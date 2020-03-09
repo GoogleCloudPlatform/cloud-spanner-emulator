@@ -38,7 +38,7 @@ namespace frontend {
 using Labels = std::map<std::string, std::string>;
 
 // Validates the provided labels. For validation requirements, see
-//    go/cloud-spanner-api-docs/google.spanner.v1#session
+//    https://cloud.google.com/spanner/docs/reference/rpc/google.spanner.v1#session
 zetasql_base::Status ValidateLabels(
     const google::protobuf::Map<std::string, std::string>& labels);
 

@@ -39,7 +39,7 @@ namespace frontend {
 // - Spanner
 //
 // For more details on these services, see
-//   go/cloud-spanner-api-docs
+//   https://cloud.google.com/spanner/docs/reference/rpc
 //
 // To manage the complexity of the large number of method handlers, the handlers
 // are not implemented as class methods but rather as free-standing functions in

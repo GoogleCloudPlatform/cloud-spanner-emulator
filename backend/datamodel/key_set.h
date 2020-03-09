@@ -36,7 +36,7 @@ namespace backend {
 // class itself does not ensure that the keys and ranges are disjoint).
 //
 // For more details, see
-//    go/cloud-spanner-api-docs/google.spanner.v1#keyset
+//    https://cloud.google.com/spanner/docs/reference/rpc/google.spanner.v1#keyset
 class KeySet {
  public:
   // Constructs an empty key set.

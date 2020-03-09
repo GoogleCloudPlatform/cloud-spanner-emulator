@@ -438,24 +438,18 @@ class DatabaseTest : public ::testing::Test {
                                                  Mutations mutations);
 
   // Commits the given transaction with the set of sql statements provided.
-  zetasql_base::StatusOr<CommitResult> CommitDmlTransaction(
-      Transaction txn, const std::vector<std::string>& statements) {
+  zetasql_base::StatusOr<CommitResult> CommitDml(
+      const std::vector<std::string>& statements) {
     std::vector<SqlStatement> sql_statements;
     for (auto statement : statements) {
       sql_statements.push_back(SqlStatement(statement));
     }
-    return CommitDmlTransaction(txn, sql_statements);
+    return CommitDml(sql_statements);
   }
 
   // Commits a set of sql statements.
   zetasql_base::StatusOr<CommitResult> CommitDml(
-      const std::vector<SqlStatement>& sql_statements) {
-    return CommitDmlTransaction(Transaction(Transaction::ReadWriteOptions()),
-                                sql_statements);
-  }
-
-  zetasql_base::StatusOr<CommitResult> CommitDmlTransaction(
-      Transaction txn, const std::vector<SqlStatement>& sql_statements);
+      const std::vector<SqlStatement>& sql_statements);
 
   // Rollback the given transaction.
   zetasql_base::Status Rollback(Transaction txn);

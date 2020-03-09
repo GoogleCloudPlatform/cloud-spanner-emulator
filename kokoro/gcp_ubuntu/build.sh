@@ -61,7 +61,6 @@ if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
   mkdir -p "${LOG_DIR}"
 
   # Copy test results.
-  # See g3doc/devtools/kokoro/g3doc/userdocs/general/custom_test_logs.md.
   find -L . -name "test.log" -exec rename 's/test.log/sponge_log.log/' {} \;
   find -L . -name "sponge_log.log" -exec cp --parents {} "${LOG_DIR}" \;
   find -L . -name "test.xml" -exec rename 's/test.xml/sponge_log.xml/' {} \;

@@ -45,7 +45,7 @@ enum class EndpointType { kOpen, kClosed };
 // same prefix, e.g. (k1, ... will exclude all keys with prefix k1 and [k1, ...
 // will include all keys with prefix k1 (similarly for the limit key). For more
 // details, see the test cases and
-//     go/cloud-spanner-api-docs/google.spanner.v1#keyrange
+//     https://cloud.google.com/spanner/docs/reference/rpc/google.spanner.v1#keyrange
 //
 // Within the database, key ranges are usually canonicalized into a closed-open
 // form via KeyRange::ToClosedOpen. ClosedOpen ranges have the useful property

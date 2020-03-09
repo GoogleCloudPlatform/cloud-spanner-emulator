@@ -56,7 +56,7 @@ namespace frontend {
 // not implemented by Cloud Spanner, so we don't need to implement it here.
 //
 // For more details on the long running operations api, see
-//     go/cloud-spanner-api-docs/google.longrunning
+//     https://cloud.google.com/spanner/docs/reference/rpc/google.longrunning
 class OperationManager {
  public:
   // A constant indicating that the operation id should be auto generated.

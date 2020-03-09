@@ -36,7 +36,7 @@ namespace frontend {
 // is considered done.
 //
 // More details about the nature of an operation can be found at:
-//    go/cloud-spanner-api-docs/google.longrunning#google.longrunning.Operation
+//    https://cloud.google.com/spanner/docs/reference/rpc/google.longrunning#google.longrunning.Operation
 class Operation {
  public:
   // Constructs an empty operation.

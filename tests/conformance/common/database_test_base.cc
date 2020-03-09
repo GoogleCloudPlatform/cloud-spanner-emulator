@@ -151,8 +151,8 @@ zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitTransaction(
   return ToUtilStatusOr(client().Commit(txn, mutations));
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitDmlTransaction(
-    Transaction txn, const std::vector<SqlStatement>& sql_statements) {
+zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitDml(
+    const std::vector<SqlStatement>& sql_statements) {
   return ToUtilStatusOr(client().Commit(
       [&](Transaction const& txn) -> cloud::StatusOr<Mutations> {
         for (auto sql_statement : sql_statements) {

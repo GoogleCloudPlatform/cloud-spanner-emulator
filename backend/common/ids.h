@@ -36,10 +36,6 @@ class UniqueIdGenerator {
  public:
   UniqueIdGenerator() : next_seq_(0) {}
   explicit UniqueIdGenerator(int64_t starting_seq) : next_seq_(starting_seq) {}
-  // TODO: This hack was required to fix bazel
-  // build failing without it, need to understand the root cause and find a
-  // better way to fix it.
-  UniqueIdGenerator(UniqueIdGenerator&& other) {}
 
   // Generate the next unique ID.
   IdType NextId(absl::string_view prefix) ABSL_LOCKS_EXCLUDED(mu_) {
