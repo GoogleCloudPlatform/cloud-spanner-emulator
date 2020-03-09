@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include "gmock/gmock.h"
+#include "zetasql/base/status.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -21,7 +23,82 @@ namespace spanner {
 namespace emulator {
 namespace test {
 
-namespace {}  // namespace
+namespace {
+
+using zetasql_base::testing::StatusIs;
+
+class MalformedWritesTest : public DatabaseTest {
+ public:
+  zetasql_base::Status SetUpDatabase() override {
+    return SetSchema({
+        R"(
+          CREATE TABLE Users(
+          ID       INT64 NOT NULL,
+          Name     STRING(MAX),
+          Age      INT64,
+          Updated  TIMESTAMP,
+        ) PRIMARY KEY (ID)
+      )",
+    });
+  }
+};
+
+TEST_F(MalformedWritesTest, CannotSpecifySameColumnMultipleTimes) {
+  // Cannot specify a key column multiple times in a write.
+  EXPECT_THAT(
+      Insert("Users", {"ID", "ID", "Name"}, {"1", "2", "Suzanne Collins"}),
+      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+  EXPECT_THAT(Insert("Users", {"ID", "ID"}, {"1", "2"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  // Cannot specify a key column multiple times even if set to the same value.
+  EXPECT_THAT(Insert("Users", {"ID", "ID"}, {"1", "1"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  // Key column names are case-insensitive and thus cannot specify same column
+  // specified with different case either.
+  EXPECT_THAT(Insert("Users", {"id", "ID"}, {"1", "2"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  // Cannot specify a non-key column multiple times in a write.
+  EXPECT_THAT(Insert("Users", {"ID", "Name", "Name"},
+                     {"1", "Douglas Adams", "Suzanne Collins"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  // Cannot specify a column multiple times even if set to the same value.
+  EXPECT_THAT(Insert("Users", {"ID", "Name", "Name"},
+                     {"1", "Douglas Adams", "Douglas Adams"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  // Column names are case-insensitive and thus cannot specify same column
+  // specified with different case either.
+  EXPECT_THAT(Insert("Users", {"ID", "Name", "nAME"},
+                     {"1", "Douglas Adams", "Douglas Adams"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(MalformedWritesTest, CannotInsertValueWithMismatchingType) {
+  // Insert with all types match is successful.
+  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age", "Updated"},
+                   {"1", "Douglas Adams", 27, MakeNowTimestamp()}));
+
+  // Type for int key does not match.
+  EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"},
+                     {MakeNowTimestamp(), "Suzanne Collins", 27}),
+              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+
+  // Type for int column does not match.
+  EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"},
+                     {"1", "Suzanne Collins", MakeNowTimestamp()}),
+              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+
+  // Type for timestamp column does not match.
+  EXPECT_THAT(
+      Insert("Users", {"ID", "Name", "Updated"}, {"1", "Suzanne Collins", 27}),
+      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+}
+
+}  // namespace
 
 }  // namespace test
 }  // namespace emulator

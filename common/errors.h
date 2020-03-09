@@ -91,6 +91,7 @@ zetasql_base::Status CouldNotParseStringAsDate(absl::string_view str);
 zetasql_base::Status InvalidDate(absl::string_view str);
 zetasql_base::Status CouldNotParseStringAsBytes(absl::string_view str);
 zetasql_base::Status TimestampOutOfRange(absl::string_view time);
+zetasql_base::Status MultipleValuesForColumn(absl::string_view column);
 
 // Key proto errors.
 zetasql_base::Status WrongNumberOfKeyParts(absl::string_view table_or_index_name,

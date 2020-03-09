@@ -37,6 +37,7 @@ cc_library(
         "//backend/access:write",
         "//backend/actions:context",
         "//backend/actions:manager",
+        "//backend/common:case",
         "//backend/common:ids",
         "//backend/common:rows",
         "//backend/datamodel:key",

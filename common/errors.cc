@@ -315,6 +315,12 @@ zetasql_base::Status TimestampOutOfRange(absl::string_view time) {
           time));
 }
 
+zetasql_base::Status MultipleValuesForColumn(absl::string_view column) {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      absl::Substitute("Multiple values for column $0.", column));
+}
+
 // Key proto errors.
 zetasql_base::Status WrongNumberOfKeyParts(absl::string_view table_or_index_name,
                                    int max_key_parts, int found_key_parts,

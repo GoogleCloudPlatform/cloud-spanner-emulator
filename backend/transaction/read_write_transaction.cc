@@ -32,6 +32,7 @@
 #include "backend/access/write.h"
 #include "backend/actions/context.h"
 #include "backend/actions/manager.h"
+#include "backend/common/case.h"
 #include "backend/common/ids.h"
 #include "backend/common/rows.h"
 #include "backend/datamodel/key_range.h"
@@ -56,6 +57,22 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+namespace {
+
+zetasql_base::Status ValidateColumnsAreNotDuplicate(
+    const std::vector<std::string>& column_names) {
+  CaseInsensitiveStringSet columns;
+  for (const std::string& column_name : column_names) {
+    if (columns.find(column_name) != columns.end()) {
+      return error::MultipleValuesForColumn(column_name);
+    }
+    columns.insert(column_name);
+  }
+  return zetasql_base::OkStatus();
+}
+
+}  // namespace
 
 ReadWriteTransaction::ReadWriteTransaction(
     const ReadWriteOptions& options, TransactionID transaction_id, Clock* clock,
@@ -244,6 +261,7 @@ zetasql_base::Status ReadWriteTransaction::Write(const Mutation& mutation) {
             "generation used: ",
             schema_->generation()));
       }
+      ZETASQL_RETURN_IF_ERROR(ValidateColumnsAreNotDuplicate(mutation_op.columns));
       std::vector<const Column*> columns;
       ZETASQL_ASSIGN_OR_RETURN(columns, GetColumnsByName(table, mutation_op.columns));
       absl::Time now = clock_->Now();
