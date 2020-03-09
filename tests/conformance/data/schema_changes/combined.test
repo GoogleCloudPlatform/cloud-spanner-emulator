@@ -1,0 +1,46 @@
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  Name   STRING(MAX)
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ALTER COLUMN Name STRING(20);
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX)
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX) NOT NULL,
+) PRIMARY KEY (UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE INDEX AlbumsByName ON Albums(AlbumName);
+ALTER TABLE Albums ALTER COLUMN AlbumName STRING(MAX);
+--
+ERROR: Changing NOT NULL constraints on column AlbumName is not allowed because it affects index AlbumsByName.
+==
+CREATE TABLE Albums (
+) PRIMARY KEY(), INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+--
+ERROR: Table not found: Users
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE INDEX PRIMARY_KEY ON Users(UserName);
+--
+ERROR: Cannot use reserved name PRIMARY_KEY for a secondary index
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX Dir_BadIndexName ON Users(UserName);
+--
+ERROR: Index name not valid: Dir_BadIndexName.

@@ -1,0 +1,12 @@
+build --cxxopt=-std=c++17
+
+# gRPC has some issues with building under bazel on MacOS with thread-locals.
+# See https://github.com/bazelbuild/bazel/issues/4341 for more details. This
+# flag enabled gRPC workarounds for building under bazel.
+build --copt -DGRPC_BAZEL_BUILD
+
+# Required for python test runner to find gcloud binary.
+test --test_env GCLOUD_DIR
+
+# Required for python test runner to find gateway binary.
+test --test_env GO_BINARY_DIR
