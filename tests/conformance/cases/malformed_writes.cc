@@ -33,69 +33,117 @@ class MalformedWritesTest : public DatabaseTest {
     return SetSchema({
         R"(
           CREATE TABLE Users(
-          ID       INT64 NOT NULL,
-          Name     STRING(MAX),
-          Age      INT64,
-          Updated  TIMESTAMP,
-        ) PRIMARY KEY (ID)
-      )",
-    });
+            UserId     INT64 NOT NULL,
+            Name       STRING(MAX),
+            Age        INT64,
+            Updated    TIMESTAMP,
+          ) PRIMARY KEY (UserId)
+        )",
+        R"(
+          CREATE TABLE Threads (
+            UserId     INT64 NOT NULL,
+            ThreadId   INT64 NOT NULL,
+            Starred    BOOL
+          ) PRIMARY KEY (UserId, ThreadId),
+          INTERLEAVE IN PARENT Users ON DELETE CASCADE
+        )"});
   }
 };
 
 TEST_F(MalformedWritesTest, CannotSpecifySameColumnMultipleTimes) {
   // Cannot specify a key column multiple times in a write.
-  EXPECT_THAT(
-      Insert("Users", {"ID", "ID", "Name"}, {"1", "2", "Suzanne Collins"}),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
-  EXPECT_THAT(Insert("Users", {"ID", "ID"}, {"1", "2"}),
+  EXPECT_THAT(Insert("Users", {"UserId", "UserId", "Name"},
+                     {"1", "2", "Suzanne Collins"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+  EXPECT_THAT(Insert("Users", {"UserId", "UserId"}, {"1", "2"}),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 
   // Cannot specify a key column multiple times even if set to the same value.
-  EXPECT_THAT(Insert("Users", {"ID", "ID"}, {"1", "1"}),
+  EXPECT_THAT(Insert("Users", {"UserId", "UserId"}, {"1", "1"}),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 
   // Key column names are case-insensitive and thus cannot specify same column
   // specified with different case either.
-  EXPECT_THAT(Insert("Users", {"id", "ID"}, {"1", "2"}),
+  EXPECT_THAT(Insert("Users", {"uSERiD", "UserId"}, {"1", "2"}),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 
   // Cannot specify a non-key column multiple times in a write.
-  EXPECT_THAT(Insert("Users", {"ID", "Name", "Name"},
+  EXPECT_THAT(Insert("Users", {"UserId", "Name", "Name"},
                      {"1", "Douglas Adams", "Suzanne Collins"}),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 
   // Cannot specify a column multiple times even if set to the same value.
-  EXPECT_THAT(Insert("Users", {"ID", "Name", "Name"},
+  EXPECT_THAT(Insert("Users", {"UserId", "Name", "Name"},
                      {"1", "Douglas Adams", "Douglas Adams"}),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 
   // Column names are case-insensitive and thus cannot specify same column
   // specified with different case either.
-  EXPECT_THAT(Insert("Users", {"ID", "Name", "nAME"},
+  EXPECT_THAT(Insert("Users", {"UserId", "Name", "nAME"},
                      {"1", "Douglas Adams", "Douglas Adams"}),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 }
 
 TEST_F(MalformedWritesTest, CannotInsertValueWithMismatchingType) {
   // Insert with all types match is successful.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age", "Updated"},
+  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age", "Updated"},
                    {"1", "Douglas Adams", 27, MakeNowTimestamp()}));
 
   // Type for int key does not match.
-  EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"},
+  EXPECT_THAT(Insert("Users", {"UserId", "Name", "Age"},
                      {MakeNowTimestamp(), "Suzanne Collins", 27}),
               StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
 
   // Type for int column does not match.
-  EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"},
+  EXPECT_THAT(Insert("Users", {"UserId", "Name", "Age"},
                      {"1", "Suzanne Collins", MakeNowTimestamp()}),
               StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
 
   // Type for timestamp column does not match.
+  EXPECT_THAT(Insert("Users", {"UserId", "Name", "Updated"},
+                     {"1", "Suzanne Collins", 27}),
+              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(MalformedWritesTest, CannotHaveDifferentNumberOfColumnsAndValues) {
   EXPECT_THAT(
-      Insert("Users", {"ID", "Name", "Updated"}, {"1", "Suzanne Collins", 27}),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      Insert("Users", {"UserId", "Name", "Updated"}, {"1", "Douglas Adams"}),
+      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(MalformedWritesTest, CannotSpecifyPartialKey) {
+  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name"}, {1, "Douglas Adams"}));
+  ZETASQL_EXPECT_OK(Insert("Threads", {"UserId", "ThreadId", "Starred"}, {1, 1, true}));
+
+  // Can perform a succesful read by specifying the full primary key.
+  EXPECT_THAT(Read("Threads", {"UserId", "ThreadId", "Starred"}, Key(1, 1)),
+              IsOkAndHoldsRow({1, 1, true}));
+
+  // Cannot however read by specifying a prefix of the primary key.
+  EXPECT_THAT(Read("Threads", {"UserId", "ThreadId", "Starred"}, Key(1)),
+              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+
+  // Partial key cannot be used to perform writes either.
+  EXPECT_THAT(Update("Threads", {"UserId", "Starred"}, {1, false}),
+              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(MalformedWritesTest, CannotWriteToNonExistentColumn) {
+  EXPECT_THAT(Insert("Users", {"bad-key", "Name"}, {1, "Douglas Adams"}),
+              StatusIs(zetasql_base::StatusCode::kNotFound));
+
+  EXPECT_THAT(Insert("Users", {"UserId", "bad-column"}, {1, "Douglas Adams"}),
+              StatusIs(zetasql_base::StatusCode::kNotFound));
+}
+
+TEST_F(MalformedWritesTest, CannotWriteToEmptyTableName) {
+  EXPECT_THAT(Insert("", {"UserId", "Name"}, {1, "Douglas Adams"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(MalformedWritesTest, CannotWriteToNonExistentTable) {
+  EXPECT_THAT(Insert("bad-table", {"UserId", "Name"}, {1, "Douglas Adams"}),
+              StatusIs(zetasql_base::StatusCode::kNotFound));
 }
 
 }  // namespace

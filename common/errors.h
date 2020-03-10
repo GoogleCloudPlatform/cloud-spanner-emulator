@@ -95,7 +95,7 @@ zetasql_base::Status MultipleValuesForColumn(absl::string_view column);
 
 // Key proto errors.
 zetasql_base::Status WrongNumberOfKeyParts(absl::string_view table_or_index_name,
-                                   int max_key_parts, int found_key_parts,
+                                   int expected_key_parts, int found_key_parts,
                                    absl::string_view supplied_key);
 zetasql_base::Status KeyRangeMissingStart();
 zetasql_base::Status KeyRangeMissingEnd();
@@ -103,6 +103,7 @@ zetasql_base::Status KeyRangeMissingEnd();
 // Mutation proto errors.
 zetasql_base::Status BadDeleteRange(absl::string_view start_key,
                             absl::string_view limit_key);
+zetasql_base::Status MutationTableRequired();
 
 // Transaction errors.
 zetasql_base::Status AbortConcurrentTransaction(int64_t requestor_id, int64_t holder_id);

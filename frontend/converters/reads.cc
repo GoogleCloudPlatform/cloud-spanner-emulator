@@ -137,6 +137,10 @@ zetasql_base::Status ReadArgFromProto(const backend::Schema& schema,
   if (!request.has_key_set()) {
     return error::MissingRequiredFieldError("ReadRequest.key_set");
   }
+  if (request.table().empty()) {
+    return error::MutationTableRequired();
+  }
+
   read_arg->table = request.table();
   read_arg->index = request.index();
   read_arg->columns.assign(request.columns().begin(), request.columns().end());

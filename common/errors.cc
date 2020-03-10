@@ -323,12 +323,12 @@ zetasql_base::Status MultipleValuesForColumn(absl::string_view column) {
 
 // Key proto errors.
 zetasql_base::Status WrongNumberOfKeyParts(absl::string_view table_or_index_name,
-                                   int max_key_parts, int found_key_parts,
+                                   int expected_key_parts, int found_key_parts,
                                    absl::string_view supplied_key) {
   return zetasql_base::Status(
       zetasql_base::StatusCode::kFailedPrecondition,
       absl::StrCat("Wrong number of key parts for ", table_or_index_name,
-                   ". Expected at most ", max_key_parts, " key parts, found ",
+                   ". Expected ", expected_key_parts, " key parts, found ",
                    found_key_parts,
                    " key parts. Supplied key: ", supplied_key));
 }
@@ -352,6 +352,11 @@ zetasql_base::Status BadDeleteRange(absl::string_view start_key,
       absl::StrCat("For delete ranges, start and limit keys may only differ in "
                    "the final key part: start=",
                    start_key, ", limit=", limit_key));
+}
+
+zetasql_base::Status MutationTableRequired() {
+  return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+                      "Mutation does not specify table.");
 }
 
 // Transaction errors.

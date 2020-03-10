@@ -28,21 +28,33 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
+namespace {
+
 namespace spanner_api = ::google::spanner::v1;
 
-zetasql_base::StatusOr<backend::Key> KeyFromProto(
-    const google::protobuf::ListValue& list_pb, const backend::Table& table) {
+zetasql_base::StatusOr<backend::Key> KeyFromProtoInternal(
+    const google::protobuf::ListValue& list_pb, const backend::Table& table,
+    bool allow_prefix_key) {
   // Check that the user did not specify more than the required number of key
   // parts. For normal tables, this is the size of the primary key. For index
   // data tables, this is the number of index columns specified in the index
   // definition.
-  size_t max_key_parts =
+  size_t required_key_parts =
       (table.owner_index() ? table.owner_index()->key_columns().size()
                            : table.primary_key().size());
-  if (list_pb.values_size() > max_key_parts) {
+  if (list_pb.values_size() > required_key_parts) {
     return error::WrongNumberOfKeyParts(
         (table.owner_index() ? table.owner_index()->Name() : table.Name()),
-        max_key_parts, list_pb.values_size(), list_pb.ShortDebugString());
+        required_key_parts, list_pb.values_size(), list_pb.ShortDebugString());
+  }
+
+  // Prefix keys are allowed only when part of key ranges. When prefix keys are
+  // not allowed in other cases, check that the required number of key parts are
+  // present.
+  if (!allow_prefix_key && list_pb.values_size() < required_key_parts) {
+    return error::WrongNumberOfKeyParts(
+        (table.owner_index() ? table.owner_index()->Name() : table.Name()),
+        required_key_parts, list_pb.values_size(), list_pb.ShortDebugString());
   }
 
   backend::Key key;
@@ -57,6 +69,14 @@ zetasql_base::StatusOr<backend::Key> KeyFromProto(
   return key;
 }
 
+}  // namespace
+
+zetasql_base::StatusOr<backend::Key> KeyFromProto(
+    const google::protobuf::ListValue& list_pb, const backend::Table& table) {
+  // Prefix key parts are only allowed in key ranges.
+  return KeyFromProtoInternal(list_pb, table, /*allow_prefix_key=*/false);
+}
+
 zetasql_base::StatusOr<backend::KeyRange> KeyRangeFromProto(
     const spanner_api::KeyRange& range_pb, const backend::Table& table) {
   // Parse the start endpoint.
@@ -64,10 +84,14 @@ zetasql_base::StatusOr<backend::KeyRange> KeyRangeFromProto(
   backend::Key start_key;
   if (range_pb.has_start_open()) {
     start_type = backend::EndpointType::kOpen;
-    ZETASQL_ASSIGN_OR_RETURN(start_key, KeyFromProto(range_pb.start_open(), table));
+    ZETASQL_ASSIGN_OR_RETURN(start_key,
+                     KeyFromProtoInternal(range_pb.start_open(), table,
+                                          /*allow_prefix_key=*/true));
   } else if (range_pb.has_start_closed()) {
     start_type = backend::EndpointType::kClosed;
-    ZETASQL_ASSIGN_OR_RETURN(start_key, KeyFromProto(range_pb.start_closed(), table));
+    ZETASQL_ASSIGN_OR_RETURN(start_key,
+                     KeyFromProtoInternal(range_pb.start_closed(), table,
+                                          /*allow_prefix_key=*/true));
   } else {
     return error::KeyRangeMissingStart();
   }
@@ -77,10 +101,14 @@ zetasql_base::StatusOr<backend::KeyRange> KeyRangeFromProto(
   backend::Key limit_key;
   if (range_pb.has_end_open()) {
     limit_type = backend::EndpointType::kOpen;
-    ZETASQL_ASSIGN_OR_RETURN(limit_key, KeyFromProto(range_pb.end_open(), table));
+    ZETASQL_ASSIGN_OR_RETURN(limit_key,
+                     KeyFromProtoInternal(range_pb.end_open(), table,
+                                          /*allow_prefix_key=*/true));
   } else if (range_pb.has_end_closed()) {
     limit_type = backend::EndpointType::kClosed;
-    ZETASQL_ASSIGN_OR_RETURN(limit_key, KeyFromProto(range_pb.end_closed(), table));
+    ZETASQL_ASSIGN_OR_RETURN(limit_key,
+                     KeyFromProtoInternal(range_pb.end_closed(), table,
+                                          /*allow_prefix_key=*/true));
   } else {
     return error::KeyRangeMissingEnd();
   }
@@ -94,7 +122,9 @@ zetasql_base::StatusOr<backend::KeySet> KeySetFromProto(
 
   // Parse individual keys.
   for (const auto& key_pb : key_set_pb.keys()) {
-    ZETASQL_ASSIGN_OR_RETURN(backend::Key key, KeyFromProto(key_pb, table));
+    ZETASQL_ASSIGN_OR_RETURN(
+        backend::Key key,
+        KeyFromProtoInternal(key_pb, table, /*allow_prefix_key=*/false));
     key_set.AddKey(key);
   }
 

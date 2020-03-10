@@ -49,6 +49,9 @@ zetasql_base::Status WriteFromProto(const backend::Schema& schema,
                             const spanner_api::Mutation::Write& write_pb,
                             backend::MutationOpType op_type,
                             backend::Mutation* mutation) {
+  if (write_pb.table().empty()) {
+    return error::MutationTableRequired();
+  }
   const backend::Table* table = schema.FindTable(write_pb.table());
   if (table == nullptr) {
     return error::TableNotFound(write_pb.table());
@@ -123,6 +126,9 @@ zetasql_base::Status DeleteFromProto(const backend::Schema& schema,
                              const spanner_api::Mutation::Delete& delete_pb,
                              backend::Mutation* mutation) {
   // Verify that the table exists.
+  if (delete_pb.table().empty()) {
+    return error::MutationTableRequired();
+  }
   const backend::Table* table = schema.FindTable(delete_pb.table());
   if (table == nullptr) {
     return error::TableNotFound(delete_pb.table());
