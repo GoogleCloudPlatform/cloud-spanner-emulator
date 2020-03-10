@@ -68,7 +68,7 @@ http_archive(
     url = "https://github.com/googleapis/googleapis/archive/eba3897fff7c49ed85d3c47fc96fe96e47f6f684.zip",
     strip_prefix="googleapis-eba3897fff7c49ed85d3c47fc96fe96e47f6f684",
     # Patches missing C++ build rules for Spanner and IAM protos
-    patches = ["@//bazel:googleapis.patch"],
+    patches = ["@//build/bazel:googleapis.patch"],
     sha256 = "e12e955d937682a01dbceed657ce79f412e374347e23883bc559fadc1af39b10",
 )
 
@@ -136,7 +136,7 @@ http_archive(
     # - Give visibility to ZetaSQL's base library to reuse some utilities
     # - Allow implicit conversion of grpc::Status to zetasql_base::Status
     # - Patches for flex, m4, and icu to work on MacOS
-    patches = ["//bazel:zetasql.patch"],
+    patches = ["//build/bazel:zetasql.patch"],
     sha256 = "3be4b149adeef3b30462e271879d0b9e4a0fd358b83452b47fde427ae9046871",
 )
 
@@ -274,7 +274,7 @@ http_archive(
     ],
     sha256 = "d2cdc776873635ed421315c4d22e63280042456bbfa07397817e687b142b9667",
     strip_prefix = "portpicker-1.3.1/src",
-    build_file = "//bazel:portpicker.BUILD",
+    build_file = "//build/bazel:portpicker.BUILD",
 )
 
 ################################################################################

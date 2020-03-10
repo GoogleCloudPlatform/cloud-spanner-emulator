@@ -16,6 +16,7 @@
 
 #include "backend/locking/manager.h"
 
+#include "absl/strings/substitute.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
@@ -72,9 +73,16 @@ zetasql_base::StatusOr<absl::Time> LockManager::ReserveCommitTimestamp(
     LockHandle* handle) {
   absl::MutexLock lock(&mu_);
 
-  // TODO : Only the active transaction holding the write locks can
-  // flush. Add the check that active_tid_ is same as the tid that requested to
-  // reserve commit timestamp after changes to acquire write locks are in.
+  // If there is no transaction holding the lock, we grant it to the transaction
+  // requesting commit timestamp. This can happen if transaction has empty
+  // mutations and write locks weren't thus acquired yet.
+  if (active_tid_ == kInvalidTransactionID) {
+    active_tid_ = handle->tid();
+  } else if (active_tid_ != handle->tid()) {
+    // There is another active transaction, abort this transaction.
+    return error::AbortConcurrentTransaction(handle->tid(), active_tid_);
+  }
+
   pending_commit_timestamp_ = clock_->Now();
   return pending_commit_timestamp_;
 }
@@ -82,10 +90,10 @@ zetasql_base::StatusOr<absl::Time> LockManager::ReserveCommitTimestamp(
 zetasql_base::Status LockManager::MarkCommitted(LockHandle* handle) {
   absl::MutexLock lock(&mu_);
 
-  // TODO : Only the active transaction holding the write locks could
-  // be doing the flush and thus can release the commit timestamp as well. Add
-  // the check that active_tid_ is same as the tid that requested to reserve
-  // commit timestamp after changes to acquire write locks are in.
+  // This transaction should have been set as the active transaction.
+  ZETASQL_RET_CHECK_EQ(active_tid_, handle->tid())
+      << absl::Substitute("Transaction $0 is not active.", handle->tid());
+
   last_commit_timestamp_ = pending_commit_timestamp_;
   pending_commit_timestamp_ = absl::InfiniteFuture();
   pending_commit_cvar_.SignalAll();

@@ -557,7 +557,7 @@ zetasql_base::Status ColumnNotNull(absl::string_view column_name,
 zetasql_base::Status UnallowedCommitTimestampOption(absl::string_view column_name) {
   return zetasql_base::Status(zetasql_base::StatusCode::kFailedPrecondition,
                       absl::Substitute("Column $0 has invalid "
-                                       "allow_commit_timestamp option. Option "
+                                       "allow_commit_timestamp option.  Option "
                                        "only allowed on TIMESTAMP columns.",
                                        column_name));
 }
@@ -573,9 +573,9 @@ zetasql_base::Status InvalidDropColumnWithDependency(absl::string_view column_na
 
 zetasql_base::Status CannotChangeKeyColumn(absl::string_view column_name,
                                    absl::string_view reason) {
-  return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
-                      absl::Substitute("Cannot change key column $0: $1.",
-                                       column_name, reason));
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot change key column $0.", column_name));
 }
 
 zetasql_base::Status InvalidDropKeyColumn(absl::string_view colum_name,
@@ -632,22 +632,21 @@ zetasql_base::Status DropTableWithInterleavedTables(absl::string_view table_name
                                             absl::string_view child_tables) {
   return zetasql_base::Status(
       zetasql_base::StatusCode::kFailedPrecondition,
-      absl::Substitute("Cannot drop table $0 with interleaved tables or "
-                       "indices: $1.",
+      absl::Substitute("Cannot drop table $0 with interleaved tables: $1.",
                        table_name, child_tables));
 }
 
 zetasql_base::Status DropTableWithDependentIndices(absl::string_view table_name,
                                            absl::string_view indexes) {
   return zetasql_base::Status(zetasql_base::StatusCode::kFailedPrecondition,
-                      absl::Substitute("Cannot drop table $0 with indices: $1",
+                      absl::Substitute("Cannot drop table $0 with indices: $1.",
                                        table_name, indexes));
 }
 
 zetasql_base::Status SetOnDeleteWithoutInterleaving(absl::string_view table_name) {
   return zetasql_base::Status(
       zetasql_base::StatusCode::kInvalidArgument,
-      absl::Substitute("Cannot SET ON DELETE on Table $0 that does not have "
+      absl::Substitute("Cannot SET ON DELETE on table $0 that does not have "
                        "an INTERLEAVE clause.",
                        table_name));
 }
@@ -705,9 +704,9 @@ zetasql_base::Status MustReferenceParentKeyColumn(absl::string_view child_object
                                           absl::string_view parent_key_column) {
   return zetasql_base::Status(
       zetasql_base::StatusCode::kFailedPrecondition,
-      absl::Substitute("$0 $1 does not reference parent key column $2.",
-                       child_object_type, child_object_name,
-                       parent_key_column));
+      absl::Substitute("$0 $1 does not reference $3parent key column $2.",
+                       child_object_type, child_object_name, parent_key_column,
+                       child_object_type == "Index" ? "index " : ""));
 }
 
 zetasql_base::Status IncorrectParentKeyType(absl::string_view child_object_type,
@@ -766,17 +765,18 @@ zetasql_base::Status IndexRefsKeyAsStoredColumn(absl::string_view index_name,
 
 zetasql_base::Status IndexRefsColumnTwice(absl::string_view index_name,
                                   absl::string_view key_column) {
-  return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
-                      absl::Substitute("Index $0 specifies column $1 twice.",
-                                       index_name, key_column));
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      absl::Substitute("Index $0 specifies key column $1 twice.", index_name,
+                       key_column));
 }
 
 zetasql_base::Status IndexRefsNonExistentColumn(absl::string_view index_name,
                                         absl::string_view column_name) {
   return zetasql_base::Status(
       zetasql_base::StatusCode::kInvalidArgument,
-      absl::Substitute("Index $0 specifies column $1 which does not exist in "
-                       "the index's base table.",
+      absl::Substitute("Index $0 specifies key column $1 which does not exist "
+                       "in the index's base table.",
                        index_name, column_name));
 }
 
@@ -854,10 +854,9 @@ zetasql_base::Status IndexNotFound(absl::string_view index_name) {
 
 zetasql_base::Status ColumnNotFound(absl::string_view table_name,
                             absl::string_view column_name) {
-  return zetasql_base::Status(
-      zetasql_base::StatusCode::kNotFound,
-      absl::StrCat("Table '", table_name, "' does not have Column ",
-                   column_name, "."));
+  return zetasql_base::Status(zetasql_base::StatusCode::kNotFound,
+                      absl::StrCat("Column not found in table ", table_name,
+                                   ": ", column_name));
 }
 
 zetasql_base::Status ColumnNotFoundAtTimestamp(absl::string_view table_name,
@@ -900,10 +899,8 @@ zetasql_base::Status CannotParseKeyValue(absl::string_view table_name,
 
 zetasql_base::Status SchemaObjectAlreadyExists(absl::string_view schema_object,
                                        absl::string_view name) {
-  return zetasql_base::Status(
-      zetasql_base::StatusCode::kFailedPrecondition,
-      absl::Substitute("Could not create $0 : `$1`. It already exists.",
-                       schema_object, name));
+  return zetasql_base::Status(zetasql_base::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Duplicate name in schema: $0.", name));
 }
 
 zetasql_base::Status CannotChangeColumnType(absl::string_view column_name,
@@ -1046,9 +1043,8 @@ zetasql_base::Status InvalidColumnValueLength(absl::string_view table_name,
                                       int max_column_length) {
   return zetasql_base::Status(
       zetasql_base::StatusCode::kInvalidArgument,
-      absl::StrCat("Bad length for column ", column_name, " in table ",
-                   table_name, " : Allowed length range: [1, ",
-                   max_column_length, "]"));
+      absl::StrCat("Bad length for column ", table_name, ".", column_name,
+                   " : Allowed length range: [1, ", max_column_length, "]"));
 }
 
 zetasql_base::Status InvalidStringEncoding(absl::string_view table_name,
