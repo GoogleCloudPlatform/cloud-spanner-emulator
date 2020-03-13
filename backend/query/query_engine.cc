@@ -103,6 +103,14 @@ class VectorsRowCursor : public RowCursor {
   std::vector<std::vector<zetasql::Value>> column_values_;
 };
 
+zetasql::EvaluatorOptions CommonEvaluatorOptions(
+    zetasql::TypeFactory* type_factory) {
+  zetasql::EvaluatorOptions options;
+  options.type_factory = type_factory;
+  options.scramble_undefined_orderings = true;
+  return options;
+}
+
 // Uses googlesql/public/analyzer to build an AnalyzerOutput for an query.
 zetasql_base::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> Analyze(
     const std::string& sql, const zetasql::ParameterValueMap& params,
@@ -265,8 +273,7 @@ zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedInsert(
                        insert_statement->row_list()));
 
   auto prepared_insert = absl::make_unique<zetasql::PreparedModify>(
-      insert_statement,
-      zetasql::EvaluatorOptions{.type_factory = type_factory});
+      insert_statement, CommonEvaluatorOptions(type_factory));
   ZETASQL_ASSIGN_OR_RETURN(auto iterator, prepared_insert->Execute(parameters));
 
   return BuildInsert(std::move(iterator), MutationOpType::kInsert,
@@ -281,8 +288,7 @@ zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedUpdate(
                    PendingCommitTimestampColumnsInUpdate(
                        update_statement->update_item_list()));
   auto prepared_update = absl::make_unique<zetasql::PreparedModify>(
-      update_statement,
-      zetasql::EvaluatorOptions{.type_factory = type_factory});
+      update_statement, CommonEvaluatorOptions(type_factory));
   ZETASQL_ASSIGN_OR_RETURN(auto iterator, prepared_update->Execute(parameters));
 
   return BuildUpdate(std::move(iterator), MutationOpType::kUpdate,
@@ -294,8 +300,7 @@ zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedDelete(
     const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory) {
   auto prepared_delete = absl::make_unique<zetasql::PreparedModify>(
-      delete_statement,
-      zetasql::EvaluatorOptions{.type_factory = type_factory});
+      delete_statement, CommonEvaluatorOptions(type_factory));
   ZETASQL_ASSIGN_OR_RETURN(auto iterator, prepared_delete->Execute(parameters));
 
   return BuildDelete(std::move(iterator));
@@ -338,7 +343,7 @@ zetasql_base::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
       << "input is not a query statement";
   auto prepared_query = absl::make_unique<zetasql::PreparedQuery>(
       resolved_statement->GetAs<zetasql::ResolvedQueryStmt>(),
-      zetasql::EvaluatorOptions{.type_factory = type_factory});
+      CommonEvaluatorOptions(type_factory));
   ZETASQL_ASSIGN_OR_RETURN(auto iterator, prepared_query->Execute(params));
 
   std::vector<std::vector<zetasql::Value>> values;

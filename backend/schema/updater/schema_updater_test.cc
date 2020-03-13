@@ -1326,7 +1326,7 @@ TEST_F(SchemaUpdaterTest, DropTable_WithIndex) {
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
       DROP TABLE T
     )"}),
-              StatusIs(error::DropTableWithInterleavedTables("T", "Idx2")));
+              StatusIs(error::DropTableWithDependentIndices("T", "Idx2")));
 }
 
 TEST_F(SchemaUpdaterTest, DropIndex) {

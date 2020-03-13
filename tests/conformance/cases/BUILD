@@ -34,6 +34,7 @@ cc_library(
         "malformed_writes.cc",
         "multi_row_writes.cc",
         "primary_keys.cc",
+        "query.cc",
         "query_hints.cc",
         "query_modes.cc",
         "range_delete.cc",

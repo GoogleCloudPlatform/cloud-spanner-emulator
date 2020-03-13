@@ -24,7 +24,10 @@
 #include "backend/query/query_engine.h"
 #include "common/errors.h"
 #include "frontend/common/protos.h"
+#include "frontend/converters/query.h"
 #include "frontend/converters/reads.h"
+#include "frontend/converters/types.h"
+#include "frontend/converters/values.h"
 #include "frontend/entities/session.h"
 #include "frontend/entities/transaction.h"
 #include "frontend/server/handler.h"
@@ -33,21 +36,31 @@
 #include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
 
-namespace spanner_api = ::google::spanner::v1;
-
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace frontend {
 
+namespace spanner_api = ::google::spanner::v1;
+
 namespace {
 
 zetasql_base::Status ValidateTransactionSelectorForQuery(
-    const spanner_api::TransactionSelector& selector) {
+    const spanner_api::TransactionSelector& selector, bool is_dml) {
   if (selector.selector_case() ==
           spanner_api::TransactionSelector::SelectorCase::kSingleUse &&
       selector.single_use().mode_case() != v1::TransactionOptions::kReadOnly) {
     return error::InvalidModeForReadOnlySingleUseTransaction();
+  }
+  if (is_dml) {
+    if (selector.begin().mode_case() == v1::TransactionOptions::kReadOnly) {
+      // ReadWrite and PartitionedDML transactions are currently allowed.
+      return error::DmlRequiresReadWriteTransaction("ReadOnly");
+    }
+    if (selector.selector_case() ==
+        spanner_api::TransactionSelector::SelectorCase::kSingleUse) {
+      return error::DmlDoesNotSupportSingleUseTransaction();
+    }
   }
   return zetasql_base::OkStatus();
 }
@@ -64,6 +77,16 @@ void AddQueryStatsFromQueryResult(const backend::QueryResult& result,
       absl::FormatDuration(result.elapsed_time));
 }
 
+zetasql_base::StatusOr<backend::QueryResult> ExecuteQuery(
+    const spanner_api::ExecuteBatchDmlRequest_Statement& statement,
+    std::shared_ptr<Transaction> txn) {
+  ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
+                   QueryFromProto(statement.sql(), statement.params(),
+                                  statement.param_types(),
+                                  txn->query_engine()->type_factory()));
+  return txn->ExecuteSql(query);
+}
+
 }  //  namespace
 
 // Executes a SQL statement, returning all results in a single reply.
@@ -76,7 +99,8 @@ zetasql_base::Status ExecuteSql(RequestContext* ctx,
                    GetSession(ctx, request->session()));
 
   // Get underlying transaction.
-  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction()));
+  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(
+      request->transaction(), backend::IsDMLQuery(request->sql())));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
 
@@ -87,7 +111,10 @@ zetasql_base::Status ExecuteSql(RequestContext* ctx,
       return error::CannotReadOrQueryAfterCommitOrRollback();
     }
 
-    ZETASQL_ASSIGN_OR_RETURN(const backend::Query query, txn->BuildQuery(*request));
+    ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
+                     QueryFromProto(request->sql(), request->params(),
+                                    request->param_types(),
+                                    txn->query_engine()->type_factory()));
     ZETASQL_ASSIGN_OR_RETURN(backend::QueryResult result, txn->ExecuteSql(query));
 
     ZETASQL_RETURN_IF_ERROR(txn->MaybeFillTransactionMetadata(
@@ -136,7 +163,8 @@ zetasql_base::Status ExecuteStreamingSql(
                    GetSession(ctx, request->session()));
 
   // Get underlying transaction.
-  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction()));
+  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(
+      request->transaction(), backend::IsDMLQuery(request->sql())));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
 
@@ -147,7 +175,10 @@ zetasql_base::Status ExecuteStreamingSql(
       return error::CannotReadOrQueryAfterCommitOrRollback();
     }
 
-    ZETASQL_ASSIGN_OR_RETURN(const backend::Query query, txn->BuildQuery(*request));
+    ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
+                     QueryFromProto(request->sql(), request->params(),
+                                    request->param_types(),
+                                    txn->query_engine()->type_factory()));
     ZETASQL_ASSIGN_OR_RETURN(backend::QueryResult result, txn->ExecuteSql(query));
 
     spanner_api::PartialResultSet response;
@@ -188,7 +219,57 @@ REGISTER_GRPC_HANDLER(Spanner, ExecuteStreamingSql);
 zetasql_base::Status ExecuteBatchDml(RequestContext* ctx,
                              const spanner_api::ExecuteBatchDmlRequest* request,
                              spanner_api::ExecuteBatchDmlResponse* response) {
-  return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented, "");
+  // Verify the request has DML statement(s).
+  if (request->statements().empty()) {
+    return error::InvalidBatchDmlRequest();
+  }
+
+  // Take shared ownerships of session and transaction so that they will keep
+  // valid throughout this function.
+  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+                   GetSession(ctx, request->session()));
+
+  // Get underlying transaction.
+  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction(),
+                                                      /*is_dml=*/true));
+  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
+                   session->FindOrInitTransaction(request->transaction()));
+
+  // Wrap all operations on this transaction so they are atomic.
+  return txn->GuardedCall([&]() -> zetasql_base::Status {
+    // Cannot query after commit or rollback.
+    if (txn->IsCommitted() || txn->IsRolledback()) {
+      return error::CannotReadOrQueryAfterCommitOrRollback();
+    }
+
+    for (int index = 0; index < request->statements_size(); ++index) {
+      const auto& statement = request->statements(index);
+      if (!backend::IsDMLQuery(statement.sql())) {
+        *response->mutable_status() =
+            StatusToProto(error::ExecuteBatchDmlOnlySupportsDmlStatements(
+                index, statement.sql()));
+        return zetasql_base::OkStatus();
+      }
+
+      auto maybe_result = ExecuteQuery(statement, txn);
+      if (!maybe_result.ok() &&
+          maybe_result.status().code() != zetasql_base::StatusCode::kAborted) {
+        *response->mutable_status() = StatusToProto(maybe_result.status());
+        return zetasql_base::OkStatus();
+      } else if (maybe_result.status().code() == zetasql_base::StatusCode::kAborted) {
+        return maybe_result.status();
+      }
+      auto& result = maybe_result.value();
+      spanner_api::ResultSet* result_set = response->add_result_sets();
+      ZETASQL_RETURN_IF_ERROR(txn->MaybeFillTransactionMetadata(
+          request->transaction(), result_set->mutable_metadata()));
+      result_set->mutable_stats()->set_row_count_exact(
+          result.modified_row_count);
+      result_set->mutable_metadata()->mutable_row_type();
+    }
+
+    return zetasql_base::OkStatus();
+  });
 }
 REGISTER_GRPC_HANDLER(Spanner, ExecuteBatchDml);
 

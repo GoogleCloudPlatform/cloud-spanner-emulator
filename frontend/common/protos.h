@@ -32,7 +32,11 @@ namespace emulator {
 // The type_url on "out" is set to type.googleapis.com/<message.type>.
 void ToAnyProto(const google::protobuf::Message& message, google::protobuf::Any* out);
 
+// Returns backend transaction ID from given bytes.
 backend::TransactionID TransactionIDFromProto(const std::string& bytes);
+
+// Returns the given status as status proto.
+google::rpc::Status StatusToProto(const zetasql_base::Status& error);
 
 }  // namespace emulator
 }  // namespace spanner

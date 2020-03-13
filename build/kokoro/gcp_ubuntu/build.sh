@@ -52,6 +52,21 @@ set +e
 exit_code=${?}
 set -e
 
+if [[ -f build/info/version.txt ]]; then
+  while read -r line;
+  do
+    if [[ $line =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      EMULATOR_VERSION=$line
+    fi
+  done < build/info/version.txt
+  if [[ -z "${EMULATOR_VERSION}" ]]; then
+    echo "No version in build/info/version.txt" 1>&2
+    exit 1
+  fi
+else
+  EMULATOR_VERSION=0.0.0
+fi
+
 # If running under kokoro, copy outputs to a predefined-dir
 if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
   # Create binary and test log dirs.
@@ -74,6 +89,8 @@ if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
   if [[ -f bazel-bin/binaries/linux_amd64_stripped/gateway_main ]]; then
     cp bazel-bin/binaries/linux_amd64_stripped/gateway_main "${BIN_DIR}"
   fi
+
+  tar -C "${BIN_DIR}" -czf "${BIN_DIR}/cloud-spanner-emulator-linux_amd64-${EMULATOR_VERSION}.tar.gz" gateway_main emulator_main
 fi
 
 exit ${exit_code}

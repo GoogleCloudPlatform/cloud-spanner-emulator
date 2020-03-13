@@ -322,6 +322,11 @@ zetasql_base::Status InvalidStatementHintValue(absl::string_view hint_string,
 zetasql_base::Status MultipleValuesForSameHint(absl::string_view hint_string);
 zetasql_base::Status InvalidHintForNode(absl::string_view hint_string,
                                 absl::string_view supported_node);
+zetasql_base::Status InvalidBatchDmlRequest();
+zetasql_base::Status ExecuteBatchDmlOnlySupportsDmlStatements(int index,
+                                                      absl::string_view query);
+zetasql_base::Status DmlRequiresReadWriteTransaction(
+    absl::string_view transaction_type);
 
 }  // namespace error
 }  // namespace emulator

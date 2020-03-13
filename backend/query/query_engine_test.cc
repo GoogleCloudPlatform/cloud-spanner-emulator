@@ -162,9 +162,9 @@ TEST_F(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTableWithForceIndexHint) {
   EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("string_col"));
   EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(StringType()));
   EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
-              IsOkAndHolds(ElementsAre(ElementsAre(String("one")),
-                                       ElementsAre(String("two")),
-                                       ElementsAre(String("four")))));
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(String("one")),
+                                                ElementsAre(String("two")),
+                                                ElementsAre(String("four")))));
 }
 
 TEST_F(QueryEngineTest,
@@ -178,9 +178,9 @@ TEST_F(QueryEngineTest,
   EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("string_col"));
   EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(StringType()));
   EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
-              IsOkAndHolds(ElementsAre(ElementsAre(String("one")),
-                                       ElementsAre(String("two")),
-                                       ElementsAre(String("four")))));
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(String("one")),
+                                                ElementsAre(String("two")),
+                                                ElementsAre(String("four")))));
 }
 
 TEST_F(QueryEngineTest, ExecuteSqlSelectsAllColumnsFromTable) {
@@ -213,7 +213,8 @@ TEST_F(QueryEngineTest, ExecuteSqlSelectsParameterValuesFromTable) {
   EXPECT_THAT(GetColumnTypes(*result.rows),
               ElementsAre(Int64Type(), StringType()));
   EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
-              IsOkAndHolds(ElementsAre(ElementsAre(Int64(24), String("bar")),
+              IsOkAndHolds(
+                  UnorderedElementsAre(ElementsAre(Int64(24), String("bar")),
                                        ElementsAre(Int64(24), String("bar")),
                                        ElementsAre(Int64(24), String("bar")))));
 }

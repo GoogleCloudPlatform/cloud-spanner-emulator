@@ -232,3 +232,19 @@ cc_test(
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
+
+cc_library(
+    name = "query",
+    srcs = ["query.cc"],
+    hdrs = ["query.h"],
+    deps = [
+        ":types",
+        ":values",
+        "//backend/query:query_engine",
+        "//common:errors",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_zetasql//zetasql/base:statusor",
+        "@com_google_zetasql//zetasql/public:type",
+    ],
+)

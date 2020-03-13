@@ -49,6 +49,7 @@ namespace emulator {
 namespace frontend {
 
 namespace spanner_api = ::google::spanner::v1;
+
 using ReadWriteTransactionPtr = std::unique_ptr<backend::ReadWriteTransaction>;
 using ReadOnlyTransactionPtr = std::unique_ptr<backend::ReadOnlyTransaction>;
 
@@ -99,27 +100,6 @@ zetasql_base::Status Transaction::MaybeFillTransactionMetadata(
         metadata->mutable_transaction()->mutable_read_timestamp());
   }
   return zetasql_base::OkStatus();
-}
-
-zetasql_base::StatusOr<backend::Query> Transaction::BuildQuery(
-    const google::spanner::v1::ExecuteSqlRequest& request) const {
-  std::map<std::string, zetasql::Value> query_parameters;
-  if (request.has_params()) {
-    for (const auto& [name, proto_value] : request.params().fields()) {
-      auto param_type_iter = request.param_types().find(name);
-      if (param_type_iter == request.param_types().end()) {
-        // TODO Support untyped parameters.
-        return error::UnimplementedUntypedParameterBinding(name);
-      }
-      const spanner::v1::Type& proto_type = param_type_iter->second;
-      const zetasql::Type* type;
-      ZETASQL_RETURN_IF_ERROR(
-          TypeFromProto(proto_type, query_engine_->type_factory(), &type));
-      ZETASQL_ASSIGN_OR_RETURN(query_parameters[name],
-                       ValueFromProto(proto_value, type));
-    }
-  }
-  return backend::Query{request.sql(), std::move(query_parameters)};
 }
 
 bool Transaction::IsClosed() const {

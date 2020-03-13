@@ -38,6 +38,7 @@ namespace spanner_api = ::google::spanner::v1;
 
 using testing::ElementsAre;
 using test::EqualsProto;
+using test::proto::Partially;
 
 class QueryApiTest : public test::ServerTest {
  protected:
@@ -80,11 +81,86 @@ class QueryApiTest : public test::ServerTest {
   std::string test_session_uri_;
 };
 
+TEST_F(QueryApiTest, ExecuteBatchDml) {
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"(
+    options { read_write {} }
+  )");
+  begin_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction transaction_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  spanner_api::ExecuteBatchDmlRequest request = PARSE_TEXT_PROTO(
+      R"""(
+        statements {
+          sql: "insert into test_table(int64_col, string_col) "
+               "values (10, 'row_10')"
+        }
+        statements {
+          sql: "insert into test_table(int64_col, string_col) "
+               "values (11, 'row_11')"
+        }
+      )""");
+  request.set_session(test_session_uri_);
+  request.mutable_transaction()->set_id(transaction_response.id());
+
+  spanner_api::ExecuteBatchDmlResponse response;
+  ZETASQL_ASSERT_OK(ExecuteBatchDml(request, &response));
+  EXPECT_THAT(response, EqualsProto(
+                            R"(
+                              result_sets {
+                                metadata { row_type {} }
+                                stats { row_count_exact: 1 }
+                              }
+                              result_sets {
+                                metadata { row_type {} }
+                                stats { row_count_exact: 1 }
+                              }
+                            )"));
+}
+
+TEST_F(QueryApiTest, ExecuteBatchDmlFailsOnInvalidDmlStatement) {
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"(
+    options { read_write {} }
+  )");
+  begin_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction transaction_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  spanner_api::ExecuteBatchDmlRequest request = PARSE_TEXT_PROTO(
+      R"""(
+        statements {
+          sql: "insert into test_table(int64_col, string_col) "
+               "values (10, 'row_10')"
+        }
+        statements {
+          sql: "insert into test_table(int64_t, string) "
+               "values (11, 'row_11')"
+        }
+      )""");
+  request.set_session(test_session_uri_);
+  request.mutable_transaction()->set_id(transaction_response.id());
+
+  spanner_api::ExecuteBatchDmlResponse response;
+  ZETASQL_ASSERT_OK(ExecuteBatchDml(request, &response));
+  // Ignoring the status.message field to avoid brittle tests.
+  EXPECT_THAT(response, Partially(EqualsProto(
+                            R"(
+                              result_sets {
+                                metadata { row_type {} }
+                                stats { row_count_exact: 1 }
+                              }
+                              status { code: 3 }
+                            )")));
+}
+
 TEST_F(QueryApiTest, ExecuteSql) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"(
         transaction { single_use { read_only { strong: true } } }
-        sql: "SELECT int64_col, string_col FROM test_table"
+        sql: "SELECT int64_col, string_col FROM test_table "
+             "ORDER BY int64_col ASC, string_col DESC"
       )");
   request.set_session(test_session_uri_);
 
@@ -159,7 +235,8 @@ TEST_F(QueryApiTest, ExecuteStreamingSql) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"(
         transaction { single_use { read_only { strong: true } } }
-        sql: "SELECT int64_col, string_col FROM test_table"
+        sql: "SELECT int64_col, string_col FROM test_table "
+             "ORDER BY int64_col ASC, string_col DESC"
       )");
   request.set_session(test_session_uri_);
 

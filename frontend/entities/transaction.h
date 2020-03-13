@@ -63,12 +63,11 @@ class Transaction {
       const google::spanner::v1::TransactionSelector& selector,
       google::spanner::v1::ResultSetMetadata* metadata);
 
-  // Builds a backend query from the given sql request.
-  zetasql_base::StatusOr<backend::Query> BuildQuery(
-      const google::spanner::v1::ExecuteSqlRequest& request) const;
-
   // Returns the schema from the backend transaction.
   const backend::Schema* schema() const;
+
+  // Returns the engine used to execute queries against the database.
+  const backend::QueryEngine* query_engine() { return query_engine_; }
 
   // Returns the TransactionID from the backend transaction.
   backend::TransactionID id() const;

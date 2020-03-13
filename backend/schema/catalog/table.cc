@@ -300,11 +300,27 @@ zetasql_base::Status Table::ValidateUpdate(const SchemaNode* orig,
   if (is_deleted()) {
     ZETASQL_RET_CHECK(!owner_index_ || owner_index()->is_deleted());
     if (!child_tables_.empty()) {
-      return error::DropTableWithInterleavedTables(
-          name_, absl::StrJoin(child_tables_.begin(), child_tables_.end(), ",",
-                               [](std::string* out, const Table* child) {
-                                 return out->append(OwningObjectName(child));
-                               }));
+      // Build a sorted list of interleaved child tables and indexes.
+      std::vector<std::string> interleaved_tables;
+      std::vector<std::string> interleaved_indices;
+      for (const auto& entry : child_tables_) {
+        if (entry->owner_index()) {
+          interleaved_indices.push_back(entry->owner_index()->Name());
+        } else {
+          interleaved_tables.push_back(entry->Name());
+        }
+      }
+      std::sort(interleaved_tables.begin(), interleaved_tables.end());
+      std::sort(interleaved_indices.begin(), interleaved_indices.end());
+
+      // Cannot drop a table with interleaved child tables or indexes.
+      if (!interleaved_tables.empty()) {
+        return error::DropTableWithInterleavedTables(
+            name_, absl::StrJoin(interleaved_tables, ","));
+      } else if (!interleaved_indices.empty()) {
+        return error::DropTableWithDependentIndices(
+            name_, absl::StrJoin(interleaved_indices, ","));
+      }
     }
     if (!indexes_.empty()) {
       return error::DropTableWithDependentIndices(

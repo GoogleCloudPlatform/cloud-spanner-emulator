@@ -208,6 +208,14 @@ class ServerTest : public testing::Test {
     return test_env()->spanner_client()->ExecuteSql(&ctx, request, response);
   }
 
+  zetasql_base::Status ExecuteBatchDml(
+      const spanner_api::ExecuteBatchDmlRequest& request,
+      spanner_api::ExecuteBatchDmlResponse* response) {
+    grpc::ClientContext ctx;
+    return test_env()->spanner_client()->ExecuteBatchDml(&ctx, request,
+                                                         response);
+  }
+
   zetasql_base::Status ExecuteStreamingSql(
       const spanner_api::ExecuteSqlRequest& request,
       std::vector<spanner_api::PartialResultSet>* response);

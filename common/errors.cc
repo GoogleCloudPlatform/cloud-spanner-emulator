@@ -1136,6 +1136,27 @@ zetasql_base::Status InvalidHintValue(absl::string_view hint_string,
                                        hint_string, value_string));
 }
 
+zetasql_base::Status InvalidBatchDmlRequest() {
+  return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+                      "Request must contain at least one DML statement");
+}
+
+zetasql_base::Status ExecuteBatchDmlOnlySupportsDmlStatements(int index,
+                                                      absl::string_view query) {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      absl::Substitute("Statement $0: '$1' is not valid DML.", index, query));
+}
+
+zetasql_base::Status DmlRequiresReadWriteTransaction(
+    absl::string_view transaction_type) {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      absl::Substitute("DML statements can only be performed in a read-write "
+                       "transaction. Current transaction type is $0.",
+                       transaction_type));
+}
+
 zetasql_base::Status EmulatorDoesNotSupportQueryPlans() {
   return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented,
                       "The emulator does not support the PLAN query mode.");
