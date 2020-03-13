@@ -39,8 +39,8 @@ backend::TransactionID TransactionIDFromProto(const std::string& bytes) {
 
 google::rpc::Status StatusToProto(const zetasql_base::Status& error) {
   google::rpc::Status status;
-  status.set_code(error.raw_code());
-  status.set_message(error.message());
+  status.set_code(error.error_code());
+  status.set_message(std::string(error.message()));
   return status;
 }
 

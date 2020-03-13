@@ -457,7 +457,6 @@ TEST_F(CommitTimestamps, CanInsertPendingCommitTimestampInBuffer) {
 }
 
 TEST_F(CommitTimestamps, CanInsertAndCommitPendingCommitTimestampInDml) {
-  auto txn = Transaction(Transaction::ReadWriteOptions());
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       CommitDml({SqlStatement(

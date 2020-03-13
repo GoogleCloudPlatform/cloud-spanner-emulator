@@ -49,10 +49,51 @@ cc_test(
 )
 
 cc_library(
-    name = "reads",
-    srcs = ["reads.cc"],
-    hdrs = ["reads.h"],
+    name = "chunking",
+    srcs = ["chunking.cc"],
+    hdrs = ["chunking.h"],
     deps = [
+        "//common:errors",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_zetasql//zetasql/base:statusor",
+    ],
+)
+
+cc_test(
+    name = "chunking_test",
+    srcs = ["chunking_test.cc"],
+    deps = [
+        ":chunking",
+        ":reads",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_row_cursor",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/strings",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+        "@com_google_zetasql//zetasql/public/types",
+    ],
+)
+
+cc_library(
+    name = "reads",
+    srcs = [
+        "reads.cc",
+    ],
+    hdrs = [
+        "reads.h",
+    ],
+    deps = [
+        ":chunking",
         ":keys",
         ":time",
         ":types",
@@ -67,6 +108,8 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//backend/transaction:read_only_transaction",
         "//common:errors",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",
@@ -89,12 +132,14 @@ cc_test(
         "//tests/common:test_row_cursor",
         "//tests/common:test_schema_constructor",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
+        "@com_google_zetasql//zetasql/public/types",
     ],
 )
 

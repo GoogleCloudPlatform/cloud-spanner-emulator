@@ -29,7 +29,7 @@ namespace frontend {
 
 zetasql_base::StatusOr<backend::Query> QueryFromProto(
     std::string sql, const google::protobuf::Struct& params,
-    google::protobuf::Map<string, google::spanner::v1::Type> param_types,
+    google::protobuf::Map<std::string, google::spanner::v1::Type> param_types,
     zetasql::TypeFactory* type_factory) {
   std::map<std::string, zetasql::Value> query_parameters;
   for (const auto& [name, proto_value] : params.fields()) {

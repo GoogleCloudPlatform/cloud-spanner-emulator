@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include <tuple>
+
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -23,6 +25,7 @@ namespace test {
 
 namespace {
 
+using cloud::spanner::Bytes;
 using zetasql_base::testing::StatusIs;
 
 class QueryTest : public DatabaseTest {
@@ -140,6 +143,31 @@ TEST_F(QueryTest, CannotExecuteInvalidSelectStatement) {
                     "WHERE Users.UserId = t.UserId "
                     "AND Users.UserId=10 AND t.ThreadId=40"),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(QueryTest, HashFunctions) {
+  const unsigned char hash[] = {'\xb1', '\n', '\x8d', '\xb1', 'd',    '\xe0',
+                                'u',    'A',  '\x05', '\xb7', '\xa9', '\x9b',
+                                '\xe7', '.',  '?',    '\xe5'};
+  EXPECT_THAT(Query("SELECT MD5(\"Hello World\") as md5"),
+              IsOkAndHoldsRow({Value(Bytes(hash))}));
+}
+
+TEST_F(QueryTest, JSONFunctions) {
+  EXPECT_THAT(Query(R"(SELECT JSON_VALUE('{"a": {"b": "world"}}', '$.a.b'))"),
+              IsOkAndHoldsRow({Value("world")}));
+}
+
+TEST_F(QueryTest, CanReturnArrayOfStructTypedColumns) {
+  using EmptyStruct = std::tuple<>;
+  EXPECT_THAT(
+      Query("SELECT ARRAY(SELECT STRUCT<>())"),
+      IsOkAndHoldsRow({Value(std::vector<EmptyStruct>{EmptyStruct{}})}));
+
+  using SimpleStruct = std::tuple<int64_t>;
+  EXPECT_THAT(
+      Query("SELECT ARRAY(SELECT STRUCT<INT64>(1))"),
+      IsOkAndHoldsRow({Value(std::vector<SimpleStruct>{SimpleStruct{1}})}));
 }
 
 }  // namespace

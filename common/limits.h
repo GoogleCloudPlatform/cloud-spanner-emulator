@@ -83,6 +83,11 @@ constexpr int kMaxBytesColumnLength = (10 << 20);  // 10 MB
 // Maximum length for a STRING column value.
 constexpr int kMaxStringColumnLength = (kMaxBytesColumnLength / 4);  // 2621440
 
+// Maximum size of a response that is returned by a streaming read or query. If
+// total aggregate response is larger than this limit it will be chunked into
+// pieces, each no larger than this limit.
+constexpr int64_t kMaxStreamingChunkSize = 1024 * 1024;  // 1 MB
+
 }  // namespace limits
 }  // namespace emulator
 }  // namespace spanner

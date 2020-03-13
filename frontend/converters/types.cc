@@ -148,8 +148,9 @@ zetasql_base::Status TypeToProto(const zetasql::Type* type,
     case zetasql::TYPE_STRUCT: {
       type_pb->set_code(google::spanner::v1::TypeCode::STRUCT);
       const zetasql::StructType* struct_type = type->AsStruct();
+      auto struct_pb_type = type_pb->mutable_struct_type();
       for (int i = 0; i < struct_type->num_fields(); ++i) {
-        auto field = type_pb->mutable_struct_type()->add_fields();
+        auto field = struct_pb_type->add_fields();
         field->set_name(struct_type->field(i).name);
         ZETASQL_RETURN_IF_ERROR(
             TypeToProto(struct_type->field(i).type, field->mutable_type()))

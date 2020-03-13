@@ -1,1 +1,1 @@
-cloud_spanner_emulator_20200313_RC00
+bimargulies_17_RC00

@@ -14,15 +14,15 @@
 // limitations under the License.
 //
 
-#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_QUERY_H_
-#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_QUERY_H_
+#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_CHUNKING_H_
+#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_CHUNKING_H_
 
-#include <string>
+#include <vector>
 
 #include "google/protobuf/struct.pb.h"
-#include "google/spanner/v1/spanner.pb.h"
-#include "backend/query/query_engine.h"
-#include "common/errors.h"
+#include "google/spanner/v1/result_set.pb.h"
+#include "absl/strings/string_view.h"
+#include "zetasql/base/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -30,15 +30,15 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
-// Converts the sql, params into backend query using given type factory.
-zetasql_base::StatusOr<backend::Query> QueryFromProto(
-    std::string sql, const google::protobuf::Struct& params,
-    google::protobuf::Map<std::string, google::spanner::v1::Type> param_types,
-    zetasql::TypeFactory* type_factory);
+// Takes a ResultSet and chunks it into smaller pieces as necessary. Each
+// resulting piece will have a size <= max_chunk_size. Returns an ordered list
+// of PartialResultSets or an error.
+zetasql_base::StatusOr<std::vector<google::spanner::v1::PartialResultSet>>
+ChunkResultSet(const google::spanner::v1::ResultSet& set, int64_t max_chunk_size);
 
 }  // namespace frontend
 }  // namespace emulator
 }  // namespace spanner
 }  // namespace google
 
-#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_QUERY_H_
+#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_CHUNKING_H_

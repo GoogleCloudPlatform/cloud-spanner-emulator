@@ -30,16 +30,34 @@ RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
                         --slave   /usr/bin/g++ g++ /usr/bin/g++-7           && \
     update-alternatives --set gcc /usr/bin/gcc-7
 
-# Copy over the emulator code base into the container.
-COPY . src
-
-# Exclude the Dockerfile so we can iterate on it without rebuilding the image.
-RUN rm -rf kokoro/docker
+# Copy over the emulator code base into the container. We explicitly copy only
+# the required files to maximize chances that the layer will be cached. There
+# does not seem to be a nicer way to do this than multiple COPY commands as
+# COPY copies the contents of the source, not the directory itself.
+COPY BUILD WORKSPACE .bazelrc src/
+COPY common      src/common/
+COPY gateway     src/gateway/
+COPY frontend    src/frontend/
+COPY backend     src/backend/
+COPY binaries    src/binaries/
+COPY tests       src/tests/
+COPY build/bazel src/build/bazel/
 
 # Build the emulator.
 RUN cd src                                                                  && \
     CC=/usr/bin/gcc CXX=/usr/bin/g++                                           \
     bazel build -c opt ...
+
+# Generate licenses file.
+RUN for file in $(find -L src/bazel-src/external                               \
+                       -name "LICENSE" -o -name "COPYING")                   ; \
+    do                                                                         \
+      echo "----"                                                            ; \
+      echo $file                                                             ; \
+      echo "----"                                                            ; \
+      cat $file                                                              ; \
+    done > licenses.txt                                                     && \
+    gzip licenses.txt
 
 ################################################################################
 #                                   RELEASE                                    #
@@ -51,6 +69,9 @@ FROM gcr.io/distroless/cc
 # Copy binaries.
 COPY --from=build /src/bazel-bin/binaries/emulator_main .
 COPY --from=build /src/bazel-bin/binaries/linux_amd64_stripped/gateway_main .
+
+# Copy licenses
+COPY --from=build /licenses.txt.gz .
 
 # Expose the default ports 9010 (gRPC) and 9020 (REST)
 EXPOSE 9010 9020

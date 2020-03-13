@@ -42,11 +42,18 @@ using zetasql::types::TimestampType;
 
 TEST(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
   zetasql::TypeFactory factory;
-  const StructType* str_int_pair_type;
+  const zetasql::Type* str_int_pair_type;
   ZETASQL_ASSERT_OK(factory.MakeStructType(
       {StructType::StructField("str", factory.get_string()),
        StructType::StructField("int", factory.get_int64())},
       &str_int_pair_type));
+
+  const zetasql::Type* array_struct_type;
+  ZETASQL_ASSERT_OK(factory.MakeArrayType(str_int_pair_type, &array_struct_type));
+
+  const zetasql::Type* array_empty_struct_type;
+  ZETASQL_ASSERT_OK(factory.MakeArrayType(EmptyStructType(), &array_empty_struct_type));
+
   std::vector<std::pair<const zetasql::Type*, std::string>> test_cases{
       {BoolType(), "code: BOOL"},
       {Int64Type(), "code: INT64"},
@@ -56,7 +63,7 @@ TEST(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
       {StringType(), "code: STRING"},
       {BytesType(), "code: BYTES"},
       {Int64ArrayType(), "code: ARRAY array_element_type { code: INT64 }"},
-      {EmptyStructType(), "code: STRUCT"},
+      {EmptyStructType(), "code: STRUCT struct_type: { }"},
       {str_int_pair_type,
        R"(code: STRUCT
           struct_type: {
@@ -70,6 +77,30 @@ TEST(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
               }
             ]
           })"},
+      {array_struct_type,
+       R"(
+        code: ARRAY
+        array_element_type {
+          code: STRUCT
+          struct_type: {
+            fields: [
+              {
+                name: 'str'
+                type: { code: STRING }
+              }, {
+                name: 'int'
+                type: { code: INT64 }
+              }
+            ]
+          }
+        })"},
+      {array_empty_struct_type,
+       R"(
+        code: ARRAY
+        array_element_type {
+          code: STRUCT struct_type: { }
+        }
+        )"},
   };
   for (const auto& entry : test_cases) {
     const zetasql::Type* expected_type = entry.first;

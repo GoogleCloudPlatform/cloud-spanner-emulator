@@ -143,7 +143,9 @@ TEST_F(TransactionsTest, ReadWriteTransactionRollbackReplayIsOk) {
   ZETASQL_EXPECT_OK(Rollback(txn));
 }
 
-TEST_F(TransactionsTest, ReadWriteTransactionInvalidatedAfterError) {
+// TODO : Disabled until replay behavior is changed to make it
+// in-line with Prod.
+TEST_F(TransactionsTest, DISABLED_ReadWriteTransactionInvalidatedAfterError) {
   auto txn = Transaction(Transaction::ReadWriteOptions());
   // Invalid mutation since all values are not present for the given columns.
   auto mutation = InsertMutationBuilder("TestTable", {"key1", "key2", "col1"})

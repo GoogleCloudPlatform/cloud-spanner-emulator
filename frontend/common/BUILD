@@ -61,6 +61,7 @@ cc_library(
         "//common:errors",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
+        "@com_google_googleapis//google/rpc:status_cc_proto",
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_zetasql//zetasql/base:status",
     ],

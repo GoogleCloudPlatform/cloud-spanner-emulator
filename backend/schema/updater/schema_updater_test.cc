@@ -74,7 +74,8 @@ MATCHER_P2(IsKeyColumnOf, table, order, "") {
                                          result_listener);
   }
   return ::testing::ExplainMatchResult(::testing::Eq(pk->is_descending()),
-                                       (order == "DESC"), result_listener);
+                                       std::string(order) == "DESC",
+                                       result_listener);
 }
 
 MATCHER_P2(IsInterleavedIn, parent, on_delete, "") {

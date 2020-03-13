@@ -193,7 +193,15 @@ std::pair<Mutation, int64_t> BuildDelete(
   const zetasql::Table* table = iterator->table();
 
   KeySet key_set;
+  int64_t rows_deleted = 0;
   while (iterator->NextRow()) {
+    rows_deleted += 1;
+    if (!table->PrimaryKey().has_value()) {
+      // There is no primary key in the case of a singleton table. Delete
+      // mutation will contain an empty key set in such a case. We still loop
+      // over iterator to count the exact number (0 or 1) of rows deleted.
+      continue;
+    }
     ValueList key_values;
     for (int i = 0; i < table->PrimaryKey()->size(); ++i) {
       key_values.push_back(iterator->GetOriginalKeyValue(i));
@@ -201,9 +209,14 @@ std::pair<Mutation, int64_t> BuildDelete(
     key_set.AddKey(Key{key_values});
   }
 
+  if (key_set.keys().empty()) {
+    // Add empty key to delete the only row, if present, in a singleton table.
+    key_set.AddKey(Key{});
+  }
+
   Mutation mutation;
   mutation.AddDeleteOp(table->Name(), key_set);
-  return std::make_pair(mutation, key_set.keys().size());
+  return std::make_pair(mutation, rows_deleted);
 }
 
 // Returns true if the ResolvedDMLValue is a call to PENDING_COMMIT_TIMESTAMP()
