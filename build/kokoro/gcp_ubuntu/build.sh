@@ -19,8 +19,31 @@
 # Fail on any error.
 set -e
 
+# Extract the version.
+if [[ -f build/info/version.txt ]]; then
+  while read -r line; do
+    if [[ $line =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      EMULATOR_VERSION=$line
+    fi
+  done <build/info/version.txt
+  if [[ -z "${EMULATOR_VERSION}" ]]; then
+    echo "No version in build/info/version.txt" 1>&2
+    exit 1
+  fi
+else
+  EMULATOR_VERSION=0.0.0
+fi
+
 # Display commands being run.
 set -x
+
+# Skip the build if we are mocking.
+if [[ "${CLOUD_SPANNER_EMULATOR_MOCK_BUILD}" == true ]]; then
+  BIN_DIR="${KOKORO_ARTIFACTS_DIR:-/tmp}/bin"
+  cp build/info/version.txt "${BIN_DIR}"
+  tar -C "${BIN_DIR}" -czf "${BIN_DIR}/cloud-spanner-emulator-linux_amd64-${EMULATOR_VERSION}.tar.gz" version.txt
+  exit 0
+fi
 
 # If running under kokoro, setup the environment.
 if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
@@ -32,7 +55,7 @@ if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
   sudo apt-get -qq update
   sudo apt-get -qq install -y gcc-7 g++-7
   sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 90 \
-                           --slave   /usr/bin/g++ g++ /usr/bin/g++-7
+                           --slave /usr/bin/g++ g++ /usr/bin/g++-7
   sudo update-alternatives --set gcc /usr/bin/gcc-7
 
   # Switch to source root.
@@ -50,22 +73,10 @@ export GO_BINARY_DIR=linux_amd64_stripped
 set +e
 ./build/kokoro/build.sh
 exit_code=${?}
+
 set -e
 
-if [[ -f build/info/version.txt ]]; then
-  while read -r line;
-  do
-    if [[ $line =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-      EMULATOR_VERSION=$line
-    fi
-  done < build/info/version.txt
-  if [[ -z "${EMULATOR_VERSION}" ]]; then
-    echo "No version in build/info/version.txt" 1>&2
-    exit 1
-  fi
-else
-  EMULATOR_VERSION=0.0.0
-fi
+
 
 # If running under kokoro, copy outputs to a predefined-dir
 if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
