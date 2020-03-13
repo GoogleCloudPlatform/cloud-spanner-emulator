@@ -76,8 +76,6 @@ exit_code=${?}
 
 set -e
 
-
-
 # If running under kokoro, copy outputs to a predefined-dir
 if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
   # Create binary and test log dirs.

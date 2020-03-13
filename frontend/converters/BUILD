@@ -80,7 +80,6 @@ cc_test(
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
-        "@com_google_zetasql//zetasql/public/types",
     ],
 )
 
@@ -139,7 +138,6 @@ cc_test(
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
-        "@com_google_zetasql//zetasql/public/types",
     ],
 )
 

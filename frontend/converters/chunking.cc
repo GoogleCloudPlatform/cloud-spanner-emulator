@@ -172,7 +172,7 @@ class ResultSetBuilder {
     while (!str.empty()) {
       int64_t available = std::max(
           max_chunk_size_ - current_chunk_size_ - kStringOrListMetadataSize,
-          0LL);
+          static_cast<int64_t>(0));
       if (str.size() > available) {
         // Strings are UTF-8 encoded. Not all client libraries support a split
         // UTF-8 character. Flush the entire and not partial UTF-8 character.

@@ -146,14 +146,15 @@ TEST_F(QueryTest, CannotExecuteInvalidSelectStatement) {
 }
 
 TEST_F(QueryTest, HashFunctions) {
-  const unsigned char hash[] = {'\xb1', '\n', '\x8d', '\xb1', 'd',    '\xe0',
-                                'u',    'A',  '\x05', '\xb7', '\xa9', '\x9b',
-                                '\xe7', '.',  '?',    '\xe5'};
+  const char hash[] = {'\xb1', '\n', '\x8d', '\xb1', 'd',    '\xe0',
+                       'u',    'A',  '\x05', '\xb7', '\xa9', '\x9b',
+                       '\xe7', '.',  '?',    '\xe5'};
   EXPECT_THAT(Query("SELECT MD5(\"Hello World\") as md5"),
               IsOkAndHoldsRow({Value(Bytes(hash))}));
 }
 
-TEST_F(QueryTest, JSONFunctions) {
+// TODO: Enable JSON functions once available in ZetaSQL.
+TEST_F(QueryTest, DISABLED_JSONFunctions) {
   EXPECT_THAT(Query(R"(SELECT JSON_VALUE('{"a": {"b": "world"}}', '$.a.b'))"),
               IsOkAndHoldsRow({Value("world")}));
 }

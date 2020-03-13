@@ -19,7 +19,6 @@
 #include <vector>
 
 #include "google/spanner/v1/result_set.pb.h"
-#include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

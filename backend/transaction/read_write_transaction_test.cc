@@ -355,10 +355,11 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
           zetasql_base::Status status = cur_txn->Read(read_arg, &cursor);
           if (status.ok()) {
             // Increment and save this value to the database.
-            int cur_val;
+            int cur_val = 0;
             while (cursor->Next()) {
               cur_val = cursor->ColumnValue(0).int64_value();
             }
+            ZETASQL_ASSERT_OK(cursor->Status());
             Mutation m;
             m.AddWriteOp(MutationOpType::kUpdate, "test_table",
                          {"int64_col", "int64_val_col"},
