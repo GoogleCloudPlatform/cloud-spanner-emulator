@@ -46,6 +46,7 @@ set -x
 # Skip the build if we are mocking.
 if [[ "${CLOUD_SPANNER_EMULATOR_MOCK_BUILD}" == true ]]; then
   BIN_DIR="${KOKORO_ARTIFACTS_DIR:-/tmp}/bin"
+  mkdir -p ${BIN_DIR}
   cp build/info/version.txt "${BIN_DIR}"
   tar -C "${BIN_DIR}" -czf "${BIN_DIR}/cloud-spanner-emulator-linux_amd64-${EMULATOR_VERSION}.tar.gz" version.txt
   exit 0
