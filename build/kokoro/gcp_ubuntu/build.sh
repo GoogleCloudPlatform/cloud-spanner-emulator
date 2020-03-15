@@ -19,6 +19,12 @@
 # Fail on any error.
 set -e
 
+# Switch to source root so that version extraction and mock work.
+if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
+  # Switch to source root.
+  cd ${KOKORO_ARTIFACTS_DIR}/git/cloud-spanner-emulator
+fi
+
 # Extract the version.
 if [[ -f build/info/version.txt ]]; then
   while read -r line; do
@@ -57,9 +63,6 @@ if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
   sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 90 \
                            --slave /usr/bin/g++ g++ /usr/bin/g++-7
   sudo update-alternatives --set gcc /usr/bin/gcc-7
-
-  # Switch to source root.
-  cd ${KOKORO_ARTIFACTS_DIR}/git/cloud-spanner-emulator
 fi
 
 # Directory in which gcloud is located (gcloud should be accessible via PATH for
