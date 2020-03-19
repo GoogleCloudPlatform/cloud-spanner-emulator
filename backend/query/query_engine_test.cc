@@ -305,6 +305,23 @@ TEST_F(QueryEngineTest, ExecuteSqlUpdatesRows) {
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
 }
 
+TEST_F(QueryEngineTest, CannotInsertDuplicateValuesForPrimaryKey) {
+  MockRowWriter writer;
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{"INSERT INTO test_table (int64_col, string_col) "
+                        "VALUES(2, 'another two')"},
+                  QueryContext{schema(), reader(), &writer}),
+              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+}
+
+TEST_F(QueryEngineTest, ConnotUpdatePrimaryKey) {
+  MockRowWriter writer;
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{"UPDATE test_table SET int64_col=2 WHERE int64_col=2"},
+                  QueryContext{schema(), reader(), &writer}),
+              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
 }  // namespace
 
 }  // namespace backend

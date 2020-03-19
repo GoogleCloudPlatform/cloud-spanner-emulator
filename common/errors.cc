@@ -1043,13 +1043,23 @@ zetasql_base::Status NullValueForNotNullColumn(absl::string_view table_name,
                        column_name, table_name, key));
 }
 
-zetasql_base::Status InvalidColumnValueLength(absl::string_view table_name,
-                                      absl::string_view column_name,
-                                      int max_column_length) {
+zetasql_base::Status ValueExceedsLimit(absl::string_view column_name, int value_size,
+                               int max_column_size) {
   return zetasql_base::Status(
-      zetasql_base::StatusCode::kInvalidArgument,
-      absl::StrCat("Bad length for column ", table_name, ".", column_name,
-                   " : Allowed length range: [1, ", max_column_length, "]"));
+      zetasql_base::StatusCode::kFailedPrecondition,
+      absl::Substitute("New value exceeds the maximum size limit for this "
+                       "column: $0, size: $1, limit: $2.",
+                       column_name, value_size, max_column_size));
+}
+
+zetasql_base::Status NonNullValueNotSpecifiedForInsert(absl::string_view table_name,
+                                               absl::string_view column_name) {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "A new row in table $0 does not specify a non-null value "
+          "for NOT NULL column: $1",
+          table_name, column_name));
 }
 
 zetasql_base::Status InvalidStringEncoding(absl::string_view table_name,

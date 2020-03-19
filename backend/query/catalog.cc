@@ -91,7 +91,8 @@ zetasql_base::Status Catalog::GetTypes(
 }
 zetasql_base::Status Catalog::GetFunctions(
     absl::flat_hash_set<const zetasql::Function*>* output) const {
-  // TODO: Add functions when we have implemented them.
+  // TODO: Add functions when we have implemented an AST filter
+  // that returns a canonical, supported list of functions.
   return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented,
                       "Catalog::GetFunctions is not implemented");
 }

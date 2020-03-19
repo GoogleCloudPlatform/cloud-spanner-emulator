@@ -21,7 +21,9 @@ import os
 import os.path
 import signal
 import subprocess
+import time
 import urllib.request
+import builtins
 
 import portpicker
 
@@ -103,6 +105,8 @@ class TestCase(unittest.TestCase):
     self.RunGCloud('config', 'set', 'api_endpoint_overrides/spanner',
                    'http://localhost:{}/'.format(self.http_port))
 
+    self.WaitForReady()
+
   def tearDown(self):
     super(TestCase, self).tearDown()
 
@@ -113,6 +117,34 @@ class TestCase(unittest.TestCase):
     # which terminates the gateway process, but leaks the grpc server process
     # started by the gateway process.
     self.emulator.send_signal(signal.SIGINT)
+
+    # Wait for emulator subprocess to close grpc and http gateway server and
+    # release any network ports being used.
+    self.emulator.wait()
+
+  def WaitForReady(self):
+    url = 'http://localhost:{}/v1/projects/test-project/instanceConfigs'.format(
+        self.http_port)
+    req = urllib.request.Request(url, method='GET')
+
+    # Wait for up to 15 seconds for emulator http server to be up.
+    max_retries = 15
+    num_retries = 0
+    while num_retries < max_retries:
+      try:
+        with urllib.request.urlopen(req) as response:
+          response.read().decode('utf-8')
+          return
+      except urllib.error.URLError as e:
+        if isinstance(e.reason, builtins.ConnectionRefusedError):
+          # Sleep for 1 second if the server isn't up.
+          num_retries += 1
+          if num_retries >= max_retries:
+            raise e
+          time.sleep(1.0)
+          continue
+        else:
+          raise Exception(e.file.read().decode())
 
 
 def RunTests():

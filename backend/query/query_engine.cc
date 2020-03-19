@@ -33,6 +33,8 @@
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/memory/memory.h"
+#include "zetasql/base/status.h"
+#include "absl/strings/match.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/common/case.h"
@@ -125,6 +127,23 @@ zetasql_base::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> Analyze(
   return output;
 }
 
+// TODO : Replace with a better error transforming mechanism,
+// ideally hooking into ZetaSQL to control error messages.
+zetasql_base::Status MaybeTransformZetaSQLDMLError(zetasql_base::Status error) {
+  // For inserts to a primary key columm.
+  if (absl::StartsWith(error.message(),
+                       "Failed to insert row with primary key")) {
+    return zetasql_base::Status(zetasql_base::StatusCode::kAlreadyExists, error.message());
+  }
+
+  // For updates to a primary key column.
+  if (absl::StartsWith(error.message(), "Cannot modify a primary key column")) {
+    return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument, error.message());
+  }
+
+  return error;
+}
+
 // Builds a INSERT mutation and returns it along with a count of inserted rows.
 std::pair<Mutation, int64_t> BuildInsert(
     std::unique_ptr<zetasql::EvaluatorTableModifyIterator> iterator,
@@ -193,30 +212,24 @@ std::pair<Mutation, int64_t> BuildDelete(
   const zetasql::Table* table = iterator->table();
 
   KeySet key_set;
-  int64_t rows_deleted = 0;
-  while (iterator->NextRow()) {
-    rows_deleted += 1;
-    if (!table->PrimaryKey().has_value()) {
-      // There is no primary key in the case of a singleton table. Delete
-      // mutation will contain an empty key set in such a case. We still loop
-      // over iterator to count the exact number (0 or 1) of rows deleted.
-      continue;
-    }
-    ValueList key_values;
-    for (int i = 0; i < table->PrimaryKey()->size(); ++i) {
-      key_values.push_back(iterator->GetOriginalKeyValue(i));
-    }
-    key_set.AddKey(Key{key_values});
-  }
-
-  if (key_set.keys().empty()) {
-    // Add empty key to delete the only row, if present, in a singleton table.
+  if (!table->PrimaryKey().has_value() && iterator->NextRow()) {
+    // There is no primary key in the case of a singleton table. Delete
+    // mutation will contain an empty key set in such a case if there is a row
+    // to be deleted.
     key_set.AddKey(Key{});
+  } else {
+    while (iterator->NextRow()) {
+      ValueList key_values;
+      for (int i = 0; i < table->PrimaryKey()->size(); ++i) {
+        key_values.push_back(iterator->GetOriginalKeyValue(i));
+      }
+      key_set.AddKey(Key{key_values});
+    }
   }
 
   Mutation mutation;
   mutation.AddDeleteOp(table->Name(), key_set);
-  return std::make_pair(mutation, rows_deleted);
+  return std::make_pair(mutation, key_set.keys().size());
 }
 
 // Returns true if the ResolvedDMLValue is a call to PENDING_COMMIT_TIMESTAMP()
@@ -287,8 +300,11 @@ zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedInsert(
 
   auto prepared_insert = absl::make_unique<zetasql::PreparedModify>(
       insert_statement, CommonEvaluatorOptions(type_factory));
-  ZETASQL_ASSIGN_OR_RETURN(auto iterator, prepared_insert->Execute(parameters));
-
+  auto status_or = prepared_insert->Execute(parameters);
+  if (!status_or.ok()) {
+    return MaybeTransformZetaSQLDMLError(status_or.status());
+  }
+  auto iterator = std::move(status_or).ValueOrDie();
   return BuildInsert(std::move(iterator), MutationOpType::kInsert,
                      pending_ts_columns);
 }
@@ -302,8 +318,11 @@ zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedUpdate(
                        update_statement->update_item_list()));
   auto prepared_update = absl::make_unique<zetasql::PreparedModify>(
       update_statement, CommonEvaluatorOptions(type_factory));
-  ZETASQL_ASSIGN_OR_RETURN(auto iterator, prepared_update->Execute(parameters));
-
+  auto status_or = prepared_update->Execute(parameters);
+  if (!status_or.ok()) {
+    return MaybeTransformZetaSQLDMLError(status_or.status());
+  }
+  auto iterator = std::move(status_or).ValueOrDie();
   return BuildUpdate(std::move(iterator), MutationOpType::kUpdate,
                      pending_ts_columns);
 }

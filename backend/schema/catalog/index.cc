@@ -86,10 +86,6 @@ zetasql_base::Status Index::Validate(SchemaValidationContext* context) const {
     return error::InvalidSchemaName("Index", name_);
   }
 
-  // copybara_strip:begin(internal-comment)
-  //   TODO : This should ideally be fixed in the parser.
-  //   The parser should not allow this.
-  // copybara_strip:end
   if (key_columns_.empty()) {
     return error::IndexWithNoKeys(name_);
   }

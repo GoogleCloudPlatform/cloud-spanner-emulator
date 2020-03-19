@@ -48,6 +48,11 @@ class DmlTest : public DatabaseTest {
             Col1     STRING(MAX),
             Col2     STRING(MAX),
           ) PRIMARY KEY ()
+        )",
+        R"(CREATE TABLE ArrayFields(
+            Key      INT64,
+            ArrayCol ARRAY<INT64>,
+          ) PRIMARY KEY(Key)
         )"});
   }
 
@@ -97,6 +102,33 @@ TEST_F(DmlTest, CanDeleteFromTable) {
   ZETASQL_EXPECT_OK(CommitDml({SqlStatement("DELETE FROM Users WHERE true")}));
 
   EXPECT_THAT(Query("SELECT ID, Name, Age FROM Users"), IsOkAndHoldsRows({}));
+}
+
+TEST_F(DmlTest, CanDeleteRangeFromTable) {
+  PopulateDatabase();
+  EXPECT_THAT(Query("SELECT ID, Name, Age FROM Users ORDER BY ID"),
+              IsOkAndHoldsRows(
+                  {{1, "Levin", 27}, {2, "Mark", 32}, {10, "Douglas", 31}}));
+
+  // Should delete only User with ID 2.
+  ZETASQL_EXPECT_OK(
+      CommitDml({SqlStatement("DELETE FROM Users WHERE ID > 1 AND ID < 10")}));
+
+  EXPECT_THAT(Query("SELECT ID, Name, Age FROM Users ORDER BY ID"),
+              IsOkAndHoldsRows({{1, "Levin", 27}, {10, "Douglas", 31}}));
+}
+
+TEST_F(DmlTest, DeleteWithEmptyKeysIsNoOp) {
+  PopulateDatabase();
+  EXPECT_THAT(Query("SELECT ID, Name, Age FROM Users ORDER BY ID"),
+              IsOkAndHoldsRows(
+                  {{1, "Levin", 27}, {2, "Mark", 32}, {10, "Douglas", 31}}));
+
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("DELETE FROM Users WHERE false")}));
+
+  EXPECT_THAT(Query("SELECT ID, Name, Age FROM Users ORDER BY ID"),
+              IsOkAndHoldsRows(
+                  {{1, "Levin", 27}, {2, "Mark", 32}, {10, "Douglas", 31}}));
 }
 
 TEST_F(DmlTest, CanExecuteUpdateAfterDelete) {
@@ -168,7 +200,9 @@ TEST_F(DmlTest, CanUpdateSingletonTable) {
 }
 
 TEST_F(DmlTest, CanDeleteFromEmptySingletonTable) {
+  EXPECT_THAT(Query("SELECT Col1, Col2 FROM Singleton"), IsOkAndHoldsRows({}));
   ZETASQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM Singleton WHERE true")}));
+  EXPECT_THAT(Query("SELECT Col1, Col2 FROM Singleton"), IsOkAndHoldsRows({}));
 }
 
 TEST_F(DmlTest, CanDeleteFromSingletonTable) {
@@ -177,6 +211,91 @@ TEST_F(DmlTest, CanDeleteFromSingletonTable) {
                               "('val11', 'val21')")}));
   ZETASQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM Singleton WHERE true")}));
   EXPECT_THAT(Query("SELECT Col1, Col2 FROM Singleton"), IsOkAndHoldsRows({}));
+}
+
+TEST_F(DmlTest, DeleteWithEmptyKeysIsNoOpForSingletonTable) {
+  ZETASQL_ASSERT_OK(
+      CommitDml({SqlStatement("INSERT INTO Singleton (Col1, Col2) Values "
+                              "('val11', 'val21')")}));
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM Singleton WHERE false")}));
+  EXPECT_THAT(Query("SELECT Col1, Col2 FROM Singleton"),
+              IsOkAndHoldsRows({{"val11", "val21"}}));
+}
+
+TEST_F(DmlTest, CannotUseReadOnlyTransaction) {
+  EXPECT_THAT(
+      ExecuteDmlTransaction(Transaction(Transaction::ReadOnlyOptions()),
+                            SqlStatement("INSERT INTO Users(ID) VALUES(1)")),
+      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(QuerySingleUseTransaction(
+                  Transaction::SingleUseOptions{Transaction::ReadOnlyOptions{}},
+                  SqlStatement("INSERT INTO Users(ID) VALUES(1)")),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(DmlTest, CanInsertToArrayColumns) {
+  // Array literals.
+  ZETASQL_EXPECT_OK(
+      CommitDml({SqlStatement("INSERT INTO ArrayFields(Key, ArrayCol) "
+                              "VALUES(1, ARRAY<INT64>[10])")}));
+
+  // Array parameters.
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("INSERT INTO ArrayFields(Key, ArrayCol) "
+                    "VALUES(@p1, @p2)",
+                    SqlStatement::ParamType{
+                        {"p1", Value(2)},
+                        {"p2", Value(std::vector<int64_t>{10, 20, 30})}})}));
+
+  EXPECT_THAT(Query("SELECT Key, ArrayCol FROM ArrayFields ORDER BY Key"),
+              IsOkAndHoldsRows({
+                  {1, Value(std::vector<int64_t>{10})},
+                  {2, Value(std::vector<int64_t>{10, 20, 30})},
+              }));
+}
+
+TEST_F(DmlTest, CanInsertMultipleRowsUsingStructParam) {
+  using StructType = std::tuple<int64_t, std::string>;
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+      "INSERT INTO Users(ID, Name) "
+      "SELECT * FROM UNNEST(@p1)",
+      SqlStatement::ParamType{
+          {"p1", Value(std::vector<StructType>{StructType{1, "abc"},
+                                               StructType{2, "def"}})}})}));
+
+  EXPECT_THAT(Query("SELECT ID, Name FROM Users ORDER BY ID"),
+              IsOkAndHoldsRows({{1, "abc"}, {2, "def"}}));
+}
+
+TEST_F(DmlTest, CannotCommitWithBadMutation) {
+  Transaction txn{Transaction::ReadWriteOptions{}};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto result,
+      ExecuteDmlTransaction(
+          txn, SqlStatement("INSERT INTO Users(ID, Name) VALUES(1, \"abc\")")));
+
+  // Check read-your-writes
+  EXPECT_THAT(QueryTransaction(txn, "SELECT ID, Name FROM Users"),
+              IsOkAndHoldsRow({1, "abc"}));
+
+  // Build an invalid mutation referencing a non-existent column.
+  auto mut1 = MakeInsert("Users", {"ID"}, 2);
+  auto mut2 = MakeInsert("Users", {"NON_EXISTENT_COLUMN"}, 3);
+  auto mut3 = MakeInsert("Users", {"ID"}, 4);
+
+  // Try to commit the transaction, it should fail.
+  EXPECT_THAT(
+      CommitTransaction(txn,
+                        {
+                            MakeInsert("Users", {"ID"}, 2),
+                            MakeInsert("Users", {"NON_EXISTENT_COLUMN"}, 3),
+                            MakeInsert("Users", {"ID"}, 4),
+                        }),
+      StatusIs(zetasql_base::StatusCode::kNotFound));
+
+  // Check that the DML statement was not committed.
+  EXPECT_THAT(Query("SELECT ID FROM Users"), IsOkAndHoldsRows({}));
 }
 
 }  // namespace

@@ -101,6 +101,12 @@ class SchemaChangeTest : public DatabaseTest,
 
   // Runs all schema change test cases from the given test file.
   zetasql_base::Status RunTestCasesFrom(const std::string& test_file) {
+    // TODO: Schema change tests take too long to run in prod, so
+    // skip them from now.
+    if (in_prod_env()) {
+      return zetasql_base::OkStatus();
+    }
+
     return RunTestCasesFromFile(test_file, FileBasedTestOptions{},
                                 [this](const FileBasedTestCaseInput& input) {
                                   return RunSchemaChangeTestCase(input);

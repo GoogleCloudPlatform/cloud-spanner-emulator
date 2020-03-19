@@ -51,8 +51,6 @@ namespace {
 using zetasql::values::Int64;
 using zetasql::values::String;
 
-// TODO: This is hardcoded to test against the basic test table. This
-// should be made more robust after DDL parsing is implemented.
 ValueList GetIndexValues(const Key& key,
                          std::unique_ptr<ReadWriteTransaction>* txn) {
   ValueList values;

@@ -72,8 +72,12 @@ class DatabaseTest : public ::testing::Test {
 
  protected:
   // Bring several symbols into the namespace of this class for readability.
+  template <typename T>
+  using Array = std::vector<google::cloud::optional<T>>;
+  using Bytes = cloud::spanner::Bytes;
   using Client = cloud::spanner::Client;
   using CommitResult = cloud::spanner::CommitResult;
+  using Date = cloud::spanner::Date;
   using Mutation = cloud::spanner::Mutation;
   using Mutations = cloud::spanner::Mutations;
   using Transaction = cloud::spanner::Transaction;
@@ -92,6 +96,13 @@ class DatabaseTest : public ::testing::Test {
   using ReadOptions = cloud::spanner::ReadOptions;
   using Value = cloud::spanner::Value;
   using Timestamp = cloud::spanner::Timestamp;
+
+  template <typename Duration>
+  static Timestamp MakeTimestamp(
+      const std::chrono::time_point<std::chrono::system_clock, Duration>&
+          time) {
+    return google::cloud::spanner::MakeTimestamp(time).value();
+  }
 
   static Timestamp MakeMinTimestamp() {
     // 0001-01-01T00:00:00Z
@@ -360,6 +371,20 @@ class DatabaseTest : public ::testing::Test {
   zetasql_base::StatusOr<std::vector<ValueRow>> QueryTransaction(
       Transaction txn, const std::string& query) {
     auto result = client().ExecuteQuery(txn, SqlStatement(query));
+    std::vector<ValueRow> retval;
+    for (const auto& row : result) {
+      if (!row.ok()) {
+        return ToUtilStatus(row.status());
+      }
+      retval.push_back(row.value());
+    }
+    return retval;
+  }
+
+  zetasql_base::StatusOr<std::vector<ValueRow>> QuerySingleUseTransaction(
+      Transaction::SingleUseOptions txn_opts,
+      const SqlStatement sql_statement) {
+    auto result = client().ExecuteQuery(txn_opts, sql_statement);
     std::vector<ValueRow> retval;
     for (const auto& row : result) {
       if (!row.ok()) {

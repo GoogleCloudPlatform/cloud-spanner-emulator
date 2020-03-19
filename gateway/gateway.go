@@ -88,6 +88,10 @@ func (gw *Gateway) Run() {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		<-c
+		// Release resources e.g., network ports associated with the process.
+		// This is required since gateway may receive an interrupt signal for
+		// shutdown before Wait() returns.
+		cmd.Process.Release()
 		cmd.Process.Kill()
 		os.Exit(0)
 	}()

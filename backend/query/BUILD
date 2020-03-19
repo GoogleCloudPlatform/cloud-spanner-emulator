@@ -36,6 +36,7 @@ cc_library(
         "//common:constants",
         "//common:errors",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base:statusor",

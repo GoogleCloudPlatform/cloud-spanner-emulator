@@ -17,6 +17,7 @@
 #include "backend/actions/column_value.h"
 
 #include "zetasql/public/functions/string.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
 #include "backend/actions/action.h"
 #include "backend/actions/context.h"
@@ -35,6 +36,25 @@ namespace emulator {
 namespace backend {
 
 namespace {
+
+zetasql_base::Status ValidateNotNullColumnsPresent(
+    const Table* table, const std::vector<const Column*>& columns) {
+  // TODO: Find a way of doing this without creating a hash set for
+  // every insert.
+  absl::flat_hash_set<const Column*> inserted_columns;
+  for (const auto column : columns) {
+    if (!column->is_nullable()) {
+      inserted_columns.insert(column);
+    }
+  }
+  for (const auto column : table->columns()) {
+    if (!column->is_nullable() && !inserted_columns.contains(column)) {
+      return error::NonNullValueNotSpecifiedForInsert(table->Name(),
+                                                      column->Name());
+    }
+  }
+  return zetasql_base::OkStatus();
+}
 
 zetasql_base::Status ValidateColumnValueType(const Table* table,
                                      const Column* const column,
@@ -82,9 +102,8 @@ zetasql_base::Status ValidateColumnStringValue(const Table* table, const Column*
       return error::InvalidStringEncoding(table->Name(), column->Name());
     }
     if (encoded_chars > column->effective_max_length()) {
-      return error::InvalidColumnLength(column->FullName(), encoded_chars,
-                                        /*min_length=*/1,
-                                        column->effective_max_length());
+      return error::ValueExceedsLimit(column->FullName(), encoded_chars,
+                                      column->effective_max_length());
     }
   }
   return zetasql_base::OkStatus();
@@ -95,9 +114,9 @@ zetasql_base::Status ValidateColumnBytesValue(const Table* table, const Column* 
   // Validate that bytes do not exceed max length.
   if (!value.is_null()) {
     if (value.bytes_value().size() > column->effective_max_length()) {
-      return error::InvalidColumnLength(
-          column->FullName(), value.bytes_value().size(),
-          /*min_length=*/1, column->effective_max_length());
+      return error::ValueExceedsLimit(column->FullName(),
+                                      value.bytes_value().size(),
+                                      column->effective_max_length());
     }
   }
   return zetasql_base::OkStatus();
@@ -166,6 +185,7 @@ zetasql_base::Status ValidateInsertUpdateOp(const Table* table,
 
 zetasql_base::Status ColumnValueValidator::Validate(const ActionContext* ctx,
                                             const InsertOp& op) const {
+  ZETASQL_RETURN_IF_ERROR(ValidateNotNullColumnsPresent(op.table, op.columns));
   return ValidateInsertUpdateOp(op.table, op.columns, op.values, ctx->clock());
 }
 

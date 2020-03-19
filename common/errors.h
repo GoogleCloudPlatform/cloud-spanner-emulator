@@ -293,6 +293,10 @@ zetasql_base::Status InvalidStringEncoding(absl::string_view table_name,
                                    absl::string_view column_name);
 zetasql_base::Status UTF8StringColumn(absl::string_view column_name,
                               absl::string_view key);
+zetasql_base::Status ValueExceedsLimit(absl::string_view column_name, int value_size,
+                               int max_column_size);
+zetasql_base::Status NonNullValueNotSpecifiedForInsert(absl::string_view table_name,
+                                               absl::string_view column_name);
 
 // Index errors.
 zetasql_base::Status UniqueIndexConstraintViolation(absl::string_view index_name,

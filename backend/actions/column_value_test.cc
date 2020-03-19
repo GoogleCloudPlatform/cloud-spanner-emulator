@@ -287,9 +287,9 @@ TEST_F(ColumnValueTest, ValidateStringLength) {
   {
     values.string_col = String(exceed_max);
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
   }
 }
 
@@ -306,9 +306,9 @@ TEST_F(ColumnValueTest, ValidateBytesLength) {
   {
     values.bytes_col = Bytes(exceed_max);
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
   }
 }
 
@@ -325,9 +325,9 @@ TEST_F(ColumnValueTest, ValidateArrayStringLength) {
   {
     values.array_string_col = StringArray({exceed_max, exceed_max, exceed_max});
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
   }
 }
 
@@ -344,9 +344,9 @@ TEST_F(ColumnValueTest, ValidateArrayBytesLength) {
   {
     values.array_bytes_col = BytesArray({exceed_max, exceed_max, exceed_max});
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
   }
 }
 
