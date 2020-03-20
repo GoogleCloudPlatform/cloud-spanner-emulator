@@ -23,6 +23,7 @@ cc_library(
     testonly = 1,
     srcs = [
         "arrays.cc",
+        "batch_dml.cc",
         "case_sensitivity.cc",
         "column_constraints.cc",
         "commit_timestamps.cc",

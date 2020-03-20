@@ -26,6 +26,7 @@
 #include "tests/conformance/common/environment.h"
 #include "google/cloud/status_or.h"
 #include "google/cloud/spanner/backoff_policy.h"
+#include "google/cloud/spanner/batch_dml_result.h"
 #include "google/cloud/spanner/commit_result.h"
 #include "google/cloud/spanner/connection_options.h"
 #include "google/cloud/spanner/create_instance_request_builder.h"
@@ -140,6 +141,7 @@ using InsertOrUpdateMutationBuilder =
     cloud::spanner::InsertOrUpdateMutationBuilder;
 using DeleteMutationBuilder = cloud::spanner::DeleteMutationBuilder;
 using Transaction = cloud::spanner::Transaction;
+using BatchDmlResult = cloud::spanner::BatchDmlResult;
 
 zetasql_base::StatusOr<CommitResult> DatabaseTest::Commit(Mutations mutations) {
   return ToUtilStatusOr(client().Commit(
@@ -157,10 +159,28 @@ zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitDml(
       [&](Transaction const& txn) -> cloud::StatusOr<Mutations> {
         for (auto sql_statement : sql_statements) {
           auto result = client().ExecuteDml(txn, sql_statement);
-          if (!result) return std::move(result).status();
+          if (!result) return result.status();
         }
         return Mutations{};
       }));
+}
+
+zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitBatchDml(
+    const std::vector<SqlStatement>& sql_statements) {
+  return ToUtilStatusOr(client().Commit(
+      [&](Transaction const& txn) -> cloud::StatusOr<Mutations> {
+        auto result = client().ExecuteBatchDml(txn, sql_statements);
+        if (!result) return result.status();
+        if (!result.value().status.ok()) return result.value().status;
+        return Mutations{};
+      }));
+}
+
+zetasql_base::StatusOr<BatchDmlResult> DatabaseTest::BatchDmlTransaction(
+    Transaction txn, const std::vector<SqlStatement>& sql_statements) {
+  auto result = client().ExecuteBatchDml(txn, sql_statements);
+  if (!result) return ToUtilStatus(result.status());
+  return result.value();
 }
 
 zetasql_base::Status DatabaseTest::Rollback(Transaction txn) {

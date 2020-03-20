@@ -137,13 +137,72 @@ TEST_F(MalformedWritesTest, CannotWriteToNonExistentColumn) {
 }
 
 TEST_F(MalformedWritesTest, CannotWriteToEmptyTableName) {
+  // Check that empty table name cannot be specified for all mutation types:
+  // insert, update, delete and replace.
   EXPECT_THAT(Insert("", {"UserId", "Name"}, {1, "Douglas Adams"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(InsertOrUpdate("", {"UserId", "Name"}, {1, "Douglas Adams"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(Update("", {"UserId", "Name"}, {1, "Douglas Adams"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(Replace("", {"UserId", "Name"}, {1, "Douglas Adams"}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(Delete("", Key(1, "Douglas Adams")),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 }
 
 TEST_F(MalformedWritesTest, CannotWriteToNonExistentTable) {
   EXPECT_THAT(Insert("bad-table", {"UserId", "Name"}, {1, "Douglas Adams"}),
               StatusIs(zetasql_base::StatusCode::kNotFound));
+}
+
+TEST_F(MalformedWritesTest, CannotWriteStructToStringColumn) {
+  // Check that struct type cannot be passed to a string column for all mutation
+  // types: insert, update, delete and replace.
+  using StructType = std::tuple<std::pair<std::string, std::string>>;
+  StructType struct_val{StructType{{"Name", "Douglas Adams"}}};
+
+  EXPECT_THAT(Insert("", {"UserId", "Name"}, {1, struct_val}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(InsertOrUpdate("", {"UserId", "Name"}, {1, struct_val}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(Update("", {"UserId", "Name"}, {1, struct_val}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(Replace("", {"UserId", "Name"}, {1, struct_val}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(Delete("", Key(1, struct_val)),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(MalformedWritesTest, CannotWriteListStructToStringColumn) {
+  // Check that list of struct cannot be passed to a string column for all
+  // mutation types: insert, update, delete and replace.
+  using StructType = std::tuple<std::pair<std::string, std::string>>;
+  std::vector<StructType> struct_arr{StructType{{"Name", "Douglas Adams"}},
+                                     StructType{{"Name", "Suzanne Collins"}}};
+
+  EXPECT_THAT(Insert("", {"UserId", "Name"}, {1, struct_arr}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(InsertOrUpdate("", {"UserId", "Name"}, {1, struct_arr}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(Update("", {"UserId", "Name"}, {1, struct_arr}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(Replace("", {"UserId", "Name"}, {1, struct_arr}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(Delete("", Key(1, struct_arr)),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

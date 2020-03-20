@@ -82,6 +82,7 @@ class DatabaseTest : public ::testing::Test {
   using Mutations = cloud::spanner::Mutations;
   using Transaction = cloud::spanner::Transaction;
   using SqlStatement = cloud::spanner::SqlStatement;
+  using BatchDmlResult = cloud::spanner::BatchDmlResult;
   using DmlResult = cloud::spanner::DmlResult;
   using UpdateDatabaseDdlMetadata =
       admin::database::v1::UpdateDatabaseDdlMetadata;
@@ -475,6 +476,14 @@ class DatabaseTest : public ::testing::Test {
   // Commits a set of sql statements.
   zetasql_base::StatusOr<CommitResult> CommitDml(
       const std::vector<SqlStatement>& sql_statements);
+
+  // Commits a set of sql statements executed by BatchDML.
+  zetasql_base::StatusOr<CommitResult> CommitBatchDml(
+      const std::vector<SqlStatement>& sql_statements);
+
+  // Executes BatchDml within the given transaction.
+  zetasql_base::StatusOr<BatchDmlResult> BatchDmlTransaction(
+      Transaction txn, const std::vector<SqlStatement>& sql_statements);
 
   // Rollback the given transaction.
   zetasql_base::Status Rollback(Transaction txn);

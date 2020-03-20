@@ -68,7 +68,7 @@ class DmlTest : public DatabaseTest {
 TEST_F(DmlTest, CanInsertAndUpdateInSameTransaction) {
   // Note that column Age is not part of update columns.
   ZETASQL_ASSERT_OK(CommitDml(
-      {SqlStatement("INSERT Users(ID, Name, Age) Values (1, 'Levin', 27)"),
+      {SqlStatement("INSERT Users(ID, Name, Age) VALUES (1, 'Levin', 27)"),
        SqlStatement("UPDATE Users SET Name = 'Mark' WHERE ID = 1")}));
   EXPECT_THAT(Query("SELECT ID, Name, Age FROM Users"),
               IsOkAndHoldsRows({{1, "Mark", 27}}));
@@ -77,7 +77,7 @@ TEST_F(DmlTest, CanInsertAndUpdateInSameTransaction) {
 TEST_F(DmlTest, InsertsNullValuesForUnspecifiedColumns) {
   // Nullable columns that are not specified are assigned default null values.
   ZETASQL_ASSERT_OK(
-      CommitDml({SqlStatement("INSERT Users(ID, Updated) Values "
+      CommitDml({SqlStatement("INSERT Users(ID, Updated) VALUES "
                               "(10, '2015-10-13T02:19:40Z')")}));
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto timestamp,
                        ParseRFC3339TimeSeconds("2015-10-13T02:19:40Z"));
@@ -87,7 +87,7 @@ TEST_F(DmlTest, InsertsNullValuesForUnspecifiedColumns) {
 }
 
 TEST_F(DmlTest, CanInsertPrimaryKeyOnly) {
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT Users(ID) Values (10)")}));
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT Users(ID) VALUES (10)")}));
   EXPECT_THAT(Query("SELECT ID, Name, Age, Updated FROM Users"),
               IsOkAndHoldsRows({{10, Null<std::string>(), Null<std::int64_t>(),
                                  Null<Timestamp>()}}));
