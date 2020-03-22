@@ -19,7 +19,6 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
-#include "google/cloud/spanner/mutations.h"
 
 namespace google {
 namespace spanner {

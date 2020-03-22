@@ -359,6 +359,36 @@ TEST_F(SchemaChangeTest, AlterColumnArrayType) {
               IsOkAndHoldsRow({Value(bytes_arr)}));
 }
 
+TEST_F(SchemaChangeTest, CreationOfIndexWithTooManyKeysFails) {
+  ZETASQL_EXPECT_OK(UpdateSchema({R"(
+    CREATE TABLE Photos(
+      PhotoId  INT64 NOT NULL,
+      ID1      INT64,
+      ID2      INT64,
+      ID3      INT64,
+      ID4      INT64,
+      ID5      INT64,
+      ID6      INT64,
+      ID7      INT64,
+      ID8      INT64,
+      ID9      INT64,
+      ID10     INT64,
+      ID11     INT64,
+      ID12     INT64,
+      ID13     INT64,
+      ID14     INT64,
+      ID15     INT64,
+      ID16     INT64,
+    ) PRIMARY KEY (PhotoId)
+  )"}));
+
+  EXPECT_THAT(
+      UpdateSchema(
+          {"CREATE INDEX PhotosIndex ON Photos(ID1, ID2, ID3, ID4, ID5, ID6, "
+           "ID7, ID8, ID9, ID10, ID11, ID12, ID13, ID14, ID15, ID16)"}),
+      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
 }  // namespace
 
 }  // namespace test

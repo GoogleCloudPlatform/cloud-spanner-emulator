@@ -275,7 +275,7 @@ zetasql_base::StatusOr<absl::optional<bool>> SchemaUpdaterImpl::CreateColumnOpti
     const ddl::Options& options) {
   absl::optional<bool> allows_commit_timestamp = absl::nullopt;
   for (const ddl::Options::Option& option : options.option_val()) {
-    ZETASQL_RET_CHECK_EQ(option.name(), ddl::kCommitTimestampOptionDDL)
+    ZETASQL_RET_CHECK_EQ(option.name(), ddl::kCommitTimestampOptionName)
         << "Invalid column option: " << option.name();
     switch (option.kind_case()) {
       case ddl::Options_Option::kBoolValue:
@@ -285,7 +285,7 @@ zetasql_base::StatusOr<absl::optional<bool>> SchemaUpdaterImpl::CreateColumnOpti
         allows_commit_timestamp = absl::nullopt;
         break;
       default:
-        ZETASQL_RET_CHECK(false) << "Option " << ddl::kCommitTimestampOptionDDL
+        ZETASQL_RET_CHECK(false) << "Option " << ddl::kCommitTimestampOptionName
                          << " can only take bool_value or null_value.";
     }
   }

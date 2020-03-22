@@ -43,7 +43,7 @@ namespace emulator {
 namespace backend {
 namespace ddl {
 
-const char kCommitTimestampOptionDDL[] = "allow_commit_timestamp";
+const char kCommitTimestampOptionName[] = "allow_commit_timestamp";
 
 namespace {
 
@@ -252,15 +252,15 @@ zetasql_base::StatusOr<std::string> GetOptionName(const SimpleNode* node) {
 
 zetasql_base::Status VisitColumnOptionKeyValNode(const SimpleNode* node,
                                          Options* options) {
-  // Check that option set on column is kCommitTimestampOptionDDL. When multiple
-  // commit timestamp options are set, last value is applied.
+  // Check that option set on column is kCommitTimestampOptionName. When
+  // multiple commit timestamp options are set, last value is applied.
   ZETASQL_ASSIGN_OR_RETURN(std::string option_name, GetOptionName(node));
-  if (option_name != kCommitTimestampOptionDDL) {
+  if (option_name != kCommitTimestampOptionName) {
     return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
                         absl::StrCat("Option: ", option_name, " is unknown."));
   }
   Options::Option* option = options->add_option_val();
-  option->set_name(kCommitTimestampOptionDDL);
+  option->set_name(kCommitTimestampOptionName);
 
   // Set the tri-state boolean value for kAllowCommitTimestamp option.
   ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* bool_node, GetChildAtIndex(node, 1));

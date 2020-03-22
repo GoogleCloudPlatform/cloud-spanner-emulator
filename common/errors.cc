@@ -603,7 +603,7 @@ zetasql_base::Status TooManyKeys(absl::string_view object_type,
                          absl::string_view object_name, int64_t key_count,
                          int64_t limit) {
   return zetasql_base::Status(
-      zetasql_base::StatusCode::kFailedPrecondition,
+      zetasql_base::StatusCode::kInvalidArgument,
       absl::Substitute("$0 $1 has too many keys ($2); the limit is $3.",
                        object_type, object_name, key_count, limit));
 }

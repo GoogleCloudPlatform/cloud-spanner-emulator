@@ -44,6 +44,7 @@
 #include "google/cloud/spanner/transaction.h"
 #include "google/cloud/spanner/value.h"
 #include "zetasql/base/status.h"
+#include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -219,7 +220,7 @@ class DatabaseTest : public ::testing::Test {
   struct ReadResult {
     std::vector<ValueRow> values;
     bool has_read_timestamp = false;
-    absl::Time read_timestamp;
+    Timestamp read_timestamp;
   };
 
   // Returns a matcher for a set of rows returned by the client library.
@@ -273,39 +274,27 @@ class DatabaseTest : public ::testing::Test {
                                   KeySet key_set) {
     auto result = client().Read(std::move(txn), std::move(table),
                                 std::move(key_set), std::move(columns));
-    ReadResult read_result;
-    auto time = result.ReadTimestamp();
-    if (time.has_value()) {
-      auto tp = time->get<std::chrono::system_clock::time_point>();
-      read_result.read_timestamp = absl::FromChrono(tp.value());
-      read_result.has_read_timestamp = true;
-    }
-    std::vector<ValueRow> values;
-    for (const auto& row : result) {
-      if (!row.ok()) {
-        return ToUtilStatus(row.status());
-      }
-      values.push_back(row.value());
-    }
-    read_result.values = values;
-    return read_result;
+    return ProcessRowStreamForReadResult(result);
+  }
+
+  // Sinlge-use strong read returning ReadResult
+  zetasql_base::StatusOr<ReadResult> Read(
+      std::string table, std::vector<std::string> columns, KeySet key_set,
+      Transaction::SingleUseOptions transaction_options) {
+    auto result =
+        client().Read(std::move(transaction_options), std::move(table),
+                      std::move(key_set), std::move(columns));
+    return ProcessRowStreamForReadResult(result);
   }
 
   // Read using a single-use transaction read options.
   zetasql_base::StatusOr<std::vector<ValueRow>> Read(
       Transaction::SingleUseOptions transaction_options, std::string table,
       std::vector<std::string> columns, KeySet key_set) {
-    auto result =
-        client().Read(std::move(transaction_options), std::move(table),
-                      std::move(key_set), std::move(columns));
-    std::vector<ValueRow> values;
-    for (const auto& row : result) {
-      if (!row.ok()) {
-        return ToUtilStatus(row.status());
-      }
-      values.push_back(row.value());
-    }
-    return values;
+    ZETASQL_ASSIGN_OR_RETURN(auto read_result,
+                     Read(std::move(table), std::move(columns),
+                          std::move(key_set), std::move(transaction_options)));
+    return read_result.values;
   }
 
   // Collects all rows from a read operation into a single vector.
@@ -332,14 +321,8 @@ class DatabaseTest : public ::testing::Test {
     options.index_name = std::move(index);
     auto result = client().Read(std::move(table), std::move(key_set),
                                 std::move(columns), options);
-    std::vector<ValueRow> retval;
-    for (const auto& row : result) {
-      if (!row.ok()) {
-        return ToUtilStatus(row.status());
-      }
-      retval.push_back(row.value());
-    }
-    return retval;
+    ZETASQL_ASSIGN_OR_RETURN(auto read_result, ProcessRowStreamForReadResult(result));
+    return read_result.values;
   }
 
   // Collects all rows from a table into a single vector.
@@ -520,6 +503,25 @@ class DatabaseTest : public ::testing::Test {
                                             std::vector<ValueRow> rows);
 
   bool in_prod_env() const { return GetConformanceTestGlobals().in_prod_env; }
+
+  zetasql_base::StatusOr<ReadResult> ProcessRowStreamForReadResult(
+      cloud::spanner::RowStream& result) {
+    ReadResult read_result;
+    auto time = result.ReadTimestamp();
+    if (time.has_value()) {
+      read_result.has_read_timestamp = true;
+      read_result.read_timestamp = time.value();
+    }
+    std::vector<ValueRow> values;
+    for (const auto& row : result) {
+      if (!row.ok()) {
+        return ToUtilStatus(row.status());
+      }
+      values.push_back(row.value());
+    }
+    read_result.values = values;
+    return read_result;
+  }
 
  private:
   // The database used in this test (a new one is created for each test case).

@@ -263,6 +263,32 @@ TEST_F(TransactionsTest, ReadWriteTransactionCannotReadAfterRollback) {
               StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
 }
 
+TEST_F(TransactionsTest, StrongReadSeesLastCommitTimestamp) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto commit_result,
+      Commit({MakeInsert("TestTable", {"key1", "key2"}, "val1", "val2")}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto read_result,
+      Read("TestTable", {"key1", "key2"}, KeySet::All(),
+           Transaction::SingleUseOptions{Transaction::ReadOnlyOptions{}}));
+  EXPECT_LE(commit_result.commit_timestamp, read_result.read_timestamp);
+  EXPECT_THAT(read_result.values,
+              testing::ElementsAre(ValueRow{"val1", "val2"}));
+}
+
+TEST_F(TransactionsTest, QueryWithBoundedStalenessDoesNotSeeOldValues) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+                       Commit({MakeInsert("TestTable", {"key1", "key2", "col1"},
+                                          "key1", "key2", "val1")}));
+  ZETASQL_ASSERT_OK(Commit({MakeUpdate("TestTable", {"key1", "key2", "col1"}, "key1",
+                               "key2", "val2")}));
+  EXPECT_THAT(QuerySingleUseTransaction(
+                  Transaction::SingleUseOptions(commit_result.commit_timestamp),
+                  SqlStatement("SELECT col1 FROM TestTable")),
+              IsOkAndHoldsRows({{"val2"}}));
+}
+
 }  // namespace
 
 }  // namespace test

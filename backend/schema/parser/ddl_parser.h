@@ -30,7 +30,7 @@ namespace backend {
 namespace ddl {
 
 // The option to enable the use of cloud spanner commit timestamps for a column.
-extern const char kCommitTimestampOptionDDL[];
+extern const char kCommitTimestampOptionName[];
 
 // Parses a create database statement.
 zetasql_base::StatusOr<CreateDatabase> ParseCreateDatabase(

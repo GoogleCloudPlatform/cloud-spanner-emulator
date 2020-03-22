@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include "zetasql/base/status.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -78,6 +79,27 @@ TEST_F(MultiRowWritesTest, DeleteSameKeySucceeds) {
 
   // Read to verify row does not exist.
   EXPECT_THAT(ReadAll("Users", {"ID", "Name", "Age"}), IsOkAndHoldsRows({}));
+}
+
+TEST_F(MultiRowWritesTest, MultipleModsWithErrorsFails) {
+  EXPECT_THAT(Commit({
+                  MakeInsert("Users", {"ID", "Name"}, 1, "Mark"),
+                  MakeInsert("NonExistentTable", {"Column"}, 1),
+              }),
+              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+}
+
+TEST_F(MultiRowWritesTest, DeleteNotAppliedWithFailingMods) {
+  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "Mark", 25}));
+
+  EXPECT_THAT(Commit({
+                  MakeDelete("Users", KeySet::All()),
+                  MakeInsert("NonExistentTable", {"Column"}, 1),
+              }),
+              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+
+  EXPECT_THAT(ReadAll("Users", {"ID", "Name", "Age"}),
+              IsOkAndHoldsRow({1, "Mark", 25}));
 }
 
 }  // namespace
