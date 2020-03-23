@@ -111,14 +111,61 @@ TEST_F(IndexBackfillTest,
   ZETASQL_EXPECT_OK(Insert("Photos", {"UserId", "PhotoId", "Name"}, {1, 2, "entry1"}));
   ZETASQL_EXPECT_OK(Insert("Photos", {"UserId", "PhotoId", "Name"}, {1, 3, "entry2"}));
 
-  ZETASQL_EXPECT_OK(UpdateSchema(
-      {"CREATE INDEX PhotosByName ON Photos(Name, PhotoId, UserId)"}));
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"CREATE INDEX PhotosByName ON Photos(Name, PhotoId)"}));
 
   ZETASQL_EXPECT_OK(Delete("Users", KeySet::All()));
 
-  EXPECT_THAT(ReadWithIndex("Photos", "PhotosByName",
-                            {"Name", "PhotoId", "UserId"}, KeySet::All()),
+  EXPECT_THAT(ReadWithIndex("Photos", "PhotosByName", {"Name", "PhotoId"},
+                            KeySet::All()),
               IsOkAndHoldsRows({}));
+}
+
+TEST_F(IndexBackfillTest, ValidateBackfillOfNullFilteredIndexSucceeds) {
+  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age"}, {1, "user1", 20}));
+  ZETASQL_EXPECT_OK(
+      Insert("Users", {"UserId", "Name", "Age"}, {2, Null<std::string>(), 20}));
+  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age"},
+                   {3, "user2", Null<int64_t>()}));
+
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"CREATE NULL_FILTERED INDEX UsersByNameNullFiltered ON "
+                    "Users(Name, Age)"}));
+
+  EXPECT_THAT(ReadWithIndex("Users", "UsersByNameNullFiltered", {"Name", "Age"},
+                            KeySet::All()),
+              IsOkAndHoldsRows({{"user1", 20}}));
+}
+
+TEST_F(IndexBackfillTest, ValidateBackfillOfIndexWithStoredColumns) {
+  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age"}, {1, "user1", 20}));
+  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age"}, {2, "user2", 30}));
+  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age"},
+                   {3, "user2", Null<int64_t>()}));
+
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"CREATE INDEX UsersByName ON Users(Name) STORING (Age)"}));
+
+  EXPECT_THAT(
+      ReadWithIndex("Users", "UsersByName", {"Name", "Age"}, KeySet::All()),
+      IsOkAndHoldsRows(
+          {{"user1", 20}, {"user2", 30}, {"user2", Null<int64_t>()}}));
+}
+
+TEST_F(IndexBackfillTest, ValidateNullFilteringDoesNotApplyToStoredColumns) {
+  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age"}, {1, "user1", 20}));
+  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age"}, {2, "user2", 30}));
+  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age"},
+                   {3, "user2", Null<int64_t>()}));
+
+  // Ensure that null filtering does not apply to stored columns.
+  ZETASQL_EXPECT_OK(UpdateSchema(
+      {"CREATE NULL_FILTERED INDEX UsersByName ON Users(Name) STORING (Age)"}));
+
+  EXPECT_THAT(
+      ReadWithIndex("Users", "UsersByName", {"Name", "Age"}, KeySet::All()),
+      IsOkAndHoldsRows(
+          {{"user1", 20}, {"user2", 30}, {"user2", Null<int64_t>()}}));
 }
 
 }  // namespace

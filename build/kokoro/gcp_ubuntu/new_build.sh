@@ -37,11 +37,8 @@ if [[ -z "${CLOUD_SPANNER_EMULATOR_RELEASE_TAG}" ]]; then
 fi
 
 # Start echoing all the commands so they show in the log.
-# Start here so mishaps with the version extraction are easier to debug.
 set -x
-# Extract a.b.c from the full release tag.
-EMULATOR_VERSION=$(expr match "${CLOUD_SPANNER_EMULATOR_RELEASE_TAG}" \
- 'cloud_spanner_emulator_\([0-9]\+\.[0-9]\+\.[0-9]\+\)_.*$')
+EMULATOR_VERSION="${CLOUD_SPANNER_EMULATOR_RELEASE_TAG}"
 
 echo "Building version " ${EMULATOR_VERSION}
 
