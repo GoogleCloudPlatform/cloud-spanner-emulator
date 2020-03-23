@@ -60,7 +60,10 @@ else
   docker build . -t ${IMAGE_LOCAL_TAG} -f build/docker/Dockerfile.ubuntu
 fi
 
-docker save --output ${OUTPUT_DIR}/emulator-docker-image.tar ${IMAGE_LOCAL_TAG}
+# We need the image tar file to be in a directory of its own.
+IMAGE_DIR=${OUTPUT_DIR}/image
+mkdir -p ${IMAGE_DIR}
+docker save --output ${IMAGE_DIR}/emulator-docker-image.tar ${IMAGE_LOCAL_TAG}
 
 container_id=$(docker create ${IMAGE_LOCAL_TAG})
 docker cp $container_id:/gateway_main $OUTPUT_DIR
