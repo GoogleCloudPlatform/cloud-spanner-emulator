@@ -26,7 +26,7 @@
 #include "backend/locking/request.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/iterator.h"
-#include "common/constants.h"
+#include "backend/transaction/commit_timestamp.h"
 #include "common/errors.h"
 #include "zetasql/base/status.h"
 
@@ -55,64 +55,6 @@ void ResetInvalidValuesToNull(absl::Span<const Column* const> columns,
       values->at(i) = zetasql::values::Null(columns[i]->GetType());
     }
   }
-}
-
-bool IsPendingCommitTimestamp(const Column* column,
-                              const zetasql::Value& column_value) {
-  if (column->allows_commit_timestamp() && !column_value.is_null() &&
-      column_value.type()->IsTimestamp() &&
-      column_value.ToTime() == kCommitTimestampValueSentinel) {
-    return true;
-  }
-  return false;
-}
-
-bool HasPendingCommitTimestampInReadResult(
-    const Table* table, absl::Span<const Column* const> columns,
-    std::vector<FixedRowStorageIterator::Row> rows) {
-  absl::Span<const KeyColumn* const> primary_key = table->primary_key();
-  for (const auto& [key, values] : rows) {
-    // Check that primary key of the row being read does not contain pending
-    // commit timestamp value(s).
-    for (int i = 0; i < key.NumColumns(); i++) {
-      if (IsPendingCommitTimestamp(primary_key[i]->column(),
-                                   key.ColumnValue(i))) {
-        return true;
-      }
-    }
-
-    // Check that non-primary-key columns being explicitly read do not contain
-    // pending commit timestamp value(s).
-    for (int i = 0; i < columns.size(); i++) {
-      if (IsPendingCommitTimestamp(columns[i], values[i])) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-// Replace commit timestamp sentinel value, if present, with transaction
-// commit timestamp for a given column value.
-zetasql::Value MaybeSetCommitTimestamp(const Column* column,
-                                         zetasql::Value column_value,
-                                         absl::Time commit_timestamp) {
-  if (IsPendingCommitTimestamp(column, column_value)) {
-    return zetasql::values::Timestamp(commit_timestamp);
-  }
-  return column_value;
-}
-
-// Replace commit timestamp sentinel value, if present, with transaction
-// commit timestamp for key column values.
-Key MaybeSetCommitTimestamp(absl::Span<const KeyColumn* const> primary_key,
-                            Key key, absl::Time commit_timestamp) {
-  for (int i = 0; i < key.NumColumns(); i++) {
-    key.SetColumnValue(
-        i, MaybeSetCommitTimestamp(primary_key[i]->column(), key.ColumnValue(i),
-                                   commit_timestamp));
-  }
-  return key;
 }
 
 }  // namespace
@@ -200,35 +142,6 @@ zetasql_base::Status TransactionStore::BufferDelete(const Table* table,
   }
   buffered_ops_[table][key] = std::make_pair(OpType::kDelete, row_values);
 
-  return zetasql_base::OkStatus();
-}
-
-zetasql_base::Status TransactionStore::FlushMutation(absl::Time commit_timestamp) {
-  for (auto table_itr = buffered_ops_.begin(); table_itr != buffered_ops_.end();
-       ++table_itr) {
-    const Table* table = table_itr->first;
-    for (auto row_itr = table_itr->second.begin();
-         row_itr != table_itr->second.end(); ++row_itr) {
-      const Key key = MaybeSetCommitTimestamp(table->primary_key(),
-                                              row_itr->first, commit_timestamp);
-      OpType op_type = row_itr->second.first;
-      if (op_type == OpType::kInsert || op_type == OpType::kUpdate) {
-        // Build vectors of column IDs and cell values.
-        std::vector<ColumnID> column_ids;
-        ValueList column_values;
-        for (auto entry : row_itr->second.second) {
-          column_ids.push_back(entry.first->id());
-          column_values.push_back(MaybeSetCommitTimestamp(
-              entry.first, entry.second, commit_timestamp));
-        }
-        ZETASQL_RETURN_IF_ERROR(base_storage_->Write(commit_timestamp, table->id(), key,
-                                             column_ids, column_values));
-      } else {  // op_type == OpType::kDelete
-        ZETASQL_RETURN_IF_ERROR(base_storage_->Delete(commit_timestamp, table->id(),
-                                              KeyRange::Point(key)));
-      }
-    }
-  }
   return zetasql_base::OkStatus();
 }
 

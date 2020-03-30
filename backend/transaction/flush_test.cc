@@ -14,30 +14,23 @@
 // limitations under the License.
 //
 
-#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_READ_UTIL_H_
-#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_READ_UTIL_H_
+#include "backend/transaction/flush.h"
 
-#include "backend/access/read.h"
-#include "backend/datamodel/key_set.h"
-#include "backend/schema/catalog/schema.h"
-#include "backend/schema/catalog/table.h"
-#include "zetasql/base/status.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+namespace {
 
-zetasql_base::Status ExtractTableAndColumnsFromReadArg(
-    const ReadArg& read_arg, const Schema* schema, const Table** read_table,
-    std::vector<const Column*>* columns);
+// TODO : Fill in unit tests for FlushWriteOpsToStorage.
 
-void CanonicalizeKeySetForTable(const KeySet& set, const Table* table,
-                                std::vector<KeyRange>* ranges);
-
+}  // namespace
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner
 }  // namespace google
-
-#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_READ_UTIL_H_

@@ -85,7 +85,8 @@ class Session {
   }
 
   // Converts this session to its proto representation.
-  zetasql_base::Status ToProto(google::spanner::v1::Session* session);
+  zetasql_base::Status ToProto(google::spanner::v1::Session* session,
+                       bool include_labels = true);
 
   // Creates a new multi-use transaction.
   zetasql_base::StatusOr<std::shared_ptr<Transaction>> CreateMultiUseTransaction(

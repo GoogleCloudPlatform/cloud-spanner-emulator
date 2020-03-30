@@ -44,6 +44,10 @@ constexpr int kMaxTablesPerDatabase = 2048;
 // Maximum length of a schema identifier e.g. table/column/index name.
 constexpr int kMaxSchemaIdentifierLength = 128;
 
+// Maximum and minimum length of long-running operation IDs for schema changes.
+constexpr int kDatabaseOpIdMinLength = 2;
+constexpr int kDatabaseOpIdMaxLength = 128;
+
 // Maximum number of columns per table.
 constexpr int kMaxColumnsPerTable = 1024;
 

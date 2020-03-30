@@ -16,6 +16,9 @@
 
 #include <tuple>
 
+#include "gmock/gmock.h"
+#include "absl/time/civil_time.h"
+#include "absl/time/time.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -169,6 +172,49 @@ TEST_F(QueryTest, CanReturnArrayOfStructTypedColumns) {
   EXPECT_THAT(
       Query("SELECT ARRAY(SELECT STRUCT<INT64>(1))"),
       IsOkAndHoldsRow({Value(std::vector<SimpleStruct>{SimpleStruct{1}})}));
+}
+
+TEST_F(QueryTest, Params) {
+  // The majority of the test cases set the parameter to a certain value and
+  // expect the returned row to contain said value. This lambda just captures
+  // that pattern.
+  auto expect_selected = [this](Value v) {
+    EXPECT_THAT(QueryWithParams("SELECT @param",
+                                {{"param", v}, {"unused_param", Value(6)}}),
+                IsOkAndHoldsRow({v}));
+  };
+
+  expect_selected(Value(6));
+  expect_selected(Value("str"));
+  expect_selected(Value(""));
+  expect_selected(Value(Bytes("bytes")));
+  expect_selected(
+      Value(MakeTimestamp(absl::ToChronoTime(absl::FromUnixNanos(1)))));
+  expect_selected(Value(MakeTimestamp(absl::ToChronoTime(
+      absl::FromCivil(absl::CivilDay(1970, 1, 11), absl::FixedTimeZone(0))))));
+  expect_selected(Value(std::vector<bool>{true, false}));
+
+  EXPECT_THAT(
+      QueryWithParams("SELECT @param * @param",
+                      {{"param", Value(-2.0)}, {"unused_param", Value(6)}}),
+      IsOkAndHoldsRow({4.0}));
+
+  EXPECT_THAT(
+      QueryWithParams("SELECT @param * @param",
+                      {{"param", Value(-0.0)}, {"unused_param", Value(6)}}),
+      IsOkAndHoldsRow({0.0}));
+
+  EXPECT_THAT(
+      QueryWithParams("SELECT @param * @param",
+                      {{"param", Value(2.0)}, {"unused_param", Value(6)}}),
+      IsOkAndHoldsRow({4.0}));
+
+  EXPECT_THAT(QueryWithParams("SELECT @`p\\`ram`", {{"p`ram", Value(6)}}),
+              IsOkAndHoldsRow({6}));
+
+  EXPECT_THAT(
+      QueryWithParams("SELECT @param", {{std::string(130, 'x'), Value(6)}}),
+      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

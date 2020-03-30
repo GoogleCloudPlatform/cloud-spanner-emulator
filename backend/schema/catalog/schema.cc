@@ -21,8 +21,8 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "backend/schema/catalog/index.h"
-#include "backend/schema/catalog/schema_node.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/graph/schema_node.h"
 #include "common/errors.h"
 #include "zetasql/base/status.h"
 

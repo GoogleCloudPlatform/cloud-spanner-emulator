@@ -90,10 +90,13 @@ zetasql_base::Status ValidateSingleUseTransactionOptions(
 
 }  // namespace
 
-zetasql_base::Status Session::ToProto(spanner_api::Session* session) {
+zetasql_base::Status Session::ToProto(spanner_api::Session* session,
+                              bool include_labels) {
   absl::ReaderMutexLock lock(&mu_);
   session->set_name(session_uri_);
-  session->mutable_labels()->insert(labels_.begin(), labels_.end());
+  if (include_labels) {
+    session->mutable_labels()->insert(labels_.begin(), labels_.end());
+  }
   ZETASQL_RETURN_IF_ERROR(
       TimestampToProto(create_time_, session->mutable_create_time()));
   return TimestampToProto(approximate_last_use_time_,

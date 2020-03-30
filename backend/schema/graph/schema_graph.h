@@ -14,13 +14,13 @@
 // limitations under the License.
 //
 
-#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_GRAPH_H_
-#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_GRAPH_H_
+#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_GRAPH_H_
+#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_GRAPH_H_
 
 #include <memory>
 
-#include "backend/schema/catalog/schema_node.h"
-#include "backend/schema/catalog/schema_objects_pool.h"
+#include "backend/schema/graph/schema_node.h"
+#include "backend/schema/graph/schema_objects_pool.h"
 
 namespace google {
 namespace spanner {
@@ -63,4 +63,4 @@ class SchemaGraph {
 }  // namespace spanner
 }  // namespace google
 
-#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_GRAPH_H_
+#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_GRAPH_H_

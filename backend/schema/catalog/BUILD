@@ -33,12 +33,12 @@ cc_library(
         "table.h",
     ],
     deps = [
-        ":schema_graph",
-        ":schema_graph_editor",
-        ":schema_node",
         "//backend/common:case",
         "//backend/common:ids",
         "//backend/datamodel:types",
+        "//backend/schema/graph:schema_graph",
+        "//backend/schema/graph:schema_graph_editor",
+        "//backend/schema/graph:schema_node",
         "//backend/schema/updater:schema_validation_context",
         "//common:errors",
         "//common:limits",
@@ -108,53 +108,5 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
-    ],
-)
-
-cc_library(
-    name = "schema_node",
-    hdrs = ["schema_node.h"],
-    deps = [
-        "@com_google_zetasql//zetasql/base:status",
-        "@com_google_zetasql//zetasql/base:statusor",
-    ],
-)
-
-cc_library(
-    name = "schema_graph",
-    hdrs = ["schema_graph.h"],
-    deps = [
-        ":schema_node",
-        ":schema_objects_pool",
-    ],
-)
-
-cc_library(
-    name = "schema_objects_pool",
-    hdrs = ["schema_objects_pool.h"],
-    deps = [
-        ":schema_node",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-cc_library(
-    name = "schema_graph_editor",
-    srcs = ["schema_graph_editor.cc"],
-    hdrs = ["schema_graph_editor.h"],
-    deps = [
-        ":schema_graph",
-        ":schema_node",
-        ":schema_objects_pool",
-        "//backend/schema/updater:schema_validation_context",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/base:status",
-        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )

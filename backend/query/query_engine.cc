@@ -237,7 +237,7 @@ bool IsPendingCommitTimestamp(const zetasql::ResolvedDMLValue& dml_value) {
   if (dml_value.value()->node_kind() == zetasql::RESOLVED_FUNCTION_CALL) {
     const zetasql::ResolvedFunctionCall* fn =
         dml_value.value()->GetAs<zetasql::ResolvedFunctionCall>();
-    if (fn->function()->Name() == "PENDING_COMMIT_TIMESTAMP") {
+    if (fn->function()->Name() == kPendingCommitTimestampFunctionName) {
       // Touch the argument list so that the ResolvedAST code does not claim we
       // missed it.
       return fn->argument_list().empty();

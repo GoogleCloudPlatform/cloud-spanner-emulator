@@ -28,8 +28,10 @@ cc_library(
     ],
     deps = [
         "//common:errors",
+        "//common:limits",
         "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/base:status",
+        "@com_googlesource_code_re2//:re2",
     ],
 )
 

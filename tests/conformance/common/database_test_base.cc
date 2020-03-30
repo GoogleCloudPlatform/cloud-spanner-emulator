@@ -85,6 +85,15 @@ void DatabaseTest::SetUp() {
       google::cloud::spanner::MakeConnection(*database_,
                                              *globals.connection_options));
 
+  // Setup stubs to access low-level API features not exposed by the C++ client.
+  std::shared_ptr<grpc::Channel> channel =
+      grpc::CreateChannel(globals.connection_options->endpoint(),
+                          globals.connection_options->credentials());
+  spanner_stub_ = v1::Spanner::NewStub(channel);
+  database_admin_stub_ =
+      admin::database::v1::DatabaseAdmin::NewStub(channel);
+  operations_stub_ = longrunning::Operations::NewStub(channel);
+
   // Allow test suites to customize the database at SetUp time.
   ZETASQL_ASSERT_OK(SetUpDatabase());
 }
@@ -157,12 +166,23 @@ zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitDml(
     const std::vector<SqlStatement>& sql_statements) {
   return ToUtilStatusOr(client().Commit(
       [&](Transaction const& txn) -> cloud::StatusOr<Mutations> {
-        for (auto sql_statement : sql_statements) {
+        for (const auto& sql_statement : sql_statements) {
           auto result = client().ExecuteDml(txn, sql_statement);
           if (!result) return result.status();
         }
         return Mutations{};
       }));
+}
+
+zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitDmlTransaction(
+    Transaction txn, const std::vector<SqlStatement>& sql_statements) {
+  for (const auto& sql_statement : sql_statements) {
+    auto result = client().ExecuteDml(txn, sql_statement);
+    if (!result) return ToUtilStatus(result.status());
+  }
+  auto result = client().Commit(txn, Mutations{});
+  if (!result) return ToUtilStatus(result.status());
+  return result.value();
 }
 
 zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitBatchDml(

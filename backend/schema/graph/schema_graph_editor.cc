@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-#include "backend/schema/catalog/schema_graph_editor.h"
+#include "backend/schema/graph/schema_graph_editor.h"
 
 #include <memory>
 
@@ -23,7 +23,7 @@
 #include "absl/memory/memory.h"
 #include "zetasql/base/status.h"
 #include "absl/strings/str_join.h"
-#include "backend/schema/catalog/schema_node.h"
+#include "backend/schema/graph/schema_node.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status.h"
 #include "zetasql/base/status_macros.h"

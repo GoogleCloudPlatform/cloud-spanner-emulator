@@ -81,6 +81,10 @@ std::string MakeSessionUri(absl::string_view database_uri,
 std::string MakeOperationUri(absl::string_view resource_uri,
                              absl::string_view operation_id);
 
+// Returns true if `operation_id` is a valid schema change/database creation
+// operation ID.
+bool IsValidOperationId(absl::string_view operation_id);
+
 }  // namespace emulator
 }  // namespace spanner
 }  // namespace google

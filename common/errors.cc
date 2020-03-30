@@ -145,6 +145,11 @@ zetasql_base::Status InvalidDatabaseName(absl::string_view database_id) {
 }
 
 // Operation errors.
+zetasql_base::Status InvalidOperationId(absl::string_view id) {
+  return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+                      absl::Substitute("Invalid operation id: $0.", id));
+}
+
 zetasql_base::Status InvalidOperationURI(absl::string_view uri) {
   return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
                       absl::StrCat("Invalid operation uri: ", uri));
@@ -201,6 +206,14 @@ zetasql_base::Status InvalidSessionURI(absl::string_view uri) {
 zetasql_base::Status SessionNotFound(absl::string_view uri) {
   return zetasql_base::Status(zetasql_base::StatusCode::kNotFound,
                       absl::StrCat("Session not found: ", uri));
+}
+
+zetasql_base::Status TooFewSessions(int session_count) {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      absl::Substitute("Invalid number of sessions $0. "
+                       "Requested sessions should be greater than 0.",
+                       session_count));
 }
 
 // General proto formatting errors.

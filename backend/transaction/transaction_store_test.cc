@@ -35,7 +35,6 @@ using zetasql::values::Int64;
 using zetasql::values::Null;
 using zetasql::values::String;
 using testing::ElementsAre;
-using testing::MatchesRegex;
 using zetasql_base::testing::StatusIs;
 
 namespace google {
@@ -74,7 +73,7 @@ class TransactionStoreTest : public testing::Test {
   const Column* string_col_;
 };
 
-TEST_F(TransactionStoreTest, Basic) {
+TEST_F(TransactionStoreTest, CanReadBufferedWrites) {
   // CREATE TABLE test_table (
   //   int64_col INT64 NOT NULL,
   //   string_col STRING(MAX)
@@ -120,36 +119,9 @@ TEST_F(TransactionStoreTest, Basic) {
   EXPECT_EQ(itr->ColumnValue(1), String("value"));
   // No other rows to read.
   EXPECT_FALSE(itr->Next());
-
-  // Commit the transaction.
-  absl::Time t1 = t0 + absl::Seconds(1);
-  ZETASQL_EXPECT_OK(transaction_store_.FlushMutation(t1));
-
-  // Now verify the values in the base storage.
-  std::vector<zetasql::Value> values;
-  // Row Int64(1) is updated.
-  ZETASQL_EXPECT_OK(base_storage_.Lookup(
-      absl::InfiniteFuture(), table_->id(), Key({Int64(1)}),
-      {int64_col_->id(), string_col_->id()}, &values));
-  EXPECT_EQ(values[0], Int64(1));
-  EXPECT_EQ(values[1], String("new-value"));
-
-  // Row Int64(2) is deleted.
-  EXPECT_THAT(base_storage_.Lookup(
-                  absl::InfiniteFuture(), table_->id(), Key({Int64(2)}),
-                  {int64_col_->id(), string_col_->id()}, &values),
-              StatusIs(zetasql_base::StatusCode::kNotFound,
-                       MatchesRegex(".*Key.* does not exist .*")));
-
-  // Row Int64(3) is inserted.
-  ZETASQL_EXPECT_OK(base_storage_.Lookup(
-      absl::InfiniteFuture(), table_->id(), Key({Int64(3)}),
-      {int64_col_->id(), string_col_->id()}, &values));
-  EXPECT_EQ(values[0], Int64(3));
-  EXPECT_EQ(values[1], String("value"));
 }
 
-TEST_F(TransactionStoreTest, InsertAfterDelete) {
+TEST_F(TransactionStoreTest, CanBufferInsertAfterDelete) {
   // CREATE TABLE test_table (
   //   int64_col INT64 NOT NULL,
   //   string_col STRING(MAX)
@@ -197,21 +169,9 @@ TEST_F(TransactionStoreTest, InsertAfterDelete) {
   EXPECT_EQ(itr->ColumnValue(1), String("new-value"));
   // No other rows to read.
   EXPECT_FALSE(itr->Next());
-
-  // Commit the transaction.
-  absl::Time t1 = t0 + absl::Seconds(1);
-  ZETASQL_EXPECT_OK(transaction_store_.FlushMutation(t1));
-
-  std::vector<zetasql::Value> values;
-  // Row Int64(1) in test_table has the inserted values.
-  ZETASQL_EXPECT_OK(base_storage_.Lookup(
-      absl::InfiniteFuture(), table_->id(), Key({Int64(1)}),
-      {int64_col_->id(), string_col_->id()}, &values));
-  EXPECT_EQ(values[0], Int64(1));
-  EXPECT_EQ(values[1], String("new-value"));
 }
 
-TEST_F(TransactionStoreTest, UpdateAfterInsert) {
+TEST_F(TransactionStoreTest, CanBufferUpdateAfterInsert) {
   // CREATE TABLE test_table (
   //   int64_col INT64 NOT NULL,
   //   string_col STRING(MAX)
@@ -222,7 +182,6 @@ TEST_F(TransactionStoreTest, UpdateAfterInsert) {
                                             {Int64(1), String("old-value")}));
 
   // Read your writes.
-  absl::Time t1 = absl::Now();
   std::unique_ptr<StorageIterator> itr;
   ZETASQL_EXPECT_OK(transaction_store_.Read(table_, KeyRange::Point(Key({Int64(1)})),
                                     {int64_col_, string_col_}, &itr));
@@ -243,20 +202,9 @@ TEST_F(TransactionStoreTest, UpdateAfterInsert) {
                                     {int64_col_, string_col_}, &itr));
   EXPECT_TRUE(itr->Next());
   EXPECT_EQ(itr->ColumnValue(1), String("new-value"));
-
-  // Commit the transaction.
-  ZETASQL_EXPECT_OK(transaction_store_.FlushMutation(t1));
-
-  std::vector<zetasql::Value> values;
-  // Row Int64(1) in test_table has the updated values.
-  ZETASQL_EXPECT_OK(base_storage_.Lookup(
-      absl::InfiniteFuture(), table_->id(), Key({Int64(1)}),
-      {int64_col_->id(), string_col_->id()}, &values));
-  EXPECT_EQ(values[0], Int64(1));
-  EXPECT_EQ(values[1], String("new-value"));
 }
 
-TEST_F(TransactionStoreTest, DeleteAfterInsert) {
+TEST_F(TransactionStoreTest, CanBufferDeleteAfterInsert) {
   // CREATE TABLE test_table (
   //   int64_col INT64 NOT NULL,
   //   string_col STRING(MAX)
@@ -273,21 +221,9 @@ TEST_F(TransactionStoreTest, DeleteAfterInsert) {
                                     {int64_col_, string_col_}, &itr));
   // No rows to read.
   EXPECT_FALSE(itr->Next());
-
-  // Commit the transaction.
-  absl::Time t1 = absl::Now();
-  ZETASQL_EXPECT_OK(transaction_store_.FlushMutation(t1));
-
-  std::vector<zetasql::Value> values;
-  // Row Int64(1) does not exist (the new insert is deleted in the same
-  // transaction.
-  EXPECT_THAT(base_storage_.Lookup(
-                  absl::InfiniteFuture(), table_->id(), Key({Int64(1)}),
-                  {int64_col_->id(), string_col_->id()}, &values),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
 }
 
-TEST_F(TransactionStoreTest, MultipleUpdates) {
+TEST_F(TransactionStoreTest, CanBufferMultipleUpdates) {
   // CREATE TABLE test_table (
   //   int64_col INT64 NOT NULL,
   //   string_col STRING(MAX)
@@ -324,54 +260,9 @@ TEST_F(TransactionStoreTest, MultipleUpdates) {
   EXPECT_EQ(itr->ColumnValue(0), String("value-3"));
   // No other rows to read.
   EXPECT_FALSE(itr->Next());
-
-  // Commit the transaction.
-  absl::Time t1 = t0 + absl::Seconds(1);
-  ZETASQL_EXPECT_OK(transaction_store_.FlushMutation(t1));
-
-  std::vector<zetasql::Value> values;
-  // Row Int64(1) in test_table has the latest updated values.
-  ZETASQL_EXPECT_OK(base_storage_.Lookup(
-      absl::InfiniteFuture(), table_->id(), Key({Int64(1)}),
-      {int64_col_->id(), string_col_->id()}, &values));
-  EXPECT_EQ(values[0], Int64(1));
-  EXPECT_EQ(values[1], String("value-3"));
 }
 
-TEST_F(TransactionStoreTest, UpdateCheckTimestamp) {
-  // CREATE TABLE test_table (
-  //   int64_col INT64 NOT NULL,
-  //   string_col STRING(MAX)
-  // ) PRIMARY_KEY(int64_col);
-  absl::Time t0 = absl::Now();
-  ZETASQL_EXPECT_OK(base_storage_.Write(t0, table_->id(), Key({Int64(1)}),
-                                {int64_col_->id(), string_col_->id()},
-                                {Int64(1), String("value")}));
-
-  ZETASQL_EXPECT_OK(transaction_store_.BufferUpdate(
-      table_, Key({Int64(1)}), {string_col_}, {String("new-value")}));
-
-  // Commit the transaction.
-  absl::Time t1 = t0 + absl::Seconds(1);
-  ZETASQL_EXPECT_OK(transaction_store_.FlushMutation(t1));
-
-  std::vector<zetasql::Value> values;
-  // A lookup at the current timestamp should see updated value.
-  ZETASQL_EXPECT_OK(base_storage_.Lookup(
-      absl::InfiniteFuture(), table_->id(), Key({Int64(1)}),
-      {int64_col_->id(), string_col_->id()}, &values));
-  EXPECT_EQ(values[0], Int64(1));
-  EXPECT_EQ(values[1], String("new-value"));
-
-  // A lookup at t0 should see old value.
-  ZETASQL_EXPECT_OK(base_storage_.Lookup(t0, table_->id(), Key({Int64(1)}),
-                                 {int64_col_->id(), string_col_->id()},
-                                 &values));
-  EXPECT_EQ(values[0], Int64(1));
-  EXPECT_EQ(values[1], String("value"));
-}
-
-TEST_F(TransactionStoreTest, ReplaceShouldReadRecentColumnValues) {
+TEST_F(TransactionStoreTest, CanBufferReplaceWithNullValues) {
   // CREATE TABLE test_table (
   //   int64_col INT64 NOT NULL,
   //   string_col STRING(MAX)
@@ -391,24 +282,9 @@ TEST_F(TransactionStoreTest, ReplaceShouldReadRecentColumnValues) {
   ZETASQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(1)}), {string_col_},
                                       &values));
   EXPECT_THAT(values, testing::ElementsAre(Null(StringType())));
-
-  // Commit the transaction.
-  absl::Time t1 = t0 + absl::Seconds(1);
-  ZETASQL_EXPECT_OK(transaction_store_.FlushMutation(t1));
-
-  // Lookup at t0 timestamp should return valid string_col value.
-  ZETASQL_EXPECT_OK(base_storage_.Lookup(t0, table_->id(), Key({Int64(1)}),
-                                 {string_col_->id()}, &values));
-  EXPECT_THAT(values, testing::ElementsAre(String("value-1")));
-
-  // Lookup at t1 timestamp should return null value.
-  ZETASQL_EXPECT_OK(base_storage_.Lookup(absl::InfiniteFuture(), table_->id(),
-                                 Key({Int64(1)}), {string_col_->id()},
-                                 &values));
-  EXPECT_THAT(values, testing::ElementsAre(Null(StringType())));
 }
 
-TEST_F(TransactionStoreTest, DeleteInsertUpdateCheckTimestamp) {
+TEST_F(TransactionStoreTest, CanBufferDeleteInsertUpdate) {
   // CREATE TABLE test_table (
   //   int64_col INT64 NOT NULL,
   //   string_col STRING(MAX)
@@ -425,24 +301,10 @@ TEST_F(TransactionStoreTest, DeleteInsertUpdateCheckTimestamp) {
   ZETASQL_EXPECT_OK(transaction_store_.BufferUpdate(
       table_, Key({Int64(1)}), {string_col_}, {String("value-3")}));
 
-  // Commit the transaction.
-  absl::Time t1 = t0 + absl::Seconds(1);
-  ZETASQL_EXPECT_OK(transaction_store_.FlushMutation(t1));
-
   std::vector<zetasql::Value> values;
-  // A lookup at the current timestamp should see updated value.
-  ZETASQL_EXPECT_OK(base_storage_.Lookup(
-      absl::InfiniteFuture(), table_->id(), Key({Int64(1)}),
-      {int64_col_->id(), string_col_->id()}, &values));
-  EXPECT_EQ(values[0], Int64(1));
-  EXPECT_EQ(values[1], String("value-3"));
-
-  // A lookup at t0 should see the old value.
-  ZETASQL_EXPECT_OK(base_storage_.Lookup(t0, table_->id(), Key({Int64(1)}),
-                                 {int64_col_->id(), string_col_->id()},
-                                 &values));
-  EXPECT_EQ(values[0], Int64(1));
-  EXPECT_EQ(values[1], String("value-1"));
+  ZETASQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(1)}),
+                                      {int64_col_, string_col_}, &values));
+  EXPECT_THAT(values, testing::ElementsAre(Int64(1), String("value-3")));
 }
 
 TEST_F(TransactionStoreTest, ReadValueNotFound) {

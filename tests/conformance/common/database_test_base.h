@@ -21,7 +21,11 @@
 #include <utility>
 #include <vector>
 
+#include "google/longrunning/operations.grpc.pb.h"
+#include "google/spanner/admin/database/v1/spanner_database_admin.grpc.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
+#include "google/spanner/v1/spanner.pb.h"
+#include "grpcpp/client_context.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -51,6 +55,10 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace test {
+
+namespace database_api = ::google::spanner::admin::database::v1;
+namespace operations_api = ::google::longrunning;
+namespace spanner_api = ::google::spanner::v1;
 
 // Base fixture for conformance testing of Cloud Spanner.
 //
@@ -98,6 +106,9 @@ class DatabaseTest : public ::testing::Test {
   using ReadOptions = cloud::spanner::ReadOptions;
   using Value = cloud::spanner::Value;
   using Timestamp = cloud::spanner::Timestamp;
+  using DatabaseAdminStub = admin::database::v1::DatabaseAdmin::Stub;
+  using OperationsStub = longrunning::Operations::Stub;
+  using SpannerStub = v1::Spanner::Stub;
 
   template <typename Duration>
   static Timestamp MakeTimestamp(
@@ -172,8 +183,23 @@ class DatabaseTest : public ::testing::Test {
   // Returns the DDL for the database.
   zetasql_base::StatusOr<std::vector<std::string>> GetDatabaseDdl() const;
 
+  // Provides read-only access to the database object for the test.
+  const cloud::spanner::Database* database() { return database_.get(); }
+
   // Returns the client used to communicate with the emulator.
   Client& client() { return *client_; }
+
+  // Returns a raw stub for calling low-level APIs that are not exposed
+  // by the cloud::spanner::Client API.
+  SpannerStub* raw_client() { return spanner_stub_.get(); }
+
+  // Raw stub for calling long-running operations management APIs.
+  OperationsStub* raw_operations_client() { return operations_stub_.get(); }
+
+  // Raw stub for issuing database admin requests.
+  DatabaseAdminStub* raw_database_client() {
+    return database_admin_stub_.get();
+  }
 
   // The client library requires explicit construction of Value objects which
   // is cumbersome for unit tests. This class acts as a proxy for implicitly
@@ -277,7 +303,7 @@ class DatabaseTest : public ::testing::Test {
     return ProcessRowStreamForReadResult(result);
   }
 
-  // Sinlge-use strong read returning ReadResult
+  // Sinlge-use strong read returning ReadResult.
   zetasql_base::StatusOr<ReadResult> Read(
       std::string table, std::vector<std::string> columns, KeySet key_set,
       Transaction::SingleUseOptions transaction_options) {
@@ -325,6 +351,19 @@ class DatabaseTest : public ::testing::Test {
     return read_result.values;
   }
 
+  // Same as version above except reads using a specified transaction.
+  zetasql_base::StatusOr<std::vector<ValueRow>> ReadWithIndex(
+      Transaction txn, std::string table, std::string index,
+      std::vector<std::string> columns, KeySet key_set) {
+    ReadOptions options;
+    options.index_name = std::move(index);
+    auto result =
+        client().Read(std::move(txn), std::move(table), std::move(key_set),
+                      std::move(columns), options);
+    ZETASQL_ASSIGN_OR_RETURN(auto read_result, ProcessRowStreamForReadResult(result));
+    return read_result.values;
+  }
+
   // Collects all rows from a table into a single vector.
   zetasql_base::StatusOr<std::vector<ValueRow>> ReadAll(
       std::string table, std::vector<std::string> columns) {
@@ -338,9 +377,20 @@ class DatabaseTest : public ::testing::Test {
                          KeySet::All());
   }
 
-  zetasql_base::StatusOr<std::vector<ValueRow>> Query(const std::string& query) {
-    auto result =
-        client().ExecuteQuery(google::cloud::spanner::SqlStatement(query));
+  // Same as version above except reads using a specified transaction.
+  zetasql_base::StatusOr<std::vector<ValueRow>> ReadAllWithIndex(
+      Transaction txn, std::string table, std::string index,
+      std::vector<std::string> columns) {
+    return ReadWithIndex(std::move(txn), std::move(table), std::move(index),
+                         std::move(columns), KeySet::All());
+  }
+
+  // Run a SQL query with the given bound parameters and return the results.
+  zetasql_base::StatusOr<std::vector<ValueRow>> QueryWithParams(
+      const std::string& query,
+      google::cloud::spanner::SqlStatement::ParamType params) {
+    auto result = client().ExecuteQuery(
+        google::cloud::spanner::SqlStatement(query, std::move(params)));
     std::vector<ValueRow> retval;
     for (const auto& row : result) {
       if (!row.ok()) {
@@ -349,6 +399,11 @@ class DatabaseTest : public ::testing::Test {
       retval.push_back(row.value());
     }
     return retval;
+  }
+
+  // Same as version above, but with no bound parameters.
+  zetasql_base::StatusOr<std::vector<ValueRow>> Query(const std::string& query) {
+    return QueryWithParams(query, /*params=*/{});
   }
 
   // Execute query using an existing transaction.
@@ -450,7 +505,8 @@ class DatabaseTest : public ::testing::Test {
   zetasql_base::StatusOr<CommitResult> CommitDml(
       const std::vector<std::string>& statements) {
     std::vector<SqlStatement> sql_statements;
-    for (auto statement : statements) {
+    sql_statements.reserve(statements.size());
+    for (const auto& statement : statements) {
       sql_statements.push_back(SqlStatement(statement));
     }
     return CommitDml(sql_statements);
@@ -459,6 +515,10 @@ class DatabaseTest : public ::testing::Test {
   // Commits a set of sql statements.
   zetasql_base::StatusOr<CommitResult> CommitDml(
       const std::vector<SqlStatement>& sql_statements);
+
+  // Commits the given transaction with the set of sql statements provided.
+  zetasql_base::StatusOr<CommitResult> CommitDmlTransaction(
+      Transaction txn, const std::vector<SqlStatement>& sql_statements);
 
   // Commits a set of sql statements executed by BatchDML.
   zetasql_base::StatusOr<CommitResult> CommitBatchDml(
@@ -532,6 +592,15 @@ class DatabaseTest : public ::testing::Test {
 
   // The client used for the spanner client api.
   std::unique_ptr<cloud::spanner::Client> client_;
+
+  // Stubs for accessing low-level APIs that are not exported by the high-level
+  // cloud::spanner::Client API.
+
+  std::unique_ptr<SpannerStub> spanner_stub_;
+
+  std::unique_ptr<DatabaseAdminStub> database_admin_stub_;
+
+  std::unique_ptr<OperationsStub> operations_stub_;
 };
 
 }  // namespace test

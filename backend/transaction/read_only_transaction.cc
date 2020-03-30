@@ -29,7 +29,7 @@
 #include "backend/storage/in_memory_iterator.h"
 #include "backend/storage/storage.h"
 #include "backend/transaction/options.h"
-#include "backend/transaction/read_util.h"
+#include "backend/transaction/resolve.h"
 #include "backend/transaction/row_cursor.h"
 #include "common/clock.h"
 #include "zetasql/base/status.h"
@@ -70,27 +70,19 @@ zetasql_base::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
     return error::ReadTimestampPastVersionGCLimit(read_timestamp_);
   }
 
-  const Table* table;
-  std::vector<const Column*> columns;
-  std::vector<ColumnID> column_ids;
-  ZETASQL_RETURN_IF_ERROR(
-      ExtractTableAndColumnsFromReadArg(read_arg, schema_, &table, &columns));
-  column_ids.reserve(columns.size());
-  for (const Column* column : columns) {
-    column_ids.push_back(column->id());
-  }
+  ZETASQL_ASSIGN_OR_RETURN(const ResolvedReadArg resolved_read_arg,
+                   ResolveReadArg(read_arg, schema_));
 
   std::vector<std::unique_ptr<StorageIterator>> iterators;
-  std::vector<KeyRange> key_ranges;
-  CanonicalizeKeySetForTable(read_arg.key_set, table, &key_ranges);
-  for (const auto& key_range : key_ranges) {
+  for (const auto& key_range : resolved_read_arg.key_ranges) {
     std::unique_ptr<StorageIterator> itr;
-    ZETASQL_RETURN_IF_ERROR(base_storage_->Read(read_timestamp_, table->id(), key_range,
-                                        column_ids, &itr));
+    ZETASQL_RETURN_IF_ERROR(base_storage_->Read(
+        read_timestamp_, resolved_read_arg.table->id(), key_range,
+        GetColumnIDs(resolved_read_arg.columns), &itr));
     iterators.push_back(std::move(itr));
   }
-  *cursor = absl::make_unique<StorageIteratorRowCursor>(std::move(iterators),
-                                                        std::move(columns));
+  *cursor = absl::make_unique<StorageIteratorRowCursor>(
+      std::move(iterators), resolved_read_arg.columns);
   return zetasql_base::OkStatus();
 }
 

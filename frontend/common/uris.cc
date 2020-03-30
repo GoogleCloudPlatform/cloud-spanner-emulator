@@ -22,6 +22,8 @@
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "common/errors.h"
+#include "common/limits.h"
+#include "re2/re2.h"
 
 namespace google {
 namespace spanner {
@@ -194,6 +196,15 @@ std::string MakeSessionUri(absl::string_view database_uri,
 std::string MakeOperationUri(absl::string_view resource_uri,
                              absl::string_view operation_id) {
   return absl::StrCat(resource_uri, "/operations/", operation_id);
+}
+
+bool IsValidOperationId(absl::string_view operation_id) {
+  if (operation_id.length() < limits::kDatabaseOpIdMinLength ||
+      operation_id.length() > limits::kDatabaseOpIdMaxLength) {
+    return false;
+  }
+  static LazyRE2 re{"[a-z][a-z0-9_]*"};
+  return RE2::FullMatch(operation_id, *re);
 }
 
 }  // namespace emulator

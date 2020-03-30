@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_NODE_BASE_H_
 
 #include <string>
+
 #include "zetasql/base/logging.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/match.h"
@@ -43,7 +44,7 @@ class NodeBase {
   const std::string& image() const { return image_; }
   int64_t image_as_int64() const {
     const bool is_hex = absl::StartsWithIgnoreCase(image_, "0x") ||
-        absl::StartsWithIgnoreCase(image_, "-0x");
+                        absl::StartsWithIgnoreCase(image_, "-0x");
     int64_t rv;
     if (is_hex) {
       if (!absl::numbers_internal::safe_strtoi_base(image_, &rv, 16)) {

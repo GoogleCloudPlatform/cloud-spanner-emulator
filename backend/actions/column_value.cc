@@ -140,9 +140,9 @@ zetasql_base::Status ValidateColumnArrayValue(const Table* table, const Column* 
   return zetasql_base::OkStatus();
 }
 
-zetasql_base::Status ValidateCommitTimestampColumn(const Column* const column,
-                                           const zetasql::Value& value,
-                                           Clock* clock) {
+zetasql_base::Status ValidateColumnTimestampValue(const Column* const column,
+                                          const zetasql::Value& value,
+                                          Clock* clock) {
   // Check that user provided timestamp value is not in future. Sentinel max
   // timestamp value for commit timestamp column can only be set internally.
   if (column->allows_commit_timestamp() && !value.is_null() &&
@@ -172,7 +172,7 @@ zetasql_base::Status ValidateInsertUpdateOp(const Table* table,
         break;
       case zetasql::TYPE_TIMESTAMP:
         ZETASQL_RETURN_IF_ERROR(
-            ValidateCommitTimestampColumn(columns[i], values[i], clock));
+            ValidateColumnTimestampValue(columns[i], values[i], clock));
         break;
       default:
         continue;

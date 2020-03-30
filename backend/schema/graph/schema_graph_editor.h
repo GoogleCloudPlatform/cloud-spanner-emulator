@@ -14,17 +14,17 @@
 // limitations under the License.
 //
 
-#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_GRAPH_EDITOR_H_
-#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_GRAPH_EDITOR_H_
+#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_GRAPH_EDITOR_H_
+#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_GRAPH_EDITOR_H_
 
 #include <algorithm>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
-#include "backend/schema/catalog/schema_graph.h"
-#include "backend/schema/catalog/schema_node.h"
-#include "backend/schema/catalog/schema_objects_pool.h"
+#include "backend/schema/graph/schema_graph.h"
+#include "backend/schema/graph/schema_node.h"
+#include "backend/schema/graph/schema_objects_pool.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status.h"
@@ -266,4 +266,4 @@ class SchemaGraphEditor {
 }  // namespace spanner
 }  // namespace google
 
-#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_GRAPH_EDITOR_H_
+#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_GRAPH_EDITOR_H_

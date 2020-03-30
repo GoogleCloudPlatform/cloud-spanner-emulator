@@ -26,8 +26,8 @@
 #include "absl/strings/substitute.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/column.h"
-#include "backend/schema/catalog/schema_node.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
 
 namespace google {

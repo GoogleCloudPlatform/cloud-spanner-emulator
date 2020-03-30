@@ -44,8 +44,9 @@
 #include "backend/storage/iterator.h"
 #include "backend/storage/storage.h"
 #include "backend/transaction/actions.h"
+#include "backend/transaction/flush.h"
 #include "backend/transaction/options.h"
-#include "backend/transaction/read_util.h"
+#include "backend/transaction/resolve.h"
 #include "backend/transaction/row_cursor.h"
 #include "backend/transaction/write_util.h"
 #include "common/clock.h"
@@ -111,23 +112,19 @@ zetasql_base::Status ReadWriteTransaction::Read(const ReadArg& read_arg,
   return GuardedCall([&]() -> zetasql_base::Status {
     mu_.AssertHeld();
 
-    const Table* table;
-    std::vector<const Column*> columns;
-    ZETASQL_RETURN_IF_ERROR(
-        ExtractTableAndColumnsFromReadArg(read_arg, schema_, &table, &columns));
+    ZETASQL_ASSIGN_OR_RETURN(const ResolvedReadArg& resolved_read_arg,
+                     ResolveReadArg(read_arg, schema_));
 
     std::vector<std::unique_ptr<StorageIterator>> iterators;
-    std::vector<KeyRange> key_ranges;
-    CanonicalizeKeySetForTable(read_arg.key_set, table, &key_ranges);
-    for (const auto& key_range : key_ranges) {
+    for (const auto& key_range : resolved_read_arg.key_ranges) {
       std::unique_ptr<StorageIterator> itr;
       ZETASQL_RETURN_IF_ERROR(transaction_store_->Read(
-          table, key_range, columns, &itr,
+          resolved_read_arg.table, key_range, resolved_read_arg.columns, &itr,
           false /*allow_pending_commit_timestamps_in_read*/));
       iterators.push_back(std::move(itr));
     }
-    *cursor = absl::make_unique<StorageIteratorRowCursor>(std::move(iterators),
-                                                          std::move(columns));
+    *cursor = absl::make_unique<StorageIteratorRowCursor>(
+        std::move(iterators), resolved_read_arg.columns);
     return zetasql_base::OkStatus();
   });
 }
@@ -279,7 +276,7 @@ zetasql_base::Status ReadWriteTransaction::Write(const Mutation& mutation) {
       ZETASQL_ASSIGN_OR_RETURN(
           std::vector<absl::optional<int>> key_indices,
           ExtractPrimaryKeyIndices(mutation_op.columns, table->primary_key()));
-      for (ValueList row : mutation_op.rows) {
+      for (const ValueList& row : mutation_op.rows) {
         ZETASQL_RET_CHECK_EQ(row.size(), columns.size())
             << "MutationOp has difference in size of column and value vectors, "
                "mutation op: "
@@ -303,8 +300,8 @@ zetasql_base::Status ReadWriteTransaction::Commit() {
     ZETASQL_ASSIGN_OR_RETURN(commit_timestamp_, lock_handle_->ReserveCommitTimestamp());
 
     // Write the mutations to the base storage.
-    zetasql_base::Status flush_status =
-        transaction_store_->FlushMutation(commit_timestamp_);
+    zetasql_base::Status flush_status = FlushWriteOpsToStorage(
+        transaction_store_->GetBufferedOps(), base_storage_, commit_timestamp_);
     ZETASQL_RETURN_IF_ERROR(lock_handle_->MarkCommitted());
     if (!flush_status.ok()) {
       return flush_status;

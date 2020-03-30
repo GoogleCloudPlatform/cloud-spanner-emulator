@@ -25,7 +25,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
 #include "backend/common/ids.h"
-#include "backend/schema/catalog/schema_node.h"
+#include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "common/limits.h"
 #include "zetasql/base/status.h"

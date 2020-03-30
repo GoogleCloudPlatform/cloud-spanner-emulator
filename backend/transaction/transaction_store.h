@@ -94,9 +94,6 @@ class TransactionStore {
                     std::unique_ptr<StorageIterator>* storage_itr,
                     bool allow_pending_commit_timestamps_in_read = true) const;
 
-  // Flushes buffered mutations to base storage.
-  zetasql_base::Status FlushMutation(const absl::Time commit_timestamp);
-
   // Returns the buffered mutations.
   std::vector<WriteOp> GetBufferedOps() const;
 
@@ -125,7 +122,7 @@ class TransactionStore {
   bool RowExistsInBuffer(const Table* table, const Key& key, RowOp* row) const;
 
   // Underlying storage for the database.
-  Storage* base_storage_;
+  const Storage* base_storage_;
 
   // Handle for the lock manager.
   LockHandle* lock_handle_;

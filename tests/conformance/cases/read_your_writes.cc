@@ -47,7 +47,7 @@ class ReadYourWritesTest : public DatabaseTest {
           CREATE INDEX CommitTsTableIndex ON CommitTsTable(val)
         )",
         R"(
-          CREATE INDEX CommitTsTableUniqueIndex ON CommitTsTable(val)
+          CREATE UNIQUE INDEX CommitTsTableUniqueIndex ON CommitTsTable(val)
         )",
         R"(
           CREATE TABLE NonKeyCommitTsTable (
@@ -61,6 +61,15 @@ class ReadYourWritesTest : public DatabaseTest {
         )",
         R"(
           CREATE INDEX NonKeyCommitTsIndexOnKey ON NonKeyCommitTsTable(key)
+        )",
+        R"(
+          CREATE TABLE Users (
+            userid INT64 NOT NULL,
+            email STRING(MAX)
+          ) PRIMARY KEY (userid)
+        )",
+        R"(
+          CREATE UNIQUE INDEX UsersByEmail ON Users(email)
         )"}));
     return zetasql_base::OkStatus();
   }
@@ -196,6 +205,71 @@ TEST_F(ReadYourWritesTest,
                   "SELECT key FROM "
                   "NonKeyCommitTsTable@{force_index=NonKeyCommitTsIndexOnKey}"),
               IsOkAndHoldsRows({{"key1"}}));
+}
+
+TEST_F(ReadYourWritesTest, CanReadBufferedUpdatesToIndex) {
+  // Insert a row and verify that the row can be read using index.
+  ZETASQL_ASSERT_OK(
+      CommitDml({SqlStatement("INSERT INTO Users(userid, email) "
+                              "VALUES (111, 'a@foo.com')")}));
+  EXPECT_THAT(
+      Query("SELECT userid, email FROM Users@{force_index=UsersByEmail}"),
+      IsOkAndHoldsRow({111, "a@foo.com"}));
+  EXPECT_THAT(ReadAllWithIndex("Users", "UsersByEmail", {"userid", "email"}),
+              IsOkAndHoldsRow({111, "a@foo.com"}));
+
+  // Update the row with a different value, and verify that buffered value can
+  // be read using index inside the same transaction.
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn,
+      SqlStatement("UPDATE Users SET email = 'b@foo.com' WHERE userid = 111")));
+  EXPECT_THAT(
+      QueryTransaction(
+          txn, "SELECT userid, email FROM Users@{force_index=UsersByEmail}"),
+      IsOkAndHoldsRow({111, "b@foo.com"}));
+  EXPECT_THAT(
+      ReadAllWithIndex(txn, "Users", "UsersByEmail", {"userid", "email"}),
+      IsOkAndHoldsRow({111, "b@foo.com"}));
+
+  // Perform one more update, verify that buffered writes get updated and can be
+  // read using index.
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn,
+      SqlStatement("UPDATE Users SET email = 'c@foo.com' WHERE userid = 111")));
+  EXPECT_THAT(
+      QueryTransaction(
+          txn, "SELECT userid, email FROM Users@{force_index=UsersByEmail}"),
+      IsOkAndHoldsRow({111, "c@foo.com"}));
+  EXPECT_THAT(
+      ReadAllWithIndex(txn, "Users", "UsersByEmail", {"userid", "email"}),
+      IsOkAndHoldsRow({111, "c@foo.com"}));
+}
+
+TEST_F(ReadYourWritesTest, CannotViolateUniqueIndexConstraint) {
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+
+  // Insert: 111 - a@foo.com
+  ZETASQL_EXPECT_OK(ExecuteDmlTransaction(
+      txn,
+      SqlStatement({SqlStatement(
+          "INSERT INTO Users(userid, email) VALUES (111, 'a@foo.com')")})));
+
+  // Insert: 222 - 'a@foo.com' - violate unique index.
+  EXPECT_THAT(
+      ExecuteDmlTransaction(
+          txn,
+          SqlStatement({SqlStatement(
+              "INSERT INTO Users(userid, email) VALUES (222, 'a@foo.com')")})),
+      StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+
+  // Insert: 333 - 'a@foo.com' - violate unique index with commit.
+  EXPECT_THAT(
+      CommitDmlTransaction(
+          txn,
+          {SqlStatement(
+              "INSERT INTO Users(userid, email) VALUES (222, 'a@foo.com')")}),
+      StatusIs(zetasql_base::StatusCode::kAlreadyExists));
 }
 
 }  // namespace test

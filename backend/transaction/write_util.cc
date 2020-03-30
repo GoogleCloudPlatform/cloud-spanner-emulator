@@ -33,9 +33,9 @@
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/iterator.h"
-#include "backend/transaction/read_util.h"
+#include "backend/transaction/commit_timestamp.h"
+#include "backend/transaction/resolve.h"
 #include "backend/transaction/transaction_store.h"
-#include "common/constants.h"
 #include "common/errors.h"
 #include "zetasql/base/status.h"
 #include "zetasql/base/status_macros.h"
@@ -58,104 +58,6 @@ void ComputeKey(const ValueList& row,
             : zetasql::Value::Null(primary_key[i]->column()->GetType()),
         primary_key[i]->is_descending());
   }
-}
-
-// Helper methods to set commit timestamp sentinel, if user requested to store
-// or read commit timestamp atomically in a timestamp column or timestamp key
-// column with allow_commit_timestamp set to true.
-zetasql_base::StatusOr<zetasql::Value> MaybeSetCommitTimestampSentinel(
-    const Column* column, zetasql::Value column_value) {
-  if (column->GetType()->IsTimestamp() && column->allows_commit_timestamp()) {
-    if (!column_value.is_null() && column_value.type()->IsString() &&
-        column_value.string_value() == kCommitTimestampIdentifier) {
-      return zetasql::values::Timestamp(kCommitTimestampValueSentinel);
-    } else if (!column_value.is_null() && column_value.type()->IsTimestamp() &&
-               column_value.ToTime() == kCommitTimestampValueSentinel) {
-      return error::CommitTimestampInFuture(column_value.ToTime());
-    }
-  }
-  return column_value;
-}
-
-zetasql_base::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
-    std::vector<const Column*> columns, const ValueList& row) {
-  if (row.empty()) return row;
-  ValueList ret_val;
-  for (int i = 0; i < row.size(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(ret_val.emplace_back(),
-                     MaybeSetCommitTimestampSentinel(columns[i], row[i]));
-  }
-  return ret_val;
-}
-
-zetasql_base::StatusOr<Key> MaybeSetCommitTimestampSentinel(
-    absl::Span<const KeyColumn* const> primary_key, Key key) {
-  for (int i = 0; i < key.NumColumns(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(zetasql::Value value,
-                     MaybeSetCommitTimestampSentinel(primary_key[i]->column(),
-                                                     key.ColumnValue(i)));
-    key.SetColumnValue(i, value);
-  }
-  return key;
-}
-
-zetasql_base::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
-    absl::Span<const KeyColumn* const> primary_key, KeyRange key_range) {
-  ZETASQL_RET_CHECK(key_range.IsClosedOpen());
-  if (key_range.start_key() >= key_range.limit_key()) {
-    // Nothing to be done for empty key range.
-    return key_range;
-  }
-  ZETASQL_ASSIGN_OR_RETURN(Key start_key, MaybeSetCommitTimestampSentinel(
-                                      primary_key, key_range.start_key()));
-  ZETASQL_ASSIGN_OR_RETURN(Key limit_key, MaybeSetCommitTimestampSentinel(
-                                      primary_key, key_range.limit_key()));
-  return KeyRange(key_range.start_type(), start_key, key_range.limit_type(),
-                  limit_key);
-}
-
-zetasql_base::Status ValidateCommitTimestampValueNotInFuture(
-    const zetasql::Value& value, absl::Time now) {
-  if (!value.is_null() && value.type()->IsTimestamp() && value.ToTime() > now) {
-    return error::CommitTimestampInFuture(value.ToTime());
-  }
-  return zetasql_base::OkStatus();
-}
-
-zetasql_base::Status ValidateCommitTimestampKeyForDeleteOp(const Table* table,
-                                                   const Key& key,
-                                                   absl::Time now) {
-  const absl::Span<const KeyColumn* const> primary_key = table->primary_key();
-  for (int i = 0; i < key.NumColumns(); ++i) {
-    const Column* column = primary_key.at(i)->column();
-    if (column->GetType()->IsTimestamp() && column->allows_commit_timestamp()) {
-      ZETASQL_RETURN_IF_ERROR(
-          ValidateCommitTimestampValueNotInFuture(key.ColumnValue(i), now));
-    }
-  }
-  return zetasql_base::OkStatus();
-}
-
-zetasql_base::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table,
-                                                      const KeySet& set,
-                                                      absl::Time now) {
-  for (const Key& key : set.keys()) {
-    ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampKeyForDeleteOp(table, key, now));
-  }
-
-  for (const KeyRange& key_range : set.ranges()) {
-    auto closed_open = key_range.ToClosedOpen();
-    if (closed_open.start_key() >= closed_open.limit_key()) {
-      // No-op empty key ranges are ignored.
-      continue;
-    }
-
-    ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampKeyForDeleteOp(
-        table, key_range.start_key(), now));
-    ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampKeyForDeleteOp(
-        table, key_range.limit_key(), now));
-  }
-  return zetasql_base::OkStatus();
 }
 
 }  // namespace

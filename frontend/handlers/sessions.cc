@@ -61,7 +61,7 @@ zetasql_base::Status CreateSession(RequestContext* ctx,
       ctx->env()->session_manager()->CreateSession(labels, database));
 
   // Return details about the newly created session.
-  return session->ToProto(response);
+  return session->ToProto(response, /*include_labels=*/false);
 }
 REGISTER_GRPC_HANDLER(Spanner, CreateSession);
 
@@ -74,6 +74,9 @@ zetasql_base::Status BatchCreateSessions(
   ZETASQL_RETURN_IF_ERROR(ParseDatabaseUri(request->database(), &project_id,
                                    &instance_id, &database_id));
   ZETASQL_RETURN_IF_ERROR(ValidateLabels(request->session_template().labels()));
+  if (request->session_count() < 0) {
+    return error::TooFewSessions(request->session_count());
+  }
 
   // Fetch the database to ensure that it exists.
   ZETASQL_ASSIGN_OR_RETURN(
@@ -110,7 +113,7 @@ zetasql_base::Status GetSession(RequestContext* ctx,
                                   &database_id, &session_id));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    ctx->env()->session_manager()->GetSession(request->name()));
-  return session->ToProto(response);
+  return session->ToProto(response, /*include_labels=*/false);
 }
 REGISTER_GRPC_HANDLER(Spanner, GetSession);
 
@@ -147,7 +150,8 @@ zetasql_base::Status ListSessions(RequestContext* ctx,
       break;
     }
     if (session->session_uri() >= request->page_token()) {
-      ZETASQL_RETURN_IF_ERROR(session->ToProto(response->add_sessions()));
+      ZETASQL_RETURN_IF_ERROR(session->ToProto(response->add_sessions(),
+                                       /*include_labels=*/true));
     }
   }
   return zetasql_base::OkStatus();

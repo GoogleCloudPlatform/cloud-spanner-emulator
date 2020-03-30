@@ -14,8 +14,8 @@
 // limitations under the License.
 //
 
-#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_OBJECTS_POOL_H_
-#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_OBJECTS_POOL_H_
+#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_OBJECTS_POOL_H_
+#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_OBJECTS_POOL_H_
 
 #include <algorithm>
 #include <memory>
@@ -23,7 +23,7 @@
 
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_cat.h"
-#include "backend/schema/catalog/schema_node.h"
+#include "backend/schema/graph/schema_node.h"
 
 namespace google {
 namespace spanner {
@@ -80,4 +80,4 @@ class SchemaObjectsPool {
 }  // namespace spanner
 }  // namespace google
 
-#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_OBJECTS_POOL_H_
+#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_OBJECTS_POOL_H_

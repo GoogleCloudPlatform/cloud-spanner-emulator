@@ -32,6 +32,7 @@
 #include "backend/actions/ops.h"
 #include "backend/common/ids.h"
 #include "backend/datamodel/key.h"
+#include "backend/datamodel/key_range.h"
 #include "backend/datamodel/value.h"
 #include "backend/schema/catalog/versioned_catalog.h"
 #include "backend/storage/in_memory_storage.h"
@@ -125,30 +126,56 @@ class ReadWriteTransactionTest : public testing::Test {
   std::unique_ptr<ReadWriteTransaction> secondary_transaction_;
 };
 
-TEST_F(ReadWriteTransactionTest, Read) {
+TEST_F(ReadWriteTransactionTest, CanReadAfterFlush) {
   // Buffer mutations.
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "test_table",
-               {"int64_col", "string_col"}, {{Int64(1), String("value")}});
+               {"int64_col", "string_col"}, {{Int64(1), String("value1")}});
+  m.AddWriteOp(MutationOpType::kInsert, "test_table",
+               {"int64_col", "string_col"}, {{Int64(2), String("value2")}});
   ZETASQL_EXPECT_OK(primary_transaction_->Write(m));
+  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
 
   // Verify the values.
-  std::unique_ptr<backend::RowCursor> cursor;
   backend::ReadArg read_arg;
   read_arg.table = "test_table";
   read_arg.columns = {"int64_col", "string_col"};
-  read_arg.key_set = KeySet(Key({Int64(1)}));
+  read_arg.key_set = KeySet(KeyRange::All());
 
-  ZETASQL_EXPECT_OK(primary_transaction_->Read(read_arg, &cursor));
+  std::unique_ptr<backend::RowCursor> cursor;
+  ZETASQL_EXPECT_OK(secondary_transaction_->Read(read_arg, &cursor));
   std::vector<zetasql::Value> values;
   while (cursor->Next()) {
     values.push_back(cursor->ColumnValue(0));
     values.push_back(cursor->ColumnValue(1));
   }
-  EXPECT_THAT(values, testing::ElementsAre(Int64(1), String("value")));
+  EXPECT_THAT(values, testing::ElementsAre(Int64(1), String("value1"), Int64(2),
+                                           String("value2")));
 
-  // Commit the transaction.
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+  // Update some of the existing rows and insert some new rows.
+  Mutation m2;
+  m2.AddWriteOp(MutationOpType::kInsert, "test_table",
+                {"int64_col", "string_col"}, {{Int64(3), String("value3")}});
+  m2.AddWriteOp(MutationOpType::kUpdate, "test_table",
+                {"int64_col", "string_col"},
+                {{Int64(1), String("new-value1")}});
+  m2.AddDeleteOp("test_table", KeySet(Key({Int64(2)})));
+  ZETASQL_EXPECT_OK(secondary_transaction_->Write(m2));
+  ZETASQL_EXPECT_OK(secondary_transaction_->Commit());
+
+  // Verify that updates are flushed to underlying storage.
+  auto transaction3 = absl::make_unique<ReadWriteTransaction>(
+      opts_, txn_id_ + 1, &clock_, &storage_, lock_manager_.get(),
+      &versioned_catalog_, action_manager_.get());
+  std::unique_ptr<backend::RowCursor> cursor3;
+  ZETASQL_EXPECT_OK(transaction3->Read(read_arg, &cursor3));
+  std::vector<zetasql::Value> values3;
+  while (cursor3->Next()) {
+    values3.push_back(cursor3->ColumnValue(0));
+    values3.push_back(cursor3->ColumnValue(1));
+  }
+  EXPECT_THAT(values3, testing::ElementsAre(Int64(1), String("new-value1"),
+                                            Int64(3), String("value3")));
 }
 
 TEST_F(ReadWriteTransactionTest, ReadEmptyDatabase) {

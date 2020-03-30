@@ -155,6 +155,9 @@ zetasql_base::Status UpdateDatabaseDdl(
 
   // Check for request replay.
   if (!request->operation_id().empty()) {
+    if (!IsValidOperationId(request->operation_id())) {
+      return error::InvalidOperationId(request->operation_id());
+    }
     const std::string operation_uri =
         MakeOperationUri(request->database(), request->operation_id());
     auto maybe_operation =
@@ -197,6 +200,7 @@ zetasql_base::Status UpdateDatabaseDdl(
   }
 
   // Create operation to be returned as part of the response.
+  // A user-supplied operation_id would have already been validated above.
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Operation> operation,
                    ctx->env()->operation_manager()->CreateOperation(
                        request->database(), request->operation_id()));

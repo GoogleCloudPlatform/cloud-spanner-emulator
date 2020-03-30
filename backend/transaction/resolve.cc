@@ -14,13 +14,9 @@
 // limitations under the License.
 //
 
-#include "backend/transaction/read_util.h"
+#include "backend/transaction/resolve.h"
 
-#include "absl/time/time.h"
-#include "backend/common/ids.h"
 #include "backend/datamodel/key_set.h"
-#include "backend/storage/storage.h"
-#include "backend/transaction/transaction_store.h"
 #include "common/errors.h"
 
 namespace google {
@@ -59,34 +55,35 @@ KeySet SetSortOrder(const Table* table, const KeySet& key_set) {
 
 }  // namespace
 
-zetasql_base::Status ExtractTableAndColumnsFromReadArg(
-    const ReadArg& read_arg, const Schema* schema, const Table** read_table,
-    std::vector<const Column*>* columns) {
-  columns->clear();
-  *read_table = schema->FindTable(read_arg.table);
-  if (*read_table == nullptr) {
+zetasql_base::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
+                                               const Schema* schema) {
+  // Find the table to read from schema.
+  auto read_table = schema->FindTable(read_arg.table);
+  if (read_table == nullptr) {
     return error::TableNotFound(read_arg.table);
   }
 
-  // Check if index should be read from.
+  // Check if index should be read from instead.
   const Index* index = nullptr;
   if (!read_arg.index.empty()) {
     index = schema->FindIndex(read_arg.index);
     if (index == nullptr) {
       return error::IndexNotFound(read_arg.index, read_arg.table);
     }
-    if (index->indexed_table() != *read_table) {
+    if (index->indexed_table() != read_table) {
       return error::IndexTableDoesNotMatchBaseTable(
-          (*read_table)->Name(), index->indexed_table()->Name(), index->Name());
+          read_table->Name(), index->indexed_table()->Name(), index->Name());
     }
-    *read_table = index->index_data_table();
+    read_table = index->index_data_table();
   }
 
+  // Find the columns to read from schema.
+  std::vector<const Column*> columns;
   for (const auto& column_name : read_arg.columns) {
-    const Column* column = (*read_table)->FindColumn(column_name);
+    const Column* column = read_table->FindColumn(column_name);
     if (column == nullptr) {
       if (index == nullptr) {
-        return error::ColumnNotFound((*read_table)->Name(), column_name);
+        return error::ColumnNotFound(read_table->Name(), column_name);
       }
       // Check if column exists in base table and not in index table.
       const Column* base_column =
@@ -98,9 +95,18 @@ zetasql_base::Status ExtractTableAndColumnsFromReadArg(
       return error::ColumnNotFoundInIndex(
           index->Name(), index->indexed_table()->Name(), column_name);
     }
-    columns->push_back(column);
+    columns.push_back(column);
   }
-  return zetasql_base::OkStatus();
+
+  // Convert key set to canonicalized key ranges.
+  std::vector<KeyRange> key_ranges;
+  CanonicalizeKeySetForTable(read_arg.key_set, read_table, &key_ranges);
+
+  ResolvedReadArg resolved_read_arg;
+  resolved_read_arg.table = read_table;
+  resolved_read_arg.key_ranges = std::move(key_ranges);
+  resolved_read_arg.columns = columns;
+  return resolved_read_arg;
 }
 
 void CanonicalizeKeySetForTable(const KeySet& set, const Table* table,

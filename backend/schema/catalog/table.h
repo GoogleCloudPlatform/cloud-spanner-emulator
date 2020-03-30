@@ -30,8 +30,8 @@
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
-#include "backend/schema/catalog/schema_graph_editor.h"
-#include "backend/schema/catalog/schema_node.h"
+#include "backend/schema/graph/schema_graph_editor.h"
+#include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "zetasql/base/status.h"
 

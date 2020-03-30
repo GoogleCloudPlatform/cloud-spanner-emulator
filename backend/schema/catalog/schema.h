@@ -25,8 +25,8 @@
 #include "absl/types/span.h"
 #include "backend/common/case.h"
 #include "backend/schema/catalog/index.h"
-#include "backend/schema/catalog/schema_graph.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/graph/schema_graph.h"
 #include "zetasql/base/status.h"
 
 namespace google {

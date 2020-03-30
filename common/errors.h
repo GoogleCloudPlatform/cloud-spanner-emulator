@@ -56,6 +56,7 @@ zetasql_base::Status TooManyDatabasesPerInstance(absl::string_view instance_uri)
 zetasql_base::Status InvalidDatabaseName(absl::string_view database_id);
 
 // Operation errors.
+zetasql_base::Status InvalidOperationId(absl::string_view id);
 zetasql_base::Status InvalidOperationURI(absl::string_view uri);
 zetasql_base::Status OperationAlreadyExists(absl::string_view uri);
 zetasql_base::Status OperationNotFound(absl::string_view uri);
@@ -71,6 +72,7 @@ zetasql_base::Status BadLabelValue(absl::string_view key, absl::string_view valu
 // Session errors.
 zetasql_base::Status InvalidSessionURI(absl::string_view uri);
 zetasql_base::Status SessionNotFound(absl::string_view uri);
+zetasql_base::Status TooFewSessions(int session_count);
 
 // Missing required field in proto error.
 zetasql_base::Status MissingRequiredFieldError(absl::string_view field);
