@@ -41,10 +41,10 @@ zetasql_base::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table
 // or read commit timestamp atomically in a timestamp column or timestamp key
 // column with allow_commit_timestamp set to true.
 zetasql_base::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
-    std::vector<const Column*> columns, const ValueList& row);
+    absl::Span<const Column* const> columns, const ValueList& row);
 
 zetasql_base::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
-    absl::Span<const KeyColumn* const> primary_key, KeyRange key_range);
+    absl::Span<const KeyColumn* const> primary_key, const KeyRange& key_range);
 
 // Returns true if either primary key or columns for the rows contain special
 // sentinel timestamp value which should be replaced with commit timestamp of
@@ -56,7 +56,7 @@ bool HasPendingCommitTimestampInReadResult(
 // Replace commit timestamp sentinel value, if present, with transaction
 // commit timestamp for the given column value.
 zetasql::Value MaybeSetCommitTimestamp(const Column* column,
-                                         zetasql::Value column_value,
+                                         const zetasql::Value& column_value,
                                          absl::Time commit_timestamp);
 
 // Replace commit timestamp sentinel value, if present, with transaction

@@ -24,6 +24,8 @@
 #include "backend/datamodel/types.h"
 #include "backend/schema/backfills/index_backfill.h"
 #include "backend/schema/builders/column_builder.h"
+#include "backend/schema/builders/index_builder.h"
+#include "backend/schema/builders/table_builder.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"

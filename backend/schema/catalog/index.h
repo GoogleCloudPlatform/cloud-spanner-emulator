@@ -147,53 +147,6 @@ class Index : public SchemaNode {
   bool is_null_filtered_ = false;
 };
 
-class Index::Builder {
- public:
-  Builder() : instance_(absl::WrapUnique(new Index())) {}
-
-  std::unique_ptr<const Index> build() { return std::move(instance_); }
-
-  const Index* get() const { return instance_.get(); }
-
-  Builder& set_name(const std::string& name) {
-    instance_->name_ = name;
-    return *this;
-  }
-
-  Builder& set_indexed_table(const Table* table) {
-    instance_->indexed_table_ = table;
-    return *this;
-  }
-
-  Builder& set_index_data_table(const Table* table) {
-    instance_->index_data_table_ = table;
-    return *this;
-  }
-
-  Builder& add_key_column(const KeyColumn* column) {
-    instance_->key_columns_.push_back(column);
-    return *this;
-  }
-
-  Builder& add_stored_column(const Column* column) {
-    instance_->stored_columns_.push_back(column);
-    return *this;
-  }
-
-  Builder& set_unique(bool is_unique) {
-    instance_->is_unique_ = is_unique;
-    return *this;
-  }
-
-  Builder& set_null_filtered(bool null_filtered) {
-    instance_->is_null_filtered_ = null_filtered;
-    return *this;
-  }
-
- private:
-  std::unique_ptr<Index> instance_;
-};
-
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

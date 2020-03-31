@@ -38,7 +38,6 @@
 #include "backend/storage/in_memory_storage.h"
 #include "backend/transaction/actions.h"
 #include "backend/transaction/options.h"
-#include "backend/transaction/write_util.h"
 #include "common/clock.h"
 #include "tests/common/schema_constructor.h"
 #include "zetasql/base/status.h"

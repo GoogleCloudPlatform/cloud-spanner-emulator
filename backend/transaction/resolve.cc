@@ -16,8 +16,16 @@
 
 #include "backend/transaction/resolve.h"
 
+#include <vector>
+
+#include "backend/common/case.h"
+#include "backend/common/rows.h"
 #include "backend/datamodel/key_set.h"
+#include "backend/schema/catalog/column.h"
+#include "backend/transaction/commit_timestamp.h"
 #include "common/errors.h"
+#include "zetasql/base/status.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -51,6 +59,74 @@ KeySet SetSortOrder(const Table* table, const KeySet& key_set) {
     result_set.AddRange(new_range);
   }
   return result_set;
+}
+
+void CanonicalizeKeySetForTable(const KeySet& set, const Table* table,
+                                std::vector<KeyRange>* ranges) {
+  KeySet ordered_set = SetSortOrder(table, set);
+  MakeDisjointKeyRanges(ordered_set, ranges);
+}
+
+zetasql_base::Status ValidateColumnsAreNotDuplicate(
+    const std::vector<std::string>& column_names) {
+  CaseInsensitiveStringSet columns;
+  for (const std::string& column_name : column_names) {
+    if (columns.find(column_name) != columns.end()) {
+      return error::MultipleValuesForColumn(column_name);
+    }
+    columns.insert(column_name);
+  }
+  return zetasql_base::OkStatus();
+}
+
+// Extracts the primary key column indices from the given list of columns. The
+// returned indices will be in the order specified by the primary key. Nullable
+// primary key columns do not need to be specified, in which the index entry
+// will be nullopt.
+zetasql_base::StatusOr<std::vector<absl::optional<int>>> ExtractPrimaryKeyIndices(
+    absl::Span<const Column* const> columns,
+    absl::Span<const KeyColumn* const> primary_key) {
+  std::vector<absl::optional<int>> key_indices;
+  // Number of columns should be relatively small, so we just iterate over them
+  // to find matches.
+  std::vector<std::string> missing_columns;
+  for (const auto& key_column : primary_key) {
+    int i = 0;
+    for (; i < columns.size(); ++i) {
+      // Column names are case-insensitive in Cloud Spanner.
+      if (zetasql_base::CaseEqual(key_column->column()->Name(), columns[i]->Name())) {
+        key_indices.push_back(i);
+        break;
+      }
+    }
+    // Reached end of columns list, so this key_column was not found.
+    if (i == columns.size()) {
+      if (key_column->column()->is_nullable()) {
+        key_indices.push_back(absl::nullopt);
+      } else {
+        return error::NullValueForNotNullColumn(
+            key_column->column()->table()->Name(),
+            key_column->column()->Name());
+      }
+    }
+  }
+
+  return key_indices;
+}
+
+// Computes the PrimaryKey from the given row using the key indices provided.
+Key ComputeKey(const ValueList& row,
+               absl::Span<const KeyColumn* const> primary_key,
+               const std::vector<absl::optional<int>>& key_indices) {
+  Key key;
+  for (int i = 0; i < primary_key.size(); i++) {
+    key.AddColumn(
+        key_indices[i].has_value()
+            ? row[key_indices[i].value()]
+            : zetasql::Value::Null(primary_key[i]->column()->GetType()),
+        primary_key[i]->is_descending());
+  }
+  return key;
 }
 
 }  // namespace
@@ -109,10 +185,60 @@ zetasql_base::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
   return resolved_read_arg;
 }
 
-void CanonicalizeKeySetForTable(const KeySet& set, const Table* table,
-                                std::vector<KeyRange>* ranges) {
-  KeySet ordered_set = SetSortOrder(table, set);
-  MakeDisjointKeyRanges(ordered_set, ranges);
+zetasql_base::StatusOr<ResolvedMutationOp> ResolveMutationOp(
+    const MutationOp& mutation_op, const Schema* schema, absl::Time now) {
+  const Table* table = schema->FindTable(mutation_op.table);
+  if (table == nullptr) {
+    return error::TableNotFound(mutation_op.table);
+  }
+
+  ResolvedMutationOp resolved_mutation_op;
+  resolved_mutation_op.table = table;
+  resolved_mutation_op.type = mutation_op.type;
+
+  if (mutation_op.type == MutationOpType::kDelete) {
+    // Invalid commit timestamp key ranges for delete ops need to be caught
+    // before CanonicalizeKeySetForTable filters out invalid key ranges with
+    // future timestamp(s).
+    ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampKeySetForDeleteOp(
+        table, mutation_op.key_set, now));
+    std::vector<KeyRange> key_ranges;
+    CanonicalizeKeySetForTable(mutation_op.key_set, table, &key_ranges);
+
+    for (const KeyRange& key_range : key_ranges) {
+      // Transaction store may contain commit timestamp sentinel value until
+      // flush, if requested so in a previous mutation. Hence, convert key
+      // values to timestamp sentinel value to delete such buffered rows.
+      ZETASQL_ASSIGN_OR_RETURN(
+          resolved_mutation_op.key_ranges.emplace_back(),
+          MaybeSetCommitTimestampSentinel(table->primary_key(), key_range));
+    }
+  } else {
+    ZETASQL_RETURN_IF_ERROR(ValidateColumnsAreNotDuplicate(mutation_op.columns));
+
+    ZETASQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
+                     GetColumnsByName(table, mutation_op.columns));
+
+    ZETASQL_ASSIGN_OR_RETURN(std::vector<absl::optional<int>> key_indices,
+                     ExtractPrimaryKeyIndices(columns, table->primary_key()));
+
+    for (const ValueList& row : mutation_op.rows) {
+      ZETASQL_RET_CHECK_EQ(row.size(), columns.size())
+          << "MutationOp has difference in size of column and value vectors, "
+             "mutation op: "
+          << mutation_op.DebugString();
+
+      ZETASQL_ASSIGN_OR_RETURN(resolved_mutation_op.rows.emplace_back(),
+                       MaybeSetCommitTimestampSentinel(columns, row));
+
+      resolved_mutation_op.keys.push_back(ComputeKey(
+          resolved_mutation_op.rows.back(), table->primary_key(), key_indices));
+    }
+
+    resolved_mutation_op.columns = std::move(columns);
+  }
+
+  return resolved_mutation_op;
 }
 
 }  // namespace backend

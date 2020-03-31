@@ -145,6 +145,20 @@ zetasql_base::Status TransactionStore::BufferDelete(const Table* table,
   return zetasql_base::OkStatus();
 }
 
+zetasql_base::Status TransactionStore::BufferWriteOp(const WriteOp& op) {
+  return std::visit(
+      overloaded{
+          [&](const InsertOp& op) {
+            return BufferInsert(op.table, op.key, op.columns, op.values);
+          },
+          [&](const UpdateOp& op) {
+            return BufferUpdate(op.table, op.key, op.columns, op.values);
+          },
+          [&](const DeleteOp& op) { return BufferDelete(op.table, op.key); },
+      },
+      op);
+}
+
 // Reads keys within the given range and add to StorageIterator. This is done by
 // reading from both the base storage & transaction store.
 // - Read keys from base storage (and apply merges as mentioned below).

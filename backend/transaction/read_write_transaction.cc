@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
@@ -32,12 +33,14 @@
 #include "backend/access/write.h"
 #include "backend/actions/context.h"
 #include "backend/actions/manager.h"
+#include "backend/actions/ops.h"
 #include "backend/common/case.h"
 #include "backend/common/ids.h"
 #include "backend/common/rows.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/datamodel/value.h"
 #include "backend/locking/request.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/versioned_catalog.h"
 #include "backend/storage/in_memory_iterator.h"
@@ -48,7 +51,6 @@
 #include "backend/transaction/options.h"
 #include "backend/transaction/resolve.h"
 #include "backend/transaction/row_cursor.h"
-#include "backend/transaction/write_util.h"
 #include "common/clock.h"
 #include "common/errors.h"
 #include "zetasql/base/status.h"
@@ -61,16 +63,66 @@ namespace backend {
 
 namespace {
 
-zetasql_base::Status ValidateColumnsAreNotDuplicate(
-    const std::vector<std::string>& column_names) {
-  CaseInsensitiveStringSet columns;
-  for (const std::string& column_name : column_names) {
-    if (columns.find(column_name) != columns.end()) {
-      return error::MultipleValuesForColumn(column_name);
+// Flattens delete mutation to one write op for each key being deleted.
+zetasql_base::StatusOr<std::vector<WriteOp>> FlattenDeleteOp(
+    const Table* table, const std::vector<KeyRange>& key_ranges,
+    const TransactionStore* transaction_store) {
+  std::vector<WriteOp> write_ops;
+  for (const KeyRange& key_range : key_ranges) {
+    std::unique_ptr<StorageIterator> itr;
+    ZETASQL_RETURN_IF_ERROR(transaction_store->Read(table, key_range,
+                                            /*columns= */ {}, &itr));
+    while (itr->Next()) {
+      write_ops.push_back(DeleteOp{table, itr->Key()});
     }
-    columns.insert(column_name);
   }
-  return zetasql_base::OkStatus();
+  return std::move(write_ops);
+}
+
+// Converts each MutationOp row to a WriteOp based on the MutationOpType:
+// - MutatioOpTyp::kReplace: converts to DeleteOp followed by InsertOp.
+// - MutationOpType::kInsertOrUpdate: if the row already exists, converts
+//   to UpdateOp. Otherwise converts to InsertOp.
+// - MutationOpType::kInsert | kDelete | kUpdate: converts to
+//   corresponding WriteOp of the same type.
+zetasql_base::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
+    MutationOpType type, const Table* table,
+    const std::vector<const Column*>& columns, const Key& key,
+    const ValueList& row, const TransactionStore* transaction_store) {
+  std::vector<WriteOp> write_ops;
+  switch (type) {
+    case MutationOpType::kInsert: {
+      write_ops.push_back(InsertOp{table, key, columns, row});
+      break;
+    }
+    case MutationOpType::kUpdate: {
+      write_ops.push_back(UpdateOp{table, key, columns, row});
+      break;
+    }
+    case MutationOpType::kInsertOrUpdate: {
+      zetasql_base::Status s = transaction_store->Lookup(table, key,
+                                                 /*columns= */ {},
+                                                 /*values= */ nullptr);
+      if (s.ok()) {
+        // Row exists and therefore we should only update.
+        write_ops.push_back(UpdateOp{table, key, columns, row});
+      } else if (s.code() == zetasql_base::StatusCode::kNotFound) {
+        write_ops.push_back(InsertOp{table, key, columns, row});
+      } else {
+        return s;
+      }
+      break;
+    }
+    case MutationOpType::kReplace: {
+      write_ops.push_back(DeleteOp{table, key});
+      write_ops.push_back(InsertOp{table, key, columns, row});
+      break;
+    }
+    case MutationOpType::kDelete: {
+      break;
+    }
+  }
+  return std::move(write_ops);
 }
 
 }  // namespace
@@ -129,32 +181,12 @@ zetasql_base::Status ReadWriteTransaction::Read(const ReadArg& read_arg,
   });
 }
 
-zetasql_base::Status ReadWriteTransaction::BufferRow(const WriteOp& op) {
-  return std::visit(overloaded{
-                        [&](const InsertOp& op) {
-                          return transaction_store_->BufferInsert(
-                              op.table, op.key, op.columns, op.values);
-                        },
-                        [&](const UpdateOp& op) {
-                          return transaction_store_->BufferUpdate(
-                              op.table, op.key, op.columns, op.values);
-                        },
-                        [&](const DeleteOp& op) {
-                          return transaction_store_->BufferDelete(op.table,
-                                                                  op.key);
-                        },
-                    },
-                    op);
-}
-
 zetasql_base::Status ReadWriteTransaction::ApplyValidators(const WriteOp& op) {
   return action_registry_->ExecuteValidators(action_context_.get(), op);
 }
 
 zetasql_base::Status ReadWriteTransaction::ApplyEffectors(const WriteOp& op) {
-  ZETASQL_RETURN_IF_ERROR(
-      action_registry_->ExecuteEffectors(action_context_.get(), op));
-  return zetasql_base::OkStatus();
+  return action_registry_->ExecuteEffectors(action_context_.get(), op);
 }
 
 zetasql_base::Status ReadWriteTransaction::ApplyStatementVerifiers() {
@@ -230,17 +262,24 @@ zetasql_base::Status ReadWriteTransaction::GuardedCall(
   return status;
 }
 
-zetasql_base::Status ReadWriteTransaction::ProcessWriteOpsQueue() {
+zetasql_base::Status ReadWriteTransaction::ProcessWriteOps(
+    const std::vector<WriteOp>& write_ops) {
   mu_.AssertHeld();
+
+  for (const auto& write_op : write_ops) {
+    write_ops_queue_.push(write_op);
+  }
 
   while (!write_ops_queue_.empty()) {
     WriteOp write_op = write_ops_queue_.front();
     write_ops_queue_.pop();
+
+    // Process the operation.
     ZETASQL_RETURN_IF_ERROR(ApplyValidators(write_op));
     ZETASQL_RETURN_IF_ERROR(ApplyEffectors(write_op));
 
-    // Buffer the operation.
-    ZETASQL_RETURN_IF_ERROR(BufferRow(write_op));
+    // Apply to transaction store.
+    ZETASQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(write_op));
   }
   return zetasql_base::OkStatus();
 }
@@ -250,42 +289,29 @@ zetasql_base::Status ReadWriteTransaction::Write(const Mutation& mutation) {
     mu_.AssertHeld();
 
     for (const MutationOp& mutation_op : mutation.ops()) {
-      const Table* table = schema_->FindTable(mutation_op.table);
-      if (table == nullptr) {
-        return error::Internal(absl::StrCat(
-            "Table '", mutation_op.table,
-            "' not found while flattening MutationOp to WriteOp. Schema "
-            "generation used: ",
-            schema_->generation()));
-      }
-      ZETASQL_RETURN_IF_ERROR(ValidateColumnsAreNotDuplicate(mutation_op.columns));
-      std::vector<const Column*> columns;
-      ZETASQL_ASSIGN_OR_RETURN(columns, GetColumnsByName(table, mutation_op.columns));
-      absl::Time now = clock_->Now();
+      ZETASQL_ASSIGN_OR_RETURN(ResolvedMutationOp resolved_mutation_op,
+                       ResolveMutationOp(mutation_op, schema_, clock_->Now()));
 
       // Process Delete.
-      if (mutation_op.type == MutationOpType::kDelete) {
-        ZETASQL_RETURN_IF_ERROR(FlattenDelete(mutation_op, table, columns,
-                                      transaction_store_.get(),
-                                      &write_ops_queue_, now));
-        ZETASQL_RETURN_IF_ERROR(ProcessWriteOpsQueue());
-        continue;
-      }
+      if (resolved_mutation_op.type == MutationOpType::kDelete) {
+        ZETASQL_ASSIGN_OR_RETURN(std::vector<WriteOp> write_ops,
+                         FlattenDeleteOp(resolved_mutation_op.table,
+                                         resolved_mutation_op.key_ranges,
+                                         transaction_store_.get()));
 
-      // Process Insert, Update, Replace and InsertOrUpdate.
-      ZETASQL_ASSIGN_OR_RETURN(
-          std::vector<absl::optional<int>> key_indices,
-          ExtractPrimaryKeyIndices(mutation_op.columns, table->primary_key()));
-      for (const ValueList& row : mutation_op.rows) {
-        ZETASQL_RET_CHECK_EQ(row.size(), columns.size())
-            << "MutationOp has difference in size of column and value vectors, "
-               "mutation op: "
-            << mutation_op.DebugString();
+        ZETASQL_RETURN_IF_ERROR(ProcessWriteOps(write_ops));
+      } else {
+        // Process Insert, Update, Replace and InsertOrUpdate.
+        for (int i = 0; i < resolved_mutation_op.rows.size(); i++) {
+          ZETASQL_ASSIGN_OR_RETURN(
+              std::vector<WriteOp> write_ops,
+              FlattenNonDeleteOpRow(
+                  resolved_mutation_op.type, resolved_mutation_op.table,
+                  resolved_mutation_op.columns, resolved_mutation_op.keys[i],
+                  resolved_mutation_op.rows[i], transaction_store_.get()));
 
-        ZETASQL_RETURN_IF_ERROR(FlattenMutationOpRow(
-            table, columns, key_indices, row, mutation_op.type,
-            transaction_store_.get(), &write_ops_queue_, now));
-        ZETASQL_RETURN_IF_ERROR(ProcessWriteOpsQueue());
+          ZETASQL_RETURN_IF_ERROR(ProcessWriteOps(write_ops));
+        }
       }
     }
     return ApplyStatementVerifiers();

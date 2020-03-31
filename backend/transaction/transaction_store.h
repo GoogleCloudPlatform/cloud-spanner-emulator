@@ -64,18 +64,8 @@ class TransactionStore {
   explicit TransactionStore(Storage* base_storage, LockHandle* lock_handle)
       : base_storage_(base_storage), lock_handle_(lock_handle) {}
 
-  // Buffers an insert mutation. Acquires write locks.
-  zetasql_base::Status BufferInsert(const Table* table, const Key& key,
-                            absl::Span<const Column* const> columns,
-                            const ValueList& values);
-
-  // Buffers an update mutation. Acquires write locks.
-  zetasql_base::Status BufferUpdate(const Table* table, const Key& key,
-                            absl::Span<const Column* const> columns,
-                            const ValueList& values);
-
-  // Buffers a delete mutation. Acquires write locks.
-  zetasql_base::Status BufferDelete(const Table* table, const Key& key);
+  // Buffers a write operation. Acquires write locks.
+  zetasql_base::Status BufferWriteOp(const WriteOp& op);
 
   // Returns the column values for 'key' by merging information from the
   // buffered mutations and the base storage. Returns NOT_FOUND if 'key'
@@ -117,6 +107,19 @@ class TransactionStore {
   // Acquires write locks for the specified column ranges.
   zetasql_base::Status AcquireWriteLock(const Table* table, const KeyRange& key_range,
                                 absl::Span<const Column* const> columns) const;
+
+  // Buffers an insert mutation. Acquires write locks.
+  zetasql_base::Status BufferInsert(const Table* table, const Key& key,
+                            absl::Span<const Column* const> columns,
+                            const ValueList& values);
+
+  // Buffers an update mutation. Acquires write locks.
+  zetasql_base::Status BufferUpdate(const Table* table, const Key& key,
+                            absl::Span<const Column* const> columns,
+                            const ValueList& values);
+
+  // Buffers a delete mutation. Acquires write locks.
+  zetasql_base::Status BufferDelete(const Table* table, const Key& key);
 
   // Returns true if a mutation has been buffered for 'key' and fills 'row'.
   bool RowExistsInBuffer(const Table* table, const Key& key, RowOp* row) const;

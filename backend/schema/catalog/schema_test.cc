@@ -25,6 +25,8 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/time/time.h"
 #include "backend/schema/builders/column_builder.h"
+#include "backend/schema/builders/index_builder.h"
+#include "backend/schema/builders/table_builder.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"

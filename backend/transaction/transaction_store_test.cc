@@ -23,6 +23,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/time/time.h"
+#include "backend/actions/ops.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/datamodel/value.h"
 #include "backend/locking/manager.h"
@@ -89,16 +90,19 @@ TEST_F(TransactionStoreTest, CanReadBufferedWrites) {
                                 {Int64(2), String("value")}));
 
   // Insert a new row.
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(3)}),
-                                            {int64_col_, string_col_},
-                                            {Int64(3), String("value")}));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(InsertOp{table_,
+                                                Key({Int64(3)}),
+                                                {int64_col_, string_col_},
+                                                {Int64(3), String("value")}}));
 
   // Update an existing row.
-  ZETASQL_EXPECT_OK(transaction_store_.BufferUpdate(
-      table_, Key({Int64(1)}), {string_col_}, {String("new-value")}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      UpdateOp{table_, Key({Int64(1)}), {string_col_}, {String("new-value")}}));
 
   // Delete another existing row.
-  ZETASQL_EXPECT_OK(transaction_store_.BufferDelete(table_, Key({Int64(2)})));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(DeleteOp{table_, Key({Int64(2)})}));
 
   // Read your writes.
   std::unique_ptr<StorageIterator> itr;
@@ -145,7 +149,8 @@ TEST_F(TransactionStoreTest, CanBufferInsertAfterDelete) {
   // No other rows to read.
   EXPECT_FALSE(itr->Next());
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferDelete(table_, Key({Int64(1)})));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(DeleteOp{table_, Key({Int64(1)})}));
 
   // Read your writes.
   ZETASQL_EXPECT_OK(transaction_store_.Read(table_, KeyRange::Point(Key({Int64(1)})),
@@ -153,9 +158,11 @@ TEST_F(TransactionStoreTest, CanBufferInsertAfterDelete) {
   // No rows to read.
   EXPECT_FALSE(itr->Next());
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(1)}),
-                                            {int64_col_, string_col_},
-                                            {Int64(1), String("new-value")}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      InsertOp{table_,
+               Key({Int64(1)}),
+               {int64_col_, string_col_},
+               {Int64(1), String("new-value")}}));
 
   // Read your writes.
   // This tests the case where a Delete & Insert are buffered over an existing
@@ -177,9 +184,11 @@ TEST_F(TransactionStoreTest, CanBufferUpdateAfterInsert) {
   //   string_col STRING(MAX)
   // ) PRIMARY_KEY(int64_col);
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(1)}),
-                                            {int64_col_, string_col_},
-                                            {Int64(1), String("old-value")}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      InsertOp{table_,
+               Key({Int64(1)}),
+               {int64_col_, string_col_},
+               {Int64(1), String("old-value")}}));
 
   // Read your writes.
   std::unique_ptr<StorageIterator> itr;
@@ -193,9 +202,11 @@ TEST_F(TransactionStoreTest, CanBufferUpdateAfterInsert) {
   // No other rows to read.
   EXPECT_FALSE(itr->Next());
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferUpdate(table_, Key({Int64(1)}),
-                                            {int64_col_, string_col_},
-                                            {Int64(1), String("new-value")}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      InsertOp{table_,
+               Key({Int64(1)}),
+               {int64_col_, string_col_},
+               {Int64(1), String("new-value")}}));
 
   // Read your writes.
   ZETASQL_EXPECT_OK(transaction_store_.Read(table_, KeyRange::Point(Key({Int64(1)})),
@@ -210,11 +221,14 @@ TEST_F(TransactionStoreTest, CanBufferDeleteAfterInsert) {
   //   string_col STRING(MAX)
   // ) PRIMARY_KEY(int64_col);
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(1)}),
-                                            {int64_col_, string_col_},
-                                            {Int64(1), String("old-value")}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      InsertOp{table_,
+               Key({Int64(1)}),
+               {int64_col_, string_col_},
+               {Int64(1), String("old-value")}}));
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferDelete(table_, Key({Int64(1)})));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(DeleteOp{table_, Key({Int64(1)})}));
 
   std::unique_ptr<StorageIterator> itr;
   ZETASQL_EXPECT_OK(transaction_store_.Read(table_, KeyRange::Point(Key({Int64(1)})),
@@ -233,8 +247,8 @@ TEST_F(TransactionStoreTest, CanBufferMultipleUpdates) {
                                 {int64_col_->id(), string_col_->id()},
                                 {Int64(1), String("value-1")}));
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferUpdate(
-      table_, Key({Int64(1)}), {string_col_}, {String("value-2")}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      UpdateOp{table_, Key({Int64(1)}), {string_col_}, {String("value-2")}}));
 
   // Read
   std::unique_ptr<StorageIterator> itr;
@@ -249,8 +263,8 @@ TEST_F(TransactionStoreTest, CanBufferMultipleUpdates) {
   EXPECT_FALSE(itr->Next());
 
   // Buffer update.
-  ZETASQL_EXPECT_OK(transaction_store_.BufferUpdate(
-      table_, Key({Int64(1)}), {string_col_}, {String("value-3")}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      UpdateOp{table_, Key({Int64(1)}), {string_col_}, {String("value-3")}}));
 
   // Read
   ZETASQL_EXPECT_OK(transaction_store_.Read(table_, KeyRange::Point(Key({Int64(1)})),
@@ -273,9 +287,10 @@ TEST_F(TransactionStoreTest, CanBufferReplaceWithNullValues) {
                                 {Int64(1), String("value-1")}));
 
   // Delete row and only insert key column value.
-  ZETASQL_EXPECT_OK(transaction_store_.BufferDelete(table_, Key({Int64(1)})));
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(1)}),
-                                            {int64_col_}, {Int64(1)}));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(DeleteOp{table_, Key({Int64(1)})}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      InsertOp{table_, Key({Int64(1)}), {int64_col_}, {Int64(1)}}));
 
   // Lookup should return null value for string_col.
   std::vector<zetasql::Value> values;
@@ -294,12 +309,15 @@ TEST_F(TransactionStoreTest, CanBufferDeleteInsertUpdate) {
                                 {int64_col_->id(), string_col_->id()},
                                 {Int64(1), String("value-1")}));
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferDelete(table_, Key({Int64(1)})));
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(1)}),
-                                            {int64_col_, string_col_},
-                                            {Int64(1), String("value-2")}));
-  ZETASQL_EXPECT_OK(transaction_store_.BufferUpdate(
-      table_, Key({Int64(1)}), {string_col_}, {String("value-3")}));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(DeleteOp{table_, Key({Int64(1)})}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      InsertOp{table_,
+               Key({Int64(1)}),
+               {int64_col_, string_col_},
+               {Int64(1), String("value-2")}}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      UpdateOp{table_, Key({Int64(1)}), {string_col_}, {String("value-3")}}));
 
   std::vector<zetasql::Value> values;
   ZETASQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(1)}),
@@ -352,17 +370,22 @@ TEST_F(TransactionStoreTest, Lookup) {
   // ) PRIMARY_KEY(int64_col);
 
   // Populate transaction store
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(1)}),
-                                            {int64_col_, string_col_},
-                                            {Int64(1), String("value")}));
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(3)}),
-                                            {int64_col_, string_col_},
-                                            {Int64(3), String("value")}));
-  ZETASQL_EXPECT_OK(transaction_store_.BufferUpdate(
-      table_, Key({Int64(1)}), {string_col_}, {String("new-value")}));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(InsertOp{table_,
+                                                Key({Int64(1)}),
+                                                {int64_col_, string_col_},
+                                                {Int64(1), String("value")}}));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(InsertOp{table_,
+                                                Key({Int64(3)}),
+                                                {int64_col_, string_col_},
+                                                {Int64(3), String("value")}}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      UpdateOp{table_, Key({Int64(1)}), {string_col_}, {String("new-value")}}));
 
   // Delete another existing row.
-  ZETASQL_EXPECT_OK(transaction_store_.BufferDelete(table_, Key({Int64(2)})));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(DeleteOp{table_, Key({Int64(2)})}));
 
   // Now verify the values in the transaction store.
   std::vector<zetasql::Value> values;
@@ -383,7 +406,8 @@ TEST_F(TransactionStoreTest, Lookup) {
   EXPECT_EQ(values[0], Int64(3));
   EXPECT_EQ(values[1], String("value"));
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferDelete(table_, Key({Int64(3)})));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(DeleteOp{table_, Key({Int64(3)})}));
 
   // Row Int64(3) has been deleted so it should return not found.
   EXPECT_THAT(transaction_store_.Lookup(table_, Key({Int64(3)}),
@@ -402,13 +426,16 @@ TEST_F(TransactionStoreTest, LookupDelete) {
                                         {int64_col_, string_col_}, &values),
               StatusIs(zetasql_base::StatusCode::kNotFound));
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(1)}),
-                                            {int64_col_, string_col_},
-                                            {Int64(1), String("value")}));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(InsertOp{table_,
+                                                Key({Int64(1)}),
+                                                {int64_col_, string_col_},
+                                                {Int64(1), String("value")}}));
   ZETASQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(1)}),
                                       {int64_col_, string_col_}, &values));
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferDelete(table_, Key({Int64(1)})));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(DeleteOp{table_, Key({Int64(1)})}));
   EXPECT_THAT(transaction_store_.Lookup(table_, Key({Int64(1)}),
                                         {int64_col_, string_col_}, &values),
               StatusIs(zetasql_base::StatusCode::kNotFound));
@@ -431,8 +458,8 @@ TEST_F(TransactionStoreTest, LookupBaseStorage) {
   EXPECT_EQ(values[0], Int64(1));
   EXPECT_EQ(values[1], String("value"));
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferUpdate(
-      table_, Key({Int64(1)}), {string_col_}, {String("new-value")}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      UpdateOp{table_, Key({Int64(1)}), {string_col_}, {String("new-value")}}));
   ZETASQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(1)}),
                                       {int64_col_, string_col_}, &values));
   EXPECT_EQ(values[0], Int64(1));
@@ -449,16 +476,20 @@ TEST_F(TransactionStoreTest, LookupNullValues) {
   ZETASQL_EXPECT_OK(base_storage_.Write(t0, table_->id(), Key({Int64(1)}),
                                 {int64_col_->id(), string_col_->id()},
                                 {Int64(1), String("value")}));
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(2)}),
-                                            {int64_col_, string_col_},
-                                            {Int64(2), String("value")}));
+  ZETASQL_EXPECT_OK(
+      transaction_store_.BufferWriteOp(InsertOp{table_,
+                                                Key({Int64(2)}),
+                                                {int64_col_, string_col_},
+                                                {Int64(2), String("value")}}));
 
   ZETASQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(1)}), {}, nullptr));
   ZETASQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(2)}), {}, nullptr));
 
-  ZETASQL_EXPECT_OK(transaction_store_.BufferUpdate(table_, Key({Int64(1)}),
-                                            {int64_col_, string_col_},
-                                            {Int64(2), String("new-value")}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      UpdateOp{table_,
+               Key({Int64(1)}),
+               {int64_col_, string_col_},
+               {Int64(2), String("new-value")}}));
 
   ZETASQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(1)}), {}, nullptr));
 }
@@ -478,12 +509,12 @@ TEST_F(TransactionStoreTest, ReturnsNullValuesForUnpopulatedColumns) {
   absl::Time t0 = absl::Now();
   ZETASQL_EXPECT_OK(base_storage_.Write(t0, table_->id(), Key({Int64(1)}),
                                 {int64_col_->id()}, {Int64(1)}));
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(2)}),
-                                            {int64_col_}, {Int64(2)}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      InsertOp{table_, Key({Int64(2)}), {int64_col_}, {Int64(2)}}));
   ZETASQL_EXPECT_OK(base_storage_.Write(t0, table_->id(), Key({Int64(3)}),
                                 {int64_col_->id()}, {Int64(3)}));
-  ZETASQL_EXPECT_OK(transaction_store_.BufferUpdate(table_, Key({Int64(3)}),
-                                            {int64_col_}, {Int64(3)}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      UpdateOp{table_, Key({Int64(3)}), {int64_col_}, {Int64(3)}}));
 
   for (const int key : {1, 2, 3}) {
     std::vector<zetasql::Value> values;
@@ -508,8 +539,8 @@ TEST_F(TransactionStoreTest, ReturnsNullValuesForUnpopulatedColumns) {
 
 TEST_F(TransactionStoreTest, ReadsClosedOpenRange) {
   // We insert key {1}, then read range [0, 1) which should exclude the key.
-  ZETASQL_EXPECT_OK(transaction_store_.BufferInsert(table_, Key({Int64(1)}),
-                                            {int64_col_}, {Int64(1)}));
+  ZETASQL_EXPECT_OK(transaction_store_.BufferWriteOp(
+      InsertOp{table_, Key({Int64(1)}), {int64_col_}, {Int64(1)}}));
   std::unique_ptr<StorageIterator> itr;
   ZETASQL_EXPECT_OK(transaction_store_.Read(
       table_, KeyRange::ClosedOpen(Key({Int64(0)}), Key({Int64(1)})),

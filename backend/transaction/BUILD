@@ -33,11 +33,11 @@ cc_library(
         ":resolve",
         ":row_cursor",
         ":transaction_store",
-        ":write_util",
         "//backend/access:read",
         "//backend/access:write",
         "//backend/actions:context",
         "//backend/actions:manager",
+        "//backend/actions:ops",
         "//backend/common:case",
         "//backend/common:ids",
         "//backend/common:rows",
@@ -72,7 +72,6 @@ cc_test(
     deps = [
         ":actions",
         ":read_write_transaction",
-        ":write_util",
         "//backend/access:write",
         "//backend/actions:manager",
         "//backend/actions:ops",
@@ -99,10 +98,17 @@ cc_library(
     srcs = ["resolve.cc"],
     hdrs = ["resolve.h"],
     deps = [
+        ":commit_timestamp",
         "//backend/access:read",
+        "//backend/access:write",
+        "//backend/common:case",
+        "//backend/common:rows",
         "//backend/datamodel:key_set",
         "//backend/schema/catalog:schema",
         "//common:errors",
+        "@com_google_absl//absl/time",
+        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
 
@@ -111,10 +117,13 @@ cc_test(
     srcs = ["resolve_test.cc"],
     deps = [
         ":resolve",
+        "//backend/access:write",
         "//backend/datamodel:key_range",
         "//backend/datamodel:key_set",
         "//backend/schema/catalog:schema",
         "//backend/storage:in_memory_storage",
+        "//common:clock",
+        "//common:errors",
         "//tests/common:proto_matchers",
         "//tests/common:test_schema_constructor",
         "@com_github_grpc_grpc//:grpc++",
@@ -208,53 +217,6 @@ cc_test(
 )
 
 cc_library(
-    name = "write_util",
-    srcs = ["write_util.cc"],
-    hdrs = ["write_util.h"],
-    deps = [
-        ":commit_timestamp",
-        ":resolve",
-        ":transaction_store",
-        "//backend/access:write",
-        "//backend/actions:ops",
-        "//backend/datamodel:key_range",
-        "//backend/datamodel:key_set",
-        "//backend/datamodel:value",
-        "//backend/schema/catalog:schema",
-        "//backend/storage:iterator",
-        "//common:errors",
-        "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base:status",
-        "@com_google_zetasql//zetasql/public:value",
-    ],
-)
-
-cc_test(
-    name = "write_util_test",
-    srcs = ["write_util_test.cc"],
-    deps = [
-        ":write_util",
-        "//backend/actions:ops",
-        "//backend/datamodel:key_range",
-        "//backend/datamodel:key_set",
-        "//backend/locking:manager",
-        "//backend/schema/catalog:schema",
-        "//backend/storage:in_memory_storage",
-        "//common:clock",
-        "//common:errors",
-        "//tests/common:proto_matchers",
-        "//tests/common:test_schema_constructor",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/time",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:status",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:type",
-        "@com_google_zetasql//zetasql/public:value",
-    ],
-)
-
-cc_library(
     name = "transaction_store",
     srcs = [
         "transaction_store.cc",
@@ -290,6 +252,7 @@ cc_test(
     ],
     deps = [
         ":transaction_store",
+        "//backend/actions:ops",
         "//backend/datamodel:key_range",
         "//backend/datamodel:value",
         "//backend/locking:manager",

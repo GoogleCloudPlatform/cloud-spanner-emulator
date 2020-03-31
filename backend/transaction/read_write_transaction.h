@@ -102,7 +102,7 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
  private:
   zetasql_base::Status GuardedCall(const std::function<zetasql_base::Status()>& fn)
       ABSL_LOCKS_EXCLUDED(mu_);
-  zetasql_base::Status ProcessWriteOpsQueue();
+  zetasql_base::Status ProcessWriteOps(const std::vector<WriteOp>& write_ops);
 
   // Resets the transaction and marks it Active.
   void Reset();
@@ -111,9 +111,6 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
   zetasql_base::Status ApplyValidators(const WriteOp& op);
   zetasql_base::Status ApplyEffectors(const WriteOp& op);
   zetasql_base::Status ApplyStatementVerifiers();
-
-  // Buffers the given operation in the transaction store.
-  zetasql_base::Status BufferRow(const WriteOp& op);
 
   // Returns true if the given key exists within the table.
   bool KeyExists(const Table* table, const Key& key) const;

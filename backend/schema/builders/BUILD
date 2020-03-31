@@ -20,10 +20,16 @@ licenses(["unencumbered"])
 
 cc_library(
     name = "schema_builders",
-    hdrs = ["column_builder.h"],
+    hdrs = [
+        "column_builder.h",
+        "index_builder.h",
+        "table_builder.h",
+    ],
     deps = [
         "//backend/common:ids",
         "//backend/schema/catalog:schema",
+        "//backend/schema/graph:schema_node",
+        "//backend/schema/updater:schema_validation_context",
         "//backend/schema/validators:schema_validators",
         "@com_google_absl//absl/memory",
         "@com_google_zetasql//zetasql/public:type",

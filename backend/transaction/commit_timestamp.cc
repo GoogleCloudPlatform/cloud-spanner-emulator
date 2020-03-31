@@ -112,7 +112,7 @@ zetasql_base::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table
 }
 
 zetasql_base::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
-    std::vector<const Column*> columns, const ValueList& row) {
+    absl::Span<const Column* const> columns, const ValueList& row) {
   if (row.empty()) return row;
   ValueList ret_val;
   for (int i = 0; i < row.size(); i++) {
@@ -123,7 +123,7 @@ zetasql_base::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
 }
 
 zetasql_base::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
-    absl::Span<const KeyColumn* const> primary_key, KeyRange key_range) {
+    absl::Span<const KeyColumn* const> primary_key, const KeyRange& key_range) {
   ZETASQL_RET_CHECK(key_range.IsClosedOpen());
   if (key_range.start_key() >= key_range.limit_key()) {
     // Nothing to be done for empty key range.
@@ -163,7 +163,7 @@ bool HasPendingCommitTimestampInReadResult(
 }
 
 zetasql::Value MaybeSetCommitTimestamp(const Column* column,
-                                         zetasql::Value column_value,
+                                         const zetasql::Value& column_value,
                                          absl::Time commit_timestamp) {
   if (IsPendingCommitTimestamp(column, column_value)) {
     return zetasql::values::Timestamp(commit_timestamp);
