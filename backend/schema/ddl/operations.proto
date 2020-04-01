@@ -1,0 +1,243 @@
+//
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+syntax = "proto2";
+
+package google.spanner.emulator.backend.ddl;
+
+
+// Table/Index-only constraints.
+message OnDeleteAction {
+  enum Action {
+    UNKNOWN_ACTION = 0;
+    NO_ACTION = 1;
+    CASCADE = 2;
+  }
+  optional Action action = 1;
+}
+
+message InterleaveConstraint {
+  enum Type {
+    UNKNOWN_TYPE = 0;
+    IN_PARENT = 1;
+  }
+  optional Type type = 1;
+  optional string parent = 2;
+  optional string child = 3;
+  optional OnDeleteAction on_delete = 4;
+}
+
+message PrimaryKeyConstraint {
+  enum Order {
+    UNKNOWN_ORDER = 0;
+    ASC = 1;
+    DESC = 2;
+  }
+  message KeyPart {
+    optional Order order = 3;
+    optional string key_column_name = 4;
+  }
+  repeated KeyPart key_part = 5;
+}
+
+// Column-level constraints
+message NotNullConstraint {
+  optional bool nullable = 1;
+}
+
+message ColumnLengthConstraint {
+  optional int64 max_length = 1;
+}
+
+message CommitTimestampConstraint {
+  optional bool is_commit_timestamp = 1;
+}
+
+message EnforcementType {
+  enum Type {
+    UNKNOWN_TYPE = 0;
+    DEFERRED = 1;
+    IMMEDIATE = 2;
+  }
+  optional Type type = 1;
+}
+
+
+// Foregin key constraint on a combination of one-or-more columns.
+message ForeignKeyConstraint {
+  optional string name = 1;
+  optional string constrained_table_name = 2;
+  repeated string constrained_column_name = 3;
+  optional string referenced_table_name = 4;
+  repeated string referenced_column_name = 5;
+  optional OnDeleteAction on_delete = 6;
+  optional bool enforced = 7;
+  optional EnforcementType enforcement = 8;
+}
+
+message Constraint {
+  oneof kind {
+    InterleaveConstraint interleave = 1;
+    ForeignKeyConstraint foreign_key = 2;
+    NotNullConstraint not_null = 3;
+    ColumnLengthConstraint column_length = 4;
+    PrimaryKeyConstraint primary_key = 6;
+    CommitTimestampConstraint commit_timestamp = 7;
+  }
+}
+
+// Free-form options.
+message Options {
+  message Option {
+    optional string name = 1;
+    oneof kind {
+      bool bool_value = 2;
+      int64 int_value = 3;
+      int64 string_value = 4;
+      bool null_value = 5;
+    }
+  }
+  repeated Option option_val = 1;
+}
+
+message ColumnType {
+  enum Type {
+    UNKNOWN_TYPE = 0;
+    FLOAT64 = 1;
+    INT64 = 2;
+    BOOL = 3;
+    STRING = 4;
+    BYTES = 5;
+    TIMESTAMP = 6;
+    DATE = 7;
+    ARRAY = 8;
+  }
+  optional Type type = 1;
+  optional ColumnType array_subtype = 2;
+}
+
+// Properties for columns, tables and indexes.
+
+message ColumnProperties {
+  optional ColumnType column_type = 1;
+
+  // Stored columns are used by index definitions.
+  optional string stored = 2;
+}
+
+message IndexProperties {
+  optional bool null_filtered = 1;
+  optional bool unique = 2;
+}
+
+// Definitions for columns, tables and indexes.
+message ColumnDefinition {
+  optional string column_name = 1;
+
+  optional ColumnProperties properties = 2;
+  optional Options options = 3;
+  repeated Constraint constraints = 4;
+}
+
+message CreateDatabase {
+  optional string database_name = 1;
+}
+
+message CreateTable {
+  optional string table_name = 1;
+  repeated ColumnDefinition columns = 2;
+
+  optional Options options = 4;
+  repeated Constraint constraints = 5;
+}
+
+message CreateIndex {
+  optional string index_name = 1;
+  optional string table_name = 2;
+  repeated ColumnDefinition columns = 3;
+
+  optional IndexProperties properties = 4;
+  optional Options options = 5;
+  repeated Constraint constraints = 6;
+}
+
+// Alter and drop operations.
+message AlterConstraint {
+  optional string constraint_name = 1;
+  enum Type {
+    UNKNOWN_TYPE = 0;
+    ADD = 1;
+    ALTER = 2;
+    DROP = 3;
+  }
+  optional Type type = 2;
+  optional Constraint constraint = 3;
+}
+
+message AlterColumn {
+  optional string column_name = 1;
+  enum Type {
+    UNKNOWN_TYPE = 0;
+    ADD = 1;
+    ALTER = 2;
+    DROP = 3;
+  }
+  optional Type type = 2;
+  optional ColumnDefinition column = 3;
+}
+
+message AlterTable {
+  optional string table_name = 1;
+  optional AlterColumn alter_column = 2;
+
+  optional Options options = 3;
+  optional AlterConstraint alter_constraint = 4;
+}
+
+message AlterIndex {
+  optional string index_name = 1;
+
+  optional Options options = 2;
+  optional AlterConstraint alter_constraint = 3;
+}
+
+message DropTable {
+  optional string table_name = 1;
+}
+
+message DropIndex {
+  optional string index_name = 1;
+}
+
+message DropDatabase {
+  optional string database_name = 1;
+}
+
+message DDLStatement {
+  oneof kind {
+    CreateTable create_table = 1;
+    CreateIndex create_index = 2;
+    AlterTable alter_table = 3;
+    AlterIndex alter_index = 5;
+    DropTable drop_table = 6;
+    DropIndex drop_index = 8;
+  }
+}
+
+message Schema {
+  optional string schema_name = 1;
+  repeated DDLStatement ddl_statements = 3;
+}

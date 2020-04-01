@@ -1,0 +1,20 @@
+build --cxxopt=-std=c++17
+
+# gRPC has some issues with building under bazel on MacOS with thread-locals.
+# See https://github.com/bazelbuild/bazel/issues/4341 for more details. This
+# flag enabled gRPC workarounds for building under bazel.
+build --copt -DGRPC_BAZEL_BUILD
+
+# Required for python test runner to find gcloud binary.
+test --test_env GCLOUD_DIR
+
+# Required for python test runner to find gateway binary.
+test --test_env GO_BINARY_DIR
+
+# Most of these warnings are triggered from ZetaSQL, disable for now. Ideally,
+# we would disable these only for projects we don't control, but there does not
+# seem to be an easy way to do that yet.
+build --copt   -Wno-sign-compare
+build --copt   -Wno-deprecated-declarations
+build --copt   -Wno-return-type
+build --cxxopt -Wno-pessimizing-move

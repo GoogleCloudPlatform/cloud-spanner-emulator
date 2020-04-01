@@ -1,0 +1,1182 @@
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE users (
+) PRIMARY KEY();
+--
+ERROR: Duplicate name in schema: Users.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
+CREATE TABLE UsersByName (
+) PRIMARY KEY();
+CREATE TABLE usersbyname (
+) PRIMARY KEY();
+--
+ERROR: Duplicate name in schema: UsersByName.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX) NOT NULL,
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE INDEX AlbumsByName ON Albums(AlbumName);
+ALTER TABLE Albums ALTER COLUMN AlbumName STRING(MAX);
+--
+ERROR: Changing NOT NULL constraints on column AlbumName is not allowed because it affects index AlbumsByName.
+==
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+--
+ERROR: Table not found: Users
+==
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
+--
+ERROR: Table not found: Albums
+==
+CREATE TABLE Users (
+  UserName STRING(MAX),
+  UserName STRING(MAX),
+) PRIMARY KEY();
+CREATE TABLE Users (
+  UserName STRING(MAX),
+  username STRING(MAX),
+) PRIMARY KEY();
+--
+ERROR: Duplicate column name Users.UserName.
+==
+CREATE TABLE Users (
+) PRIMARY KEY(UserId);
+--
+ERROR: Table Users references nonexistent key column UserId.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(userid);
+--
+ERROR: Table Users references nonexistent key column userid.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId, UserId);
+--
+ERROR: Table Users references key column UserId more than once.
+==
+CREATE TABLE Users (
+  UserIds ARRAY<INT64> NOT NULL,
+) PRIMARY KEY(UserIds);
+--
+ERROR: Column Users.UserIds has type ARRAY, but is part of the primary key.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+--
+ERROR: Table Albums does not reference parent key column UserId.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+) PRIMARY KEY(AlbumId, UserId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+--
+ERROR: Table Albums references parent key column UserId at incorrect position 1.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId DESC),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+--
+ERROR: Table Albums references parent key column UserId with incorrect order ASC.
+==
+CREATE TABLE Users (
+  UserName STRING(MAX) NOT NULL,
+) PRIMARY KEY(UserName);
+CREATE TABLE Albums (
+  UserName STRING(42) NOT NULL,
+) PRIMARY KEY(UserName),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+--
+ERROR: Table Albums references parent key column UserName with incorrect length 42 (should be MAX).
+==
+CREATE TABLE Users (
+  UserId FLOAT64 NOT NULL,
+) PRIMARY KEY(UserId);
+--
+CREATE TABLE Users (
+  UserId FLOAT64 NOT NULL,
+) PRIMARY KEY(UserId);
+==
+CREATE TABLE Users (
+  UserName STRING(0),
+) PRIMARY KEY();
+--
+ERROR: Bad length for column Users.UserName: 0 : Allowed length range: [1, 2621440].
+==
+CREATE TABLE Users (
+  UserName ARRAY<STRING(400000000)>,
+) PRIMARY KEY();
+--
+ERROR: Bad length for column Users.UserName: 400000000 : Allowed length range: [1, 2621440].
+==
+CREATE TABLE Users (
+  UserId1 INT64 NOT NULL,
+  UserId2 INT64 NOT NULL,
+  UserId3 INT64 NOT NULL,
+  UserId4 INT64 NOT NULL,
+  UserId5 INT64 NOT NULL,
+  UserId6 INT64 NOT NULL,
+) PRIMARY KEY(UserId1, UserId2, UserId3, UserId4, UserId5, UserId6);
+CREATE TABLE Albums (
+  UserId1 INT64 NOT NULL,
+  UserId2 INT64 NOT NULL,
+  UserId3 INT64 NOT NULL,
+  UserId4 INT64 NOT NULL,
+  UserId5 INT64 NOT NULL,
+  UserId6 INT64 NOT NULL,
+  AlbumId1 INT64 NOT NULL,
+  AlbumId2 INT64 NOT NULL,
+  AlbumId3 INT64 NOT NULL,
+  AlbumId4 INT64 NOT NULL,
+  AlbumId5 INT64 NOT NULL,
+  AlbumId6 INT64 NOT NULL,
+) PRIMARY KEY(UserId1, UserId2, UserId3, UserId4, UserId5, UserId6, AlbumId1, AlbumId2, AlbumId3, AlbumId4, AlbumId5, AlbumId6),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE TABLE Photos (
+  UserId1 INT64 NOT NULL,
+  UserId2 INT64 NOT NULL,
+  UserId3 INT64 NOT NULL,
+  UserId4 INT64 NOT NULL,
+  UserId5 INT64 NOT NULL,
+  UserId6 INT64 NOT NULL,
+  AlbumId1 INT64 NOT NULL,
+  AlbumId2 INT64 NOT NULL,
+  AlbumId3 INT64 NOT NULL,
+  AlbumId4 INT64 NOT NULL,
+  AlbumId5 INT64 NOT NULL,
+  AlbumId6 INT64 NOT NULL,
+  PhotoId1 INT64 NOT NULL,
+  PhotoId2 INT64 NOT NULL,
+  PhotoId3 INT64 NOT NULL,
+  PhotoId4 INT64 NOT NULL,
+  PhotoId5 INT64 NOT NULL,
+) PRIMARY KEY(UserId1, UserId2, UserId3, UserId4, UserId5, UserId6, AlbumId1, AlbumId2, AlbumId3, AlbumId4, AlbumId5, AlbumId6, PhotoId1, PhotoId2, PhotoId3, PhotoId4, PhotoId5),
+  INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
+--
+ERROR: Table Photos has too many keys (17); the limit is 16.
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE TABLE Photos (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
+--
+ERROR: Table Albums adds no columns and is not a top level table.
+==
+CREATE TABLE Users (
+  user_info STRING(MAX) NOT NULL,
+) PRIMARY KEY();
+--
+CREATE TABLE Users (
+  user_info STRING(MAX) NOT NULL,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserName STRING(MAX) OPTIONS (
+    allow_commit_timestamp = true
+  ),
+) PRIMARY KEY();
+--
+ERROR: Column Users.UserName has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+==
+CREATE TABLE Users (
+  UserName STRING(MAX) OPTIONS (
+    allow_commit_timestamp = true
+  ),
+) PRIMARY KEY();
+--
+ERROR: Column Users.UserName has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+==
+CREATE TABLE A (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = true
+  ),
+) PRIMARY KEY(Timestamp);
+CREATE TABLE B (
+  Timestamp INT64 NOT NULL,
+) PRIMARY KEY(Timestamp),
+  INTERLEAVE IN PARENT A ON DELETE CASCADE;
+--
+ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+==
+CREATE TABLE A (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = true
+  ),
+) PRIMARY KEY(Timestamp);
+CREATE TABLE B (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = false
+  ),
+) PRIMARY KEY(Timestamp),
+  INTERLEAVE IN PARENT A ON DELETE CASCADE;
+--
+ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+==
+CREATE TABLE A (
+  Timestamp INT64 NOT NULL,
+) PRIMARY KEY(Timestamp);
+CREATE TABLE B (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = true
+  ),
+) PRIMARY KEY(Timestamp),
+  INTERLEAVE IN PARENT A ON DELETE CASCADE;
+--
+ERROR: Column B.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+==
+CREATE TABLE A (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = false
+  ),
+) PRIMARY KEY(Timestamp);
+CREATE TABLE B (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = true
+  ),
+) PRIMARY KEY(Timestamp),
+  INTERLEAVE IN PARENT A ON DELETE CASCADE;
+--
+ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
+CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
+CREATE NULL_FILTERED INDEX usersbyname ON Users(UserName);
+--
+ERROR: Duplicate name in schema: UsersByName.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX Users ON Users(UserName);
+--
+ERROR: Duplicate name in schema: Users.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX),
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(UserId, AlbumName), INTERLEAVE IN DoesNotExist;
+--
+ERROR: Cannot interleave index AlbumsByName within nonexistent table DoesNotExist.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX),
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(UserId DESC, AlbumName), INTERLEAVE IN Users;
+--
+ERROR: Index AlbumsByName references parent key column UserId with incorrect order ASC.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX UsersByNothing ON Users();
+--
+ERROR: Index UsersByNothing does not specify any key columns.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserId2 INT64 NOT NULL,
+  Data1 INT64,
+  Data2 INT64,
+  Data3 INT64,
+  Data4 INT64,
+  Data5 INT64,
+  Data6 INT64,
+  Data7 INT64,
+  Data8 INT64,
+  Data9 INT64,
+  Data10 INT64,
+  Data11 INT64,
+  Data12 INT64,
+  Data13 INT64,
+  Data14 INT64,
+  Data15 INT64,
+  Data16 INT64,
+  Data17 INT64,
+) PRIMARY KEY(UserId, UserId2);
+CREATE NULL_FILTERED INDEX UsersByData ON Users(Data1, Data2, UserId, Data3, Data4, Data5, Data6, Data7, Data8, Data9, Data10, Data11, Data12, Data13, Data14, Data15);
+--
+ERROR: Index UsersByData has too many keys (17); the limit is 16.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
+--
+ERROR: Index UsersByName specifies key column UserName which does not exist in the index's base table.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName, UserName);
+--
+ERROR: Index UsersByName specifies key column UserName twice.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX),
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(AlbumName), INTERLEAVE IN Users;
+--
+ERROR: Index AlbumsByName does not reference index parent key column UserId.
+==
+CREATE TABLE Root (
+  user_id INT64 NOT NULL,
+  vals ARRAY<INT64>,
+) PRIMARY KEY(user_id);
+CREATE NULL_FILTERED INDEX Index1 ON Root(vals);
+--
+ERROR: Cannot reference ARRAY vals in the creation of index Index1.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX Dir_BadIndexName ON Users(UserName);
+--
+ERROR: Index name not valid: Dir_BadIndexName.
+==
+DROP TABLE DoesNotExist;
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE TABLE Photos (
+  PhotoId INT64 NOT NULL,
+) PRIMARY KEY(PhotoId),
+  INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
+DROP TABLE Albums;
+--
+ERROR: Table not found: DoesNotExist
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX),
+) PRIMARY KEY(AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(AlbumName);
+DROP TABLE Albums;
+--
+ERROR: Cannot drop table Albums with indices: AlbumsByName.
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+) PRIMARY KEY(AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE TABLE Photos (
+  AlbumId INT64 NOT NULL,
+  PhotoId INT64 NOT NULL,
+  PhotoName STRING(MAX),
+) PRIMARY KEY(AlbumId, PhotoId),
+  INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
+CREATE NULL_FILTERED INDEX PhotosByName ON Photos(AlbumId, PhotoName), INTERLEAVE IN Albums;
+DROP TABLE Albums;
+--
+ERROR: Cannot drop table Albums with interleaved tables: Photos.
+==
+CREATE TABLE Users (
+  UserName STRING(MAX),
+) PRIMARY KEY();
+ALTER TABLE Users ADD COLUMN UserName STRING(MAX);
+ALTER TABLE Users ADD COLUMN username STRING(MAX);
+--
+ERROR: Duplicate column name Users.UserName.
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+ALTER TABLE Users ADD COLUMN UserName STRING(MAX);
+ALTER TABLE Users ADD COLUMN UserName STRING(MAX);
+--
+ERROR: Duplicate column name Users.UserName.
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+ALTER TABLE Users ADD COLUMN albums STRING(MAX);
+ALTER TABLE Users ADD COLUMN ALBums STRING(MAX);
+--
+ERROR: Table Albums adds no columns and is not a top level table.
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+ALTER TABLE Users ADD COLUMN UserName STRING(MAX) NOT NULL;
+--
+ERROR: Cannot add NOT NULL column Users.UserName to existing table Users.
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+ALTER TABLE Users ADD COLUMN UserName STRING(0);
+--
+ERROR: Bad length for column Users.UserName: 0 : Allowed length range: [1, 2621440].
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+ALTER TABLE Users DROP COLUMN DoesNotExist;
+--
+ERROR: Column not found in table Users: DoesNotExist
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+ALTER TABLE Users DROP COLUMN UserId;
+--
+ERROR: Cannot drop key column UserId from table Users.
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+) PRIMARY KEY(AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+ALTER TABLE Albums DROP COLUMN AlbumId;
+--
+ERROR: Cannot drop key column AlbumId from table Albums.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
+ALTER TABLE Users DROP COLUMN UserName;
+--
+ERROR: Cannot drop column UserName from table Users because it is used by index UsersByName.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ALTER COLUMN DoesNotExist STRING(MAX);
+--
+ERROR: Column not found in table Users: DoesNotExist
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ALTER COLUMN UserId INT64;
+--
+ERROR: Cannot change key column Users.UserId.
+==
+CREATE TABLE Users (
+  UserName STRING(40),
+) PRIMARY KEY();
+ALTER TABLE Users ALTER COLUMN UserName STRING(400000000);
+--
+ERROR: Bad length for column Users.UserName: 400000000 : Allowed length range: [1, 2621440].
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ALTER COLUMN UserId INT64;
+--
+ERROR: Cannot change key column Users.UserId.
+==
+CREATE TABLE Users (
+  UserNames ARRAY<STRING(40)>,
+) PRIMARY KEY();
+ALTER TABLE Users ALTER COLUMN UserNames ARRAY<STRING(20)>;
+--
+CREATE TABLE Users (
+  UserNames ARRAY<STRING(20)>,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserNames ARRAY<STRING(MAX)>,
+) PRIMARY KEY();
+ALTER TABLE Users ALTER COLUMN UserNames ARRAY<STRING(40)>;
+--
+CREATE TABLE Users (
+  UserNames ARRAY<STRING(40)>,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserNames ARRAY<BYTES(MAX)>,
+) PRIMARY KEY();
+ALTER TABLE Users ALTER COLUMN UserNames ARRAY<STRING(MAX)>;
+--
+CREATE TABLE Users (
+  UserNames ARRAY<STRING(MAX)>,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserNames ARRAY<STRING(20)>,
+) PRIMARY KEY();
+ALTER TABLE Users ALTER COLUMN UserNames ARRAY<BYTES(79)>;
+--
+CREATE TABLE Users (
+  UserNames ARRAY<BYTES(79)>,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserId STRING(MAX) NOT NULL,
+) PRIMARY KEY(UserId);
+ALTER TABLE Users SET ON DELETE CASCADE;
+--
+ERROR: Cannot SET ON DELETE on table Users that does not have an INTERLEAVE clause.
+==
+CREATE TABLE Users (
+  UserId STRING(MAX) NOT NULL,
+) PRIMARY KEY(UserId);
+ALTER TABLE Users SET ON DELETE CASCADE;
+--
+ERROR: Cannot SET ON DELETE on table Users that does not have an INTERLEAVE clause.
+==
+CREATE TABLE T (
+  C ARRAY<STRING(MAX)>,
+) PRIMARY KEY();
+ALTER TABLE T ALTER COLUMN C ARRAY<STRING(MAX)> NOT NULL;
+--
+CREATE TABLE T (
+  C ARRAY<STRING(MAX)> NOT NULL,
+) PRIMARY KEY();
+==
+CREATE TABLE T (
+  C ARRAY<STRING(40)>,
+) PRIMARY KEY();
+ALTER TABLE T ALTER COLUMN C ARRAY<STRING(20)>;
+--
+CREATE TABLE T (
+  C ARRAY<STRING(20)>,
+) PRIMARY KEY();
+==
+CREATE TABLE T (
+  C ARRAY<BYTES(MAX)>,
+) PRIMARY KEY();
+ALTER TABLE T ALTER COLUMN C ARRAY<STRING(MAX)>;
+--
+CREATE TABLE T (
+  C ARRAY<STRING(MAX)>,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE INDEX PRIMARY_KEY ON Users(UserName);
+--
+ERROR: Cannot use reserved name PRIMARY_KEY for a secondary index
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE INDEX Primary_Key ON Users(UserName);
+--
+ERROR: Cannot use reserved name PRIMARY_KEY for a secondary index
+==
+CREATE TABLE Users (
+  UserId INT64,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ALTER COLUMN UserId INT64 NOT NULL;
+--
+ERROR: Cannot change key column Users.UserId.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE INDEX UsersByUserName ON Users(UserName);
+ALTER TABLE Users ALTER COLUMN UserName STRING(MAX) NOT NULL;
+--
+ERROR: Changing NOT NULL constraints on column UserName is not allowed because it affects index UsersByUserName.
+==
+CREATE TABLE Users (
+  UserId INT64,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ALTER COLUMN UserId INT64 NOT NULL;
+--
+ERROR: Cannot change key column Users.UserId.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE INDEX UsersByUserName ON Users(UserName);
+ALTER TABLE Users ALTER COLUMN UserName STRING(MAX) NOT NULL;
+--
+ERROR: Changing NOT NULL constraints on column UserName is not allowed because it affects index UsersByUserName.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName ARRAY<STRING(MAX)>,
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ALTER COLUMN UserName ARRAY<STRING(1)>;
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName ARRAY<STRING(1)>,
+) PRIMARY KEY(UserId);
+==
+CREATE TABLE dir1 (
+  k INT64 NOT NULL,
+  v STRING(1),
+) PRIMARY KEY(k);
+DROP TABLE dir1;
+ALTER TABLE dir1 ADD COLUMN v2 STRING(MAX);
+--
+ERROR: Table not found: dir1
+==
+CREATE TABLE dir1 (
+  k INT64 NOT NULL,
+  v STRING(1),
+) PRIMARY KEY(k);
+DROP TABLE dir1;
+ALTER TABLE dir1 ALTER COLUMN v STRING(2);
+--
+ERROR: Table not found: dir1
+==
+CREATE TABLE dir1 (
+  k INT64 NOT NULL,
+  v STRING(1),
+) PRIMARY KEY(k);
+DROP TABLE dir1;
+CREATE INDEX dir1IndexOnC ON dir1(v);
+--
+ERROR: Table not found: dir1
+==
+CREATE TABLE dir1 (
+  k INT64 NOT NULL,
+  v STRING(1),
+) PRIMARY KEY(k);
+DROP TABLE dir1;
+CREATE TABLE tbl (
+  k INT64 NOT NULL,
+  v2 INT64,
+) PRIMARY KEY(k),
+  INTERLEAVE IN PARENT dir1 ON DELETE CASCADE;
+--
+ERROR: Table not found: dir1
+==
+CREATE TABLE Users (
+  UserId INT64,
+  Name STRING(MAX),
+) PRIMARY KEY();
+--
+CREATE TABLE Users (
+  UserId INT64,
+  Name STRING(MAX),
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  Name STRING(MAX) NOT NULL,
+  Notes STRING(MAX),
+) PRIMARY KEY(UserId, Name);
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  Name STRING(MAX) NOT NULL,
+  Notes STRING(MAX),
+) PRIMARY KEY(UserId, Name);
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  Name STRING(MAX),
+  Notes STRING(MAX),
+) PRIMARY KEY(UserId);
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  Name STRING(MAX),
+  Notes STRING(MAX),
+) PRIMARY KEY(UserId);
+==
+CREATE TABLE Users (
+  UserId STRING(MAX) NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId STRING(MAX) NOT NULL,
+  AlbumId FLOAT64 NOT NULL,
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+--
+CREATE TABLE Users (
+  UserId STRING(MAX) NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId STRING(MAX) NOT NULL,
+  AlbumId FLOAT64 NOT NULL,
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+--
+ERROR: Table Albums adds no columns and is not a top level table.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+  Name STRING(1024),
+  Description STRING(1024),
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+  Name STRING(1024),
+  Description STRING(1024),
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE TABLE Photos (
+  PhotoId INT64 NOT NULL,
+) PRIMARY KEY(PhotoId),
+  INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
+--
+ERROR: Table Albums adds no columns and is not a top level table.
+==
+CREATE TABLE T (
+  DKey DATE NOT NULL,
+  DValue DATE,
+) PRIMARY KEY(DKey);
+--
+CREATE TABLE T (
+  DKey DATE NOT NULL,
+  DValue DATE,
+) PRIMARY KEY(DKey);
+==
+CREATE TABLE Users (
+  UserName STRING(MAX) NOT NULL,
+) PRIMARY KEY();
+--
+CREATE TABLE Users (
+  UserName STRING(MAX) NOT NULL,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE INDEX UsersByName ON Users(UserName);
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE INDEX UsersByName ON Users(UserName);
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX) NOT NULL,
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE INDEX AlbumsByName ON Albums(UserId, AlbumName), INTERLEAVE IN Users;
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX) NOT NULL,
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE INDEX AlbumsByName ON Albums(UserId, AlbumName), INTERLEAVE IN Users;
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX),
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE NULL_FILTERED INDEX LocalAlbumsByName ON Albums(UserId, AlbumName DESC), INTERLEAVE IN Users;
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX),
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE NULL_FILTERED INDEX LocalAlbumsByName ON Albums(UserId, AlbumName DESC), INTERLEAVE IN Users;
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX UsersDesc ON Users(UserName DESC);
+CREATE NULL_FILTERED INDEX UsersAsc ON Users(UserName);
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX UsersAsc ON Users(UserName);
+CREATE NULL_FILTERED INDEX UsersDesc ON Users(UserName DESC);
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE UNIQUE NULL_FILTERED INDEX UsersByName ON Users(UserName);
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE UNIQUE NULL_FILTERED INDEX UsersByName ON Users(UserName);
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE NULL_FILTERED INDEX AlbumsByUser ON Albums(UserId);
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId INT64 NOT NULL,
+  AlbumId INT64 NOT NULL,
+) PRIMARY KEY(UserId, AlbumId),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE NULL_FILTERED INDEX AlbumsByUser ON Albums(UserId);
+==
+CREATE TABLE A (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = true
+  ),
+) PRIMARY KEY(Timestamp);
+CREATE TABLE B (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = true
+  ),
+) PRIMARY KEY(Timestamp),
+  INTERLEAVE IN PARENT A ON DELETE CASCADE;
+--
+ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+==
+CREATE TABLE A (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = false
+  ),
+) PRIMARY KEY(Timestamp);
+CREATE TABLE B (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = false
+  ),
+) PRIMARY KEY(Timestamp),
+  INTERLEAVE IN PARENT A ON DELETE CASCADE;
+--
+ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+==
+CREATE TABLE A (
+  Timestamp INT64 NOT NULL,
+) PRIMARY KEY(Timestamp);
+CREATE TABLE B (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = false
+  ),
+) PRIMARY KEY(Timestamp),
+  INTERLEAVE IN PARENT A ON DELETE CASCADE;
+--
+ERROR: Column B.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+==
+CREATE TABLE A (
+  Timestamp INT64 NOT NULL OPTIONS (
+    allow_commit_timestamp = false
+  ),
+) PRIMARY KEY(Timestamp);
+CREATE TABLE B (
+  Timestamp INT64 NOT NULL,
+) PRIMARY KEY(Timestamp),
+  INTERLEAVE IN PARENT A ON DELETE CASCADE;
+--
+ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+DROP TABLE Albums;
+--
+ERROR: Table Albums adds no columns and is not a top level table.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
+DROP INDEX UsersByName;
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+ALTER TABLE Users ADD COLUMN NewColumn INT64;
+--
+CREATE TABLE Users (
+  NewColumn INT64,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  OldColumn INT64,
+) PRIMARY KEY();
+ALTER TABLE Users DROP COLUMN OldColumn;
+--
+CREATE TABLE Users (
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserName STRING(20),
+) PRIMARY KEY();
+ALTER TABLE Users ALTER COLUMN UserName STRING(MAX);
+--
+CREATE TABLE Users (
+  UserName STRING(MAX),
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserNames ARRAY<STRING(20)>,
+) PRIMARY KEY();
+ALTER TABLE Users ALTER COLUMN UserNames ARRAY<STRING(MAX)>;
+--
+CREATE TABLE Users (
+  UserNames ARRAY<STRING(MAX)>,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserName ARRAY<STRING(400000)>,
+) PRIMARY KEY();
+--
+CREATE TABLE Users (
+  UserName ARRAY<STRING(400000)>,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserName STRING(20),
+) PRIMARY KEY();
+ALTER TABLE Users ALTER COLUMN UserName BYTES(80);
+--
+CREATE TABLE Users (
+  UserName BYTES(80),
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserNames ARRAY<STRING(20)>,
+) PRIMARY KEY();
+ALTER TABLE Users ALTER COLUMN UserNames ARRAY<BYTES(80)>;
+--
+CREATE TABLE Users (
+  UserNames ARRAY<BYTES(80)>,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserName STRING(MAX),
+) PRIMARY KEY();
+ALTER TABLE Users ALTER COLUMN UserName BYTES(MAX);
+--
+CREATE TABLE Users (
+  UserName BYTES(MAX),
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserNames ARRAY<STRING(MAX)>,
+) PRIMARY KEY();
+ALTER TABLE Users ALTER COLUMN UserNames ARRAY<BYTES(MAX)>;
+--
+CREATE TABLE Users (
+  UserNames ARRAY<BYTES(MAX)>,
+) PRIMARY KEY();
+==
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ALTER COLUMN UserId STRING(40) NOT NULL;
+--
+CREATE TABLE Users (
+  UserId STRING(40) NOT NULL,
+) PRIMARY KEY(UserId);
+==
+CREATE TABLE Users (
+  UserId STRING(MAX) NOT NULL,
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ALTER COLUMN UserId BYTES(MAX) NOT NULL;
+--
+CREATE TABLE Users (
+  UserId BYTES(MAX) NOT NULL,
+) PRIMARY KEY(UserId);
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE NO ACTION;
+--
+ERROR: Table Albums adds no columns and is not a top level table.
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE NO ACTION;
+--
+ERROR: Table Albums adds no columns and is not a top level table.
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE NO ACTION;
+--
+ERROR: Table Albums adds no columns and is not a top level table.
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+ALTER TABLE Albums SET ON DELETE NO ACTION;
+--
+ERROR: Table Albums adds no columns and is not a top level table.
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ALTER COLUMN UserName STRING(MAX) NOT NULL;
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX) NOT NULL,
+) PRIMARY KEY(UserId);
+==
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX),
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ALTER COLUMN UserName STRING(MAX) NOT NULL;
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  UserName STRING(MAX) NOT NULL,
+) PRIMARY KEY(UserId);
+==
+CREATE TABLE Users (
+) PRIMARY KEY();
+CREATE TABLE Albums (
+) PRIMARY KEY(),
+  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+ALTER TABLE Albums SET ON DELETE CASCADE;
+--
+ERROR: Table Albums adds no columns and is not a top level table.
+==
+CREATE TABLE T (
+  A INT64,
+) PRIMARY KEY(A);
+--
+CREATE TABLE T (
+  A INT64,
+) PRIMARY KEY(A);

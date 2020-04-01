@@ -1,0 +1,29 @@
+--- BUILD.bazel
++++ BUILD.bazel
+@@ -7,0 +7,25 @@
++cc_library(
++    name = "grpc_utils_protos",
++    includes = [
++        ".",
++    ],
++    visibility = ["//visibility:public"],
++    deps = [
++        "@com_github_grpc_grpc//:grpc++",
++        "//google/rpc:status_cc_proto"
++    ],
++)
++
++cc_library(
++    name = "spanner_protos",
++    includes = [
++        ".",
++    ],
++    visibility = ["//visibility:public"],
++    deps = [
++        "//google/longrunning:longrunning_cc_grpc",
++        "//google/spanner/v1:spanner_cc_grpc",
++        "//google/spanner/admin/instance/v1:instance_cc_grpc",
++        "//google/spanner/admin/database/v1:database_cc_grpc",
++    ],
++)
+

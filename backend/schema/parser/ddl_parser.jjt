@@ -1,0 +1,448 @@
+//
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+
+
+SKIP:
+{
+    <WHITE_SPACE: (" " | "\n" | "\r" | "\t" | "\b" | "\f" |
+        "\u000b" | "\013" |
+        "\u00a0" | "\302\240" |
+        "\u2000" | "\342\200\200" |
+        "\u2001" | "\342\200\201" |
+        "\u2002" | "\342\200\202" |
+        "\u2003" | "\342\200\203" |
+        "\u2004" | "\342\200\204" |
+        "\u2005" | "\342\200\205" |
+        "\u2006" | "\342\200\206" |
+        "\u2007" | "\342\200\207" |
+        "\u2008" | "\342\200\210" |
+        "\u2009" | "\342\200\211" |
+        "\u200A" | "\342\200\212" |
+        "\u202f" | "\342\200\257" |
+        "\u205f" | "\342\201\237" |
+        "\u3000" | "\343\200\200"
+    )>
+}
+TOKEN:
+{
+    <ALL:                     "all">
+  | <AND:                     "and">
+  | <ANY:                     "any">
+  | <ARRAY:                   "array">
+  | <AS:                      "as">
+  | <ASC:                     "asc">
+  | <ASSERT_ROWS_MODIFIED:    "assert_rows_modified">
+  | <AT:                      "at">
+  | <BETWEEN:                 "between">
+  | <BY:                      "by">
+  | <CASE:                    "case">
+  | <CAST:                    "cast">
+  | <COLLATE:                 "collate">
+  | <CONTAINS:                "contains">
+  | <CREATE:                  "create">
+  | <CROSS:                   "cross">
+  | <CUBE:                    "cube">
+  | <CURRENT:                 "current">
+  | <DEFAULTT:                "default">
+  | <DEFINE:                  "define">
+  | <DESC:                    "desc">
+  | <DISTINCT:                "distinct">
+  | <ELSE:                    "else">
+  | <END:                     "end">
+  | <ENUM:                    "enum">
+  | <ESCAPE:                  "escape">
+  | <EXCEPT:                  "except">
+  | <EXCLUDE:                 "exclude">
+  | <EXISTS:                  "exists">
+  | <EXTRACT:                 "extract">
+  | <FALSE:                   "false">
+  | <FETCH:                   "fetch">
+  | <FOLLOWING:               "following">
+  | <FOR:                     "for">
+  | <FROM:                    "from">
+  | <FULL:                    "full">
+  | <GROUP:                   "group">
+  | <GROUPING:                "grouping">
+  | <GROUPS:                  "groups">
+  | <HASH:                    "hash">
+  | <HAVING:                  "having">
+  | <IF:                      "if">
+  | <IGNORE:                  "ignore">
+  | <IN:                      "in">
+  | <INNER:                   "inner">
+  | <INTERSECT:               "intersect">
+  | <INTERVAL:                "interval">
+  | <INTO:                    "into">
+  | <IS:                      "is">
+  | <JOIN:                    "join">
+  | <LATERAL:                 "lateral">
+  | <LEFT:                    "left">
+  | <LIKE:                    "like">
+  | <LIMIT:                   "limit">
+  | <LOOKUP:                  "lookup">
+  | <MERGE:                   "merge">
+  | <NATURAL:                 "natural">
+  | <NEW:                     "new">
+  | <NO:                      "no">
+  | <NOT:                     "not">
+  | <NULLL:                   "null">
+  | <NULLS:                   "nulls">
+  | <OF:                      "of">
+  | <ON:                      "on">
+  | <OR:                      "or">
+  | <ORDER:                   "order">
+  | <OUTER:                   "outer">
+  | <OVER:                    "over">
+  | <PARTITION:               "partition">
+  | <PRECEDING:               "preceding">
+  | <PROTO:                   "proto">
+  | <RANGE:                   "range">
+  | <RECURSIVE:               "recursive">
+  | <RESPECT:                 "respect">
+  | <RIGHT:                   "right">
+  | <ROLLUP:                  "rollup">
+  | <ROWS:                    "rows">
+  | <SELECT:                  "select">
+  | <SET:                     "set">
+  | <SOME:                    "some">
+  | <STRUCT:                  "struct">
+  | <TABLESAMPLE:             "tablesample">
+  | <THEN:                    "then">
+  | <TO:                      "to">
+  | <TREAT:                   "treat">
+  | <TRUE:                    "true">
+  | <UNBOUNDED:               "unbounded">
+  | <UNION:                   "union">
+  | <UNNEST:                  "unnest">
+  | <USING:                   "using">
+  | <WHEN:                    "when">
+  | <WHERE:                   "where">
+  | <WINDOW:                  "window">
+  | <WITH:                    "with">
+  | <WITHIN:                  "within">
+}
+TOKEN:
+{
+    <ACTION:                 "action">
+  | <ADD:                    "add">
+  | <ALTER:                  "alter">
+  | <BOOL:                   "bool">
+  | <BYTES:                  "bytes">
+  | <CASCADE:                "cascade">
+  | <COLUMN:                 "column">
+  | <DATABASE:               "database">
+  | <DATE:                   "date">
+  | <DELETE:                 "delete">
+  | <DROP:                   "drop">
+  | <FLOAT64:                "float64">
+  | <INDEX:                  "index">
+  | <INT64:                  "int64">
+  | <INTERLEAVE:             "interleave">
+  | <KEY:                    "key">
+  | <MAX:                    "max">
+  | <NULL_FILTERED:          "null_filtered">
+  | <OPTIONS:                "options">
+  | <PARENT:                 "parent">
+  | <PRIMARY:                "primary">
+  | <STORING:                "storing">
+  | <STRING:                 "string">
+  | <TABLE:                  "table">
+  | <TIMESTAMP:              "timestamp">
+  | <UNIQUE:                 "unique">
+}
+TOKEN:
+{
+    <#DEC_DIGIT:            ["0"-"9"]>
+  | <#HEX_DIGIT:            ["0"-"9", "A"-"F"]>
+  | <#LETTER_OR_UNDERSCORE: ["a"-"z","A"-"Z","_"]>
+  | <#SCALE_FACTOR:         "e" (["+", "-"])? ( <DEC_DIGIT> )+ >
+}
+
+TOKEN:
+{
+    <ID: (<LETTER_OR_UNDERSCORE>) (<LETTER_OR_UNDERSCORE> | <DEC_DIGIT>)* >
+  | <INTEGER_LITERAL: ("-")? ( <DEC_DIGIT> (<DEC_DIGIT>)* |
+                               "0x" (<HEX_DIGIT>)+ ) >
+  | <QUOTED_ID: "`" (~["\n","\r","`","0"-"9"]) (~["\n","\r","`"])* "`" >
+}
+void identifier() #void :
+{}
+{
+    <ID>
+  | <QUOTED_ID>
+  | pseudoReservedWord()
+}
+
+void pseudoReservedWord() #void :
+{}
+{
+    <ACTION>
+  | <ADD>
+  | <ALTER>
+  | <BOOL>
+  | <BYTES>
+  | <CASCADE>
+  | <COLUMN>
+  | <DATABASE>
+  | <DATE>
+  | <DELETE>
+  | <DROP>
+  | <FLOAT64>
+  | <INDEX>
+  | <INT64>
+  | <INTERLEAVE>
+  | <KEY>
+  | <MAX>
+  | <NULL_FILTERED>
+  | <OPTIONS>
+  | <PARENT>
+  | <PRIMARY>
+  | <STORING>
+  | <STRING>
+  | <TABLE>
+  | <TIMESTAMP>
+  | <UNIQUE>
+}
+
+void path() :
+{}
+{
+  identifier()
+}
+void int_value() :
+{}
+{
+  <INTEGER_LITERAL>
+}
+void ddl_statement() :
+{}
+{
+  (   alter_statement()
+    | create_statement()
+    | drop_statement()
+  )
+  <EOF>
+}
+
+void create_statement() #void :
+{}
+{
+  <CREATE>
+  (   create_database_statement()
+    | create_table_statement()
+    | create_index_statement()
+  )
+}
+
+void options_clause() :
+{}
+{
+  <OPTIONS> option_list()
+}
+
+void create_database_statement() :
+{}
+{
+  <DATABASE>
+  identifier() #db_name
+  [ options_clause() ]
+}
+
+void create_table_statement() :
+{}
+{
+  <TABLE> identifier() #name
+  "(" [ table_element() ( LOOKAHEAD(2) "," table_element() )* [ "," ] ] ")"
+  primary_key()
+  [ LOOKAHEAD(2) "," table_interleave_clause() ]
+}
+
+void table_element() #void :
+{}
+{
+  column_def()
+}
+
+void column_def() :
+{}
+{
+  identifier() #name
+  column_type()
+  [ <NOT> <NULLL> #not_null ]
+  [ options_clause() ]
+}
+
+void column_def_alter_attrs() :
+{}
+{
+  column_type()
+  [ <NOT> <NULLL> #not_null ]
+}
+
+void column_def_alter() :
+{}
+{
+    <SET> #set_options_clause options_clause()
+  | column_def_alter_attrs()
+}
+
+void column_type() :
+{}
+{
+    <FLOAT64>
+  | <INT64>
+  | <BOOL>
+  | <STRING> "(" column_length() #length ")"
+  | <BYTES> "(" column_length() #length ")"
+  | <TIMESTAMP>
+  | <DATE>
+  | <ARRAY> "<" column_type() ">"
+}
+
+void column_length() :
+{}
+{
+  <MAX> | int_value()
+}
+
+void primary_key() #void :
+{}
+{
+  <PRIMARY> <KEY> (key() #primary_key)
+}
+
+void table_interleave_clause() :
+{}
+{
+  <INTERLEAVE> <IN> <PARENT> identifier() #interleave_in
+    [ on_delete_clause() ]
+}
+
+void on_delete_clause() :
+{}
+{
+  <ON> <DELETE> ( <CASCADE> #cascade | <NO> <ACTION> #no_action )
+}
+
+void create_index_statement() :
+{}
+{
+  [ <UNIQUE> #unique_index ]
+  [ <NULL_FILTERED> #null_filtered ]
+  <INDEX> identifier() #name
+  <ON> identifier() #table
+  key() #columns
+  [ <STORING> stored_column_list() ]
+  [ LOOKAHEAD(2) "," index_interleave_clause() ]
+}
+
+void index_interleave_clause() :
+{}
+{
+  <INTERLEAVE> <IN> identifier() #interleave_in
+}
+
+void key() #void :
+{}
+{
+  "("
+    [ // parts may be empty for primary keys
+      key_part()
+      ( "," key_part() )*
+    ]
+  ")"
+}
+
+void key_part() :
+{}
+{
+  path()
+  [   <ASC>
+    | <DESC> #desc
+  ]
+}
+
+void stored_column() :
+{}
+{
+  path()
+}
+
+void stored_column_list() :
+{}
+{
+  "(" stored_column()
+    ( "," stored_column() )*
+  ")"
+}
+
+void option_list() #void :
+{}
+{
+  "("
+  option_key_val() ( LOOKAHEAD(2) "," option_key_val() )*
+  ")"
+}
+
+void option_key_val() :
+{}
+{
+  identifier() #key
+  "="
+  (   <NULLL> #nulll
+    | <TRUE> #bool_true_val
+    | <FALSE> #bool_false_val
+    | <INTEGER_LITERAL> #integer_val
+  )
+}
+
+void drop_statement() :
+{}
+{
+  <DROP> ( <TABLE> #table | <INDEX> #index ) identifier() #name
+}
+
+void alter_statement() #void :
+{}
+{
+  <ALTER>
+  (   alter_database_statement()
+    | alter_table_statement()  )
+}
+
+void alter_database_statement() :
+{}
+{
+  <DATABASE> (identifier() #database_name) <SET> options_clause()
+}
+
+void alter_table_statement() :
+{}
+{
+  <TABLE> (identifier() #table_name)
+  (   LOOKAHEAD(3) <ADD> #add_column <COLUMN> column_def()
+    | <DROP> #drop_column <COLUMN> (identifier() #column_name)
+    | LOOKAHEAD(3) <ALTER> #alter_column <COLUMN>
+        (identifier() #name) column_def_alter()
+    | <SET> #set_on_delete on_delete_clause()
+  )
+}
+
+TOKEN:
+{
+  <UNEXPECTED_CHARACTER: ~[]>
+}
