@@ -74,7 +74,9 @@ zetasql_base::Status BackfillIndex(const Index* index,
 
     // Compute the index key and column values.
     Row base_row = MakeRow(base_columns, row_values);
-    Key index_data_table_key = ComputeIndexKey(base_row, index);
+    // Backfill should return failed precondition error for invalid index keys.
+    ZETASQL_ASSIGN_OR_RETURN(Key index_data_table_key, ComputeIndexKey(base_row, index),
+                     _.SetErrorCode(zetasql_base::StatusCode::kFailedPrecondition));
     ValueList index_values = ComputeIndexValues(base_row, index);
     if (ShouldFilterIndexKey(index, index_data_table_key)) {
       continue;

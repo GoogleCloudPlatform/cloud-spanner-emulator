@@ -24,6 +24,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
+#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {
@@ -31,7 +32,7 @@ namespace emulator {
 namespace backend {
 
 // Computes the index key from the given row.
-Key ComputeIndexKey(const Row& base_row, const Index* index);
+zetasql_base::StatusOr<Key> ComputeIndexKey(const Row& base_row, const Index* index);
 
 // Computes an the ordered list of index row values using the given base row.
 ValueList ComputeIndexValues(const Row& base_row, const Index* index);

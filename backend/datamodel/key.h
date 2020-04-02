@@ -94,6 +94,9 @@ class Key {
   // Returns true if the key does not have any columns.
   bool IsEmpty() const { return columns_.empty(); }
 
+  // Returns the logical size of the key in bytes.
+  int64_t LogicalSizeInBytes() const;
+
   // Returns a debug string suitable to be included in error messages.
   std::string DebugString() const;
 

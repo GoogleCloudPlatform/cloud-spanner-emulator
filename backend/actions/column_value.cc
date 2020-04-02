@@ -181,10 +181,20 @@ zetasql_base::Status ValidateInsertUpdateOp(const Table* table,
   return zetasql_base::OkStatus();
 }
 
+zetasql_base::Status ValidateKeySize(const Table* table, const Key& key) {
+  int64_t key_size = key.LogicalSizeInBytes();
+  if (key_size > limits::kMaxKeySizeBytes) {
+    return error::KeyTooLarge(table->Name(), key_size,
+                              limits::kMaxKeySizeBytes);
+  }
+  return zetasql_base::OkStatus();
+}
+
 }  //  namespace
 
 zetasql_base::Status ColumnValueValidator::Validate(const ActionContext* ctx,
                                             const InsertOp& op) const {
+  ZETASQL_RETURN_IF_ERROR(ValidateKeySize(op.table, op.key));
   ZETASQL_RETURN_IF_ERROR(ValidateNotNullColumnsPresent(op.table, op.columns));
   return ValidateInsertUpdateOp(op.table, op.columns, op.values, ctx->clock());
 }

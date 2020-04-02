@@ -202,6 +202,12 @@ class ServerTest : public testing::Test {
       const spanner_api::ReadRequest& request,
       std::vector<spanner_api::PartialResultSet>* response);
 
+  zetasql_base::Status PartitionRead(const spanner_api::PartitionReadRequest& request,
+                             spanner_api::PartitionResponse* response) {
+    grpc::ClientContext ctx;
+    return test_env()->spanner_client()->PartitionRead(&ctx, request, response);
+  }
+
   zetasql_base::Status ExecuteSql(const spanner_api::ExecuteSqlRequest& request,
                           spanner_api::ResultSet* response) {
     grpc::ClientContext ctx;

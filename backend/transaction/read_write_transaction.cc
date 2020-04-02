@@ -14,8 +14,6 @@
 // limitations under the License.
 //
 
-#include "backend/transaction/read_write_transaction.h"
-
 #include <memory>
 #include <string>
 #include <utility>
@@ -49,6 +47,7 @@
 #include "backend/transaction/actions.h"
 #include "backend/transaction/flush.h"
 #include "backend/transaction/options.h"
+#include "backend/transaction/read_write_transaction.h"
 #include "backend/transaction/resolve.h"
 #include "backend/transaction/row_cursor.h"
 #include "common/clock.h"

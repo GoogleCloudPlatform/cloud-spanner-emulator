@@ -40,7 +40,9 @@
 #include "google/cloud/spanner/instance_admin_client.h"
 #include "google/cloud/spanner/keys.h"
 #include "google/cloud/spanner/mutations.h"
+#include "google/cloud/spanner/partition_options.h"
 #include "google/cloud/spanner/read_options.h"
+#include "google/cloud/spanner/read_partition.h"
 #include "google/cloud/spanner/results.h"
 #include "google/cloud/spanner/row.h"
 #include "google/cloud/spanner/sql_statement.h"
@@ -109,6 +111,8 @@ class DatabaseTest : public ::testing::Test {
   using DatabaseAdminStub = admin::database::v1::DatabaseAdmin::Stub;
   using OperationsStub = longrunning::Operations::Stub;
   using SpannerStub = v1::Spanner::Stub;
+  using ReadPartition = cloud::spanner::ReadPartition;
+  using PartitionOptions = cloud::spanner::PartitionOptions;
 
   template <typename Duration>
   static Timestamp MakeTimestamp(
@@ -383,6 +387,16 @@ class DatabaseTest : public ::testing::Test {
       std::vector<std::string> columns) {
     return ReadWithIndex(std::move(txn), std::move(table), std::move(index),
                          std::move(columns), KeySet::All());
+  }
+
+  // PartitionRead using a specified transaction.
+  zetasql_base::StatusOr<std::vector<ReadPartition>> PartitionRead(
+      Transaction txn, std::string table, KeySet key_set,
+      std::vector<std::string> columns, ReadOptions read_options = {},
+      PartitionOptions partition_options = {}) {
+    return ToUtilStatusOr(client().PartitionRead(
+        std::move(txn), std::move(table), std::move(key_set),
+        std::move(columns), read_options, partition_options));
   }
 
   // Run a SQL query with the given bound parameters and return the results.

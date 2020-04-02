@@ -83,6 +83,13 @@ TEST_F(PrimaryKeysTest, CannotInsertNullForNotNullKeyColumn) {
               StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
 }
 
+TEST_F(PrimaryKeysTest, CannotInsertKeyTooLarge) {
+  std::string long_str(8192, 'a');
+  EXPECT_THAT(
+      Insert("TableWithNullableKey", {"key1", "key2"}, {long_str, "abc"}),
+      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
 }  // namespace
 
 }  // namespace test

@@ -136,6 +136,7 @@ cc_library(
     srcs = ["partitions.cc"],
     deps = [
         "//common:errors",
+        "//frontend/entities:session",
         "//frontend/server:handler",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_zetasql//zetasql/base:status",
@@ -148,10 +149,13 @@ cc_test(
     srcs = ["partitions_test.cc"],
     deps = [
         ":partitions",
+        "//common:errors",
         "//tests/common:proto_matchers",
         "//tests/common:test_env",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

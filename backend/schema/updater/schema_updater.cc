@@ -307,7 +307,7 @@ zetasql_base::Status SchemaUpdaterImpl::SetColumnDefinition(
   // Set the default values for nullability and length.
   modifier->set_nullable(true);
   modifier->set_declared_max_length(absl::nullopt);
-  for (const ddl::Constraint ddl_constraint : ddl_column.constraints()) {
+  for (const ddl::Constraint& ddl_constraint : ddl_column.constraints()) {
     switch (ddl_constraint.kind_case()) {
       case ddl::Constraint::kNotNull: {
         modifier->set_nullable(ddl_constraint.not_null().nullable());
@@ -382,7 +382,7 @@ zetasql_base::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
 
 zetasql_base::Status SchemaUpdaterImpl::CreatePrimaryKeyConstraint(
     const ddl::PrimaryKeyConstraint& ddl_primary_key, Table::Builder* builder) {
-  for (const ddl::PrimaryKeyConstraint::KeyPart ddl_key_part :
+  for (const ddl::PrimaryKeyConstraint::KeyPart& ddl_key_part :
        ddl_primary_key.key_part()) {
     ZETASQL_ASSIGN_OR_RETURN(const KeyColumn* key_col,
                      CreatePrimaryKeyColumn(ddl_key_part, builder->get()));
@@ -500,7 +500,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
         ddl::PrimaryKeyConstraint data_table_pk = ddl_primary_key;
 
         // First create columns for the specified primary key.
-        for (const ddl::PrimaryKeyConstraint::KeyPart ddl_key_part :
+        for (const ddl::PrimaryKeyConstraint::KeyPart& ddl_key_part :
              ddl_primary_key.key_part()) {
           const std::string& column_name = ddl_key_part.key_column_name();
           ZETASQL_ASSIGN_OR_RETURN(const Column* column,

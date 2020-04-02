@@ -68,109 +68,12 @@ std::string Index::DebugString() const {
 const Table* Index::parent() const { return index_data_table_->parent(); }
 
 zetasql_base::Status Index::Validate(SchemaValidationContext* context) const {
-  ZETASQL_RET_CHECK(!name_.empty());
-  ZETASQL_RET_CHECK_NE(indexed_table_, nullptr);
-  ZETASQL_RET_CHECK_NE(index_data_table_, nullptr);
-
-  if (name_.length() > limits::kMaxSchemaIdentifierLength) {
-    return error::InvalidSchemaName("Index", name_,
-                                    "name exceeds maximum allowed "
-                                    "identifier length");
-  }
-
-  if (zetasql_base::CaseEqual(name_, "PRIMARY_KEY")) {
-    return error::CannotNameIndexPrimaryKey();
-  }
-
-  if (absl::StartsWith(name_, "Dir_")) {
-    return error::InvalidSchemaName("Index", name_);
-  }
-
-  if (key_columns_.empty()) {
-    return error::IndexWithNoKeys(name_);
-  }
-
-  CaseInsensitiveStringSet keys_set;
-  for (const auto* key_column : key_columns_) {
-    const std::string& column_name = key_column->column()->Name();
-    const auto* column_type = key_column->column()->GetType();
-    if (!IsSupportedKeyColumnType(column_type)) {
-      return error::IndexRefsUnsupportedColumn(name_, ToString(column_type));
-    }
-    if (keys_set.contains(column_name)) {
-      return error::IndexRefsColumnTwice(name_, column_name);
-    }
-    if (is_null_filtered_) {
-      ZETASQL_RET_CHECK(!key_column->column()->is_nullable());
-    }
-    keys_set.insert(column_name);
-  }
-
-  CaseInsensitiveStringSet stored_set;
-  for (const auto* column : stored_columns_) {
-    const std::string& column_name = column->Name();
-    if (keys_set.contains(column_name)) {
-      return error::IndexRefsKeyAsStoredColumn(name_, column_name);
-    }
-    if (indexed_table_->FindKeyColumn(column_name) != nullptr) {
-      return error::IndexRefsTableKeyAsStoredColumn(name_, column_name,
-                                                    indexed_table_->Name());
-    }
-    if (stored_set.contains(column_name)) {
-      return error::IndexRefsColumnTwice(name_, column_name);
-    }
-    stored_set.insert(column_name);
-  }
-
-  if (parent()) {
-    const Table* table = indexed_table_;
-    while (table != parent() && table->parent()) {
-      table = table->parent();
-    }
-    if (table != parent()) {
-      return error::IndexInterleaveTableUnacceptable(
-          name_, indexed_table_->Name(), parent()->Name());
-    }
-  }
-
-  return zetasql_base::OkStatus();
+  return validate_(this, context);
 }
 
 zetasql_base::Status Index::ValidateUpdate(const SchemaNode* old,
                                    SchemaValidationContext* context) const {
-  if (is_deleted()) {
-    ZETASQL_RET_CHECK(index_data_table_->is_deleted());
-    return zetasql_base::OkStatus();
-  }
-
-  ZETASQL_RET_CHECK(!index_data_table()->is_deleted());
-
-  const Index* old_index = old->As<const Index>();
-  ZETASQL_RET_CHECK_EQ(name_, old_index->name_);
-  ZETASQL_RET_CHECK_EQ(is_null_filtered_, old_index->is_null_filtered_);
-  ZETASQL_RET_CHECK_EQ(is_unique_, old_index->is_unique_);
-  ZETASQL_RET_CHECK_EQ(key_columns_.size(), old_index->key_columns_.size());
-  ZETASQL_RET_CHECK_EQ(stored_columns_.size(), old_index->stored_columns_.size());
-
-  for (int i = 0; i < key_columns_.size(); ++i) {
-    const KeyColumn* new_key = key_columns_[i];
-    const KeyColumn* old_key = old_index->key_columns_[i];
-    if (is_null_filtered_) {
-      // For null-filtered indexes, we need not check for nullability changes
-      // of the source column
-      ZETASQL_RET_CHECK(!new_key->column()->is_nullable());
-    } else {
-      // Cannot change nullability of key columns for non-null filtered
-      // indexes.
-      if (old_key->column()->is_nullable() !=
-          new_key->column()->is_nullable()) {
-        return error::ChangingNullConstraintOnIndexedColumn(
-            new_key->column()->Name(), name_);
-      }
-    }
-  }
-
-  return zetasql_base::OkStatus();
+  return validate_update_(this, old->template As<const Index>(), context);
 }
 
 zetasql_base::Status Index::DeepClone(SchemaGraphEditor* editor,

@@ -145,8 +145,9 @@ TEST_F(ResolveTest, CannotResolveReadArgWithInvalidIndex) {
               StatusIs(zetasql_base::StatusCode::kNotFound));
 }
 
-TEST_F(ResolveTest, CanResolveMutationOp) {
+TEST_F(ResolveTest, CanResolveInsertMutationOp) {
   backend::MutationOp mutation_op;
+  mutation_op.type = MutationOpType::kInsert;
   mutation_op.table = "TestTable";
   mutation_op.columns = {"StringCol", "Int64Col"};
   mutation_op.rows = {{String("val1"), Int64(1)}, {String("val2"), Int64(2)}};
@@ -162,8 +163,9 @@ TEST_F(ResolveTest, CanResolveMutationOp) {
               testing::ElementsAre(Key({Int64(1)}), Key({Int64(2)})));
 }
 
-TEST_F(ResolveTest, CannotResolveMutationOpWithEmptyColumns) {
+TEST_F(ResolveTest, CannotResolveInsertMutationOpWithEmptyColumns) {
   backend::MutationOp mutation_op;
+  mutation_op.type = MutationOpType::kInsert;
   mutation_op.table = "TestTable";
   mutation_op.columns = {};
 
@@ -172,8 +174,9 @@ TEST_F(ResolveTest, CannotResolveMutationOpWithEmptyColumns) {
       error::NullValueForNotNullColumn("TestTable", "Int64Col"));
 }
 
-TEST_F(ResolveTest, CannotResolveMutationOpWithMissingKeyColumn) {
+TEST_F(ResolveTest, CannotResolveInsertMutationOpWithMissingKeyColumn) {
   backend::MutationOp mutation_op;
+  mutation_op.type = MutationOpType::kInsert;
   mutation_op.table = "TestTable";
   mutation_op.columns = {"StringCol"};
 
@@ -182,8 +185,9 @@ TEST_F(ResolveTest, CannotResolveMutationOpWithMissingKeyColumn) {
       error::NullValueForNotNullColumn("TestTable", "Int64Col"));
 }
 
-TEST_F(ResolveTest, CanResolveMutationOpCaseInsensitiveColumns) {
+TEST_F(ResolveTest, CanResolveInsertMutationOpCaseInsensitiveColumns) {
   backend::MutationOp mutation_op;
+  mutation_op.type = MutationOpType::kInsert;
   mutation_op.table = "TestTable";
   mutation_op.columns = {"sTRINGCol", "iNT64cOL"};
 
@@ -196,8 +200,9 @@ TEST_F(ResolveTest, CanResolveMutationOpCaseInsensitiveColumns) {
               testing::ElementsAre(string_col_, int_col_));
 }
 
-TEST_F(ResolveTest, CanResolveMutationOpWithDuplicateColumns) {
+TEST_F(ResolveTest, CannotResolveInsertMutationOpWithDuplicateColumns) {
   backend::MutationOp mutation_op;
+  mutation_op.type = MutationOpType::kInsert;
   mutation_op.table = "TestTable";
   mutation_op.columns = {"Int64Col", "StringCol", "iNT64cOL"};
 

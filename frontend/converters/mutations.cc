@@ -153,7 +153,7 @@ zetasql_base::Status MutationFromProto(
     const backend::Schema& schema,
     const google::protobuf::RepeatedPtrField<spanner_api::Mutation>& mutation_pbs,
     backend::Mutation* mutation) {
-  for (const spanner_api::Mutation mutation_pb : mutation_pbs) {
+  for (const spanner_api::Mutation& mutation_pb : mutation_pbs) {
     switch (mutation_pb.operation_case()) {
       case spanner_api::Mutation::kInsert:
         ZETASQL_RETURN_IF_ERROR(WriteFromProto(schema, mutation_pb.insert(),

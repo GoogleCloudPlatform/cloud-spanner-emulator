@@ -121,7 +121,7 @@ zetasql_base::Status InvalidReadOptionForMultiUseTransaction(
 zetasql_base::Status InvalidModeForReadOnlySingleUseTransaction();
 zetasql_base::Status DmlDoesNotSupportSingleUseTransaction();
 zetasql_base::Status PartitionReadDoesNotSupportSingleUseTransaction();
-zetasql_base::Status PartitionReadOnlySupportsReadOnlyTransaction();
+zetasql_base::Status PartitionReadNeedsReadOnlyTxn();
 zetasql_base::Status CannotCommitRollbackReadOnlyTransaction();
 zetasql_base::Status CannotCommitAfterRollback();
 zetasql_base::Status CannotRollbackAfterCommit();
@@ -299,6 +299,10 @@ zetasql_base::Status ValueExceedsLimit(absl::string_view column_name, int value_
                                int max_column_size);
 zetasql_base::Status NonNullValueNotSpecifiedForInsert(absl::string_view table_name,
                                                absl::string_view column_name);
+zetasql_base::Status KeyTooLarge(absl::string_view table_name, int64_t key_size,
+                         int64_t max_key_size);
+zetasql_base::Status IndexKeyTooLarge(absl::string_view index_name, int64_t key_size,
+                              int64_t max_key_size);
 
 // Index errors.
 zetasql_base::Status UniqueIndexConstraintViolation(absl::string_view index_name,
@@ -333,6 +337,10 @@ zetasql_base::Status ExecuteBatchDmlOnlySupportsDmlStatements(int index,
                                                       absl::string_view query);
 zetasql_base::Status DmlRequiresReadWriteTransaction(
     absl::string_view transaction_type);
+
+// Partition Read errors.
+zetasql_base::Status InvalidBytesPerBatch(absl::string_view message_name);
+zetasql_base::Status InvalidMaxPartitionCount(absl::string_view message_name);
 
 }  // namespace error
 }  // namespace emulator

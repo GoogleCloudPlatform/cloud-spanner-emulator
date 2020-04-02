@@ -228,7 +228,7 @@ zetasql_base::Status InMemoryStorage::Delete(absl::Time timestamp,
       continue;
     }
 
-    for (auto columns : itr->second) {
+    for (const auto& columns : itr->second) {
       if (columns.first == kExistsColumn) {
         itr->second[kExistsColumn][timestamp] = zetasql::values::Bool(false);
       } else {

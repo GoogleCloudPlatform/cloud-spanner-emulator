@@ -132,7 +132,6 @@ bool Transaction::IsCommitted() const {
 }
 
 bool Transaction::IsReadOnly() const {
-  mu_.AssertHeld();
   return absl::visit(
       backend::overloaded{
           [&](const ReadWriteTransactionPtr& transaction) -> bool {

@@ -36,6 +36,7 @@ cc_library(
         "malformed_writes.cc",
         "multi_row_writes.cc",
         "operations.cc",
+        "partition_reads.cc",
         "primary_keys.cc",
         "query.cc",
         "query_hints.cc",
@@ -57,6 +58,7 @@ cc_library(
     ],
     deps = [
         "//tests/common:file_based_test_runner",
+        "//tests/common:proto_matchers",
         "//tests/conformance/common:database_test_base",
         "@com_github_googleapis_google_cloud_cpp_spanner//google/cloud/spanner:spanner_client",
         "@com_google_absl//absl/strings",

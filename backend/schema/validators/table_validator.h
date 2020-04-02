@@ -14,10 +14,10 @@
 // limitations under the License.
 //
 
-#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_VALIDATORS_COLUMN_VALIDATOR_H_
-#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_VALIDATORS_COLUMN_VALIDATOR_H_
+#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_VALIDATORS_TABLE_VALIDATOR_H_
+#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_VALIDATORS_TABLE_VALIDATOR_H_
 
-#include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/table.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "zetasql/base/status.h"
 
@@ -26,24 +26,13 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-// Implementation of Column::Validate() / Column::ValidateUpdate().
-class ColumnValidator {
+// Implementation of Table::Validate() / Table::ValidateUpdate().
+class TableValidator {
  public:
-  static zetasql_base::Status Validate(const Column* column,
+  static zetasql_base::Status Validate(const Table* table,
                                SchemaValidationContext* context);
 
-  static zetasql_base::Status ValidateUpdate(const Column* column,
-                                     const Column* old_column,
-                                     SchemaValidationContext* context);
-};
-
-class KeyColumnValidator {
- public:
-  static zetasql_base::Status Validate(const KeyColumn* column,
-                               SchemaValidationContext* context);
-
-  static zetasql_base::Status ValidateUpdate(const KeyColumn* key_column,
-                                     const KeyColumn* old_key_column,
+  static zetasql_base::Status ValidateUpdate(const Table* table, const Table* old_table,
                                      SchemaValidationContext* context);
 };
 
@@ -52,4 +41,4 @@ class KeyColumnValidator {
 }  // namespace spanner
 }  // namespace google
 
-#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_VALIDATORS_COLUMN_VALIDATOR_H_
+#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_VALIDATORS_TABLE_VALIDATOR_H_

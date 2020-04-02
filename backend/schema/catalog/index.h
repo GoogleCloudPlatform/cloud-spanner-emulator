@@ -110,7 +110,17 @@ class Index : public SchemaNode {
   class Builder;
 
  private:
-  Index() = default;
+  friend class IndexValidator;
+
+  using ValidationFn =
+      std::function<zetasql_base::Status(const Index*, SchemaValidationContext*)>;
+  using UpdateValidationFn = std::function<zetasql_base::Status(
+      const Index*, const Index*, SchemaValidationContext*)>;
+
+  // Constructors are private and only friend classes are able to build /
+  // modify.
+  Index(const ValidationFn& validate, const UpdateValidationFn& validate_update)
+      : validate_(validate), validate_update_(validate_update) {}
   Index(const Index&) = default;
 
   std::unique_ptr<SchemaNode> ShallowClone() const override {
@@ -119,6 +129,11 @@ class Index : public SchemaNode {
 
   zetasql_base::Status DeepClone(SchemaGraphEditor* editor,
                          const SchemaNode* orig) override;
+
+  // Validation delegates.
+  const ValidationFn validate_;
+
+  const UpdateValidationFn validate_update_;
 
   // The name of this index.
   std::string name_;

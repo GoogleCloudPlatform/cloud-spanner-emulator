@@ -215,6 +215,12 @@ TEST_F(IndexTest, AllEntriesAreUniqueAndNullFiltered) {
       IsOkAndHoldsRows({{"", 1}, {"Adam", 0}, {"John", 3}, {"Matthew", 7}}));
 }
 
+TEST_F(IndexTest, ValidateKeyTooLargeFails) {
+  std::string long_name(8192, 'a');
+  EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"}, {1, long_name, 20}),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
 }  // namespace
 
 }  // namespace test

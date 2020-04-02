@@ -15,9 +15,12 @@
 //
 
 #include "google/spanner/v1/spanner.pb.h"
+#include "google/spanner/v1/transaction.pb.h"
 #include "common/errors.h"
+#include "frontend/entities/session.h"
 #include "frontend/server/handler.h"
 #include "zetasql/base/status.h"
+#include "zetasql/base/status_macros.h"
 
 namespace spanner_api = ::google::spanner::v1;
 
@@ -35,16 +38,29 @@ zetasql_base::Status ValidateTransactionSelectorForPartitionRead(
   switch (selector.selector_case()) {
     case spanner_api::TransactionSelector::SelectorCase::kBegin: {
       if (!selector.begin().has_read_only()) {
-        return error::PartitionReadOnlySupportsReadOnlyTransaction();
+        return error::PartitionReadNeedsReadOnlyTxn();
       }
       return zetasql_base::OkStatus();
     }
-    case spanner_api::TransactionSelector::SelectorCase::kId:
+    case spanner_api::TransactionSelector::SelectorCase::kId: {
       return zetasql_base::OkStatus();
+    }
     case spanner_api::TransactionSelector::SelectorCase::kSingleUse:
-    default:
       return error::PartitionReadDoesNotSupportSingleUseTransaction();
+    case spanner_api::TransactionSelector::SELECTOR_NOT_SET:
+      return error::MissingRequiredFieldError("TransactionSelector.selector");
   }
+}
+
+zetasql_base::Status ValidatePartitionOptions(
+    const spanner_api::PartitionOptions& partition_options) {
+  if (partition_options.partition_size_bytes() < 0) {
+    return error::InvalidBytesPerBatch("partition_options");
+  }
+  if (partition_options.max_partitions() < 0) {
+    return error::InvalidMaxPartitionCount("partition_options");
+  }
+  return zetasql_base::OkStatus();
 }
 
 }  //  namespace
@@ -63,7 +79,13 @@ zetasql_base::Status PartitionRead(RequestContext* ctx,
       ValidateTransactionSelectorForPartitionRead(request->transaction()));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
+  if (!txn->IsReadOnly()) {
+    return error::PartitionReadNeedsReadOnlyTxn();
+  }
 
+  if (request->has_partition_options()) {
+    ZETASQL_RETURN_IF_ERROR(ValidatePartitionOptions(request->partition_options()));
+  }
   return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented, "");
 }
 REGISTER_GRPC_HANDLER(Spanner, PartitionRead);
@@ -83,6 +105,9 @@ zetasql_base::Status PartitionQuery(RequestContext* ctx,
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
 
+  if (request->has_partition_options()) {
+    ZETASQL_RETURN_IF_ERROR(ValidatePartitionOptions(request->partition_options()));
+  }
   return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented, "");
 }
 REGISTER_GRPC_HANDLER(Spanner, PartitionQuery);

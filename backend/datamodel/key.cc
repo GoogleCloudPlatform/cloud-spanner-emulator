@@ -23,6 +23,38 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+namespace {
+
+// Returns the logical size in bytes of the given value.
+int64_t LogicalBytesInternal(const zetasql::Value& value) {
+  if (value.is_null()) {
+    return 2;
+  }
+  // TODO: Refactor this to account for physical not null vs
+  // logical not null keys. This causes a difference of 1 byte in the size.
+  switch (value.type_kind()) {
+    case zetasql::TYPE_BOOL:
+      return 1;
+    case zetasql::TYPE_DATE:
+      return 4;
+    case zetasql::TYPE_INT64:
+    case zetasql::TYPE_DOUBLE:
+      return 8;
+    case zetasql::TYPE_TIMESTAMP:
+      return 12;
+    case zetasql::TYPE_STRING:
+      return value.string_value().size();
+    case zetasql::TYPE_BYTES:
+      return value.bytes_value().size();
+    default:
+      // Key columns should have already been validated, so invalid key columns
+      // should not occur.
+      return 0;
+  }
+}
+
+}  // namespace
+
 Key::Key() {}
 
 Key::Key(std::vector<zetasql::Value> columns)
@@ -128,6 +160,14 @@ bool Key::IsPrefixOf(const Key& other) const {
 
   // If we reached here, all columns in *this match.
   return is_prefix_limit_ == other.is_prefix_limit_;
+}
+
+int64_t Key::LogicalSizeInBytes() const {
+  int64_t key_size = 0;
+  for (int i = 0; i < NumColumns(); ++i) {
+    key_size += LogicalBytesInternal(ColumnValue(i));
+  }
+  return key_size;
 }
 
 std::string Key::DebugString() const {

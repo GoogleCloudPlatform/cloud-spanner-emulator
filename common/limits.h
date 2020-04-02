@@ -92,6 +92,9 @@ constexpr int kMaxStringColumnLength = (kMaxBytesColumnLength / 4);  // 2621440
 // pieces, each no larger than this limit.
 constexpr int64_t kMaxStreamingChunkSize = 1024 * 1024;  // 1 MB
 
+// Maximum size of a key in bytes.
+constexpr int kMaxKeySizeBytes = 8 * 1024;  // 8 KB
+
 }  // namespace limits
 }  // namespace emulator
 }  // namespace spanner

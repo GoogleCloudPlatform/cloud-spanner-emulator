@@ -64,7 +64,7 @@ zetasql_base::Status IndexEffector::Effect(const ActionContext* ctx,
                                    const InsertOp& op) const {
   // Compute the index key and column values.
   Row base_row = MakeRow(op.columns, op.values);
-  Key index_key = ComputeIndexKey(base_row, index_);
+  ZETASQL_ASSIGN_OR_RETURN(Key index_key, ComputeIndexKey(base_row, index_));
   ValueList index_values = ComputeIndexValues(base_row, index_);
   if (ShouldFilterIndexKey(index_, index_key)) {
     return zetasql_base::OkStatus();
@@ -89,7 +89,7 @@ zetasql_base::Status IndexEffector::Effect(const ActionContext* ctx,
   }
 
   // If a previous index entry existed, delete it.
-  Key old_index_key = ComputeIndexKey(base_row, index_);
+  ZETASQL_ASSIGN_OR_RETURN(Key old_index_key, ComputeIndexKey(base_row, index_));
   if (!ShouldFilterIndexKey(index_, old_index_key)) {
     ctx->effects()->Delete(index_->index_data_table(), old_index_key);
   }
@@ -98,7 +98,7 @@ zetasql_base::Status IndexEffector::Effect(const ActionContext* ctx,
   for (int i = 0; i < op.columns.size(); ++i) {
     base_row[op.columns[i]] = op.values[i];
   }
-  Key new_index_key = ComputeIndexKey(base_row, index_);
+  ZETASQL_ASSIGN_OR_RETURN(Key new_index_key, ComputeIndexKey(base_row, index_));
   ValueList index_values = ComputeIndexValues(base_row, index_);
   if (ShouldFilterIndexKey(index_, new_index_key)) {
     return zetasql_base::OkStatus();
@@ -122,7 +122,7 @@ zetasql_base::Status IndexEffector::Effect(const ActionContext* ctx,
   }
 
   // Compute the index key to delete.
-  Key index_key = ComputeIndexKey(base_row, index_);
+  ZETASQL_ASSIGN_OR_RETURN(Key index_key, ComputeIndexKey(base_row, index_));
   if (ShouldFilterIndexKey(index_, index_key)) {
     return zetasql_base::OkStatus();
   }

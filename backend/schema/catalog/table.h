@@ -123,7 +123,17 @@ class Table : public SchemaNode {
   class Editor;
 
  private:
-  Table() = default;
+  friend class TableValidator;
+
+  using ValidationFn =
+      std::function<zetasql_base::Status(const Table*, SchemaValidationContext*)>;
+  using UpdateValidationFn = std::function<zetasql_base::Status(
+      const Table*, const Table*, SchemaValidationContext*)>;
+
+  // Constructors are private and only friend classes are able to build /
+  // modify.
+  Table(const ValidationFn& validate, const UpdateValidationFn& validate_update)
+      : validate_(validate), validate_update_(validate_update) {}
   Table(const Table&) = default;
 
   std::unique_ptr<SchemaNode> ShallowClone() const override {
@@ -133,6 +143,11 @@ class Table : public SchemaNode {
 
   zetasql_base::Status DeepClone(SchemaGraphEditor* editor,
                          const SchemaNode* orig) override;
+
+  // Validation delegates.
+  const ValidationFn validate_;
+
+  const UpdateValidationFn validate_update_;
 
   // The name of this table.
   std::string name_;

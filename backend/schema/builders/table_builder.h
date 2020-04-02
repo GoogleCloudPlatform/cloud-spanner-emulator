@@ -27,6 +27,7 @@
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/updater/schema_validation_context.h"
+#include "backend/schema/validators/table_validator.h"
 
 namespace google {
 namespace spanner {
@@ -35,7 +36,9 @@ namespace backend {
 
 class Table::Builder {
  public:
-  Builder() : instance_(absl::WrapUnique(new Table())) {}
+  Builder()
+      : instance_(absl::WrapUnique(new Table(
+            TableValidator::Validate, TableValidator::ValidateUpdate))) {}
 
   std::unique_ptr<const Table> build() { return std::move(instance_); }
 

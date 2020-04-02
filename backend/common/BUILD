@@ -58,6 +58,10 @@ cc_library(
         "//backend/datamodel:key",
         "//backend/datamodel:value",
         "//backend/schema/catalog:schema",
+        "//common:errors",
+        "//common:limits",
+        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )

@@ -16,12 +16,29 @@
 
 #include "backend/common/indexing.h"
 
+#include "common/errors.h"
+#include "common/limits.h"
+#include "zetasql/base/status_macros.h"
+
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
 
-Key ComputeIndexKey(const Row& base_row, const Index* index) {
+namespace {
+
+zetasql_base::Status ValidateKeySizeForIndex(const Index* index, const Key& key) {
+  int64_t key_size = key.LogicalSizeInBytes();
+  if (key_size > limits::kMaxKeySizeBytes) {
+    return error::IndexKeyTooLarge(index->Name(), key_size,
+                                   limits::kMaxKeySizeBytes);
+  }
+  return zetasql_base::OkStatus();
+}
+
+}  // namespace
+
+zetasql_base::StatusOr<Key> ComputeIndexKey(const Row& base_row, const Index* index) {
   // Columns must be added to the key for each column in index data table
   // primary key.
   Key key;
@@ -30,6 +47,7 @@ Key ComputeIndexKey(const Row& base_row, const Index* index) {
         GetColumnValueOrNull(base_row, key_column->column()->source_column()),
         key_column->is_descending());
   }
+  ZETASQL_RETURN_IF_ERROR(ValidateKeySizeForIndex(index, key));
   return key;
 }
 

@@ -157,8 +157,7 @@ Limitations during the beta (will be removed at version 1.0.0):
   are not supported.
 
 - Untyped parameter bindings (used by client libraries written in languages with
-  dynamic typing) and commit timestamp values in bound parameters are not
-  supported.
+  dynamic typing) are not supported.
 
 - Foreign keys are not supported.
 

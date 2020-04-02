@@ -449,6 +449,12 @@ zetasql_base::Status PartitionReadOnlySupportsReadOnlyTransaction() {
                       "Partition reads can only be used to perform reads.");
 }
 
+zetasql_base::Status PartitionReadNeedsReadOnlyTxn() {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      "Partitioned reads can only be performed in a read-only transaction.");
+}
+
 zetasql_base::Status CannotCommitRollbackReadOnlyTransaction() {
   return zetasql_base::Status(zetasql_base::StatusCode::kFailedPrecondition,
                       "Cannot commit or rollback a read-only transaction.");
@@ -1075,6 +1081,23 @@ zetasql_base::Status NonNullValueNotSpecifiedForInsert(absl::string_view table_n
           table_name, column_name));
 }
 
+zetasql_base::Status KeyTooLarge(absl::string_view table_name, int64_t key_size,
+                         int64_t max_key_size) {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      absl::Substitute("Number of bytes for key of table $0 is $1 which "
+                       "exceeds the maximum of $2.",
+                       table_name, key_size, max_key_size));
+}
+
+zetasql_base::Status IndexKeyTooLarge(absl::string_view index_name, int64_t key_size,
+                              int64_t max_key_size) {
+  return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+                      absl::Substitute("Number of bytes for key of index $0 is "
+                                       "$1 which exceeds the maximum of $2.",
+                                       index_name, key_size, max_key_size));
+}
+
 zetasql_base::Status InvalidStringEncoding(absl::string_view table_name,
                                    absl::string_view column_name) {
   return zetasql_base::Status(
@@ -1202,6 +1225,22 @@ zetasql_base::Status InvalidHintForNode(absl::string_view hint_string,
   return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
                       absl::Substitute("$0 hint is only supported for $1.",
                                        hint_string, supported_node));
+}
+
+// Partition Read errors.
+zetasql_base::Status InvalidBytesPerBatch(absl::string_view message_name) {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      absl::Substitute("Invalid $0: bytes per batch must be greater than zero.",
+                       message_name));
+}
+
+zetasql_base::Status InvalidMaxPartitionCount(absl::string_view message_name) {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Invalid $0: max partition count must be greater than zero.",
+          message_name));
 }
 
 }  // namespace error

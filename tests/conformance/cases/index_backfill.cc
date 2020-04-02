@@ -168,6 +168,14 @@ TEST_F(IndexBackfillTest, ValidateNullFilteringDoesNotApplyToStoredColumns) {
           {{"user1", 20}, {"user2", 30}, {"user2", Null<int64_t>()}}));
 }
 
+TEST_F(IndexBackfillTest, CannotBackfillIndexWithLargeKey) {
+  std::string long_name(8192, 'a');
+  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age"}, {1, long_name, 20}));
+
+  EXPECT_THAT(UpdateSchema({"CREATE INDEX UsersByName ON Users(Name)"}),
+              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+}
+
 }  // namespace
 
 }  // namespace test
