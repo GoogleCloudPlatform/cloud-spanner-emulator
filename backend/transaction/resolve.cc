@@ -18,6 +18,7 @@
 
 #include <vector>
 
+#include "absl/strings/match.h"
 #include "backend/common/case.h"
 #include "backend/common/rows.h"
 #include "backend/datamodel/key_set.h"
@@ -94,7 +95,8 @@ zetasql_base::StatusOr<std::vector<absl::optional<int>>> ExtractPrimaryKeyIndice
     int i = 0;
     for (; i < columns.size(); ++i) {
       // Column names are case-insensitive in Cloud Spanner.
-      if (zetasql_base::CaseEqual(key_column->column()->Name(), columns[i]->Name())) {
+      if (absl::EqualsIgnoreCase(key_column->column()->Name(),
+                                 columns[i]->Name())) {
         key_indices.push_back(i);
         break;
       }

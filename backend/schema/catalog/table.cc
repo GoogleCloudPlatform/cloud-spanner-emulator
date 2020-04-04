@@ -20,7 +20,6 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
 #include "zetasql/base/status.h"
-#include "zetasql/base/case.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/substitute.h"

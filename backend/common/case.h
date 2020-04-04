@@ -21,7 +21,8 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "zetasql/base/case.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
 
 namespace google {
 namespace spanner {
@@ -66,7 +67,7 @@ struct CaseInsensistiveHash {
 // comparison on strings.
 struct CaseInsensitiveEqual {
   bool operator()(const std::string& left, const std::string& right) const {
-    return zetasql_base::CaseEqual(left, right);
+    return absl::EqualsIgnoreCase(left, right);
   }
 };
 

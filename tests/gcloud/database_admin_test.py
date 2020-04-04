@@ -98,18 +98,33 @@ class GCloudDatabaseAdminTest(emulator.TestCase):
         self.JoinLines(
             'name: projects/test-project/instances/test-instance/'
             'databases/test-database', 'state: READY'))
-    # Describe the DDL
-    self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'ddl', 'describe',
-                       'test-database', '--instance=test-instance'),
-        self.JoinLines(
-            # pyformat: disable
-            'CREATE TABLE mytable (',
-            '  a INT64,',
-            '  b INT64,',
-            ') PRIMARY KEY(a);'
-            # pyformat: enable
-        ))
+
+    # TODO : Remove version check after GCloud version is updated.
+    if self.GCloudVersion() <= 287:
+      self.assertEqual(
+          self.RunGCloud('spanner', 'databases', 'ddl', 'describe',
+                         'test-database', '--instance=test-instance'),
+          self.JoinLines(
+              # pyformat: disable
+              '--- |-',
+              '  CREATE TABLE mytable (',
+              '    a INT64,',
+              '    b INT64,',
+              '  ) PRIMARY KEY(a)'
+              # pyformat: enable
+          ))
+    else:
+      self.assertEqual(
+          self.RunGCloud('spanner', 'databases', 'ddl', 'describe',
+                         'test-database', '--instance=test-instance'),
+          self.JoinLines(
+              # pyformat: disable
+              'CREATE TABLE mytable (',
+              '  a INT64,',
+              '  b INT64,',
+              ') PRIMARY KEY(a);'
+              # pyformat: enable
+          ))
 
   def testCreateDatabaseAndGetDatabaseDDL(self):
     # Create an instance.
@@ -130,22 +145,41 @@ class GCloudDatabaseAdminTest(emulator.TestCase):
         self.JoinLines(
             'name: projects/test-project/instances/test-instance/'
             'databases/test-database', 'state: READY'))
-    # Describe the DDL
-    self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'ddl', 'describe',
-                       'test-database', '--instance=test-instance'),
-        self.JoinLines(
-            # pyformat: disable
-            'CREATE TABLE mytable (',
-            '  a INT64,',
-            '  b INT64,',
-            '  c STRING(256),',
-            '  d TIMESTAMP OPTIONS (',
-            '    allow_commit_timestamp = true',
-            '  ),',
-            ') PRIMARY KEY(a, b);'
-            # pyformat: enable
-        ))
+
+    # TODO : Remove version check after GCloud version is updated.
+    if self.GCloudVersion() <= 287:
+      self.assertEqual(
+          self.RunGCloud('spanner', 'databases', 'ddl', 'describe',
+                         'test-database', '--instance=test-instance'),
+          self.JoinLines(
+              # pyformat: disable
+              '--- |-',
+              '  CREATE TABLE mytable (',
+              '    a INT64,',
+              '    b INT64,',
+              '    c STRING(256),',
+              '    d TIMESTAMP OPTIONS (',
+              '      allow_commit_timestamp = true',
+              '    ),',
+              '  ) PRIMARY KEY(a, b)'
+              # pyformat: enable
+          ))
+    else:
+      self.assertEqual(
+          self.RunGCloud('spanner', 'databases', 'ddl', 'describe',
+                         'test-database', '--instance=test-instance'),
+          self.JoinLines(
+              # pyformat: disable
+              'CREATE TABLE mytable (',
+              '  a INT64,',
+              '  b INT64,',
+              '  c STRING(256),',
+              '  d TIMESTAMP OPTIONS (',
+              '    allow_commit_timestamp = true',
+              '  ),',
+              ') PRIMARY KEY(a, b);'
+              # pyformat: enable
+          ))
 
     # TODO: Add a test that creates an index.
     # TODO: create tests for 'spanner databases ddl update'.

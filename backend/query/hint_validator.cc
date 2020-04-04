@@ -26,9 +26,8 @@
 #include "absl/container/flat_hash_set.h"
 #include "zetasql/base/status.h"
 #include "absl/strings/ascii.h"
-#include "zetasql/base/case.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
-#include "zetasql/base/case.h"
 #include "backend/common/case.h"
 #include "common/errors.h"
 
@@ -89,7 +88,7 @@ zetasql_base::Status HintValidator::ValidateHints(
     if (child_node->node_kind() == zetasql::RESOLVED_OPTION) {
       const zetasql::ResolvedOption* hint =
           child_node->GetAs<zetasql::ResolvedOption>();
-      if (zetasql_base::CaseEqual(hint->qualifier(), "spanner") ||
+      if (absl::EqualsIgnoreCase(hint->qualifier(), "spanner") ||
           hint->qualifier().empty()) {
         ZETASQL_RETURN_IF_ERROR(CheckHintName(hint->name(), node->node_kind()));
       }
@@ -171,35 +170,38 @@ zetasql_base::Status HintValidator::CheckHintValue(
   if (!value.type()->Equals(iter->second)) {
     return error::InvalidHintValue(name, value.DebugString());
   }
-  if (zetasql_base::CaseEqual(name, kHintForceIndex)) {
+  if (absl::EqualsIgnoreCase(name, kHintForceIndex)) {
     const std::string& string_value = value.string_value();
     // Statement-level FORCE_INDEX hints can only be '_BASE_TABLE'.
     if (node_kind == zetasql::RESOLVED_QUERY_STMT &&
-        !zetasql_base::CaseEqual(string_value, "_BASE_TABLE")) {
+        !absl::EqualsIgnoreCase(string_value, "_BASE_TABLE")) {
       return error::InvalidStatementHintValue(name, value.DebugString());
     }
     if (schema_->FindIndex(string_value) == nullptr &&
-        !zetasql_base::CaseEqual(string_value, "_BASE_TABLE")) {
+        !absl::EqualsIgnoreCase(string_value, "_BASE_TABLE")) {
       return error::InvalidHintValue(name, value.DebugString());
     }
-  } else if (zetasql_base::CaseEqual(name, kHintJoinMethod) ||
-             zetasql_base::CaseEqual(name, kHintJoinTypeDeprecated)) {
+  } else if (absl::EqualsIgnoreCase(name, kHintJoinMethod) ||
+             absl::EqualsIgnoreCase(name, kHintJoinTypeDeprecated)) {
     const std::string& string_value = value.string_value();
-    if (!(zetasql_base::CaseEqual(string_value, kHintJoinTypeApply) ||
-          zetasql_base::CaseEqual(string_value, kHintJoinTypeHash) ||
-          zetasql_base::CaseEqual(string_value, kHintJoinTypeNestedLoopDeprecated))) {
+    if (!(absl::EqualsIgnoreCase(string_value, kHintJoinTypeApply) ||
+          absl::EqualsIgnoreCase(string_value, kHintJoinTypeHash) ||
+          absl::EqualsIgnoreCase(string_value,
+                                 kHintJoinTypeNestedLoopDeprecated))) {
       return error::InvalidHintValue(name, value.DebugString());
     }
-  } else if (zetasql_base::CaseEqual(name, kHashJoinBuildSide)) {
+  } else if (absl::EqualsIgnoreCase(name, kHashJoinBuildSide)) {
     bool is_hash_join = [&]() {
       auto it = hint_map.find(kHintJoinMethod);
       if (it != hint_map.end() &&
-          zetasql_base::CaseEqual(it->second.string_value(), kHintJoinTypeHash)) {
+          absl::EqualsIgnoreCase(it->second.string_value(),
+                                 kHintJoinTypeHash)) {
         return true;
       }
       it = hint_map.find(kHintJoinTypeDeprecated);
       if (it != hint_map.end() &&
-          zetasql_base::CaseEqual(it->second.string_value(), kHintJoinTypeHash)) {
+          absl::EqualsIgnoreCase(it->second.string_value(),
+                                 kHintJoinTypeHash)) {
         return true;
       }
       return false;
@@ -208,15 +210,15 @@ zetasql_base::Status HintValidator::CheckHintValue(
       return error::InvalidHintForNode(kHashJoinBuildSide, "HASH joins");
     }
     const std::string& string_value = value.string_value();
-    if (!(zetasql_base::CaseEqual(string_value, kHashJoinBuildSideLeft) ||
-          zetasql_base::CaseEqual(string_value, kHashJoinBuildSideRight))) {
+    if (!(absl::EqualsIgnoreCase(string_value, kHashJoinBuildSideLeft) ||
+          absl::EqualsIgnoreCase(string_value, kHashJoinBuildSideRight))) {
       return error::InvalidHintValue(name, value.DebugString());
     }
-  } else if (zetasql_base::CaseEqual(name, kHintGroupMethod) ||
-             zetasql_base::CaseEqual(name, kHintGroupTypeDeprecated)) {
+  } else if (absl::EqualsIgnoreCase(name, kHintGroupMethod) ||
+             absl::EqualsIgnoreCase(name, kHintGroupTypeDeprecated)) {
     const std::string& string_value = value.string_value();
-    if (!(zetasql_base::CaseEqual(string_value, kHintGroupMethodHash) ||
-          zetasql_base::CaseEqual(string_value, kHintGroupMethodStream))) {
+    if (!(absl::EqualsIgnoreCase(string_value, kHintGroupMethodHash) ||
+          absl::EqualsIgnoreCase(string_value, kHintGroupMethodStream))) {
       return error::InvalidHintValue(name, value.DebugString());
     }
   }

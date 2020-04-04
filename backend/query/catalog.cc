@@ -18,7 +18,7 @@
 
 #include "zetasql/public/function.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/case.h"
+#include "absl/strings/match.h"
 #include "backend/access/read.h"
 #include "backend/query/function_catalog.h"
 #include "backend/query/information_schema_catalog.h"
@@ -43,7 +43,7 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
 zetasql_base::Status Catalog::GetCatalog(const std::string& name,
                                  zetasql::Catalog** catalog,
                                  const FindOptions& options) {
-  if (zetasql_base::CaseEqual(name, InformationSchemaCatalog::kName)) {
+  if (absl::EqualsIgnoreCase(name, InformationSchemaCatalog::kName)) {
     *catalog = GetInformationSchemaCatalog();
   } else {
     *catalog = nullptr;

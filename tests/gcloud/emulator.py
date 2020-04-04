@@ -19,6 +19,7 @@
 import json
 import os
 import os.path
+import re
 import signal
 import subprocess
 import time
@@ -49,6 +50,16 @@ class TestCase(unittest.TestCase):
           os.environ.get('TEST_UNDECLARED_OUTPUTS_DIR'), '.config', 'gcloud')
     return subprocess.check_output(
         (GCLOUD_BINARY,) + args, env=env, universal_newlines=True).strip()
+
+  def GCloudVersion(self):
+    # Get the current installed version e.g., Google Cloud SDK 287.0.0.
+    version_str = self.RunGCloud('version').splitlines()[0]
+    try:
+      version = re.search(r'Google Cloud SDK (.+?)\.\d\.\d$',
+                          version_str).group(1)
+      return int(version)
+    except AttributeError:
+      return 10000
 
   def JoinLines(self, *lines):
     return '\n'.join(lines)

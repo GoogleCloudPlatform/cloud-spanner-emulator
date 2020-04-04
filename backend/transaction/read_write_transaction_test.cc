@@ -25,7 +25,6 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "zetasql/base/status.h"
-#include "zetasql/base/case.h"
 #include "absl/time/time.h"
 #include "backend/access/write.h"
 #include "backend/actions/manager.h"
