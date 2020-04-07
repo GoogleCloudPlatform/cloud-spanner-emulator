@@ -47,7 +47,7 @@ echo "Building version " ${EMULATOR_VERSION}
 IMAGE_LOCAL_TAG=emulator:${USER}-${EMULATOR_VERSION}
 
 docker-credential-gcr configure-docker
-docker-credential-gcr gcr-login
+# On GCE, gcr-login not needed.
 
 if [[ "${CLOUD_SPANNER_EMULATOR_MOCK_BUILD}" == true ]]; then
   docker build -t ${IMAGE_LOCAL_TAG} -<<EOF
