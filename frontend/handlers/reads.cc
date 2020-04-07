@@ -120,17 +120,19 @@ zetasql_base::Status StreamingRead(
     std::unique_ptr<backend::RowCursor> cursor;
     ZETASQL_RETURN_IF_ERROR(txn->Read(read_arg, &cursor));
 
+    // Convert read results to protos.
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::vector<spanner_api::PartialResultSet> responses,
+        RowCursorToPartialResultSetProtos(cursor.get(), request->limit()));
+
     // Populate transaction metadata.
-    spanner_api::PartialResultSet response;
     ZETASQL_RETURN_IF_ERROR(txn->MaybeFillTransactionMetadata(
-        request->transaction(), response.mutable_metadata()));
+        request->transaction(), responses.front().mutable_metadata()));
 
-    // Convert read results to proto.
-    ZETASQL_RETURN_IF_ERROR(RowCursorToPartialResultSetProto(
-        cursor.get(), request->limit(), &response));
-
-    // Send result back to client.
-    stream->Send(response);
+    // Send results back to client.
+    for (const auto& response : responses) {
+      stream->Send(response);
+    }
     return zetasql_base::OkStatus();
   });
 }

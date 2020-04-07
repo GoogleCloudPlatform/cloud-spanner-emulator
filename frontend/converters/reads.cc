@@ -33,6 +33,8 @@
 #include "backend/schema/catalog/table.h"
 #include "backend/transaction/options.h"
 #include "common/errors.h"
+#include "common/limits.h"
+#include "frontend/converters/chunking.h"
 #include "frontend/converters/keys.h"
 #include "frontend/converters/time.h"
 #include "frontend/converters/types.h"
@@ -184,25 +186,11 @@ zetasql_base::Status RowCursorToResultSetProto(backend::RowCursor* cursor, int l
   return zetasql_base::OkStatus();
 }
 
-zetasql_base::Status RowCursorToPartialResultSetProto(
-    backend::RowCursor* cursor, int limit,
-    spanner_api::PartialResultSet* result_pb) {
-  ZETASQL_RETURN_IF_ERROR(
-      ResultSetMetadataToProto(cursor, result_pb->mutable_metadata()));
-
-  // Iterate over all rows and populate column values into PartialResultSet.
-  int row_count = 0;
-  while (cursor->Next()) {
-    for (int i = 0; i < cursor->NumColumns(); ++i) {
-      ZETASQL_ASSIGN_OR_RETURN(*result_pb->add_values(),
-                       ValueToProto(cursor->ColumnValue(i)));
-    }
-    ++row_count;
-    if (limit > 0 && limit == row_count) {
-      break;
-    }
-  }
-  return zetasql_base::OkStatus();
+zetasql_base::StatusOr<std::vector<spanner_api::PartialResultSet>>
+RowCursorToPartialResultSetProtos(backend::RowCursor* cursor, int limit) {
+  spanner_api::ResultSet result_set;
+  ZETASQL_RETURN_IF_ERROR(RowCursorToResultSetProto(cursor, limit, &result_set));
+  return ChunkResultSet(result_set, limits::kMaxStreamingChunkSize);
 }
 
 }  // namespace frontend

@@ -206,50 +206,50 @@ TEST_F(AccessProtosTest, CanConvertRowCursorToPartialResultSet) {
        {Int64(2), Bool(true), Double(0.0), String(""), NullString()},
        {Int64(3), Bool(false), Double(-9.999), String("Key:Value"),
         NullString()}});
-  PartialResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToPartialResultSetProto(&cursor, 0, &result_pb));
+  std::vector<PartialResultSet> results;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
 
-  EXPECT_THAT(result_pb, test::EqualsProto(
-                             R"(metadata {
-                                  row_type {
-                                    fields {
-                                      name: "int64"
-                                      type { code: INT64 }
-                                    }
-                                    fields {
-                                      name: "bool"
-                                      type { code: BOOL }
-                                    }
-                                    fields {
-                                      name: "double"
-                                      type { code: FLOAT64 }
-                                    }
-                                    fields {
-                                      name: "string"
-                                      type { code: STRING }
-                                    }
-                                    fields {
-                                      name: "string"
-                                      type { code: STRING }
-                                    }
-                                  }
-                                }
-                                values { string_value: "1" }
-                                values { bool_value: true }
-                                values { number_value: 1.234 }
-                                values { string_value: "Test" }
-                                values { null_value: NULL_VALUE }
-                                values { string_value: "2" }
-                                values { bool_value: true }
-                                values { number_value: 0 }
-                                values { string_value: "" }
-                                values { null_value: NULL_VALUE }
-                                values { string_value: "3" }
-                                values { bool_value: false }
-                                values { number_value: -9.999 }
-                                values { string_value: "Key:Value" }
-                                values { null_value: NULL_VALUE }
-                             )"));
+  EXPECT_THAT(results[0], test::EqualsProto(
+                              R"(metadata {
+                                   row_type {
+                                     fields {
+                                       name: "int64"
+                                       type { code: INT64 }
+                                     }
+                                     fields {
+                                       name: "bool"
+                                       type { code: BOOL }
+                                     }
+                                     fields {
+                                       name: "double"
+                                       type { code: FLOAT64 }
+                                     }
+                                     fields {
+                                       name: "string"
+                                       type { code: STRING }
+                                     }
+                                     fields {
+                                       name: "string"
+                                       type { code: STRING }
+                                     }
+                                   }
+                                 }
+                                 values { string_value: "1" }
+                                 values { bool_value: true }
+                                 values { number_value: 1.234 }
+                                 values { string_value: "Test" }
+                                 values { null_value: NULL_VALUE }
+                                 values { string_value: "2" }
+                                 values { bool_value: true }
+                                 values { number_value: 0 }
+                                 values { string_value: "" }
+                                 values { null_value: NULL_VALUE }
+                                 values { string_value: "3" }
+                                 values { bool_value: false }
+                                 values { number_value: -9.999 }
+                                 values { string_value: "Key:Value" }
+                                 values { null_value: NULL_VALUE }
+                              )"));
 }
 
 TEST_F(AccessProtosTest, CanConvertRowCursorToPartialResultSetWithLimit) {
@@ -260,40 +260,40 @@ TEST_F(AccessProtosTest, CanConvertRowCursorToPartialResultSetWithLimit) {
        {Int64(2), Bool(true), Double(0.0), String(""), NullString()},
        {Int64(3), Bool(false), Double(-9.999), String("Key:Value"),
         NullString()}});
-  PartialResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToPartialResultSetProto(&cursor, 1, &result_pb));
+  std::vector<PartialResultSet> results;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
 
-  EXPECT_THAT(result_pb, test::EqualsProto(
-                             R"(metadata {
-                                  row_type {
-                                    fields {
-                                      name: "int64"
-                                      type { code: INT64 }
-                                    }
-                                    fields {
-                                      name: "bool"
-                                      type { code: BOOL }
-                                    }
-                                    fields {
-                                      name: "double"
-                                      type { code: FLOAT64 }
-                                    }
-                                    fields {
-                                      name: "string"
-                                      type { code: STRING }
-                                    }
-                                    fields {
-                                      name: "string"
-                                      type { code: STRING }
-                                    }
-                                  }
-                                }
-                                values { string_value: "1" }
-                                values { bool_value: true }
-                                values { number_value: 1.234 }
-                                values { string_value: "Test" }
-                                values { null_value: NULL_VALUE }
-                             )"));
+  EXPECT_THAT(results[0], test::EqualsProto(
+                              R"(metadata {
+                                   row_type {
+                                     fields {
+                                       name: "int64"
+                                       type { code: INT64 }
+                                     }
+                                     fields {
+                                       name: "bool"
+                                       type { code: BOOL }
+                                     }
+                                     fields {
+                                       name: "double"
+                                       type { code: FLOAT64 }
+                                     }
+                                     fields {
+                                       name: "string"
+                                       type { code: STRING }
+                                     }
+                                     fields {
+                                       name: "string"
+                                       type { code: STRING }
+                                     }
+                                   }
+                                 }
+                                 values { string_value: "1" }
+                                 values { bool_value: true }
+                                 values { number_value: 1.234 }
+                                 values { string_value: "Test" }
+                                 values { null_value: NULL_VALUE }
+                              )"));
 }
 
 TEST_F(AccessProtosTest, CanConvertEmptyRowCursorToResultSet) {

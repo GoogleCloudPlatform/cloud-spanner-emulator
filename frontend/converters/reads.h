@@ -50,14 +50,15 @@ zetasql_base::Status RowCursorToResultSetProto(
     backend::RowCursor* cursor, int limit,
     google::spanner::v1::ResultSet* result_pb);
 
-// Converts a RowCursor to a PartialResultSet proto.
+// Converts a RowCursor to a set of one or more PartialResultSet protos.
 //
 // Only handles the types and values supported by Cloud Spanner. Invalid types
 // or values not supported by Cloud Spanner will return errors. If limit > 0,
-// will only convert first limit numbers of rows into result_pb.
-zetasql_base::Status RowCursorToPartialResultSetProto(
-    backend::RowCursor* cursor, int limit,
-    google::spanner::v1::PartialResultSet* result_pb);
+// will only convert first limit numbers of rows. If the results exceed the max
+// streaming chunk size for a given partial result set, it will be chunked into
+// multiple partial result sets.
+zetasql_base::StatusOr<std::vector<google::spanner::v1::PartialResultSet>>
+RowCursorToPartialResultSetProtos(backend::RowCursor* cursor, int limit);
 
 }  // namespace frontend
 }  // namespace emulator

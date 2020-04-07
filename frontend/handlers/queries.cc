@@ -181,24 +181,28 @@ zetasql_base::Status ExecuteStreamingSql(
                                     txn->query_engine()->type_factory()));
     ZETASQL_ASSIGN_OR_RETURN(backend::QueryResult result, txn->ExecuteSql(query));
 
-    spanner_api::PartialResultSet response;
-    ZETASQL_RETURN_IF_ERROR(txn->MaybeFillTransactionMetadata(
-        request->transaction(), response.mutable_metadata()));
+    std::vector<spanner_api::PartialResultSet> responses;
     if (IsDmlResult(result)) {
-      response.mutable_stats()->set_row_count_exact(result.modified_row_count);
+      responses.emplace_back();
+      responses.front().mutable_stats()->set_row_count_exact(
+          result.modified_row_count);
       // Set empty row type.
-      response.mutable_metadata()->mutable_row_type();
+      responses.front().mutable_metadata()->mutable_row_type();
     } else {
-      ZETASQL_RETURN_IF_ERROR(RowCursorToPartialResultSetProto(result.rows.get(),
-                                                       /*limit=*/0, &response));
+      ZETASQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
+                                      result.rows.get(), /*limit=*/0));
     }
+
+    // Populate transaction metadata.
+    ZETASQL_RETURN_IF_ERROR(txn->MaybeFillTransactionMetadata(
+        request->transaction(), responses.front().mutable_metadata()));
 
     // Add basic stats for PROFILE mode. We do this to interoperate with REPL
     // applications written for Cloud Spanner. The profile will not contain
     // statistics for plan nodes.
     if (request->query_mode() == spanner_api::ExecuteSqlRequest::PROFILE) {
       AddQueryStatsFromQueryResult(
-          result, response.mutable_stats()->mutable_query_stats());
+          result, responses.front().mutable_stats()->mutable_query_stats());
     }
 
     // Reject requests for PLAN mode. The emulator uses ZetaSQL reference
@@ -209,7 +213,10 @@ zetasql_base::Status ExecuteStreamingSql(
       return error::EmulatorDoesNotSupportQueryPlans();
     }
 
-    stream->Send(response);
+    // Send results back to client.
+    for (const auto& response : responses) {
+      stream->Send(response);
+    }
     return zetasql_base::OkStatus();
   });
 }
