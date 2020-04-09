@@ -46,8 +46,6 @@ echo "Building version " ${EMULATOR_VERSION}
 # It will be tagged with emulator:${USER}-${EMULATOR_VERSION} and sitting locally.
 IMAGE_LOCAL_TAG=emulator:${USER}-${EMULATOR_VERSION}
 
-docker-credential-gcr configure-docker
-# On GCE, gcr-login not needed.
 
 if [[ "${CLOUD_SPANNER_EMULATOR_MOCK_BUILD}" == true ]]; then
   docker build -t ${IMAGE_LOCAL_TAG} -<<EOF
@@ -57,6 +55,8 @@ RUN chmod +x gateway_main emulator_main
 CMD echo "Mocked Emulator"
 EOF
 else
+  # Activate our GCloud credentials with docker to allow GCR access.
+  yes | gcloud auth configure-docker
   docker build . -t ${IMAGE_LOCAL_TAG} -f build/docker/Dockerfile.ubuntu
 fi
 
