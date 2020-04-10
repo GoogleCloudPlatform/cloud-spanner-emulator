@@ -33,6 +33,7 @@ cc_library(
         "index_read_write.cc",
         "information_schema.cc",
         "interleaving.cc",
+        "large_reads.cc",
         "malformed_writes.cc",
         "multi_row_writes.cc",
         "operations.cc",

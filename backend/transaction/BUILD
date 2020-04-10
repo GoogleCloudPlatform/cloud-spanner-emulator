@@ -329,8 +329,12 @@ cc_test(
     srcs = ["flush_test.cc"],
     deps = [
         ":flush",
+        "//backend/actions:ops",
+        "//backend/storage:in_memory_storage",
         "//tests/common:proto_matchers",
+        "//tests/common:test_schema_constructor",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
