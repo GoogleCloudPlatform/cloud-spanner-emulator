@@ -24,6 +24,7 @@ and can be invoked via the [gcloud emulators](
 https://cloud.google.com/sdk/gcloud/reference/beta/emulators) command group:
 
 ```shell
+gcloud components update
 gcloud beta emulators spanner start
 ```
 
