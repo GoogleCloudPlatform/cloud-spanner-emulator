@@ -22,7 +22,7 @@ set -e
 # Account for in-Kokoro or not.
 if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
   # Switch to source root.
-  cd ${KOKORO_ARTIFACTS_DIR}/git/cloud-spanner-emulator
+  cd "${KOKORO_ARTIFACTS_DIR}"/git/cloud-spanner-emulator
   OUTPUT_DIR="${KOKORO_ARTIFACTS_DIR}"
 else
   OUTPUT_DIR=$(mktemp -d)
@@ -40,7 +40,7 @@ fi
 set -x
 EMULATOR_VERSION="${CLOUD_SPANNER_EMULATOR_RELEASE_TAG}"
 
-echo "Building version " ${EMULATOR_VERSION}
+echo "Building version " "${EMULATOR_VERSION}"
 
 # Create the Docker image that we want to include in the release.
 # It will be tagged with emulator:${USER}-${EMULATOR_VERSION} and sitting locally.
@@ -48,7 +48,7 @@ IMAGE_LOCAL_TAG=emulator:${USER}-${EMULATOR_VERSION}
 
 
 if [[ "${CLOUD_SPANNER_EMULATOR_MOCK_BUILD}" == true ]]; then
-  docker build -t ${IMAGE_LOCAL_TAG} -<<EOF
+  docker build -t "${IMAGE_LOCAL_TAG}" -<<EOF
 FROM busybox
 RUN echo "hello world" > gateway_main && echo "hello world" > emulator_main
 RUN chmod +x gateway_main emulator_main
@@ -57,18 +57,18 @@ EOF
 else
   # Activate our GCloud credentials with docker to allow GCR access.
   yes | gcloud auth configure-docker
-  docker build . -t ${IMAGE_LOCAL_TAG} -f build/docker/Dockerfile.ubuntu
+  docker build . -t "${IMAGE_LOCAL_TAG}" -f build/kokoro/gcp_ubuntu/Dockerfile.release
 fi
 
 # We need the image tar file to be in a directory of its own.
 IMAGE_DIR=${OUTPUT_DIR}/image
-mkdir -p ${IMAGE_DIR}
-docker save --output ${IMAGE_DIR}/emulator-docker-image.tar ${IMAGE_LOCAL_TAG}
+mkdir -p "${IMAGE_DIR}"
+docker save --output "${IMAGE_DIR}"/emulator-docker-image.tar ${IMAGE_LOCAL_TAG}
 
-container_id=$(docker create ${IMAGE_LOCAL_TAG})
-docker cp $container_id:/gateway_main $OUTPUT_DIR
-docker cp $container_id:/emulator_main $OUTPUT_DIR
-docker rm $container_id
+container_id=$(docker create "${IMAGE_LOCAL_TAG}")
+docker cp "$container_id":/gateway_main $OUTPUT_DIR
+docker cp "$container_id":/emulator_main $OUTPUT_DIR
+docker rm "$container_id"
 
-tar -C ${OUTPUT_DIR} -czf ${OUTPUT_DIR}/cloud-spanner-emulator-linux_amd64-${EMULATOR_VERSION}.tar.gz gateway_main emulator_main
+tar -C "${OUTPUT_DIR}" -czf "${OUTPUT_DIR}"/cloud-spanner-emulator-linux_amd64-"${EMULATOR_VERSION}".tar.gz gateway_main emulator_main
 

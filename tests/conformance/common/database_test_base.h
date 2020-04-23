@@ -253,9 +253,15 @@ class DatabaseTest : public ::testing::Test {
     Timestamp read_timestamp;
   };
 
-  // Returns a matcher for a set of rows returned by the client library.
+  // Returns a matcher for a set of rows returned by client library.
   auto IsOkAndHoldsRows(const std::vector<ValueRow>& rows) {
     return zetasql_base::testing::IsOkAndHolds(testing::ElementsAreArray(rows));
+  }
+
+  // Returns a matcher for an unordered set of rows returned by client library.
+  auto IsOkAndHoldsUnorderedRows(const std::vector<ValueRow>& rows) {
+    return zetasql_base::testing::IsOkAndHolds(
+        testing::UnorderedElementsAreArray(rows));
   }
 
   // Same as above, but used when there is only one row.
@@ -397,6 +403,20 @@ class DatabaseTest : public ::testing::Test {
     return ToUtilStatusOr(client().PartitionRead(
         std::move(txn), std::move(table), std::move(key_set),
         std::move(columns), read_options, partition_options));
+  }
+
+  // Read all the partitions returned by PartitionRead.
+  zetasql_base::StatusOr<std::vector<ValueRow>> Read(
+      std::vector<ReadPartition> partitions) {
+    std::vector<ValueRow> rows;
+    for (const auto& partition : partitions) {
+      auto result = client().Read(std::move(partition));
+      ZETASQL_ASSIGN_OR_RETURN(auto read_result, ProcessRowStreamForReadResult(result));
+      for (const auto& row : read_result.values) {
+        rows.push_back(row);
+      }
+    }
+    return rows;
   }
 
   // Run a SQL query with the given bound parameters and return the results.

@@ -39,7 +39,10 @@
 #include "frontend/converters/time.h"
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
+#include "frontend/proto/partition_token.pb.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -83,6 +86,57 @@ zetasql_base::Status ValidateExactReadTimestamp(absl::Time exact_read_timestamp)
   if (timestamp < 0 || timestamp == std::numeric_limits<int64_t>::max()) {
     return error::InvalidExactReadTimestamp(exact_read_timestamp);
   }
+  return zetasql_base::OkStatus();
+}
+
+zetasql_base::StatusOr<PartitionToken> PartitionTokenFromString(
+    const std::string& token) {
+  std::string binary_string;
+  if (!absl::WebSafeBase64Unescape(token, &binary_string)) {
+    return error::InvalidPartitionToken();
+  }
+
+  PartitionToken partition_token;
+  if (!partition_token.ParseFromString(binary_string)) {
+    return error::InvalidPartitionToken();
+  }
+  return partition_token;
+}
+
+zetasql_base::Status ValidatePartitionToken(
+    const PartitionToken& partition_token,
+    const google::spanner::v1::ReadRequest& request) {
+  if (partition_token.session() != request.session()) {
+    return error::ReadFromDifferentSession();
+  }
+
+  if (request.transaction().selector_case() != v1::TransactionSelector::kId ||
+      partition_token.transaction_id() != request.transaction().id()) {
+    return error::ReadFromDifferentTransaction();
+  }
+
+  if (!partition_token.has_read_params()) {
+    return error::ReadFromDifferentParameters();
+  }
+  auto read_params = partition_token.read_params();
+
+  if (read_params.table() != request.table() ||
+      read_params.index() != request.index() ||
+      read_params.columns_size() != request.columns_size()) {
+    return error::ReadFromDifferentParameters();
+  }
+
+  for (int i = 0; i < request.columns_size(); i++) {
+    if (read_params.columns(i) != request.columns(i)) {
+      return error::ReadFromDifferentParameters();
+    }
+  }
+
+  if (read_params.key_set().SerializeAsString() !=
+      request.key_set().SerializeAsString()) {
+    return error::ReadFromDifferentParameters();
+  }
+
   return zetasql_base::OkStatus();
 }
 
@@ -142,6 +196,20 @@ zetasql_base::Status ReadArgFromProto(const backend::Schema& schema,
   if (request.table().empty()) {
     return error::MutationTableRequired();
   }
+  if (request.limit() < 0) {
+    return error::InvalidReadLimit();
+  }
+  if (request.limit() > 0 && !request.partition_token().empty()) {
+    return error::InvalidReadLimitWithPartitionToken();
+  }
+
+  auto key_set = request.key_set();
+  if (!request.partition_token().empty()) {
+    ZETASQL_ASSIGN_OR_RETURN(auto partition_token,
+                     PartitionTokenFromString(request.partition_token()));
+    ZETASQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
+    key_set = partition_token.partitioned_key_set();
+  }
 
   read_arg->table = request.table();
   read_arg->index = request.index();
@@ -159,9 +227,18 @@ zetasql_base::Status ReadArgFromProto(const backend::Schema& schema,
     table = index->index_data_table();
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(read_arg->key_set,
-                   KeySetFromProto(request.key_set(), *table));
+  ZETASQL_ASSIGN_OR_RETURN(read_arg->key_set, KeySetFromProto(key_set, *table));
   return zetasql_base::OkStatus();
+}
+
+zetasql_base::StatusOr<std::string> PartitionTokenToString(
+    const PartitionToken& partition_token) {
+  std::string binary_string, token_string;
+  ZETASQL_RET_CHECK(partition_token.SerializeToString(&binary_string))
+      << absl::Substitute("Failed to serialize proto: $0",
+                          partition_token.ShortDebugString());
+  absl::WebSafeBase64Escape(binary_string, &token_string);
+  return token_string;
 }
 
 zetasql_base::Status RowCursorToResultSetProto(backend::RowCursor* cursor, int limit,

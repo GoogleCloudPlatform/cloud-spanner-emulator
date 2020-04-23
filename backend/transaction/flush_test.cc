@@ -37,7 +37,8 @@ using zetasql::values::String;
 class FlushTest : public testing::Test {
  public:
   FlushTest()
-      : type_factory_(absl::make_unique<zetasql::TypeFactory>()),
+      : storage_(absl::make_unique<InMemoryStorage>()),
+        type_factory_(absl::make_unique<zetasql::TypeFactory>()),
         schema_(test::CreateSchemaFromDDL(
                     {
                         R"(
@@ -53,40 +54,55 @@ class FlushTest : public testing::Test {
         string_col_(table_->FindColumn("StringCol")) {}
 
  protected:
-  InMemoryStorage base_storage_;
+  std::unique_ptr<InMemoryStorage> storage_;
+
+  // The type factory must outlive the type objects that it has made.
   std::unique_ptr<zetasql::TypeFactory> type_factory_;
   std::unique_ptr<const Schema> schema_;
+
+  // Constants
   const Table* table_;
   const Column* int64_col_;
   const Column* string_col_;
+
+  // Helper functions to use in tests.
+  zetasql_base::Status Write(absl::Time timestamp, const Key& key,
+                     const ValueList& values) {
+    return storage_->Write(timestamp, table_->id(), key,
+                           {int64_col_->id(), string_col_->id()}, values);
+  }
+
+  zetasql_base::StatusOr<std::vector<ValueList>> ReadAll(absl::Time timestamp) {
+    std::unique_ptr<StorageIterator> itr;
+    ZETASQL_RETURN_IF_ERROR(storage_->Read(timestamp, table_->id(), KeyRange::All(),
+                                   {int64_col_->id(), string_col_->id()},
+                                   &itr));
+
+    std::vector<ValueList> rows;
+    while (itr->Next()) {
+      rows.emplace_back();
+      for (int i = 0; i < itr->NumColumns(); i++) {
+        rows.back().push_back(itr->ColumnValue(i));
+      }
+    }
+    return rows;
+  }
+
+  auto IsOkAndHoldsRows(const std::vector<ValueList>& rows) {
+    return zetasql_base::testing::IsOkAndHolds(testing::ElementsAreArray(rows));
+  }
 };
 
 TEST_F(FlushTest, CanFlushWriteOpsToStorage) {
   absl::Time t0 = absl::Now();
 
   // Insert - {1, "value"}, {2, "value"}
-  ZETASQL_ASSERT_OK(base_storage_.Write(t0, table_->id(), Key({Int64(1)}),
-                                {int64_col_->id(), string_col_->id()},
-                                {Int64(1), String("value")}));
-  ZETASQL_ASSERT_OK(base_storage_.Write(t0, table_->id(), Key({Int64(2)}),
-                                {int64_col_->id(), string_col_->id()},
-                                {Int64(2), String("value")}));
+  ZETASQL_ASSERT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value")}));
+  ZETASQL_ASSERT_OK(Write(t0, Key({Int64(2)}), {Int64(2), String("value")}));
 
   // Make sure we can read back the rows written to base storage.
-  {
-    std::unique_ptr<StorageIterator> itr;
-    ZETASQL_ASSERT_OK(base_storage_.Read(t0, table_->id(), KeyRange::All(),
-                                 {int64_col_->id(), string_col_->id()}, &itr));
-    std::vector<std::pair<int64_t, std::string>> rows_read;
-    while (itr->Next()) {
-      ASSERT_EQ(itr->NumColumns(), 2);
-      rows_read.push_back({itr->ColumnValue(0).int64_value(),
-                           itr->ColumnValue(1).string_value()});
-    }
-    std::vector<std::pair<int64_t, std::string>> rows_expected{{1, "value"},
-                                                             {2, "value"}};
-    EXPECT_EQ(rows_read, rows_expected);
-  }
+  EXPECT_THAT(ReadAll(t0), IsOkAndHoldsRows({{Int64(1), String("value")},
+                                             {Int64(2), String("value")}}));
 
   // Update base storage by flushing write ops at a later timestamp.
   absl::Time t1 = t0 + absl::Seconds(1);
@@ -105,23 +121,11 @@ TEST_F(FlushTest, CanFlushWriteOpsToStorage) {
   DeleteOp delete_op{table_, Key({Int64(2)})};
 
   ZETASQL_ASSERT_OK(FlushWriteOpsToStorage({insert_op, update_op, delete_op},
-                                   &base_storage_, t1));
+                                   storage_.get(), t1));
 
-  // Make sure reads on base storage reflect the flushed write ops.
-  {
-    std::unique_ptr<StorageIterator> itr;
-    ZETASQL_ASSERT_OK(base_storage_.Read(t1, table_->id(), KeyRange::All(),
-                                 {int64_col_->id(), string_col_->id()}, &itr));
-    std::vector<std::pair<int64_t, std::string>> rows_read;
-    while (itr->Next()) {
-      ASSERT_EQ(itr->NumColumns(), 2);
-      rows_read.push_back({itr->ColumnValue(0).int64_value(),
-                           itr->ColumnValue(1).string_value()});
-    }
-    std::vector<std::pair<int64_t, std::string>> rows_expected{{1, "new-value"},
-                                                             {3, "value"}};
-    EXPECT_EQ(rows_read, rows_expected);
-  }
+  // Make sure reads on base storage at t1 reflect the flushed write ops.
+  EXPECT_THAT(ReadAll(t1), IsOkAndHoldsRows({{Int64(1), String("new-value")},
+                                             {Int64(3), String("value")}}));
 }
 
 }  // namespace

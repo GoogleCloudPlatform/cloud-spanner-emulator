@@ -76,7 +76,7 @@ TEST_F(QueryableTableTest, PrimaryKey) {
 TEST_F(QueryableTableTest, CreateEvaluatorTableIteratorWithZeroColumns) {
   QueryableTable table{schema()->FindTable("test_table"), reader()};
   auto iterator =
-      table.CreateEvaluatorTableIterator(/*column_idxs=*/{}).ValueOrDie();
+      table.CreateEvaluatorTableIterator(/*column_idxs=*/{}).value();
   ASSERT_EQ(iterator->NumColumns(), 0);
   ASSERT_TRUE(iterator->NextRow());
   ZETASQL_ASSERT_OK(iterator->Status());
@@ -86,7 +86,7 @@ TEST_F(QueryableTableTest, CreateEvaluatorTableIteratorWithZeroColumns) {
 TEST_F(QueryableTableTest, CreateEvaluatorTableIteratorWithTheSecondColumn) {
   QueryableTable table{schema()->FindTable("test_table"), reader()};
   auto iterator =
-      table.CreateEvaluatorTableIterator(/*column_idxs=*/{1}).ValueOrDie();
+      table.CreateEvaluatorTableIterator(/*column_idxs=*/{1}).value();
   ASSERT_EQ(iterator->NumColumns(), 1);
   EXPECT_EQ(iterator->GetColumnName(0), "string_col");
   EXPECT_TRUE(iterator->GetColumnType(0)->IsString());
@@ -99,7 +99,7 @@ TEST_F(QueryableTableTest, CreateEvaluatorTableIteratorWithTheSecondColumn) {
 TEST_F(QueryableTableTest, CreateEvaluatorTableIteratorWithAllColumns) {
   QueryableTable table{schema()->FindTable("test_table"), reader()};
   auto iterator =
-      table.CreateEvaluatorTableIterator(/*column_idxs=*/{0, 1}).ValueOrDie();
+      table.CreateEvaluatorTableIterator(/*column_idxs=*/{0, 1}).value();
   ASSERT_EQ(iterator->NumColumns(), 2);
   EXPECT_EQ(iterator->GetColumnName(0), "int64_col");
   EXPECT_EQ(iterator->GetColumnName(1), "string_col");

@@ -52,18 +52,8 @@ zetasql_base::Status BeginTransaction(
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->CreateMultiUseTransaction(request->options()));
 
-  // Populate transaction id in response metadata.
-  *response->mutable_id() = std::to_string(txn->id());
-
-  // Populate read_timestamp at which all future reads will be performed.
-  // Applicable only if transaction created was read only and user requested to
-  // return read_timestamp.
-  if (request->options().has_read_only() &&
-      request->options().read_only().return_read_timestamp()) {
-    ZETASQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
-    ZETASQL_RETURN_IF_ERROR(
-        TimestampToProto(read_timestamp, response->mutable_read_timestamp()));
-  }
+  // Populate transaction proto in response.
+  ZETASQL_ASSIGN_OR_RETURN(*response, txn->ToProto());
 
   return zetasql_base::OkStatus();
 }
@@ -108,8 +98,9 @@ zetasql_base::Status Commit(RequestContext* ctx,
     // Commit should be indempotent.
     if (txn->IsCommitted()) {
       ZETASQL_ASSIGN_OR_RETURN(absl::Time commit_timestamp, txn->GetCommitTimestamp());
-      return TimestampToProto(commit_timestamp,
-                              response->mutable_commit_timestamp());
+      ZETASQL_ASSIGN_OR_RETURN(*response->mutable_commit_timestamp(),
+                       TimestampToProto(commit_timestamp));
+      return zetasql_base::OkStatus();
     }
 
     // Process mutations and write to transaction store.
@@ -123,8 +114,9 @@ zetasql_base::Status Commit(RequestContext* ctx,
 
     // Return commit timestamp to user.
     ZETASQL_ASSIGN_OR_RETURN(absl::Time commit_timestamp, txn->GetCommitTimestamp());
-    return TimestampToProto(commit_timestamp,
-                            response->mutable_commit_timestamp());
+    ZETASQL_ASSIGN_OR_RETURN(*response->mutable_commit_timestamp(),
+                     TimestampToProto(commit_timestamp));
+    return zetasql_base::OkStatus();
   });
 }
 REGISTER_GRPC_HANDLER(Spanner, Commit);

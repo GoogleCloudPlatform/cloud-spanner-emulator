@@ -253,6 +253,7 @@ cc_test(
     deps = [
         ":transaction_store",
         "//backend/actions:ops",
+        "//backend/common:rows",
         "//backend/datamodel:key_range",
         "//backend/datamodel:value",
         "//backend/locking:manager",

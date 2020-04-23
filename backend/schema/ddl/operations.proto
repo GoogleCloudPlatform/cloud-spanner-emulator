@@ -66,26 +66,13 @@ message CommitTimestampConstraint {
   optional bool is_commit_timestamp = 1;
 }
 
-message EnforcementType {
-  enum Type {
-    UNKNOWN_TYPE = 0;
-    DEFERRED = 1;
-    IMMEDIATE = 2;
-  }
-  optional Type type = 1;
-}
-
 
 // Foregin key constraint on a combination of one-or-more columns.
 message ForeignKeyConstraint {
-  optional string name = 1;
-  optional string constrained_table_name = 2;
-  repeated string constrained_column_name = 3;
-  optional string referenced_table_name = 4;
-  repeated string referenced_column_name = 5;
-  optional OnDeleteAction on_delete = 6;
-  optional bool enforced = 7;
-  optional EnforcementType enforcement = 8;
+  optional string constraint_name = 1;
+  repeated string referencing_column_name = 2;
+  optional string referenced_table_name = 3;
+  repeated string referenced_column_name = 4;
 }
 
 message Constraint {

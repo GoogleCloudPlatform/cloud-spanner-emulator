@@ -136,7 +136,9 @@ cc_library(
     srcs = ["partitions.cc"],
     deps = [
         "//common:errors",
+        "//frontend/converters:reads",
         "//frontend/entities:session",
+        "//frontend/proto:partition_token_cc_proto",
         "//frontend/server:handler",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_zetasql//zetasql/base:status",

@@ -1008,6 +1008,17 @@ zetasql_base::Status StrongReadOptionShouldBeTrue() {
                       "Strong read option must be true for a strong read.");
 }
 
+zetasql_base::Status InvalidReadLimit() {
+  return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+                      "Limit must be non-negative.");
+}
+
+zetasql_base::Status InvalidReadLimitWithPartitionToken() {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      "A limit cannot be used when a partition_token is specified.");
+}
+
 // Constraint errors.
 zetasql_base::Status RowAlreadyExists(absl::string_view table_name,
                               absl::string_view key) {
@@ -1241,6 +1252,29 @@ zetasql_base::Status InvalidMaxPartitionCount(absl::string_view message_name) {
       absl::Substitute(
           "Invalid $0: max partition count must be greater than zero.",
           message_name));
+}
+
+zetasql_base::Status InvalidPartitionToken() {
+  return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+                      "Invalid partition token.");
+}
+
+zetasql_base::Status ReadFromDifferentSession() {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      "Partitioned request was created for a different session.");
+}
+
+zetasql_base::Status ReadFromDifferentTransaction() {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      "Partitioned request was created for a different transaction.");
+}
+
+zetasql_base::Status ReadFromDifferentParameters() {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      "Partitioned request was created for different read or sql parameters.");
 }
 
 }  // namespace error

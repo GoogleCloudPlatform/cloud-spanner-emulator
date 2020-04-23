@@ -107,14 +107,17 @@ class Session {
  private:
   // Create a transaction based on the provided options.
   zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateTransaction(
-      const google::spanner::v1::TransactionOptions& options);
+      const google::spanner::v1::TransactionOptions& options,
+      bool is_single_use);
 
   // Create a read-only transaction.
   zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateReadOnly(
-      const google::spanner::v1::TransactionOptions::ReadOnly& options);
+      const google::spanner::v1::TransactionOptions::ReadOnly& options,
+      bool is_single_use);
 
   // Create a read-write transaction.
-  zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateReadWrite();
+  zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateReadWrite(
+      bool is_single_use);
 
   // The URI for this session.
   const std::string session_uri_;

@@ -51,17 +51,16 @@ class Transaction {
   Transaction(absl::variant<std::unique_ptr<backend::ReadWriteTransaction>,
                             std::unique_ptr<backend::ReadOnlyTransaction>>
                   backend_transaction,
-              const backend::QueryEngine* query_engine);
+              const backend::QueryEngine* query_engine, bool is_single_use,
+              bool return_read_timestamp);
 
   // Mark the transaction as closed.  This indicates that the transaction is no
   // longer valid in the context of its owning session.  For example, prior
   // transactions are closed once a new transaction is started.
   void Close() ABSL_LOCKS_EXCLUDED(mu_);
 
-  // Fills transaction metadata for this transaction.
-  zetasql_base::Status MaybeFillTransactionMetadata(
-      const google::spanner::v1::TransactionSelector& selector,
-      google::spanner::v1::ResultSetMetadata* metadata);
+  // Converts this transaction to its proto representation.
+  zetasql_base::StatusOr<google::spanner::v1::Transaction> ToProto();
 
   // Returns the schema from the backend transaction.
   const backend::Schema* schema() const;
@@ -87,9 +86,6 @@ class Transaction {
 
   // Calls Rollback using the backend transaction.
   zetasql_base::Status Rollback();
-
-  // Returns the read timestamp from the backend transaction.
-  zetasql_base::StatusOr<absl::Time> GetReadTimestamp() const;
 
   // Returns the commit timestamp from the backend transaction.
   zetasql_base::StatusOr<absl::Time> GetCommitTimestamp();
@@ -125,8 +121,19 @@ class Transaction {
                 std::unique_ptr<backend::ReadOnlyTransaction>>
       transaction_;
 
+  // Returns the read timestamp from the backend transaction.
+  zetasql_base::StatusOr<absl::Time> GetReadTimestamp() const;
+
   // The query engine for executing queries.
   const backend::QueryEngine* query_engine_;
+
+  // True if this transaction should not be reused. In such a case, proto
+  // representation of this transaction will not return transaction id.
+  bool is_single_use_;
+
+  // True if proto representation of this transaction should return the
+  // timestamp at which reads are be performed by the backend transaction.
+  bool return_read_timestamp_;
 
   // Mutex to guard state below.
   mutable absl::Mutex mu_;
@@ -137,6 +144,11 @@ class Transaction {
   // Previous outcome of the transaction.
   zetasql_base::Status status_ ABSL_GUARDED_BY(mu_);
 };
+
+// Return true if the given transaction selector requires the transaction to be
+// returned in the response.
+bool ShouldReturnTransaction(
+    const google::spanner::v1::TransactionSelector& selector);
 
 }  // namespace frontend
 }  // namespace emulator

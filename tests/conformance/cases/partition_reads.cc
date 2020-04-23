@@ -15,7 +15,11 @@
 //
 
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "zetasql/base/status.h"
+#include "absl/strings/substitute.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -31,13 +35,24 @@ using zetasql_base::testing::StatusIs;
 class PartitionReadsTest : public DatabaseTest {
  public:
   zetasql_base::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({R"(
-      CREATE TABLE Users(
-        ID   INT64,
-        Name STRING(MAX),
-        Age  INT64
-      ) PRIMARY KEY (ID)
-    )"}));
+    ZETASQL_RETURN_IF_ERROR(SetSchema({
+        R"(
+          CREATE TABLE Users(
+            UserId   INT64 NOT NULL,
+            Name STRING(MAX),
+            Age  INT64
+          ) PRIMARY KEY (UserId)
+        )",
+        "CREATE INDEX UsersByName ON Users(Name)",
+        "CREATE INDEX UsersByNameDescending ON Users(Name DESC)",
+        R"(
+          CREATE TABLE Threads (
+            UserId     INT64 NOT NULL,
+            ThreadId   INT64 NOT NULL,
+            Starred    BOOL
+          ) PRIMARY KEY (UserId, ThreadId),
+          INTERLEAVE IN PARENT Users ON DELETE CASCADE
+        )"}));
     return zetasql_base::OkStatus();
   }
 
@@ -50,6 +65,13 @@ class PartitionReadsTest : public DatabaseTest {
     spanner_api::Session response;
     ZETASQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
     return response;
+  }
+
+  void PopulateDatabase() {
+    // Write fixure data to use in partition reads test.
+    ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+        "INSERT Users(UserId, Name, Age) Values (1, 'Levin', 27), "
+        "(2, 'Mark', 32), (10, 'Douglas', 31)")}));
   }
 };
 
@@ -80,11 +102,13 @@ TEST_F(PartitionReadsTest, CannotReadWithoutTransaction) {
 TEST_F(PartitionReadsTest, CannotReadUsingSingleUseTransaction) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
 
-  spanner_api::PartitionReadRequest partition_read_request = PARSE_TEXT_PROTO(
-      R"(
-        transaction { single_use { read_only {} } }
-      )");
-  partition_read_request.set_session(session.name());
+  spanner_api::PartitionReadRequest partition_read_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            transaction { single_use { read_only {} } }
+          )",
+          session.name()));
 
   spanner_api::PartitionResponse partition_read_response;
   grpc::ClientContext context;
@@ -98,16 +122,16 @@ TEST_F(PartitionReadsTest, CannotReadUsingBeginReadWriteTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
 
   // PartitionRead using a begin read-write transaction fails.
-  EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"ID", "Name"}),
+  EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"UserId", "Name"}),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionReadsTest, CannotReadUsingExistingReadWriteTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
-  ZETASQL_ASSERT_OK(Read(txn, "Users", {"ID", "Name"}, KeySet::All()));
+  ZETASQL_ASSERT_OK(Read(txn, "Users", {"UserId", "Name"}, KeySet::All()));
 
   // PartitionRead using an already started read-write transaction fails.
-  EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"ID", "Name"}),
+  EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"UserId", "Name"}),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 }
 
@@ -117,14 +141,354 @@ TEST_F(PartitionReadsTest, CannotReadUsingInvalidPartitionOptions) {
   // Test that negative partition_size_bytes is not allowed.
   PartitionOptions partition_options = {.partition_size_bytes = -1,
                                         .max_partitions = 100};
-  EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"ID", "Name"},
+  EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"UserId", "Name"},
                             /**read_options =*/{}, partition_options),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 
   // Test that negative partition_size_bytes is not allowed.
   partition_options = {.partition_size_bytes = 10000, .max_partitions = -1};
-  EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"ID", "Name"},
+  EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"UserId", "Name"},
                             /**read_options =*/{}, partition_options),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionReadsTest, CanReadUsingPartitionToken) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<ReadPartition> partitions,
+      PartitionRead(txn, "Users", KeySet::All(), {"UserId", "Name"}));
+
+  EXPECT_THAT(
+      Read(partitions),
+      IsOkAndHoldsUnorderedRows({{1, "Levin"}, {2, "Mark"}, {10, "Douglas"}}));
+}
+
+TEST_F(PartitionReadsTest, CannotSetReadLimitWithPartitionToken) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+
+  spanner_api::PartitionReadRequest partition_read_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            transaction { begin { read_only {} } }
+            table: "Users"
+            columns: "UserId"
+            columns: "Name"
+            key_set { all: true }
+          )",
+          session.name()));
+
+  spanner_api::PartitionResponse partition_read_response;
+  {
+    grpc::ClientContext context;
+    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+                                          &partition_read_response));
+  }
+
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(absl::Substitute(
+      R"(
+        session: "$0"
+        transaction { id: "$1" }
+        table: "Users"
+        columns: "UserId"
+        columns: "Name"
+        key_set { all: true }
+      )",
+      session.name(), partition_read_response.transaction().id()));
+
+  // Validate that Read with limit only succeeds.
+  read_request.set_limit(100);
+  {
+    grpc::ClientContext context;
+    spanner_api::ResultSet read_response;
+    ZETASQL_EXPECT_OK(raw_client()->Read(&context, read_request, &read_response));
+  }
+
+  // Validate that Read with partition_token only succeeds.
+  read_request.clear_limit();
+  *read_request.mutable_partition_token() =
+      partition_read_response.partitions()[0].partition_token();
+  {
+    grpc::ClientContext context;
+    spanner_api::ResultSet read_response;
+    ZETASQL_EXPECT_OK(raw_client()->Read(&context, read_request, &read_response));
+  }
+
+  // Validate that limit cannot be passed with partition_token.
+  read_request.set_limit(100);
+  {
+    grpc::ClientContext context;
+    spanner_api::ResultSet read_response;
+    EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
+                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+  }
+}
+
+TEST_F(PartitionReadsTest, CannotReadWithDifferentSession) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+
+  spanner_api::PartitionReadRequest partition_read_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            transaction { begin { read_only {} } }
+            table: "Users"
+            columns: "UserId"
+            columns: "Name"
+            key_set { all: true }
+          )",
+          session.name()));
+
+  spanner_api::PartitionResponse partition_read_response;
+  {
+    grpc::ClientContext context;
+    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+                                          &partition_read_response));
+  }
+  ASSERT_GT(partition_read_response.partitions().size(), 0);
+
+  // Validate that a different session cannot be used for read using partition
+  // token than the one used for partition read.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto read_session, CreateSession());
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(absl::Substitute(
+      R"(
+        session: "$0"
+        transaction { begin { read_only {} } }
+        table: "Users"
+        columns: "UserId"
+        columns: "Name"
+        key_set { all: true }
+        partition_token: "$1"
+      )",
+      read_session.name(),
+      partition_read_response.partitions()[0].partition_token()));
+
+  grpc::ClientContext context;
+  spanner_api::ResultSet read_response;
+  EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionReadsTest, CannotReadWithDifferentTransaction) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+
+  spanner_api::PartitionReadRequest partition_read_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            transaction { begin { read_only {} } }
+            table: "Users"
+            columns: "UserId"
+            columns: "Name"
+            key_set { all: true }
+          )",
+          session.name()));
+
+  spanner_api::PartitionResponse partition_read_response;
+  {
+    grpc::ClientContext context;
+    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+                                          &partition_read_response));
+  }
+  ASSERT_GT(partition_read_response.partitions().size(), 0);
+
+  // Validate that a new/different transaction cannot be used for read using
+  // partition token than the one used for partition read.
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(absl::Substitute(
+      R"(
+        session: "$0"
+        transaction { begin { read_only {} } }
+        table: "Users"
+        columns: "UserId"
+        columns: "Name"
+        key_set { all: true }
+        partition_token: "$1"
+      )",
+      session.name(),
+      partition_read_response.partitions()[0].partition_token()));
+
+  grpc::ClientContext context;
+  spanner_api::ResultSet read_response;
+  EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionReadsTest, CannotReadWithDifferentTable) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+
+  spanner_api::PartitionReadRequest partition_read_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            transaction { begin { read_only {} } }
+            table: "Users"
+            columns: "UserId"
+            columns: "Name"
+            key_set { all: true }
+          )",
+          session.name()));
+
+  spanner_api::PartitionResponse partition_read_response;
+  {
+    grpc::ClientContext context;
+    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+                                          &partition_read_response));
+  }
+  ASSERT_GT(partition_read_response.partitions().size(), 0);
+
+  // Validate that a different table cannot be read when using partition token.
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(absl::Substitute(
+      R"(
+        session: "$0"
+        transaction { id: "$1" }
+        table: "Threads"
+        columns: "UserId"
+        columns: "Name"
+        key_set { all: true }
+        partition_token: "$2"
+      )",
+      session.name(), partition_read_response.transaction().id(),
+      partition_read_response.partitions()[0].partition_token()));
+
+  grpc::ClientContext context;
+  spanner_api::ResultSet read_response;
+  EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionReadsTest, CannotReadWithDifferentIndex) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+
+  spanner_api::PartitionReadRequest partition_read_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            transaction { begin { read_only {} } }
+            table: "Users"
+            index: "UsersByNameDescending"
+            columns: "UserId"
+            columns: "Name"
+            key_set { all: true }
+          )",
+          session.name()));
+
+  spanner_api::PartitionResponse partition_read_response;
+  {
+    grpc::ClientContext context;
+    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+                                          &partition_read_response));
+  }
+  ASSERT_GT(partition_read_response.partitions().size(), 0);
+
+  // Validate that a different index cannot be read when using partition token.
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(absl::Substitute(
+      R"(
+        session: "$0"
+        transaction { id: "$1" }
+        table: "Users"
+        index: "UsersByName"
+        columns: "UserId"
+        columns: "Name"
+        key_set { all: true }
+        partition_token: "$2"
+      )",
+      session.name(), partition_read_response.transaction().id(),
+      partition_read_response.partitions()[0].partition_token()));
+
+  grpc::ClientContext context;
+  spanner_api::ResultSet read_response;
+  EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionReadsTest, CannotReadWithDifferentKeySet) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+
+  spanner_api::PartitionReadRequest partition_read_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            transaction { begin { read_only {} } }
+            table: "Users"
+            columns: "UserId"
+            columns: "Name"
+            key_set { all: true }
+          )",
+          session.name()));
+
+  spanner_api::PartitionResponse partition_read_response;
+  {
+    grpc::ClientContext context;
+    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+                                          &partition_read_response));
+  }
+  ASSERT_GT(partition_read_response.partitions().size(), 0);
+
+  // Validate that a different key_set cannot be read when using partition
+  // token.
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(absl::Substitute(
+      R"(
+        session: "$0"
+        transaction { id: "$1" }
+        table: "Users"
+        columns: "UserId"
+        columns: "Name"
+        key_set { all: false }
+        partition_token: "$2"
+      )",
+      session.name(), partition_read_response.transaction().id(),
+      partition_read_response.partitions()[0].partition_token()));
+
+  grpc::ClientContext context;
+  spanner_api::ResultSet read_response;
+  EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
+              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionReadsTest, CannotReadWithDifferentColumns) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+
+  spanner_api::PartitionReadRequest partition_read_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            transaction { begin { read_only {} } }
+            table: "Users"
+            columns: "UserId"
+            columns: "Name"
+            key_set { all: true }
+          )",
+          session.name()));
+
+  spanner_api::PartitionResponse partition_read_response;
+  {
+    grpc::ClientContext context;
+    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+                                          &partition_read_response));
+  }
+  ASSERT_GT(partition_read_response.partitions().size(), 0);
+
+  // Validate that a different set of columns cannot be read when using
+  // partition token.
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(absl::Substitute(
+      R"(
+        session: "$0"
+        transaction { id: "$1" }
+        table: "Users"
+        columns: "UserId"
+        columns: "Age"
+        key_set { all: true }
+        partition_token: "$2"
+      )",
+      session.name(), partition_read_response.transaction().id(),
+      partition_read_response.partitions()[0].partition_token()));
+
+  grpc::ClientContext context;
+  spanner_api::ResultSet read_response;
+  EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
               StatusIs(zetasql_base::StatusCode::kInvalidArgument));
 }
 

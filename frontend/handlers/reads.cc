@@ -79,8 +79,10 @@ zetasql_base::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* r
     ZETASQL_RETURN_IF_ERROR(txn->Read(read_arg, &cursor));
 
     // Populate transaction metadata.
-    ZETASQL_RETURN_IF_ERROR(txn->MaybeFillTransactionMetadata(
-        request->transaction(), response->mutable_metadata()));
+    if (ShouldReturnTransaction(request->transaction())) {
+      ZETASQL_ASSIGN_OR_RETURN(*response->mutable_metadata()->mutable_transaction(),
+                       txn->ToProto());
+    }
 
     // Convert read results to proto.
     return RowCursorToResultSetProto(cursor.get(), request->limit(), response);
@@ -126,8 +128,11 @@ zetasql_base::Status StreamingRead(
         RowCursorToPartialResultSetProtos(cursor.get(), request->limit()));
 
     // Populate transaction metadata.
-    ZETASQL_RETURN_IF_ERROR(txn->MaybeFillTransactionMetadata(
-        request->transaction(), responses.front().mutable_metadata()));
+    if (ShouldReturnTransaction(request->transaction())) {
+      ZETASQL_ASSIGN_OR_RETURN(
+          *responses.front().mutable_metadata()->mutable_transaction(),
+          txn->ToProto());
+    }
 
     // Send results back to client.
     for (const auto& response : responses) {

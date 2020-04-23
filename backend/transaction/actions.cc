@@ -37,11 +37,12 @@ namespace backend {
 
 zetasql_base::StatusOr<bool> TransactionReadOnlyStore::Exists(const Table* table,
                                                       const Key& key) const {
-  zetasql_base::Status s = read_only_store_->Lookup(table, key, {}, {});
-  if (s.code() == zetasql_base::StatusCode::kNotFound) {
+  zetasql_base::StatusOr<ValueList> maybe_row =
+      read_only_store_->Lookup(table, key, {});
+  if (maybe_row.status().code() == zetasql_base::StatusCode::kNotFound) {
     return false;
-  } else if (!s.ok()) {
-    return s;
+  } else if (!maybe_row.ok()) {
+    return maybe_row.status();
   }
   return true;
 }

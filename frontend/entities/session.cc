@@ -97,10 +97,11 @@ zetasql_base::Status Session::ToProto(spanner_api::Session* session,
   if (include_labels) {
     session->mutable_labels()->insert(labels_.begin(), labels_.end());
   }
-  ZETASQL_RETURN_IF_ERROR(
-      TimestampToProto(create_time_, session->mutable_create_time()));
-  return TimestampToProto(approximate_last_use_time_,
-                          session->mutable_approximate_last_use_time());
+  ZETASQL_ASSIGN_OR_RETURN(*session->mutable_create_time(),
+                   TimestampToProto(create_time_));
+  ZETASQL_ASSIGN_OR_RETURN(*session->mutable_approximate_last_use_time(),
+                   TimestampToProto(approximate_last_use_time_));
+  return zetasql_base::OkStatus();
 }
 
 zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTransaction(
@@ -111,7 +112,7 @@ zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTran
   // since session will also hold a reference to multi-use transaction object
   // for future uses.
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
-                   CreateTransaction(options));
+                   CreateTransaction(options, /*is_single_use = */ false));
 
   // Insert shared transaction object into transaction map.
   absl::MutexLock lock(&mu_);
@@ -129,16 +130,16 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>>
 Session::CreateSingleUseTransaction(
     const spanner_api::TransactionOptions& options) {
   ZETASQL_RETURN_IF_ERROR(ValidateSingleUseTransactionOptions(options));
-  return CreateTransaction(options);
+  return CreateTransaction(options, /*is_single_use = */ true);
 }
 
 zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateTransaction(
-    const spanner_api::TransactionOptions& options) {
+    const spanner_api::TransactionOptions& options, bool is_single_use) {
   switch (options.mode_case()) {
     case v1::TransactionOptions::kReadOnly:
-      return CreateReadOnly(options.read_only());
+      return CreateReadOnly(options.read_only(), is_single_use);
     case v1::TransactionOptions::kReadWrite:
-      return CreateReadWrite();
+      return CreateReadWrite(is_single_use);
     default:
       return error::Internal(
           "Unexpected TransactionOptions.mode for create transaction.");
@@ -146,7 +147,8 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateTransaction(
 }
 
 zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadOnly(
-    const spanner_api::TransactionOptions::ReadOnly& read_options) {
+    const spanner_api::TransactionOptions::ReadOnly& read_options,
+    bool is_single_use) {
   absl::MutexLock lock(&mu_);
 
   // Populate read options.
@@ -157,11 +159,13 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadOnly(
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<backend::ReadOnlyTransaction> read_only_transaction,
       database_->backend()->CreateReadOnlyTransaction(options));
-  return std::make_unique<Transaction>(std::move(read_only_transaction),
-                                       database_->backend()->query_engine());
+  return std::make_unique<Transaction>(
+      std::move(read_only_transaction), database_->backend()->query_engine(),
+      is_single_use, read_options.return_read_timestamp());
 }
 
-zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadWrite() {
+zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadWrite(
+    bool is_single_use) {
   absl::MutexLock lock(&mu_);
 
   // Create a new backend read write transaction.
@@ -170,7 +174,9 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadWrite() 
       database_->backend()->CreateReadWriteTransaction(
           backend::ReadWriteOptions()));
   return std::make_unique<Transaction>(std::move(read_write_transaction),
-                                       database_->backend()->query_engine());
+                                       database_->backend()->query_engine(),
+                                       is_single_use,
+                                       /*return_read_timestamp = */ false);
 }
 
 zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::FindAndUseTransaction(

@@ -545,6 +545,134 @@ TEST(ParseCreateTable, CanParseCreateTableWithoutInterleaveClause) {
                   )")));
 }
 
+TEST(ParseCreateTable, CanParseCreateTableWithForeignKeys) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"(
+                    CREATE TABLE T (
+                      A INT64,
+                      B STRING(MAX),
+                      FOREIGN KEY (B) REFERENCES U (Y),
+                      CONSTRAINT FK_UXY FOREIGN KEY (B, A) REFERENCES U (X, Y),
+                    ) PRIMARY KEY (A)
+                  )"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"(
+                    create_table {
+                      table_name: "T"
+                      columns {
+                        column_name: "A"
+                        properties {
+                          column_type {
+                            type: INT64
+                          }
+                        }
+                      }
+                      columns {
+                        column_name: "B"
+                        properties {
+                          column_type {
+                            type: STRING
+                          }
+                        }
+                      }
+                      constraints {
+                        foreign_key {
+                          referencing_column_name: "B"
+                          referenced_table_name: "U"
+                          referenced_column_name: "Y"
+                        }
+                      }
+                      constraints {
+                        foreign_key {
+                          constraint_name: "FK_UXY"
+                          referencing_column_name: "B"
+                          referencing_column_name: "A"
+                          referenced_table_name: "U"
+                          referenced_column_name: "X"
+                          referenced_column_name: "Y"
+                        }
+                      }
+                      constraints {
+                        primary_key {
+                          key_part {
+                            key_column_name: "A"
+                          }
+                        }
+                      }
+                    }
+                  )")));
+}
+
+TEST(ParseCreateTable, CanParseAlterTableWithAddUnnamedForeignKey) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"(
+                    ALTER TABLE T ADD FOREIGN KEY (B, A) REFERENCES U (X, Y)
+                  )"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"(
+                    alter_table {
+                      table_name: "T"
+                      alter_constraint {
+                        type: ADD
+                        constraint {
+                          foreign_key {
+                            referencing_column_name: "B"
+                            referencing_column_name: "A"
+                            referenced_table_name: "U"
+                            referenced_column_name: "X"
+                            referenced_column_name: "Y"
+                          }
+                        }
+                      }
+                    }
+                  )")));
+}
+
+TEST(ParseCreateTable, CanParseAlterTableWithAddNamedForeignKey) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"(
+                    ALTER TABLE T ADD CONSTRAINT FK_UXY FOREIGN KEY (B, A)
+                        REFERENCES U (X, Y)
+                  )"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"(
+                    alter_table {
+                      table_name: "T"
+                      alter_constraint {
+                        constraint_name: "FK_UXY"
+                        type: ADD
+                        constraint {
+                          foreign_key {
+                            constraint_name: "FK_UXY"
+                            referencing_column_name: "B"
+                            referencing_column_name: "A"
+                            referenced_table_name: "U"
+                            referenced_column_name: "X"
+                            referenced_column_name: "Y"
+                          }
+                        }
+                      }
+                    }
+                  )")));
+}
+
+TEST(ParseCreateTable, CanParseAlterTableWithDropConstraint) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"(
+                    ALTER TABLE T DROP CONSTRAINT FK_UXY
+                  )"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"(
+                    alter_table {
+                      table_name: "T"
+                      alter_constraint {
+                        constraint_name: "FK_UXY"
+                        type: DROP
+                      }
+                    }
+                  )")));
+}
+
 // CREATE INDEX
 
 TEST(ParseCreateIndex, CanParseCreateIndexBasicImplicitlyGlobal) {

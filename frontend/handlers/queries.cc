@@ -117,8 +117,12 @@ zetasql_base::Status ExecuteSql(RequestContext* ctx,
                                     txn->query_engine()->type_factory()));
     ZETASQL_ASSIGN_OR_RETURN(backend::QueryResult result, txn->ExecuteSql(query));
 
-    ZETASQL_RETURN_IF_ERROR(txn->MaybeFillTransactionMetadata(
-        request->transaction(), response->mutable_metadata()));
+    // Populate transaction metadata.
+    if (ShouldReturnTransaction(request->transaction())) {
+      ZETASQL_ASSIGN_OR_RETURN(*response->mutable_metadata()->mutable_transaction(),
+                       txn->ToProto());
+    }
+
     if (IsDmlResult(result)) {
       response->mutable_stats()->set_row_count_exact(result.modified_row_count);
       // Set empty row type.
@@ -194,8 +198,11 @@ zetasql_base::Status ExecuteStreamingSql(
     }
 
     // Populate transaction metadata.
-    ZETASQL_RETURN_IF_ERROR(txn->MaybeFillTransactionMetadata(
-        request->transaction(), responses.front().mutable_metadata()));
+    if (ShouldReturnTransaction(request->transaction())) {
+      ZETASQL_ASSIGN_OR_RETURN(
+          *responses.front().mutable_metadata()->mutable_transaction(),
+          txn->ToProto());
+    }
 
     // Add basic stats for PROFILE mode. We do this to interoperate with REPL
     // applications written for Cloud Spanner. The profile will not contain
@@ -268,11 +275,15 @@ zetasql_base::Status ExecuteBatchDml(RequestContext* ctx,
       }
       auto& result = maybe_result.value();
       spanner_api::ResultSet* result_set = response->add_result_sets();
-      ZETASQL_RETURN_IF_ERROR(txn->MaybeFillTransactionMetadata(
-          request->transaction(), result_set->mutable_metadata()));
       result_set->mutable_stats()->set_row_count_exact(
           result.modified_row_count);
       result_set->mutable_metadata()->mutable_row_type();
+
+      // Populate transaction metadata.
+      if (ShouldReturnTransaction(request->transaction())) {
+        ZETASQL_ASSIGN_OR_RETURN(*result_set->mutable_metadata()->mutable_transaction(),
+                         txn->ToProto());
+      }
     }
 
     return zetasql_base::OkStatus();

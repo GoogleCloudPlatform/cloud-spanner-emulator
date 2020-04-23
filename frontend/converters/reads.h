@@ -26,6 +26,7 @@
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/transaction/options.h"
+#include "frontend/proto/partition_token.pb.h"
 #include "zetasql/base/status.h"
 
 namespace google {
@@ -40,6 +41,10 @@ zetasql_base::StatusOr<backend::ReadOnlyOptions> ReadOnlyOptionsFromProto(
 zetasql_base::Status ReadArgFromProto(const backend::Schema& schema,
                               const google::spanner::v1::ReadRequest& request,
                               backend::ReadArg* read_arg);
+
+// Converts a partition token into a byte string.
+zetasql_base::StatusOr<std::string> PartitionTokenToString(
+    const PartitionToken& partition_token);
 
 // Converts a RowCursor to a ResultSet proto.
 //

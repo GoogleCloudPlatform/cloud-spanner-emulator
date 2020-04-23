@@ -48,7 +48,7 @@ class UniqueIndexTest : public test::ActionsTest {
                             CREATE UNIQUE INDEX TestIndex ON TestTable(string_col DESC)
                     )"},
                     &type_factory_)
-                    .ValueOrDie()),
+                    .value()),
         index_(schema_->FindIndex("TestIndex")),
         verifier_(absl::make_unique<UniqueIndexVerifier>(index_)) {}
 

@@ -174,8 +174,8 @@ zetasql_base::Status CreateInstance(RequestContext* ctx,
   *metadata_pb.mutable_instance() = instance_pb;
 
   // Update the start time of the LRO.
-  ZETASQL_RETURN_IF_ERROR(TimestampToProto(ctx->env()->clock()->Now(),
-                                   metadata_pb.mutable_start_time()));
+  ZETASQL_ASSIGN_OR_RETURN(*metadata_pb.mutable_start_time(),
+                   TimestampToProto(ctx->env()->clock()->Now()));
   operation->SetMetadata(metadata_pb);
 
   // Convert to proto before setting the response so that the returned
@@ -188,8 +188,8 @@ zetasql_base::Status CreateInstance(RequestContext* ctx,
   //  operation->ToProto(response);
 
   // Update the endtime after the LRO is conceptually completed.
-  ZETASQL_RETURN_IF_ERROR(TimestampToProto(ctx->env()->clock()->Now(),
-                                   metadata_pb.mutable_end_time()));
+  ZETASQL_ASSIGN_OR_RETURN(*metadata_pb.mutable_end_time(),
+                   TimestampToProto(ctx->env()->clock()->Now()));
   operation->SetMetadata(metadata_pb);
   operation->SetResponse(instance_pb);
 

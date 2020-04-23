@@ -272,6 +272,8 @@ zetasql_base::Status StalenessMustBeNonNegative();
 zetasql_base::Status InvalidMinReadTimestamp(absl::Time min_read_timestamp);
 zetasql_base::Status InvalidExactReadTimestamp(absl::Time exact_read_timestamp);
 zetasql_base::Status StrongReadOptionShouldBeTrue();
+zetasql_base::Status InvalidReadLimit();
+zetasql_base::Status InvalidReadLimitWithPartitionToken();
 
 // Constraint errors.
 zetasql_base::Status RowAlreadyExists(absl::string_view table_name,
@@ -341,6 +343,10 @@ zetasql_base::Status DmlRequiresReadWriteTransaction(
 // Partition Read errors.
 zetasql_base::Status InvalidBytesPerBatch(absl::string_view message_name);
 zetasql_base::Status InvalidMaxPartitionCount(absl::string_view message_name);
+zetasql_base::Status InvalidPartitionToken();
+zetasql_base::Status ReadFromDifferentSession();
+zetasql_base::Status ReadFromDifferentTransaction();
+zetasql_base::Status ReadFromDifferentParameters();
 
 }  // namespace error
 }  // namespace emulator

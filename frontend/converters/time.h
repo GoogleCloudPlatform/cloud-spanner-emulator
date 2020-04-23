@@ -28,8 +28,10 @@ namespace google {
 namespace spanner {
 namespace emulator {
 
-zetasql_base::Status TimestampToProto(absl::Time time,
-                              google::protobuf::Timestamp* proto);
+// Convert unix time into proto format. Returns an error if it does not meet the
+// requirements of [RFC
+// 3339](https://www.ietf.org/rfc/rfc3339.txt) format.
+zetasql_base::StatusOr<google::protobuf::Timestamp> TimestampToProto(absl::Time time);
 
 // TODO: Add tests for TimestampFromProto and DurationFromProto.
 zetasql_base::StatusOr<absl::Time> TimestampFromProto(

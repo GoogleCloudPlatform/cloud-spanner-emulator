@@ -57,9 +57,12 @@ Transaction::Transaction(
     absl::variant<std::unique_ptr<backend::ReadWriteTransaction>,
                   std::unique_ptr<backend::ReadOnlyTransaction>>
         backend_transaction,
-    const backend::QueryEngine* query_engine)
+    const backend::QueryEngine* query_engine, bool is_single_use,
+    bool return_read_timestamp)
     : transaction_(std::move(backend_transaction)),
-      query_engine_(query_engine) {}
+      query_engine_(query_engine),
+      is_single_use_(is_single_use),
+      return_read_timestamp_(return_read_timestamp) {}
 
 void Transaction::Close() {
   absl::MutexLock lock(&mu_);
@@ -73,33 +76,17 @@ void Transaction::Close() {
               transaction_);
 }
 
-zetasql_base::Status Transaction::MaybeFillTransactionMetadata(
-    const spanner_api::TransactionSelector& selector,
-    spanner_api::ResultSetMetadata* metadata) {
-  spanner_api::TransactionOptions options;
-  switch (selector.selector_case()) {
-    case spanner_api::TransactionSelector::SelectorCase::kBegin: {
-      // Populate transaction id in response metadata.
-      *metadata->mutable_transaction()->mutable_id() = std::to_string(id());
-      options = selector.begin();
-      break;
-    }
-    case spanner_api::TransactionSelector::SelectorCase::kSingleUse:
-      options = selector.single_use();
-      break;
-    default:
-      // For already started multi-use transactions and temporary single-use
-      // transaction, metadata is not populated.
-      break;
+zetasql_base::StatusOr<spanner_api::Transaction> Transaction::ToProto() {
+  spanner_api::Transaction txn;
+  if (!is_single_use_) {
+    *txn.mutable_id() = std::to_string(id());
   }
-
-  if (options.has_read_only() && options.read_only().return_read_timestamp()) {
+  if (return_read_timestamp_) {
     ZETASQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, GetReadTimestamp());
-    return TimestampToProto(
-        read_timestamp,
-        metadata->mutable_transaction()->mutable_read_timestamp());
+    ZETASQL_ASSIGN_OR_RETURN(*txn.mutable_read_timestamp(),
+                     TimestampToProto(read_timestamp));
   }
-  return zetasql_base::OkStatus();
+  return txn;
 }
 
 bool Transaction::IsClosed() const {
@@ -289,6 +276,20 @@ zetasql_base::Status Transaction::GuardedCall(const std::function<zetasql_base::
     Rollback().IgnoreError();
   }
   return status;
+}
+
+bool ShouldReturnTransaction(
+    const google::spanner::v1::TransactionSelector& selector) {
+  if (selector.selector_case() ==
+      spanner_api::TransactionSelector::SelectorCase::kBegin) {
+    return true;
+  }
+  if (selector.selector_case() ==
+      spanner_api::TransactionSelector::SelectorCase::kSingleUse) {
+    return selector.single_use().has_read_only() &&
+           selector.single_use().read_only().return_read_timestamp();
+  }
+  return false;
 }
 
 }  // namespace frontend

@@ -448,6 +448,50 @@ zetasql_base::Status VisitIndexInterleaveNode(const SimpleNode* node,
   return zetasql_base::OkStatus();
 }
 
+zetasql_base::Status AddForeignKeyColumnNames(
+    const SimpleNode* child, std::function<void(const std::string&)> add) {
+  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* names,
+                   GetChildAtIndexWithType(child, 0, JJTIDENTIFIER_LIST));
+  for (int i = 0; i < names->jjtGetNumChildren(); i++) {
+    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* name,
+                     GetChildAtIndexWithType(names, i, JJTIDENTIFIER));
+    add(name->image());
+  }
+  return zetasql_base::OkStatus();
+}
+
+zetasql_base::Status VisitForeignKeyNode(const SimpleNode* node,
+                                 ForeignKeyConstraint* foreign_key) {
+  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTFOREIGN_KEY));
+  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
+    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
+    switch (child->getId()) {
+      case JJTCONSTRAINT_NAME:
+        foreign_key->set_constraint_name(child->image());
+        break;
+      case JJTREFERENCING_COLUMNS:
+        ZETASQL_RETURN_IF_ERROR(AddForeignKeyColumnNames(
+            child, [&foreign_key](const std::string& name) {
+              foreign_key->add_referencing_column_name(name);
+            }));
+        break;
+      case JJTREFERENCED_TABLE:
+        foreign_key->set_referenced_table_name(child->image());
+        break;
+      case JJTREFERENCED_COLUMNS:
+        ZETASQL_RETURN_IF_ERROR(AddForeignKeyColumnNames(
+            child, [&foreign_key](const std::string& name) {
+              foreign_key->add_referenced_column_name(name);
+            }));
+        break;
+      default:
+        return error::Internal(
+            absl::StrCat("Unexpected foreign key node: ", child->toString()));
+    }
+  }
+  return zetasql_base::OkStatus();
+}
+
 zetasql_base::Status VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
                                   std::vector<std::string>* errors) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCREATE_TABLE_STATEMENT));
@@ -461,6 +505,10 @@ zetasql_base::Status VisitCreateTableNode(const SimpleNode* node, CreateTable* t
         break;
       case JJTCOLUMN_DEF:
         ZETASQL_RETURN_IF_ERROR(VisitColumnNode(child, table->add_columns(), errors));
+        break;
+      case JJTFOREIGN_KEY:
+        ZETASQL_RETURN_IF_ERROR(VisitForeignKeyNode(
+            child, table->add_constraints()->mutable_foreign_key()));
         break;
       case JJTPRIMARY_KEY:
         ZETASQL_RETURN_IF_ERROR(VisitKeyNode(
@@ -646,6 +694,35 @@ zetasql_base::Status VisitAlterTableSetOnDelete(const SimpleNode* node,
                                  ->mutable_on_delete());
 }
 
+zetasql_base::Status VisitAlterTableAddForeignKey(const SimpleNode* node,
+                                          AlterTable* alter_table) {
+  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* foreign_key,
+                   GetChildAtIndexWithType(node, 1, JJTFOREIGN_KEY));
+  ZETASQL_RETURN_IF_ERROR(
+      VisitForeignKeyNode(foreign_key, alter_table->mutable_alter_constraint()
+                                           ->mutable_constraint()
+                                           ->mutable_foreign_key()));
+  const std::string& constraint_name = alter_table->alter_constraint()
+                                           .constraint()
+                                           .foreign_key()
+                                           .constraint_name();
+  if (!constraint_name.empty()) {
+    alter_table->mutable_alter_constraint()->set_constraint_name(
+        constraint_name);
+  }
+  alter_table->mutable_alter_constraint()->set_type(AlterConstraint::ADD);
+  return zetasql_base::OkStatus();
+}
+
+zetasql_base::Status VisitAlterTableDropConstraint(const SimpleNode* node,
+                                           AlterTable* alter_table) {
+  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* name,
+                   GetChildAtIndexWithType(node, 2, JJTCONSTRAINT_NAME));
+  alter_table->mutable_alter_constraint()->set_constraint_name(name->image());
+  alter_table->mutable_alter_constraint()->set_type(AlterConstraint::DROP);
+  return zetasql_base::OkStatus();
+}
+
 zetasql_base::Status VisitAlterTableNode(const SimpleNode* node,
                                  DDLStatement* statement,
                                  std::vector<std::string>* errors) {
@@ -668,6 +745,10 @@ zetasql_base::Status VisitAlterTableNode(const SimpleNode* node,
       return VisitAlterTableAlterColumnNode(node, alter_table, errors);
     case JJTSET_ON_DELETE:
       return VisitAlterTableSetOnDelete(node, alter_table);
+    case JJTFOREIGN_KEY:
+      return VisitAlterTableAddForeignKey(node, alter_table);
+    case JJTDROP_CONSTRAINT:
+      return VisitAlterTableDropConstraint(node, alter_table);
     default:
       return error::Internal(
           absl::StrCat("Unexpected alter table type: ", child->toString()));

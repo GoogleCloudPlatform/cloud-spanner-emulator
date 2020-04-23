@@ -14,10 +14,13 @@
 // limitations under the License.
 //
 
+#include "google/spanner/v1/keys.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "common/errors.h"
+#include "frontend/converters/reads.h"
 #include "frontend/entities/session.h"
+#include "frontend/proto/partition_token.pb.h"
 #include "frontend/server/handler.h"
 #include "zetasql/base/status.h"
 #include "zetasql/base/status_macros.h"
@@ -63,6 +66,26 @@ zetasql_base::Status ValidatePartitionOptions(
   return zetasql_base::OkStatus();
 }
 
+// Create a partition token for the given partition read request and partitioned
+// key set.
+zetasql_base::StatusOr<PartitionToken> CreatePartitionTokenForRead(
+    const google::spanner::v1::PartitionReadRequest& request,
+    const backend::TransactionID& txn_id,
+    const google::spanner::v1::KeySet& partitioned_key_set) {
+  PartitionToken partition_token;
+  *partition_token.mutable_session() = request.session();
+  *partition_token.mutable_transaction_id() = std::to_string(txn_id);
+
+  auto read_params = partition_token.mutable_read_params();
+  *read_params->mutable_table() = request.table();
+  *read_params->mutable_index() = request.index();
+  *read_params->mutable_key_set() = request.key_set();
+  *read_params->mutable_columns() = request.columns();
+
+  *partition_token.mutable_partitioned_key_set() = partitioned_key_set;
+  return partition_token;
+}
+
 }  //  namespace
 
 // Creates a set of partition tokens for executing parallel read operations.
@@ -86,7 +109,31 @@ zetasql_base::Status PartitionRead(RequestContext* ctx,
   if (request->has_partition_options()) {
     ZETASQL_RETURN_IF_ERROR(ValidatePartitionOptions(request->partition_options()));
   }
-  return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented, "");
+
+  if (ShouldReturnTransaction(request->transaction())) {
+    ZETASQL_ASSIGN_OR_RETURN(*response->mutable_transaction(), txn->ToProto());
+  }
+
+  // Add two partitions to result set, with first partition being empty.
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto empty_partition_token,
+      CreatePartitionTokenForRead(*request, txn->id(), spanner_api::KeySet()));
+  spanner_api::Partition empty_partition;
+  ZETASQL_ASSIGN_OR_RETURN(*empty_partition.mutable_partition_token(),
+                   PartitionTokenToString(empty_partition_token));
+
+  // Second partition contains full result set for requested key_set.
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto full_partition_token,
+      CreatePartitionTokenForRead(*request, txn->id(), request->key_set()));
+  spanner_api::Partition full_partition;
+  ZETASQL_ASSIGN_OR_RETURN(*full_partition.mutable_partition_token(),
+                   PartitionTokenToString(full_partition_token));
+
+  *response->mutable_partitions()->Add() = empty_partition;
+  *response->mutable_partitions()->Add() = full_partition;
+
+  return zetasql_base::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Spanner, PartitionRead);
 

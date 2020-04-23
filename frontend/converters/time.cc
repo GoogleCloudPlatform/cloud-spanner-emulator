@@ -62,12 +62,13 @@ zetasql_base::Status Validate(const google::protobuf::Duration& d) {
 
 }  // namespace
 
-zetasql_base::Status TimestampToProto(absl::Time time,
-                              google::protobuf::Timestamp* proto) {
+zetasql_base::StatusOr<google::protobuf::Timestamp> TimestampToProto(absl::Time time) {
   const int64_t s = absl::ToUnixSeconds(time);
-  proto->set_seconds(s);
-  proto->set_nanos((time - absl::FromUnixSeconds(s)) / absl::Nanoseconds(1));
-  return Validate(*proto);
+  google::protobuf::Timestamp proto;
+  proto.set_seconds(s);
+  proto.set_nanos((time - absl::FromUnixSeconds(s)) / absl::Nanoseconds(1));
+  ZETASQL_RETURN_IF_ERROR(Validate(proto));
+  return proto;
 }
 
 zetasql_base::StatusOr<absl::Time> TimestampFromProto(

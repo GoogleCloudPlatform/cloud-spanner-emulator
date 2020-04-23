@@ -278,18 +278,10 @@ bool TransactionStore::RowExistsInBuffer(const Table* table, const Key& key,
   return true;
 }
 
-zetasql_base::Status TransactionStore::Lookup(const Table* table, const Key& key,
-                                      absl::Span<const Column* const> columns,
-                                      ValueList* values) const {
-  // Validate the request.
-  if (!columns.empty() && values == nullptr) {
-    return error::Internal(
-        "TransactionStore::Lookup was passed a nullptr for "
-        "values, but had non-empty column_ids.");
-  }
-  if (values != nullptr) {
-    values->clear();
-  }
+zetasql_base::StatusOr<ValueList> TransactionStore::Lookup(
+    const Table* table, const Key& key,
+    absl::Span<const Column* const> columns) const {
+  ValueList values;
 
   // Acquire locks to prevent another transaction to modify this entity.
   ZETASQL_RETURN_IF_ERROR(AcquireReadLock(table, KeyRange::Point(key), columns));
@@ -303,9 +295,9 @@ zetasql_base::Status TransactionStore::Lookup(const Table* table, const Key& key
         for (auto column : columns) {
           auto row_value = row_op.second.find(column);
           if (row_value != row_op.second.end()) {
-            values->emplace_back(row_value->second);
+            values.emplace_back(row_value->second);
           } else {
-            values->emplace_back(zetasql::values::Null(column->GetType()));
+            values.emplace_back(zetasql::values::Null(column->GetType()));
           }
         }
         break;
@@ -315,13 +307,13 @@ zetasql_base::Status TransactionStore::Lookup(const Table* table, const Key& key
         // which might not be included in the update.
         ZETASQL_RETURN_IF_ERROR(base_storage_->Lookup(absl::InfiniteFuture(),
                                               table->id(), key,
-                                              GetColumnIDs(columns), values));
-        ResetInvalidValuesToNull(columns, values);
+                                              GetColumnIDs(columns), &values));
+        ResetInvalidValuesToNull(columns, &values);
         for (int i = 0; i < columns.size(); ++i) {
           // Update values retrieved from base storage with new values.
           auto row_value = row_op.second.find(columns[i]);
           if (row_value != row_op.second.end()) {
-            (*values)[i] = row_value->second;
+            values[i] = row_value->second;
           }
         }
         break;
@@ -332,12 +324,12 @@ zetasql_base::Status TransactionStore::Lookup(const Table* table, const Key& key
         break;
       }
     }
-    return zetasql_base::OkStatus();
+    return values;
   }
   ZETASQL_RETURN_IF_ERROR(base_storage_->Lookup(absl::InfiniteFuture(), table->id(),
-                                        key, GetColumnIDs(columns), values));
-  ResetInvalidValuesToNull(columns, values);
-  return zetasql_base::OkStatus();
+                                        key, GetColumnIDs(columns), &values));
+  ResetInvalidValuesToNull(columns, &values);
+  return values;
 }
 
 std::vector<WriteOp> TransactionStore::GetBufferedOps() const {

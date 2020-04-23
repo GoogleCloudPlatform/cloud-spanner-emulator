@@ -32,7 +32,6 @@
 namespace google {
 namespace spanner {
 namespace emulator {
-
 namespace backend {
 
 // Schema represents a single generation of schema of a database. It is
@@ -61,12 +60,6 @@ class Schema {
   // Return the underlying SchemaGraph owning the objects in the schema.
   const SchemaGraph* GetSchemaGraph() const { return graph_.get(); }
 
-  // Pool for managing the lifetime of all Column objects in the schema.
-  std::vector<std::unique_ptr<Column>> column_pool_;
-
-  // Pool for managing the lifetime of all Index objects in the schema.
-  std::vector<std::unique_ptr<Index>> index_pool_;
-
  private:
   // Manages the lifetime of all schema objects. Maintains the order
   // in which the nodes were added to the graph.
@@ -91,4 +84,5 @@ class Schema {
 }  // namespace emulator
 }  // namespace spanner
 }  // namespace google
+
 #endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_H_

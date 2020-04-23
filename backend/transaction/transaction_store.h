@@ -70,9 +70,9 @@ class TransactionStore {
   // Returns the column values for 'key' by merging information from the
   // buffered mutations and the base storage. Returns NOT_FOUND if 'key'
   // does not exist in the merged view. Acquires read locks.
-  zetasql_base::Status Lookup(const Table* table, const Key& key,
-                      absl::Span<const Column* const> columns,
-                      ValueList* values) const;
+  zetasql_base::StatusOr<ValueList> Lookup(
+      const Table* table, const Key& key,
+      absl::Span<const Column* const> columns) const;
 
   // Returns an iterator for column values of 'key_range' by merging information
   // from the buffered mutations and the base storage. Acquires read locks.

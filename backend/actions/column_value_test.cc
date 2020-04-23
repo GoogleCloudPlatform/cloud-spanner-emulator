@@ -95,7 +95,7 @@ class ColumnValueTest : public test::ActionsTest {
                           )",
                     },
                     &type_factory_)
-                    .ValueOrDie()),
+                    .value()),
         table_(schema_->FindTable("TestTable")),
         base_columns_(table_->columns()),
         validator_(absl::make_unique<ColumnValueValidator>()) {}

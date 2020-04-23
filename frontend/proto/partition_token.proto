@@ -1,0 +1,63 @@
+//
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+syntax = "proto2";
+
+package google.spanner.emulator.frontend;
+
+import "google/spanner/v1/keys.proto";
+
+// Partition token returned in PartitionQuery/PartitionRead. A partition token
+// can only be used for reads in the session/transaction it was created in.
+//
+// Parition token encapsulates the original read/query parameters, such that any
+// subsequent read/query request can validate that the partition token is valid.
+//
+// Partition token also contains information about the partition to read/query.
+// Each partition corresponds to a subset of rows such that all partitions
+// together return the full result set.
+message PartitionToken {
+  // Read params from the PartitionRead request in which the partition token was
+  // created.
+  message ReadParams {
+    required string table = 1;
+    optional string index = 2;
+    repeated string columns = 3;
+    required google.spanner.v1.KeySet key_set = 4;
+  }
+
+  message QueryParams {
+    // TODO : Implement partition token for query.
+  }
+
+  oneof params {
+    ReadParams read_params = 1;
+    QueryParams query_params = 2;
+  }
+
+  // Session in which this partition token was created.
+  required string session = 3;
+
+  // Id of the transaction in which this partition token was created.
+  required bytes transaction_id = 4;
+
+  oneof partition {
+    // Internal representation of the partition that should be read.
+    google.spanner.v1.KeySet partitioned_key_set = 5;
+
+    // TODO : Implement partition for query.
+  }
+}

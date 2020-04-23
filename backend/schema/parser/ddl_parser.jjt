@@ -144,11 +144,13 @@ TOKEN:
   | <BYTES:                  "bytes">
   | <CASCADE:                "cascade">
   | <COLUMN:                 "column">
+  | <CONSTRAINT:             "constraint">
   | <DATABASE:               "database">
   | <DATE:                   "date">
   | <DELETE:                 "delete">
   | <DROP:                   "drop">
   | <FLOAT64:                "float64">
+  | <FOREIGN:                "foreign">
   | <INDEX:                  "index">
   | <INT64:                  "int64">
   | <INTERLEAVE:             "interleave">
@@ -158,6 +160,7 @@ TOKEN:
   | <OPTIONS:                "options">
   | <PARENT:                 "parent">
   | <PRIMARY:                "primary">
+  | <REFERENCES:             "references">
   | <STORING:                "storing">
   | <STRING:                 "string">
   | <TABLE:                  "table">
@@ -187,6 +190,11 @@ void identifier() #void :
   | pseudoReservedWord()
 }
 
+void identifier_list() :
+{}
+{
+  (identifier() #identifier) ("," identifier() #identifier)*
+}
 void pseudoReservedWord() #void :
 {}
 {
@@ -197,11 +205,13 @@ void pseudoReservedWord() #void :
   | <BYTES>
   | <CASCADE>
   | <COLUMN>
+  | <CONSTRAINT>
   | <DATABASE>
   | <DATE>
   | <DELETE>
   | <DROP>
   | <FLOAT64>
+  | <FOREIGN>
   | <INDEX>
   | <INT64>
   | <INTERLEAVE>
@@ -211,6 +221,7 @@ void pseudoReservedWord() #void :
   | <OPTIONS>
   | <PARENT>
   | <PRIMARY>
+  | <REFERENCES>
   | <STORING>
   | <STRING>
   | <TABLE>
@@ -274,7 +285,8 @@ void create_table_statement() :
 void table_element() #void :
 {}
 {
-  column_def()
+    LOOKAHEAD(3) foreign_key()
+  | column_def()
 }
 
 void column_def() :
@@ -323,6 +335,16 @@ void primary_key() #void :
 {}
 {
   <PRIMARY> <KEY> (key() #primary_key)
+}
+
+void foreign_key() :
+{}
+{
+  [ <CONSTRAINT> identifier() #constraint_name ]
+  <FOREIGN> <KEY>
+    "(" identifier_list() #referencing_columns ")"
+  <REFERENCES> identifier() #referenced_table
+    "(" identifier_list() #referenced_columns ")"
 }
 
 void table_interleave_clause() :
@@ -421,7 +443,8 @@ void alter_statement() #void :
 {
   <ALTER>
   (   alter_database_statement()
-    | alter_table_statement()  )
+    | alter_table_statement()
+  )
 }
 
 void alter_database_statement() :
@@ -435,10 +458,13 @@ void alter_table_statement() :
 {
   <TABLE> (identifier() #table_name)
   (   LOOKAHEAD(3) <ADD> #add_column <COLUMN> column_def()
+    | LOOKAHEAD(3) <DROP> <CONSTRAINT> #drop_constraint
+        identifier() #constraint_name
     | <DROP> #drop_column <COLUMN> (identifier() #column_name)
     | LOOKAHEAD(3) <ALTER> #alter_column <COLUMN>
         (identifier() #name) column_def_alter()
     | <SET> #set_on_delete on_delete_clause()
+    | LOOKAHEAD(3) <ADD> foreign_key()
   )
 }
 

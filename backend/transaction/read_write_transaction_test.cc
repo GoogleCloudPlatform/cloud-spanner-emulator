@@ -49,79 +49,91 @@ namespace {
 
 using zetasql::values::Int64;
 using zetasql::values::String;
-
-ValueList GetIndexValues(const Key& key,
-                         std::unique_ptr<ReadWriteTransaction>* txn) {
-  ValueList values;
-  std::unique_ptr<backend::RowCursor> cursor;
-  backend::ReadArg read_arg;
-  // We specify the read using the user-visible table on which the index
-  // is present and not by directly using the index data table.
-  read_arg.table = "test_table";
-  read_arg.columns = {"string_col"};
-  read_arg.index = "test_index";
-  read_arg.key_set = KeySet(key);
-
-  ZETASQL_EXPECT_OK(txn->get()->Read(read_arg, &cursor));
-  while (cursor->Next()) {
-    values.push_back(cursor->ColumnValue(0));
-  }
-  return values;
-}
+using zetasql_base::testing::StatusIs;
 
 class ReadWriteTransactionTest : public testing::Test {
  public:
   ReadWriteTransactionTest()
-      : lock_manager_(absl::make_unique<LockManager>(&clock_)),
-        type_factory_(absl::make_unique<zetasql::TypeFactory>()),
-        schema_(test::CreateSchemaFromDDL(
-                    {
-                        R"(
-              CREATE TABLE test_table (
-                int64_col INT64 NOT NULL,
-                string_col STRING(MAX),
-                int64_val_col INT64
-              ) PRIMARY KEY (int64_col)
-            )",
-                        R"(
-              CREATE UNIQUE INDEX test_index ON test_table(string_col DESC)
-            )",
-                    },
-                    type_factory_.get())
-                    .ValueOrDie()),
-        versioned_catalog_(VersionedCatalog(std::move(schema_))),
+      : type_factory_(absl::make_unique<zetasql::TypeFactory>()),
+        lock_manager_(absl::make_unique<LockManager>(&clock_)),
+        storage_(absl::make_unique<InMemoryStorage>()),
+        versioned_catalog_(absl::make_unique<VersionedCatalog>(
+            std::move(test::CreateSchemaFromDDL(
+                          {
+                              R"(
+                  CREATE TABLE test_table (
+                    int64_col INT64 NOT NULL,
+                    string_col STRING(MAX),
+                    int64_val_col INT64
+                  ) PRIMARY KEY (int64_col)
+                )",
+                              R"(
+                  CREATE UNIQUE INDEX test_index ON test_table(string_col DESC)
+                )"},
+                          type_factory_.get())
+                          .ValueOrDie()))),
         action_manager_(absl::make_unique<ActionManager>()) {
     action_manager_->AddActionsForSchema(
-        versioned_catalog_.GetSchema(absl::InfiniteFuture()));
-    primary_transaction_ = absl::make_unique<ReadWriteTransaction>(
-        opts_, txn_id_, &clock_, &storage_, lock_manager_.get(),
-        &versioned_catalog_, action_manager_.get());
-    secondary_transaction_ = absl::make_unique<ReadWriteTransaction>(
-        opts_, txn_id_ + 1, &clock_, &storage_, lock_manager_.get(),
-        &versioned_catalog_, action_manager_.get());
+        versioned_catalog_->GetSchema(absl::InfiniteFuture()));
   }
 
  protected:
   Clock clock_;
-  // Components.
-  std::unique_ptr<LockManager> lock_manager_;
+
   // The type factory must outlive the type objects that it has made.
   std::unique_ptr<zetasql::TypeFactory> type_factory_;
-  std::unique_ptr<const Schema> schema_;
-  VersionedCatalog versioned_catalog_;
-  InMemoryStorage storage_;
+
+  // Internal state of database exposed for the purpose of testing.
+  std::unique_ptr<LockManager> lock_manager_;
+  std::unique_ptr<InMemoryStorage> storage_;
+  std::unique_ptr<VersionedCatalog> versioned_catalog_;
   std::unique_ptr<ActionManager> action_manager_;
 
-  // Constants.
-  TransactionID txn_id_ = 1;
-  absl::Time t0_ = clock_.Now();
+  // Counter to generate TransactionID.
+  std::atomic<int> id_counter_ = 0;
 
-  // Test State.
-  ReadWriteOptions opts_;
-  absl::Time read_timestamp_;
-  absl::Time commit_timestamp_;
-  std::unique_ptr<ReadWriteTransaction> primary_transaction_;
-  std::unique_ptr<ReadWriteTransaction> secondary_transaction_;
+  std::unique_ptr<ReadWriteTransaction> CreateReadWriteTransaction() {
+    ReadWriteOptions opts;
+    return absl::make_unique<ReadWriteTransaction>(
+        opts, ++id_counter_, &clock_, storage_.get(), lock_manager_.get(),
+        versioned_catalog_.get(), action_manager_.get());
+  }
+
+  zetasql_base::StatusOr<std::vector<ValueList>> ReadAll(
+      ReadWriteTransaction* txn, std::vector<std::string> columns) {
+    return ReadAllUsingIndex(txn, /*index =*/"", columns);
+  }
+
+  zetasql_base::StatusOr<std::vector<ValueList>> ReadAllUsingIndex(
+      ReadWriteTransaction* txn, std::string index,
+      std::vector<std::string> columns) {
+    return ReadUsingIndex(txn, KeySet(KeyRange::All()), index, columns);
+  }
+
+  zetasql_base::StatusOr<std::vector<ValueList>> ReadUsingIndex(
+      ReadWriteTransaction* txn, KeySet key_set, std::string index,
+      std::vector<std::string> columns) {
+    backend::ReadArg read_arg{.table = "test_table",
+                              .index = index,
+                              .key_set = key_set,
+                              .columns = columns};
+
+    std::unique_ptr<backend::RowCursor> cursor;
+    ZETASQL_RETURN_IF_ERROR(txn->Read(read_arg, &cursor));
+
+    std::vector<ValueList> rows;
+    while (cursor->Next()) {
+      rows.emplace_back();
+      for (int i = 0; i < cursor->NumColumns(); i++) {
+        rows.back().push_back(cursor->ColumnValue(i));
+      }
+    }
+    return rows;
+  }
+
+  auto IsOkAndHoldsRows(const std::vector<ValueList>& rows) {
+    return zetasql_base::testing::IsOkAndHolds(testing::ElementsAreArray(rows));
+  }
 };
 
 TEST_F(ReadWriteTransactionTest, CanReadAfterFlush) {
@@ -131,24 +143,17 @@ TEST_F(ReadWriteTransactionTest, CanReadAfterFlush) {
                {"int64_col", "string_col"}, {{Int64(1), String("value1")}});
   m.AddWriteOp(MutationOpType::kInsert, "test_table",
                {"int64_col", "string_col"}, {{Int64(2), String("value2")}});
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(m));
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+
+  // Commit the transaction.
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
-  backend::ReadArg read_arg;
-  read_arg.table = "test_table";
-  read_arg.columns = {"int64_col", "string_col"};
-  read_arg.key_set = KeySet(KeyRange::All());
-
-  std::unique_ptr<backend::RowCursor> cursor;
-  ZETASQL_EXPECT_OK(secondary_transaction_->Read(read_arg, &cursor));
-  std::vector<zetasql::Value> values;
-  while (cursor->Next()) {
-    values.push_back(cursor->ColumnValue(0));
-    values.push_back(cursor->ColumnValue(1));
-  }
-  EXPECT_THAT(values, testing::ElementsAre(Int64(1), String("value1"), Int64(2),
-                                           String("value2")));
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"int64_col", "string_col"}),
+              IsOkAndHoldsRows({{Int64(1), String("value1")},
+                                {Int64(2), String("value2")}}));
 
   // Update some of the existing rows and insert some new rows.
   Mutation m2;
@@ -158,39 +163,20 @@ TEST_F(ReadWriteTransactionTest, CanReadAfterFlush) {
                 {"int64_col", "string_col"},
                 {{Int64(1), String("new-value1")}});
   m2.AddDeleteOp("test_table", KeySet(Key({Int64(2)})));
-  ZETASQL_EXPECT_OK(secondary_transaction_->Write(m2));
-  ZETASQL_EXPECT_OK(secondary_transaction_->Commit());
+  ZETASQL_EXPECT_OK(txn2->Write(m2));
+  ZETASQL_EXPECT_OK(txn2->Commit());
 
   // Verify that updates are flushed to underlying storage.
-  auto transaction3 = absl::make_unique<ReadWriteTransaction>(
-      opts_, txn_id_ + 1, &clock_, &storage_, lock_manager_.get(),
-      &versioned_catalog_, action_manager_.get());
-  std::unique_ptr<backend::RowCursor> cursor3;
-  ZETASQL_EXPECT_OK(transaction3->Read(read_arg, &cursor3));
-  std::vector<zetasql::Value> values3;
-  while (cursor3->Next()) {
-    values3.push_back(cursor3->ColumnValue(0));
-    values3.push_back(cursor3->ColumnValue(1));
-  }
-  EXPECT_THAT(values3, testing::ElementsAre(Int64(1), String("new-value1"),
-                                            Int64(3), String("value3")));
+  auto txn3 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn3.get(), {"int64_col", "string_col"}),
+              IsOkAndHoldsRows({{Int64(1), String("new-value1")},
+                                {Int64(3), String("value3")}}));
 }
 
 TEST_F(ReadWriteTransactionTest, ReadEmptyDatabase) {
-  std::unique_ptr<backend::RowCursor> cursor;
-  backend::ReadArg read_arg;
-  read_arg.table = "test_table";
-  read_arg.columns = {"int64_col", "string_col"};
-  read_arg.key_set = KeySet(Key({Int64(1)}));
-
-  ZETASQL_EXPECT_OK(primary_transaction_->Read(read_arg, &cursor));
-  std::vector<zetasql::Value> values;
-  while (cursor->Next()) {
-    values.push_back(cursor->ColumnValue(0));
-    values.push_back(cursor->ColumnValue(1));
-  }
-
-  EXPECT_THAT(values, testing::ElementsAre());
+  auto txn1 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn1.get(), {"int64_col", "string_col"}),
+              IsOkAndHoldsRows({}));
 }
 
 TEST_F(ReadWriteTransactionTest, ReadTableNotFound) {
@@ -200,8 +186,9 @@ TEST_F(ReadWriteTransactionTest, ReadTableNotFound) {
   read_arg.columns = {"int64_col", "string_col"};
   read_arg.key_set = KeySet(Key({Int64(1)}));
 
-  EXPECT_THAT(primary_transaction_->Read(read_arg, &cursor),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+  auto txn = CreateReadWriteTransaction();
+  EXPECT_THAT(txn->Read(read_arg, &cursor),
+              StatusIs(zetasql_base::StatusCode::kNotFound));
 }
 
 TEST_F(ReadWriteTransactionTest, ReadColumnNotFound) {
@@ -211,8 +198,9 @@ TEST_F(ReadWriteTransactionTest, ReadColumnNotFound) {
   read_arg.columns = {"non-existent-column", "string_col"};
   read_arg.key_set = KeySet(Key({Int64(1)}));
 
-  EXPECT_THAT(primary_transaction_->Read(read_arg, &cursor),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+  auto txn = CreateReadWriteTransaction();
+  EXPECT_THAT(txn->Read(read_arg, &cursor),
+              StatusIs(zetasql_base::StatusCode::kNotFound));
 }
 
 TEST_F(ReadWriteTransactionTest, Commit) {
@@ -220,52 +208,40 @@ TEST_F(ReadWriteTransactionTest, Commit) {
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "test_table",
                {"int64_col", "string_col"}, {{Int64(3), String("value")}});
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(m));
+
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
 
   // Commit the transaction.
   absl::Time before_commit_timestamp_ = clock_.Now();
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+  ZETASQL_EXPECT_OK(txn1->Commit());
+
   // Verify Commit Timestamp.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(commit_timestamp_,
-                       primary_transaction_->GetCommitTimestamp());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn1->GetCommitTimestamp());
   EXPECT_GT(commit_timestamp_, before_commit_timestamp_);
-  EXPECT_EQ(primary_transaction_->state(),
-            ReadWriteTransaction::State::kCommitted);
+  EXPECT_EQ(txn1->state(), ReadWriteTransaction::State::kCommitted);
 
   // Start new transaction and verify the values.
-  std::unique_ptr<backend::RowCursor> cursor;
-  backend::ReadArg read_arg;
-  read_arg.table = "test_table";
-  read_arg.columns = {"int64_col", "string_col"};
-  read_arg.key_set = KeySet(Key({Int64(3)}));
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"int64_col", "string_col"}),
+              IsOkAndHoldsRows({{Int64(3), String("value")}}));
 
-  ZETASQL_EXPECT_OK(secondary_transaction_->Read(read_arg, &cursor));
-  std::vector<zetasql::Value> values;
-  while (cursor->Next()) {
-    values.push_back(cursor->ColumnValue(0));
-    values.push_back(cursor->ColumnValue(1));
-  }
-
-  EXPECT_THAT(values, testing::ElementsAre(Int64(3), String("value")));
-
-  // Verify index values.
-  std::vector<zetasql::Value> index_values;
-  Key index_key = Key();
-  index_values = GetIndexValues(index_key, &secondary_transaction_);
-  EXPECT_THAT(index_values, testing::ElementsAre(String("value")));
+  // Verify read using index.
+  EXPECT_THAT(ReadAllUsingIndex(txn2.get(), "test_index", {"string_col"}),
+              IsOkAndHoldsRows({{String("value")}}));
 }
 
 TEST_F(ReadWriteTransactionTest, CommitWithNoBufferedMutation) {
-  // Commit the transaction.
   absl::Time before_commit_timestamp_ = clock_.Now();
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+
+  // Commit the transaction.
+  auto txn = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn->Commit());
 
   // Verify Commit Timestamp.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(commit_timestamp_,
-                       primary_transaction_->GetCommitTimestamp());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn->GetCommitTimestamp());
   EXPECT_GT(commit_timestamp_, before_commit_timestamp_);
-  EXPECT_EQ(primary_transaction_->state(),
-            ReadWriteTransaction::State::kCommitted);
+  EXPECT_EQ(txn->state(), ReadWriteTransaction::State::kCommitted);
 }
 
 TEST_F(ReadWriteTransactionTest, CommitWithMultipleChangesToDatabase) {
@@ -275,42 +251,28 @@ TEST_F(ReadWriteTransactionTest, CommitWithMultipleChangesToDatabase) {
                {"int64_col", "string_col"}, {{Int64(3), String("value")}});
   m.AddWriteOp(MutationOpType::kInsert, "test_table",
                {"int64_col", "string_col"}, {{Int64(6), String("value-2")}});
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(m));
+
+  absl::Time before_commit_timestamp_ = clock_.Now();
 
   // Commit the transaction.
-  absl::Time before_commit_timestamp_ = clock_.Now();
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
+
   // Verify Commit Timestamp.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(commit_timestamp_,
-                       primary_transaction_->GetCommitTimestamp());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn1->GetCommitTimestamp());
   EXPECT_GT(commit_timestamp_, before_commit_timestamp_);
-  EXPECT_EQ(primary_transaction_->state(),
-            ReadWriteTransaction::State::kCommitted);
+  EXPECT_EQ(txn1->state(), ReadWriteTransaction::State::kCommitted);
 
   // Verify the values.
-  std::unique_ptr<backend::RowCursor> cursor;
-  backend::ReadArg read_arg;
-  read_arg.table = "test_table";
-  read_arg.columns = {"int64_col", "string_col"};
-  read_arg.key_set = KeySet(Key({Int64(3)}));
-  read_arg.key_set.AddKey(Key({Int64(6)}));
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"int64_col", "string_col"}),
+              IsOkAndHoldsRows({{Int64(3), String("value")},
+                                {Int64(6), String("value-2")}}));
 
-  ZETASQL_EXPECT_OK(secondary_transaction_->Read(read_arg, &cursor));
-  std::vector<zetasql::Value> values;
-  while (cursor->Next()) {
-    values.push_back(cursor->ColumnValue(0));
-    values.push_back(cursor->ColumnValue(1));
-  }
-
-  EXPECT_THAT(values, testing::ElementsAre(Int64(3), String("value"), Int64(6),
-                                           String("value-2")));
-
-  // Verify index values.
-  std::vector<zetasql::Value> index_values;
-  Key index_key = Key();
-  index_values = GetIndexValues(index_key, &secondary_transaction_);
-  EXPECT_THAT(index_values,
-              testing::ElementsAre(String("value-2"), String("value")));
+  // Verify that read using index results in descending order for string_col.
+  EXPECT_THAT(ReadAllUsingIndex(txn2.get(), "test_index", {"string_col"}),
+              IsOkAndHoldsRows({{String("value-2")}, {String("value")}}));
 }
 
 TEST_F(ReadWriteTransactionTest,
@@ -319,28 +281,28 @@ TEST_F(ReadWriteTransactionTest,
   Mutation m1;
   m1.AddWriteOp(MutationOpType::kInsert, "test_table",
                 {"int64_col", "string_col"}, {{Int64(1), String("value-1")}});
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(m1));
+
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m1));
 
   // Before commiting first transaction, starting another transaction is in
   // progress. Write for second transaction should consistently ABORT.
+  auto txn2 = CreateReadWriteTransaction();
   Mutation m2;
   m2.AddWriteOp(MutationOpType::kInsert, "test_table",
                 {"int64_col", "string_col"}, {{Int64(2), String("value-2")}});
   for (int i = 0; i < 5; i++) {
-    EXPECT_THAT(secondary_transaction_->Write(m2),
-                zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kAborted));
+    EXPECT_THAT(txn2->Write(m2), StatusIs(zetasql_base::StatusCode::kAborted));
   }
 
   // Commit the first transaction.
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
-  EXPECT_EQ(primary_transaction_->state(),
-            ReadWriteTransaction::State::kCommitted);
+  ZETASQL_EXPECT_OK(txn1->Commit());
+  EXPECT_EQ(txn1->state(), ReadWriteTransaction::State::kCommitted);
 
   // Now, secondary transaction can write / commit.
-  ZETASQL_EXPECT_OK(secondary_transaction_->Write(m2));
-  ZETASQL_EXPECT_OK(secondary_transaction_->Commit());
-  EXPECT_EQ(secondary_transaction_->state(),
-            ReadWriteTransaction::State::kCommitted);
+  ZETASQL_EXPECT_OK(txn2->Write(m2));
+  ZETASQL_EXPECT_OK(txn2->Commit());
+  EXPECT_EQ(txn2->state(), ReadWriteTransaction::State::kCommitted);
 }
 
 TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
@@ -352,10 +314,11 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
   Mutation seed_m;
   seed_m.AddWriteOp(MutationOpType::kInsert, "test_table",
                     {"int64_col", "int64_val_col"}, {{Int64(1), Int64(0)}});
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(seed_m));
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
-  EXPECT_EQ(primary_transaction_->state(),
-            ReadWriteTransaction::State::kCommitted);
+
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(seed_m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
+  EXPECT_EQ(txn1->state(), ReadWriteTransaction::State::kCommitted);
 
   // Read args.
   backend::ReadArg read_arg;
@@ -364,15 +327,12 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
   read_arg.key_set = KeySet(Key({Int64(1)}));
 
   std::vector<std::thread> threads;
-  std::atomic<int> id_counter(0);
   for (int i = 0; i < n; ++i) {
     threads.emplace_back([&]() {
       for (int j = 0; j < k; ++j) {
         // Start a  ReadWriteTransaction that will read and increment
         // this value.
-        auto cur_txn = absl::make_unique<ReadWriteTransaction>(
-            opts_, TransactionID(++id_counter), &clock_, &storage_,
-            lock_manager_.get(), &versioned_catalog_, action_manager_.get());
+        auto cur_txn = CreateReadWriteTransaction();
         while (true) {
           std::unique_ptr<backend::RowCursor> cursor;
           zetasql_base::Status status = cur_txn->Read(read_arg, &cursor);
@@ -415,8 +375,9 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
   }
 
   // Verify the value.
+  auto txn2 = CreateReadWriteTransaction();
   std::unique_ptr<backend::RowCursor> cursor;
-  ZETASQL_EXPECT_OK(secondary_transaction_->Read(read_arg, &cursor));
+  ZETASQL_EXPECT_OK(txn2->Read(read_arg, &cursor));
   int final_val;
   while (cursor->Next()) {
     final_val = cursor->ColumnValue(0).int64_value();
@@ -427,51 +388,48 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
 TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {
   // Start a ReadWrite transaction. This holds default schema at start of the
   // database creation.
-  auto cur_txn = absl::make_unique<ReadWriteTransaction>(
-      opts_, txn_id_, &clock_, &storage_, lock_manager_.get(),
-      &versioned_catalog_, action_manager_.get());
+  auto txn = CreateReadWriteTransaction();
 
   // Update the schema with "new_table".
   auto schema = test::CreateSchemaFromDDL(
                     {
                         R"(
-              CREATE TABLE new_table (
-                int64_col INT64 NOT NULL,
-                string_col STRING(MAX)
-              ) PRIMARY KEY (int64_col)
-            )",
+                          CREATE TABLE new_table (
+                            int64_col INT64 NOT NULL,
+                            string_col STRING(MAX)
+                          ) PRIMARY KEY (int64_col)
+                        )",
                     },
                     type_factory_.get())
                     .ValueOrDie();
-  ZETASQL_ASSERT_OK(versioned_catalog_.AddSchema(clock_.Now(), std::move(schema)));
-  action_manager_->AddActionsForSchema(versioned_catalog_.GetLatestSchema());
+  ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
+  action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema());
 
   // Transaction should return latest schema unless an operation is performed.
-  ASSERT_NE(cur_txn->schema()->FindTable("new_table"), nullptr);
+  ASSERT_NE(txn->schema()->FindTable("new_table"), nullptr);
 
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "new_table",
                {"int64_col", "string_col"}, {{Int64(1), String("value")}});
-  ZETASQL_EXPECT_OK(cur_txn->Write(m));
+  ZETASQL_EXPECT_OK(txn->Write(m));
 
   // Schema change to verify the transaction is aborted in subsequent requests.
   schema = test::CreateSchemaFromDDL(
                {
                    R"(
-              CREATE TABLE another_new_table (
-                int64_col INT64 NOT NULL,
-                string_col STRING(MAX)
-              ) PRIMARY KEY (int64_col)
-            )",
+                    CREATE TABLE another_new_table (
+                      int64_col INT64 NOT NULL,
+                      string_col STRING(MAX)
+                    ) PRIMARY KEY (int64_col)
+                  )",
                },
                type_factory_.get())
                .ValueOrDie();
-  ZETASQL_ASSERT_OK(versioned_catalog_.AddSchema(clock_.Now(), std::move(schema)));
-  action_manager_->AddActionsForSchema(versioned_catalog_.GetLatestSchema());
+  ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
+  action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema());
 
   // Transaction is aborted.
-  EXPECT_THAT(cur_txn->Write(m),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kAborted));
+  EXPECT_THAT(txn->Write(m), StatusIs(zetasql_base::StatusCode::kAborted));
 }
 
 TEST_F(ReadWriteTransactionTest, CommitWithNoEffectiveChangesToDatabase) {
@@ -480,61 +438,50 @@ TEST_F(ReadWriteTransactionTest, CommitWithNoEffectiveChangesToDatabase) {
   m.AddWriteOp(MutationOpType::kInsert, "test_table",
                {"int64_col", "string_col"}, {{Int64(3), String("value")}});
   m.AddDeleteOp("test_table", KeySet(Key({Int64(3)})));
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(m));
+
+  absl::Time before_commit_timestamp_ = clock_.Now();
 
   // Commit the transaction.
-  absl::Time before_commit_timestamp_ = clock_.Now();
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
+
   // Verify Commit Timestamp.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(commit_timestamp_,
-                       primary_transaction_->GetCommitTimestamp());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn1->GetCommitTimestamp());
   EXPECT_GT(commit_timestamp_, before_commit_timestamp_);
-  EXPECT_EQ(primary_transaction_->state(),
-            ReadWriteTransaction::State::kCommitted);
+  EXPECT_EQ(txn1->state(), ReadWriteTransaction::State::kCommitted);
 
   // Verify the values.
-  std::unique_ptr<backend::RowCursor> cursor;
-  backend::ReadArg read_arg;
-  read_arg.table = "test_table";
-  read_arg.columns = {"int64_col", "string_col"};
-  read_arg.key_set = KeySet(Key({Int64(3)}));
-
-  ZETASQL_EXPECT_OK(secondary_transaction_->Read(read_arg, &cursor));
-  std::vector<zetasql::Value> values;
-  while (cursor->Next()) {
-    values.push_back(cursor->ColumnValue(0));
-    values.push_back(cursor->ColumnValue(1));
-  }
-  EXPECT_THAT(values, testing::ElementsAre());
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"int64_col", "string_col"}),
+              IsOkAndHoldsRows({}));
 }
 
 TEST_F(ReadWriteTransactionTest, DuplicateCommitFails) {
   // Commit the transaction.
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+  auto txn = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn->Commit());
 
   // Verify Commit State.
-  EXPECT_EQ(primary_transaction_->state(),
-            ReadWriteTransaction::State::kCommitted);
+  EXPECT_EQ(txn->state(), ReadWriteTransaction::State::kCommitted);
 
   // Call commit on a committed transaction should fail.
-  EXPECT_THAT(primary_transaction_->Commit(),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInternal));
+  EXPECT_THAT(txn->Commit(), StatusIs(zetasql_base::StatusCode::kInternal));
 }
 
 TEST_F(ReadWriteTransactionTest, CommitAfterRollbackFails) {
   // Rollback transaction.
-  ZETASQL_EXPECT_OK(primary_transaction_->Rollback());
-  EXPECT_EQ(primary_transaction_->state(),
-            ReadWriteTransaction::State::kRolledback);
+  auto txn = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn->Rollback());
+  EXPECT_EQ(txn->state(), ReadWriteTransaction::State::kRolledback);
 
   // Call commit on a rolled-back transaction should fail.
-  EXPECT_THAT(primary_transaction_->Commit(),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInternal));
+  EXPECT_THAT(txn->Commit(), StatusIs(zetasql_base::StatusCode::kInternal));
 }
 
 TEST_F(ReadWriteTransactionTest, GetCommitTimestampWithoutTransactionCommit) {
-  EXPECT_THAT(primary_transaction_->GetCommitTimestamp(),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInternal));
+  auto txn = CreateReadWriteTransaction();
+  EXPECT_THAT(txn->GetCommitTimestamp(), StatusIs(zetasql_base::StatusCode::kInternal));
 }
 
 TEST_F(ReadWriteTransactionTest, FailsReadWithInvalidIndex) {
@@ -542,21 +489,17 @@ TEST_F(ReadWriteTransactionTest, FailsReadWithInvalidIndex) {
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "test_table",
                {"int64_col", "string_col"}, {{Int64(3), String("value")}});
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(m));
 
   // Commit the transaction.
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
 
   // Verify that reading from an invalid index fails.
-  std::unique_ptr<backend::RowCursor> cursor;
-  backend::ReadArg read_arg;
-  read_arg.table = "test_table";
-  read_arg.index = "invalid_index";
-  read_arg.columns = {"string_col", "int64_col"};
-  read_arg.key_set = KeySet(Key({String("value")}));
-
-  EXPECT_THAT(secondary_transaction_->Read(read_arg, &cursor),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAllUsingIndex(txn2.get(), "invalid_index",
+                                {"int64_col", "string_col"}),
+              StatusIs(zetasql_base::StatusCode::kNotFound));
 }
 
 TEST_F(ReadWriteTransactionTest, CanReadUsingIndex) {
@@ -564,26 +507,17 @@ TEST_F(ReadWriteTransactionTest, CanReadUsingIndex) {
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "test_table",
                {"int64_col", "string_col"}, {{Int64(3), String("value")}});
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(m));
 
   // Commit the transaction.
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
-  std::unique_ptr<backend::RowCursor> cursor;
-  backend::ReadArg read_arg;
-  read_arg.table = "test_table";
-  read_arg.index = "test_index";
-  read_arg.columns = {"string_col", "int64_col"};
-  read_arg.key_set = KeySet(Key({String("value")}));
-
-  ZETASQL_EXPECT_OK(secondary_transaction_->Read(read_arg, &cursor));
-  std::vector<zetasql::Value> values;
-  while (cursor->Next()) {
-    values.push_back(cursor->ColumnValue(0));
-    values.push_back(cursor->ColumnValue(1));
-  }
-  EXPECT_THAT(values, testing::ElementsAre(String("value"), Int64(3)));
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadUsingIndex(txn2.get(), KeySet(Key({String("value")})),
+                             "test_index", {"string_col", "int64_col"}),
+              IsOkAndHoldsRows({{String("value"), Int64(3)}}));
 }
 
 TEST_F(ReadWriteTransactionTest, IndexInsertTest) {
@@ -591,22 +525,26 @@ TEST_F(ReadWriteTransactionTest, IndexInsertTest) {
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "test_table",
                {"int64_col", "string_col"}, {{Int64(3), String("value")}});
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(m));
 
   // Commit the transaction.
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
-  std::vector<zetasql::Value> values;
-  Key index_key = Key({String("value")});
-  values = GetIndexValues(index_key, &secondary_transaction_);
-  EXPECT_THAT(values, testing::ElementsAre(String("value")));
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(
+      ReadAllUsingIndex(txn2.get(), "test_index", {"string_col", "int64_col"}),
+      IsOkAndHoldsRows({{String("value"), Int64(3)}}));
+
+  EXPECT_THAT(ReadUsingIndex(txn2.get(), KeySet(Key({String("value")})),
+                             "test_index", {"string_col"}),
+              IsOkAndHoldsRows({{String("value")}}));
 
   // Searching for empty string should result in no elements.
-  values.clear();
-  index_key = Key({String("")});
-  values = GetIndexValues(index_key, &secondary_transaction_);
-  EXPECT_THAT(values, testing::ElementsAre());
+  EXPECT_THAT(ReadUsingIndex(txn2.get(), KeySet(Key({String("")})),
+                             "test_index", {"string_col"}),
+              IsOkAndHoldsRows({}));
 }
 
 TEST_F(ReadWriteTransactionTest, IndexUpdateTest) {
@@ -616,22 +554,21 @@ TEST_F(ReadWriteTransactionTest, IndexUpdateTest) {
                {"int64_col", "string_col"}, {{Int64(3), String("value")}});
   m.AddWriteOp(MutationOpType::kUpdate, "test_table",
                {"int64_col", "string_col"}, {{Int64(3), String("new-value")}});
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(m));
 
   // Commit the transaction.
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
 
-  // Verify the values.
-  std::vector<zetasql::Value> values;
-  Key index_key = Key({String("value")});
-  values = GetIndexValues(index_key, &secondary_transaction_);
-  EXPECT_THAT(values, testing::ElementsAre());
+  // Verify the index contains value "new-value" and not "value"
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadUsingIndex(txn2.get(), KeySet(Key({String("value")})),
+                             "test_index", {"string_col"}),
+              IsOkAndHoldsRows({}));
 
-  // Searching for empty string should result in no elements.
-  values.clear();
-  index_key = Key({String("new-value")});
-  values = GetIndexValues(index_key, &secondary_transaction_);
-  EXPECT_THAT(values, testing::ElementsAre(String("new-value")));
+  EXPECT_THAT(ReadUsingIndex(txn2.get(), KeySet(Key({String("new-value")})),
+                             "test_index", {"string_col"}),
+              IsOkAndHoldsRows({{String("new-value")}}));
 }
 
 TEST_F(ReadWriteTransactionTest, IndexDeleteTest) {
@@ -640,16 +577,17 @@ TEST_F(ReadWriteTransactionTest, IndexDeleteTest) {
   m.AddWriteOp(MutationOpType::kInsert, "test_table",
                {"int64_col", "string_col"}, {{Int64(3), String("value")}});
   m.AddDeleteOp("test_table", KeySet(Key({Int64(3)})));
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(m));
 
   // Commit the transaction.
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
-  std::vector<zetasql::Value> values;
-  Key index_key = Key({String("value")});
-  values = GetIndexValues(index_key, &secondary_transaction_);
-  EXPECT_THAT(values, testing::ElementsAre());
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadUsingIndex(txn2.get(), KeySet(Key({String("value")})),
+                             "test_index", {"string_col"}),
+              IsOkAndHoldsRows({}));
 }
 
 TEST_F(ReadWriteTransactionTest, IndexDeleteAreIdempotentTest) {
@@ -663,16 +601,17 @@ TEST_F(ReadWriteTransactionTest, IndexDeleteAreIdempotentTest) {
   // triggers a index delete op.
   m.AddWriteOp(MutationOpType::kReplace, "test_table",
                {"int64_col", "string_col"}, {{Int64(3), String("value2")}});
-  ZETASQL_EXPECT_OK(primary_transaction_->Write(m));
 
   // Commit the transaction.
-  ZETASQL_EXPECT_OK(primary_transaction_->Commit());
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
-  std::vector<zetasql::Value> values;
-  Key index_key = Key({String("value")});
-  values = GetIndexValues(index_key, &secondary_transaction_);
-  EXPECT_THAT(values, testing::ElementsAre());
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadUsingIndex(txn2.get(), KeySet(Key({String("value")})),
+                             "test_index", {"string_col"}),
+              IsOkAndHoldsRows({}));
 }
 
 TEST_F(ReadWriteTransactionTest, IndexUniquenessFailTest) {
@@ -682,8 +621,9 @@ TEST_F(ReadWriteTransactionTest, IndexUniquenessFailTest) {
                {"int64_col", "string_col"}, {{Int64(3), String("value")}});
   m.AddWriteOp(MutationOpType::kInsert, "test_table",
                {"int64_col", "string_col"}, {{Int64(4), String("value")}});
-  EXPECT_THAT(primary_transaction_->Write(m),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+
+  auto txn = CreateReadWriteTransaction();
+  EXPECT_THAT(txn->Write(m), StatusIs(zetasql_base::StatusCode::kAlreadyExists));
 }
 
 }  // namespace

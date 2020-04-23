@@ -193,10 +193,11 @@ zetasql_base::Status UpdateDatabaseDdl(
   for (const std::string& statement : statements) {
     update_md.add_statements(statement);
   }
+
   // Only the timestamps of the successful statements are reported.
   for (int i = 0; i < num_succesful_statements; ++i) {
-    ZETASQL_RETURN_IF_ERROR(
-        TimestampToProto(commit_timestamp, update_md.add_commit_timestamps()));
+    ZETASQL_ASSIGN_OR_RETURN(*update_md.add_commit_timestamps(),
+                     TimestampToProto(commit_timestamp));
   }
 
   // Create operation to be returned as part of the response.

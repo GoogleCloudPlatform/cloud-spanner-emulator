@@ -35,6 +35,7 @@
 #include "backend/schema/parser/DDLParser.h"
 #include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
+#include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
 #include "zetasql/base/status_macros.h"
@@ -43,6 +44,8 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+namespace {
 
 // A class that processes a set of Cloud Spanner DDL statements, and applies
 // them to an existing (or empty) `Schema` to obtain the updated `Schema`.
@@ -58,6 +61,37 @@ namespace backend {
 // executed during both database schema creation and update.
 class SchemaUpdaterImpl {
  public:
+  SchemaUpdaterImpl() = delete;  // Private construction only.
+  ~SchemaUpdaterImpl() = default;
+  // Disallow copies but enable moves.
+  SchemaUpdaterImpl(const SchemaUpdaterImpl&) = delete;
+  SchemaUpdaterImpl& operator=(const SchemaUpdaterImpl&) = delete;
+  SchemaUpdaterImpl(SchemaUpdaterImpl&&) = default;
+  // Assignment move is not supported by absl::Time.
+  SchemaUpdaterImpl& operator=(SchemaUpdaterImpl&&) = delete;
+
+  zetasql_base::StatusOr<SchemaUpdaterImpl> static Build(
+      zetasql::TypeFactory* type_factory,
+      TableIDGenerator* table_id_generator,
+      ColumnIDGenerator* column_id_generator, Storage* storage,
+      absl::Time schema_change_ts, const Schema* existing_schema) {
+    SchemaUpdaterImpl impl(type_factory, table_id_generator,
+                           column_id_generator, storage, schema_change_ts,
+                           existing_schema);
+    ZETASQL_RETURN_IF_ERROR(impl.Init());
+    return impl;
+  }
+
+  // Apply DDL statements returning the SchemaValidationContext containing
+  // the schema change actions resulting from each statement.
+  zetasql_base::StatusOr<std::vector<SchemaValidationContext>> ApplyDDLStatements(
+      absl::Span<const std::string> statements);
+
+  std::vector<std::unique_ptr<const Schema>> GetIntermediateSchemas() {
+    return std::move(intermediate_schemas_);
+  }
+
+ private:
   SchemaUpdaterImpl(zetasql::TypeFactory* type_factory,
                     TableIDGenerator* table_id_generator,
                     ColumnIDGenerator* column_id_generator, Storage* storage,
@@ -71,16 +105,9 @@ class SchemaUpdaterImpl {
         editor_(absl::make_unique<SchemaGraphEditor>(
             latest_schema_->GetSchemaGraph())) {}
 
-  // Apply DDL statements returning the SchemaValidationContext containing
-  // the schema change actions resulting from each statement.
-  zetasql_base::StatusOr<std::vector<SchemaValidationContext>> ApplyDDLStatements(
-      absl::Span<const std::string> statements);
+  // Initializes potentially failing components after construction.
+  zetasql_base::Status Init();
 
-  std::vector<std::unique_ptr<const Schema>> GetIntermediateSchemas() {
-    return std::move(intermediate_schemas_);
-  }
-
- private:
   // Applies the given `statement` on to `latest_schema_`.
   zetasql_base::StatusOr<std::unique_ptr<const Schema>> ApplyDDLStatement(
       absl::string_view statement);
@@ -183,7 +210,20 @@ class SchemaUpdaterImpl {
 
   // Editor used to modify the schema graph.
   std::unique_ptr<SchemaGraphEditor> editor_;
+
+  // Manages global schema names to prevent and generate unique names.
+  GlobalSchemaNames global_names_;
 };
+
+zetasql_base::Status SchemaUpdaterImpl::Init() {
+  for (const Table* table : latest_schema_->tables()) {
+    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", table->Name()));
+    for (const Index* index : table->indexes()) {
+      ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Index", index->Name()));
+    }
+  }
+  return zetasql_base::OkStatus();
+}
 
 zetasql_base::Status SchemaUpdaterImpl::AddNode(
     std::unique_ptr<const SchemaNode> node) {
@@ -412,11 +452,7 @@ zetasql_base::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColu
 }
 
 zetasql_base::Status SchemaUpdaterImpl::CreateTable(const ddl::CreateTable& ddl_table) {
-  // Tables and indexes share a namespace.
-  if (latest_schema_->FindTable(ddl_table.table_name()) ||
-      latest_schema_->FindIndex(ddl_table.table_name())) {
-    return error::SchemaObjectAlreadyExists("Table", ddl_table.table_name());
-  }
+  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", ddl_table.table_name()));
 
   Table::Builder builder;
   builder.set_id(table_id_generator_->NextId(ddl_table.table_name()))
@@ -483,7 +519,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
     const Table* indexed_table,
     std::vector<const KeyColumn*>* index_key_columns,
     std::vector<const Column*>* stored_columns) {
-  const std::string& table_name =
+  std::string table_name =
       absl::StrCat(kIndexDataTablePrefix, ddl_index.index_name());
   Table::Builder builder;
   builder.set_name(table_name)
@@ -516,7 +552,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
             // Skip already added columns
             continue;
           }
-          const std::string& key_col_name = key_col->column()->Name();
+          std::string key_col_name = key_col->column()->Name();
           ZETASQL_ASSIGN_OR_RETURN(const Column* column,
                            CreateIndexDataTableColumn(
                                indexed_table, key_col_name, builder.get(),
@@ -534,7 +570,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
 
         ZETASQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(data_table_pk, &builder));
         int num_declared_keys = ddl_primary_key.key_part_size();
-        const auto& data_table_key_cols = builder.get()->primary_key();
+        auto data_table_key_cols = builder.get()->primary_key();
         for (int i = 0; i < num_declared_keys; ++i) {
           index_key_columns->push_back(data_table_key_cols[i]);
         }
@@ -580,10 +616,7 @@ zetasql_base::Status SchemaUpdaterImpl::CreateIndex(const ddl::CreateIndex& ddl_
   }
 
   // Tables and indexes share a namespace.
-  if (latest_schema_->FindIndex(ddl_index.index_name()) ||
-      latest_schema_->FindTable(ddl_index.index_name())) {
-    return error::SchemaObjectAlreadyExists("Index", ddl_index.index_name());
-  }
+  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Index", ddl_index.index_name()));
 
   Index::Builder builder;
   builder.set_name(ddl_index.index_name())
@@ -711,6 +744,7 @@ zetasql_base::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_tab
     return error::TableNotFound(drop_table.table_name());
   }
   ZETASQL_RETURN_IF_ERROR(DropNode(table));
+  global_names_.RemoveName(table->Name());
   return zetasql_base::OkStatus();
 }
 
@@ -720,8 +754,11 @@ zetasql_base::Status SchemaUpdaterImpl::DropIndex(const ddl::DropIndex& drop_ind
     return error::IndexNotFound(drop_index.index_name());
   }
   ZETASQL_RETURN_IF_ERROR(DropNode(index));
+  global_names_.RemoveName(index->Name());
   return zetasql_base::OkStatus();
 }
+
+}  // namespace
 
 const Schema* SchemaUpdater::EmptySchema() {
   static const Schema* empty_schema = new Schema;
@@ -735,9 +772,11 @@ SchemaUpdater::ValidateSchemaFromDDL(absl::Span<const std::string> statements,
   if (existing_schema == nullptr) {
     existing_schema = EmptySchema();
   }
-  SchemaUpdaterImpl updater(context.type_factory, context.table_id_generator,
-                            context.column_id_generator, context.storage,
-                            context.schema_change_timestamp, existing_schema);
+  ZETASQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
+                   SchemaUpdaterImpl::Build(
+                       context.type_factory, context.table_id_generator,
+                       context.column_id_generator, context.storage,
+                       context.schema_change_timestamp, existing_schema));
   ZETASQL_ASSIGN_OR_RETURN(pending_work_, updater.ApplyDDLStatements(statements));
   intermediate_schemas_ = updater.GetIntermediateSchemas();
 
@@ -763,9 +802,11 @@ zetasql_base::Status SchemaUpdater::RunPendingActions(int* num_succesful) {
 zetasql_base::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
     const Schema* existing_schema, absl::Span<const std::string> statements,
     const SchemaChangeContext& context) {
-  SchemaUpdaterImpl updater(context.type_factory, context.table_id_generator,
-                            context.column_id_generator, context.storage,
-                            context.schema_change_timestamp, existing_schema);
+  ZETASQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
+                   SchemaUpdaterImpl::Build(
+                       context.type_factory, context.table_id_generator,
+                       context.column_id_generator, context.storage,
+                       context.schema_change_timestamp, existing_schema));
   ZETASQL_ASSIGN_OR_RETURN(pending_work_, updater.ApplyDDLStatements(statements));
   intermediate_schemas_ = updater.GetIntermediateSchemas();
 

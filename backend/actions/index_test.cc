@@ -59,7 +59,7 @@ class IndexTest : public test::ActionsTest {
                             STORING(another_string_col)
                     )"},
                     &type_factory_)
-                    .ValueOrDie()),
+                    .value()),
         table_(schema_->FindTable("TestTable")),
         base_columns_(table_->columns()),
         index_(schema_->FindIndex("TestIndex")),

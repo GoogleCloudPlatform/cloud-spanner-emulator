@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include "backend/transaction/read_write_transaction.h"
+
 #include <memory>
 #include <string>
 #include <utility>
@@ -47,7 +49,6 @@
 #include "backend/transaction/actions.h"
 #include "backend/transaction/flush.h"
 #include "backend/transaction/options.h"
-#include "backend/transaction/read_write_transaction.h"
 #include "backend/transaction/resolve.h"
 #include "backend/transaction/row_cursor.h"
 #include "common/clock.h"
@@ -99,16 +100,16 @@ zetasql_base::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
       break;
     }
     case MutationOpType::kInsertOrUpdate: {
-      zetasql_base::Status s = transaction_store->Lookup(table, key,
-                                                 /*columns= */ {},
-                                                 /*values= */ nullptr);
-      if (s.ok()) {
+      zetasql_base::StatusOr<ValueList> maybe_row =
+          transaction_store->Lookup(table, key,
+                                    /*columns= */ {});
+      if (maybe_row.ok()) {
         // Row exists and therefore we should only update.
         write_ops.push_back(UpdateOp{table, key, columns, row});
-      } else if (s.code() == zetasql_base::StatusCode::kNotFound) {
+      } else if (maybe_row.status().code() == zetasql_base::StatusCode::kNotFound) {
         write_ops.push_back(InsertOp{table, key, columns, row});
       } else {
-        return s;
+        return maybe_row.status();
       }
       break;
     }

@@ -49,6 +49,42 @@ cc_test(
 )
 
 cc_library(
+    name = "global_schema_names",
+    srcs = [
+        "global_schema_names.cc",
+    ],
+    hdrs = [
+        "global_schema_names.h",
+    ],
+    deps = [
+        "//backend/common:case",
+        "//backend/schema/catalog:schema",
+        "//common:errors",
+        "//common:limits",
+        "@com_google_absl//absl/strings",
+        "@com_google_farmhash//:farmhash_fingerprint",
+        "@com_google_zetasql//zetasql/base:status",
+    ],
+)
+
+cc_test(
+    name = "global_schema_names_test",
+    srcs = [
+        "global_schema_names_test.cc",
+    ],
+    deps = [
+        ":global_schema_names",
+        "//common:errors",
+        "//common:limits",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
     name = "schema_updater",
     srcs = [
         "schema_updater.cc",
@@ -58,6 +94,7 @@ cc_library(
     ],
     deps = [
         ":ddl_type_conversion",
+        ":global_schema_names",
         ":schema_validation_context",
         "//backend/common:ids",
         "//backend/datamodel:types",
