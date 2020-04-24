@@ -45,6 +45,7 @@
 #include "backend/query/hint_validator.h"
 #include "common/constants.h"
 #include "common/errors.h"
+#include "frontend/converters/values.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status.h"
 #include "zetasql/base/status_macros.h"
@@ -417,8 +418,52 @@ zetasql_base::StatusOr<QueryResult> QueryEngine::ExecuteSql(
     const Query& query, const QueryContext& context) const {
   absl::Time start_time = absl::Now();
   Catalog catalog{context.schema, &function_catalog_, context.reader};
-  ZETASQL_ASSIGN_OR_RETURN(auto analyzer_output,
-                   Analyze(query.sql, query.params, &catalog, type_factory_));
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto analyzer_output,
+      Analyze(query.sql, query.declared_params, &catalog, type_factory_));
+
+  // Allow the loop below to look up undeclared parameters without worrying
+  // about case. ZetaSQL will return the undeclared parameters using the
+  // spelling provided in the query, but the undeclared_params map uses the
+  // spelling from the query params section of the request.
+  //
+  // For example:
+  //     SELECT CAST(@pBool AS bool) with a supplied parameter "pbool".
+  //
+  // Do this here instead of the frontend so that the frontend does not need to
+  // know any details about case normalization.
+  //
+  // This map takes pointers to elements inside of query.undeclared_params,
+  // which is const so the pointers should not be invalidated.
+  CaseInsensitiveStringMap<const google::protobuf::Value*> undeclared_params;
+  for (const auto& [name, value] : query.undeclared_params)
+    undeclared_params[name] = &value;
+
+  // Build new parameter map which includes all unresolved parameters.
+  auto params = query.declared_params;
+  for (const auto& [name, type] : analyzer_output->undeclared_parameters()) {
+    if (type->IsTimestamp() || type->IsDate()) {
+      return error::UnableToInferUndeclaredParameter(name);
+    }
+
+    auto it = undeclared_params.find(name);
+
+    // ZetaSQL will return an undeclared parameter error for any parameters that
+    // do not have values specified (ie, when it == end()).
+    if (it != undeclared_params.end()) {
+      auto parsed_value = frontend::ValueFromProto(*it->second, type);
+
+      // If the value does not parse as the given type, the error code is
+      // kInvalidArgument, not kFailedPrecondition, for example.
+      if (!parsed_value.ok()) {
+        return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+                            parsed_value.status().message());
+      }
+
+      params[name] = parsed_value.value();
+    }
+  }
+
   ZETASQL_ASSIGN_OR_RETURN(
       auto resolved_statement,
       ExtractValidatdResolvedStatement(analyzer_output.get(), context.schema));
@@ -427,14 +472,14 @@ zetasql_base::StatusOr<QueryResult> QueryEngine::ExecuteSql(
   if (analyzer_output->resolved_statement()->node_kind() ==
       zetasql::RESOLVED_QUERY_STMT) {
     ZETASQL_ASSIGN_OR_RETURN(auto cursor,
-                     EvaluateQuery(resolved_statement.get(), query.params,
+                     EvaluateQuery(resolved_statement.get(), params,
                                    type_factory_, &result.num_output_rows));
     result.rows = std::move(cursor);
   } else {
     ZETASQL_RET_CHECK_NE(context.writer, nullptr);
     ZETASQL_ASSIGN_OR_RETURN(
         const auto& mutation_and_count,
-        EvaluateUpdate(resolved_statement.get(), query.params, type_factory_));
+        EvaluateUpdate(resolved_statement.get(), params, type_factory_));
     ZETASQL_RETURN_IF_ERROR(context.writer->Write(mutation_and_count.first));
     result.modified_row_count = static_cast<int64_t>(mutation_and_count.second);
   }

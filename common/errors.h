@@ -324,7 +324,7 @@ zetasql_base::Status ColumnNotFoundInIndex(absl::string_view index,
                                    absl::string_view column);
 
 // Query errors.
-zetasql_base::Status UnimplementedUntypedParameterBinding(absl::string_view param_name);
+zetasql_base::Status UnableToInferUndeclaredParameter(absl::string_view parameter_name);
 zetasql_base::Status InvalidHint(absl::string_view hint_string);
 zetasql_base::Status InvalidHintValue(absl::string_view hint_string,
                               absl::string_view value_string);

@@ -1172,15 +1172,12 @@ zetasql_base::Status ColumnNotFoundInIndex(absl::string_view index,
 }
 
 // Query errors.
-zetasql_base::Status UnimplementedUntypedParameterBinding(
-    absl::string_view param_name) {
-  return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented,
-                      absl::Substitute("Untyped parameter binding: $0. Support "
-                                       "for untyped parameter bindings is "
-                                       "not yet implemented.",
-                                       param_name));
+zetasql_base::Status UnableToInferUndeclaredParameter(
+    absl::string_view parameter_name) {
+  return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+                      absl::Substitute("Unable to infer type for parameter $0.",
+                                       parameter_name));
 }
-
 zetasql_base::Status InvalidHint(absl::string_view hint_string) {
   return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
                       absl::Substitute("Unsupported hint: $0.", hint_string));

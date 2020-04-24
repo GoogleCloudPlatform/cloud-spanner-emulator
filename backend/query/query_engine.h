@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 
+#include "google/protobuf/struct.pb.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
 #include "absl/memory/memory.h"
@@ -40,8 +41,13 @@ struct Query {
   // The SQL string to be executed.
   std::string sql;
 
-  // The query parameters.
-  std::map<std::string, zetasql::Value> params;
+  // The query parameters. Values in this map have already been deserialized as
+  // their type was provided in the query.
+  std::map<std::string, zetasql::Value> declared_params;
+
+  // Parameters that did not have a type supplied. They will be deserialized in
+  // the backend once the ZetaSQL analyzer provides types.
+  std::map<std::string, google::protobuf::Value> undeclared_params;
 };
 
 // Returns true if the given query is a DML query.

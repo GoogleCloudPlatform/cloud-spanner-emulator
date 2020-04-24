@@ -31,19 +31,21 @@ zetasql_base::StatusOr<backend::Query> QueryFromProto(
     std::string sql, const google::protobuf::Struct& params,
     google::protobuf::Map<std::string, google::spanner::v1::Type> param_types,
     zetasql::TypeFactory* type_factory) {
-  std::map<std::string, zetasql::Value> query_parameters;
+  std::map<std::string, zetasql::Value> declared;
+  std::map<std::string, google::protobuf::Value> undeclared;
   for (const auto& [name, proto_value] : params.fields()) {
     auto param_type_iter = param_types.find(name);
     if (param_type_iter == param_types.end()) {
-      // TODO Support untyped parameters.
-      return error::UnimplementedUntypedParameterBinding(name);
+      // Defer parsing this value until the backend has performed type analysis.
+      undeclared[name] = proto_value;
+    } else {
+      const spanner::v1::Type& proto_type = param_type_iter->second;
+      const zetasql::Type* type;
+      ZETASQL_RETURN_IF_ERROR(TypeFromProto(proto_type, type_factory, &type));
+      ZETASQL_ASSIGN_OR_RETURN(declared[name], ValueFromProto(proto_value, type));
     }
-    const spanner::v1::Type& proto_type = param_type_iter->second;
-    const zetasql::Type* type;
-    ZETASQL_RETURN_IF_ERROR(TypeFromProto(proto_type, type_factory, &type));
-    ZETASQL_ASSIGN_OR_RETURN(query_parameters[name], ValueFromProto(proto_value, type));
   }
-  return backend::Query{sql, std::move(query_parameters)};
+  return backend::Query{sql, std::move(declared), std::move(undeclared)};
 }
 
 }  // namespace frontend

@@ -218,7 +218,10 @@ cc_test(
     srcs = ["queries_test.cc"],
     deps = [
         ":queries",
+        "//backend/datamodel:types",
         "//common:errors",
+        "//frontend/converters:types",
+        "//frontend/converters:values",
         "//tests/common:proto_matchers",
         "//tests/common:test_env",
         "@com_github_grpc_grpc//:grpc++",
