@@ -45,7 +45,7 @@ namespace backend {
 // key string is directly compared with another string, the comparison is still
 // case sensitive. For example:
 //
-//     absl::flat_hash_map<std::string, CaseInsensitiveHash,
+//     absl::flat_hash_set<std::string, CaseInsensitiveHash,
 //                         CaseInsensitiveEqual> table_names;
 //     table_names.insert("my-table");
 //     for (auto& table : table_names) {
@@ -55,7 +55,7 @@ namespace backend {
 //     }
 //
 // A hash function object for performing case-insensitive hash on strings.
-struct CaseInsensistiveHash {
+struct CaseInsensitiveHash {
   size_t operator()(const std::string& keyval) const {
     std::string s = keyval;
     absl::AsciiStrToLower(&s);
@@ -73,14 +73,13 @@ struct CaseInsensitiveEqual {
 
 // A convenient alias for flat_hash_map with case-insensitive strings as the
 // keys.
-template <typename SchemaClassType>
+template <typename ValueType>
 using CaseInsensitiveStringMap =
-    absl::flat_hash_map<std::string, SchemaClassType, CaseInsensistiveHash,
+    absl::flat_hash_map<std::string, ValueType, CaseInsensitiveHash,
                         CaseInsensitiveEqual>;
 
 using CaseInsensitiveStringSet =
-    absl::flat_hash_set<std::string, CaseInsensistiveHash,
-                        CaseInsensitiveEqual>;
+    absl::flat_hash_set<std::string, CaseInsensitiveHash, CaseInsensitiveEqual>;
 
 }  // namespace backend
 }  // namespace emulator

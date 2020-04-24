@@ -29,7 +29,7 @@ namespace backend {
 namespace {
 
 TEST(CaseTest, CaseInsensitiveHashContainer) {
-  absl::flat_hash_set<std::string, CaseInsensistiveHash, CaseInsensitiveEqual>
+  absl::flat_hash_set<std::string, CaseInsensitiveHash, CaseInsensitiveEqual>
       hash_set;
   EXPECT_TRUE(hash_set.insert("my-TeSt").second);
 
