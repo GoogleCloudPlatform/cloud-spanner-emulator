@@ -1,1 +1,1 @@
-cloud_spanner_emulator_0.7.12_test_20200424_01_RC08
+cloud_spanner_emulator_0.7.22_test_20200426_00_RC00
