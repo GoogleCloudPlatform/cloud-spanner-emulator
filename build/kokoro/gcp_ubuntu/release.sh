@@ -70,5 +70,5 @@ docker cp "$container_id":/gateway_main $OUTPUT_DIR
 docker cp "$container_id":/emulator_main $OUTPUT_DIR
 docker rm "$container_id"
 
-tar -C "${OUTPUT_DIR}" -czf "${OUTPUT_DIR}"/cloud-spanner-emulator-linux_amd64-"${EMULATOR_VERSION}".tar.gz gateway_main emulator_main
+tar -C "${OUTPUT_DIR}" -czf "${OUTPUT_DIR}"/cloud-spanner-emulator_linux_amd64-"${EMULATOR_VERSION}".tar.gz gateway_main emulator_main
 
