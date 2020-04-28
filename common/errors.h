@@ -347,6 +347,7 @@ zetasql_base::Status InvalidPartitionToken();
 zetasql_base::Status ReadFromDifferentSession();
 zetasql_base::Status ReadFromDifferentTransaction();
 zetasql_base::Status ReadFromDifferentParameters();
+zetasql_base::Status InvalidPartitionedQueryMode();
 
 }  // namespace error
 }  // namespace emulator

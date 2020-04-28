@@ -94,6 +94,7 @@ cc_library(
     deps = [
         ":chunking",
         ":keys",
+        ":partition",
         ":time",
         ":types",
         ":values",
@@ -112,7 +113,6 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",
-        "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
@@ -289,5 +289,18 @@ cc_library(
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:type",
+    ],
+)
+
+cc_library(
+    name = "partition",
+    srcs = ["partition.cc"],
+    hdrs = ["partition.h"],
+    deps = [
+        "//common:errors",
+        "//frontend/proto:partition_token_cc_proto",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )

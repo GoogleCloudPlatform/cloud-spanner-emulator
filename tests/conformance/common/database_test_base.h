@@ -41,6 +41,7 @@
 #include "google/cloud/spanner/keys.h"
 #include "google/cloud/spanner/mutations.h"
 #include "google/cloud/spanner/partition_options.h"
+#include "google/cloud/spanner/query_partition.h"
 #include "google/cloud/spanner/read_options.h"
 #include "google/cloud/spanner/read_partition.h"
 #include "google/cloud/spanner/results.h"
@@ -113,6 +114,7 @@ class DatabaseTest : public ::testing::Test {
   using SpannerStub = v1::Spanner::Stub;
   using ReadPartition = cloud::spanner::ReadPartition;
   using PartitionOptions = cloud::spanner::PartitionOptions;
+  using QueryPartition = cloud::spanner::QueryPartition;
 
   template <typename Duration>
   static Timestamp MakeTimestamp(
@@ -466,6 +468,28 @@ class DatabaseTest : public ::testing::Test {
       retval.push_back(row.value());
     }
     return retval;
+  }
+
+  // PartitionQuery using a specified transaction.
+  zetasql_base::StatusOr<std::vector<QueryPartition>> PartitionQuery(
+      Transaction txn, const std::string& query,
+      PartitionOptions partition_options = {}) {
+    return ToUtilStatusOr(
+        client().PartitionQuery(txn, SqlStatement(query), partition_options));
+  }
+
+  // Query all the partitions returned by PartitionQuery.
+  zetasql_base::StatusOr<std::vector<ValueRow>> Query(
+      std::vector<QueryPartition> partitions) {
+    std::vector<ValueRow> rows;
+    for (const auto& partition : partitions) {
+      auto result = client().ExecuteQuery(std::move(partition));
+      ZETASQL_ASSIGN_OR_RETURN(auto read_result, ProcessRowStreamForReadResult(result));
+      for (const auto& row : read_result.values) {
+        rows.push_back(row);
+      }
+    }
+    return rows;
   }
 
   zetasql_base::StatusOr<DmlResult> ExecuteDml(const std::string& statement) {

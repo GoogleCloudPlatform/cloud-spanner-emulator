@@ -1274,6 +1274,13 @@ zetasql_base::Status ReadFromDifferentParameters() {
       "Partitioned request was created for different read or sql parameters.");
 }
 
+zetasql_base::Status InvalidPartitionedQueryMode() {
+  return zetasql_base::Status(
+      zetasql_base::StatusCode::kInvalidArgument,
+      "Query modes returning query plan and profile information cannot be used "
+      "with partitioned queries.");
+}
+
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

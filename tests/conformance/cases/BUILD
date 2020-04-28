@@ -37,6 +37,7 @@ cc_library(
         "malformed_writes.cc",
         "multi_row_writes.cc",
         "operations.cc",
+        "partition_query.cc",
         "partition_reads.cc",
         "primary_keys.cc",
         "query.cc",

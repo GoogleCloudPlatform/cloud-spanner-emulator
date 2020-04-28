@@ -20,16 +20,19 @@
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
+#include "google/spanner/v1/transaction.pb.h"
 #include "backend/access/read.h"
 #include "backend/query/query_engine.h"
 #include "common/errors.h"
 #include "frontend/common/protos.h"
+#include "frontend/converters/partition.h"
 #include "frontend/converters/query.h"
 #include "frontend/converters/reads.h"
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
 #include "frontend/entities/session.h"
 #include "frontend/entities/transaction.h"
+#include "frontend/proto/partition_token.pb.h"
 #include "frontend/server/handler.h"
 #include "frontend/server/request_context.h"
 #include "zetasql/base/status.h"
@@ -62,6 +65,48 @@ zetasql_base::Status ValidateTransactionSelectorForQuery(
       return error::DmlDoesNotSupportSingleUseTransaction();
     }
   }
+  return zetasql_base::OkStatus();
+}
+
+zetasql_base::Status ValidatePartitionToken(
+    const PartitionToken& partition_token,
+    const spanner_api::ExecuteSqlRequest* request) {
+  if (request->query_mode() != v1::ExecuteSqlRequest::NORMAL) {
+    return error::InvalidPartitionedQueryMode();
+  }
+  if (partition_token.session() != request->session()) {
+    return error::ReadFromDifferentSession();
+  }
+  if (request->transaction().selector_case() != v1::TransactionSelector::kId ||
+      partition_token.transaction_id() != request->transaction().id()) {
+    return error::ReadFromDifferentTransaction();
+  }
+
+  if (!partition_token.has_query_params()) {
+    return error::ReadFromDifferentParameters();
+  }
+  auto query_params = partition_token.query_params();
+
+  if (query_params.sql() != request->sql()) {
+    return error::ReadFromDifferentParameters();
+  }
+
+  if (query_params.params().SerializeAsString() !=
+      request->params().SerializeAsString()) {
+    return error::ReadFromDifferentParameters();
+  }
+
+  if (query_params.param_types_size() != request->param_types_size()) {
+    return error::ReadFromDifferentParameters();
+  }
+  for (const auto& param_type : query_params.param_types()) {
+    if (!request->param_types().contains(param_type.first) ||
+        param_type.second.GetTypeName() !=
+            request->param_types().at(param_type.first).GetTypeName()) {
+      return error::ReadFromDifferentParameters();
+    }
+  }
+
   return zetasql_base::OkStatus();
 }
 
@@ -128,8 +173,17 @@ zetasql_base::Status ExecuteSql(RequestContext* ctx,
       // Set empty row type.
       response->mutable_metadata()->mutable_row_type();
     } else {
-      ZETASQL_RETURN_IF_ERROR(
-          RowCursorToResultSetProto(result.rows.get(), /*limit=*/0, response));
+      ZETASQL_RETURN_IF_ERROR(RowCursorToResultSetProto(result.rows.get(),
+                                                /*limit=*/0, response));
+    }
+
+    if (!request->partition_token().empty()) {
+      ZETASQL_ASSIGN_OR_RETURN(auto partition_token,
+                       PartitionTokenFromString(request->partition_token()));
+      ZETASQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
+      if (partition_token.empty_query_partition()) {
+        response->clear_rows();
+      }
     }
 
     // Add basic stats for PROFILE mode. We do this to interoperate with REPL
@@ -188,13 +242,26 @@ zetasql_base::Status ExecuteStreamingSql(
     std::vector<spanner_api::PartialResultSet> responses;
     if (IsDmlResult(result)) {
       responses.emplace_back();
-      responses.front().mutable_stats()->set_row_count_exact(
+      responses.back().mutable_stats()->set_row_count_exact(
           result.modified_row_count);
       // Set empty row type.
-      responses.front().mutable_metadata()->mutable_row_type();
+      responses.back().mutable_metadata()->mutable_row_type();
     } else {
       ZETASQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
                                       result.rows.get(), /*limit=*/0));
+    }
+
+    if (!request->partition_token().empty()) {
+      ZETASQL_ASSIGN_OR_RETURN(auto partition_token,
+                       PartitionTokenFromString(request->partition_token()));
+      ZETASQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
+      if (partition_token.empty_query_partition()) {
+        // Clear all partial responses except the first one. Return only
+        // metadata in the first partial response.
+        responses.resize(1);
+        responses.front().clear_values();
+        responses.front().clear_chunked_value();
+      }
     }
 
     // Populate transaction metadata.

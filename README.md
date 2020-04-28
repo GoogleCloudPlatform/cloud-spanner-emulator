@@ -204,10 +204,32 @@ Notable limitations:
 - Server-side monitoring and logging functionality such as audit logs,
   stackdriver logging, and stackdriver monitoring are not supported.
 
+## Frequently Asked Questions (FAQ)
+
+#### What is the recommended test setup?
+
+Use a single emulator process and create a Cloud Spanner instance within it.
+Since creating databases is cheap in the emulator, we recommend that each test
+bring up and tear down its own database. This ensures hermetic testing and
+allows the test suite to run tests in parallel if needed.
+
+#### Why is the order of rows returned by the emulator different across runs?
+
+The emulator intentionally randomizes query results with no ORDER BY clause.
+You should not depend on ordering done by the Cloud Spanner service in the
+absence of an ORDER BY clause.
+
+
 ## Contribute
 
 During the beta, we are not accepting external code contributions to this
 project.
+
+## Issues
+
+During the beta, we are not accepting issues for this project. Please feel free
+to ask questions or file requests/bugs using the existing Cloud Spanner
+[support channels](https://cloud.google.com/spanner/docs/getting-support).
 
 ## License
 

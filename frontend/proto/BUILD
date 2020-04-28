@@ -23,6 +23,7 @@ proto_library(
     srcs = ["partition_token.proto"],
     deps = [
         "@com_google_googleapis//google/spanner/v1:spanner_proto",
+        "@com_google_protobuf//:struct_proto",
     ],
 )
 

@@ -18,7 +18,9 @@ syntax = "proto2";
 
 package google.spanner.emulator.frontend;
 
+import "google/protobuf/struct.proto";
 import "google/spanner/v1/keys.proto";
+import "google/spanner/v1/type.proto";
 
 // Partition token returned in PartitionQuery/PartitionRead. A partition token
 // can only be used for reads in the session/transaction it was created in.
@@ -40,7 +42,9 @@ message PartitionToken {
   }
 
   message QueryParams {
-    // TODO : Implement partition token for query.
+    optional string sql = 1;
+    optional google.protobuf.Struct params = 2;
+    map<string, google.spanner.v1.Type> param_types = 3;
   }
 
   oneof params {
@@ -58,6 +62,7 @@ message PartitionToken {
     // Internal representation of the partition that should be read.
     google.spanner.v1.KeySet partitioned_key_set = 5;
 
-    // TODO : Implement partition for query.
+    // True if query using partition token should return an empty result set.
+    bool empty_query_partition = 6;
   }
 }

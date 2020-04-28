@@ -14,10 +14,13 @@
 // limitations under the License.
 //
 
+#include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/keys.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
+#include "google/spanner/v1/type.pb.h"
 #include "common/errors.h"
+#include "frontend/converters/partition.h"
 #include "frontend/converters/reads.h"
 #include "frontend/entities/session.h"
 #include "frontend/proto/partition_token.pb.h"
@@ -86,6 +89,23 @@ zetasql_base::StatusOr<PartitionToken> CreatePartitionTokenForRead(
   return partition_token;
 }
 
+// Create a partition token for the given partition query request.
+zetasql_base::StatusOr<PartitionToken> CreatePartitionTokenForQuery(
+    const google::spanner::v1::PartitionQueryRequest& request,
+    const backend::TransactionID& txn_id, bool empty_partition) {
+  PartitionToken partition_token;
+  *partition_token.mutable_session() = request.session();
+  *partition_token.mutable_transaction_id() = std::to_string(txn_id);
+
+  auto query_params = partition_token.mutable_query_params();
+  *query_params->mutable_sql() = request.sql();
+  *query_params->mutable_params() = request.params();
+  *query_params->mutable_param_types() = request.param_types();
+
+  partition_token.set_empty_query_partition(empty_partition);
+  return partition_token;
+}
+
 }  //  namespace
 
 // Creates a set of partition tokens for executing parallel read operations.
@@ -151,11 +171,38 @@ zetasql_base::Status PartitionQuery(RequestContext* ctx,
       ValidateTransactionSelectorForPartitionRead(request->transaction()));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
+  if (!txn->IsReadOnly()) {
+    return error::PartitionReadNeedsReadOnlyTxn();
+  }
 
   if (request->has_partition_options()) {
     ZETASQL_RETURN_IF_ERROR(ValidatePartitionOptions(request->partition_options()));
   }
-  return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented, "");
+
+  if (ShouldReturnTransaction(request->transaction())) {
+    ZETASQL_ASSIGN_OR_RETURN(*response->mutable_transaction(), txn->ToProto());
+  }
+
+  // Add two partitions to result set, with first partition being empty.
+  ZETASQL_ASSIGN_OR_RETURN(auto empty_partition_token,
+                   CreatePartitionTokenForQuery(*request, txn->id(),
+                                                /*empty_partition =*/true));
+  spanner_api::Partition empty_partition;
+  ZETASQL_ASSIGN_OR_RETURN(*empty_partition.mutable_partition_token(),
+                   PartitionTokenToString(empty_partition_token));
+
+  // Second partition contains full result set for requested query.
+  ZETASQL_ASSIGN_OR_RETURN(auto full_partition_token,
+                   CreatePartitionTokenForQuery(*request, txn->id(),
+                                                /*empty_partition =*/false));
+  spanner_api::Partition full_partition;
+  ZETASQL_ASSIGN_OR_RETURN(*full_partition.mutable_partition_token(),
+                   PartitionTokenToString(full_partition_token));
+
+  *response->mutable_partitions()->Add() = empty_partition;
+  *response->mutable_partitions()->Add() = full_partition;
+
+  return zetasql_base::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Spanner, PartitionQuery);
 
