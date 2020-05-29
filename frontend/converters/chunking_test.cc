@@ -18,15 +18,20 @@
 
 #include <vector>
 
+#include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/random/random.h"
+#include "absl/time/time.h"
+#include "common/limits.h"
 #include "frontend/converters/reads.h"
+#include "tests/common/chunking.h"
 #include "tests/common/row_cursor.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -109,7 +114,7 @@ TEST(ChunkingTest, InvalidTypeReturnsError) {
   )");
 
   EXPECT_THAT(ChunkResultSet(result, kChunkSize),
-              StatusIs(zetasql_base::StatusCode::kInternal));
+              StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST(ChunkingTest, ChunkString) {
@@ -124,11 +129,11 @@ TEST(ChunkingTest, ChunkString) {
   std::vector<std::string> expected_results(2);
   expected_results[0] = R"(
     metadata {}
-    values { string_value: "abcdefghijkl" }
+    values { string_value: "abcdefghijklmnop" }
     chunked_value: true
   )";
   expected_results[1] = R"(
-    values { string_value: "mnopqrstuvwxyz" }
+    values { string_value: "qrstuvwxyz" }
   )";
 
   EXPECT_THAT(results,
@@ -172,24 +177,24 @@ TEST(ChunkingTest, ChunkNestedLists) {
         }
         values {
           list_value {
-            values { string_value: "ab" }
+            values { string_value: "abcdefghijkl" }
           }
         }
       }
     }
-    chunked_value:  true
+    chunked_value: true
   )";
   expected_results[1] = R"(
     values {
       list_value {
         values {
           list_value {
-            values { string_value: "cdefghijklmnoqrstu" }
+            values { string_value: "mnoqrstu" }
           }
         }
         values {
           list_value {
-            values { string_value: "abcdef" }
+            values { string_value: "abcdefghijklmnoqrstu" }
           }
         }
       }
@@ -201,7 +206,6 @@ TEST(ChunkingTest, ChunkNestedLists) {
       list_value {
         values {
           list_value {
-            values { string_value: "ghijklmnoqrstu" }
           }
         }
       }
@@ -238,7 +242,7 @@ TEST(ChunkingTest, ChunkStringLists) {
     values {
       list_value {
         values { string_value: "The beginning" }
-        values { string_value: "abcdefghijklm" }
+        values { string_value: "abcdefghijklmnopqrstu" }
       }
     }
     chunked_value:  true
@@ -246,8 +250,226 @@ TEST(ChunkingTest, ChunkStringLists) {
   expected_results[1] = R"(
     values {
       list_value {
-        values { string_value: "nopqrstuvwxyz" }
+        values { string_value: "vwxyz" }
         values { string_value: "The end" }
+      }
+    }
+  )";
+
+  EXPECT_THAT(results,
+              testing::ElementsAre(test::EqualsProto(expected_results[0]),
+                                   test::EqualsProto(expected_results[1])));
+}
+
+TEST(ChunkingTest, ChunkStringListsAtStringBoundary) {
+  const size_t kChunkSize = 40;
+
+  ResultSet result = PARSE_TEXT_PROTO(R"(
+    metadata {}
+    rows {
+      values {
+        list_value {
+          values { string_value: "The beginning" }
+          values { string_value: "abcdefghijklmnopqrstu" }
+          values { string_value: "vwxyz" }
+          values { string_value: "The end" }
+        }
+      }
+    }
+  )");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+                       ChunkResultSet(result, kChunkSize));
+
+  std::vector<std::string> expected_results(2);
+  expected_results[0] = R"(
+    metadata {}
+    values {
+      list_value {
+        values { string_value: "The beginning" }
+        values { string_value: "abcdefghijklmnopqrstu" }
+      }
+    }
+    chunked_value:  true
+  )";
+  expected_results[1] = R"(
+    values {
+      list_value {
+        values { string_value: "" }
+        values { string_value: "vwxyz" }
+        values { string_value: "The end" }
+      }
+    }
+  )";
+
+  EXPECT_THAT(results,
+              testing::ElementsAre(test::EqualsProto(expected_results[0]),
+                                   test::EqualsProto(expected_results[1])));
+}
+
+TEST(ChunkingTest, ChunkStringListsAtListBoundary) {
+  const size_t kChunkSize = 40;
+
+  ResultSet result = PARSE_TEXT_PROTO(R"(
+    metadata {}
+    rows {
+      values {
+        list_value {
+          values { string_value: "The beginning" }
+          values { string_value: "abcdefghijklmno" }
+        }
+      }
+      values {
+        list_value {
+          values { string_value: "pqrstuvwxyz" }
+          values { string_value: "The end" }
+        }
+      }
+    }
+  )");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+                       ChunkResultSet(result, kChunkSize));
+
+  std::vector<std::string> expected_results(2);
+  expected_results[0] = R"(
+    metadata {}
+    values {
+      list_value {
+        values { string_value: "The beginning" }
+        values { string_value: "abcdefghijklmno" }
+      }
+    }
+  )";
+  expected_results[1] = R"(
+    values {
+      list_value {
+        values { string_value: "pqrstuvwxyz" }
+        values { string_value: "The end" }
+      }
+    }
+  )";
+
+  EXPECT_THAT(results,
+              testing::ElementsAre(test::EqualsProto(expected_results[0]),
+                                   test::EqualsProto(expected_results[1])));
+}
+
+TEST(ChunkingTest, ChunkStringListsAtNestedListBoundary) {
+  const size_t kChunkSize = 40;
+
+  ResultSet result = PARSE_TEXT_PROTO(R"(
+    metadata {}
+    rows {
+      values {
+        list_value {
+          values {
+            list_value {
+              values { string_value: "abcdefghijklmnoqrstuvwxyz-------" }
+            }
+          }
+          values { list_value { values { string_value: "1234567890" } } }
+        }
+      }
+    }
+  )");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+                       ChunkResultSet(result, kChunkSize));
+
+  std::vector<std::string> expected_results(2);
+  expected_results[0] = R"(
+    metadata {}
+    values {
+      list_value {
+        values { list_value { values { string_value: "abcdefghijklmnoqrstuvwxyz-------" } } }
+      }
+    }
+    chunked_value: true
+  )";
+  expected_results[1] = R"(
+    values {
+      list_value {
+        values { list_value { values { string_value: "" } } }
+        values {
+          list_value { values { string_value: "1234567890" } }
+        }
+      }
+    }
+  )";
+
+  EXPECT_THAT(results,
+              testing::ElementsAre(test::EqualsProto(expected_results[0]),
+                                   test::EqualsProto(expected_results[1])));
+}
+
+TEST(ChunkingTest, ChunkEmptyLists) {
+  const size_t kChunkSize = 20;
+
+  ResultSet result = PARSE_TEXT_PROTO(R"(
+    metadata {}
+    rows {
+      values {
+        list_value {
+          values { list_value {} }
+          values { list_value {} }
+          values { list_value {} }
+          values { list_value {} }
+          values { list_value {} }
+          values { list_value {} }
+          values { list_value {} }
+          values { list_value {} }
+          values { list_value {} }
+          values { list_value {} }
+        }
+      }
+    }
+  )");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+                       ChunkResultSet(result, kChunkSize));
+
+  std::vector<std::string> expected_results(2);
+  expected_results[0] = R"(
+    metadata {}
+    values {
+      list_value {
+        values {
+          list_value {}
+        }
+        values {
+          list_value {}
+        }
+        values {
+          list_value {}
+        }
+        values {
+          list_value {}
+        }
+        values {
+          list_value {}
+        }
+        values {
+          list_value {}
+        }
+        values {
+          list_value {}
+        }
+        values {
+          list_value {}
+        }
+      }
+    }
+    chunked_value: true
+  )";
+  expected_results[1] = R"(
+    values {
+      list_value {
+        values {
+          list_value {}
+        }
+        values {
+          list_value {}
+        }
+        values {
+          list_value {}
+        }
       }
     }
   )";
@@ -292,6 +514,8 @@ TEST(ChunkingTest, ChunkNumberLists) {
         values {  number_value: 2 }
         values {  number_value: 3 }
         values {  number_value: 4 }
+        values {  number_value: 5 }
+        values {  number_value: 6 }
       }
     }
     chunked_value: true
@@ -299,8 +523,6 @@ TEST(ChunkingTest, ChunkNumberLists) {
   expected_results[1] = R"(
     values {
       list_value {
-        values {  number_value: 5 }
-        values {  number_value: 6 }
         values {  number_value: 7 }
         values {  number_value: 8 }
         values {  number_value: 9 }
@@ -314,7 +536,7 @@ TEST(ChunkingTest, ChunkNumberLists) {
 }
 
 TEST(ChunkingTest, ChunkUTFCharacters) {
-  const size_t kChunkSize = 11;
+  const size_t kChunkSize = 6;
   std::vector<std::string> expected_results(2);
   std::vector<PartialResultSet> results;
 
@@ -398,11 +620,11 @@ TEST(ChunkingTest, ChunkUTFCharacters) {
 
     expected_results[0] = R"(
       metadata {}
-      values { string_value: "\x61\x62\x63\x64\x65" }
+      values { string_value: "\x61\x62\x63\x64" }
       chunked_value: true
     )";
     expected_results[1] = R"(
-      values { string_value: "\x66\x67" }
+      values { string_value: "\x65\x66\x67" }
     )";
 
     EXPECT_THAT(results, testing::ElementsAre(
@@ -428,6 +650,62 @@ TEST(ChunkingTest, ChunkEmptyString) {
 
   EXPECT_THAT(results,
               testing::ElementsAre(test::EqualsProto(expected_results[0])));
+}
+
+TEST(ChunkingTest, CheckSizeLimit) {
+  const size_t kChunkSize = limits::kMaxStreamingChunkSize;
+  ResultSet result;
+  result.mutable_metadata();
+  auto row = result.add_rows();
+
+  for (int i = 0; i < 600000; ++i) {
+    row->add_values()->set_bool_value(true);
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+                       ChunkResultSet(result, kChunkSize));
+
+  // Check that the total size is within a factor of 2 of the streaming chunk
+  // limit.
+  ASSERT_EQ(results.size(), 2);
+  for (const auto& set : results) {
+    ASSERT_LE(set.ByteSizeLong(), limits::kMaxStreamingChunkSize * 2);
+  }
+}
+
+TEST(ChunkingTest, RandomChunking) {
+  int64_t time = absl::ToUnixNanos(absl::Now());
+  std::seed_seq seed({time});
+  absl::BitGen gen(seed);
+  LOG(INFO) << "Testing random chunking with seed: " << time;
+
+  const int kNumColumnsMin = 10;
+  const int kNumColumnsMax = 200;
+  // We set the minimum chunk size to 40 since there needs to be sufficient room
+  // to handle all of the recursive lists that are transferred to the next
+  // chunk.
+  const int kChunkSizeMin = 40;
+  const int kChunkSizeMax = 1000;
+  for (int i = 0; i < 50; ++i) {
+    const size_t kChunkSize = absl::Uniform<size_t>(
+        absl::IntervalClosedClosed, gen, kChunkSizeMin, kChunkSizeMax);
+    const int kNumColumns = absl::Uniform<int>(absl::IntervalClosedClosed, gen,
+                                               kNumColumnsMin, kNumColumnsMax);
+
+    // Generate random result set.
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        ResultSet result,
+        backend::test::GenerateRandomResultSet(&gen, kNumColumns));
+
+    // Chunk result.
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+                         ChunkResultSet(result, kChunkSize));
+
+    // Merge resulting chunks and check that it is equal to the original result.
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        ResultSet merged_result,
+        backend::test::MergePartialResultSets(results, kNumColumns));
+    EXPECT_THAT(merged_result, test::EqualsProto(result));
+  }
 }
 
 }  // namespace

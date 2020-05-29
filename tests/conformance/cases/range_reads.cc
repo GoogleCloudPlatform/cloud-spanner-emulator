@@ -31,7 +31,7 @@ using zetasql_base::testing::StatusIs;
 
 class RangeReadsTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     ZETASQL_RETURN_IF_ERROR(SetSchema({R"(
       CREATE TABLE Users(
         ID   INT64,
@@ -39,7 +39,7 @@ class RangeReadsTest : public DatabaseTest {
         Age  INT64
       ) PRIMARY KEY (ID)
     )"}));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
  protected:
@@ -116,7 +116,7 @@ TEST_F(RangeReadsTest, CanReadUsingEmptyKeyBounds) {
   // with empty key ranges.
   if (in_prod_env()) {
     EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(), Key(1))),
-                StatusIs(zetasql_base::StatusCode::kUnimplemented));
+                StatusIs(absl::StatusCode::kUnimplemented));
   } else {
     EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(), Key(1))),
                 IsOkAndHoldsRows({}));
@@ -132,7 +132,7 @@ TEST_F(RangeReadsTest, CanReadUsingEmptyKeyBounds) {
   // ranges.
   if (in_prod_env()) {
     EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(1), Key())),
-                StatusIs(zetasql_base::StatusCode::kUnimplemented));
+                StatusIs(absl::StatusCode::kUnimplemented));
   } else {
     EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(1), Key())),
                 IsOkAndHoldsRows({}));

@@ -40,10 +40,10 @@ bool IsValidValueLabel(const std::string& label) {
 
 }  // namespace
 
-zetasql_base::Status ValidateLabels(
+absl::Status ValidateLabels(
     const google::protobuf::Map<std::string, std::string>& labels) {
   if (labels.empty()) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
   if (labels.size() > limits::kMaxNumCloudLabels) {
     return error::TooManyLabels(labels.size());
@@ -56,7 +56,7 @@ zetasql_base::Status ValidateLabels(
       return error::BadLabelValue(label.first, label.second);
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace frontend

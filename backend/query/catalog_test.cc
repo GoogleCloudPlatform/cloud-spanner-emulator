@@ -25,7 +25,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/container/flat_hash_set.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/column.h"
@@ -46,7 +46,7 @@ using ::zetasql_base::testing::StatusIs;
 // An integration test that uses Catalog to call zetasql::AnalyzeStatement.
 class AnalyzeStatementTest : public testing::Test {
  protected:
-  zetasql_base::Status AnalyzeStatement(absl::string_view sql) {
+  absl::Status AnalyzeStatement(absl::string_view sql) {
     zetasql::TypeFactory type_factory{};
     std::unique_ptr<const Schema> schema =
         test::CreateSchemaWithOneTable(&type_factory);
@@ -64,7 +64,7 @@ TEST_F(AnalyzeStatementTest, SelectOneFromExistingTableReturnsOk) {
 
 TEST_F(AnalyzeStatementTest, SelectOneFromNonexistentTableReturnsError) {
   EXPECT_THAT(AnalyzeStatement("SELECT 1 FROM prod_table"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(AnalyzeStatementTest, SelectExistingColumnReturnsOk) {
@@ -73,7 +73,7 @@ TEST_F(AnalyzeStatementTest, SelectExistingColumnReturnsOk) {
 
 TEST_F(AnalyzeStatementTest, SelectNonexistentColumnReturnsError) {
   EXPECT_THAT(AnalyzeStatement("SELECT json_col FROM test_table"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 class CatalogTest : public testing::Test {
@@ -101,7 +101,7 @@ TEST_F(CatalogTest, FindTableTableIsFound) {
 TEST_F(CatalogTest, FindTableTableIsNotFound) {
   const zetasql::Table* table;
   EXPECT_THAT(catalog().FindTable({"BAR"}, &table, {}),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
   EXPECT_EQ(table, nullptr);
 }
 

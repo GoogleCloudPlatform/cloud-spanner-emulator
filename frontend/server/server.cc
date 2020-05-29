@@ -23,6 +23,7 @@
 #include "google/iam/v1/policy.pb.h"
 #include "google/longrunning/operations.grpc.pb.h"
 #include "google/protobuf/empty.pb.h"
+#include "google/rpc/error_details.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.grpc.pb.h"
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.grpc.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
@@ -31,6 +32,7 @@
 #include "grpcpp/server_builder.h"
 #include "grpcpp/support/status.h"
 #include "absl/memory/memory.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "frontend/common/status.h"
@@ -50,11 +52,28 @@ namespace operations_api = ::google::longrunning;
 namespace protobuf_api = ::google::protobuf;
 namespace spanner_api = ::google::spanner::v1;
 
+namespace {
+
+void MaybeAddTrailingMetadata(const absl::Status& status, RequestContext* ctx) {
+  if (!status.ok()) {
+    // Check for ResourceInfo within the returned status and append it as extra
+    // trailing metadata. The Java client library expects the ResourceInfo to be
+    // added as additional trailing metadata.
+    auto payload = status.GetPayload(kResourceInfoType);
+    if (payload.has_value()) {
+      std::string serialized_info(payload.value());
+      ctx->grpc()->AddTrailingMetadata(kResourceInfoBinaryHeader,
+                                       serialized_info);
+    }
+  }
+}
+
+}  // namespace
 
 // Invokes the given unary gRPC method on the given service by looking up the
 // handler registry. Returns INTERNAL error if the handler could not be found.
 template <typename RequestT, typename ResponseT>
-zetasql_base::Status Invoke(const std::string& service_name,
+absl::Status Invoke(const std::string& service_name,
                     const std::string& method_name,
                     grpc::ServerContext* grpc_ctx, ServerEnv* env,
                     const RequestT* request, ResponseT* response) {
@@ -64,15 +83,18 @@ zetasql_base::Status Invoke(const std::string& service_name,
                                         service_name, ".", method_name));
   }
   RequestContext ctx(env, grpc_ctx);
-  return dynamic_cast<UnaryGRPCHandler<RequestT, ResponseT>*>(handler)->Run(
-      &ctx, request, response);
+  absl::Status status =
+      dynamic_cast<UnaryGRPCHandler<RequestT, ResponseT>*>(handler)->Run(
+          &ctx, request, response);
+  MaybeAddTrailingMetadata(status, &ctx);
+  return status;
 }
 
 // Invokes the given server streaming gRPC method on the given service by
 // looking up the handler registry. Returns INTERNAL error if the handler could
 // not be found.
 template <typename RequestT, typename ResponseT>
-zetasql_base::Status Invoke(const std::string& service_name,
+absl::Status Invoke(const std::string& service_name,
                     const std::string& method_name,
                     grpc::ServerContext* grpc_ctx, ServerEnv* env,
                     const RequestT* request,
@@ -83,8 +105,11 @@ zetasql_base::Status Invoke(const std::string& service_name,
                                         service_name, ".", method_name));
   }
   RequestContext ctx(env, grpc_ctx);
-  return dynamic_cast<ServerStreamingGRPCHandler<RequestT, ResponseT>*>(handler)
-      ->Run(&ctx, request, writer);
+  absl::Status status =
+      dynamic_cast<ServerStreamingGRPCHandler<RequestT, ResponseT>*>(handler)
+          ->Run(&ctx, request, writer);
+  MaybeAddTrailingMetadata(status, &ctx);
+  return status;
 }
 
 #define DEFINE_GRPC_METHOD(ServiceName, MethodName, RequestType, ResponseType) \

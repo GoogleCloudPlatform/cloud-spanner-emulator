@@ -24,7 +24,7 @@
 #include "absl/base/thread_annotations.h"
 #include "absl/synchronization/mutex.h"
 #include "frontend/entities/operation.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -77,7 +77,7 @@ class OperationManager {
 
   // Deletes the operation with the specified URI. Delete is idempotent - OK is
   // returned even if the operation does not exist.
-  zetasql_base::Status DeleteOperation(const std::string& operation_uri)
+  absl::Status DeleteOperation(const std::string& operation_uri)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Lists all the operations registered with the operation manager.

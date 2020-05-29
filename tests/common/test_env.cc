@@ -31,7 +31,7 @@
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "frontend/server/server.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -40,7 +40,7 @@ namespace test {
 
 namespace {
 
-zetasql_base::Status ReadFromClientReader(
+absl::Status ReadFromClientReader(
     std::unique_ptr<grpc::ClientReader<spanner_api::PartialResultSet>> reader,
     std::vector<spanner_api::PartialResultSet>* response) {
   response->clear();
@@ -92,7 +92,7 @@ void TestEnv::SetupClientStubs() {
 
 void TestEnv::WaitForServerReady() { ready_.WaitForNotification(); }
 
-zetasql_base::Status ServerTest::StreamingRead(
+absl::Status ServerTest::StreamingRead(
     const spanner_api::ReadRequest& request,
     std::vector<spanner_api::PartialResultSet>* response) {
   grpc::ClientContext ctx;
@@ -101,7 +101,7 @@ zetasql_base::Status ServerTest::StreamingRead(
   return ReadFromClientReader(std::move(client_reader), response);
 }
 
-zetasql_base::Status ServerTest::ExecuteStreamingSql(
+absl::Status ServerTest::ExecuteStreamingSql(
     const spanner_api::ExecuteSqlRequest& request,
     std::vector<spanner_api::PartialResultSet>* response) {
   grpc::ClientContext ctx;

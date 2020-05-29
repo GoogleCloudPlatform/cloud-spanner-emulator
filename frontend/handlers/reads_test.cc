@@ -26,7 +26,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "frontend/common/protos.h"
 #include "frontend/common/uris.h"
 #include "frontend/entities/database.h"
@@ -34,7 +34,7 @@
 #include "frontend/entities/transaction.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -56,7 +56,7 @@ class ReadApiTest : public test::ServerTest {
     ZETASQL_ASSERT_OK(PopulateTestDatabase());
   }
 
-  zetasql_base::Status PopulateTestDatabase() {
+  absl::Status PopulateTestDatabase() {
     spanner_api::CommitRequest commit_request = PARSE_TEXT_PROTO(R"(
       single_use_transaction { read_write {} }
       mutations {
@@ -103,7 +103,7 @@ TEST_F(ReadApiTest, CannotReadBeyondVersionGCLimit) {
 
   spanner_api::ResultSet read_response;
   EXPECT_THAT(Read(read_request, &read_response),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(ReadApiTest, CanReadUsingAnAlreadyStartedTransaction) {
@@ -318,7 +318,7 @@ TEST_F(ReadApiTest, CannotReadUsingPartitionedDMLTransaction) {
 
   spanner_api::ResultSet read_response;
   EXPECT_THAT(Read(read_request, &read_response),
-              StatusIs(zetasql_base::StatusCode::kUnimplemented));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(ReadApiTest, CannotReadUsingInvalidTransaction) {
@@ -346,7 +346,7 @@ TEST_F(ReadApiTest, CannotReadUsingInvalidTransaction) {
 
   spanner_api::ResultSet read_response;
   EXPECT_THAT(Read(read_request, &read_response),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 }  // namespace

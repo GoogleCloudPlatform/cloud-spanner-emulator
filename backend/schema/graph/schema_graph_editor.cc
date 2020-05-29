@@ -21,11 +21,11 @@
 #include "zetasql/base/logging.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_join.h"
 #include "backend/schema/graph/schema_node.h"
 #include "zetasql/base/ret_check.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -41,7 +41,7 @@ SchemaNode* SchemaGraphEditor::MakeNewClone(const SchemaNode* node) {
   return mutable_clone;
 }
 
-zetasql_base::Status SchemaGraphEditor::InitCloneMap() {
+absl::Status SchemaGraphEditor::InitCloneMap() {
   // First, make a clone of the graph.
   VLOG(2) << "First cloning pass";
   for (const auto* schema_node : original_graph_->GetSchemaNodes()) {
@@ -49,10 +49,10 @@ zetasql_base::Status SchemaGraphEditor::InitCloneMap() {
     new_nodes_.push_back(cloned_node);
   }
   ZETASQL_RET_CHECK_EQ(clone_map_.size(), num_original_nodes());
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status SchemaGraphEditor::FixupInternal(const SchemaNode* original,
+absl::Status SchemaGraphEditor::FixupInternal(const SchemaNode* original,
                                               SchemaNode* mutable_clone) {
   VLOG(4) << std::string(depth_, ' ') << "Fixing "
           << NodeKindString(mutable_clone) << " node :" << mutable_clone;
@@ -61,7 +61,7 @@ zetasql_base::Status SchemaGraphEditor::FixupInternal(const SchemaNode* original
   --depth_;
   VLOG(4) << std::string(depth_, ' ')
           << "Finished fixing node: " << mutable_clone->DebugString();
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 // The cloning process is guaranteed to terminate even in case of cycles in the
@@ -111,22 +111,22 @@ zetasql_base::StatusOr<const SchemaNode*> SchemaGraphEditor::Clone(
   return ret;
 }
 
-zetasql_base::Status SchemaGraphEditor::DeleteNode(const SchemaNode* node) {
+absl::Status SchemaGraphEditor::DeleteNode(const SchemaNode* node) {
   ZETASQL_RET_CHECK(!HasModifications())
       << "Graph already contains modifications. "
       << "Graph must be canonicalized before deleting another node.";
   ZETASQL_RET_CHECK(IsOriginalNode(node));
   deleted_node_ = node;
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status SchemaGraphEditor::AddNode(
+absl::Status SchemaGraphEditor::AddNode(
     std::unique_ptr<const SchemaNode> node) {
   ZETASQL_RET_CHECK_EQ(deleted_node_, nullptr)
       << "Graph already has a deleted node. It must be canonicalized before "
       << "making further changes.";
   added_nodes_.emplace_back(std::move(node));
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 bool SchemaGraphEditor::IsOriginalNode(const SchemaNode* node) const {
@@ -141,6 +141,9 @@ bool SchemaGraphEditor::IsOriginalNode(const SchemaNode* node) const {
 zetasql_base::StatusOr<std::unique_ptr<SchemaGraph>>
 SchemaGraphEditor::CanonicalizeGraph() {
   std::unique_ptr<SchemaGraph> cloned_graph = nullptr;
+  // Set the edited nodes in the context so that nodes can check
+  // if they were edited/cloned inside ValidateUpdate()/Validate().
+  context_->set_edited_map(&edited_clones_);
   if (deleted_node_) {
     VLOG(2) << "Canonicalizing deletes";
     ZETASQL_RETURN_IF_ERROR(CanonicalizeDeletion());
@@ -155,7 +158,7 @@ SchemaGraphEditor::CanonicalizeGraph() {
   return cloned_graph;
 }
 
-zetasql_base::Status SchemaGraphEditor::CheckValid() const {
+absl::Status SchemaGraphEditor::CheckValid() const {
   if (!deleted_node_) {
     // ValidateUpdate was already called on deleted nodes.
     auto orig_nodes = original_graph_->GetSchemaNodes();
@@ -169,10 +172,10 @@ zetasql_base::Status SchemaGraphEditor::CheckValid() const {
   for (const auto* node : new_nodes_) {
     ZETASQL_RETURN_IF_ERROR(node->Validate(context_));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status SchemaGraphEditor::CanonicalizeEdits() {
+absl::Status SchemaGraphEditor::CanonicalizeEdits() {
   if (clone_map_.empty()) {
     ZETASQL_RETURN_IF_ERROR(InitCloneMap());
   }
@@ -196,16 +199,16 @@ zetasql_base::Status SchemaGraphEditor::CanonicalizeEdits() {
   }
   ZETASQL_RET_CHECK_EQ(cloned_pool_->size(),
                num_original_nodes() + added_nodes_.size());
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status SchemaGraphEditor::Fixup(const SchemaNode* node) {
+absl::Status SchemaGraphEditor::Fixup(const SchemaNode* node) {
   ZETASQL_ASSIGN_OR_RETURN(const auto* cloned_node, Clone(node));
   ZETASQL_RET_CHECK_NE(cloned_node, nullptr);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status SchemaGraphEditor::CanonicalizeDeletion() {
+absl::Status SchemaGraphEditor::CanonicalizeDeletion() {
   if (clone_map_.empty()) {
     ZETASQL_RETURN_IF_ERROR(InitCloneMap());
   }
@@ -256,10 +259,10 @@ zetasql_base::Status SchemaGraphEditor::CanonicalizeDeletion() {
                      [](const SchemaNode* node) { return node->is_deleted(); }),
       new_nodes_.end());
   trimmed_ = cloned_pool_->Trim();
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status SchemaGraphEditor::CheckInvariants() const {
+absl::Status SchemaGraphEditor::CheckInvariants() const {
   ZETASQL_RET_CHECK_EQ(cloned_pool_->size(), new_nodes_.size())
       << "\nNodes:\n"
       << cloned_pool_->DebugString();
@@ -274,7 +277,7 @@ zetasql_base::Status SchemaGraphEditor::CheckInvariants() const {
       << "Nodes:\n"
       << cloned_pool_->DebugString();
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

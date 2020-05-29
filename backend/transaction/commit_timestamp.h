@@ -30,10 +30,10 @@ namespace backend {
 
 // Helper methods to validate that user provided timestamp value for a commit
 // timestamp column is not in future.
-zetasql_base::Status ValidateCommitTimestampValueNotInFuture(
+absl::Status ValidateCommitTimestampValueNotInFuture(
     const zetasql::Value& value, absl::Time now);
 
-zetasql_base::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table,
+absl::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table,
                                                       const KeySet& set,
                                                       absl::Time now);
 

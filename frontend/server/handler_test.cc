@@ -31,12 +31,12 @@ namespace frontend {
 namespace {
 
 // Example handler to test unary gRPC method registration.
-zetasql_base::Status CreateSession(
+absl::Status CreateSession(
     RequestContext* ctx,
     const google::spanner::v1::CreateSessionRequest* request,
     google::spanner::v1::Session* response) {
   response->set_name("Hello, World!");
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Spanner, CreateSession);
 
@@ -72,7 +72,7 @@ class TestServerWriter : public grpc::ServerWriterInterface<MessageT> {
 };
 
 // Example handler to test server streaming gRPC method registration.
-zetasql_base::Status StreamingRead(
+absl::Status StreamingRead(
     RequestContext* ctx, const google::spanner::v1::ReadRequest* request,
     ServerStream<google::spanner::v1::PartialResultSet>* stream) {
   google::spanner::v1::PartialResultSet prs;
@@ -81,7 +81,7 @@ zetasql_base::Status StreamingRead(
   prs.set_resume_token("World");
   stream->Send(prs);
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Spanner, StreamingRead);
 

@@ -20,41 +20,41 @@
 #include <string>
 
 #include "absl/strings/string_view.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 
 // Parses a project URI into its components.
-zetasql_base::Status ParseProjectUri(absl::string_view resource_uri,
+absl::Status ParseProjectUri(absl::string_view resource_uri,
                              absl::string_view* project_id);
 
 // Parses an instance config URI into its components.
-zetasql_base::Status ParseInstanceConfigUri(absl::string_view resource_uri,
+absl::Status ParseInstanceConfigUri(absl::string_view resource_uri,
                                     absl::string_view* project_id,
                                     absl::string_view* instance_config_id);
 
 // Parses an instance URI into its components.
-zetasql_base::Status ParseInstanceUri(absl::string_view resource_uri,
+absl::Status ParseInstanceUri(absl::string_view resource_uri,
                               absl::string_view* project_id,
                               absl::string_view* instance_id);
 
 // Parses a database URI into its components.
-zetasql_base::Status ParseDatabaseUri(absl::string_view resource_uri,
+absl::Status ParseDatabaseUri(absl::string_view resource_uri,
                               absl::string_view* project_id,
                               absl::string_view* instance_id,
                               absl::string_view* database_id);
 
 // Parses a session URI into its components.
-zetasql_base::Status ParseSessionUri(absl::string_view resource_uri,
+absl::Status ParseSessionUri(absl::string_view resource_uri,
                              absl::string_view* project_id,
                              absl::string_view* instance_id,
                              absl::string_view* database_id,
                              absl::string_view* session_id);
 
 // Parses an operation URI into its components.
-zetasql_base::Status ParseOperationUri(absl::string_view operation_uri,
+absl::Status ParseOperationUri(absl::string_view operation_uri,
                                absl::string_view* resource_uri,
                                absl::string_view* operation_id);
 

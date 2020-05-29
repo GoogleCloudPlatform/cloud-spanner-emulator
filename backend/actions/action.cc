@@ -16,16 +16,16 @@
 
 #include "backend/actions/action.h"
 
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "backend/actions/ops.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
 
-zetasql_base::Status Validator::Validate(const ActionContext* ctx,
+absl::Status Validator::Validate(const ActionContext* ctx,
                                  const WriteOp& op) const {
   return std::visit(overloaded{
                         [&](const InsertOp& op) { return Validate(ctx, op); },
@@ -35,20 +35,20 @@ zetasql_base::Status Validator::Validate(const ActionContext* ctx,
                     op);
 }
 
-zetasql_base::Status Validator::Validate(const ActionContext* ctx,
+absl::Status Validator::Validate(const ActionContext* ctx,
                                  const InsertOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
-zetasql_base::Status Validator::Validate(const ActionContext* ctx,
+absl::Status Validator::Validate(const ActionContext* ctx,
                                  const UpdateOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
-zetasql_base::Status Validator::Validate(const ActionContext* ctx,
+absl::Status Validator::Validate(const ActionContext* ctx,
                                  const DeleteOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status Modifier::Modify(const ActionContext* ctx,
+absl::Status Modifier::Modify(const ActionContext* ctx,
                               const WriteOp& op) const {
   return std::visit(overloaded{
                         [&](const InsertOp& op) { return Modify(ctx, op); },
@@ -58,20 +58,20 @@ zetasql_base::Status Modifier::Modify(const ActionContext* ctx,
                     op);
 }
 
-zetasql_base::Status Modifier::Modify(const ActionContext* ctx,
+absl::Status Modifier::Modify(const ActionContext* ctx,
                               const InsertOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
-zetasql_base::Status Modifier::Modify(const ActionContext* ctx,
+absl::Status Modifier::Modify(const ActionContext* ctx,
                               const UpdateOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
-zetasql_base::Status Modifier::Modify(const ActionContext* ctx,
+absl::Status Modifier::Modify(const ActionContext* ctx,
                               const DeleteOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status Effector::Effect(const ActionContext* ctx,
+absl::Status Effector::Effect(const ActionContext* ctx,
                               const WriteOp& op) const {
   return std::visit(overloaded{
                         [&](const InsertOp& op) { return Effect(ctx, op); },
@@ -81,20 +81,20 @@ zetasql_base::Status Effector::Effect(const ActionContext* ctx,
                     op);
 }
 
-zetasql_base::Status Effector::Effect(const ActionContext* ctx,
+absl::Status Effector::Effect(const ActionContext* ctx,
                               const InsertOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
-zetasql_base::Status Effector::Effect(const ActionContext* ctx,
+absl::Status Effector::Effect(const ActionContext* ctx,
                               const UpdateOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
-zetasql_base::Status Effector::Effect(const ActionContext* ctx,
+absl::Status Effector::Effect(const ActionContext* ctx,
                               const DeleteOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status Verifier::Verify(const ActionContext* ctx,
+absl::Status Verifier::Verify(const ActionContext* ctx,
                               const WriteOp& op) const {
   return std::visit(overloaded{
                         [&](const InsertOp& op) { return Verify(ctx, op); },
@@ -104,17 +104,17 @@ zetasql_base::Status Verifier::Verify(const ActionContext* ctx,
                     op);
 }
 
-zetasql_base::Status Verifier::Verify(const ActionContext* ctx,
+absl::Status Verifier::Verify(const ActionContext* ctx,
                               const InsertOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
-zetasql_base::Status Verifier::Verify(const ActionContext* ctx,
+absl::Status Verifier::Verify(const ActionContext* ctx,
                               const UpdateOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
-zetasql_base::Status Verifier::Verify(const ActionContext* ctx,
+absl::Status Verifier::Verify(const ActionContext* ctx,
                               const DeleteOp& op) const {
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

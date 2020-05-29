@@ -39,7 +39,7 @@ class StorageIteratorRowCursor : public RowCursor {
 
   // Implementation of the RowCursor interface
   bool Next() override;
-  zetasql_base::Status Status() const override;
+  absl::Status Status() const override;
   int NumColumns() const override;
   const std::string ColumnName(int i) const override;
   const zetasql::Value ColumnValue(int i) const override;

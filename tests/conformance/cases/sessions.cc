@@ -42,7 +42,7 @@ static constexpr int kMaxBatchCreateSessionsCount = 100;
 // google::spanner::Client used by the test base class.
 class SessionsTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE TestTable()
       PRIMARY KEY()
@@ -118,13 +118,13 @@ class SessionsTest : public DatabaseTest {
   }
 
   // Deletes a session.
-  zetasql_base::Status DeleteSession(absl::string_view session_name) {
+  absl::Status DeleteSession(absl::string_view session_name) {
     grpc::ClientContext context;
     spanner_api::DeleteSessionRequest request;
     request.set_name(std::string(session_name));  // NOLINT
     google::protobuf::Empty response;
     ZETASQL_RETURN_IF_ERROR(raw_client()->DeleteSession(&context, request, &response));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   // Batch-creates the specified number of sessions.
@@ -167,13 +167,13 @@ TEST_F(SessionsTest, CreateSessionWithLabel) {
 TEST_F(SessionsTest, CreatesSessionWithNonExistentDatabaseReturnsNotFound) {
   EXPECT_THAT(CreateSession("projects/test-project/instances/test-instance/"
                             "databases/doesnotexist"),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(SessionsTest,
        CreatesSessionWithInvalidDatabaseUriReturnsInvalidArgument) {
   EXPECT_THAT(CreateSession("database/test-database"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(SessionsTest, GetSession) {
@@ -183,7 +183,7 @@ TEST_F(SessionsTest, GetSession) {
 
 TEST_F(SessionsTest, GetSessionWithInvalidSessionUriReturnsInvalidArgument) {
   EXPECT_THAT(GetSession(/*session_name=*/""),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(SessionsTest, DeleteSession) {
@@ -193,14 +193,14 @@ TEST_F(SessionsTest, DeleteSession) {
 
 TEST_F(SessionsTest, DeleteSessionWithInvalidSessionUriReturnsInvalidArgument) {
   EXPECT_THAT(DeleteSession(/*session_name=*/""),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(SessionsTest, DeleteSessionAndGetSessionReturnsNotFound) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
   ZETASQL_EXPECT_OK(DeleteSession(session.name()));
   EXPECT_THAT(GetSession(session.name()),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(SessionsTest, CanDeleteDeletedSession) {
@@ -297,7 +297,7 @@ TEST_F(SessionsTest, BatchCreateSessionReturnsMultipleSessions) {
 
 TEST_F(SessionsTest, BatchCreateSessionsReturnsErrorsOnInvalidArg) {
   EXPECT_THAT(BatchCreateSessions(/*num_sessions=*/-1),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(SessionsTest, BatchCreateSessionSilentlyTruncatesRequestCount) {

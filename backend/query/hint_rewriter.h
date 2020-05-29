@@ -19,7 +19,7 @@
 
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_ast_deep_copy_visitor.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -30,7 +30,7 @@ namespace backend {
 // "spanner".
 class HintRewriter : public zetasql::ResolvedASTDeepCopyVisitor {
  public:
-  zetasql_base::Status VisitResolvedOption(
+  absl::Status VisitResolvedOption(
       const zetasql::ResolvedOption* node) override;
 };
 

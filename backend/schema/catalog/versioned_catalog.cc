@@ -22,7 +22,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -49,7 +49,7 @@ const Schema* VersionedCatalog::GetLatestSchema() const {
   return GetSchema(absl::InfiniteFuture());
 }
 
-zetasql_base::Status VersionedCatalog::AddSchema(absl::Time creation_time,
+absl::Status VersionedCatalog::AddSchema(absl::Time creation_time,
                                          std::unique_ptr<const Schema> schema) {
   absl::MutexLock lock(&mu_);
   ZETASQL_RET_CHECK(creation_time > schemas_.rbegin()->first)
@@ -57,7 +57,7 @@ zetasql_base::Status VersionedCatalog::AddSchema(absl::Time creation_time,
       << ": the latest schema creation timestamp is "
       << absl::FormatTime(schemas_.rbegin()->first);
   schemas_[creation_time] = std::move(schema);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

@@ -25,7 +25,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
@@ -53,7 +53,7 @@
 #include "backend/transaction/row_cursor.h"
 #include "common/clock.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -106,7 +106,7 @@ zetasql_base::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
       if (maybe_row.ok()) {
         // Row exists and therefore we should only update.
         write_ops.push_back(UpdateOp{table, key, columns, row});
-      } else if (maybe_row.status().code() == zetasql_base::StatusCode::kNotFound) {
+      } else if (maybe_row.status().code() == absl::StatusCode::kNotFound) {
         write_ops.push_back(InsertOp{table, key, columns, row});
       } else {
         return maybe_row.status();
@@ -159,9 +159,9 @@ zetasql_base::StatusOr<absl::Time> ReadWriteTransaction::GetCommitTimestamp() {
   return commit_timestamp_;
 }
 
-zetasql_base::Status ReadWriteTransaction::Read(const ReadArg& read_arg,
+absl::Status ReadWriteTransaction::Read(const ReadArg& read_arg,
                                         std::unique_ptr<RowCursor>* cursor) {
-  return GuardedCall([&]() -> zetasql_base::Status {
+  return GuardedCall([&]() -> absl::Status {
     mu_.AssertHeld();
 
     ZETASQL_ASSIGN_OR_RETURN(const ResolvedReadArg& resolved_read_arg,
@@ -177,24 +177,24 @@ zetasql_base::Status ReadWriteTransaction::Read(const ReadArg& read_arg,
     }
     *cursor = absl::make_unique<StorageIteratorRowCursor>(
         std::move(iterators), resolved_read_arg.columns);
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   });
 }
 
-zetasql_base::Status ReadWriteTransaction::ApplyValidators(const WriteOp& op) {
+absl::Status ReadWriteTransaction::ApplyValidators(const WriteOp& op) {
   return action_registry_->ExecuteValidators(action_context_.get(), op);
 }
 
-zetasql_base::Status ReadWriteTransaction::ApplyEffectors(const WriteOp& op) {
+absl::Status ReadWriteTransaction::ApplyEffectors(const WriteOp& op) {
   return action_registry_->ExecuteEffectors(action_context_.get(), op);
 }
 
-zetasql_base::Status ReadWriteTransaction::ApplyStatementVerifiers() {
+absl::Status ReadWriteTransaction::ApplyStatementVerifiers() {
   for (const auto& write_op : transaction_store_->GetBufferedOps()) {
     ZETASQL_RETURN_IF_ERROR(
         action_registry_->ExecuteVerifiers(action_context_.get(), write_op));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 const Schema* ReadWriteTransaction::schema() const {
@@ -215,8 +215,8 @@ void ReadWriteTransaction::Reset() {
   state_ = State::kUninitialized;
 }
 
-zetasql_base::Status ReadWriteTransaction::GuardedCall(
-    const std::function<zetasql_base::Status()>& fn) {
+absl::Status ReadWriteTransaction::GuardedCall(
+    const std::function<absl::Status()>& fn) {
   absl::MutexLock lock(&mu_);
   switch (state_) {
     case State::kRolledback: {
@@ -249,20 +249,20 @@ zetasql_base::Status ReadWriteTransaction::GuardedCall(
     }
   }
 
-  const zetasql_base::Status status = fn();
+  const absl::Status status = fn();
 
   if (!status.ok()) {
     // For all errors, reset the transaction state.
     Reset();
 
-    if (status.code() == zetasql_base::StatusCode::kAborted) {
+    if (status.code() == absl::StatusCode::kAborted) {
       abort_retry_count_++;
     }
   }
   return status;
 }
 
-zetasql_base::Status ReadWriteTransaction::ProcessWriteOps(
+absl::Status ReadWriteTransaction::ProcessWriteOps(
     const std::vector<WriteOp>& write_ops) {
   mu_.AssertHeld();
 
@@ -281,11 +281,11 @@ zetasql_base::Status ReadWriteTransaction::ProcessWriteOps(
     // Apply to transaction store.
     ZETASQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(write_op));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ReadWriteTransaction::Write(const Mutation& mutation) {
-  return GuardedCall([&]() -> zetasql_base::Status {
+absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
+  return GuardedCall([&]() -> absl::Status {
     mu_.AssertHeld();
 
     for (const MutationOp& mutation_op : mutation.ops()) {
@@ -318,15 +318,15 @@ zetasql_base::Status ReadWriteTransaction::Write(const Mutation& mutation) {
   });
 }
 
-zetasql_base::Status ReadWriteTransaction::Commit() {
-  return GuardedCall([&]() -> zetasql_base::Status {
+absl::Status ReadWriteTransaction::Commit() {
+  return GuardedCall([&]() -> absl::Status {
     mu_.AssertHeld();
 
     // Pick a commit timestamp.
     ZETASQL_ASSIGN_OR_RETURN(commit_timestamp_, lock_handle_->ReserveCommitTimestamp());
 
     // Write the mutations to the base storage.
-    zetasql_base::Status flush_status = FlushWriteOpsToStorage(
+    absl::Status flush_status = FlushWriteOpsToStorage(
         transaction_store_->GetBufferedOps(), base_storage_, commit_timestamp_);
     ZETASQL_RETURN_IF_ERROR(lock_handle_->MarkCommitted());
     if (!flush_status.ok()) {
@@ -339,12 +339,12 @@ zetasql_base::Status ReadWriteTransaction::Commit() {
     // Unlock all locks.
     lock_handle_->UnlockAll();
 
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   });
 }
 
-zetasql_base::Status ReadWriteTransaction::Rollback() {
-  return GuardedCall([&]() -> zetasql_base::Status {
+absl::Status ReadWriteTransaction::Rollback() {
+  return GuardedCall([&]() -> absl::Status {
     mu_.AssertHeld();
 
     // Reset the transaction state.
@@ -353,7 +353,7 @@ zetasql_base::Status ReadWriteTransaction::Rollback() {
     // Mark the transaction as rolledback.
     state_ = State::kRolledback;
 
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   });
 }
 

@@ -32,7 +32,7 @@ namespace emulator {
 namespace frontend {
 
 // Lists operations that match the specified filter in the request.
-zetasql_base::Status ListOperations(
+absl::Status ListOperations(
     RequestContext* ctx, const operations_api::ListOperationsRequest* request,
     operations_api::ListOperationsResponse* response) {
   // Verify the operations URI is valid.
@@ -45,12 +45,12 @@ zetasql_base::Status ListOperations(
   for (const auto& op : operations) {
     op->ToProto(response->add_operations());
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Operations, ListOperations);
 
 // Gets the latest state of a long-running operation.
-zetasql_base::Status GetOperation(RequestContext* ctx,
+absl::Status GetOperation(RequestContext* ctx,
                           const operations_api::GetOperationRequest* request,
                           operations_api::Operation* response) {
   absl::string_view resource_uri, operation_id;
@@ -60,31 +60,31 @@ zetasql_base::Status GetOperation(RequestContext* ctx,
       std::shared_ptr<Operation> operation,
       ctx->env()->operation_manager()->GetOperation(request->name()));
   operation->ToProto(response);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Operations, GetOperation);
 
 // Deletes a long-running operation.
-zetasql_base::Status DeleteOperation(
+absl::Status DeleteOperation(
     RequestContext* ctx, const operations_api::DeleteOperationRequest* request,
     protobuf_api::Empty* response) {
-  return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented, "");
+  return absl::Status(absl::StatusCode::kUnimplemented, "");
 }
 REGISTER_GRPC_HANDLER(Operations, DeleteOperation);
 
 // Cancels a long-running operation.
-zetasql_base::Status CancelOperation(
+absl::Status CancelOperation(
     RequestContext* ctx, const operations_api::CancelOperationRequest* request,
     protobuf_api::Empty* response) {
-  return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented, "");
+  return absl::Status(absl::StatusCode::kUnimplemented, "");
 }
 REGISTER_GRPC_HANDLER(Operations, CancelOperation);
 
 // Waits for the specified long-running operation until it is done.
-zetasql_base::Status WaitOperation(RequestContext* ctx,
+absl::Status WaitOperation(RequestContext* ctx,
                            const operations_api::WaitOperationRequest* request,
                            operations_api::Operation* response) {
-  return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented, "");
+  return absl::Status(absl::StatusCode::kUnimplemented, "");
 }
 REGISTER_GRPC_HANDLER(Operations, WaitOperation);
 

@@ -21,7 +21,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "common/errors.h"
 #include "tests/common/test_env.h"
 
@@ -52,7 +52,7 @@ TEST_F(PartitionApiTest, RequiredSession) {
 
   spanner_api::PartitionResponse partition_read_response;
   EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionApiTest, RequiredTransaction) {
@@ -60,8 +60,8 @@ TEST_F(PartitionApiTest, RequiredTransaction) {
   partition_read_request.set_session(test_session_uri_);
 
   spanner_api::PartitionResponse partition_read_response;
-  EXPECT_EQ(PartitionRead(partition_read_request, &partition_read_response),
-            error::MissingRequiredFieldError("TransactionSelector.selector"));
+  EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionApiTest, CannotReadUsingSingleUseTransaction) {
@@ -72,8 +72,8 @@ TEST_F(PartitionApiTest, CannotReadUsingSingleUseTransaction) {
   partition_read_request.set_session(test_session_uri_);
 
   spanner_api::PartitionResponse partition_read_response;
-  EXPECT_EQ(PartitionRead(partition_read_request, &partition_read_response),
-            error::PartitionReadDoesNotSupportSingleUseTransaction());
+  EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionApiTest, CannotReadUsingBeginReadWriteTransaction) {
@@ -85,8 +85,8 @@ TEST_F(PartitionApiTest, CannotReadUsingBeginReadWriteTransaction) {
   partition_read_request.set_session(test_session_uri_);
 
   spanner_api::PartitionResponse partition_read_response;
-  EXPECT_EQ(PartitionRead(partition_read_request, &partition_read_response),
-            error::PartitionReadNeedsReadOnlyTxn());
+  EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionApiTest, CannotReadUsingExistingReadWriteTransaction) {
@@ -110,8 +110,8 @@ TEST_F(PartitionApiTest, CannotReadUsingExistingReadWriteTransaction) {
   *partition_read_request.mutable_transaction() = selector;
 
   spanner_api::PartitionResponse partition_read_response;
-  EXPECT_EQ(PartitionRead(partition_read_request, &partition_read_response),
-            error::PartitionReadNeedsReadOnlyTxn());
+  EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionApiTest, CannotReadUsingInvalidPartitionOptions) {
@@ -124,8 +124,8 @@ TEST_F(PartitionApiTest, CannotReadUsingInvalidPartitionOptions) {
   partition_read_request.set_session(test_session_uri_);
 
   spanner_api::PartitionResponse partition_read_response;
-  EXPECT_EQ(PartitionRead(partition_read_request, &partition_read_response),
-            error::InvalidBytesPerBatch("partition_options"));
+  EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Test that negative max_partitions is not allowed.
   partition_read_request = PARSE_TEXT_PROTO(
@@ -135,8 +135,8 @@ TEST_F(PartitionApiTest, CannotReadUsingInvalidPartitionOptions) {
       )");
   partition_read_request.set_session(test_session_uri_);
 
-  EXPECT_EQ(PartitionRead(partition_read_request, &partition_read_response),
-            error::InvalidMaxPartitionCount("partition_options"));
+  EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

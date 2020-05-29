@@ -79,7 +79,7 @@ TEST_F(SessionManagerTest, GetSessionFailsAfterVersionGcDuration) {
   // Set the approximate_last_use_time to earlier than gc duration.
   expected->set_approximate_last_use_time(absl::Now() - absl::Hours(1.5));
   EXPECT_THAT(session_manager_.GetSession(expected->session_uri()),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(SessionManagerTest, DeleteSession) {
@@ -87,7 +87,7 @@ TEST_F(SessionManagerTest, DeleteSession) {
                        session_manager_.CreateSession(test_labels_, database_));
   ZETASQL_EXPECT_OK(session_manager_.DeleteSession(actual->session_uri()));
   EXPECT_THAT(session_manager_.GetSession(actual->session_uri()),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(SessionManagerTest, ListSessions) {

@@ -62,7 +62,7 @@ class LockManager {
   void UnlockAll(LockHandle* handle) ABSL_LOCKS_EXCLUDED(mu_);
   zetasql_base::StatusOr<absl::Time> ReserveCommitTimestamp(LockHandle* handle)
       ABSL_LOCKS_EXCLUDED(mu_);
-  zetasql_base::Status MarkCommitted(LockHandle* handle) ABSL_LOCKS_EXCLUDED(mu_);
+  absl::Status MarkCommitted(LockHandle* handle) ABSL_LOCKS_EXCLUDED(mu_);
   void WaitForSafeRead(absl::Time read_time) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Mutex to guard state below.

@@ -25,7 +25,7 @@
 #include "absl/types/span.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/schema.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -64,8 +64,8 @@ struct SchemaChangeResult {
   std::unique_ptr<const Schema> updated_schema;
 
   // The error encounterd while processing the first backfill/verifier action
-  // that failed. zetasql_base::OkStatus() if all schema actions successfully applied.
-  zetasql_base::Status backfill_status;
+  // that failed. absl::OkStatus() if all schema actions successfully applied.
+  absl::Status backfill_status;
 };
 
 class SchemaUpdater {
@@ -106,7 +106,7 @@ class SchemaUpdater {
  private:
   static const Schema* EmptySchema();
 
-  zetasql_base::Status RunPendingActions(int* num_succesful);
+  absl::Status RunPendingActions(int* num_succesful);
 
   std::vector<SchemaValidationContext> pending_work_;
 

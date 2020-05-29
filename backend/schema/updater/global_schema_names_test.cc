@@ -22,7 +22,7 @@
 #include "tests/common/proto_matchers.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -39,6 +39,8 @@ TEST(GlobalSchemaNames, AddName) {
   GlobalSchemaNames names;
   ZETASQL_EXPECT_OK(names.AddName("Table", "Albums"));
   ZETASQL_EXPECT_OK(names.AddName("Table", "Singers"));
+  EXPECT_TRUE(names.HasName("Albums"));
+  EXPECT_TRUE(names.HasName("Singers"));
 
   // Names must be unique regardless of the type of schema object.
   EXPECT_THAT(names.AddName("Index", "Albums"),
@@ -52,14 +54,18 @@ TEST(GlobalSchemaNames, AddName) {
 TEST(GlobalSchemaNames, RemoveName) {
   GlobalSchemaNames names;
   ZETASQL_EXPECT_OK(names.AddName("Table", "Albums"));
+  EXPECT_TRUE(names.HasName("Albums"));
   names.RemoveName("albums");  // Case-insensitive.
+  EXPECT_FALSE(names.HasName("Albums"));
   ZETASQL_EXPECT_OK(names.AddName("Table", "Albums"));
+  EXPECT_TRUE(names.HasName("Albums"));
 }
 
 TEST(GlobalSchemaNames, GenerateForeignKeyName) {
   GlobalSchemaNames names;
   auto status = names.GenerateForeignKeyName("Albums", "Singers");
   ZETASQL_EXPECT_OK(status);
+  EXPECT_TRUE(names.HasName(status.value()));
   EXPECT_THAT(status.value(), Eq("FK_Albums_Singers_5FB395005BB87272_1"));
 
   // Same tables.
@@ -89,6 +95,33 @@ TEST(GlobalSchemaNames, GenerateForeignKeyName) {
   // Empty tables names.
   EXPECT_THAT(names.GenerateForeignKeyName("", "Songs"), Not(IsOk()));
   EXPECT_THAT(names.GenerateForeignKeyName("Albums", ""), Not(IsOk()));
+}
+
+TEST(GlobalSchemaNames, ValidateSchemaName) {
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", "Albums"));
+
+  EXPECT_THAT(GlobalSchemaNames::ValidateSchemaName("Table", ""), Not(IsOk()));
+  EXPECT_THAT(GlobalSchemaNames::ValidateSchemaName("Table", "_Albums"),
+              Eq(error::InvalidSchemaName("Table", "_Albums")));
+
+  std::string max_name(limits::kMaxSchemaIdentifierLength, 'x');
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", max_name));
+
+  std::string long_name(limits::kMaxSchemaIdentifierLength + 1, 'x');
+  EXPECT_THAT(GlobalSchemaNames::ValidateSchemaName("Table", long_name),
+              Eq(error::InvalidSchemaName("Table", long_name)));
+}
+
+TEST(GlobalSchemaNames, ValidateConstraintName) {
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateConstraintName("Albums", "Foreign Key",
+                                                      "FK_C"));
+  EXPECT_THAT(GlobalSchemaNames::ValidateConstraintName("Albums", "Foreign Key",
+                                                        "PK_C"),
+              Eq(error::InvalidConstraintName("Foreign Key", "PK_C", "PK_")));
+  EXPECT_THAT(GlobalSchemaNames::ValidateConstraintName("Albums", "Foreign Key",
+                                                        "CK_IS_NOT_NULL_C"),
+              Eq(error::InvalidConstraintName("Foreign Key", "CK_IS_NOT_NULL_C",
+                                              "CK_IS_NOT_NULL_")));
 }
 
 }  // namespace

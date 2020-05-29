@@ -28,7 +28,7 @@ namespace {
 
 class QueryHintsTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({
         R"(
           CREATE TABLE Users(
@@ -45,7 +45,7 @@ TEST_F(QueryHintsTest, QueryWithStatementHints) {
   ZETASQL_EXPECT_OK(Query("SELECT ID, Name, Age FROM Users@{force_index=UsersByName}"));
   EXPECT_THAT(
       Query("@{force_index=UsersByName} SELECT ID, Name, Age FROM Users"),
-      ::zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      ::zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   ZETASQL_EXPECT_OK(
       Query("@{force_index=_BASE_TABLE} SELECT ID, Name, Age FROM Users"));
   ZETASQL_EXPECT_OK(Query("@{join_method=hash_join} SELECT ID, Name, Age FROM Users"));
@@ -57,7 +57,7 @@ TEST_F(QueryHintsTest, QueryWithStatementHints) {
   EXPECT_THAT(
       Query(
           "@{hash_join_build_side=build_left} SELECT ID, Name, Age FROM Users"),
-      ::zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      ::zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   ZETASQL_EXPECT_OK(
       Query("@{join_type=hash_join,hash_join_build_side=build_right} SELECT "
             "ID, Name, Age FROM Users"));

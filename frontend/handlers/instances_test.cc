@@ -49,7 +49,7 @@ class InstanceApiTest : public test::ServerTest {
  protected:
   const std::string kTestConfigId = "emulator-config";
 
-  zetasql_base::Status GetInstance(absl::string_view instance_uri,
+  absl::Status GetInstance(absl::string_view instance_uri,
                            instance_api::Instance* instance) {
     instance_api::GetInstanceRequest request;
     request.set_name(MakeInstanceUri(test_project_name_, instance_uri));
@@ -58,7 +58,7 @@ class InstanceApiTest : public test::ServerTest {
                                                             instance);
   }
 
-  zetasql_base::Status ListInstances(const std::string& project_uri, int32_t page_size,
+  absl::Status ListInstances(const std::string& project_uri, int32_t page_size,
                              const std::string& page_token,
                              instance_api::ListInstancesResponse* response) {
     grpc::ClientContext context;
@@ -70,13 +70,13 @@ class InstanceApiTest : public test::ServerTest {
                                                               response);
   }
 
-  zetasql_base::Status CreateInstance(const absl::string_view instance_id) {
+  absl::Status CreateInstance(const absl::string_view instance_id) {
     longrunning::Operation operation;
     ZETASQL_RETURN_IF_ERROR(CreateInstance(instance_id, &operation));
     return WaitForOperation(operation.name(), &operation);
   }
 
-  zetasql_base::Status CreateInstance(const absl::string_view instance_id,
+  absl::Status CreateInstance(const absl::string_view instance_id,
                               longrunning::Operation* operation) {
     instance_api::CreateInstanceRequest request;
     request.set_parent(test_project_uri_);
@@ -117,13 +117,13 @@ TEST_F(InstanceApiTest, CreateInstanceWithInvalidName) {
   longrunning::Operation operation;
   // Instance name less than 2 characters.
   EXPECT_THAT(CreateInstance("a", &operation),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Instance name more than 64 characters.
   EXPECT_THAT(CreateInstance("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                              &operation),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(InstanceApiTest, CreateInstance) {
@@ -152,7 +152,7 @@ TEST_F(InstanceApiTest, CreateInstance) {
 TEST_F(InstanceApiTest, InstanceAlreadyExists) {
   ZETASQL_EXPECT_OK(CreateInstance(test_instance_name_));
   EXPECT_THAT(CreateInstance(test_instance_name_),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists,
+              StatusIs(absl::StatusCode::kAlreadyExists,
                        MatchesRegex(".*Instance already exists.*")));
 }
 
@@ -169,7 +169,7 @@ TEST_F(InstanceApiTest, GetInstance) {
                 labels { key: "a" value: "b" }
               )"));
   EXPECT_THAT(GetInstance("nonexist-instance", &instance),
-              StatusIs(zetasql_base::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kNotFound,
                        MatchesRegex(".*Instance not found.*")));
 }
 
@@ -247,7 +247,7 @@ TEST_F(InstanceApiTest, DeleteInstance) {
       &context, request, &response));
   instance_api::Instance instance;
   EXPECT_THAT(GetInstance(test_instance_name_, &instance),
-              StatusIs(zetasql_base::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kNotFound,
                        MatchesRegex(".*Instance not found.*")));
 }
 

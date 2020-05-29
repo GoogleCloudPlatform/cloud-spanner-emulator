@@ -21,7 +21,7 @@
 #include "common/clock.h"
 #include "frontend/entities/database.h"
 #include "frontend/entities/session.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -44,7 +44,7 @@ class SessionManager {
       const std::string& session_uri) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Deletes a session with the given URI.
-  zetasql_base::Status DeleteSession(const std::string& session_uri)
+  absl::Status DeleteSession(const std::string& session_uri)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Lists sessions attached to the given database URI.

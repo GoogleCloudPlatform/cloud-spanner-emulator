@@ -57,9 +57,9 @@ class ColumnValueVerifiersTest : public ::testing::Test {
  public:
   ColumnValueVerifiersTest() {}
 
-  zetasql_base::Status UpdateSchema(absl::Span<const std::string> update_statements) {
+  absl::Status UpdateSchema(absl::Span<const std::string> update_statements) {
     int num_succesful;
-    zetasql_base::Status backfill_status;
+    absl::Status backfill_status;
     absl::Time update_time;
     ZETASQL_RETURN_IF_ERROR(database_->UpdateSchema(update_statements, &num_succesful,
                                             &update_time, &backfill_status));

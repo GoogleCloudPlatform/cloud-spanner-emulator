@@ -30,9 +30,9 @@ cc_library(
         "//frontend/common:uris",
         "//frontend/entities:database",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
-        "@com_google_zetasql//zetasql/base:status",
     ],
 )
 
@@ -65,10 +65,10 @@ cc_library(
         "//frontend/common:uris",
         "//frontend/entities:database",
         "//frontend/entities:session",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
@@ -87,10 +87,10 @@ cc_test(
         "//frontend/entities:session",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
@@ -108,10 +108,10 @@ cc_library(
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_cc_grpc",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
@@ -127,8 +127,8 @@ cc_test(
         "//frontend/entities:instance",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
@@ -142,9 +142,9 @@ cc_library(
         "//frontend/common:uris",
         "//frontend/entities:operation",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base:statusor",
     ],
 )

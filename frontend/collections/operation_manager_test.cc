@@ -58,7 +58,7 @@ TEST_F(OperationManagerTest, CreatesNewOperationWithSystemGeneratedId) {
 TEST_F(OperationManagerTest, FailsToCreateOperationWithExistingURI) {
   ZETASQL_ASSERT_OK(manager()->CreateOperation("projects/123/instances/456", "789"));
   EXPECT_THAT(manager()->CreateOperation("projects/123/instances/456", "789"),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(OperationManagerTest, GetExistingOperation) {
@@ -74,7 +74,7 @@ TEST_F(OperationManagerTest, GetExistingOperation) {
 TEST_F(OperationManagerTest, CannotGetNonExistingOperation) {
   EXPECT_THAT(
       manager()->GetOperation("projects/123/instances/456/operations/789"),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(OperationManagerTest, DeletesAnExistingOperation) {
@@ -90,7 +90,7 @@ TEST_F(OperationManagerTest, DeletesAnExistingOperation) {
       manager()->DeleteOperation("projects/123/instances/456/operations/789"));
   EXPECT_THAT(
       manager()->GetOperation("projects/123/instances/456/operations/789"),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(OperationManagerTest, DeletesANonExistingOperation) {

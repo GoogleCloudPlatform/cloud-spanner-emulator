@@ -19,7 +19,7 @@
 #include <memory>
 
 #include "zetasql/public/type.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/types/optional.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/backfills/index_backfill.h"
@@ -102,18 +102,17 @@ class SchemaUpdaterImpl {
         storage_(storage),
         schema_change_timestamp_(schema_change_ts),
         latest_schema_(existing_schema),
-        editor_(absl::make_unique<SchemaGraphEditor>(
-            latest_schema_->GetSchemaGraph())) {}
+        editor_(nullptr) {}
 
   // Initializes potentially failing components after construction.
-  zetasql_base::Status Init();
+  absl::Status Init();
 
   // Applies the given `statement` on to `latest_schema_`.
   zetasql_base::StatusOr<std::unique_ptr<const Schema>> ApplyDDLStatement(
       absl::string_view statement);
 
   // Run any pending schema actions resulting from the schema change statements.
-  zetasql_base::Status RunPendingActions(
+  absl::Status RunPendingActions(
       const std::vector<SchemaValidationContext>& pending_work,
       int* num_succesful);
 
@@ -123,7 +122,7 @@ class SchemaUpdaterImpl {
       const ddl::Options& options);
 
   template <typename ColumnDefModifier>
-  zetasql_base::Status SetColumnDefinition(const ddl::ColumnDefinition& ddl_column,
+  absl::Status SetColumnDefinition(const ddl::ColumnDefinition& ddl_column,
                                    ColumnDefModifier* modifier);
 
   zetasql_base::StatusOr<const Column*> CreateColumn(
@@ -133,14 +132,14 @@ class SchemaUpdaterImpl {
       const ddl::PrimaryKeyConstraint::KeyPart& ddl_key_part,
       const Table* table);
 
-  zetasql_base::Status CreatePrimaryKeyConstraint(
+  absl::Status CreatePrimaryKeyConstraint(
       const ddl::PrimaryKeyConstraint& ddl_primary_key,
       Table::Builder* builder);
 
-  zetasql_base::Status CreateInterleaveConstraint(
+  absl::Status CreateInterleaveConstraint(
       const ddl::InterleaveConstraint& interleave, Table::Builder* builder);
 
-  zetasql_base::Status CreateTable(const ddl::CreateTable& ddl_table);
+  absl::Status CreateTable(const ddl::CreateTable& ddl_table);
 
   zetasql_base::StatusOr<const Column*> CreateIndexDataTableColumn(
       const Table* indexed_table, const std::string& source_column_name,
@@ -152,30 +151,30 @@ class SchemaUpdaterImpl {
       std::vector<const KeyColumn*>* index_key_columns,
       std::vector<const Column*>* stored_columns);
 
-  zetasql_base::Status CreateIndex(const ddl::CreateIndex& ddl_index);
+  absl::Status CreateIndex(const ddl::CreateIndex& ddl_index);
 
-  zetasql_base::Status AlterTable(const ddl::AlterTable& alter_table);
+  absl::Status AlterTable(const ddl::AlterTable& alter_table);
 
-  zetasql_base::Status DropTable(const ddl::DropTable& drop_table);
+  absl::Status DropTable(const ddl::DropTable& drop_table);
 
-  zetasql_base::Status DropIndex(const ddl::DropIndex& drop_index);
+  absl::Status DropIndex(const ddl::DropIndex& drop_index);
 
   // Adds a new schema object `node` to the schema copy being edited by
   // `editor_`.
-  zetasql_base::Status AddNode(std::unique_ptr<const SchemaNode> node);
+  absl::Status AddNode(std::unique_ptr<const SchemaNode> node);
 
   // Drops the schema object `node` in `latest_schema_` from the schema copy
   // being edited by `editor_`.
-  zetasql_base::Status DropNode(const SchemaNode* node);
+  absl::Status DropNode(const SchemaNode* node);
 
   // Modifies the schema object `node` in `LatestSchema` in the schema
   // copy being edited by `editor_`.
   template <typename T>
-  zetasql_base::Status AlterNode(const T* node,
+  absl::Status AlterNode(const T* node,
                          const SchemaGraphEditor::EditCallback<T>& alter_cb) {
     ZETASQL_RET_CHECK_NE(node, nullptr);
     ZETASQL_RETURN_IF_ERROR(editor_->EditNode<T>(node, alter_cb));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   // Type factory for the database. Not owned.
@@ -215,28 +214,29 @@ class SchemaUpdaterImpl {
   GlobalSchemaNames global_names_;
 };
 
-zetasql_base::Status SchemaUpdaterImpl::Init() {
-  for (const Table* table : latest_schema_->tables()) {
-    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", table->Name()));
-    for (const Index* index : table->indexes()) {
-      ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Index", index->Name()));
+absl::Status SchemaUpdaterImpl::Init() {
+  for (const SchemaNode* node :
+       latest_schema_->GetSchemaGraph()->GetSchemaNodes()) {
+    if (auto name = node->GetSchemaNameInfo(); name && name.value().global) {
+      ZETASQL_RETURN_IF_ERROR(
+          global_names_.AddName(name.value().kind, name.value().name));
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status SchemaUpdaterImpl::AddNode(
+absl::Status SchemaUpdaterImpl::AddNode(
     std::unique_ptr<const SchemaNode> node) {
   // Since we canonicalize immediately after an edit,
   // we don't expect ay edits while adding a node.
   ZETASQL_RETURN_IF_ERROR(editor_->AddNode(std::move(node)));
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status SchemaUpdaterImpl::DropNode(const SchemaNode* node) {
+absl::Status SchemaUpdaterImpl::DropNode(const SchemaNode* node) {
   ZETASQL_RET_CHECK_NE(node, nullptr);
   ZETASQL_RETURN_IF_ERROR(editor_->DeleteNode(node));
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<std::unique_ptr<const Schema>>
@@ -286,10 +286,11 @@ SchemaUpdaterImpl::ApplyDDLStatements(
 
   for (const auto& statement : statements) {
     VLOG(2) << "Applying statement " << statement;
-    SchemaValidationContext statement_context{storage_,
+    SchemaValidationContext statement_context{storage_, &global_names_,
                                               schema_change_timestamp_};
-    editor_->set_validation_context(&statement_context);
     statement_context_ = &statement_context;
+    editor_ = absl::make_unique<SchemaGraphEditor>(
+        latest_schema_->GetSchemaGraph(), statement_context_);
 
     // If there is a semantic validation error, then we return right away.
     ZETASQL_ASSIGN_OR_RETURN(auto new_schema, ApplyDDLStatement(statement));
@@ -305,8 +306,6 @@ SchemaUpdaterImpl::ApplyDDLStatements(
     // If everything was OK, make this the new schema snapshot for processing
     // the next statement and save the pending schema snapshot and backfill
     // work.
-    editor_ =
-        absl::make_unique<SchemaGraphEditor>(latest_schema_->GetSchemaGraph());
     pending_work.emplace_back(std::move(statement_context));
   }
 
@@ -335,7 +334,7 @@ zetasql_base::StatusOr<absl::optional<bool>> SchemaUpdaterImpl::CreateColumnOpti
 }
 
 template <typename ColumnDefModifer>
-zetasql_base::Status SchemaUpdaterImpl::SetColumnDefinition(
+absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     const ddl::ColumnDefinition& ddl_column, ColumnDefModifer* modifier) {
   if (ddl_column.has_properties() &&
       ddl_column.properties().has_column_type()) {
@@ -371,7 +370,7 @@ zetasql_base::Status SchemaUpdaterImpl::SetColumnDefinition(
                      CreateColumnOptions(ddl_column.options()));
     modifier->set_allow_commit_timestamp(allows_commit_ts);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
@@ -389,7 +388,7 @@ zetasql_base::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
   return column;
 }
 
-zetasql_base::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
+absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
     const ddl::InterleaveConstraint& interleave, Table::Builder* builder) {
   auto parent = latest_schema_->FindTable(interleave.parent());
   if (parent == nullptr) {
@@ -405,10 +404,10 @@ zetasql_base::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
   ZETASQL_RET_CHECK_EQ(builder->get()->parent(), nullptr);
 
   ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
-      parent, [builder](Table::Editor& parent_editor) -> zetasql_base::Status {
+      parent, [builder](Table::Editor& parent_editor) -> absl::Status {
         parent_editor.add_child_table(builder->get());
         builder->set_parent_table(parent_editor.get());
-        return zetasql_base::OkStatus();
+        return absl::OkStatus();
       }));
 
   if (interleave.on_delete().action() == ddl::OnDeleteAction::CASCADE) {
@@ -417,10 +416,10 @@ zetasql_base::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
     builder->set_on_delete(Table::OnDeleteAction::kNoAction);
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status SchemaUpdaterImpl::CreatePrimaryKeyConstraint(
+absl::Status SchemaUpdaterImpl::CreatePrimaryKeyConstraint(
     const ddl::PrimaryKeyConstraint& ddl_primary_key, Table::Builder* builder) {
   for (const ddl::PrimaryKeyConstraint::KeyPart& ddl_key_part :
        ddl_primary_key.key_part()) {
@@ -428,7 +427,7 @@ zetasql_base::Status SchemaUpdaterImpl::CreatePrimaryKeyConstraint(
                      CreatePrimaryKeyColumn(ddl_key_part, builder->get()));
     builder->add_key_column(key_col);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
@@ -451,7 +450,7 @@ zetasql_base::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColu
   return key_col;
 }
 
-zetasql_base::Status SchemaUpdaterImpl::CreateTable(const ddl::CreateTable& ddl_table) {
+absl::Status SchemaUpdaterImpl::CreateTable(const ddl::CreateTable& ddl_table) {
   ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", ddl_table.table_name()));
 
   Table::Builder builder;
@@ -483,7 +482,7 @@ zetasql_base::Status SchemaUpdaterImpl::CreateTable(const ddl::CreateTable& ddl_
   }
 
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
@@ -609,7 +608,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
   return builder.build();
 }
 
-zetasql_base::Status SchemaUpdaterImpl::CreateIndex(const ddl::CreateIndex& ddl_index) {
+absl::Status SchemaUpdaterImpl::CreateIndex(const ddl::CreateIndex& ddl_index) {
   auto indexed_table = latest_schema_->FindTable(ddl_index.table_name());
   if (indexed_table == nullptr) {
     return error::TableNotFound(ddl_index.table_name());
@@ -639,10 +638,10 @@ zetasql_base::Status SchemaUpdaterImpl::CreateIndex(const ddl::CreateIndex& ddl_
   }
 
   ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
-      indexed_table, [&builder](Table::Editor& table_editor) -> zetasql_base::Status {
+      indexed_table, [&builder](Table::Editor& table_editor) -> absl::Status {
         table_editor.add_index(builder.get());
         builder.set_indexed_table(table_editor.get());
-        return zetasql_base::OkStatus();
+        return absl::OkStatus();
       }));
 
   // Register a backfill action for the index.
@@ -656,10 +655,10 @@ zetasql_base::Status SchemaUpdaterImpl::CreateIndex(const ddl::CreateIndex& ddl_
   // validation.
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
   ZETASQL_RETURN_IF_ERROR(AddNode(std::move(data_table)));
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_table) {
+absl::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_table) {
   const Table* table = latest_schema_->FindTable(alter_table.table_name());
   if (table == nullptr) {
     return error::TableNotFound(alter_table.table_name());
@@ -679,15 +678,15 @@ zetasql_base::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_
 
     const auto& interleave = alter_constraint.constraint().interleave();
     ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
-        table, [&interleave](Table::Editor& editor) -> zetasql_base::Status {
+        table, [&interleave](Table::Editor& editor) -> absl::Status {
           if (interleave.on_delete().action() == ddl::OnDeleteAction::CASCADE) {
             editor.set_on_delete(Table::OnDeleteAction::kCascade);
           } else {
             editor.set_on_delete(Table::OnDeleteAction::kNoAction);
           }
-          return zetasql_base::OkStatus();
+          return absl::OkStatus();
         }));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   if (alter_table.has_alter_column()) {
@@ -698,9 +697,9 @@ zetasql_base::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_
         ZETASQL_ASSIGN_OR_RETURN(const Column* new_column,
                          CreateColumn(column_def, table));
         ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
-            table, [new_column](Table::Editor& editor) -> zetasql_base::Status {
+            table, [new_column](Table::Editor& editor) -> absl::Status {
               editor.add_column(new_column);
-              return zetasql_base::OkStatus();
+              return absl::OkStatus();
             }));
         break;
       }
@@ -713,9 +712,9 @@ zetasql_base::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_
         const auto& column_def = alter_column.column();
         ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
             column,
-            [this, &column_def](Column::Editor& editor) -> zetasql_base::Status {
+            [this, &column_def](Column::Editor& editor) -> absl::Status {
               ZETASQL_RETURN_IF_ERROR(SetColumnDefinition(column_def, &editor));
-              return zetasql_base::OkStatus();
+              return absl::OkStatus();
             }));
         break;
       }
@@ -732,30 +731,26 @@ zetasql_base::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_
         ZETASQL_RET_CHECK(false) << "Invalid alter column specification: "
                          << alter_column.DebugString();
     }
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_table) {
+absl::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_table) {
   const Table* table = latest_schema_->FindTable(drop_table.table_name());
   if (table == nullptr) {
     return error::TableNotFound(drop_table.table_name());
   }
-  ZETASQL_RETURN_IF_ERROR(DropNode(table));
-  global_names_.RemoveName(table->Name());
-  return zetasql_base::OkStatus();
+  return DropNode(table);
 }
 
-zetasql_base::Status SchemaUpdaterImpl::DropIndex(const ddl::DropIndex& drop_index) {
+absl::Status SchemaUpdaterImpl::DropIndex(const ddl::DropIndex& drop_index) {
   const Index* index = latest_schema_->FindIndex(drop_index.index_name());
   if (index == nullptr) {
     return error::IndexNotFound(drop_index.index_name());
   }
-  ZETASQL_RETURN_IF_ERROR(DropNode(index));
-  global_names_.RemoveName(index->Name());
-  return zetasql_base::OkStatus();
+  return DropNode(index);
 }
 
 }  // namespace
@@ -791,12 +786,12 @@ SchemaUpdater::ValidateSchemaFromDDL(absl::Span<const std::string> statements,
 
 // TODO : These should run in a ReadWriteTransaction with rollback
 // capability so that changes to the database can be reversed.
-zetasql_base::Status SchemaUpdater::RunPendingActions(int* num_succesful) {
+absl::Status SchemaUpdater::RunPendingActions(int* num_succesful) {
   for (const auto& pending_statement : pending_work_) {
     ZETASQL_RETURN_IF_ERROR(pending_statement.RunSchemaChangeActions());
     ++(*num_succesful);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
@@ -814,7 +809,7 @@ zetasql_base::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
   int num_successful = 0;
   std::unique_ptr<const Schema> new_schema = nullptr;
 
-  zetasql_base::Status backfill_status = RunPendingActions(&num_successful);
+  absl::Status backfill_status = RunPendingActions(&num_successful);
   if (num_successful > 0) {
     new_schema = std::move(intermediate_schemas_[num_successful - 1]);
   }

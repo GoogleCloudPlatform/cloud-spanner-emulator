@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -22,7 +22,7 @@
 #include "tests/common/proto_matchers.h"
 #include "frontend/common/status.h"
 #include "zetasql/base/ret_check.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -32,7 +32,7 @@ namespace {
 
 TEST(GrpcStatusConversion, MessageLength) {
   std::string error_message(2048, 'a');
-  EXPECT_THAT(ToGRPCStatus(zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+  EXPECT_THAT(ToGRPCStatus(absl::Status(absl::StatusCode::kInvalidArgument,
                                         error_message))
                   .error_message(),
               testing::EndsWith("..."));

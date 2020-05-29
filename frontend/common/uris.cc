@@ -74,15 +74,15 @@ bool ConsumeOperation(absl::string_view* resource_uri,
 
 }  // namespace
 
-zetasql_base::Status ParseProjectUri(absl::string_view resource_uri,
+absl::Status ParseProjectUri(absl::string_view resource_uri,
                              absl::string_view* project_id) {
   if (!ConsumeProject(&resource_uri, project_id)) {
     return error::InvalidProjectURI(resource_uri);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ParseInstanceConfigUri(absl::string_view resource_uri,
+absl::Status ParseInstanceConfigUri(absl::string_view resource_uri,
                                     absl::string_view* project_id,
                                     absl::string_view* instance_config_id) {
   if (!ConsumeProject(&resource_uri, project_id)) {
@@ -91,10 +91,10 @@ zetasql_base::Status ParseInstanceConfigUri(absl::string_view resource_uri,
   if (!ConsumeInstanceConfig(&resource_uri, instance_config_id)) {
     return error::InvalidInstanceConfigURI(resource_uri);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ParseInstanceUri(absl::string_view resource_uri,
+absl::Status ParseInstanceUri(absl::string_view resource_uri,
                               absl::string_view* project_id,
                               absl::string_view* instance_id) {
   if (!ConsumeProject(&resource_uri, project_id)) {
@@ -103,10 +103,10 @@ zetasql_base::Status ParseInstanceUri(absl::string_view resource_uri,
   if (!ConsumeInstance(&resource_uri, instance_id)) {
     return error::InvalidInstanceURI(resource_uri);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ParseDatabaseUri(absl::string_view resource_uri,
+absl::Status ParseDatabaseUri(absl::string_view resource_uri,
                               absl::string_view* project_id,
                               absl::string_view* instance_id,
                               absl::string_view* database_id) {
@@ -119,10 +119,10 @@ zetasql_base::Status ParseDatabaseUri(absl::string_view resource_uri,
   if (!ConsumeDatabase(&resource_uri, database_id)) {
     return error::InvalidDatabaseURI(resource_uri);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ParseSessionUri(absl::string_view resource_uri,
+absl::Status ParseSessionUri(absl::string_view resource_uri,
                              absl::string_view* project_id,
                              absl::string_view* instance_id,
                              absl::string_view* database_id,
@@ -139,10 +139,10 @@ zetasql_base::Status ParseSessionUri(absl::string_view resource_uri,
   if (!ConsumeSession(&resource_uri, session_id)) {
     return error::InvalidSessionURI(resource_uri);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ParseOperationUri(absl::string_view operation_uri,
+absl::Status ParseOperationUri(absl::string_view operation_uri,
                                absl::string_view* resource_uri,
                                absl::string_view* operation_id) {
   absl::string_view project_id, instance_id, database_id;
@@ -165,7 +165,7 @@ zetasql_base::Status ParseOperationUri(absl::string_view operation_uri,
   if (!ConsumeOperation(&operation_uri, operation_id)) {
     return error::InvalidOperationURI(operation_uri);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 std::string MakeProjectUri(absl::string_view project_id) {

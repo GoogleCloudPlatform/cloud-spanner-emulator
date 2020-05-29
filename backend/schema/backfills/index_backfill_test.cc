@@ -30,7 +30,7 @@
 #include "common/errors.h"
 #include "tests/common/actions.h"
 #include "tests/common/schema_constructor.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -48,9 +48,9 @@ using zetasql::values::String;
 // more robust testing after schema constructor has been finished.
 class BackfillTest : public ::testing::Test {
  public:
-  zetasql_base::Status UpdateSchema(absl::Span<const std::string> update_statements) {
+  absl::Status UpdateSchema(absl::Span<const std::string> update_statements) {
     int num_succesful;
-    zetasql_base::Status backfill_status;
+    absl::Status backfill_status;
     absl::Time update_time;
     ZETASQL_RETURN_IF_ERROR(database_->UpdateSchema(update_statements, &num_succesful,
                                             &update_time, &backfill_status));

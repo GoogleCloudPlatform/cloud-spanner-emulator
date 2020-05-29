@@ -113,7 +113,7 @@ TEST(Operation, SerializesMetadataAndError) {
   cimd.mutable_instance()->set_name("projects/123/instances/456");
   operation.SetMetadata(cimd);
 
-  operation.SetError(zetasql_base::Status(zetasql_base::StatusCode::kAborted,
+  operation.SetError(absl::Status(absl::StatusCode::kAborted,
                                   "Aborted by higher-priority operation."));
 
   google::longrunning::Operation operation_pb;
@@ -140,7 +140,7 @@ TEST(Operation, SetErrorClearsResponse) {
   instance.set_name("projects/123/instances/456");
   operation.SetResponse(instance);
 
-  operation.SetError(zetasql_base::Status(zetasql_base::StatusCode::kAborted,
+  operation.SetError(absl::Status(absl::StatusCode::kAborted,
                                   "Aborted by higher-priority operation."));
 
   google::longrunning::Operation operation_pb;
@@ -157,7 +157,7 @@ TEST(Operation, SetErrorClearsResponse) {
 TEST(Operation, SetResponseClearsError) {
   Operation operation("projects/123/instances/456/operations/789");
 
-  operation.SetError(zetasql_base::Status(zetasql_base::StatusCode::kAborted,
+  operation.SetError(absl::Status(absl::StatusCode::kAborted,
                                   "Aborted by higher-priority operation."));
 
   instance_api::Instance instance;

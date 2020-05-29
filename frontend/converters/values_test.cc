@@ -106,9 +106,9 @@ TEST(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
 
 TEST(ValueProtos, DoesNotConvertUnknownValueTypesToProtos) {
   EXPECT_THAT(ValueToProto(zetasql::values::Invalid()),
-              StatusIs(zetasql_base::StatusCode::kInternal));
+              StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(ValueToProto(zetasql::values::Int32(0)),
-              StatusIs(zetasql_base::StatusCode::kInternal));
+              StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST(ValueProtos, DoesNotParseProtosWithMismatchingTypes) {
@@ -127,7 +127,7 @@ TEST(ValueProtos, DoesNotParseProtosWithMismatchingTypes) {
     // Check proto -> value conversion.
     EXPECT_THAT(
         ValueFromProto(PARSE_TEXT_PROTO(expected_value_pb_txt), expected_type),
-        StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+        StatusIs(absl::StatusCode::kFailedPrecondition));
   }
 }
 
@@ -146,32 +146,32 @@ TEST(ValueProtos, DoesNotParseInvalidTimestamps) {
       ValueFromProto(
           PARSE_TEXT_PROTO("string_value: '2015-01-02T03:04:05.000000067'"),
           TimestampType()),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Unsupported time format.
   EXPECT_THAT(
       ValueFromProto(
           PARSE_TEXT_PROTO("string_value: 'Mar 16 2015 10:04:05.000000067Z'"),
           TimestampType()),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST(ValueProtos, DoesNotParseInvalidDates) {
   // Before 0001-01-01.
   EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: '0000-01-02'"),
                              DateType()),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // After 9999-12-31.
   EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: '10000-12-31'"),
                              DateType()),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ValueProtos, DoesNotParseInvalidBytes) {
   EXPECT_THAT(
       ValueFromProto(PARSE_TEXT_PROTO("string_value: ';;Z'"), BytesType()),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 }  // namespace
 

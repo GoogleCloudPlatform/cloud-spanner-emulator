@@ -40,16 +40,16 @@ class ActionRegistry {
   explicit ActionRegistry(const Schema* schema);
 
   // Executes the list of validators that apply to the given operation.
-  zetasql_base::Status ExecuteValidators(const ActionContext* ctx, const WriteOp& op);
+  absl::Status ExecuteValidators(const ActionContext* ctx, const WriteOp& op);
 
   // Executes the list of effectors that apply to the given operation.
-  zetasql_base::Status ExecuteEffectors(const ActionContext* ctx, const WriteOp& op);
+  absl::Status ExecuteEffectors(const ActionContext* ctx, const WriteOp& op);
 
   // Executes the list of modifiers that apply to the given operation.
-  zetasql_base::Status ExecuteModifiers(const ActionContext* ctx, const WriteOp& op);
+  absl::Status ExecuteModifiers(const ActionContext* ctx, const WriteOp& op);
 
   // Executes the list of verifiers that apply to the given operation.
-  zetasql_base::Status ExecuteVerifiers(const ActionContext* ctx, const WriteOp& op);
+  absl::Status ExecuteVerifiers(const ActionContext* ctx, const WriteOp& op);
 
  private:
   // Initialize the validators, effectors, modifiers and verifiers for each

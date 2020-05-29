@@ -19,7 +19,7 @@
 
 #include <memory>
 
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -28,8 +28,18 @@ namespace emulator {
 namespace backend {
 
 class SchemaGraphEditor;
-
 class SchemaValidationContext;
+
+// The name of a schema node, plus additional metadata.
+struct SchemaNameInfo {
+  // The name of the schema object, such as the name of a table.
+  std::string name;
+  // The type of schema node, such as "Table" for tables.
+  std::string kind;
+  // Whether or not this is a global schema name. For example, table names are
+  // global and must be unique in a schema, whereas column names are not.
+  bool global = false;
+};
 
 // Base class for all Schema objects. All objects in the schema must sub-class
 // from this and implement its interface. This interface is used to clone the
@@ -72,6 +82,9 @@ class SchemaNode {
     return dynamic_cast<const T*>(this);
   }
 
+  // Returns the name of this node if any, plus additional metadata.
+  virtual std::optional<SchemaNameInfo> GetSchemaNameInfo() const { return {}; }
+
   //   Note for implementing validation:
   //   During validation, inconsistencies in state that cannot be arrived at
   //   through a syntactically valid DDL statement should be reported as
@@ -82,12 +95,12 @@ class SchemaNode {
   //   invalid DDL statement should be reported as user-visible, properly
   //   formatted errors.
 
-  // Returns zetasql_base::OkStatus() if the node's state is self-conistent.
-  virtual zetasql_base::Status Validate(SchemaValidationContext* context) const = 0;
+  // Returns absl::OkStatus() if the node's state is self-conistent.
+  virtual absl::Status Validate(SchemaValidationContext* context) const = 0;
 
   // Validates that the state of the cloned node after deep-cloning is
   // a valid change compared to the state of the original node.
-  virtual zetasql_base::Status ValidateUpdate(
+  virtual absl::Status ValidateUpdate(
       const SchemaNode* orig, SchemaValidationContext* context) const = 0;
 
   // Returns a debug string for uniquely identifying a node in a SchemaGraph.
@@ -116,7 +129,7 @@ class SchemaNode {
   // have not been cloned (and vice-versa) when DeepClone is called on it.
   // Instead, implementations should rely on node identifiers that do not
   // change during cloning for doing such comparisons.
-  virtual zetasql_base::Status DeepClone(SchemaGraphEditor* editor,
+  virtual absl::Status DeepClone(SchemaGraphEditor* editor,
                                  const SchemaNode* orig) = 0;
 
   template <typename T>

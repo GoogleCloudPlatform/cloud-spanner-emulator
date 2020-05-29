@@ -27,7 +27,7 @@ namespace backend {
 
 // Handles any backfill/rewrites of column values of `old_column` when
 // its definition is changed to `new_column`
-zetasql_base::Status BackfillColumnValue(const Column* old_column,
+absl::Status BackfillColumnValue(const Column* old_column,
                                  const Column* new_column,
                                  const SchemaValidationContext* context);
 

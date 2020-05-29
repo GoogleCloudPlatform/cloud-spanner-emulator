@@ -28,7 +28,7 @@ using zetasql_base::testing::StatusIs;
 
 class ColumnConstraintsTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE TestTable(
         ID1         INT64 NOT NULL,
@@ -42,15 +42,30 @@ class ColumnConstraintsTest : public DatabaseTest {
 TEST_F(ColumnConstraintsTest, CannotInsertNullValueIntoTableWithNonNullColumn) {
   // StringCol is missing, so a Null value will be inserted instead.
   EXPECT_THAT(Insert("TestTable", {"ID1"}, {1}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
   EXPECT_THAT(
       Insert("TestTable", {"ID1", "StringCol"}, {2, Null<std::string>()}),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(ColumnConstraintsTest, CannotInsertOrUpdateRowInTableWithNonNullColumn) {
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"ID1", "StringCol"}, {1, "value"}));
+  // NOT NULL StringCol is missing from InsertOrUpdate, and this will error.
+  EXPECT_THAT(
+      InsertOrUpdate("TestTable", {"ID1", "BytesCol"}, {1, Bytes("1234")}),
+      StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(ColumnConstraintsTest, CannotReplaceRowInTableWithNonNullColumn) {
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"ID1", "StringCol"}, {1, "value"}));
+  // NOT NULL StringCol is missing from Replace, and this will error.
+  EXPECT_THAT(Replace("TestTable", {"ID1", "BytesCol"}, {1, Bytes("1234")}),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(ColumnConstraintsTest, CanUpdateRowInTableWithNonNullColumn) {
   ZETASQL_EXPECT_OK(Insert("TestTable", {"ID1", "StringCol"}, {1, "value"}));
-  // Non-null StringCol is missing from update, but it already exists so this
+  // NOT NULL StringCol is missing from update, but it already exists so this
   // should succeed.
   ZETASQL_EXPECT_OK(Update("TestTable", {"ID1", "BytesCol"}, {1, Bytes("1234")}));
 }
@@ -66,10 +81,10 @@ TEST_F(ColumnConstraintsTest, SizeEnforcementHappensOnUTFCharactersForStrings) {
 
 TEST_F(ColumnConstraintsTest, CannotInsertDuplicateColumns) {
   EXPECT_THAT(Insert("TestTable", {"ID1", "ID1", "StringCol"}, {1, 1, "value"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(Insert("TestTable", {"ID1", "StringCol", "StringCol"},
                      {1, "value", "new-value"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

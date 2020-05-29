@@ -22,7 +22,7 @@
 #include "backend/datamodel/key_range.h"
 #include "backend/storage/iterator.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -32,10 +32,10 @@ namespace backend {
 
 UniqueIndexVerifier::UniqueIndexVerifier(const Index* index) : index_(index) {}
 
-zetasql_base::Status UniqueIndexVerifier::Verify(const ActionContext* ctx,
+absl::Status UniqueIndexVerifier::Verify(const ActionContext* ctx,
                                          const InsertOp& op) const {
   if (!index_->is_unique()) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   // Prefix key from the index data table.
@@ -56,7 +56,7 @@ zetasql_base::Status UniqueIndexVerifier::Verify(const ActionContext* ctx,
                                                  index_key.DebugString());
   }
   ZETASQL_RETURN_IF_ERROR(itr->Status());
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

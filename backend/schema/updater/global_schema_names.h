@@ -20,7 +20,7 @@
 #include "absl/strings/string_view.h"
 #include "backend/common/case.h"
 #include "backend/schema/catalog/schema.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -38,8 +38,11 @@ class GlobalSchemaNames {
   GlobalSchemaNames(GlobalSchemaNames&&) = default;
   GlobalSchemaNames& operator=(GlobalSchemaNames&&) = default;
 
-  // Returns an error status if the name already exists.
-  zetasql_base::Status AddName(absl::string_view type, const std::string& name);
+  // Returns true if a global name exists.
+  bool HasName(const std::string& name) const { return names_.contains(name); }
+
+  // Adds a new global schema name. Returns an error if the name already exists.
+  absl::Status AddName(absl::string_view type, const std::string& name);
 
   // Removes a name if it exists; does nothing otherwise.
   void RemoveName(const std::string& name) { names_.erase(name); }
@@ -48,6 +51,15 @@ class GlobalSchemaNames {
   zetasql_base::StatusOr<std::string> GenerateForeignKeyName(
       absl::string_view referencing_table_name,
       absl::string_view referenced_table_name);
+
+  // Validates a schema name.
+  static absl::Status ValidateSchemaName(absl::string_view type,
+                                         absl::string_view name);
+
+  // Validates a schema constraint name.
+  static absl::Status ValidateConstraintName(absl::string_view table_name,
+                                             absl::string_view constraint_type,
+                                             absl::string_view constraint_name);
 
  private:
   // Generates and adds a unique name. A sequence number is incremented and

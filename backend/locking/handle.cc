@@ -47,27 +47,27 @@ bool LockHandle::IsAborted() {
   return !status_.ok();
 }
 
-zetasql_base::Status LockHandle::Wait() {
+absl::Status LockHandle::Wait() {
   // The current implementation never blocks.
   absl::MutexLock lock(&mu_);
   return status_;
 }
 
-void LockHandle::Abort(const zetasql_base::Status& status) {
+void LockHandle::Abort(const absl::Status& status) {
   absl::MutexLock lock(&mu_);
   status_ = status;
 }
 
 void LockHandle::Reset() {
   absl::MutexLock lock(&mu_);
-  status_ = zetasql_base::OkStatus();
+  status_ = absl::OkStatus();
 }
 
 zetasql_base::StatusOr<absl::Time> LockHandle::ReserveCommitTimestamp() {
   return manager_->ReserveCommitTimestamp(this);
 }
 
-zetasql_base::Status LockHandle::MarkCommitted() {
+absl::Status LockHandle::MarkCommitted() {
   return manager_->MarkCommitted(this);
 }
 

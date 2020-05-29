@@ -36,10 +36,10 @@ cc_library(
         "//common:clock",
         "//common:errors",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:status",
     ],
 )
 

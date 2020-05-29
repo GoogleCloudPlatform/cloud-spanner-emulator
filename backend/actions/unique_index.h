@@ -21,7 +21,7 @@
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
 #include "backend/schema/catalog/index.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -40,7 +40,7 @@ class UniqueIndexVerifier : public Verifier {
   explicit UniqueIndexVerifier(const Index* index);
 
  private:
-  zetasql_base::Status Verify(const ActionContext* ctx,
+  absl::Status Verify(const ActionContext* ctx,
                       const InsertOp& op) const override;
 
   // Index to verify unique entries.

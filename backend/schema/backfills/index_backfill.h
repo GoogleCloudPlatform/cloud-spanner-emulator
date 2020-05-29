@@ -19,7 +19,7 @@
 
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -27,7 +27,7 @@ namespace emulator {
 namespace backend {
 
 // Handles backfilling of a newly created Index.
-zetasql_base::Status BackfillIndex(const Index* index,
+absl::Status BackfillIndex(const Index* index,
                            const SchemaValidationContext* context);
 
 }  // namespace backend

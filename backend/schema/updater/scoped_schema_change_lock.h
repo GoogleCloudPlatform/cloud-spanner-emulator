@@ -25,7 +25,7 @@
 #include "backend/locking/manager.h"
 #include "backend/locking/request.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -50,13 +50,13 @@ class ScopedSchemaChangeLock {
   // Will wait to acquire locks on the database or return with a
   // FAILED_PRECONDITION error if a concurrent schema change or read-write
   // transaction was already in progress.
-  zetasql_base::Status Wait() {
-    zetasql_base::Status s = lock_handle_->Wait();
+  absl::Status Wait() {
+    absl::Status s = lock_handle_->Wait();
     if (!s.ok()) {
-      ZETASQL_RET_CHECK_EQ(s.code(), zetasql_base::StatusCode::kAborted);
+      ZETASQL_RET_CHECK_EQ(s.code(), absl::StatusCode::kAborted);
       return error::ConcurrentSchemaChangeOrReadWriteTxnInProgress();
     }
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   // Reserves a commit timestamp for the shcema change.
@@ -68,7 +68,7 @@ class ScopedSchemaChangeLock {
 
   ~ScopedSchemaChangeLock() {
     if (has_commit_timestamp_) {
-      zetasql_base::Status s = lock_handle_->MarkCommitted();
+      absl::Status s = lock_handle_->MarkCommitted();
     }
     lock_handle_->UnlockAll();
   }

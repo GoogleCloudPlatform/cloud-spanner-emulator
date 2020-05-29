@@ -29,7 +29,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/ascii.h"
 #include "common/constants.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -82,6 +82,9 @@ FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory) {
   auto pending_commit_ts_func = PendingCommitTimestampFunction();
   functions_[pending_commit_ts_func->Name()] =
       std::move(pending_commit_ts_func);
+
+  // Add aliases for the functions.
+  AddFunctionAliases();
 }
 
 void FunctionCatalog::GetFunction(const std::string& name,
@@ -95,6 +98,23 @@ void FunctionCatalog::GetFunctions(
     absl::flat_hash_set<const zetasql::Function*>* output) const {
   for (const auto& [name, function] : functions_) {
     output->insert(function.get());
+  }
+}
+
+void FunctionCatalog::AddFunctionAliases() {
+  for (auto it = functions_.begin(); it != functions_.end(); ++it) {
+    const zetasql::Function* original_function = it->second.get();
+    if (!original_function->alias_name().empty()) {
+      zetasql::FunctionOptions function_options =
+          original_function->function_options();
+      std::string alias_name = function_options.alias_name;
+      function_options.set_alias_name("");
+      auto alias_function = absl::make_unique<zetasql::Function>(
+          original_function->Name(), original_function->GetGroup(),
+          original_function->mode(), original_function->signatures(),
+          function_options);
+      functions_.insert({alias_name, std::move(alias_function)});
+    }
   }
 }
 

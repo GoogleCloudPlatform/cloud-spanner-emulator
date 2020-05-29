@@ -19,7 +19,7 @@
 #include <memory>
 
 #include "absl/memory/memory.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "backend/actions/context.h"
 #include "backend/actions/existence.h"
 #include "backend/actions/interleave.h"
@@ -28,7 +28,7 @@
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/iterator.h"
 #include "backend/transaction/transaction_store.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -39,7 +39,7 @@ zetasql_base::StatusOr<bool> TransactionReadOnlyStore::Exists(const Table* table
                                                       const Key& key) const {
   zetasql_base::StatusOr<ValueList> maybe_row =
       read_only_store_->Lookup(table, key, {});
-  if (maybe_row.status().code() == zetasql_base::StatusCode::kNotFound) {
+  if (maybe_row.status().code() == absl::StatusCode::kNotFound) {
     return false;
   } else if (!maybe_row.ok()) {
     return maybe_row.status();

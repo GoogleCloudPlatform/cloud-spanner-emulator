@@ -72,7 +72,7 @@ TEST_F(OperationApiTest, ListsOperationsInvalidUri) {
   EXPECT_THAT(test_env()->operations_client()->ListOperations(&context, request,
                                                               &response),
               zetasql_base::testing::StatusIs(
-                  zetasql_base::StatusCode::kInvalidArgument,
+                  absl::StatusCode::kInvalidArgument,
                   testing::MatchesRegex(".*Invalid instance uri.*")));
 }
 
@@ -98,7 +98,7 @@ TEST_F(OperationApiTest, GetOperationInvalidUri) {
   EXPECT_THAT(test_env()->operations_client()->GetOperation(&context, request,
                                                             &operation),
               zetasql_base::testing::StatusIs(
-                  zetasql_base::StatusCode::kInvalidArgument,
+                  absl::StatusCode::kInvalidArgument,
                   testing::MatchesRegex(".*Invalid operation uri.*")));
 }
 }  // namespace

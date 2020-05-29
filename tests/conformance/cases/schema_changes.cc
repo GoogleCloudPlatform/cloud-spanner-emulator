@@ -20,13 +20,13 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/ascii.h"
-#include "tests/common/file_based_test_runner.h"
-#include "tests/conformance/common/database_test_base.h"
 #include "google/cloud/spanner/bytes.h"
 #include "google/cloud/spanner/mutations.h"
 #include "google/cloud/spanner/transaction.h"
 #include "google/cloud/spanner/value.h"
-#include "zetasql/base/status.h"
+#include "tests/common/file_based_test_runner.h"
+#include "tests/conformance/common/database_test_base.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -47,6 +47,7 @@ const char kSchemaChangeTestDataDir[] = "tests/conformance/data/schema_changes";
 // List of schema change test files within the directory above.
 const char* kSchemaChangeTestFiles[] = {
     "combined.test",
+    "key_column_alteration.test",
 };
 
 constexpr std::array<char, 10> kBytesLiteral = {'\xd0', '\xb0', '\xd0', '\xb1',
@@ -58,7 +59,7 @@ const char kUnicodeStringLiteral[] = "абвгд";
 class SchemaChangeTest : public DatabaseTest,
                          public ::testing::WithParamInterface<std::string> {
  public:
-  zetasql_base::Status SetUpDatabase() override { return zetasql_base::OkStatus(); }
+  absl::Status SetUpDatabase() override { return absl::OkStatus(); }
 
   // Runs a file-based schema change test case.
   zetasql_base::StatusOr<FileBasedTestCaseOutput> RunSchemaChangeTestCase(
@@ -76,7 +77,7 @@ class SchemaChangeTest : public DatabaseTest,
         absl::StrSplit(text, ';', absl::SkipEmpty());
 
     // Run the update.
-    zetasql_base::Status status = UpdateSchema(input_statements).status();
+    absl::Status status = UpdateSchema(input_statements).status();
 
     // For the error case, we expect the error string to match.
     if (!status.ok()) {
@@ -100,11 +101,11 @@ class SchemaChangeTest : public DatabaseTest,
   }
 
   // Runs all schema change test cases from the given test file.
-  zetasql_base::Status RunTestCasesFrom(const std::string& test_file) {
+  absl::Status RunTestCasesFrom(const std::string& test_file) {
     // TODO: Schema change tests take too long to run in prod, so
     // skip them from now.
     if (in_prod_env()) {
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     return RunTestCasesFromFile(test_file, FileBasedTestOptions{},
@@ -134,7 +135,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_F(SchemaChangeTest, NoStatements) {
   EXPECT_THAT(UpdateSchema(/*schema=*/{}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(SchemaChangeTest, ValidStatements) {
@@ -179,7 +180,7 @@ TEST_F(SchemaChangeTest, PartialSuccess) {
   )"};
 
   EXPECT_THAT(UpdateSchema(statements),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto ddl_statements, GetDatabaseDdl());
   EXPECT_EQ(ddl_statements.size(), 2);
@@ -200,7 +201,7 @@ TEST_F(SchemaChangeTest, AlterColumnTypeChange) {
   EXPECT_THAT(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN string_col BYTES(10)
   )"}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(SchemaChangeTest, AlterColumnSizeReduction) {
@@ -218,7 +219,7 @@ TEST_F(SchemaChangeTest, AlterColumnSizeReduction) {
   EXPECT_THAT(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN string_col STRING(10)
   )"}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(SchemaChangeTest, AlterColumnInvalidTypeChange) {
@@ -236,7 +237,7 @@ TEST_F(SchemaChangeTest, AlterColumnInvalidTypeChange) {
   EXPECT_THAT(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN string_col BOOL
   )"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(SchemaChangeTest, AlterColumnUTFInvalid) {
@@ -255,7 +256,7 @@ TEST_F(SchemaChangeTest, AlterColumnUTFInvalid) {
   EXPECT_THAT(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN bytes_col STRING(30)
   )"}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(SchemaChangeTest, AlterColumnStringToBytes) {
@@ -272,7 +273,7 @@ TEST_F(SchemaChangeTest, AlterColumnStringToBytes) {
   EXPECT_THAT(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN string_col BYTES(6)
   )"}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 
   ZETASQL_EXPECT_OK(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN string_col BYTES(10)
@@ -323,7 +324,7 @@ TEST_F(SchemaChangeTest, AlterColumnBytesToString) {
   EXPECT_THAT(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN bytes_col STRING(4)
   )"}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 
   ZETASQL_EXPECT_OK(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN bytes_col STRING(11)
@@ -386,7 +387,7 @@ TEST_F(SchemaChangeTest, CreationOfIndexWithTooManyKeysFails) {
       UpdateSchema(
           {"CREATE INDEX PhotosIndex ON Photos(ID1, ID2, ID3, ID4, ID5, ID6, "
            "ID7, ID8, ID9, ID10, ID11, ID12, ID13, ID14, ID15, ID16)"}),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

@@ -20,7 +20,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "backend/query/queryable_table.h"
 #include "backend/schema/catalog/table.h"
 #include "tests/common/schema_constructor.h"
@@ -55,7 +55,7 @@ TEST_F(HintValidatorTest, ValidateUnsupportedHintReturnsError) {
 
   HintValidator validator{schema()};
   ASSERT_THAT(resolved_table_scan->Accept(&validator),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(HintValidatorTest, ValidateHintWithUnmatchedValueTypeReturnsError) {
@@ -69,7 +69,7 @@ TEST_F(HintValidatorTest, ValidateHintWithUnmatchedValueTypeReturnsError) {
 
   HintValidator validator{schema()};
   ASSERT_THAT(resolved_table_scan->Accept(&validator),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(HintValidatorTest, ValidateForceIndexHintWithBaseTableReturnsOK) {
@@ -110,7 +110,7 @@ TEST_F(HintValidatorTest,
 
   HintValidator validator{schema()};
   ASSERT_THAT(resolved_table_scan->Accept(&validator),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

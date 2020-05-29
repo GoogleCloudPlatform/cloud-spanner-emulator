@@ -32,7 +32,7 @@
 #include "backend/transaction/transaction_store.h"
 #include "common/clock.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -51,7 +51,7 @@ class ReadOnlyTransaction : public RowReader {
                       Storage* storage, LockManager* lock_manager,
                       const VersionedCatalog* const versioned_catalog);
 
-  zetasql_base::Status Read(const ReadArg& read_arg,
+  absl::Status Read(const ReadArg& read_arg,
                     std::unique_ptr<RowCursor>* cursor) override
       ABSL_LOCKS_EXCLUDED(mu_);
 

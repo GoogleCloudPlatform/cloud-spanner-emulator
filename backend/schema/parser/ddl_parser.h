@@ -20,7 +20,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/schema/ddl/operations.pb.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {

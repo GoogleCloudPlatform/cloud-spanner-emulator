@@ -51,7 +51,7 @@ TEST(ValidationTest, ValidateTooManyLabelsReturnsError) {
     labels[absl::StrCat("key-", i)] = absl::StrCat("value-", i);
   }
   EXPECT_THAT(ValidateLabels(labels),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ValidationTest, ValidateLabelInvalidKeyReturnsError) {
@@ -70,7 +70,7 @@ TEST(ValidationTest, ValidateLabelInvalidKeyReturnsError) {
     labels.clear();
     labels[key] = "value";
     EXPECT_THAT(ValidateLabels(labels),
-                zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   }
 }
 
@@ -86,7 +86,7 @@ TEST(ValidationTest, ValidateLabelInvalidValueReturnsError) {
     labels.clear();
     labels["key"] = value;
     EXPECT_THAT(ValidateLabels(labels),
-                zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   }
 }
 

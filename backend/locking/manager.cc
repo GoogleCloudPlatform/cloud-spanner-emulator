@@ -87,7 +87,7 @@ zetasql_base::StatusOr<absl::Time> LockManager::ReserveCommitTimestamp(
   return pending_commit_timestamp_;
 }
 
-zetasql_base::Status LockManager::MarkCommitted(LockHandle* handle) {
+absl::Status LockManager::MarkCommitted(LockHandle* handle) {
   absl::MutexLock lock(&mu_);
 
   // This transaction should have been set as the active transaction.
@@ -97,7 +97,7 @@ zetasql_base::Status LockManager::MarkCommitted(LockHandle* handle) {
   last_commit_timestamp_ = pending_commit_timestamp_;
   pending_commit_timestamp_ = absl::InfiniteFuture();
   pending_commit_cvar_.SignalAll();
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 void LockManager::WaitForSafeRead(absl::Time read_time) {

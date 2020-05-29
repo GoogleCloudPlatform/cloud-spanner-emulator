@@ -31,7 +31,7 @@ using zetasql_base::testing::StatusIs;
 
 class SingleRowWritesTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE Users(
         ID   INT64 NOT NULL,
@@ -59,13 +59,13 @@ TEST_F(SingleRowWritesTest, CannotInsertARowTwice) {
 
   // Check that we cannot do a double-insert.
   EXPECT_THAT(Insert("Users", {"ID", "Name"}, {1, "Peter"}),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(SingleRowWritesTest, CannotUpdateWithoutInsert) {
   // Check that we cannot update a non-existent row.
   EXPECT_THAT(Update("Users", {"ID", "Name"}, {1, "Peter"}),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 
   // Check that we can update a row that exists.
   ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name"}, {1, "John"}));

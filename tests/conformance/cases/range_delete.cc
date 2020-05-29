@@ -33,7 +33,7 @@ using zetasql_base::testing::StatusIs;
 
 class RangeDeleteTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     ZETASQL_RETURN_IF_ERROR(SetSchema({
         R"(
         CREATE TABLE Users (
@@ -49,7 +49,7 @@ class RangeDeleteTest : public DatabaseTest {
         ) PRIMARY KEY (UserId, ThreadId),
         INTERLEAVE IN PARENT Users ON DELETE CASCADE
       )"}));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
  protected:
@@ -188,13 +188,13 @@ TEST_F(RangeDeleteTest, CannotDeleteInvalidPrefixRange) {
   PopulateDatabase();
 
   EXPECT_THAT(Delete("Threads", ClosedClosed(Key(1, 3), Key(2, 2))),
-              StatusIs(zetasql_base::StatusCode::kUnimplemented));
+              StatusIs(absl::StatusCode::kUnimplemented));
 
   EXPECT_THAT(Delete("Threads", ClosedClosed(Key(1, 2), Key(2, 1))),
-              StatusIs(zetasql_base::StatusCode::kUnimplemented));
+              StatusIs(absl::StatusCode::kUnimplemented));
 
   EXPECT_THAT(Delete("Threads", ClosedClosed(Key(1, 2), Key(2, 1))),
-              StatusIs(zetasql_base::StatusCode::kUnimplemented));
+              StatusIs(absl::StatusCode::kUnimplemented));
 
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{1, 1, true},

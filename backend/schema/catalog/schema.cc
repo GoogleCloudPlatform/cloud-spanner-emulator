@@ -24,7 +24,7 @@
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_node.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

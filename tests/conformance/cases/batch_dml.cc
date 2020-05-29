@@ -17,7 +17,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -33,7 +33,7 @@ using zetasql_base::testing::StatusIs;
 
 class BatchDmlTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({
         R"(
           CREATE TABLE Users(
@@ -51,7 +51,7 @@ TEST_F(BatchDmlTest, EmptyBatchDmlRequestReturnsInvalidArgumentError) {
   // No Dml statements specified in the request.
   auto txn = Transaction(Transaction::ReadWriteOptions());
   auto result = BatchDmlTransaction(txn, {});
-  EXPECT_THAT(result.status(), StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+  EXPECT_THAT(result.status(), StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Subsequent operations on the transaction succeed.
   result = BatchDmlTransaction(
@@ -109,17 +109,17 @@ TEST_F(BatchDmlTest, DISABLED_ConstraintErrorOnBatchDmlReplaysError) {
       txn,
       {SqlStatement("INSERT Users(ID, Name, Age) VALUES (1, 'Levin', 27)")});
   EXPECT_THAT(ToUtilStatus(result.value().status),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
 
   // Subsequent operation will replay the same error.
   EXPECT_THAT(
       ExecuteDmlTransaction(
           txn, {SqlStatement("UPDATE Users SET Name = 'Mark' WHERE ID = 1")}),
-      StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+      StatusIs(absl::StatusCode::kAlreadyExists));
 
   // Subsequent commit will also replay the same error.
   EXPECT_THAT(CommitTransaction(txn, {}),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(BatchDmlTest, QueryNotAllowedInBatchDml) {
@@ -128,7 +128,7 @@ TEST_F(BatchDmlTest, QueryNotAllowedInBatchDml) {
   // Invalid argument error for executing non-Dml statement.
   auto result = BatchDmlTransaction(txn, {SqlStatement("SELECT * FROM Users")});
   EXPECT_THAT(ToUtilStatus(result.value().status),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Subsequent operations succeed on the same transaction.
   result = BatchDmlTransaction(
@@ -142,7 +142,7 @@ TEST_F(BatchDmlTest, QueryNotAllowedInBatchDml) {
               IsOkAndHoldsRows({{1, "Levin", 27}}));
 }
 
-TEST_F(BatchDmlTest, MixDmlAndBatchDMLInTransactionSucceeds) {
+TEST_F(BatchDmlTest, MixDmlAndBatchDmlInTransactionSucceeds) {
   auto txn = Transaction(Transaction::ReadWriteOptions());
 
   // Executing Dml.
@@ -179,8 +179,8 @@ TEST_F(BatchDmlTest, ConcurrentTransactionWithBatchDmlNotAllowed) {
       txn2,
       {SqlStatement("INSERT Users(ID, Name, Age) VALUES (2, 'Mark', 37)")});
   EXPECT_THAT(result.status(),
-              StatusIs(in_prod_env() ? zetasql_base::StatusCode::kOk
-                                     : zetasql_base::StatusCode::kAborted));
+              StatusIs(in_prod_env() ? absl::StatusCode::kOk
+                                     : absl::StatusCode::kAborted));
 
   // Commit first transaction succeeds.
   ZETASQL_EXPECT_OK(CommitTransaction(txn1, {}));
@@ -190,8 +190,8 @@ TEST_F(BatchDmlTest, ConcurrentTransactionWithBatchDmlNotAllowed) {
       txn2,
       {SqlStatement("INSERT Users(ID, Name, Age) VALUES (2, 'Mark', 37)")});
   EXPECT_THAT(ToUtilStatus(result.value().status),
-              StatusIs(in_prod_env() ? zetasql_base::StatusCode::kAlreadyExists
-                                     : zetasql_base::StatusCode::kOk));
+              StatusIs(in_prod_env() ? absl::StatusCode::kAlreadyExists
+                                     : absl::StatusCode::kOk));
 }
 
 TEST_F(BatchDmlTest, InvalidDmlFailsButCommitSucceeds) {
@@ -202,7 +202,7 @@ TEST_F(BatchDmlTest, InvalidDmlFailsButCommitSucceeds) {
       txn, {SqlStatement(
                "INSERT InvalidTable(ID, Name, Age) VALUES (1, 'Levin', 27)")});
   EXPECT_THAT(ToUtilStatus(result.value().status),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Commit succeeds on same transaction.
   result = BatchDmlTransaction(
@@ -224,14 +224,14 @@ TEST_F(BatchDmlTest, BatchDmlFailsInReadOnlyTxn) {
   auto result = BatchDmlTransaction(
       txn, {SqlStatement(
                "INSERT InvalidTable(ID, Name, Age) VALUES (1, 'Levin', 27)")});
-  EXPECT_THAT(result.status(), StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+  EXPECT_THAT(result.status(), StatusIs(absl::StatusCode::kInvalidArgument));
 
   // ReadOnly txn not allowed.
   txn = Transaction(Transaction::ReadOnlyOptions());
   result = BatchDmlTransaction(
       txn, {SqlStatement(
                "INSERT InvalidTable(ID, Name, Age) VALUES (1, 'Levin', 27)")});
-  EXPECT_THAT(result.status(), StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+  EXPECT_THAT(result.status(), StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

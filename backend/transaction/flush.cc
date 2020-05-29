@@ -26,7 +26,7 @@ namespace backend {
 
 namespace {
 
-zetasql_base::Status FlushInsert(const InsertOp& insert_op, Storage* base_storage,
+absl::Status FlushInsert(const InsertOp& insert_op, Storage* base_storage,
                          absl::Time commit_timestamp) {
   const Table* table = insert_op.table;
   const Key key = MaybeSetCommitTimestamp(table->primary_key(), insert_op.key,
@@ -42,7 +42,7 @@ zetasql_base::Status FlushInsert(const InsertOp& insert_op, Storage* base_storag
                              column_values);
 }
 
-zetasql_base::Status FlushUpdate(const UpdateOp& update_op, Storage* base_storage,
+absl::Status FlushUpdate(const UpdateOp& update_op, Storage* base_storage,
                          absl::Time commit_timestamp) {
   const Table* table = update_op.table;
   const Key key = MaybeSetCommitTimestamp(table->primary_key(), update_op.key,
@@ -58,7 +58,7 @@ zetasql_base::Status FlushUpdate(const UpdateOp& update_op, Storage* base_storag
                              column_values);
 }
 
-zetasql_base::Status FlushDelete(const DeleteOp& delete_op, Storage* base_storage,
+absl::Status FlushDelete(const DeleteOp& delete_op, Storage* base_storage,
                          absl::Time commit_timestamp) {
   return base_storage->Delete(commit_timestamp, delete_op.table->id(),
                               KeyRange::Point(delete_op.key));
@@ -66,7 +66,7 @@ zetasql_base::Status FlushDelete(const DeleteOp& delete_op, Storage* base_storag
 
 }  // namespace
 
-zetasql_base::Status FlushWriteOpsToStorage(const std::vector<WriteOp>& write_ops,
+absl::Status FlushWriteOpsToStorage(const std::vector<WriteOp>& write_ops,
                                     Storage* base_storage,
                                     absl::Time commit_timestamp) {
   for (const auto& write_op : write_ops) {
@@ -84,7 +84,7 @@ zetasql_base::Status FlushWriteOpsToStorage(const std::vector<WriteOp>& write_op
         },
         write_op));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

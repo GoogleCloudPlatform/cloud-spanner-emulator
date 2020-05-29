@@ -43,6 +43,8 @@ class FunctionCatalog {
       absl::flat_hash_set<const zetasql::Function*>* output) const;
 
  private:
+  void AddFunctionAliases();
+
   CaseInsensitiveStringMap<std::unique_ptr<zetasql::Function>> functions_;
 };
 

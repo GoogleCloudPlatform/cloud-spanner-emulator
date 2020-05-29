@@ -19,7 +19,7 @@
 
 #include "zetasql/public/value.h"
 #include "backend/datamodel/key.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -59,7 +59,7 @@ class StorageIterator {
   virtual bool Next() = 0;
 
   // Returns error status for error caused while yielding rows.
-  virtual zetasql_base::Status Status() const = 0;
+  virtual absl::Status Status() const = 0;
 
   // Returns the key associated with the current row. A call to Key() is only
   // valid if a previous call to Next() returned true.

@@ -22,7 +22,7 @@
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
 #include "backend/schema/catalog/table.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -40,10 +40,10 @@ namespace backend {
 //     InterleaveChildAction(...);
 //
 //    private:
-//     zetasql_base::Status Validate(const ActionContext* ctx,
+//     absl::Status Validate(const ActionContext* ctx,
 //                           const InsertOp& op) const override {
 //       // Perform validation checks for parent row existence.
-//       return zetasql_base::OkStatus();
+//       return absl::OkStatus();
 //     }
 //   };
 class Validator {
@@ -51,14 +51,14 @@ class Validator {
   virtual ~Validator() {}
 
   // Validates the given WriteOp within the give action context.
-  zetasql_base::Status Validate(const ActionContext* ctx, const WriteOp& op) const;
+  absl::Status Validate(const ActionContext* ctx, const WriteOp& op) const;
 
  private:
-  virtual zetasql_base::Status Validate(const ActionContext* ctx,
+  virtual absl::Status Validate(const ActionContext* ctx,
                                 const InsertOp& op) const;
-  virtual zetasql_base::Status Validate(const ActionContext* ctx,
+  virtual absl::Status Validate(const ActionContext* ctx,
                                 const UpdateOp& op) const;
-  virtual zetasql_base::Status Validate(const ActionContext* ctx,
+  virtual absl::Status Validate(const ActionContext* ctx,
                                 const DeleteOp& op) const;
 };
 
@@ -70,22 +70,22 @@ class Validator {
 //     DefaultAction(...);
 //
 //    private:
-//     zetasql_base::Status Modify(const ActionContext* ctx,
+//     absl::Status Modify(const ActionContext* ctx,
 //                         const InsertOp& op) override {
 //       // Update the column based on given InsertOp.
 //       UpdateOp op = ...
 //       // Add this row operation to the context.
 //       ctx()->effects()->Add(op);
-//       return zetasql_base::OkStatus();
+//       return absl::OkStatus();
 //     }
 //
-//     zetasql_base::Status Modify(const ActionContext* ctx,
+//     absl::Status Modify(const ActionContext* ctx,
 //                         const UpdateOp& op) override {
 //       // Update the column based on given UpdateOp.
 //       UpdateOp op = ...
 //       // Add this row operation to the context.
 //       ctx()->effects()->Add(op);
-//       return zetasql_base::OkStatus();
+//       return absl::OkStatus();
 //     }
 //   };
 class Modifier {
@@ -93,12 +93,12 @@ class Modifier {
   virtual ~Modifier() {}
 
   // Modifies the given WriteOp within the give action context.
-  zetasql_base::Status Modify(const ActionContext* ctx, const WriteOp& op) const;
+  absl::Status Modify(const ActionContext* ctx, const WriteOp& op) const;
 
  private:
-  zetasql_base::Status Modify(const ActionContext* ctx, const InsertOp& op) const;
-  zetasql_base::Status Modify(const ActionContext* ctx, const UpdateOp& op) const;
-  zetasql_base::Status Modify(const ActionContext* ctx, const DeleteOp& op) const;
+  absl::Status Modify(const ActionContext* ctx, const InsertOp& op) const;
+  absl::Status Modify(const ActionContext* ctx, const UpdateOp& op) const;
+  absl::Status Modify(const ActionContext* ctx, const DeleteOp& op) const;
 };
 
 // A Effector adds extra row operations to a transaction.
@@ -109,22 +109,22 @@ class Modifier {
 //     Index(...);
 //
 //    private:
-//     zetasql_base::Status Effect(const ActionContext* ctx,
+//     absl::Status Effect(const ActionContext* ctx,
 //                         const InsertOp& op) override {
 //       // Add an Insert row operation for index given InsertOp on base table.
 //       InsertOp op = ...
 //       // Add this row operation to the context.
 //       ctx()->effects()->Add(op);
-//       return zetasql_base::OkStatus();
+//       return absl::OkStatus();
 //     }
 //
-//     zetasql_base::Status Effect(const ActionContext* ctx,
+//     absl::Status Effect(const ActionContext* ctx,
 //                         const DeleteOp& op) override {
 //       // Add a Delete row operation for index given DeleteOp on base table.
 //       DeleteOp op = ...
 //       // Add this row operation to the context.
 //       ctx()->effects()->Add(op);
-//       return zetasql_base::OkStatus();
+//       return absl::OkStatus();
 //     }
 //   };
 class Effector {
@@ -133,14 +133,14 @@ class Effector {
 
   // Creates additional WriteOp(s) based on the given WriteOp within the give
   // action context.
-  zetasql_base::Status Effect(const ActionContext* ctx, const WriteOp& op) const;
+  absl::Status Effect(const ActionContext* ctx, const WriteOp& op) const;
 
  private:
-  virtual zetasql_base::Status Effect(const ActionContext* ctx,
+  virtual absl::Status Effect(const ActionContext* ctx,
                               const InsertOp& op) const;
-  virtual zetasql_base::Status Effect(const ActionContext* ctx,
+  virtual absl::Status Effect(const ActionContext* ctx,
                               const UpdateOp& op) const;
-  virtual zetasql_base::Status Effect(const ActionContext* ctx,
+  virtual absl::Status Effect(const ActionContext* ctx,
                               const DeleteOp& op) const;
 };
 
@@ -152,14 +152,14 @@ class Verifier {
 
   // Executes the verification on the given WriteOp within the give action
   // context.
-  zetasql_base::Status Verify(const ActionContext* ctx, const WriteOp& op) const;
+  absl::Status Verify(const ActionContext* ctx, const WriteOp& op) const;
 
  private:
-  virtual zetasql_base::Status Verify(const ActionContext* ctx,
+  virtual absl::Status Verify(const ActionContext* ctx,
                               const InsertOp& op) const;
-  virtual zetasql_base::Status Verify(const ActionContext* ctx,
+  virtual absl::Status Verify(const ActionContext* ctx,
                               const UpdateOp& op) const;
-  virtual zetasql_base::Status Verify(const ActionContext* ctx,
+  virtual absl::Status Verify(const ActionContext* ctx,
                               const DeleteOp& op) const;
 };
 

@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -28,7 +28,7 @@ using zetasql_base::testing::StatusIs;
 
 class MultiRowWritesTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE Users(
         ID   INT64 NOT NULL,
@@ -43,8 +43,8 @@ TEST_F(MultiRowWritesTest, CanCommitAnEmptyMutation) { ZETASQL_EXPECT_OK(Commit(
 
 TEST_F(MultiRowWritesTest, InsertSameKeyErrorWithAlreadyExists) {
   EXPECT_THAT(MultiInsert("Users", {"ID"}, {{1}, {1}}),
-              in_prod_env() ? StatusIs(zetasql_base::StatusCode::kInvalidArgument)
-                            : StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              in_prod_env() ? StatusIs(absl::StatusCode::kInvalidArgument)
+                            : StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(MultiRowWritesTest, InsertOrUpdateSameKeySucceeds) {
@@ -86,7 +86,7 @@ TEST_F(MultiRowWritesTest, MultipleModsWithErrorsFails) {
                   MakeInsert("Users", {"ID", "Name"}, 1, "Mark"),
                   MakeInsert("NonExistentTable", {"Column"}, 1),
               }),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(MultiRowWritesTest, DeleteNotAppliedWithFailingMods) {
@@ -96,7 +96,7 @@ TEST_F(MultiRowWritesTest, DeleteNotAppliedWithFailingMods) {
                   MakeDelete("Users", KeySet::All()),
                   MakeInsert("NonExistentTable", {"Column"}, 1),
               }),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 
   EXPECT_THAT(ReadAll("Users", {"ID", "Name", "Age"}),
               IsOkAndHoldsRow({1, "Mark", 25}));

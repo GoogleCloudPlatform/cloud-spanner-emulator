@@ -27,7 +27,7 @@ using zetasql_base::testing::StatusIs;
 
 class SingletonTableTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE Singleton(
         col1 STRING(MAX),
@@ -55,7 +55,7 @@ TEST_F(SingletonTableTest, CannotInsertMultipleRows) {
   // Check that we cannot do a double insert in a singleton table.
   ZETASQL_EXPECT_OK(Insert("Singleton", {"col1", "col2"}, {"val1", "val2"}));
   EXPECT_THAT(Insert("Singleton", {"col1", "col2"}, {"val3", "val4"}),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(SingletonTableTest, CanUpdateMultipleRows) {

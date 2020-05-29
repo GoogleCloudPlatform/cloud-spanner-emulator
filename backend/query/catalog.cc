@@ -25,7 +25,7 @@
 #include "backend/query/queryable_table.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -40,7 +40,7 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
   }
 }
 
-zetasql_base::Status Catalog::GetCatalog(const std::string& name,
+absl::Status Catalog::GetCatalog(const std::string& name,
                                  zetasql::Catalog** catalog,
                                  const FindOptions& options) {
   if (absl::EqualsIgnoreCase(name, InformationSchemaCatalog::kName)) {
@@ -48,10 +48,10 @@ zetasql_base::Status Catalog::GetCatalog(const std::string& name,
   } else {
     *catalog = nullptr;
   }
-  return ::zetasql_base::OkStatus();
+  return ::absl::OkStatus();
 }
 
-zetasql_base::Status Catalog::GetTable(const std::string& name,
+absl::Status Catalog::GetTable(const std::string& name,
                                const zetasql::Table** table,
                                const FindOptions& options) {
   auto iter = tables_.find(name);
@@ -60,40 +60,40 @@ zetasql_base::Status Catalog::GetTable(const std::string& name,
     return error::TableNotFound(name);
   } else {
     *table = iter->second.get();
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 }
 
-zetasql_base::Status Catalog::GetFunction(const std::string& name,
+absl::Status Catalog::GetFunction(const std::string& name,
                                   const zetasql::Function** function,
                                   const FindOptions& options) {
   function_catalog_->GetFunction(name, function);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status Catalog::GetCatalogs(
+absl::Status Catalog::GetCatalogs(
     absl::flat_hash_set<const zetasql::Catalog*>* output) const {
   output->insert(GetInformationSchemaCatalog());
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status Catalog::GetTables(
+absl::Status Catalog::GetTables(
     absl::flat_hash_set<const zetasql::Table*>* output) const {
   for (auto iter = tables_.begin(); iter != tables_.end(); ++iter) {
     output->insert(iter->second.get());
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
-zetasql_base::Status Catalog::GetTypes(
+absl::Status Catalog::GetTypes(
     absl::flat_hash_set<const zetasql::Type*>* output) const {
   // Currently, Cloud Spanner doesn't support proto or enum types.
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
-zetasql_base::Status Catalog::GetFunctions(
+absl::Status Catalog::GetFunctions(
     absl::flat_hash_set<const zetasql::Function*>* output) const {
   // TODO: Add functions when we have implemented an AST filter
   // that returns a canonical, supported list of functions.
-  return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented,
+  return absl::Status(absl::StatusCode::kUnimplemented,
                       "Catalog::GetFunctions is not implemented");
 }
 

@@ -28,7 +28,7 @@
 #include "backend/access/write.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/schema.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -50,8 +50,11 @@ struct Query {
   std::map<std::string, google::protobuf::Value> undeclared_params;
 };
 
-// Returns true if the given query is a DML query.
+// Returns true if the given query is a DML statement.
 bool IsDMLQuery(const std::string& query);
+
+// Returns true if the given query is a DML INSERT statement.
+bool IsDMLInsertQuery(const std::string& query);
 
 // QueryResult specifies the output of a query request.
 struct QueryResult {

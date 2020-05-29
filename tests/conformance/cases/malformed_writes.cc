@@ -15,7 +15,7 @@
 //
 
 #include "gmock/gmock.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -29,7 +29,7 @@ using zetasql_base::testing::StatusIs;
 
 class MalformedWritesTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({
         R"(
           CREATE TABLE Users(
@@ -54,34 +54,34 @@ TEST_F(MalformedWritesTest, CannotSpecifySameColumnMultipleTimes) {
   // Cannot specify a key column multiple times in a write.
   EXPECT_THAT(Insert("Users", {"UserId", "UserId", "Name"},
                      {"1", "2", "Suzanne Collins"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(Insert("Users", {"UserId", "UserId"}, {"1", "2"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Cannot specify a key column multiple times even if set to the same value.
   EXPECT_THAT(Insert("Users", {"UserId", "UserId"}, {"1", "1"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Key column names are case-insensitive and thus cannot specify same column
   // specified with different case either.
   EXPECT_THAT(Insert("Users", {"uSERiD", "UserId"}, {"1", "2"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Cannot specify a non-key column multiple times in a write.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "Name"},
                      {"1", "Douglas Adams", "Suzanne Collins"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Cannot specify a column multiple times even if set to the same value.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "Name"},
                      {"1", "Douglas Adams", "Douglas Adams"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Column names are case-insensitive and thus cannot specify same column
   // specified with different case either.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "nAME"},
                      {"1", "Douglas Adams", "Douglas Adams"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(MalformedWritesTest, CannotInsertValueWithMismatchingType) {
@@ -92,23 +92,23 @@ TEST_F(MalformedWritesTest, CannotInsertValueWithMismatchingType) {
   // Type for int key does not match.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "Age"},
                      {MakeNowTimestamp(), "Suzanne Collins", 27}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Type for int column does not match.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "Age"},
                      {"1", "Suzanne Collins", MakeNowTimestamp()}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Type for timestamp column does not match.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "Updated"},
                      {"1", "Suzanne Collins", 27}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(MalformedWritesTest, CannotHaveDifferentNumberOfColumnsAndValues) {
   EXPECT_THAT(
       Insert("Users", {"UserId", "Name", "Updated"}, {"1", "Douglas Adams"}),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(MalformedWritesTest, CannotSpecifyPartialKey) {
@@ -121,43 +121,43 @@ TEST_F(MalformedWritesTest, CannotSpecifyPartialKey) {
 
   // Cannot however read by specifying a prefix of the primary key.
   EXPECT_THAT(Read("Threads", {"UserId", "ThreadId", "Starred"}, Key(1)),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Partial key cannot be used to perform writes either.
   EXPECT_THAT(Update("Threads", {"UserId", "Starred"}, {1, false}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(MalformedWritesTest, CannotWriteToNonExistentColumn) {
   EXPECT_THAT(Insert("Users", {"bad-key", "Name"}, {1, "Douglas Adams"}),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 
   EXPECT_THAT(Insert("Users", {"UserId", "bad-column"}, {1, "Douglas Adams"}),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(MalformedWritesTest, CannotWriteToEmptyTableName) {
   // Check that empty table name cannot be specified for all mutation types:
   // insert, update, delete and replace.
   EXPECT_THAT(Insert("", {"UserId", "Name"}, {1, "Douglas Adams"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(InsertOrUpdate("", {"UserId", "Name"}, {1, "Douglas Adams"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(Update("", {"UserId", "Name"}, {1, "Douglas Adams"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(Replace("", {"UserId", "Name"}, {1, "Douglas Adams"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(Delete("", Key(1, "Douglas Adams")),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(MalformedWritesTest, CannotWriteToNonExistentTable) {
   EXPECT_THAT(Insert("bad-table", {"UserId", "Name"}, {1, "Douglas Adams"}),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(MalformedWritesTest, CannotWriteStructToStringColumn) {
@@ -167,19 +167,19 @@ TEST_F(MalformedWritesTest, CannotWriteStructToStringColumn) {
   StructType struct_val{StructType{{"Name", "Douglas Adams"}}};
 
   EXPECT_THAT(Insert("", {"UserId", "Name"}, {1, struct_val}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(InsertOrUpdate("", {"UserId", "Name"}, {1, struct_val}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(Update("", {"UserId", "Name"}, {1, struct_val}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(Replace("", {"UserId", "Name"}, {1, struct_val}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(Delete("", Key(1, struct_val)),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(MalformedWritesTest, CannotWriteListStructToStringColumn) {
@@ -190,19 +190,19 @@ TEST_F(MalformedWritesTest, CannotWriteListStructToStringColumn) {
                                      StructType{{"Name", "Suzanne Collins"}}};
 
   EXPECT_THAT(Insert("", {"UserId", "Name"}, {1, struct_arr}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(InsertOrUpdate("", {"UserId", "Name"}, {1, struct_arr}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(Update("", {"UserId", "Name"}, {1, struct_arr}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(Replace("", {"UserId", "Name"}, {1, struct_arr}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(Delete("", Key(1, struct_arr)),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

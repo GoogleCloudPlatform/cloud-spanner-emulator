@@ -93,11 +93,11 @@ TEST(VersionedCatalogTest, AddSchemaWithSameOrEarlierCreationTime) {
   ZETASQL_EXPECT_OK(catalog.AddSchema(t2, absl::make_unique<const Schema>()));
   EXPECT_THAT(catalog.AddSchema(t2, absl::make_unique<const Schema>()),
               zetasql_base::testing::StatusIs(
-                  zetasql_base::StatusCode::kInternal,
+                  absl::StatusCode::kInternal,
                   testing::MatchesRegex(".*Failed to insert schema.*")));
   EXPECT_THAT(catalog.AddSchema(t1, absl::make_unique<const Schema>()),
               zetasql_base::testing::StatusIs(
-                  zetasql_base::StatusCode::kInternal,
+                  absl::StatusCode::kInternal,
                   testing::MatchesRegex(".*Failed to insert schema.*")));
 }
 

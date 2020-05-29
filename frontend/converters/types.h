@@ -19,7 +19,7 @@
 
 #include "google/spanner/v1/type.pb.h"
 #include "zetasql/public/type.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -32,7 +32,7 @@ namespace frontend {
 // function will be owned by the supplied type factory. An unspecified type
 // or incorrect type specification will return an appropriate error and leave
 // type unchanged.
-zetasql_base::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
+absl::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
                            zetasql::TypeFactory* factory,
                            const zetasql::Type** type);
 
@@ -41,7 +41,7 @@ zetasql_base::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
 // Only handles the types supported by Cloud Spanner. The invalid type, and
 // types not supported by Cloud Spanner, will return errors and leave the
 // proto unchanged.
-zetasql_base::Status TypeToProto(const zetasql::Type* type,
+absl::Status TypeToProto(const zetasql::Type* type,
                          google::spanner::v1::Type* type_pb);
 
 }  // namespace frontend

@@ -20,7 +20,7 @@
 #include "backend/actions/action.h"
 #include "backend/actions/ops.h"
 #include "backend/schema/catalog/table.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -41,7 +41,7 @@ class InterleaveParentValidator : public Validator {
   InterleaveParentValidator(const Table* parent, const Table* child);
 
  private:
-  zetasql_base::Status Validate(const ActionContext* ctx,
+  absl::Status Validate(const ActionContext* ctx,
                         const DeleteOp& op) const override;
 
   const Table* parent_;
@@ -62,7 +62,7 @@ class InterleaveParentEffector : public Effector {
   InterleaveParentEffector(const Table* parent, const Table* child);
 
  private:
-  zetasql_base::Status Effect(const ActionContext* ctx,
+  absl::Status Effect(const ActionContext* ctx,
                       const DeleteOp& op) const override;
 
   const Table* parent_;
@@ -80,7 +80,7 @@ class InterleaveChildValidator : public Validator {
   InterleaveChildValidator(const Table* parent, const Table* child);
 
  private:
-  zetasql_base::Status Validate(const ActionContext* ctx,
+  absl::Status Validate(const ActionContext* ctx,
                         const InsertOp& op) const override;
 
   const Table* parent_;

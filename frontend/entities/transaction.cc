@@ -38,7 +38,7 @@
 #include "frontend/converters/values.h"
 #include "frontend/entities/database.h"
 #include "zetasql/base/ret_check.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
 #include "zetasql/base/time_proto_util.h"
@@ -50,6 +50,35 @@ namespace frontend {
 
 namespace spanner_api = ::google::spanner::v1;
 
+namespace {
+
+Transaction::Type TypeFromTransactionOptions(
+    const spanner_api::TransactionOptions& options) {
+  switch (options.mode_case()) {
+    case v1::TransactionOptions::kReadWrite: {
+      return Transaction::Type::kReadWrite;
+    }
+    case v1::TransactionOptions::kReadOnly: {
+      return Transaction::Type::kReadOnly;
+    }
+    case v1::TransactionOptions::kPartitionedDml: {
+      return Transaction::Type::kPartitionedDml;
+    }
+    case v1::TransactionOptions::MODE_NOT_SET: {
+      return Transaction::Type::kReadOnly;
+    }
+  }
+}
+
+absl::Status ValidatePartitionedDmlQuery(const backend::Query& query) {
+  if (!backend::IsDMLQuery(query.sql) || backend::IsDMLInsertQuery(query.sql)) {
+    return error::InvalidOperationUsingPartitionedDmlTransaction();
+  }
+  return absl::OkStatus();
+}
+
+}  // namespace
+
 using ReadWriteTransactionPtr = std::unique_ptr<backend::ReadWriteTransaction>;
 using ReadOnlyTransactionPtr = std::unique_ptr<backend::ReadOnlyTransaction>;
 
@@ -57,31 +86,29 @@ Transaction::Transaction(
     absl::variant<std::unique_ptr<backend::ReadWriteTransaction>,
                   std::unique_ptr<backend::ReadOnlyTransaction>>
         backend_transaction,
-    const backend::QueryEngine* query_engine, bool is_single_use,
-    bool return_read_timestamp)
+    const backend::QueryEngine* query_engine,
+    const spanner_api::TransactionOptions& options, const Usage& usage)
     : transaction_(std::move(backend_transaction)),
       query_engine_(query_engine),
-      is_single_use_(is_single_use),
-      return_read_timestamp_(return_read_timestamp) {}
+      usage_type_(usage),
+      type_(TypeFromTransactionOptions(options)),
+      options_(options) {}
 
 void Transaction::Close() {
   absl::MutexLock lock(&mu_);
   closed_ = true;
-  absl::visit(backend::overloaded{
-                  [&](const ReadWriteTransactionPtr& transaction) {
-                    transaction->Rollback().IgnoreError();
-                  },
-                  [&](const ReadOnlyTransactionPtr& transaction) {},
-              },
-              transaction_);
+  if (type_ == kReadWrite || type_ == kPartitionedDml) {
+    read_write()->Rollback().IgnoreError();
+  }
 }
 
 zetasql_base::StatusOr<spanner_api::Transaction> Transaction::ToProto() {
   spanner_api::Transaction txn;
-  if (!is_single_use_) {
+  if (usage_type_ != kSingleUse) {
     *txn.mutable_id() = std::to_string(id());
   }
-  if (return_read_timestamp_) {
+  if (options_.has_read_only() &&
+      options_.read_only().return_read_timestamp()) {
     ZETASQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, GetReadTimestamp());
     ZETASQL_ASSIGN_OR_RETURN(*txn.mutable_read_timestamp(),
                      TimestampToProto(read_timestamp));
@@ -96,16 +123,15 @@ bool Transaction::IsClosed() const {
 
 bool Transaction::HasState(
     const backend::ReadWriteTransaction::State& state) const {
-  return absl::visit(
-      backend::overloaded{
-          [&](const ReadWriteTransactionPtr& transaction) -> bool {
-            return transaction->state() == state;
-          },
-          [&](const ReadOnlyTransactionPtr& transaction) -> bool {
-            return false;
-          },
-      },
-      transaction_);
+  switch (type_) {
+    case kReadOnly: {
+      return false;
+    }
+    case kReadWrite:
+    case kPartitionedDml: {
+      return read_write()->state() == state;
+    }
+  }
 }
 
 bool Transaction::IsRolledback() const {
@@ -118,159 +144,125 @@ bool Transaction::IsCommitted() const {
   return HasState(backend::ReadWriteTransaction::State::kCommitted);
 }
 
-bool Transaction::IsReadOnly() const {
-  return absl::visit(
-      backend::overloaded{
-          [&](const ReadWriteTransactionPtr& transaction) -> bool {
-            return false;
-          },
-          [&](const ReadOnlyTransactionPtr& transaction) -> bool {
-            return true;
-          },
-      },
-      transaction_);
-}
-
 const backend::Schema* Transaction::schema() const {
-  return absl::visit(backend::overloaded{
-                         [&](const ReadWriteTransactionPtr& transaction) {
-                           return transaction->schema();
-                         },
-                         [&](const ReadOnlyTransactionPtr& transaction) {
-                           return transaction->schema();
-                         },
-                     },
-                     transaction_);
+  switch (type_) {
+    case kReadOnly: {
+      return read_only()->schema();
+    }
+    case kReadWrite:
+    case kPartitionedDml: {
+      return read_write()->schema();
+    }
+  }
 }
 
 backend::TransactionID Transaction::id() const {
-  return absl::visit(backend::overloaded{
-                         [&](const ReadWriteTransactionPtr& transaction) {
-                           return transaction->id();
-                         },
-                         [&](const ReadOnlyTransactionPtr& transaction) {
-                           return transaction->id();
-                         },
-                     },
-                     transaction_);
+  switch (type_) {
+    case kReadOnly: {
+      return read_only()->id();
+    }
+    case kReadWrite:
+    case kPartitionedDml: {
+      return read_write()->id();
+    }
+  }
 }
 
-zetasql_base::Status Transaction::Read(const backend::ReadArg& read_arg,
+absl::Status Transaction::Read(const backend::ReadArg& read_arg,
                                std::unique_ptr<backend::RowCursor>* cursor) {
   mu_.AssertHeld();
-  return absl::visit(backend::overloaded{
-                         [&](const ReadWriteTransactionPtr& transaction) {
-                           return transaction->Read(read_arg, cursor);
-                         },
-                         [&](const ReadOnlyTransactionPtr& transaction) {
-                           return transaction->Read(read_arg, cursor);
-                         },
-                     },
-                     transaction_);
+  switch (type_) {
+    case kReadOnly: {
+      return read_only()->Read(read_arg, cursor);
+    }
+    case kReadWrite: {
+      return read_write()->Read(read_arg, cursor);
+    }
+    case kPartitionedDml: {
+      return error::InvalidOperationUsingPartitionedDmlTransaction();
+    }
+  }
 }
 
 zetasql_base::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
     const backend::Query& query) {
   mu_.AssertHeld();
-  return absl::visit(
-      backend::overloaded{
-          [&](const ReadWriteTransactionPtr& transaction) {
-            return query_engine_->ExecuteSql(
-                query, backend::QueryContext{.schema = schema(),
-                                             .reader = transaction.get(),
-                                             .writer = transaction.get()});
-          },
-          [&](const ReadOnlyTransactionPtr& transaction) {
-            return query_engine_->ExecuteSql(
-                query, backend::QueryContext{.schema = schema(),
-                                             .reader = transaction.get()});
-          },
-      },
-      transaction_);
+  switch (type_) {
+    case kReadOnly: {
+      return query_engine_->ExecuteSql(
+          query,
+          backend::QueryContext{
+              .schema = schema(), .reader = read_only(), .writer = nullptr});
+    }
+    case kReadWrite: {
+      return query_engine_->ExecuteSql(
+          query, backend::QueryContext{.schema = schema(),
+                                       .reader = read_write(),
+                                       .writer = read_write()});
+    }
+    case kPartitionedDml: {
+      ZETASQL_RETURN_IF_ERROR(ValidatePartitionedDmlQuery(query));
+      // PartitionedDml will auto-commit transactions and cannot be reused.
+      ZETASQL_ASSIGN_OR_RETURN(
+          backend::QueryResult result,
+          query_engine_->ExecuteSql(
+              query, backend::QueryContext{.schema = schema(),
+                                           .reader = read_write(),
+                                           .writer = read_write()}));
+      ZETASQL_RETURN_IF_ERROR(read_write()->Commit());
+      return result;
+    }
+  }
 }
 
-zetasql_base::Status Transaction::Write(const backend::Mutation& mutation) {
+absl::Status Transaction::Write(const backend::Mutation& mutation) {
   mu_.AssertHeld();
-  return absl::visit(
-      backend::overloaded{
-          [&](const ReadWriteTransactionPtr& transaction) {
-            return transaction->Write(mutation);
-          },
-          [&](const ReadOnlyTransactionPtr& transaction) {
-            return error::CannotCommitRollbackReadOnlyTransaction();
-          },
-      },
-      transaction_);
+  if (type_ == kReadWrite) {
+    return read_write()->Write(mutation);
+  }
+  return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
 }
 
-zetasql_base::Status Transaction::Commit() {
+absl::Status Transaction::Commit() {
   mu_.AssertHeld();
-  return absl::visit(
-      backend::overloaded{
-          [&](const ReadWriteTransactionPtr& transaction) {
-            return transaction->Commit();
-          },
-          [&](const ReadOnlyTransactionPtr& transaction) {
-            return error::CannotCommitRollbackReadOnlyTransaction();
-          },
-      },
-      transaction_);
+  if (type_ == kReadWrite) {
+    return read_write()->Commit();
+  }
+  return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
 }
 
-zetasql_base::Status Transaction::Rollback() {
+absl::Status Transaction::Rollback() {
   mu_.AssertHeld();
-  return absl::visit(
-      backend::overloaded{
-          [&](const ReadWriteTransactionPtr& transaction) {
-            return transaction->Rollback();
-          },
-          [&](const ReadOnlyTransactionPtr& transaction) {
-            return error::CannotCommitRollbackReadOnlyTransaction();
-          },
-      },
-      transaction_);
+  if (type_ == kReadWrite) {
+    return read_write()->Rollback();
+  }
+  return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
 }
 
 zetasql_base::StatusOr<absl::Time> Transaction::GetReadTimestamp() const {
-  return absl::visit(
-      backend::overloaded{
-          [&](const ReadWriteTransactionPtr& transaction)
-              -> zetasql_base::StatusOr<absl::Time> {
-            return error::CannotReturnReadTimestampForReadWriteTransaction();
-          },
-          [&](const ReadOnlyTransactionPtr& transaction)
-              -> zetasql_base::StatusOr<absl::Time> {
-            return transaction->read_timestamp();
-          },
-      },
-      transaction_);
+  if (type_ == kReadOnly) {
+    return read_only()->read_timestamp();
+  }
+  return error::CannotReturnReadTimestampForReadWriteTransaction();
 }
 
-zetasql_base::StatusOr<absl::Time> Transaction::GetCommitTimestamp() {
+zetasql_base::StatusOr<absl::Time> Transaction::GetCommitTimestamp() const {
   mu_.AssertHeld();
-  return absl::visit(
-      backend::overloaded{
-          [&](const ReadWriteTransactionPtr& transaction)
-              -> zetasql_base::StatusOr<absl::Time> {
-            return transaction->GetCommitTimestamp();
-          },
-          [&](const ReadOnlyTransactionPtr& transaction)
-              -> zetasql_base::StatusOr<absl::Time> {
-            return error::CannotCommitRollbackReadOnlyTransaction();
-          },
-      },
-      transaction_);
+  if (type_ == kReadWrite) {
+    return read_write()->GetCommitTimestamp();
+  }
+  return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
 }
 
-zetasql_base::Status Transaction::GuardedCall(const std::function<zetasql_base::Status()>& fn) {
+absl::Status Transaction::GuardedCall(const std::function<absl::Status()>& fn) {
   absl::MutexLock lock(&mu_);
 
   // Can not reuse a transaction that previously encountered an error.
   // Replay the last error status for the given transaction.
   ZETASQL_RETURN_IF_ERROR(status_);
 
-  const zetasql_base::Status status = fn();
-  if (!status.ok() && status.code() != zetasql_base::StatusCode::kAborted) {
+  const absl::Status status = fn();
+  if (!status.ok() && status.code() != absl::StatusCode::kAborted) {
     status_ = status;
     // For all errors (except ABORT), reset the transaction state.
     Rollback().IgnoreError();

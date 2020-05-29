@@ -20,7 +20,7 @@
 #include "backend/actions/action.h"
 #include "backend/actions/ops.h"
 #include "backend/schema/catalog/table.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -45,11 +45,11 @@ class IndexEffector : public Effector {
   explicit IndexEffector(const Index* index);
 
  private:
-  zetasql_base::Status Effect(const ActionContext* ctx,
+  absl::Status Effect(const ActionContext* ctx,
                       const InsertOp& op) const override;
-  zetasql_base::Status Effect(const ActionContext* ctx,
+  absl::Status Effect(const ActionContext* ctx,
                       const UpdateOp& op) const override;
-  zetasql_base::Status Effect(const ActionContext* ctx,
+  absl::Status Effect(const ActionContext* ctx,
                       const DeleteOp& op) const override;
 
   const Index* index_;

@@ -20,7 +20,7 @@
 #include <queue>
 
 #include "zetasql/public/value.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
@@ -32,7 +32,7 @@ namespace emulator {
 namespace backend {
 namespace test {
 
-zetasql_base::Status TestReadOnlyStore::Insert(
+absl::Status TestReadOnlyStore::Insert(
     const Table* table, const Key& key, absl::Span<const Column* const> columns,
     const std::vector<zetasql::Value>& values) {
   return store_.Write(absl::InfiniteFuture(), table->id(), key,
@@ -41,9 +41,9 @@ zetasql_base::Status TestReadOnlyStore::Insert(
 
 zetasql_base::StatusOr<bool> TestReadOnlyStore::Exists(const Table* table,
                                                const Key& key) const {
-  zetasql_base::Status s =
+  absl::Status s =
       store_.Lookup(absl::InfiniteFuture(), table->id(), key, {}, {});
-  if (s.code() == zetasql_base::StatusCode::kNotFound) {
+  if (s.code() == absl::StatusCode::kNotFound) {
     return false;
   } else if (!s.ok()) {
     return s;

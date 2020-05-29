@@ -49,7 +49,7 @@ TEST(ParseCreateDatabase, CanParseCreateDatabaseWithHyphen) {
 
   // Fails without backticks.
   EXPECT_THAT(ParseCreateDatabase("CREATE DATABASE mytestdb-1"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Passes with backticks.
   EXPECT_THAT(
@@ -59,7 +59,7 @@ TEST(ParseCreateDatabase, CanParseCreateDatabaseWithHyphen) {
 
 TEST(ParseCreateDatabase, CannotParseEmptyDatabaseName) {
   EXPECT_THAT(ParseCreateDatabase("CREATE DATABASE"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // CREATE TABLE
@@ -85,7 +85,7 @@ TEST(ParseCreateTable, CannotParseCreateTableWithoutName) {
                     CREATE TABLE (
                     ) PRIMARY KEY ()
                     )"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumn) {
@@ -842,17 +842,17 @@ TEST(ParseDropTable, CanParseDropTableBasic) {
 
 TEST(ParseDropTable, CannotParseDropTableMissingTableName) {
   EXPECT_THAT(ParseDDLStatement("DROP TABLE"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseDropTable, CannotParseDropTableInappropriateQuotes) {
   EXPECT_THAT(ParseDDLStatement("DROP `TABLE` Users"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseDropColumn, CannotParseDropColumnWithoutTable) {
   EXPECT_THAT(ParseDDLStatement("DROP COLUMN `TABLE`"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // DROP INDEX
@@ -865,12 +865,12 @@ TEST(ParseDropIndex, CanParseDropIndexBasic) {
 
 TEST(ParseDropIndex, CannotParseDropIndexMissingIndexName) {
   EXPECT_THAT(ParseDDLStatement("DROP INDEX"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseDropIndex, CannotParseDropIndexInappropriateQuotes) {
   EXPECT_THAT(ParseDDLStatement("DROP `INDEX` LocalAlbumsByName"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // ALTER TABLE ADD COLUMN
@@ -937,36 +937,36 @@ TEST(ParseAlterTable, CanParseAddColumnNamedColumnNoQuotes) {
 
 TEST(ParseAlterTable, CanParseAddColumnNoColumnName) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ADD COLUMN STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAddColumnMissingKeywordTable) {
   EXPECT_THAT(ParseDDLStatement("ALTER Users ADD Notes STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER Users ADD COLUMN Notes STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAddColumnMissingTableName) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE ADD Notes STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE ADD COLUMN Notes STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ADD Notes"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ADD COLUMN Notes"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ADD STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(
       ParseDDLStatement("ALTER TABLE Users ADD `COLUMN` Notes STRING(MAX)"),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // ALTER TABLE DROP COLUMN
@@ -1003,29 +1003,29 @@ TEST(ParseAlterTable, CanParseDropColumn) {
 
   // But this one fails, since it doesn't mention column name.
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP COLUMN"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseDropColumnMissingKeywordTable) {
   EXPECT_THAT(ParseDDLStatement("ALTER Users DROP Notes"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER Users DROP COLUMN Notes"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseDropColumnMissingTableName) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE DROP Notes"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE DROP COLUMN Notes"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP `COLUMN` Notes"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // ALTER TABLE ALTER COLUMN
@@ -1118,46 +1118,46 @@ TEST(ParseAlterTable, CanParseAlterColumnNamedColumn) {
 TEST(ParseAlterTable, CannotParseAlterColumnMissingColumnName) {
   // Below statement is ambiguous and fails, unlike column named 'column'.
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ALTER COLUMN STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAlterColumnMissingKeywordTable) {
   EXPECT_THAT(ParseDDLStatement("ALTER Users ALTER Notes STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER Users ALTER COLUMN Notes STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAlterColumnMissingTableName) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE ALTER Notes STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE ALTER COLUMN Notes STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAlterColumnMissingColumnProperties) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ALTER Notes"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ALTER COLUMN Notes"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAlterColumnMiscErrors) {
   // Missing column name.
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ALTER STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Multiple column names.
   EXPECT_THAT(
       ParseDDLStatement("ALTER TABLE Users ALTER `COLUMN` Notes STRING(MAX)"),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Missing table keyword.
   EXPECT_THAT(ParseDDLStatement("ALTER COLUMN Users.Notes STRING(MAX)"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // ALTER TABLE SET ONDELETE
@@ -1188,7 +1188,7 @@ TEST(Miscellaneous, CannotParseNonAsciiCharacters) {
                   R"(
                     CREATE TABLE \x1b Users () PRIMARY KEY()
                   )"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CanParseExtraWhitespaceCharacters) {
@@ -1213,7 +1213,7 @@ TEST(Miscellaneous, CannotParseSmartQuotes) {
                       “Name” STRING(MAX)
                     ) PRIMARY KEY()
                   )"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CanParseMixedCaseStatements) {
@@ -1380,7 +1380,7 @@ TEST(Miscellaneous, CannotParseStringFieldsWithoutLength) {
                       Name STRING NOT NULL,
                     ) PRIMARY KEY (Name)
                   )"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CannotParseNonStringFieldsWithLength) {
@@ -1392,7 +1392,7 @@ TEST(Miscellaneous, CannotParseNonStringFieldsWithLength) {
                       Age INT64(4),
                     ) PRIMARY KEY (Name)
                   )"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CanParseQuotedIdentifiers) {
@@ -1481,7 +1481,7 @@ TEST(AllowCommitTimestamp, CannotParseSingleInvalidOption) {
                       )
                     ) PRIMARY KEY ()
                   )"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Cannot also set an invalid option with null value.
   EXPECT_THAT(ParseDDLStatement(
@@ -1493,7 +1493,7 @@ TEST(AllowCommitTimestamp, CannotParseSingleInvalidOption) {
                       )
                     ) PRIMARY KEY ()
                   )"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(AllowCommitTimestamp, CanParseMultipleOptions) {
@@ -1542,7 +1542,7 @@ TEST(AllowCommitTimestamp, CannotParseMultipleOptionsWithTrailingComma) {
                       )
                     ) PRIMARY KEY ()
                   )"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(AllowCommitTimestamp, SetThroughOptions) {

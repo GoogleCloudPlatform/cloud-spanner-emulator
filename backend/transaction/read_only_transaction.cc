@@ -19,7 +19,7 @@
 #include <memory>
 
 #include "absl/random/random.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "backend/access/read.h"
@@ -32,7 +32,7 @@
 #include "backend/transaction/resolve.h"
 #include "backend/transaction/row_cursor.h"
 #include "common/clock.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -63,7 +63,7 @@ ReadOnlyTransaction::ReadOnlyTransaction(
   schema_ = versioned_catalog->GetSchema(read_timestamp_);
 }
 
-zetasql_base::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
+absl::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
                                        std::unique_ptr<RowCursor>* cursor) {
   absl::MutexLock lock(&mu_);
   if (clock_->Now() - read_timestamp_ >= kMaxStaleReadDuration) {
@@ -83,7 +83,7 @@ zetasql_base::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
   }
   *cursor = absl::make_unique<StorageIteratorRowCursor>(
       std::move(iterators), resolved_read_arg.columns);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 absl::Time ReadOnlyTransaction::PickReadTimestamp() {

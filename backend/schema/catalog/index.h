@@ -100,9 +100,13 @@ class Index : public SchemaNode {
   // SchemaNode interface implementation.
   // ------------------------------------
 
-  zetasql_base::Status Validate(SchemaValidationContext* context) const override;
+  std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
+    return SchemaNameInfo{.name = name_, .kind = "Index", .global = true};
+  }
 
-  zetasql_base::Status ValidateUpdate(const SchemaNode* old,
+  absl::Status Validate(SchemaValidationContext* context) const override;
+
+  absl::Status ValidateUpdate(const SchemaNode* old,
                               SchemaValidationContext* context) const override;
 
   std::string DebugString() const override;
@@ -113,8 +117,8 @@ class Index : public SchemaNode {
   friend class IndexValidator;
 
   using ValidationFn =
-      std::function<zetasql_base::Status(const Index*, SchemaValidationContext*)>;
-  using UpdateValidationFn = std::function<zetasql_base::Status(
+      std::function<absl::Status(const Index*, SchemaValidationContext*)>;
+  using UpdateValidationFn = std::function<absl::Status(
       const Index*, const Index*, SchemaValidationContext*)>;
 
   // Constructors are private and only friend classes are able to build /
@@ -127,7 +131,7 @@ class Index : public SchemaNode {
     return absl::WrapUnique(new Index(*this));
   }
 
-  zetasql_base::Status DeepClone(SchemaGraphEditor* editor,
+  absl::Status DeepClone(SchemaGraphEditor* editor,
                          const SchemaNode* orig) override;
 
   // Validation delegates.

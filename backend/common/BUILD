@@ -60,7 +60,7 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//common:errors",
         "//common:limits",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:value",
     ],

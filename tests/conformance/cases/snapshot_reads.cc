@@ -31,7 +31,7 @@ using zetasql_base::testing::IsOk;
 
 class SnapshotReadsTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE Users(
         ID   INT64 NOT NULL,

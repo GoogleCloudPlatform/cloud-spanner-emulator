@@ -24,7 +24,7 @@
 #include "zetasql/resolved_ast/resolved_node.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -78,7 +78,7 @@ constexpr absl::string_view kHintJoinTypeNestedLoopDeprecated = "loop_join";
 
 }  // namespace
 
-zetasql_base::Status HintValidator::ValidateHints(
+absl::Status HintValidator::ValidateHints(
     const zetasql::ResolvedNode* node) const {
   std::vector<const zetasql::ResolvedNode*> child_nodes;
   node->GetChildNodes(&child_nodes);
@@ -107,10 +107,10 @@ zetasql_base::Status HintValidator::ValidateHints(
         CheckHintValue(hint_name, hint_value, node->node_kind(), hint_map));
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status HintValidator::CheckHintName(
+absl::Status HintValidator::CheckHintName(
     absl::string_view name, const zetasql::ResolvedNodeKind node_kind) const {
   static const auto* supported_hints = new const absl::flat_hash_map<
       const zetasql::ResolvedNodeKind,
@@ -140,10 +140,10 @@ zetasql_base::Status HintValidator::CheckHintName(
   if (iter == supported_hints->end() || !iter->second.contains(name)) {
     return error::InvalidHint(name);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status HintValidator::CheckHintValue(
+absl::Status HintValidator::CheckHintValue(
     absl::string_view name, const zetasql::Value& value,
     const zetasql::ResolvedNodeKind node_kind,
     const absl::flat_hash_map<absl::string_view, zetasql::Value>& hint_map)
@@ -222,7 +222,7 @@ zetasql_base::Status HintValidator::CheckHintValue(
       return error::InvalidHintValue(name, value.DebugString());
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

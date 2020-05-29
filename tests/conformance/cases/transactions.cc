@@ -18,13 +18,13 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/time/clock.h"
-#include "tests/conformance/common/database_test_base.h"
 #include "google/cloud/spanner/mutations.h"
 #include "google/cloud/spanner/timestamp.h"
 #include "google/cloud/spanner/transaction.h"
-#include "zetasql/base/status.h"
+#include "tests/conformance/common/database_test_base.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -40,7 +40,7 @@ using zetasql_base::testing::StatusIs;
 
 class TransactionsTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE TestTable(
         key1 STRING(MAX) NOT NULL,
@@ -55,13 +55,13 @@ TEST_F(TransactionsTest, SingleUseReadOnlyTransactionCannotBeCommitted) {
   auto txn = MakeSingleUseTransaction(
       Transaction::SingleUseOptions{Transaction::ReadOnlyOptions{}});
   EXPECT_THAT(CommitTransaction(txn, {}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(TransactionsTest, SingleUseReadOnlyTransactionCannotBeRolledBack) {
   auto txn = MakeSingleUseTransaction(
       Transaction::SingleUseOptions{Transaction::ReadOnlyOptions{}});
-  EXPECT_THAT(Rollback(txn), StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+  EXPECT_THAT(Rollback(txn), StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(TransactionsTest, ReadOnlyTransactionCannotBeRolledBack) {
@@ -73,13 +73,13 @@ TEST_F(TransactionsTest, ReadOnlyTransactionCannotBeRolledBack) {
     EXPECT_THAT(result->values, testing::ElementsAre());
     EXPECT_THAT(result->has_read_timestamp, true);
   }
-  EXPECT_THAT(Rollback(txn), StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+  EXPECT_THAT(Rollback(txn), StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(TransactionsTest, ReadOnlyTransactionCannotBeCommitted) {
   auto txn = Transaction(Transaction::ReadOnlyOptions());
   EXPECT_THAT(CommitTransaction(txn, {}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(TransactionsTest, SingleUseReadOnlyTimestampMustBeValid) {
@@ -89,7 +89,7 @@ TEST_F(TransactionsTest, SingleUseReadOnlyTimestampMustBeValid) {
 
   EXPECT_THAT(Read(Transaction::SingleUseOptions(MakeMinTimestamp()),
                    "TestTable", {"key1", "key2", "col1"}, KeySet::All()),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(Read(Transaction::SingleUseOptions(result.commit_timestamp),
                    "TestTable", {"key1", "key2", "col1"}, KeySet::All()),
@@ -104,7 +104,7 @@ TEST_F(TransactionsTest, ReadOnlyTimestampMustBeValid) {
   auto min_txn = Transaction(Transaction::ReadOnlyOptions(MakeMinTimestamp()));
   EXPECT_THAT(
       Read(min_txn, "TestTable", {"key1", "key2", "col1"}, KeySet::All()),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 
   auto now_txn =
       Transaction(Transaction::ReadOnlyOptions(commit_result.commit_timestamp));
@@ -154,14 +154,14 @@ TEST_F(TransactionsTest, DISABLED_ReadWriteTransactionInvalidatedAfterError) {
 
   // An error returned from commit due to invalid mutation.
   EXPECT_THAT(CommitTransaction(txn, {mutation}),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Cannot continue to use this transaction for subsequent Read / Write.
   // The transaction replays the previous failed outcome for all subsequent
   // requests using this transaction_id.
   auto result = Read(txn, "TestTable", {"key1", "key2", "col1"}, KeySet::All());
   EXPECT_THAT(result.status(),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(TransactionsTest, FailedMutationReleasesTransactionLocks) {
@@ -172,7 +172,7 @@ TEST_F(TransactionsTest, FailedMutationReleasesTransactionLocks) {
 
   // An error returned from commit due to invalid mutation.
   EXPECT_THAT(Commit({mutation}),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Subsequent transactions should succeed.
   ZETASQL_ASSERT_OK(CommitDml(
@@ -187,7 +187,7 @@ TEST_F(TransactionsTest, FailedMutationReleasesTransactionLocks) {
 TEST_F(TransactionsTest, FailedDmlReleasesTransactionLocks) {
   // This is a malformed dml and expected to fail.
   EXPECT_THAT(CommitDml({SqlStatement("DELETE * FROM TestTable")}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Subsequent transactions should succeed.
   ZETASQL_ASSERT_OK(CommitDml(
@@ -212,7 +212,7 @@ TEST_F(TransactionsTest, ReadWriteTransactionCannotRollbackAfterCommit) {
                       .AddRow({Value("val1"), Value("val2"), Value("val3")})
                       .Build();
   ZETASQL_EXPECT_OK(CommitTransaction(txn, {mutation}));
-  EXPECT_THAT(Rollback(txn), StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+  EXPECT_THAT(Rollback(txn), StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(TransactionsTest, ReadWriteTransactionCannotCommitAfterRollback) {
@@ -229,7 +229,7 @@ TEST_F(TransactionsTest, ReadWriteTransactionCannotCommitAfterRollback) {
                       .AddRow({Value("val1"), Value("val2"), Value("val3")})
                       .Build();
   EXPECT_THAT(CommitTransaction(txn, {mutation}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(TransactionsTest, ReadWriteTransactionCannotReadAfterCommit) {
@@ -246,7 +246,7 @@ TEST_F(TransactionsTest, ReadWriteTransactionCannotReadAfterCommit) {
                       .Build();
   ZETASQL_EXPECT_OK(CommitTransaction(txn, {mutation}));
   EXPECT_THAT(Read(txn, "TestTable", {"key1", "key2", "col1"}, KeySet::All()),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(TransactionsTest, ReadWriteTransactionCannotReadAfterRollback) {
@@ -260,7 +260,7 @@ TEST_F(TransactionsTest, ReadWriteTransactionCannotReadAfterRollback) {
   }
   ZETASQL_EXPECT_OK(Rollback(txn));
   EXPECT_THAT(Read(txn, "TestTable", {"key1", "key2", "col1"}, KeySet::All()),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(TransactionsTest, StrongReadSeesLastCommitTimestamp) {

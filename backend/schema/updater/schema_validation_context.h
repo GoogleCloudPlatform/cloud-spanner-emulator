@@ -20,9 +20,11 @@
 #include <memory>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/time/time.h"
+#include "backend/schema/graph/schema_node.h"
 #include "backend/storage/storage.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -31,6 +33,7 @@ namespace emulator {
 namespace backend {
 
 class Schema;
+class GlobalSchemaNames;
 
 // A class used to collect and execute verification/backfill actions resulting
 // from a schema change. A `SchemaChangeAction` object can be constructed and
@@ -46,11 +49,19 @@ class SchemaValidationContext {
  public:
   // The actual function doing the verification to which `context_` is passed.
   using SchemaChangeAction =
-      std::function<zetasql_base::Status(const SchemaValidationContext*)>;
+      std::function<absl::Status(const SchemaValidationContext*)>;
+
+  // Test-only constructor.
+  // TODO : Split out into a separate Schema update validation
+  // context that is used by SchemaUpdater and can therefore be mocked
+  // separately.
+  SchemaValidationContext() {}
 
   explicit SchemaValidationContext(Storage* storage,
+                                   GlobalSchemaNames* global_names,
                                    absl::Time pending_commit_timestamp)
       : storage_(storage),
+        global_names_(global_names),
         pending_commit_timestamp_(pending_commit_timestamp) {}
 
   // TODO : Split out into a separate StatementValidationContext.
@@ -70,6 +81,9 @@ class SchemaValidationContext {
   // Provides SchemaVerifiers running under this validation context
   // access to the database storage to perform reads.
   Storage* storage() const { return storage_; }
+
+  // Access to the current schema's set of global names.
+  GlobalSchemaNames* global_names() const { return global_names_; }
 
   // Returns the pending commit timestamp.
   absl::Time pending_commit_timestamp() const {
@@ -93,19 +107,41 @@ class SchemaValidationContext {
   }
 
   // Runs all SchemaVerifiers added to this validation context.
-  zetasql_base::Status RunSchemaChangeActions() const {
+  absl::Status RunSchemaChangeActions() const {
     for (auto& action : actions_) {
       ZETASQL_RETURN_IF_ERROR(action(this));
     }
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   // Returns the number of pending schema change actions.
   int num_actions() const { return actions_.size(); }
 
+  // Returns true if 'node' is a node that was modified using a DDL
+  // statement/operation as a part of the schema change associated
+  // with this SchemaValidationContext.
+  bool IsModifiedNode(const SchemaNode* node) const {
+    return edited_nodes_->contains(node);
+  }
+
  private:
+  friend class SchemaGraphEditor;
+
+  // Sets the 'edited_nodes' map maintained by the 'SchemaGraphEditor'
+  // to allow nodes to check through the SchemaValidationContext if they were
+  // modified by user action or just cloned during the processing of a schema
+  // update.
+  void set_edited_map(absl::flat_hash_set<const SchemaNode*>* edited_nodes) {
+    edited_nodes_ = edited_nodes;
+  }
+
+  const absl::flat_hash_set<const SchemaNode*>* edited_nodes_ = nullptr;
+
   // Used to read data from the database for verifiers. Not owned.
   Storage* storage_;
+
+  // Global names for schema objects.
+  GlobalSchemaNames* global_names_;
 
   // Planned commit time for the schema change.
   absl::Time pending_commit_timestamp_;

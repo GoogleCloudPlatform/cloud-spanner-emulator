@@ -24,7 +24,7 @@ cc_library(
     hdrs = ["read.h"],
     deps = [
         "//backend/datamodel:key_set",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
     ],
@@ -49,7 +49,7 @@ cc_library(
     deps = [
         "//backend/datamodel:key_set",
         "//backend/datamodel:value",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
     ],

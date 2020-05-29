@@ -24,7 +24,7 @@
 #include "backend/access/write.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/schema.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -32,7 +32,7 @@ namespace emulator {
 namespace frontend {
 
 // Converts the Mutation proto into a backend mutation using the given schema.
-zetasql_base::Status MutationFromProto(
+absl::Status MutationFromProto(
     const backend::Schema& schema,
     const google::protobuf::RepeatedPtrField<google::spanner::v1::Mutation>& mutation_pbs,
     backend::Mutation* mutation);

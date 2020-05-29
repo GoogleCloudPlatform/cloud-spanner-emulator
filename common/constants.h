@@ -42,4 +42,23 @@ constexpr char kCommitTimestampIdentifier[] = "spanner.commit_timestamp()";
 constexpr absl::Time kCommitTimestampValueSentinel =
     absl::FromUnixMicros(zetasql::types::kTimestampMax);
 
+// gRPC ResourceInfo binary metadata header.
+constexpr char kResourceInfoBinaryHeader[] = "google.rpc.resourceinfo-bin";
+
+// ResourceInfo URL used for including metadata in gRPC error details.
+constexpr char kResourceInfoType[] =
+    "type.googleapis.com/google.rpc.ResourceInfo";
+
+// Session resource type.
+constexpr char kSessionResourceType[] =
+    "type.googleapis.com/google.spanner.v1.Session";
+
+// Database resource type.
+constexpr char kDatabaseResourceType[] =
+    "type.googleapis.com/google.spanner.admin.database.v1.Database";
+
+// Instance resource type.
+constexpr char kInstanceResourceType[] =
+    "type.googleapis.com/google.spanner.admin.instance.v1.Instance";
+
 #endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_CONSTANTS_H_

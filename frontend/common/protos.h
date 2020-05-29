@@ -23,7 +23,7 @@
 #include "google/rpc/status.pb.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -37,7 +37,7 @@ void ToAnyProto(const google::protobuf::Message& message, google::protobuf::Any*
 backend::TransactionID TransactionIDFromProto(const std::string& bytes);
 
 // Returns the given status as status proto.
-google::rpc::Status StatusToProto(const zetasql_base::Status& error);
+google::rpc::Status StatusToProto(const absl::Status& error);
 
 }  // namespace emulator
 }  // namespace spanner

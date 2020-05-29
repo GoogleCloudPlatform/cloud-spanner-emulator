@@ -22,7 +22,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "backend/database/database.h"
 #include "backend/schema/printer/print_ddl.h"
@@ -49,7 +49,7 @@ class DatabaseApiTest : public test::ServerTest {
   void SetUp() override { ZETASQL_EXPECT_OK(CreateTestInstance()); }
   void TearDown() override { ZETASQL_EXPECT_OK(CleanupTestInstance()); }
 
-  zetasql_base::Status ListDatabases(const std::string& instance_uri, int32_t page_size,
+  absl::Status ListDatabases(const std::string& instance_uri, int32_t page_size,
                              const std::string& page_token,
                              database_api::ListDatabasesResponse* response) {
     grpc::ClientContext context;
@@ -61,7 +61,7 @@ class DatabaseApiTest : public test::ServerTest {
                                                               response);
   }
 
-  zetasql_base::Status CreateDatabase(
+  absl::Status CreateDatabase(
       const std::string& instance_uri, const std::string& database_name,
       const std::vector<std::string>& extra_statements = {}) {
     grpc::ClientContext context;
@@ -80,10 +80,10 @@ class DatabaseApiTest : public test::ServerTest {
     ZETASQL_RET_CHECK(operation.metadata().UnpackTo(&metadata));
     ZETASQL_RET_CHECK_EQ(metadata.database(),
                  MakeDatabaseUri(instance_uri, database_name));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
-  zetasql_base::Status GetDatabase(const std::string& database_uri,
+  absl::Status GetDatabase(const std::string& database_uri,
                            database_api::Database* database) {
     grpc::ClientContext context;
     database_api::GetDatabaseRequest request;
@@ -92,7 +92,7 @@ class DatabaseApiTest : public test::ServerTest {
                                                             database);
   }
 
-  zetasql_base::Status UpdateDatabaseDdl(
+  absl::Status UpdateDatabaseDdl(
       const std::string& database_uri,
       const std::vector<std::string>& update_statements,
       database_api::UpdateDatabaseDdlMetadata* metadata = nullptr) {
@@ -110,21 +110,21 @@ class DatabaseApiTest : public test::ServerTest {
       ZETASQL_RET_CHECK(operation.metadata().UnpackTo(metadata));
     }
     google::rpc::Status status = operation.error();
-    return zetasql_base::Status(static_cast<zetasql_base::StatusCode>(status.code()),
+    return absl::Status(static_cast<absl::StatusCode>(status.code()),
                         status.message());
   }
 
-  zetasql_base::Status GetDatabaseDdl(const std::string& database_uri,
+  absl::Status GetDatabaseDdl(const std::string& database_uri,
                               database_api::GetDatabaseDdlResponse* response) {
     grpc::ClientContext context;
     database_api::GetDatabaseDdlRequest request;
     request.set_database(database_uri);
     ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->GetDatabaseDdl(
         &context, request, response));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
-  zetasql_base::Status DropDatabase(const std::string& database_uri) {
+  absl::Status DropDatabase(const std::string& database_uri) {
     grpc::ClientContext context;
     database_api::DropDatabaseRequest request;
     request.set_database(database_uri);
@@ -134,7 +134,7 @@ class DatabaseApiTest : public test::ServerTest {
   }
 
  private:
-  zetasql_base::Status CleanupTestInstance() {
+  absl::Status CleanupTestInstance() {
     database_api::ListDatabasesResponse response;
     ZETASQL_RETURN_IF_ERROR(ListDatabases(test_instance_uri_, 0 /*page_size*/,
                                   "" /*page_token*/, &response));
@@ -150,7 +150,7 @@ class DatabaseApiTest : public test::ServerTest {
                                       next_page_token, &response));
       }
     }
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 };
 
@@ -159,11 +159,11 @@ class DatabaseApiTest : public test::ServerTest {
 TEST_F(DatabaseApiTest, CreateDatabaseWithInvalidDatabaseName) {
   // Name less than 2 characters.
   EXPECT_THAT(CreateDatabase(test_instance_uri_, "a"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
   // Name greater than 30 characters.
   EXPECT_THAT(CreateDatabase(test_instance_uri_,
                              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(DatabaseApiTest, LimitDatabasePerInstance) {
@@ -173,7 +173,7 @@ TEST_F(DatabaseApiTest, LimitDatabasePerInstance) {
   }
   // Creating
   EXPECT_THAT(CreateDatabase(test_instance_uri_, test_database_name_),
-              StatusIs(zetasql_base::StatusCode::kResourceExhausted));
+              StatusIs(absl::StatusCode::kResourceExhausted));
 }
 
 TEST_F(DatabaseApiTest, CreateDatabaseEmptyInitialSchema) {
@@ -195,7 +195,7 @@ TEST_F(DatabaseApiTest, CreateDatabaseWithInitialSchema) {
 TEST_F(DatabaseApiTest, CreateDatabaseWithInvalidInitialSchema) {
   EXPECT_THAT(
       CreateDatabase(test_instance_uri_, test_database_name_, {"INVALID DDL"}),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(DatabaseApiTest, CreateDuplicateDatabaseReturnsAlreadyExists) {
@@ -203,14 +203,14 @@ TEST_F(DatabaseApiTest, CreateDuplicateDatabaseReturnsAlreadyExists) {
 
   // Request to create same database.
   EXPECT_THAT(CreateDatabase(test_instance_uri_, test_database_name_),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(DatabaseApiTest, CreateDatabaseWithoutInstanceReturnsNotFound) {
   EXPECT_THAT(CreateDatabase(
                   MakeInstanceUri(test_project_name_, "non-existent-instance"),
                   test_database_name_),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 // Tests for ListDatabases.
@@ -221,7 +221,7 @@ TEST_F(DatabaseApiTest, DoesNotListDatabasesForUnknownInstance) {
   EXPECT_THAT(ListDatabases(
                   MakeInstanceUri(test_project_name_, "non-existent-instance"),
                   0 /*page_size*/, "" /*page_token*/, &response),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(DatabaseApiTest, ListsEmptyDatabasesForNewInstance) {
@@ -279,19 +279,19 @@ TEST_F(DatabaseApiTest, UpdateDatabaseDdlInvalidDatabaseUri) {
       MakeInstanceUri("non-existent-project", test_instance_name_);
   EXPECT_THAT(
       UpdateDatabaseDdl(MakeDatabaseUri(instance_uri, test_database_name_), {}),
-      StatusIs(zetasql_base::StatusCode::kNotFound));
+      StatusIs(absl::StatusCode::kNotFound));
 
   // Invalid instance name should return an error.
   instance_uri = MakeInstanceUri(test_project_name_, "non-existent-instance");
   EXPECT_THAT(
       UpdateDatabaseDdl(MakeDatabaseUri(instance_uri, test_database_name_), {}),
-      StatusIs(zetasql_base::StatusCode::kNotFound));
+      StatusIs(absl::StatusCode::kNotFound));
 
   // Invalid database name should return an error.
   EXPECT_THAT(
       UpdateDatabaseDdl(
           MakeDatabaseUri(test_instance_uri_, "non-existent-database"), {}),
-      StatusIs(zetasql_base::StatusCode::kNotFound));
+      StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(DatabaseApiTest, UpdateDatabaseDdlPartialSuccess) {
@@ -331,7 +331,7 @@ TEST_F(DatabaseApiTest, UpdateDatabaseDdlPartialSuccess) {
   )"};
 
   EXPECT_THAT(UpdateDatabaseDdl(test_database_uri_, statements, &metadata),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
                        testing::HasSubstr(
                            "Found uniqueness violation on index test_index")));
 
@@ -345,7 +345,7 @@ TEST_F(DatabaseApiTest, UpdateDatabaseDdlPartialSuccess) {
 TEST_F(DatabaseApiTest, GetDatabaseNonExistentDatabase) {
   database_api::Database database;
   EXPECT_THAT(GetDatabase(test_database_uri_, &database),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(DatabaseApiTest, GetDatabase) {
@@ -360,7 +360,7 @@ TEST_F(DatabaseApiTest, DropDatabaseInvalidInstance) {
   auto instance_uri =
       MakeInstanceUri(test_project_name_, "invalid-instance-name");
   EXPECT_THAT(DropDatabase(MakeDatabaseUri(instance_uri, test_database_name_)),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(DatabaseApiTest, DropDatabase) {
@@ -372,13 +372,13 @@ TEST_F(DatabaseApiTest, DropDatabase) {
   ZETASQL_EXPECT_OK(DropDatabase(test_database_uri_));
 
   EXPECT_THAT(GetDatabase(test_database_uri_, &database),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(DatabaseApiTest, DropDatabaseIdempotent) {
   database_api::Database database;
   EXPECT_THAT(GetDatabase(test_database_uri_, &database),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 
   ZETASQL_EXPECT_OK(DropDatabase(test_database_uri_));
 }

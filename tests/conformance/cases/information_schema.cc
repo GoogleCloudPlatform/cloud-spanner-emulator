@@ -27,9 +27,11 @@ namespace test {
 
 namespace {
 
+using Bytes = google::cloud::spanner::Bytes;
+
 class InformationSchemaTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE Base (
         Key1 INT64,
@@ -126,6 +128,8 @@ TEST_F(InformationSchemaTest, QueriesColumnsTable) {
                   c.table_name,
                   c.column_name,
                   c.ordinal_position,
+                  c.column_default,
+                  c.data_type,
                   c.is_nullable,
                   c.spanner_type
                 from
@@ -139,32 +143,56 @@ TEST_F(InformationSchemaTest, QueriesColumnsTable) {
                   c.table_name,
                   c.ordinal_position
               )"),
-      IsOkAndHoldsRows(
-          {{"", "", "Base", "Key1", 1, "YES", "INT64"},
-           {"", "", "Base", "Key2", 2, "YES", "STRING(256)"},
-           {"", "", "Base", "BoolValue", 3, "YES", "BOOL"},
-           {"", "", "Base", "IntValue", 4, "NO", "INT64"},
-           {"", "", "Base", "DoubleValue", 5, "YES", "FLOAT64"},
-           {"", "", "Base", "StrValue", 6, "YES", "STRING(MAX)"},
-           {"", "", "Base", "ByteValue", 7, "YES", "BYTES(256)"},
-           {"", "", "Base", "TimestampValue", 8, "YES", "TIMESTAMP"},
-           {"", "", "Base", "DateValue", 9, "YES", "DATE"},
-           {"", "", "Base", "BoolArray", 10, "NO", "ARRAY<BOOL>"},
-           {"", "", "Base", "IntArray", 11, "YES", "ARRAY<INT64>"},
-           {"", "", "Base", "DoubleArray", 12, "YES", "ARRAY<FLOAT64>"},
-           {"", "", "Base", "StrArray", 13, "YES", "ARRAY<STRING(256)>"},
-           {"", "", "Base", "ByteArray", 14, "YES", "ARRAY<BYTES(MAX)>"},
-           {"", "", "Base", "TimestampArray", 15, "YES", "ARRAY<TIMESTAMP>"},
-           {"", "", "Base", "DateArray", 16, "YES", "ARRAY<DATE>"},
-           {"", "", "CascadeChild", "Key1", 1, "YES", "INT64"},
-           {"", "", "CascadeChild", "Key2", 2, "YES", "STRING(256)"},
-           {"", "", "CascadeChild", "ChildKey", 3, "YES", "BOOL"},
-           {"", "", "CascadeChild", "Value1", 4, "NO", "STRING(MAX)"},
-           {"", "", "CascadeChild", "Value2", 5, "YES", "BOOL"},
-           {"", "", "NoActionChild", "Key1", 1, "YES", "INT64"},
-           {"", "", "NoActionChild", "Key2", 2, "YES", "STRING(256)"},
-           {"", "", "NoActionChild", "ChildKey", 3, "YES", "BOOL"},
-           {"", "", "NoActionChild", "Value", 4, "YES", "STRING(MAX)"}}));
+      IsOkAndHoldsRows({{"", "", "Base", "Key1", 1, Null<Bytes>(),
+                         Null<std::string>(), "YES", "INT64"},
+                        {"", "", "Base", "Key2", 2, Null<Bytes>(),
+                         Null<std::string>(), "YES", "STRING(256)"},
+                        {"", "", "Base", "BoolValue", 3, Null<Bytes>(),
+                         Null<std::string>(), "YES", "BOOL"},
+                        {"", "", "Base", "IntValue", 4, Null<Bytes>(),
+                         Null<std::string>(), "NO", "INT64"},
+                        {"", "", "Base", "DoubleValue", 5, Null<Bytes>(),
+                         Null<std::string>(), "YES", "FLOAT64"},
+                        {"", "", "Base", "StrValue", 6, Null<Bytes>(),
+                         Null<std::string>(), "YES", "STRING(MAX)"},
+                        {"", "", "Base", "ByteValue", 7, Null<Bytes>(),
+                         Null<std::string>(), "YES", "BYTES(256)"},
+                        {"", "", "Base", "TimestampValue", 8, Null<Bytes>(),
+                         Null<std::string>(), "YES", "TIMESTAMP"},
+                        {"", "", "Base", "DateValue", 9, Null<Bytes>(),
+                         Null<std::string>(), "YES", "DATE"},
+                        {"", "", "Base", "BoolArray", 10, Null<Bytes>(),
+                         Null<std::string>(), "NO", "ARRAY<BOOL>"},
+                        {"", "", "Base", "IntArray", 11, Null<Bytes>(),
+                         Null<std::string>(), "YES", "ARRAY<INT64>"},
+                        {"", "", "Base", "DoubleArray", 12, Null<Bytes>(),
+                         Null<std::string>(), "YES", "ARRAY<FLOAT64>"},
+                        {"", "", "Base", "StrArray", 13, Null<Bytes>(),
+                         Null<std::string>(), "YES", "ARRAY<STRING(256)>"},
+                        {"", "", "Base", "ByteArray", 14, Null<Bytes>(),
+                         Null<std::string>(), "YES", "ARRAY<BYTES(MAX)>"},
+                        {"", "", "Base", "TimestampArray", 15, Null<Bytes>(),
+                         Null<std::string>(), "YES", "ARRAY<TIMESTAMP>"},
+                        {"", "", "Base", "DateArray", 16, Null<Bytes>(),
+                         Null<std::string>(), "YES", "ARRAY<DATE>"},
+                        {"", "", "CascadeChild", "Key1", 1, Null<Bytes>(),
+                         Null<std::string>(), "YES", "INT64"},
+                        {"", "", "CascadeChild", "Key2", 2, Null<Bytes>(),
+                         Null<std::string>(), "YES", "STRING(256)"},
+                        {"", "", "CascadeChild", "ChildKey", 3, Null<Bytes>(),
+                         Null<std::string>(), "YES", "BOOL"},
+                        {"", "", "CascadeChild", "Value1", 4, Null<Bytes>(),
+                         Null<std::string>(), "NO", "STRING(MAX)"},
+                        {"", "", "CascadeChild", "Value2", 5, Null<Bytes>(),
+                         Null<std::string>(), "YES", "BOOL"},
+                        {"", "", "NoActionChild", "Key1", 1, Null<Bytes>(),
+                         Null<std::string>(), "YES", "INT64"},
+                        {"", "", "NoActionChild", "Key2", 2, Null<Bytes>(),
+                         Null<std::string>(), "YES", "STRING(256)"},
+                        {"", "", "NoActionChild", "ChildKey", 3, Null<Bytes>(),
+                         Null<std::string>(), "YES", "BOOL"},
+                        {"", "", "NoActionChild", "Value", 4, Null<Bytes>(),
+                         Null<std::string>(), "YES", "STRING(MAX)"}}));
 }
 
 TEST_F(InformationSchemaTest, QueriesIndexesTable) {

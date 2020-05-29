@@ -30,7 +30,7 @@
 #include "frontend/common/labels.h"
 #include "frontend/entities/database.h"
 #include "frontend/entities/transaction.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -85,7 +85,7 @@ class Session {
   }
 
   // Converts this session to its proto representation.
-  zetasql_base::Status ToProto(google::spanner::v1::Session* session,
+  absl::Status ToProto(google::spanner::v1::Session* session,
                        bool include_labels = true);
 
   // Creates a new multi-use transaction.
@@ -107,17 +107,18 @@ class Session {
  private:
   // Create a transaction based on the provided options.
   zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateTransaction(
-      const google::spanner::v1::TransactionOptions& options,
-      bool is_single_use);
+      const spanner_api::TransactionOptions& options,
+      const Transaction::Usage& usage);
 
   // Create a read-only transaction.
   zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateReadOnly(
-      const google::spanner::v1::TransactionOptions::ReadOnly& options,
-      bool is_single_use);
+      const spanner_api::TransactionOptions& options,
+      const Transaction::Usage& usage);
 
   // Create a read-write transaction.
   zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateReadWrite(
-      bool is_single_use);
+      const spanner_api::TransactionOptions& options,
+      const Transaction::Usage& usage);
 
   // The URI for this session.
   const std::string session_uri_;

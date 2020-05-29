@@ -21,7 +21,7 @@
 #include "backend/datamodel/key_range.h"
 #include "backend/storage/iterator.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -35,7 +35,7 @@ InterleaveParentValidator::InterleaveParentValidator(const Table* parent,
       child_(child),
       on_delete_action_(child->on_delete_action()) {}
 
-zetasql_base::Status InterleaveParentValidator::Validate(const ActionContext* ctx,
+absl::Status InterleaveParentValidator::Validate(const ActionContext* ctx,
                                                  const DeleteOp& op) const {
   switch (on_delete_action_) {
     case Table::OnDeleteAction::kNoAction: {
@@ -45,10 +45,10 @@ zetasql_base::Status InterleaveParentValidator::Validate(const ActionContext* ct
         return error::ChildKeyExists(parent_->Name(), child_->Name(),
                                      op.key.DebugString());
       }
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
     case Table::OnDeleteAction::kCascade: {
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
   }
 }
@@ -59,11 +59,11 @@ InterleaveParentEffector::InterleaveParentEffector(const Table* parent,
       child_(child),
       on_delete_action_(child->on_delete_action()) {}
 
-zetasql_base::Status InterleaveParentEffector::Effect(const ActionContext* ctx,
+absl::Status InterleaveParentEffector::Effect(const ActionContext* ctx,
                                               const DeleteOp& op) const {
   switch (on_delete_action_) {
     case Table::OnDeleteAction::kNoAction: {
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
     case Table::OnDeleteAction::kCascade: {
       ZETASQL_ASSIGN_OR_RETURN(
@@ -83,7 +83,7 @@ InterleaveChildValidator::InterleaveChildValidator(const Table* parent,
       child_(child),
       on_delete_action_(child->on_delete_action()) {}
 
-zetasql_base::Status InterleaveChildValidator::Validate(const ActionContext* ctx,
+absl::Status InterleaveChildValidator::Validate(const ActionContext* ctx,
                                                 const InsertOp& op) const {
   // Compute the parent key as prefix of the child key.
   Key parent_key = op.key.Prefix(parent_->primary_key().size());
@@ -93,7 +93,7 @@ zetasql_base::Status InterleaveChildValidator::Validate(const ActionContext* ctx
     return error::ParentKeyNotFound(parent_->Name(), child_->Name(),
                                     parent_key.DebugString());
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

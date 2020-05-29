@@ -25,7 +25,7 @@
 #include "absl/synchronization/mutex.h"
 #include "common/clock.h"
 #include "frontend/entities/database.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -48,7 +48,7 @@ class DatabaseManager {
       const std::string& database_uri) const ABSL_LOCKS_EXCLUDED(mu_);
 
   // Deletes a database with the given URI.
-  zetasql_base::Status DeleteDatabase(const std::string& database_uri)
+  absl::Status DeleteDatabase(const std::string& database_uri)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Lists all databases associated with the given instance URI.

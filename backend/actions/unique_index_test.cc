@@ -72,18 +72,18 @@ TEST_F(UniqueIndexTest, DuplicateIndexKeysReturnsAlreadyExistsError) {
   EXPECT_THAT(verifier_->Verify(
                   ctx(), Insert(index_->index_data_table(),
                                 Key({String("value"), Int64(3)}), {}, {})),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
   EXPECT_THAT(verifier_->Verify(
                   ctx(), Insert(index_->index_data_table(),
                                 Key({String("value"), Int64(4)}), {}, {})),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(UniqueIndexTest, IndexKeysNotInTransactionFailsWithInternalError) {
   EXPECT_THAT(verifier_->Verify(
                   ctx(), Insert(index_->index_data_table(),
                                 Key({String("value"), Int64(3)}), {}, {})),
-              StatusIs(zetasql_base::StatusCode::kInternal));
+              StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(UniqueIndexTest, UniqueIndexKeysReturnsOk) {

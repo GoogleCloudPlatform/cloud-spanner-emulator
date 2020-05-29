@@ -70,7 +70,7 @@ TEST_F(RowExistenceTest, InsertWithExistingRowFails) {
   ZETASQL_EXPECT_OK(store()->Insert(table_, Key({Int64(1)}), {}, {}));
 
   EXPECT_THAT(validator_->Validate(ctx(), Insert(table_, Key({Int64(1)}))),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(RowExistenceTest, UpdateWithExistingRowSucceeds) {
@@ -84,7 +84,7 @@ TEST_F(RowExistenceTest, UpdateWithExistingRowSucceeds) {
 
 TEST_F(RowExistenceTest, UpdateWithNonExistingRowFails) {
   EXPECT_THAT(validator_->Validate(ctx(), Update(table_, Key({Int64(1)}))),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 }  // namespace

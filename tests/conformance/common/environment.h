@@ -20,10 +20,10 @@
 #include <memory>
 #include <string>
 
+#include "google/cloud/spanner/connection_options.h"
 #include "google/cloud/status.h"
 #include "google/cloud/status_or.h"
-#include "google/cloud/spanner/connection_options.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -51,8 +51,8 @@ const ConformanceTestGlobals& GetConformanceTestGlobals();
 void SetConformanceTestGlobals(ConformanceTestGlobals* globals);
 
 // Helper to convert the client library's Status to the emulator's Status.
-inline zetasql_base::Status ToUtilStatus(const google::cloud::Status& status) {
-  return zetasql_base::Status(static_cast<zetasql_base::StatusCode>(status.code()),
+inline absl::Status ToUtilStatus(const google::cloud::Status& status) {
+  return absl::Status(static_cast<absl::StatusCode>(status.code()),
                       status.message());
 }
 

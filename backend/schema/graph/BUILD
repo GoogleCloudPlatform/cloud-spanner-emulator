@@ -22,7 +22,7 @@ cc_library(
     name = "schema_node",
     hdrs = ["schema_node.h"],
     deps = [
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
@@ -58,10 +58,10 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/base",
         "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base:statusor",
     ],
 )

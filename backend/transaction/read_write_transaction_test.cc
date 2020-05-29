@@ -24,7 +24,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "backend/access/write.h"
 #include "backend/actions/manager.h"
@@ -39,7 +39,7 @@
 #include "backend/transaction/options.h"
 #include "common/clock.h"
 #include "tests/common/schema_constructor.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -188,7 +188,7 @@ TEST_F(ReadWriteTransactionTest, ReadTableNotFound) {
 
   auto txn = CreateReadWriteTransaction();
   EXPECT_THAT(txn->Read(read_arg, &cursor),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(ReadWriteTransactionTest, ReadColumnNotFound) {
@@ -200,7 +200,7 @@ TEST_F(ReadWriteTransactionTest, ReadColumnNotFound) {
 
   auto txn = CreateReadWriteTransaction();
   EXPECT_THAT(txn->Read(read_arg, &cursor),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(ReadWriteTransactionTest, Commit) {
@@ -292,7 +292,7 @@ TEST_F(ReadWriteTransactionTest,
   m2.AddWriteOp(MutationOpType::kInsert, "test_table",
                 {"int64_col", "string_col"}, {{Int64(2), String("value-2")}});
   for (int i = 0; i < 5; i++) {
-    EXPECT_THAT(txn2->Write(m2), StatusIs(zetasql_base::StatusCode::kAborted));
+    EXPECT_THAT(txn2->Write(m2), StatusIs(absl::StatusCode::kAborted));
   }
 
   // Commit the first transaction.
@@ -335,7 +335,7 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
         auto cur_txn = CreateReadWriteTransaction();
         while (true) {
           std::unique_ptr<backend::RowCursor> cursor;
-          zetasql_base::Status status = cur_txn->Read(read_arg, &cursor);
+          absl::Status status = cur_txn->Read(read_arg, &cursor);
           if (status.ok()) {
             // Increment and save this value to the database.
             int cur_val = 0;
@@ -361,7 +361,7 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
           }
 
           // Retry on abort.
-          if (status.code() == zetasql_base::StatusCode::kAborted) {
+          if (status.code() == absl::StatusCode::kAborted) {
             continue;
           }
         }
@@ -429,7 +429,7 @@ TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {
   action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema());
 
   // Transaction is aborted.
-  EXPECT_THAT(txn->Write(m), StatusIs(zetasql_base::StatusCode::kAborted));
+  EXPECT_THAT(txn->Write(m), StatusIs(absl::StatusCode::kAborted));
 }
 
 TEST_F(ReadWriteTransactionTest, CommitWithNoEffectiveChangesToDatabase) {
@@ -466,7 +466,7 @@ TEST_F(ReadWriteTransactionTest, DuplicateCommitFails) {
   EXPECT_EQ(txn->state(), ReadWriteTransaction::State::kCommitted);
 
   // Call commit on a committed transaction should fail.
-  EXPECT_THAT(txn->Commit(), StatusIs(zetasql_base::StatusCode::kInternal));
+  EXPECT_THAT(txn->Commit(), StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(ReadWriteTransactionTest, CommitAfterRollbackFails) {
@@ -476,12 +476,12 @@ TEST_F(ReadWriteTransactionTest, CommitAfterRollbackFails) {
   EXPECT_EQ(txn->state(), ReadWriteTransaction::State::kRolledback);
 
   // Call commit on a rolled-back transaction should fail.
-  EXPECT_THAT(txn->Commit(), StatusIs(zetasql_base::StatusCode::kInternal));
+  EXPECT_THAT(txn->Commit(), StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(ReadWriteTransactionTest, GetCommitTimestampWithoutTransactionCommit) {
   auto txn = CreateReadWriteTransaction();
-  EXPECT_THAT(txn->GetCommitTimestamp(), StatusIs(zetasql_base::StatusCode::kInternal));
+  EXPECT_THAT(txn->GetCommitTimestamp(), StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(ReadWriteTransactionTest, FailsReadWithInvalidIndex) {
@@ -499,7 +499,7 @@ TEST_F(ReadWriteTransactionTest, FailsReadWithInvalidIndex) {
   auto txn2 = CreateReadWriteTransaction();
   EXPECT_THAT(ReadAllUsingIndex(txn2.get(), "invalid_index",
                                 {"int64_col", "string_col"}),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(ReadWriteTransactionTest, CanReadUsingIndex) {
@@ -623,7 +623,7 @@ TEST_F(ReadWriteTransactionTest, IndexUniquenessFailTest) {
                {"int64_col", "string_col"}, {{Int64(4), String("value")}});
 
   auto txn = CreateReadWriteTransaction();
-  EXPECT_THAT(txn->Write(m), StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+  EXPECT_THAT(txn->Write(m), StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 }  // namespace

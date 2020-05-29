@@ -32,7 +32,8 @@
 #include "frontend/common/protos.h"
 #include "frontend/converters/reads.h"
 #include "frontend/converters/time.h"
-#include "zetasql/base/status.h"
+#include "frontend/entities/transaction.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -46,7 +47,7 @@ namespace {
 
 // Validate that read only options specify a concurrency mode that can be used
 // with multi use transactions.
-zetasql_base::Status ValidateReadOptionsForMultiUseTransaction(
+absl::Status ValidateReadOptionsForMultiUseTransaction(
     const spanner_api::TransactionOptions::ReadOnly& read_options) {
   using ReadOnly = spanner_api::TransactionOptions::ReadOnly;
   switch (read_options.timestamp_bound_case()) {
@@ -56,31 +57,29 @@ zetasql_base::Status ValidateReadOptionsForMultiUseTransaction(
     case ReadOnly::kMaxStaleness:
       return error::InvalidReadOptionForMultiUseTransaction("max_staleness");
     default:
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
   }
 }
 
-zetasql_base::Status ValidateMultiUseTransactionOptions(
+absl::Status ValidateMultiUseTransactionOptions(
     const spanner_api::TransactionOptions& options) {
   switch (options.mode_case()) {
     case v1::TransactionOptions::kReadOnly:
       return ValidateReadOptionsForMultiUseTransaction(options.read_only());
     case v1::TransactionOptions::kReadWrite:
-      return zetasql_base::OkStatus();
     case v1::TransactionOptions::kPartitionedDml:
-      return zetasql_base::Status(zetasql_base::StatusCode::kUnimplemented,
-                          "Partitioned DML transaction not supported yet.");
+      return absl::OkStatus();
     case v1::TransactionOptions::MODE_NOT_SET:
       return error::MissingRequiredFieldError("TransactionOptions.mode");
   }
 }
 
-zetasql_base::Status ValidateSingleUseTransactionOptions(
+absl::Status ValidateSingleUseTransactionOptions(
     const spanner_api::TransactionOptions& options) {
   switch (options.mode_case()) {
     case v1::TransactionOptions::kReadOnly:
     case v1::TransactionOptions::kReadWrite:
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     case v1::TransactionOptions::kPartitionedDml:
       return error::DmlDoesNotSupportSingleUseTransaction();
     case v1::TransactionOptions::MODE_NOT_SET:
@@ -90,7 +89,7 @@ zetasql_base::Status ValidateSingleUseTransactionOptions(
 
 }  // namespace
 
-zetasql_base::Status Session::ToProto(spanner_api::Session* session,
+absl::Status Session::ToProto(spanner_api::Session* session,
                               bool include_labels) {
   absl::ReaderMutexLock lock(&mu_);
   session->set_name(session_uri_);
@@ -101,7 +100,7 @@ zetasql_base::Status Session::ToProto(spanner_api::Session* session,
                    TimestampToProto(create_time_));
   ZETASQL_ASSIGN_OR_RETURN(*session->mutable_approximate_last_use_time(),
                    TimestampToProto(approximate_last_use_time_));
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTransaction(
@@ -112,7 +111,7 @@ zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTran
   // since session will also hold a reference to multi-use transaction object
   // for future uses.
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
-                   CreateTransaction(options, /*is_single_use = */ false));
+                   CreateTransaction(options, Transaction::Usage::kMultiUse));
 
   // Insert shared transaction object into transaction map.
   absl::MutexLock lock(&mu_);
@@ -130,16 +129,18 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>>
 Session::CreateSingleUseTransaction(
     const spanner_api::TransactionOptions& options) {
   ZETASQL_RETURN_IF_ERROR(ValidateSingleUseTransactionOptions(options));
-  return CreateTransaction(options, /*is_single_use = */ true);
+  return CreateTransaction(options, Transaction::Usage::kSingleUse);
 }
 
 zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateTransaction(
-    const spanner_api::TransactionOptions& options, bool is_single_use) {
+    const spanner_api::TransactionOptions& options,
+    const Transaction::Usage& usage) {
   switch (options.mode_case()) {
     case v1::TransactionOptions::kReadOnly:
-      return CreateReadOnly(options.read_only(), is_single_use);
+      return CreateReadOnly(options, usage);
     case v1::TransactionOptions::kReadWrite:
-      return CreateReadWrite(is_single_use);
+    case v1::TransactionOptions::kPartitionedDml:
+      return CreateReadWrite(options, usage);
     default:
       return error::Internal(
           "Unexpected TransactionOptions.mode for create transaction.");
@@ -147,25 +148,26 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateTransaction(
 }
 
 zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadOnly(
-    const spanner_api::TransactionOptions::ReadOnly& read_options,
-    bool is_single_use) {
+    const spanner_api::TransactionOptions& options,
+    const Transaction::Usage& usage) {
   absl::MutexLock lock(&mu_);
 
   // Populate read options.
-  ZETASQL_ASSIGN_OR_RETURN(backend::ReadOnlyOptions options,
-                   ReadOnlyOptionsFromProto(read_options));
+  ZETASQL_ASSIGN_OR_RETURN(backend::ReadOnlyOptions read_only_options,
+                   ReadOnlyOptionsFromProto(options.read_only()));
 
   // Create a new backend read only transaction.
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<backend::ReadOnlyTransaction> read_only_transaction,
-      database_->backend()->CreateReadOnlyTransaction(options));
-  return std::make_unique<Transaction>(
-      std::move(read_only_transaction), database_->backend()->query_engine(),
-      is_single_use, read_options.return_read_timestamp());
+      database_->backend()->CreateReadOnlyTransaction(read_only_options));
+  return std::make_unique<Transaction>(std::move(read_only_transaction),
+                                       database_->backend()->query_engine(),
+                                       options, usage);
 }
 
 zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadWrite(
-    bool is_single_use) {
+    const spanner_api::TransactionOptions& options,
+    const Transaction::Usage& usage) {
   absl::MutexLock lock(&mu_);
 
   // Create a new backend read write transaction.
@@ -175,8 +177,7 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadWrite(
           backend::ReadWriteOptions()));
   return std::make_unique<Transaction>(std::move(read_write_transaction),
                                        database_->backend()->query_engine(),
-                                       is_single_use,
-                                       /*return_read_timestamp = */ false);
+                                       options, usage);
 }
 
 zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::FindAndUseTransaction(

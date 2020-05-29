@@ -24,7 +24,7 @@
 #include "backend/datamodel/key_range.h"
 #include "backend/storage/iterator.h"
 #include "backend/storage/storage.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -42,23 +42,23 @@ namespace backend {
 // This class is thread-safe.
 class InMemoryStorage : public Storage {
  public:
-  zetasql_base::Status Lookup(absl::Time timestamp, const TableID& table_id,
+  absl::Status Lookup(absl::Time timestamp, const TableID& table_id,
                       const Key& key, const std::vector<ColumnID>& column_ids,
                       std::vector<zetasql::Value>* values) const override
       ABSL_LOCKS_EXCLUDED(mu_);
 
-  zetasql_base::Status Read(absl::Time timestamp, const TableID& table_id,
+  absl::Status Read(absl::Time timestamp, const TableID& table_id,
                     const KeyRange& key_range,
                     const std::vector<ColumnID>& column_ids,
                     std::unique_ptr<StorageIterator>* itr) const override
       ABSL_LOCKS_EXCLUDED(mu_);
 
-  zetasql_base::Status Write(absl::Time timestamp, const TableID& table_id,
+  absl::Status Write(absl::Time timestamp, const TableID& table_id,
                      const Key& key, const std::vector<ColumnID>& column_ids,
                      const std::vector<zetasql::Value>& values) override
       ABSL_LOCKS_EXCLUDED(mu_);
 
-  zetasql_base::Status Delete(absl::Time timestamp, const TableID& table_id,
+  absl::Status Delete(absl::Time timestamp, const TableID& table_id,
                       const KeyRange& key_range) override
       ABSL_LOCKS_EXCLUDED(mu_);
 

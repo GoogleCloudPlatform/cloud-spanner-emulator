@@ -25,14 +25,14 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "backend/access/write.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/schema/catalog/schema.h"
 #include "tests/common/row_cursor.h"
 #include "tests/common/schema_constructor.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -180,7 +180,7 @@ TEST_F(AccessProtosTest, CannotCreateMutationFromInvalidProto) {
 
   backend::Mutation mutation;
   EXPECT_THAT(MutationFromProto(*schema_.get(), mutation_pb, &mutation),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 
   google::spanner::v1::Mutation::Write invalid_column = PARSE_TEXT_PROTO(R"(
     table: "test_table"
@@ -190,7 +190,7 @@ TEST_F(AccessProtosTest, CannotCreateMutationFromInvalidProto) {
   *mutation_pb.Add()->mutable_insert() = invalid_column;
 
   EXPECT_THAT(MutationFromProto(*schema_.get(), mutation_pb, &mutation),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 }  // namespace

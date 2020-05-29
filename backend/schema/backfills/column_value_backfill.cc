@@ -20,7 +20,7 @@
 #include "zetasql/public/value.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/table.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -68,7 +68,7 @@ zetasql_base::StatusOr<zetasql::Value> RewriteColumnValue(
 
 }  // namespace
 
-zetasql_base::Status BackfillColumnValue(const Column* old_column,
+absl::Status BackfillColumnValue(const Column* old_column,
                                  const Column* new_column,
                                  const SchemaValidationContext* context) {
   ZETASQL_RET_CHECK_EQ(old_column->id(), new_column->id());
@@ -92,7 +92,7 @@ zetasql_base::Status BackfillColumnValue(const Column* old_column,
         {column_id}, {new_column_value}));
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

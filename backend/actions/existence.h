@@ -20,7 +20,7 @@
 #include "backend/actions/action.h"
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -36,9 +36,9 @@ namespace backend {
 // - Update: Validates there is an existing row with the same key in this table.
 class RowExistenceValidator : public Validator {
  private:
-  zetasql_base::Status Validate(const ActionContext* ctx,
+  absl::Status Validate(const ActionContext* ctx,
                         const InsertOp& op) const override;
-  zetasql_base::Status Validate(const ActionContext* ctx,
+  absl::Status Validate(const ActionContext* ctx,
                         const UpdateOp& op) const override;
 };
 

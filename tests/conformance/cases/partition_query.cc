@@ -18,7 +18,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/substitute.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -34,7 +34,7 @@ using zetasql_base::testing::StatusIs;
 
 class PartitionQueryTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     ZETASQL_RETURN_IF_ERROR(SetSchema({
         R"(
           CREATE TABLE Users(
@@ -53,7 +53,7 @@ class PartitionQueryTest : public DatabaseTest {
           ) PRIMARY KEY (UserId, ThreadId),
           INTERLEAVE IN PARENT Users ON DELETE CASCADE
         )"}));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
  protected:
@@ -72,6 +72,15 @@ class PartitionQueryTest : public DatabaseTest {
     ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
         "INSERT Users(UserId, Name, Age) Values (1, 'Levin', 27), "
         "(2, 'Mark', 32), (10, 'Douglas', 31)")}));
+
+    ZETASQL_EXPECT_OK(MultiInsert("Threads", {"UserId", "ThreadId", "Starred"},
+                          {{1, 1, true},
+                           {1, 2, true},
+                           {1, 3, true},
+                           {1, 4, false},
+                           {2, 1, false},
+                           {2, 2, true},
+                           {10, 1, false}}));
   }
 };
 
@@ -83,7 +92,7 @@ TEST_F(PartitionQueryTest, CannotQueryWithoutSession) {
   grpc::ClientContext context;
   EXPECT_THAT(raw_client()->PartitionQuery(&context, partition_query_request,
                                            &partition_query_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionQueryTest, CannotQueryWithoutTransaction) {
@@ -96,7 +105,7 @@ TEST_F(PartitionQueryTest, CannotQueryWithoutTransaction) {
   grpc::ClientContext context;
   EXPECT_THAT(raw_client()->PartitionQuery(&context, partition_query_request,
                                            &partition_query_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionQueryTest, CannotQueryUsingSingleUseTransaction) {
@@ -114,7 +123,7 @@ TEST_F(PartitionQueryTest, CannotQueryUsingSingleUseTransaction) {
   grpc::ClientContext context;
   EXPECT_THAT(raw_client()->PartitionQuery(&context, partition_query_request,
                                            &partition_query_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // Tests using cpp client library.
@@ -123,7 +132,7 @@ TEST_F(PartitionQueryTest, CannotQueryUsingBeginReadWriteTransaction) {
 
   // PartitionQuery using a begin read-write transaction fails.
   EXPECT_THAT(PartitionQuery(txn, "SELECT UserID, Name FROM Users"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionQueryTest, CannotQueryUsingExistingReadWriteTransaction) {
@@ -132,7 +141,7 @@ TEST_F(PartitionQueryTest, CannotQueryUsingExistingReadWriteTransaction) {
 
   // PartitionQuery using an already started read-write transaction fails.
   EXPECT_THAT(PartitionQuery(txn, "SELECT UserID, Name FROM Users"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionQueryTest, CannotQueryUsingInvalidPartitionOptions) {
@@ -143,13 +152,13 @@ TEST_F(PartitionQueryTest, CannotQueryUsingInvalidPartitionOptions) {
                                         .max_partitions = 100};
   EXPECT_THAT(
       PartitionQuery(txn, "SELECT UserID, Name FROM Users", partition_options),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Test that negative max_partitions is not allowed.
   partition_options = {.partition_size_bytes = 10000, .max_partitions = -1};
   EXPECT_THAT(
       PartitionQuery(txn, "SELECT UserID, Name FROM Users", partition_options),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionQueryTest, CanQueryUsingPartitionToken) {
@@ -163,6 +172,54 @@ TEST_F(PartitionQueryTest, CanQueryUsingPartitionToken) {
   EXPECT_THAT(
       Query(partitions),
       IsOkAndHoldsUnorderedRows({{1, "Levin"}, {2, "Mark"}, {10, "Douglas"}}));
+}
+
+TEST_F(PartitionQueryTest, CanReuseTransactionForPartitionQuery) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<QueryPartition> partitions,
+                         PartitionQuery(txn, "SELECT UserID, Name FROM Users"));
+    EXPECT_GE(partitions.size(), 1);
+  }
+
+  {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<QueryPartition> partitions,
+                         PartitionQuery(txn, "SELECT UserID FROM Users"));
+    EXPECT_GE(partitions.size(), 1);
+  }
+}
+
+// TODO : Implement check that sql statement in partition query is
+// root partitionable.
+TEST_F(PartitionQueryTest, DISABLED_CannotQueryNonRootPartitionableSql) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  EXPECT_THAT(
+      PartitionQuery(txn, "SELECT UserID, Name FROM Users ORDER BY Name"),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionQueryTest, CannotPartitionQueryWithoutSql) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+
+  spanner_api::PartitionQueryRequest partition_query_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            transaction { begin { read_only {} } }
+          )",
+          session.name()));
+
+  spanner_api::PartitionResponse partition_query_response;
+  grpc::ClientContext context;
+  EXPECT_THAT(raw_client()->PartitionQuery(&context, partition_query_request,
+                                           &partition_query_response),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionQueryTest, CannotQueryWithDifferentSession) {
@@ -202,7 +259,7 @@ TEST_F(PartitionQueryTest, CannotQueryWithDifferentSession) {
   grpc::ClientContext context;
   spanner_api::ResultSet query_response;
   EXPECT_THAT(raw_client()->ExecuteSql(&context, sql_request, &query_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionQueryTest, CannotQueryWithDifferentTransaction) {
@@ -241,7 +298,7 @@ TEST_F(PartitionQueryTest, CannotQueryWithDifferentTransaction) {
   grpc::ClientContext context;
   spanner_api::ResultSet query_response;
   EXPECT_THAT(raw_client()->ExecuteSql(&context, sql_request, &query_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionQueryTest, CannotQueryWithDifferentSql) {
@@ -280,7 +337,7 @@ TEST_F(PartitionQueryTest, CannotQueryWithDifferentSql) {
   grpc::ClientContext context;
   spanner_api::ResultSet query_response;
   EXPECT_THAT(raw_client()->ExecuteSql(&context, sql_request, &query_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionQueryTest, CannotQueryWithDifferentParams) {
@@ -343,7 +400,91 @@ TEST_F(PartitionQueryTest, CannotQueryWithDifferentParams) {
   grpc::ClientContext context;
   spanner_api::ResultSet query_response;
   EXPECT_THAT(raw_client()->ExecuteSql(&context, sql_request, &query_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionQueryTest, CanQueryWithMultipleParams) {
+  PopulateDatabase();
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+
+  spanner_api::PartitionQueryRequest partition_query_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+          session: "$0"
+          transaction { begin { read_only {} } }
+          sql: "SELECT UserID, ThreadId, Starred FROM Threads WHERE UserId=@id AND ThreadId=@tid"
+          params {
+            fields: {
+              key: "id",
+              value: {
+                number_value: 1
+              }
+            },
+            fields: {
+              key: "tid",
+              value: {
+                number_value: 2
+              }
+            },
+          }
+          param_types: {
+            key: "id"
+            value: { code: 3 }
+          }
+          param_types: {
+            key: "tid"
+            value: { code: 3 }
+          }
+        )",
+          session.name()));
+
+  spanner_api::PartitionResponse partition_query_response;
+  {
+    grpc::ClientContext context;
+    ZETASQL_ASSERT_OK(raw_client()->PartitionQuery(&context, partition_query_request,
+                                           &partition_query_response));
+  }
+  ASSERT_GT(partition_query_response.partitions().size(), 0);
+
+  // Validate that a query with same set of params can be executed using the
+  // partition token created above.
+  spanner_api::ExecuteSqlRequest sql_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            transaction { id: "$1" }
+            sql: "SELECT UserID, ThreadId, Starred FROM Threads WHERE UserId=@id AND ThreadId=@tid"
+            params {
+              fields: {
+                key: "id",
+                value: {
+                  number_value: 1
+                }
+              },
+              fields: {
+                key: "tid",
+                value: {
+                  number_value: 2
+                }
+              },
+            }
+            param_types: {
+              key: "id"
+              value: { code: 3 }
+            }
+            param_types: {
+              key: "tid"
+              value: { code: 3 }
+            }
+            partition_token: "$2"
+          )",
+          session.name(), partition_query_response.transaction().id(),
+          partition_query_response.partitions()[0].partition_token()));
+
+  grpc::ClientContext context;
+  spanner_api::ResultSet query_response;
+  ZETASQL_EXPECT_OK(raw_client()->ExecuteSql(&context, sql_request, &query_response));
 }
 
 TEST_F(PartitionQueryTest, CannotQueryWithInvalidQueryMode) {
@@ -392,7 +533,7 @@ TEST_F(PartitionQueryTest, CannotQueryWithInvalidQueryMode) {
     spanner_api::ResultSet query_response;
     EXPECT_THAT(
         raw_client()->ExecuteSql(&context, sql_request, &query_response),
-        StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+        StatusIs(absl::StatusCode::kInvalidArgument));
   }
 
   // Query mode PROFILE cannot be used with partition query.
@@ -402,7 +543,7 @@ TEST_F(PartitionQueryTest, CannotQueryWithInvalidQueryMode) {
     spanner_api::ResultSet query_response;
     EXPECT_THAT(
         raw_client()->ExecuteSql(&context, sql_request, &query_response),
-        StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+        StatusIs(absl::StatusCode::kInvalidArgument));
   }
 }
 

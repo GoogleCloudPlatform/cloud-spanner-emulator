@@ -20,7 +20,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -29,19 +29,19 @@ namespace backend {
 
 // Verifies that all the entries within a column are not NULL. Needed when
 // columns are updated with a 'NOT NULL' property.
-zetasql_base::Status VerifyColumnNotNull(const Table* table, const Column* column,
+absl::Status VerifyColumnNotNull(const Table* table, const Column* column,
                                  const SchemaValidationContext* context);
 
 // Verifies that all of the entries within a column are <= new_max_length.
 // This property must be true for resizing a column within a schema update.
-zetasql_base::Status VerifyColumnLength(const Table* table, const Column* column,
+absl::Status VerifyColumnLength(const Table* table, const Column* column,
                                 int64_t new_max_length,
                                 const SchemaValidationContext* context);
 
 // Verifies that a type change of a column is valid. Only STRING to BYTES and
 // BYTES to STRING conversions are allowed. Strings are UTF8 encoded, so a
 // conversion from BYTES to STRING must have valid UTF8 characters.
-zetasql_base::Status VerifyColumnTypeChange(const Table* table,
+absl::Status VerifyColumnTypeChange(const Table* table,
                                     const Column* old_column,
                                     const Column* new_column,
                                     const SchemaValidationContext* context);
@@ -49,7 +49,7 @@ zetasql_base::Status VerifyColumnTypeChange(const Table* table,
 // Verifies that all of the entries within a TIMESTAMP column where
 // allow_commit_timestamp=true are not in the future. Commit timestamps must be
 // before the schema pending commit timestamp supplied by the context.
-zetasql_base::Status VerifyColumnCommitTimestamp(
+absl::Status VerifyColumnCommitTimestamp(
     const Table* table, const Column* column,
     const SchemaValidationContext* context);
 

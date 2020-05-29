@@ -35,7 +35,7 @@
 #include "frontend/proto/partition_token.pb.h"
 #include "frontend/server/handler.h"
 #include "frontend/server/request_context.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
 
@@ -48,7 +48,7 @@ namespace spanner_api = ::google::spanner::v1;
 
 namespace {
 
-zetasql_base::Status ValidateTransactionSelectorForQuery(
+absl::Status ValidateTransactionSelectorForQuery(
     const spanner_api::TransactionSelector& selector, bool is_dml) {
   if (selector.selector_case() ==
           spanner_api::TransactionSelector::SelectorCase::kSingleUse &&
@@ -58,17 +58,17 @@ zetasql_base::Status ValidateTransactionSelectorForQuery(
   if (is_dml) {
     if (selector.begin().mode_case() == v1::TransactionOptions::kReadOnly) {
       // ReadWrite and PartitionedDML transactions are currently allowed.
-      return error::DmlRequiresReadWriteTransaction("ReadOnly");
+      return error::ReadOnlyTransactionDoesNotSupportDml("ReadOnly");
     }
     if (selector.selector_case() ==
         spanner_api::TransactionSelector::SelectorCase::kSingleUse) {
       return error::DmlDoesNotSupportSingleUseTransaction();
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidatePartitionToken(
+absl::Status ValidatePartitionToken(
     const PartitionToken& partition_token,
     const spanner_api::ExecuteSqlRequest* request) {
   if (request->query_mode() != v1::ExecuteSqlRequest::NORMAL) {
@@ -91,9 +91,15 @@ zetasql_base::Status ValidatePartitionToken(
     return error::ReadFromDifferentParameters();
   }
 
-  if (query_params.params().SerializeAsString() !=
-      request->params().SerializeAsString()) {
+  if (query_params.params().fields_size() != request->params().fields_size()) {
     return error::ReadFromDifferentParameters();
+  }
+  for (const auto& field : query_params.params().fields()) {
+    if (!request->params().fields().contains(field.first) ||
+        field.second.SerializeAsString() !=
+            request->params().fields().at(field.first).SerializeAsString()) {
+      return error::ReadFromDifferentParameters();
+    }
   }
 
   if (query_params.param_types_size() != request->param_types_size()) {
@@ -107,7 +113,7 @@ zetasql_base::Status ValidatePartitionToken(
     }
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 bool IsDmlResult(const backend::QueryResult& result) {
@@ -135,7 +141,7 @@ zetasql_base::StatusOr<backend::QueryResult> ExecuteQuery(
 }  //  namespace
 
 // Executes a SQL statement, returning all results in a single reply.
-zetasql_base::Status ExecuteSql(RequestContext* ctx,
+absl::Status ExecuteSql(RequestContext* ctx,
                         const spanner_api::ExecuteSqlRequest* request,
                         spanner_api::ResultSet* response) {
   // Take shared ownerships of session and transaction so that they will keep
@@ -150,17 +156,28 @@ zetasql_base::Status ExecuteSql(RequestContext* ctx,
                    session->FindOrInitTransaction(request->transaction()));
 
   // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> zetasql_base::Status {
+  return txn->GuardedCall([&]() -> absl::Status {
     // Cannot query after commit or rollback.
     if (txn->IsCommitted() || txn->IsRolledback()) {
+      if (txn->IsPartitionedDml()) {
+        return error::CannotReusePartitionedDmlTransaction();
+      }
       return error::CannotReadOrQueryAfterCommitOrRollback();
     }
 
+    // Convert and execute provided SQL statement.
     ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
                      QueryFromProto(request->sql(), request->params(),
                                     request->param_types(),
                                     txn->query_engine()->type_factory()));
-    ZETASQL_ASSIGN_OR_RETURN(backend::QueryResult result, txn->ExecuteSql(query));
+    auto maybe_result = txn->ExecuteSql(query);
+    if (!maybe_result.ok()) {
+      if (txn->IsPartitionedDml()) {
+        txn->Rollback().IgnoreError();
+      }
+      return maybe_result.status();
+    }
+    backend::QueryResult& result = maybe_result.value();
 
     // Populate transaction metadata.
     if (ShouldReturnTransaction(request->transaction())) {
@@ -169,7 +186,13 @@ zetasql_base::Status ExecuteSql(RequestContext* ctx,
     }
 
     if (IsDmlResult(result)) {
-      response->mutable_stats()->set_row_count_exact(result.modified_row_count);
+      if (txn->IsPartitionedDml()) {
+        response->mutable_stats()->set_row_count_lower_bound(
+            result.modified_row_count);
+      } else {
+        response->mutable_stats()->set_row_count_exact(
+            result.modified_row_count);
+      }
       // Set empty row type.
       response->mutable_metadata()->mutable_row_type();
     } else {
@@ -202,7 +225,7 @@ zetasql_base::Status ExecuteSql(RequestContext* ctx,
       return error::EmulatorDoesNotSupportQueryPlans();
     }
 
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   });
 }
 REGISTER_GRPC_HANDLER(Spanner, ExecuteSql);
@@ -212,7 +235,7 @@ REGISTER_GRPC_HANDLER(Spanner, ExecuteSql);
 // resume_tokens is not supported in the emulator. This implementation does not
 // limit the size of the response and therefore, chunked_value will always be
 // false.
-zetasql_base::Status ExecuteStreamingSql(
+absl::Status ExecuteStreamingSql(
     RequestContext* ctx, const spanner_api::ExecuteSqlRequest* request,
     ServerStream<spanner_api::PartialResultSet>* stream) {
   // Take shared ownerships of session and transaction so that they will keep
@@ -227,23 +250,39 @@ zetasql_base::Status ExecuteStreamingSql(
                    session->FindOrInitTransaction(request->transaction()));
 
   // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> zetasql_base::Status {
+  return txn->GuardedCall([&]() -> absl::Status {
     // Cannot query after commit or rollback.
     if (txn->IsCommitted() || txn->IsRolledback()) {
+      if (txn->IsPartitionedDml()) {
+        return error::CannotReusePartitionedDmlTransaction();
+      }
       return error::CannotReadOrQueryAfterCommitOrRollback();
     }
 
+    // Convert and execute provided SQL statement.
     ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
                      QueryFromProto(request->sql(), request->params(),
                                     request->param_types(),
                                     txn->query_engine()->type_factory()));
-    ZETASQL_ASSIGN_OR_RETURN(backend::QueryResult result, txn->ExecuteSql(query));
+    auto maybe_result = txn->ExecuteSql(query);
+    if (!maybe_result.ok()) {
+      if (txn->IsPartitionedDml()) {
+        txn->Rollback().IgnoreError();
+      }
+      return maybe_result.status();
+    }
+    backend::QueryResult& result = maybe_result.value();
 
     std::vector<spanner_api::PartialResultSet> responses;
     if (IsDmlResult(result)) {
       responses.emplace_back();
-      responses.back().mutable_stats()->set_row_count_exact(
-          result.modified_row_count);
+      if (txn->IsPartitionedDml()) {
+        responses.back().mutable_stats()->set_row_count_lower_bound(
+            result.modified_row_count);
+      } else {
+        responses.back().mutable_stats()->set_row_count_exact(
+            result.modified_row_count);
+      }
       // Set empty row type.
       responses.back().mutable_metadata()->mutable_row_type();
     } else {
@@ -291,13 +330,13 @@ zetasql_base::Status ExecuteStreamingSql(
     for (const auto& response : responses) {
       stream->Send(response);
     }
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   });
 }
 REGISTER_GRPC_HANDLER(Spanner, ExecuteStreamingSql);
 
 // Executes a batch of DML statements.
-zetasql_base::Status ExecuteBatchDml(RequestContext* ctx,
+absl::Status ExecuteBatchDml(RequestContext* ctx,
                              const spanner_api::ExecuteBatchDmlRequest* request,
                              spanner_api::ExecuteBatchDmlResponse* response) {
   // Verify the request has DML statement(s).
@@ -316,8 +355,12 @@ zetasql_base::Status ExecuteBatchDml(RequestContext* ctx,
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
 
+  if (txn->IsPartitionedDml()) {
+    return error::BatchDmlOnlySupportsReadWriteTransaction();
+  }
+
   // Wrap all operations on this transaction so they are atomic.
-  return txn->GuardedCall([&]() -> zetasql_base::Status {
+  return txn->GuardedCall([&]() -> absl::Status {
     // Cannot query after commit or rollback.
     if (txn->IsCommitted() || txn->IsRolledback()) {
       return error::CannotReadOrQueryAfterCommitOrRollback();
@@ -329,15 +372,15 @@ zetasql_base::Status ExecuteBatchDml(RequestContext* ctx,
         *response->mutable_status() =
             StatusToProto(error::ExecuteBatchDmlOnlySupportsDmlStatements(
                 index, statement.sql()));
-        return zetasql_base::OkStatus();
+        return absl::OkStatus();
       }
 
       auto maybe_result = ExecuteQuery(statement, txn);
       if (!maybe_result.ok() &&
-          maybe_result.status().code() != zetasql_base::StatusCode::kAborted) {
+          maybe_result.status().code() != absl::StatusCode::kAborted) {
         *response->mutable_status() = StatusToProto(maybe_result.status());
-        return zetasql_base::OkStatus();
-      } else if (maybe_result.status().code() == zetasql_base::StatusCode::kAborted) {
+        return absl::OkStatus();
+      } else if (maybe_result.status().code() == absl::StatusCode::kAborted) {
         return maybe_result.status();
       }
       auto& result = maybe_result.value();
@@ -353,7 +396,7 @@ zetasql_base::Status ExecuteBatchDml(RequestContext* ctx,
       }
     }
 
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   });
 }
 REGISTER_GRPC_HANDLER(Spanner, ExecuteBatchDml);

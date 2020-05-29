@@ -73,7 +73,7 @@ TEST_F(LockManagerTest, ConcurrentTransactionIsAborted) {
   EXPECT_FALSE(lh2->IsBlocked());
   EXPECT_TRUE(lh2->IsAborted());
   EXPECT_THAT(lh2->Wait(),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kAborted));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kAborted));
   EXPECT_TRUE(lh2->IsAborted());
 }
 
@@ -92,14 +92,14 @@ TEST_F(LockManagerTest, SequentialTransactionAcquiresLock) {
   // Second transaction does not get the lock yet.
   lh2->EnqueueLock(request());
   EXPECT_THAT(lh2->Wait(),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kAborted));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kAborted));
 
   // First transaction unlocks.
   lh1->UnlockAll();
 
   // Second transaction is still in a final aborted state.
   EXPECT_THAT(lh2->Wait(),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kAborted));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kAborted));
 
   // Now another transaction can get the lock.
   lh3->EnqueueLock(request());
@@ -144,10 +144,10 @@ TEST_F(LockManagerTest, EnsuresSerializationWithParallelTransactions) {
               std::unique_ptr<LockHandle> lh = manager()->CreateHandle(
                   TransactionID(++id_counter), TransactionPriority(1));
               lh->EnqueueLock(request());
-              zetasql_base::Status status = lh->Wait();
+              absl::Status status = lh->Wait();
 
               // Retry on aborts.
-              if (status.code() == zetasql_base::StatusCode::kAborted) {
+              if (status.code() == absl::StatusCode::kAborted) {
                 continue;
               } else {
                 ZETASQL_ASSERT_OK(status);

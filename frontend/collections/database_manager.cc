@@ -91,10 +91,10 @@ zetasql_base::StatusOr<std::shared_ptr<Database>> DatabaseManager::GetDatabase(
   return itr->second;
 }
 
-zetasql_base::Status DatabaseManager::DeleteDatabase(const std::string& database_uri) {
+absl::Status DatabaseManager::DeleteDatabase(const std::string& database_uri) {
   absl::MutexLock lock(&mu_);
   database_map_.erase(database_uri);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<std::vector<std::shared_ptr<Database>>>

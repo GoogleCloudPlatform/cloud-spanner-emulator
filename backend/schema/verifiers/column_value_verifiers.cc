@@ -22,7 +22,7 @@
 #include "zetasql/public/type.pb.h"
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_set.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/optional.h"
@@ -39,7 +39,7 @@
 #include "backend/storage/iterator.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
 
@@ -50,10 +50,10 @@ namespace backend {
 
 namespace {
 
-zetasql_base::Status VerifyColumnValue(
+absl::Status VerifyColumnValue(
     const SchemaValidationContext* context, const Table* table,
     const Column* column,
-    const std::function<zetasql_base::Status(const zetasql::Value& column_value,
+    const std::function<absl::Status(const zetasql::Value& column_value,
                                      const Key& key)>& verifier) {
   std::unique_ptr<StorageIterator> itr;
   ZETASQL_RETURN_IF_ERROR(context->storage()->Read(context->pending_commit_timestamp(),
@@ -65,17 +65,17 @@ zetasql_base::Status VerifyColumnValue(
       ZETASQL_RETURN_IF_ERROR(verifier(itr->ColumnValue(i), itr->Key()));
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status VerifyStringColumnValue(absl::string_view table_name,
+absl::Status VerifyStringColumnValue(absl::string_view table_name,
                                      absl::string_view column_name,
                                      const zetasql::Value& value,
                                      const Key& key,
                                      const zetasql::Type* new_column_type,
                                      int64_t new_max_length) {
   ZETASQL_RET_CHECK(value.type()->IsString());
-  zetasql_base::Status error;
+  absl::Status error;
   int64_t value_length;
   if (!zetasql::functions::LengthUtf8(value.string_value(), &value_length,
                                         &error)) {
@@ -88,10 +88,10 @@ zetasql_base::Status VerifyStringColumnValue(absl::string_view table_name,
     return error::InvalidColumnSizeReduction(column_name, new_max_length,
                                              value_length, key.DebugString());
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status VerifyBytesColumnValue(absl::string_view table_name,
+absl::Status VerifyBytesColumnValue(absl::string_view table_name,
                                     absl::string_view column_name,
                                     const zetasql::Value& value,
                                     const Key& key,
@@ -109,7 +109,7 @@ zetasql_base::Status VerifyBytesColumnValue(absl::string_view table_name,
   ZETASQL_RET_CHECK(new_column_type->IsString());
 
   // Check that it is valid UTF-8 encoding.
-  zetasql_base::Status error;
+  absl::Status error;
   int64_t encoded_chars;
   if (!zetasql::functions::LengthUtf8(value.bytes_value(), &encoded_chars,
                                         &error)) {
@@ -121,10 +121,10 @@ zetasql_base::Status VerifyBytesColumnValue(absl::string_view table_name,
     return error::InvalidColumnSizeReduction(column_name, new_max_length,
                                              encoded_chars, key.DebugString());
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status VerifyColumnValueOnTypeChange(
+absl::Status VerifyColumnValueOnTypeChange(
     absl::string_view table_name, absl::string_view column_name,
     const zetasql::Value& value, const Key& key,
     const zetasql::Type* old_column_type,
@@ -133,7 +133,7 @@ zetasql_base::Status VerifyColumnValueOnTypeChange(
 
   // Check for null-ness before accessing value.
   if (!value.is_valid() || value.is_null()) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   if (old_column_type->IsArray()) {
@@ -145,7 +145,7 @@ zetasql_base::Status VerifyColumnValueOnTypeChange(
           table_name, column_name, element, key, old_elem_type, new_elem_type,
           new_max_length));
     }
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   if (old_column_type->IsString()) {
@@ -161,17 +161,17 @@ zetasql_base::Status VerifyColumnValueOnTypeChange(
     ZETASQL_RETURN_IF_ERROR(VerifyBytesColumnValue(table_name, column_name, value, key,
                                            new_column_type, new_max_length));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status VerifyColumnValuesOnTypeChange(
+absl::Status VerifyColumnValuesOnTypeChange(
     const Table* table, const Column* column,
     const zetasql::Type* old_column_type,
     const zetasql::Type* new_column_type, int64_t new_max_length,
     const SchemaValidationContext* context) {
   return VerifyColumnValue(
       context, table, column,
-      [&](const zetasql::Value& value, const Key& key) -> zetasql_base::Status {
+      [&](const zetasql::Value& value, const Key& key) -> absl::Status {
         return VerifyColumnValueOnTypeChange(table->Name(), column->Name(),
                                              value, key, old_column_type,
                                              new_column_type, new_max_length);
@@ -180,20 +180,20 @@ zetasql_base::Status VerifyColumnValuesOnTypeChange(
 
 }  // namespace
 
-zetasql_base::Status VerifyColumnNotNull(const Table* table, const Column* column,
+absl::Status VerifyColumnNotNull(const Table* table, const Column* column,
                                  const SchemaValidationContext* context) {
   return VerifyColumnValue(
       context, table, column,
-      [&](const zetasql::Value& value, const Key& key) -> zetasql_base::Status {
+      [&](const zetasql::Value& value, const Key& key) -> absl::Status {
         if (!value.is_valid() || value.is_null()) {
           return error::NullValueForNotNullColumn(table->Name(), column->Name(),
                                                   key.DebugString());
         }
-        return zetasql_base::OkStatus();
+        return absl::OkStatus();
       });
 }
 
-zetasql_base::Status VerifyColumnLength(const Table* table, const Column* column,
+absl::Status VerifyColumnLength(const Table* table, const Column* column,
                                 int64_t new_max_length,
                                 const SchemaValidationContext* context) {
   const auto* column_type = column->GetType();
@@ -201,7 +201,7 @@ zetasql_base::Status VerifyColumnLength(const Table* table, const Column* column
                                         new_max_length, context);
 }
 
-zetasql_base::Status VerifyColumnTypeChange(const Table* table,
+absl::Status VerifyColumnTypeChange(const Table* table,
                                     const Column* old_column,
                                     const Column* new_column,
                                     const SchemaValidationContext* context) {
@@ -210,14 +210,14 @@ zetasql_base::Status VerifyColumnTypeChange(const Table* table,
       new_column->effective_max_length(), context);
 }
 
-zetasql_base::Status VerifyColumnCommitTimestamp(
+absl::Status VerifyColumnCommitTimestamp(
     const Table* table, const Column* column,
     const SchemaValidationContext* context) {
   return VerifyColumnValue(
       context, table, column,
-      [&](const zetasql::Value& value, const Key& key) -> zetasql_base::Status {
+      [&](const zetasql::Value& value, const Key& key) -> absl::Status {
         if (!value.is_valid() || value.is_null()) {
-          return zetasql_base::OkStatus();
+          return absl::OkStatus();
         }
         // Check that timestamp is not greater than commit time.
         if (value.type()->IsTimestamp() &&
@@ -225,7 +225,7 @@ zetasql_base::Status VerifyColumnCommitTimestamp(
           return error::CommitTimestampNotInFuture(
               column->Name(), key.DebugString(), value.ToTime());
         }
-        return zetasql_base::OkStatus();
+        return absl::OkStatus();
       });
 }
 

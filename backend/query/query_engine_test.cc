@@ -34,7 +34,7 @@
 #include "backend/schema/catalog/schema.h"
 #include "tests/common/row_reader.h"
 #include "tests/common/schema_constructor.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -233,7 +233,7 @@ TEST_F(QueryEngineTest, ExecuteSqlSelectsCountFromTable) {
 
 class MockRowWriter : public RowWriter {
  public:
-  MOCK_METHOD(zetasql_base::Status, Write, (const Mutation& m), (override));
+  MOCK_METHOD(absl::Status, Write, (const Mutation& m), (override));
 };
 
 TEST_F(QueryEngineTest, ExecuteInsertsTwoRows) {
@@ -252,7 +252,7 @@ TEST_F(QueryEngineTest, ExecuteInsertsTwoRows) {
                               ValueList{Int64(3), String("three")},
                               ValueList{Int64(5), String("five")})))))))
       .Times(1)
-      .WillOnce(Return(zetasql_base::OkStatus()));
+      .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{"INSERT INTO test_table (int64_col, string_col) "
                         "VALUES(5, 'five'), (3, 'three')"},
@@ -273,7 +273,7 @@ TEST_F(QueryEngineTest, ExecuteSqlDeleteRows) {
                                                         Key{{Int64(2)}},
                                                         Key{{Int64(4)}}))))))))
       .Times(1)
-      .WillOnce(Return(zetasql_base::OkStatus()));
+      .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(
       query_engine().ExecuteSql(Query{"DELETE FROM test_table "
                                       "WHERE int64_col > 1"},
@@ -297,7 +297,7 @@ TEST_F(QueryEngineTest, ExecuteSqlUpdatesRows) {
                   UnorderedElementsAre(ValueList{Int64(2), String("foo")},
                                        ValueList{Int64(4), String("foo")})))))))
       .Times(1)
-      .WillOnce(Return(zetasql_base::OkStatus()));
+      .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{"UPDATE test_table "
                         "SET string_col = 'foo' WHERE int64_col > 1"},
@@ -311,7 +311,7 @@ TEST_F(QueryEngineTest, CannotInsertDuplicateValuesForPrimaryKey) {
                   Query{"INSERT INTO test_table (int64_col, string_col) "
                         "VALUES(2, 'another two')"},
                   QueryContext{schema(), reader(), &writer}),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(QueryEngineTest, ConnotUpdatePrimaryKey) {
@@ -319,7 +319,7 @@ TEST_F(QueryEngineTest, ConnotUpdatePrimaryKey) {
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{"UPDATE test_table SET int64_col=2 WHERE int64_col=2"},
                   QueryContext{schema(), reader(), &writer}),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

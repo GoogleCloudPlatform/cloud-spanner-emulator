@@ -25,7 +25,7 @@
 #include "frontend/entities/session.h"
 #include "frontend/proto/partition_token.pb.h"
 #include "frontend/server/handler.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace spanner_api = ::google::spanner::v1;
@@ -37,7 +37,7 @@ namespace frontend {
 
 namespace {
 
-zetasql_base::Status ValidateTransactionSelectorForPartitionRead(
+absl::Status ValidateTransactionSelectorForPartitionRead(
     const spanner_api::TransactionSelector& selector) {
   // PartitionRead and PartitionQuery only support read only snapshot
   // transactions. Read/write and single use transactions are not supported.
@@ -46,10 +46,10 @@ zetasql_base::Status ValidateTransactionSelectorForPartitionRead(
       if (!selector.begin().has_read_only()) {
         return error::PartitionReadNeedsReadOnlyTxn();
       }
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
     case spanner_api::TransactionSelector::SelectorCase::kId: {
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
     case spanner_api::TransactionSelector::SelectorCase::kSingleUse:
       return error::PartitionReadDoesNotSupportSingleUseTransaction();
@@ -58,7 +58,7 @@ zetasql_base::Status ValidateTransactionSelectorForPartitionRead(
   }
 }
 
-zetasql_base::Status ValidatePartitionOptions(
+absl::Status ValidatePartitionOptions(
     const spanner_api::PartitionOptions& partition_options) {
   if (partition_options.partition_size_bytes() < 0) {
     return error::InvalidBytesPerBatch("partition_options");
@@ -66,7 +66,7 @@ zetasql_base::Status ValidatePartitionOptions(
   if (partition_options.max_partitions() < 0) {
     return error::InvalidMaxPartitionCount("partition_options");
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 // Create a partition token for the given partition read request and partitioned
@@ -93,6 +93,9 @@ zetasql_base::StatusOr<PartitionToken> CreatePartitionTokenForRead(
 zetasql_base::StatusOr<PartitionToken> CreatePartitionTokenForQuery(
     const google::spanner::v1::PartitionQueryRequest& request,
     const backend::TransactionID& txn_id, bool empty_partition) {
+  if (request.sql().empty()) {
+    return error::MissingRequiredFieldError("sql");
+  }
   PartitionToken partition_token;
   *partition_token.mutable_session() = request.session();
   *partition_token.mutable_transaction_id() = std::to_string(txn_id);
@@ -109,7 +112,7 @@ zetasql_base::StatusOr<PartitionToken> CreatePartitionTokenForQuery(
 }  //  namespace
 
 // Creates a set of partition tokens for executing parallel read operations.
-zetasql_base::Status PartitionRead(RequestContext* ctx,
+absl::Status PartitionRead(RequestContext* ctx,
                            const spanner_api::PartitionReadRequest* request,
                            spanner_api::PartitionResponse* response) {
   // Take shared ownerships of session and transaction so that they will keep
@@ -153,12 +156,12 @@ zetasql_base::Status PartitionRead(RequestContext* ctx,
   *response->mutable_partitions()->Add() = empty_partition;
   *response->mutable_partitions()->Add() = full_partition;
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Spanner, PartitionRead);
 
 // Creates a set of partition tokens for executing parallel query operations.
-zetasql_base::Status PartitionQuery(RequestContext* ctx,
+absl::Status PartitionQuery(RequestContext* ctx,
                             const spanner_api::PartitionQueryRequest* request,
                             spanner_api::PartitionResponse* response) {
   // Take shared ownerships of session and transaction so that they will keep
@@ -202,7 +205,7 @@ zetasql_base::Status PartitionQuery(RequestContext* ctx,
   *response->mutable_partitions()->Add() = empty_partition;
   *response->mutable_partitions()->Add() = full_partition;
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Spanner, PartitionQuery);
 

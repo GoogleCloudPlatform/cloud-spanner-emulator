@@ -27,7 +27,7 @@ using zetasql_base::testing::StatusIs;
 
 class DeleteRangeTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE Users(
         ShardID  INT64 NOT NULL,
@@ -49,15 +49,15 @@ TEST_F(DeleteRangeTest, CannotDeleteRangeWithMultipleDifferingKeyParts) {
 
   // DeleteRange only allows keys to differ in last part.
   EXPECT_THAT(Delete("Users", ClosedOpen(Key(1, 2, "a"), Key(1, 3, "b"))),
-              StatusIs(zetasql_base::StatusCode::kUnimplemented));
+              StatusIs(absl::StatusCode::kUnimplemented));
   EXPECT_THAT(Delete("Users", ClosedOpen(Key(1), Key(1, 3, "b"))),
-              StatusIs(zetasql_base::StatusCode::kUnimplemented));
+              StatusIs(absl::StatusCode::kUnimplemented));
   EXPECT_THAT(Delete("Users", ClosedClosed(Key(1, 2, "a"), Key(2))),
-              StatusIs(zetasql_base::StatusCode::kUnimplemented));
+              StatusIs(absl::StatusCode::kUnimplemented));
   EXPECT_THAT(Delete("Users", ClosedClosed(Key(), Key(2, 3))),
-              StatusIs(zetasql_base::StatusCode::kUnimplemented));
+              StatusIs(absl::StatusCode::kUnimplemented));
   EXPECT_THAT(Delete("Users", ClosedClosed(Key(2, 3), Key())),
-              StatusIs(zetasql_base::StatusCode::kUnimplemented));
+              StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 }  // namespace

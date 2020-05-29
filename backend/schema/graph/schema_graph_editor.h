@@ -27,7 +27,7 @@
 #include "backend/schema/graph/schema_objects_pool.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "zetasql/base/ret_check.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
 
@@ -50,12 +50,14 @@ namespace backend {
 // not be re-used after a call to CanonicalizeGraph().
 class SchemaGraphEditor {
  public:
-  explicit SchemaGraphEditor(const SchemaGraph* original_graph)
+  explicit SchemaGraphEditor(const SchemaGraph* original_graph,
+                             SchemaValidationContext* context)
       : original_graph_(original_graph),
+        context_(context),
         cloned_pool_(absl::make_unique<SchemaObjectsPool>()) {}
 
   template <typename T>
-  using EditCallback = std::function<zetasql_base::Status(typename T::Editor&)>;
+  using EditCallback = std::function<absl::Status(typename T::Editor&)>;
 
   // Creates a modifiable clone of 'node'. If the node is already cloned
   // for modifcation, re-uses the existing clone. The clone is modified through
@@ -67,7 +69,7 @@ class SchemaGraphEditor {
   // status. When the graph is canonicalized, the modified clone replaces all
   // references to the original node.
   template <typename T>
-  zetasql_base::Status EditNode(const SchemaNode* node,
+  absl::Status EditNode(const SchemaNode* node,
                         const EditCallback<T>& edit_cb) {
     ZETASQL_RET_CHECK_EQ(deleted_node_, nullptr)
         << "Graph has a deleted node. It must be canonicalized before "
@@ -93,23 +95,17 @@ class SchemaGraphEditor {
     ZETASQL_RETURN_IF_ERROR(edit_cb(editor));
 
     // On succesful modification, register the clone.
-    return zetasql_base::OkStatus();
-  }
-
-  // Sets the context in which modifications to the schema must be validated.
-  // Must be called before calling `CanonicalizeGraph()`.
-  void set_validation_context(SchemaValidationContext* context) {
-    context_ = context;
+    return absl::OkStatus();
   }
 
   // Marks 'node' as deleted from the graph. The delete may result in
   // cascading deletes depending on how the different SchemaNode(s)
   // handle deletes of children in their respective DeepClone()
   // implementations.
-  zetasql_base::Status DeleteNode(const SchemaNode* node);
+  absl::Status DeleteNode(const SchemaNode* node);
 
   // Adds 'node' to the graph.
-  zetasql_base::Status AddNode(std::unique_ptr<const SchemaNode> node);
+  absl::Status AddNode(std::unique_ptr<const SchemaNode> node);
 
   // Makes a new clone of the schema graph, fixing up node-relationships
   // after edits and calling validation on the node graph being edited.
@@ -192,7 +188,7 @@ class SchemaGraphEditor {
 
   // Clones the original schema and creates the mapping of
   // original nodes to clones.
-  zetasql_base::Status InitCloneMap();
+  absl::Status InitCloneMap();
 
   // Returns OK if 'node' is present in the original graph.
   bool IsOriginalNode(const SchemaNode* node) const;
@@ -202,22 +198,22 @@ class SchemaGraphEditor {
 
   // Updates the pointers to other SchemaNodes in the graph held by 'node'
   // to point to their canonicalized versions. Does not create any clones.
-  zetasql_base::Status Fixup(const SchemaNode* node);
+  absl::Status Fixup(const SchemaNode* node);
 
-  zetasql_base::Status FixupInternal(const SchemaNode* original,
+  absl::Status FixupInternal(const SchemaNode* original,
                              SchemaNode* mutable_clone);
 
   // Canonicalizes the graph to process any pending edits/additions.
-  zetasql_base::Status CanonicalizeEdits();
+  absl::Status CanonicalizeEdits();
 
   // Canonicalizes the graph to process any pending deletes.
-  zetasql_base::Status CanonicalizeDeletion();
+  absl::Status CanonicalizeDeletion();
 
   // Checks certain invariants about number of nodes and clones.
-  zetasql_base::Status CheckInvariants() const;
+  absl::Status CheckInvariants() const;
 
   // Calls Validate() and ValidateUpdate() on the new nodes.
-  zetasql_base::Status CheckValid() const;
+  absl::Status CheckValid() const;
 
   // The current depth of the cloning stack.
   int depth_ = 0;

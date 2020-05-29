@@ -24,7 +24,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "backend/access/read.h"
 #include "backend/common/ids.h"
 #include "backend/datamodel/key_set.h"
@@ -84,7 +84,7 @@ TEST_F(DatabaseTest, UpdateSchemaSuccessful) {
     CREATE INDEX I on T(k1)
   )"};
 
-  zetasql_base::Status backfill_status;
+  absl::Status backfill_status;
   int completed_statements;
   absl::Time commit_ts;
   ZETASQL_EXPECT_OK(db->UpdateSchema(update_statements, &completed_statements,
@@ -127,7 +127,7 @@ TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
     ) PRIMARY KEY(b)
   )"};
 
-  zetasql_base::Status backfill_status;
+  absl::Status backfill_status;
   int completed_statements;
   absl::Time commit_ts;
 
@@ -158,7 +158,7 @@ TEST_F(DatabaseTest, ConcurrentSchemaChangeIsAborted) {
                        db->CreateReadWriteTransaction(ReadWriteOptions()));
   ZETASQL_EXPECT_OK(txn->Read(read_column("T", "k1"), &row_cursor));
 
-  zetasql_base::Status backfill_status;
+  absl::Status backfill_status;
   int completed_statements;
   absl::Time commit_ts;
   EXPECT_EQ(
@@ -180,7 +180,7 @@ TEST_F(DatabaseTest, SchemaChangeLocksSuccesfullyReleased) {
     ) PRIMARY KEY(k1))"}));
 
   // Schema update will fail.
-  zetasql_base::Status backfill_status;
+  absl::Status backfill_status;
   int completed_statements;
   absl::Time commit_ts;
   EXPECT_FALSE(db->UpdateSchema({R"(

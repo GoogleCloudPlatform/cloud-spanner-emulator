@@ -45,7 +45,7 @@ namespace protobuf_api = ::google::protobuf;
 }  // namespace
 
 // Lists all databases in an instance.
-zetasql_base::Status ListDatabases(RequestContext* ctx,
+absl::Status ListDatabases(RequestContext* ctx,
                            const database_api::ListDatabasesRequest* request,
                            database_api::ListDatabasesResponse* response) {
   // Validate that the ListDatabases request is for a valid instance.
@@ -80,12 +80,12 @@ zetasql_base::Status ListDatabases(RequestContext* ctx,
       ZETASQL_RETURN_IF_ERROR(database->ToProto(response->add_databases()));
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(DatabaseAdmin, ListDatabases);
 
 // Creates a new database within an instance.
-zetasql_base::Status CreateDatabase(RequestContext* ctx,
+absl::Status CreateDatabase(RequestContext* ctx,
                             const database_api::CreateDatabaseRequest* request,
                             operations_api::Operation* response) {
   // Validate the request.
@@ -130,12 +130,12 @@ zetasql_base::Status CreateDatabase(RequestContext* ctx,
   operation->SetResponse(response_database);
   operation->ToProto(response);
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(DatabaseAdmin, CreateDatabase);
 
 // Gets the current state of a database.
-zetasql_base::Status GetDatabase(RequestContext* ctx,
+absl::Status GetDatabase(RequestContext* ctx,
                          const database_api::GetDatabaseRequest* request,
                          database_api::Database* response) {
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Database> database,
@@ -145,7 +145,7 @@ zetasql_base::Status GetDatabase(RequestContext* ctx,
 REGISTER_GRPC_HANDLER(DatabaseAdmin, GetDatabase);
 
 // Updates the schema of a database.
-zetasql_base::Status UpdateDatabaseDdl(
+absl::Status UpdateDatabaseDdl(
     RequestContext* ctx, const database_api::UpdateDatabaseDdlRequest* request,
     operations_api::Operation* response) {
   // Validate request URI.
@@ -179,7 +179,7 @@ zetasql_base::Status UpdateDatabaseDdl(
   backend::Database* backend_database = database->backend();
   int num_succesful_statements;
   absl::Time commit_timestamp;
-  zetasql_base::Status backfill_status;
+  absl::Status backfill_status;
   ZETASQL_RETURN_IF_ERROR(
       backend_database->UpdateSchema(statements, &num_succesful_statements,
                                      &commit_timestamp, &backfill_status));
@@ -213,12 +213,12 @@ zetasql_base::Status UpdateDatabaseDdl(
   }
   operation->ToProto(response);
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(DatabaseAdmin, UpdateDatabaseDdl);
 
 // Drops (aka deletes) a database.
-zetasql_base::Status DropDatabase(RequestContext* ctx,
+absl::Status DropDatabase(RequestContext* ctx,
                           const database_api::DropDatabaseRequest* request,
                           protobuf_api::Empty* response) {
   // Validate the request.
@@ -247,7 +247,7 @@ zetasql_base::Status DropDatabase(RequestContext* ctx,
 REGISTER_GRPC_HANDLER(DatabaseAdmin, DropDatabase);
 
 // Returns the schema of a database as a list of formatted DDL statements.
-zetasql_base::Status GetDatabaseDdl(RequestContext* ctx,
+absl::Status GetDatabaseDdl(RequestContext* ctx,
                             const database_api::GetDatabaseDdlRequest* request,
                             database_api::GetDatabaseDdlResponse* response) {
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Database> database,
@@ -257,7 +257,7 @@ zetasql_base::Status GetDatabaseDdl(RequestContext* ctx,
   for (auto statement : ddl_statements) {
     response->add_statements(statement);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(DatabaseAdmin, GetDatabaseDdl);
 

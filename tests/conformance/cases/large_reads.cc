@@ -32,7 +32,7 @@ constexpr int64_t kStringSize = 409600;
 
 class LargeReadsTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     ZETASQL_RETURN_IF_ERROR(SetSchema({R"(
       CREATE TABLE Users(
         ID   INT64,
@@ -40,7 +40,7 @@ class LargeReadsTest : public DatabaseTest {
         List ARRAY<STRING(MAX)>,
       ) PRIMARY KEY (ID)
     )"}));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
  protected:

@@ -31,7 +31,7 @@ using zetasql_base::testing::StatusIs;
 
 class ArraysTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE TestTable(
         ID             INT64 NOT NULL,
@@ -77,18 +77,48 @@ TEST_F(ArraysTest, InsertBasicArraysSucceed) {
       }));
 }
 
-TEST_F(ArraysTest, InsertAndUpdateArraySucceeds) {
+TEST_F(ArraysTest, InsertOrUpdateArraySucceeds) {
   Array<std::string> old_string_arr{"value1", "value2", "value3"};
   Array<std::string> new_string_arr{"new-value1", "new-value2", "new-value3"};
+  Array<std::int64_t> num_arr{1, 2, 3};
 
   ZETASQL_EXPECT_OK(
       InsertOrUpdate("TestTable", {"ID", "StringArray"}, {1, old_string_arr}));
   EXPECT_THAT(ReadAll("TestTable", {"ID", "StringArray"}),
               IsOkAndHoldsRows({{1, old_string_arr}}));
-  ZETASQL_EXPECT_OK(
-      InsertOrUpdate("TestTable", {"ID", "StringArray"}, {1, new_string_arr}));
-  EXPECT_THAT(ReadAll("TestTable", {"ID", "StringArray"}),
-              IsOkAndHoldsRows({{1, new_string_arr}}));
+  ZETASQL_EXPECT_OK(InsertOrUpdate("TestTable", {"ID", "StringArray", "NumArray"},
+                           {1, new_string_arr, num_arr}));
+  EXPECT_THAT(ReadAll("TestTable", {"ID", "StringArray", "NumArray"}),
+              IsOkAndHoldsRows({{1, new_string_arr, num_arr}}));
+}
+
+TEST_F(ArraysTest, UpdateArraySucceeds) {
+  Array<std::string> old_string_arr{"value1", "value2", "value3"};
+  Array<std::string> new_string_arr{"new-value1", "new-value2", "new-value3"};
+  Array<std::int64_t> num_arr{1, 2, 3};
+
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "StringArray", "NumArray"},
+                   {1, old_string_arr, num_arr}));
+  EXPECT_THAT(ReadAll("TestTable", {"ID", "StringArray", "NumArray"}),
+              IsOkAndHoldsRows({{1, old_string_arr, num_arr}}));
+  ZETASQL_EXPECT_OK(Update("TestTable", {"ID", "StringArray"}, {1, new_string_arr}));
+  EXPECT_THAT(ReadAll("TestTable", {"ID", "StringArray", "NumArray"}),
+              IsOkAndHoldsRows({{1, new_string_arr, num_arr}}));
+}
+
+TEST_F(ArraysTest, ReplaceArraySucceeds) {
+  Array<std::string> old_string_arr{"value1", "value2", "value3"};
+  Array<std::string> new_string_arr{"new-value1", "new-value2", "new-value3"};
+  Array<std::int64_t> num_arr{1, 2, 3};
+
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "StringArray", "NumArray"},
+                   {1, old_string_arr, num_arr}));
+  EXPECT_THAT(ReadAll("TestTable", {"ID", "StringArray", "NumArray"}),
+              IsOkAndHoldsRows({{1, old_string_arr, num_arr}}));
+  ZETASQL_EXPECT_OK(Replace("TestTable", {"ID", "StringArray"}, {1, new_string_arr}));
+  EXPECT_THAT(
+      ReadAll("TestTable", {"ID", "StringArray", "NumArray"}),
+      IsOkAndHoldsRows({{1, new_string_arr, Null<Array<std::int64_t>>()}}));
 }
 
 TEST_F(ArraysTest, InsertArrayThatExceedsSizeLimitFails) {
@@ -96,9 +126,9 @@ TEST_F(ArraysTest, InsertArrayThatExceedsSizeLimitFails) {
   Array<Bytes> bytes_arr{Bytes("1234567890abcdefghijklmnopqrstuvwxyz")};
 
   EXPECT_THAT(Insert("TestTable", {"ID", "StringArray"}, {1, string_arr}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
   EXPECT_THAT(Insert("TestTable", {"ID", "BytesArray"}, {2, bytes_arr}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(ArraysTest, InsertArrayWithMaxDataPerColumnSucceeds) {
@@ -118,7 +148,7 @@ TEST_F(ArraysTest, InsertInvalidDateArrayFails) {
   Array<Date> date_arr{Date(/*year=*/0, /*month=*/0, /*day=*/0)};
 
   EXPECT_THAT(Insert("TestTable", {"ID", "DateArray"}, {1, date_arr}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(ArraysTest, InsertEmptyArraysSucceed) {

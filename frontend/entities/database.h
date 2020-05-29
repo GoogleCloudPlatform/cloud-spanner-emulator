@@ -22,7 +22,7 @@
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "absl/time/time.h"
 #include "backend/database/database.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -50,7 +50,7 @@ class Database {
   backend::Database* backend() const { return backend_.get(); }
 
   // Converts this database object to its proto representation.
-  zetasql_base::Status ToProto(admin::database::v1::Database* database);
+  absl::Status ToProto(admin::database::v1::Database* database);
 
  private:
   // The URI for this database.

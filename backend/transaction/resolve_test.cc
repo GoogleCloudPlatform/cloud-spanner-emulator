@@ -30,7 +30,7 @@
 #include "common/clock.h"
 #include "common/errors.h"
 #include "tests/common/schema_constructor.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -96,7 +96,7 @@ TEST_F(ResolveTest, CanResolveTableAndColumnsFromReadArg) {
 TEST_F(ResolveTest, CannotResolveEmptyReadArg) {
   backend::ReadArg read_arg;
   EXPECT_THAT(ResolveReadArg(read_arg, schema_.get()),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(ResolveTest, CannotResolveReadArgWithInvalidTable) {
@@ -106,7 +106,7 @@ TEST_F(ResolveTest, CannotResolveReadArgWithInvalidTable) {
   read_arg.key_set = KeySet(Key({Int64(1)}));
 
   EXPECT_THAT(ResolveReadArg(read_arg, schema_.get()),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(ResolveTest, CannotResolveReadArgWithInvalidColumns) {
@@ -116,7 +116,7 @@ TEST_F(ResolveTest, CannotResolveReadArgWithInvalidColumns) {
   read_arg.key_set = KeySet(Key({Int64(1)}));
 
   EXPECT_THAT(ResolveReadArg(read_arg, schema_.get()),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(ResolveTest, CanResolveTableAndColumnsFromReadArgWithIndex) {
@@ -142,7 +142,7 @@ TEST_F(ResolveTest, CannotResolveReadArgWithInvalidIndex) {
   read_arg.key_set = KeySet(Key({String("value")}));
 
   EXPECT_THAT(ResolveReadArg(read_arg, schema_.get()),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(ResolveTest, CanResolveInsertMutationOp) {

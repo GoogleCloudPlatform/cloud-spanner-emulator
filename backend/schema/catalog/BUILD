@@ -44,10 +44,10 @@ cc_library(
         "//common:limits",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
         "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/public:options_cc_proto",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:type_cc_proto",
@@ -67,10 +67,10 @@ cc_library(
         "//common:errors",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:status",
     ],
 )
 

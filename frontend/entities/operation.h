@@ -22,7 +22,7 @@
 #include "google/longrunning/operations.pb.h"
 #include "google/protobuf/message.h"
 #include "absl/synchronization/mutex.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -47,7 +47,7 @@ class Operation {
 
   // Sets the error for an operation (puts the operation in a done state).
   // If a response has been set previously, it will be cleared.
-  void SetError(const zetasql_base::Status& status) ABSL_LOCKS_EXCLUDED(mu_);
+  void SetError(const absl::Status& status) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Sets the response for an operation (puts the operation in a done state).
   // If an error status was set previously, it will be cleared.
@@ -71,7 +71,7 @@ class Operation {
   std::unique_ptr<google::protobuf::Message> response_ ABSL_GUARDED_BY(mu_);
 
   // The status for this operation if this operation was not successful.
-  zetasql_base::Status status_ ABSL_GUARDED_BY(mu_);
+  absl::Status status_ ABSL_GUARDED_BY(mu_);
 };
 
 }  // namespace frontend

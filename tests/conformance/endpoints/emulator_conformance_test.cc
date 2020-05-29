@@ -19,10 +19,10 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "frontend/server/server.h"
-#include "tests/conformance/common/environment.h"
 #include "google/cloud/spanner/create_instance_request_builder.h"
 #include "google/cloud/spanner/instance_admin_client.h"
+#include "frontend/server/server.h"
+#include "tests/conformance/common/environment.h"
 
 namespace google {
 namespace spanner {

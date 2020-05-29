@@ -19,7 +19,7 @@
 
 #include "zetasql/public/type.h"
 #include "backend/schema/ddl/operations.pb.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

@@ -48,7 +48,7 @@ class TestReadOnlyStore : public ReadOnlyStore {
   zetasql_base::StatusOr<bool> PrefixExists(const Table* table,
                                     const Key& prefix_key) const override;
 
-  zetasql_base::Status Insert(const Table* table, const Key& key,
+  absl::Status Insert(const Table* table, const Key& key,
                       absl::Span<const Column* const> columns,
                       const std::vector<zetasql::Value>& values = {});
 

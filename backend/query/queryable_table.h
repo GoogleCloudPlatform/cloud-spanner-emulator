@@ -27,7 +27,7 @@
 #include "backend/access/read.h"
 #include "backend/query/queryable_column.h"
 #include "backend/schema/catalog/table.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

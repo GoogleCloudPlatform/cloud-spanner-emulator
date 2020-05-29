@@ -27,7 +27,7 @@ namespace emulator {
 namespace frontend {
 
 // Sets the access control policy on a resource.
-zetasql_base::Status SetIamPolicy(RequestContext* ctx,
+absl::Status SetIamPolicy(RequestContext* ctx,
                           const iam_api::SetIamPolicyRequest* request,
                           iam_api::Policy* response) {
   return error::IAMPoliciesNotSupported();
@@ -36,7 +36,7 @@ REGISTER_GRPC_HANDLER(InstanceAdmin, SetIamPolicy);
 REGISTER_GRPC_HANDLER(DatabaseAdmin, SetIamPolicy);
 
 // Gets the access control policy for a resource.
-zetasql_base::Status GetIamPolicy(RequestContext* ctx,
+absl::Status GetIamPolicy(RequestContext* ctx,
                           const iam_api::GetIamPolicyRequest* request,
                           iam_api::Policy* response) {
   return error::IAMPoliciesNotSupported();
@@ -45,7 +45,7 @@ REGISTER_GRPC_HANDLER(InstanceAdmin, GetIamPolicy);
 REGISTER_GRPC_HANDLER(DatabaseAdmin, GetIamPolicy);
 
 // Returns permissions that the caller has on the specified resource.
-zetasql_base::Status TestIamPermissions(
+absl::Status TestIamPermissions(
     RequestContext* ctx, const iam_api::TestIamPermissionsRequest* request,
     iam_api::TestIamPermissionsResponse* response) {
   return error::IAMPoliciesNotSupported();

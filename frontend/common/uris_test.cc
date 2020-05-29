@@ -38,10 +38,10 @@ TEST(UriUtilTest, InvalidProjectUriReturnsInvalidArgumentError) {
   absl::string_view invalid_uri = "project/test-project-0";
   absl::string_view project_id;
   EXPECT_THAT(ParseProjectUri(invalid_uri, &project_id),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   invalid_uri = "/projects/test-project-0";
   EXPECT_THAT(ParseProjectUri(invalid_uri, &project_id),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(UriUtilTest, MakeProjectUri) {
@@ -77,24 +77,24 @@ TEST(UriUtilTest, ParseInvalidDatabaseUriReturnsInvalidArgumentError) {
                                "test-instance/databases/"
                                "test-database",
                                &project_id, &instance_id, &database_id),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(
       ParseDatabaseUri(
           "projects/test-project/invalid-instances/test-instance/databases/"
           "test-database",
           &project_id, &instance_id, &database_id),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(
       ParseDatabaseUri(
           "projects/test-project/instances/test-instance/invalid-databases/"
           "test-database",
           &project_id, &instance_id, &database_id),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(ParseDatabaseUri(
                   "projects/test-project/instances/test-instance//databases/"
                   "test-database",
                   &project_id, &instance_id, &database_id),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(UriUtilTest, ParseSessionUri) {
@@ -117,7 +117,7 @@ TEST(UriUtilTest, InvalidSessionUri) {
   absl::string_view project_id, instance_id, database_id, session_id;
   EXPECT_THAT(ParseSessionUri(session_uri, &project_id, &instance_id,
                               &database_id, &session_id),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(UriUtilTest, InvalidInstanceConfigUriReturnsInvalidArgumentError) {
@@ -126,7 +126,7 @@ TEST(UriUtilTest, InvalidInstanceConfigUriReturnsInvalidArgumentError) {
       "projects/test-project-0/instances/test-instance-config-0";
   EXPECT_THAT(
       ParseInstanceConfigUri(invalid_uri, &project_id, &instance_config_id),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(UriUtilTest, MakeInstanceConfigUri) {
@@ -150,7 +150,7 @@ TEST(UriUtilTest, InvalidInstanceUriReturnsInvalidArgumentError) {
   absl::string_view invalid_uri =
       "projects/test-project-0/instanceConfigs/test-instance-0";
   EXPECT_THAT(ParseInstanceUri(invalid_uri, &project_id, &instance_id),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(UriUtilTest, MakeInstanceUri) {

@@ -21,7 +21,7 @@
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "backend/locking/request.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -89,14 +89,14 @@ class LockHandle {
   // Waits till all locks requested via this handle have either all been granted
   // or have at least one request denied. Lock denials will return ABORTED
   // status, otherwise OK will be returned.
-  zetasql_base::Status Wait() ABSL_LOCKS_EXCLUDED(mu_);
+  absl::Status Wait() ABSL_LOCKS_EXCLUDED(mu_);
 
   // Returns timestamp which can be used by this transaction as a commit
   // timestamp.
   zetasql_base::StatusOr<absl::Time> ReserveCommitTimestamp();
 
   // Notifies the LockManager that this transaction has committed.
-  zetasql_base::Status MarkCommitted();
+  absl::Status MarkCommitted();
 
   // Waits for the intended read timestamp to be safe from any in-progress
   // commits.
@@ -111,7 +111,7 @@ class LockHandle {
   ~LockHandle();
 
   // Aborts the requests made by this handle (and puts it in a final state).
-  void Abort(const zetasql_base::Status& status) ABSL_LOCKS_EXCLUDED(mu_);
+  void Abort(const absl::Status& status) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Resets the state of this handle.
   void Reset() ABSL_LOCKS_EXCLUDED(mu_);
@@ -129,7 +129,7 @@ class LockHandle {
   absl::Mutex mu_;
 
   // The status of the lock handle requests.
-  zetasql_base::Status status_ ABSL_GUARDED_BY(mu_);
+  absl::Status status_ ABSL_GUARDED_BY(mu_);
 };
 
 }  // namespace backend

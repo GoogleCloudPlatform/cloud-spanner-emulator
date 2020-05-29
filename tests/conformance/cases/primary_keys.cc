@@ -27,7 +27,7 @@ using zetasql_base::testing::StatusIs;
 
 class PrimaryKeysTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE TableWithNullableKey(
         key1 STRING(MAX) NOT NULL,
@@ -51,7 +51,7 @@ TEST_F(PrimaryKeysTest, CanInsertRowWithMultiPartKey) {
 TEST_F(PrimaryKeysTest, CannotInsertWithoutRequiredKeyColumn) {
   // Check that we cannot do an insert if we skip key1 which is required.
   EXPECT_THAT(Insert("TableWithNullableKey", {"key2"}, {"key2_val"}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(PrimaryKeysTest, CanInsertWithNullableKeyColumn) {
@@ -80,14 +80,14 @@ TEST_F(PrimaryKeysTest, CannotInsertNullForNotNullKeyColumn) {
   // Try to insert a row with key1 explicitly specified as NULL.
   EXPECT_THAT(Insert("TableWithNullableKey", {"key1", "key2", "col1"},
                      {Null<std::string>(), "key2_val", "col1_val"}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(PrimaryKeysTest, CannotInsertKeyTooLarge) {
   std::string long_str(8192, 'a');
   EXPECT_THAT(
       Insert("TableWithNullableKey", {"key1", "key2"}, {long_str, "abc"}),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

@@ -91,7 +91,7 @@ TEST_F(SessionExistenceTest, WrongSessionId) {
       "sessions/nonexist-session";
   EXPECT_THAT(GetSession(request_context_.get(), wrong_session_uri),
               zetasql_base::testing::StatusIs(
-                  zetasql_base::StatusCode::kNotFound,
+                  absl::StatusCode::kNotFound,
                   testing::MatchesRegex(".*Session not found.*")));
 }
 
@@ -102,7 +102,7 @@ TEST_F(SessionExistenceTest, WrongDatabaseId) {
       session_id_);
   EXPECT_THAT(GetSession(request_context_.get(), wrong_session_uri),
               zetasql_base::testing::StatusIs(
-                  zetasql_base::StatusCode::kNotFound,
+                  absl::StatusCode::kNotFound,
                   testing::MatchesRegex(".*Database not found.*")));
 }
 
@@ -113,7 +113,7 @@ TEST_F(SessionExistenceTest, WrongInstanceId) {
       session_id_);
   EXPECT_THAT(GetSession(request_context_.get(), wrong_session_uri),
               zetasql_base::testing::StatusIs(
-                  zetasql_base::StatusCode::kNotFound,
+                  absl::StatusCode::kNotFound,
                   testing::MatchesRegex(".*Instance not found.*")));
 }
 

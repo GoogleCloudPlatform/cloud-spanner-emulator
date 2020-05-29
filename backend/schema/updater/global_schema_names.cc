@@ -55,12 +55,12 @@ std::string MakeName(absl::string_view base, absl::string_view suffix) {
 
 }  // namespace
 
-zetasql_base::Status GlobalSchemaNames::AddName(absl::string_view type,
+absl::Status GlobalSchemaNames::AddName(absl::string_view type,
                                         const std::string& name) {
   if (!names_.insert(name).second) {
     return error::SchemaObjectAlreadyExists(type, name);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateForeignKeyName(
@@ -83,6 +83,31 @@ std::string GlobalSchemaNames::GenerateSequencedName(
       return name;
     }
   }
+}
+
+absl::Status GlobalSchemaNames::ValidateSchemaName(absl::string_view type,
+                                                   absl::string_view name) {
+  ZETASQL_RET_CHECK(!name.empty());
+  if (name[0] == '_') {
+    return error::InvalidSchemaName(type, name);
+  }
+  if (name.length() > limits::kMaxSchemaIdentifierLength) {
+    return error::InvalidSchemaName(type, name);
+  }
+  return absl::OkStatus();
+}
+
+absl::Status GlobalSchemaNames::ValidateConstraintName(
+    absl::string_view table_name, absl::string_view constraint_type,
+    absl::string_view constraint_name) {
+  ZETASQL_RETURN_IF_ERROR(ValidateSchemaName(constraint_type, constraint_name));
+  for (absl::string_view reserved_prefix : {"PK_", "CK_IS_NOT_NULL_"}) {
+    if (absl::StartsWithIgnoreCase(constraint_name, reserved_prefix)) {
+      return error::InvalidConstraintName(constraint_type, constraint_name,
+                                          reserved_prefix);
+    }
+  }
+  return absl::OkStatus();
 }
 
 }  // namespace backend

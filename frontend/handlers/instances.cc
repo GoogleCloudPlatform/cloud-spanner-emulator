@@ -26,7 +26,7 @@
 #include "frontend/entities/instance.h"
 #include "frontend/entities/operation.h"
 #include "frontend/server/handler.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace instance_api = ::google::spanner::admin::instance::v1;
@@ -55,7 +55,7 @@ instance_api::InstanceConfig GetEmulatorInstanceConfig(
 }  // namespace
 
 // Lists the supported instance configurations for a given project.
-zetasql_base::Status ListInstanceConfigs(
+absl::Status ListInstanceConfigs(
     RequestContext* ctx,
     const instance_api::ListInstanceConfigsRequest* request,
     instance_api::ListInstanceConfigsResponse* response) {
@@ -65,12 +65,12 @@ zetasql_base::Status ListInstanceConfigs(
   *response->mutable_instance_configs(0) =
       GetEmulatorInstanceConfig(project_id);
   // Pagination is not supported.
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(InstanceAdmin, ListInstanceConfigs);
 
 // Gets information about a particular instance configuration.
-zetasql_base::Status GetInstanceConfig(
+absl::Status GetInstanceConfig(
     RequestContext* ctx, const instance_api::GetInstanceConfigRequest* request,
     instance_api::InstanceConfig* response) {
   absl::string_view project_id, instance_config_id;
@@ -80,12 +80,12 @@ zetasql_base::Status GetInstanceConfig(
     return error::InstanceConfigNotFound(instance_config_id);
   }
   *response = GetEmulatorInstanceConfig(project_id);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(InstanceAdmin, GetInstanceConfig);
 
 // Lists all instances in a project.
-zetasql_base::Status ListInstances(RequestContext* ctx,
+absl::Status ListInstances(RequestContext* ctx,
                            const instance_api::ListInstancesRequest* request,
                            instance_api::ListInstancesResponse* response) {
   // Validate that the ListInstances request is for a valid project.
@@ -120,23 +120,23 @@ zetasql_base::Status ListInstances(RequestContext* ctx,
       instance->ToProto(response->add_instances());
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(InstanceAdmin, ListInstances);
 
 // Gets information about a particular instance.
-zetasql_base::Status GetInstance(RequestContext* ctx,
+absl::Status GetInstance(RequestContext* ctx,
                          const instance_api::GetInstanceRequest* request,
                          instance_api::Instance* response) {
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
                    GetInstance(ctx, request->name()));
   instance->ToProto(response);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(InstanceAdmin, GetInstance);
 
 // Creates an instance.
-zetasql_base::Status CreateInstance(RequestContext* ctx,
+absl::Status CreateInstance(RequestContext* ctx,
                             const instance_api::CreateInstanceRequest* request,
                             operations_api::Operation* response) {
   // Verify that the instance creation request is valid.
@@ -196,12 +196,12 @@ zetasql_base::Status CreateInstance(RequestContext* ctx,
   // TODO: See discussion above, remove when the issue is fixed.
   operation->ToProto(response);
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(InstanceAdmin, CreateInstance);
 
 // Updates an instance.
-zetasql_base::Status UpdateInstance(RequestContext* ctx,
+absl::Status UpdateInstance(RequestContext* ctx,
                             const instance_api::UpdateInstanceRequest* request,
                             operations_api::Operation* response) {
   return error::InstanceUpdatesNotSupported();
@@ -209,7 +209,7 @@ zetasql_base::Status UpdateInstance(RequestContext* ctx,
 REGISTER_GRPC_HANDLER(InstanceAdmin, UpdateInstance);
 
 // Deletes an instance. Returns OK even if the instance is not found.
-zetasql_base::Status DeleteInstance(RequestContext* ctx,
+absl::Status DeleteInstance(RequestContext* ctx,
                             const instance_api::DeleteInstanceRequest* request,
                             protobuf_api::Empty* response) {
   absl::string_view project_id, instance_id;
@@ -233,7 +233,7 @@ zetasql_base::Status DeleteInstance(RequestContext* ctx,
 
   // Clean up the instance.
   ctx->env()->instance_manager()->DeleteInstance(request->name());
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(InstanceAdmin, DeleteInstance);
 

@@ -27,13 +27,13 @@ namespace backend {
 
 namespace {
 
-zetasql_base::Status ValidateKeySizeForIndex(const Index* index, const Key& key) {
+absl::Status ValidateKeySizeForIndex(const Index* index, const Key& key) {
   int64_t key_size = key.LogicalSizeInBytes();
   if (key_size > limits::kMaxKeySizeBytes) {
     return error::IndexKeyTooLarge(index->Name(), key_size,
                                    limits::kMaxKeySizeBytes);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace

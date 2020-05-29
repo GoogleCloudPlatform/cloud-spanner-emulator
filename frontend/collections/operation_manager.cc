@@ -68,11 +68,11 @@ zetasql_base::StatusOr<std::shared_ptr<Operation>> OperationManager::GetOperatio
   return itr->second;
 }
 
-zetasql_base::Status OperationManager::DeleteOperation(
+absl::Status OperationManager::DeleteOperation(
     const std::string& operation_uri) {
   absl::MutexLock lock(&mu_);
   operations_map_.erase(operation_uri);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<std::vector<std::shared_ptr<Operation>>>

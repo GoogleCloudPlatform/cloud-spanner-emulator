@@ -18,14 +18,16 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_COMMON_STATUS_H_
 
 #include "grpcpp/support/status.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 
-// Converts a zetasql_base::Status to a grpc::Status, accounting for max error length.
-grpc::Status ToGRPCStatus(const zetasql_base::Status& status);
+// Converts a absl::Status to a grpc::Status, accounting for max error length.
+// If a payload is attached it will become part of the serialized error_details
+// within the grpc::Status.
+grpc::Status ToGRPCStatus(const absl::Status& status);
 
 }  // namespace emulator
 }  // namespace spanner

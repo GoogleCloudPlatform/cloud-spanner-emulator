@@ -29,8 +29,8 @@ cc_library(
     deps = [
         "//common:errors",
         "//common:limits",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_googlesource_code_re2//:re2",
     ],
 )
@@ -61,11 +61,11 @@ cc_library(
     deps = [
         "//backend/common:ids",
         "//common:errors",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/rpc:status_cc_proto",
         "@com_google_protobuf//:cc_wkt_protos",
-        "@com_google_zetasql//zetasql/base:status",
     ],
 )
 
@@ -76,8 +76,8 @@ cc_library(
     deps = [
         "//common:errors",
         "//common:limits",
+        "@com_google_absl//absl/status",
         "@com_google_protobuf//:protobuf_headers",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_googlesource_code_re2//:re2",
     ],
 )
@@ -108,7 +108,10 @@ cc_library(
     deps = [
         "//common:limits",
         "@com_github_grpc_grpc//:grpc++",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings:cord",
+        "@com_google_googleapis//google/rpc:status_cc_proto",
+        "@com_google_protobuf//:cc_wkt_protos",
     ],
 )
 
@@ -121,9 +124,9 @@ cc_test(
         ":status",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

@@ -27,7 +27,7 @@
 #include "backend/common/case.h"
 #include "common/errors.h"
 #include "tests/common/row_cursor.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -54,7 +54,7 @@ class ColumnRemappedRowCursor : public backend::RowCursor {
 
   bool Next() override { return wrapped_cursor_->Next(); }
 
-  zetasql_base::Status Status() const override { return wrapped_cursor_->Status(); }
+  absl::Status Status() const override { return wrapped_cursor_->Status(); }
 
   int NumColumns() const override { return column_index_map_.size(); }
 
@@ -89,7 +89,7 @@ class TestRowReader : public backend::RowReader {
   explicit TestRowReader(backend::CaseInsensitiveStringMap<Table> tables)
       : tables_(tables) {}
 
-  zetasql_base::Status Read(const backend::ReadArg& read_arg,
+  absl::Status Read(const backend::ReadArg& read_arg,
                     std::unique_ptr<backend::RowCursor>* cursor) override {
     std::string table_name = read_arg.table;
     if (!tables_.contains(table_name)) {
@@ -100,7 +100,7 @@ class TestRowReader : public backend::RowReader {
                                          tables_[table_name].column_types,
                                          tables_[table_name].column_values),
         read_arg.columns);
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
  private:

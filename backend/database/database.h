@@ -37,7 +37,7 @@
 #include "backend/transaction/read_only_transaction.h"
 #include "backend/transaction/read_write_transaction.h"
 #include "common/clock.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -81,10 +81,10 @@ class Database {
   //
   // If all the statements in `statements` are applied succesfully, both
   // `backfill_status` and the returned status will be set to
-  // zetasql_base::OkStatus().
+  // absl::OkStatus().
   //
   // If all the statements are semantically valid then the return status will
-  // be zetasql_base::OkStatus(). Otherwise, a non-ok zetasql_base::Status will be returned for
+  // be absl::OkStatus(). Otherwise, a non-ok absl::Status will be returned for
   // the first statement that is found to be invalid. In case of a non-ok
   // return status the output parameters (including the `backfill_status`)
   // may not be set.
@@ -93,10 +93,10 @@ class Database {
   // encountered while processing the backfill/verification actions for the
   // statements, then the first such error will be returned in
   // `backfill_status`.
-  zetasql_base::Status UpdateSchema(absl::Span<const std::string> statements,
+  absl::Status UpdateSchema(absl::Span<const std::string> statements,
                             int* num_succesful_statements,
                             absl::Time* commit_timestamp,
-                            zetasql_base::Status* backfill_status);
+                            absl::Status* backfill_status);
 
   // Retrives the sdl statements that correspond to the current version of the
   // schema.

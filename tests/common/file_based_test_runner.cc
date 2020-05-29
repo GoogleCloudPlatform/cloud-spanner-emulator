@@ -46,7 +46,7 @@ struct FileBasedTestCase {
 
 }  // namespace
 
-zetasql_base::Status RunTestCasesFromFile(const std::string& file,
+absl::Status RunTestCasesFromFile(const std::string& file,
                                   const FileBasedTestOptions& options,
                                   const FileBasedTestCaseExecutor& executor) {
   FileBasedTestCase test_case;
@@ -101,7 +101,7 @@ zetasql_base::Status RunTestCasesFromFile(const std::string& file,
     EXPECT_EQ(test_case.expected.text, actual.ValueOrDie().text);
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 std::string GetRunfilesDir(const std::string& dir) {

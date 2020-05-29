@@ -105,7 +105,7 @@ TEST_F(InterleaveTest, ParentRowDeleteWithNoActionCascadeFailsWithChildRows) {
                             {}, {}));
   EXPECT_THAT(
       validator->Validate(ctx(), Delete(parent_table_, Key({Int64(1)}))),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(InterleaveTest,
@@ -156,7 +156,7 @@ TEST_F(InterleaveTest, ChildRowInsertFailsWithoutParentRow) {
   // Action should fail since there is no parent row.
   EXPECT_THAT(validator->Validate(ctx(), Insert(cascade_delete_child_,
                                                 Key({Int64(1), Int64(1)}))),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(InterleaveTest, ChildRowInsertSucceedsWithParentRow) {

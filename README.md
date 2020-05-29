@@ -206,6 +206,22 @@ Notable limitations:
 
 ## Frequently Asked Questions (FAQ)
 
+
+#### Which [client library](https://cloud.google.com/spanner/docs/reference/libraries) versions are supported?
+
+Cloud Spanner Java, Go and C++ client libraries support the emulator.
+Install the following version (or higher) to get emulator support:
+
+| Client Library | Version |
+|----------------|---------|
+| Java           | v1.51.0 |
+| Go             | v1.5.0  |
+| C++            | v0.9.x  |
+
+#### How do I fix the client library error with "UNAUTHENTICATED: Credentials require .."?
+
+Upgrade to the latest client library versions as listed above.
+
 #### What is the recommended test setup?
 
 Use a single emulator process and create a Cloud Spanner instance within it.

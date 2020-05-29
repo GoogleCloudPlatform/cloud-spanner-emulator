@@ -94,7 +94,7 @@ TEST_F(SessionApiTest, CannotReadUsingExpiredTransactions) {
     *selector.mutable_id() = std::to_string(id - i);
     *read_request.mutable_transaction() = selector;
     EXPECT_THAT(Read(read_request, &read_response),
-                StatusIs(zetasql_base::StatusCode::kNotFound));
+                StatusIs(absl::StatusCode::kNotFound));
   }
 }
 
@@ -160,7 +160,7 @@ TEST_F(SessionApiTest, CanBeginAndUseMultipleTransactionsInSameSession) {
   *selector.mutable_id() = std::to_string(id - 40);
   *read_request.mutable_transaction() = selector;
   EXPECT_THAT(Read(read_request, &read_response),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 }  // namespace

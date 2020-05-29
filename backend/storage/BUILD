@@ -25,7 +25,7 @@ cc_library(
     ],
     deps = [
         "//backend/datamodel:key",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )
@@ -40,8 +40,8 @@ cc_library(
         "//backend/common:ids",
         "//backend/datamodel:key",
         "//backend/datamodel:key_range",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )
@@ -60,9 +60,9 @@ cc_library(
         "//backend/datamodel:key",
         "//backend/datamodel:key_range",
         "//common:errors",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )
@@ -78,9 +78,9 @@ cc_test(
         "//backend/datamodel:key_range",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
@@ -94,7 +94,7 @@ cc_library(
     deps = [
         ":iterator",
         "//backend/datamodel:key",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )

@@ -17,7 +17,7 @@
 #include "backend/schema/catalog/index.h"
 
 #include "absl/memory/memory.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/substitute.h"
@@ -25,7 +25,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -67,16 +67,16 @@ std::string Index::DebugString() const {
 
 const Table* Index::parent() const { return index_data_table_->parent(); }
 
-zetasql_base::Status Index::Validate(SchemaValidationContext* context) const {
+absl::Status Index::Validate(SchemaValidationContext* context) const {
   return validate_(this, context);
 }
 
-zetasql_base::Status Index::ValidateUpdate(const SchemaNode* old,
+absl::Status Index::ValidateUpdate(const SchemaNode* old,
                                    SchemaValidationContext* context) const {
   return validate_update_(this, old->template As<const Index>(), context);
 }
 
-zetasql_base::Status Index::DeepClone(SchemaGraphEditor* editor,
+absl::Status Index::DeepClone(SchemaGraphEditor* editor,
                               const SchemaNode* orig) {
   ZETASQL_ASSIGN_OR_RETURN(const auto* indexed_table, editor->Clone(indexed_table_));
   indexed_table_ = indexed_table->As<const Table>();
@@ -95,7 +95,7 @@ zetasql_base::Status Index::DeepClone(SchemaGraphEditor* editor,
     stored_column = schema_node->As<const Column>();
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

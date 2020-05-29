@@ -81,10 +81,10 @@ SessionManager::ListSessions(const std::string& database_uri) const {
   return sessions;
 }
 
-zetasql_base::Status SessionManager::DeleteSession(const std::string& session_uri) {
+absl::Status SessionManager::DeleteSession(const std::string& session_uri) {
   absl::MutexLock lock(&mu_);
   session_map_.erase(session_uri);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace frontend

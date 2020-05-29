@@ -41,9 +41,9 @@ bool StorageIteratorRowCursor::Next() {
   return false;
 }
 
-zetasql_base::Status StorageIteratorRowCursor::Status() const {
+absl::Status StorageIteratorRowCursor::Status() const {
   if (current_ >= iterators_.size()) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
   return iterators_.at(current_)->Status();
 }

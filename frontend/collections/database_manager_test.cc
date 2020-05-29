@@ -54,7 +54,7 @@ TEST_F(DatabaseManagerTest, CreateExistingDatabaseUriFailsWithAlreadyExists) {
       std::shared_ptr<Database> database,
       database_manager_.CreateDatabase(database_uri_, empty_schema_));
   EXPECT_THAT(database_manager_.CreateDatabase(database_uri_, empty_schema_),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(DatabaseManagerTest, GetExistingDatabase) {
@@ -68,7 +68,7 @@ TEST_F(DatabaseManagerTest, GetExistingDatabase) {
 
 TEST_F(DatabaseManagerTest, GetNonExistingDatabaseReturnsNotFound) {
   EXPECT_THAT(database_manager_.GetDatabase("not-exists"),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(DatabaseManagerTest, DeleteExistingDatabase) {
@@ -77,7 +77,7 @@ TEST_F(DatabaseManagerTest, DeleteExistingDatabase) {
       database_manager_.CreateDatabase(database_uri_, empty_schema_));
   ZETASQL_EXPECT_OK(database_manager_.DeleteDatabase(database_uri_));
   EXPECT_THAT(database_manager_.GetDatabase(database_uri_),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(DatabaseManagerTest, ListDatabase) {

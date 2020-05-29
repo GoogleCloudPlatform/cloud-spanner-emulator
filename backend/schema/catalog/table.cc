@@ -19,7 +19,7 @@
 #include "zetasql/public/type.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/substitute.h"
@@ -29,7 +29,7 @@
 #include "common/errors.h"
 #include "common/limits.h"
 #include "zetasql/base/ret_check.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -89,16 +89,16 @@ std::string OwningObjectType(const Table* table) {
   return table->owner_index() ? "Index" : "Table";
 }
 
-zetasql_base::Status Table::Validate(SchemaValidationContext* context) const {
+absl::Status Table::Validate(SchemaValidationContext* context) const {
   return validate_(this, context);
 }
 
-zetasql_base::Status Table::ValidateUpdate(const SchemaNode* orig,
+absl::Status Table::ValidateUpdate(const SchemaNode* orig,
                                    SchemaValidationContext* context) const {
   return validate_update_(this, orig->As<const Table>(), context);
 }
 
-zetasql_base::Status Table::DeepClone(SchemaGraphEditor* editor,
+absl::Status Table::DeepClone(SchemaGraphEditor* editor,
                               const SchemaNode* orig) {
   if (parent_table_) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(parent_table_));
@@ -151,7 +151,7 @@ zetasql_base::Status Table::DeepClone(SchemaGraphEditor* editor,
     }
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

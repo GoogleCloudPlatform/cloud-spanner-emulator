@@ -21,7 +21,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/schema.h"

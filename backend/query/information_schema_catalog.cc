@@ -26,10 +26,12 @@ namespace backend {
 namespace {
 
 using zetasql::types::BoolType;
+using zetasql::types::BytesType;
 using zetasql::types::Int64Type;
 using zetasql::types::StringType;
 using zetasql::values::Bool;
 using zetasql::values::Int64;
+using zetasql::values::NullBytes;
 using zetasql::values::NullInt64;
 using zetasql::values::NullString;
 using zetasql::values::String;
@@ -102,6 +104,8 @@ void InformationSchemaCatalog::AddColumnsTable() {
                                              {"TABLE_NAME", StringType()},
                                              {"COLUMN_NAME", StringType()},
                                              {"ORDINAL_POSITION", Int64Type()},
+                                             {"COLUMN_DEFAULT", BytesType()},
+                                             {"DATA_TYPE", StringType()},
                                              {"IS_NULLABLE", StringType()},
                                              {"SPANNER_TYPE", StringType()}});
 
@@ -121,6 +125,10 @@ void InformationSchemaCatalog::AddColumnsTable() {
           String(column->Name()),
           // ordinal_position
           Int64(pos++),
+          // column_default,
+          NullBytes(),
+          // data_type,
+          NullString(),
           // is_nullable
           String(column->is_nullable() ? "YES" : "NO"),
           // spanner_type

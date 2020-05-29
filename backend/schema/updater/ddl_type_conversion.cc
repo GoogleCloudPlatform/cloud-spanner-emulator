@@ -53,7 +53,7 @@ zetasql_base::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       if (ddl_type.array_subtype().type() == ddl::ColumnType::ARRAY) {
         // TODO : Update when we have a proper way to
         // construct user-facing error messages in the error catalog.
-        return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+        return absl::Status(absl::StatusCode::kInvalidArgument,
                             "ARRAYs of ARRAY column types are not supported.");
       }
       ZETASQL_ASSIGN_OR_RETURN(

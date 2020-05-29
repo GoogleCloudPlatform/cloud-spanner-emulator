@@ -30,14 +30,14 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/notification.h"
 #include "absl/time/clock.h"
 #include "frontend/common/uris.h"
 #include "frontend/server/server.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -101,7 +101,7 @@ class ServerTest : public testing::Test {
   const std::string test_database_uri_ =
       MakeDatabaseUri(test_instance_uri_, test_database_name_);
 
-  zetasql_base::Status CreateTestInstance() {
+  absl::Status CreateTestInstance() {
     // Create an instance.
     instance_api::CreateInstanceRequest request = PARSE_TEXT_PROTO(R"(
       instance { config: "emulator-config" display_name: "" node_count: 3 }
@@ -115,7 +115,7 @@ class ServerTest : public testing::Test {
     return WaitForOperation(operation.name(), &operation);
   }
 
-  zetasql_base::Status CreateTestDatabase() {
+  absl::Status CreateTestDatabase() {
     // Create a database that belongs to the instance created above and create
     // a test schema inside the newly created database.
     database_api::CreateDatabaseRequest request;
@@ -147,15 +147,15 @@ class ServerTest : public testing::Test {
     return response.name();
   }
 
-  zetasql_base::Status WaitForOperation(absl::string_view operation_uri,
+  absl::Status WaitForOperation(absl::string_view operation_uri,
                                 longrunning::Operation* op) {
     absl::Duration deadline = absl::Seconds(10);
     absl::Time start = absl::Now();
     while (true) {
       ZETASQL_RETURN_IF_ERROR(GetOperation(operation_uri, op));
-      if (op->done()) return zetasql_base::OkStatus();
+      if (op->done()) return absl::OkStatus();
       if (absl::Now() - start > deadline) {
-        return zetasql_base::Status(zetasql_base::StatusCode::kDeadlineExceeded,
+        return absl::Status(absl::StatusCode::kDeadlineExceeded,
                             "Exceeded deadline while waiting for operation " +
                                 op->name() + " to complete.");
       }
@@ -163,7 +163,7 @@ class ServerTest : public testing::Test {
     }
   }
 
-  zetasql_base::Status GetOperation(absl::string_view operation_uri,
+  absl::Status GetOperation(absl::string_view operation_uri,
                             longrunning::Operation* op) {
     longrunning::GetOperationRequest request;
     request.set_name(std::string(operation_uri));  // NOLINT
@@ -171,7 +171,7 @@ class ServerTest : public testing::Test {
     return test_env()->operations_client()->GetOperation(&context, request, op);
   }
 
-  zetasql_base::Status BeginTransaction(
+  absl::Status BeginTransaction(
       const spanner_api::BeginTransactionRequest& request,
       spanner_api::Transaction* response) {
     grpc::ClientContext ctx;
@@ -179,42 +179,42 @@ class ServerTest : public testing::Test {
                                                           response);
   }
 
-  zetasql_base::Status Commit(const spanner_api::CommitRequest& request,
+  absl::Status Commit(const spanner_api::CommitRequest& request,
                       spanner_api::CommitResponse* response) {
     grpc::ClientContext ctx;
     return test_env()->spanner_client()->Commit(&ctx, request, response);
   }
 
-  zetasql_base::Status Rollback(const spanner_api::RollbackRequest& request) {
+  absl::Status Rollback(const spanner_api::RollbackRequest& request) {
     grpc::ClientContext ctx;
     protobuf_api::Empty empty_response;
     return test_env()->spanner_client()->Rollback(&ctx, request,
                                                   &empty_response);
   }
 
-  zetasql_base::Status Read(const spanner_api::ReadRequest& request,
+  absl::Status Read(const spanner_api::ReadRequest& request,
                     spanner_api::ResultSet* response) {
     grpc::ClientContext ctx;
     return test_env()->spanner_client()->Read(&ctx, request, response);
   }
 
-  zetasql_base::Status StreamingRead(
+  absl::Status StreamingRead(
       const spanner_api::ReadRequest& request,
       std::vector<spanner_api::PartialResultSet>* response);
 
-  zetasql_base::Status PartitionRead(const spanner_api::PartitionReadRequest& request,
+  absl::Status PartitionRead(const spanner_api::PartitionReadRequest& request,
                              spanner_api::PartitionResponse* response) {
     grpc::ClientContext ctx;
     return test_env()->spanner_client()->PartitionRead(&ctx, request, response);
   }
 
-  zetasql_base::Status ExecuteSql(const spanner_api::ExecuteSqlRequest& request,
+  absl::Status ExecuteSql(const spanner_api::ExecuteSqlRequest& request,
                           spanner_api::ResultSet* response) {
     grpc::ClientContext ctx;
     return test_env()->spanner_client()->ExecuteSql(&ctx, request, response);
   }
 
-  zetasql_base::Status ExecuteBatchDml(
+  absl::Status ExecuteBatchDml(
       const spanner_api::ExecuteBatchDmlRequest& request,
       spanner_api::ExecuteBatchDmlResponse* response) {
     grpc::ClientContext ctx;
@@ -222,7 +222,7 @@ class ServerTest : public testing::Test {
                                                          response);
   }
 
-  zetasql_base::Status ExecuteStreamingSql(
+  absl::Status ExecuteStreamingSql(
       const spanner_api::ExecuteSqlRequest& request,
       std::vector<spanner_api::PartialResultSet>* response);
 

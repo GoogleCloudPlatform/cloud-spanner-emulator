@@ -33,7 +33,7 @@ using zetasql_base::testing::StatusIs;
 
 class QueryTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({
         R"(
           CREATE TABLE Users(
@@ -145,7 +145,7 @@ TEST_F(QueryTest, CannotExecuteInvalidSelectStatement) {
                     "FROM Users, Threads t "
                     "WHERE Users.UserId = t.UserId "
                     "AND Users.UserId=10 AND t.ThreadId=40"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(QueryTest, HashFunctions) {
@@ -156,8 +156,7 @@ TEST_F(QueryTest, HashFunctions) {
               IsOkAndHoldsRow({Value(Bytes(hash))}));
 }
 
-// TODO: Enable JSON functions once available in ZetaSQL.
-TEST_F(QueryTest, DISABLED_JSONFunctions) {
+TEST_F(QueryTest, JSONFunctions) {
   EXPECT_THAT(Query(R"(SELECT JSON_VALUE('{"a": {"b": "world"}}', '$.a.b'))"),
               IsOkAndHoldsRow({Value("world")}));
 }
@@ -172,6 +171,17 @@ TEST_F(QueryTest, CanReturnArrayOfStructTypedColumns) {
   EXPECT_THAT(
       Query("SELECT ARRAY(SELECT STRUCT<INT64>(1))"),
       IsOkAndHoldsRow({Value(std::vector<SimpleStruct>{SimpleStruct{1}})}));
+}
+
+TEST_F(QueryTest, FunctionAliasesAreAvailable) {
+  EXPECT_THAT(Query("SELECT CHARACTER_LENGTH('abc')"), IsOkAndHoldsRow({3}));
+  EXPECT_THAT(Query("SELECT CHAR_LENGTH('abc')"), IsOkAndHoldsRow({3}));
+
+  EXPECT_THAT(Query("SELECT POWER(2,2)"), IsOkAndHoldsRow({4.0}));
+  EXPECT_THAT(Query("SELECT POW(2,2)"), IsOkAndHoldsRow({4.0}));
+
+  EXPECT_THAT(Query("SELECT CEILING(1.6)"), IsOkAndHoldsRow({2.0}));
+  EXPECT_THAT(Query("SELECT CEIL(1.6)"), IsOkAndHoldsRow({2.0}));
 }
 
 TEST_F(QueryTest, Params) {
@@ -214,7 +224,7 @@ TEST_F(QueryTest, Params) {
 
   EXPECT_THAT(
       QueryWithParams("SELECT @param", {{std::string(130, 'x'), Value(6)}}),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

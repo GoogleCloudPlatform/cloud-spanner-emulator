@@ -31,7 +31,7 @@ using zetasql_base::testing::StatusIs;
 
 class IndexTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({
         R"(CREATE TABLE Users(
           ID   INT64 NOT NULL,
@@ -148,12 +148,12 @@ TEST_F(IndexTest, AllEntriesAreUnique) {
       Insert("Users", {"ID", "Name", "Age"}, {2, Null<std::string>(), 41}));
   ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {3, "John", 28}));
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"}, {4, "Adam", 20}),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"}, {5, "", 20}),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
   EXPECT_THAT(
       Insert("Users", {"ID", "Name", "Age"}, {6, Null<std::string>(), 41}),
-      StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+      StatusIs(absl::StatusCode::kAlreadyExists));
   ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"},
                    {7, "Matthew", Null<std::int64_t>()}));
 
@@ -179,7 +179,7 @@ TEST_F(IndexTest, TriggersUniqueIndexViolationWithImplicitNulls) {
     // This should fail because it is also adding NULL, NULL to unique Index
     // UsersByNameAgeUnique.
     EXPECT_THAT(Insert("Users", {"ID"}, {1}),
-                StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+                StatusIs(absl::StatusCode::kAlreadyExists));
   }
 
   // Executed within same transaction.
@@ -188,7 +188,7 @@ TEST_F(IndexTest, TriggersUniqueIndexViolationWithImplicitNulls) {
     EXPECT_THAT(
         CommitTransaction(txn, {MakeInsertOrUpdate("Users", {"ID"}, Value(0)),
                                 MakeInsert("Users", {"ID"}, Value(1))}),
-        StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+        StatusIs(absl::StatusCode::kAlreadyExists));
   }
 }
 
@@ -199,9 +199,9 @@ TEST_F(IndexTest, AllEntriesAreUniqueAndNullFiltered) {
       Insert("Users", {"ID", "Name", "Age"}, {2, Null<std::string>(), 41}));
   ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {3, "John", 28}));
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"}, {4, "Adam", 20}),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"}, {5, "", 22}),
-              StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
   // A duplicate index entry that is null filtered should not trigger a UNIQUE
   // violation.
   ZETASQL_EXPECT_OK(
@@ -218,7 +218,7 @@ TEST_F(IndexTest, AllEntriesAreUniqueAndNullFiltered) {
 TEST_F(IndexTest, ValidateKeyTooLargeFails) {
   std::string long_name(8192, 'a');
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"}, {1, long_name, 20}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

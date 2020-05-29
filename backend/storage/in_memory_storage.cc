@@ -19,11 +19,11 @@
 #include <memory>
 
 #include "zetasql/public/value.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "backend/storage/in_memory_iterator.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -62,7 +62,7 @@ bool InMemoryStorage::Exists(const Row& row, absl::Time timestamp) const {
   return value.is_valid() && value.bool_value();
 }
 
-zetasql_base::Status InMemoryStorage::Lookup(
+absl::Status InMemoryStorage::Lookup(
     absl::Time timestamp, const TableID& table_id, const Key& key,
     const std::vector<ColumnID>& column_ids,
     std::vector<zetasql::Value>* values) const {
@@ -81,8 +81,8 @@ zetasql_base::Status InMemoryStorage::Lookup(
   // Lookup for given table.
   auto table_itr = tables_.find(table_id);
   if (table_itr == tables_.end()) {
-    return zetasql_base::Status(
-        zetasql_base::StatusCode::kNotFound,
+    return absl::Status(
+        absl::StatusCode::kNotFound,
         absl::StrCat("Key: ", key.DebugString(), " not found for table: ",
                      table_id, " at timestamp: ", absl::FormatTime(timestamp)));
   }
@@ -91,8 +91,8 @@ zetasql_base::Status InMemoryStorage::Lookup(
   // Lookup for given key.
   auto row_itr = table.find(key);
   if (row_itr == table.end()) {
-    return zetasql_base::Status(
-        zetasql_base::StatusCode::kNotFound,
+    return absl::Status(
+        absl::StatusCode::kNotFound,
         absl::StrCat("Key: ", key.DebugString(), " not found for table: ",
                      table_id, " at timestamp: ", absl::FormatTime(timestamp)));
   }
@@ -100,8 +100,8 @@ zetasql_base::Status InMemoryStorage::Lookup(
 
   // Verify if the row exists at the given timestamp.
   if (!Exists(row, timestamp)) {
-    return zetasql_base::Status(
-        zetasql_base::StatusCode::kNotFound,
+    return absl::Status(
+        absl::StatusCode::kNotFound,
         absl::StrCat(
             "Key: ", key.DebugString(), " does not exist for table: ", table_id,
             " at the given timestamp: " + absl::FormatTime(timestamp)));
@@ -109,7 +109,7 @@ zetasql_base::Status InMemoryStorage::Lookup(
 
   // For request without columns, return ok since the key exist.
   if (column_ids.empty()) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   // Fetch the value from the cell at the given timestamp.
@@ -118,10 +118,10 @@ zetasql_base::Status InMemoryStorage::Lookup(
         GetCellValueAtTimestamp(row, column_ids[i], timestamp));
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status InMemoryStorage::Read(
+absl::Status InMemoryStorage::Read(
     absl::Time timestamp, const TableID& table_id, const KeyRange& key_range,
     const std::vector<ColumnID>& column_ids,
     std::unique_ptr<StorageIterator>* itr) const {
@@ -139,14 +139,14 @@ zetasql_base::Status InMemoryStorage::Read(
   // Return an empty iterator for empty key_range.
   if (key_range.start_key() >= key_range.limit_key()) {
     *itr = absl::make_unique<FixedRowStorageIterator>();
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   // Lookup for given table.
   auto table_itr = tables_.find(table_id);
   if (table_itr == tables_.end()) {
     *itr = absl::make_unique<FixedRowStorageIterator>();
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
   const Table& table = table_itr->second;
 
@@ -167,10 +167,10 @@ zetasql_base::Status InMemoryStorage::Read(
     rows.emplace_back(std::make_pair(itr->first, values));
   }
   *itr = absl::make_unique<FixedRowStorageIterator>(std::move(rows));
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status InMemoryStorage::Write(
+absl::Status InMemoryStorage::Write(
     absl::Time timestamp, const TableID& table_id, const Key& key,
     const std::vector<ColumnID>& column_ids,
     const std::vector<zetasql::Value>& values) {
@@ -190,10 +190,10 @@ zetasql_base::Status InMemoryStorage::Write(
     row[column_ids[i]][timestamp] = values[i];
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status InMemoryStorage::Delete(absl::Time timestamp,
+absl::Status InMemoryStorage::Delete(absl::Time timestamp,
                                      const TableID& table_id,
                                      const KeyRange& key_range) {
   absl::MutexLock lock(&mu_);
@@ -205,20 +205,20 @@ zetasql_base::Status InMemoryStorage::Delete(absl::Time timestamp,
                      key_range.DebugString()));
   }
   if (key_range.start_key() >= key_range.limit_key()) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   // Lookup for given table.
   auto table_itr = tables_.find(table_id);
   if (table_itr == tables_.end()) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
   Table& table = table_itr->second;
 
   // Lookup keys from the given key range.
   auto row_start_itr = table.lower_bound(key_range.start_key());
   if (row_start_itr == table.end()) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
   auto row_end_itr = table.lower_bound(key_range.limit_key());
 
@@ -238,7 +238,7 @@ zetasql_base::Status InMemoryStorage::Delete(absl::Time timestamp,
       }
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

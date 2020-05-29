@@ -20,7 +20,7 @@
 #include <functional>
 #include <string>
 
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -59,7 +59,7 @@ using FileBasedTestCaseExecutor =
         const FileBasedTestCaseInput&)>;
 
 // Runs all test cases in `file` via `executor`.
-zetasql_base::Status RunTestCasesFromFile(const std::string& file,
+absl::Status RunTestCasesFromFile(const std::string& file,
                                   const FileBasedTestOptions& options,
                                   const FileBasedTestCaseExecutor& executor);
 

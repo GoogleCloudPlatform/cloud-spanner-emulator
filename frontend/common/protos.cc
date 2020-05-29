@@ -19,7 +19,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -37,9 +37,9 @@ backend::TransactionID TransactionIDFromProto(const std::string& bytes) {
   return std::stoll(bytes, nullptr);
 }
 
-google::rpc::Status StatusToProto(const zetasql_base::Status& error) {
+google::rpc::Status StatusToProto(const absl::Status& error) {
   google::rpc::Status status;
-  status.set_code(error.error_code());
+  status.set_code(error.raw_code());
   status.set_message(std::string(error.message()));
   return status;
 }

@@ -133,7 +133,7 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, ArrayOfArray) {
   *(array_type2.mutable_array_subtype()) = array_type1;
 
   EXPECT_THAT(DDLColumnTypeToGoogleSqlType(array_type2, &type_factory_),
-              ::zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              ::zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, InvalidGoogleSqlType) {

@@ -19,7 +19,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -32,7 +32,7 @@ using zetasql_base::testing::StatusIs;
 
 class OperationsTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({R"(
       CREATE TABLE T(
         k1 INT64
@@ -63,9 +63,9 @@ class OperationsTest : public DatabaseTest {
     UpdateDatabaseDdlMetadata metadata;
     ZETASQL_RET_CHECK(operation.metadata().UnpackTo(&metadata));
     google::rpc::Status status = operation.error();
-    auto status_code = static_cast<zetasql_base::StatusCode>(status.code());
-    if (status_code != zetasql_base::StatusCode::kOk) {
-      return zetasql_base::Status(status_code, status.message());
+    auto status_code = static_cast<absl::StatusCode>(status.code());
+    if (status_code != absl::StatusCode::kOk) {
+      return absl::Status(status_code, status.message());
     }
     if (op) {
       op->Swap(&operation);
@@ -75,15 +75,15 @@ class OperationsTest : public DatabaseTest {
 
   // Waits for the long-running operation identified by `operation_uri` to
   // finish.
-  zetasql_base::Status WaitForOperation(absl::string_view operation_uri,
+  absl::Status WaitForOperation(absl::string_view operation_uri,
                                 operations_api::Operation* op) {
     absl::Duration deadline = absl::Seconds(25);
     absl::Time start = absl::Now();
     while (true) {
       ZETASQL_RETURN_IF_ERROR(GetOperation(operation_uri, op));
-      if (op->done()) return zetasql_base::OkStatus();
+      if (op->done()) return absl::OkStatus();
       if (absl::Now() - start > deadline) {
-        return zetasql_base::Status(zetasql_base::StatusCode::kDeadlineExceeded,
+        return absl::Status(absl::StatusCode::kDeadlineExceeded,
                             "Exceeded deadline while waiting for operation " +
                                 op->name() + " to complete.");
       }
@@ -92,7 +92,7 @@ class OperationsTest : public DatabaseTest {
   }
 
   // Returns the long-operation identified by `operation_uri` in `op`.
-  zetasql_base::Status GetOperation(absl::string_view operation_uri,
+  absl::Status GetOperation(absl::string_view operation_uri,
                             operations_api::Operation* op) {
     longrunning::GetOperationRequest request;
     request.set_name(std::string(operation_uri));  // NOLINT
@@ -129,22 +129,22 @@ TEST_F(OperationsTest, LongRunningOperationIds) {
   // Uppercase operation IDs are not allowed.
   EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
                              /*operation_id=*/"a_A"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Hyphens are not allowed.
   EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
                              /*operation_id=*/"a-123"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Operation IDs must be a minumum of 2 characters in length.
   EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
                              /*operation_id=*/"a"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Operation IDs must be a maximum of 128 characters in length.
   EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
                              /*operation_id=*/std::string(150, 'a')),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(OperationsTest, ListOperations) {
@@ -179,7 +179,7 @@ TEST_F(OperationsTest, NonExistentDatabaseOperation) {
   EXPECT_THAT(GetOperation(absl::StrCat(database()->FullName(),
                                         "/operations/non_existent"),
                            &op),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 }  // namespace

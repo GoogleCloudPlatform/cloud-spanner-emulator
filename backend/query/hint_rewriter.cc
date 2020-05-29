@@ -17,7 +17,7 @@
 #include "backend/query/hint_rewriter.h"
 
 #include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -25,7 +25,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-zetasql_base::Status HintRewriter::VisitResolvedOption(
+absl::Status HintRewriter::VisitResolvedOption(
     const zetasql::ResolvedOption* node) {
   ZETASQL_RETURN_IF_ERROR(CopyVisitResolvedOption(node));
   zetasql::ResolvedOption* option =
@@ -33,7 +33,7 @@ zetasql_base::Status HintRewriter::VisitResolvedOption(
   if (option->qualifier().empty()) {
     option->set_qualifier("spanner");
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

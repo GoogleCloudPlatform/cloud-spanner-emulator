@@ -27,7 +27,7 @@ namespace backend {
 
 namespace {
 
-zetasql_base::Status ValidateCommitTimestampKeyForDeleteOp(const Table* table,
+absl::Status ValidateCommitTimestampKeyForDeleteOp(const Table* table,
                                                    const Key& key,
                                                    absl::Time now) {
   const absl::Span<const KeyColumn* const> primary_key = table->primary_key();
@@ -38,7 +38,7 @@ zetasql_base::Status ValidateCommitTimestampKeyForDeleteOp(const Table* table,
           ValidateCommitTimestampValueNotInFuture(key.ColumnValue(i), now));
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<zetasql::Value> MaybeSetCommitTimestampSentinel(
@@ -81,15 +81,15 @@ bool IsPendingCommitTimestamp(const Column* column,
 
 }  // namespace
 
-zetasql_base::Status ValidateCommitTimestampValueNotInFuture(
+absl::Status ValidateCommitTimestampValueNotInFuture(
     const zetasql::Value& value, absl::Time now) {
   if (!value.is_null() && value.type()->IsTimestamp() && value.ToTime() > now) {
     return error::CommitTimestampInFuture(value.ToTime());
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table,
+absl::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table,
                                                       const KeySet& set,
                                                       absl::Time now) {
   for (const Key& key : set.keys()) {
@@ -108,7 +108,7 @@ zetasql_base::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table
     ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampKeyForDeleteOp(
         table, key_range.limit_key(), now));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(

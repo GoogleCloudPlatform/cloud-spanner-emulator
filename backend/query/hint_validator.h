@@ -21,7 +21,7 @@
 #include "zetasql/resolved_ast/resolved_ast_visitor.h"
 #include "backend/common/case.h"
 #include "backend/schema/catalog/schema.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -33,25 +33,25 @@ class HintValidator : public zetasql::ResolvedASTVisitor {
  public:
   explicit HintValidator(const Schema* schema) : schema_(schema) {}
 
-  zetasql_base::Status DefaultVisit(const zetasql::ResolvedNode* node) override {
+  absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override {
     ZETASQL_RETURN_IF_ERROR(ValidateHints(node));
     return zetasql::ResolvedASTVisitor::DefaultVisit(node);
   }
 
  private:
   // Validates the child hint nodes of `node`.
-  zetasql_base::Status ValidateHints(const zetasql::ResolvedNode* node) const;
+  absl::Status ValidateHints(const zetasql::ResolvedNode* node) const;
 
   // Returns an OK if `name` is a supported hint name for nodes with kind
   // `node_kind`; otherwise, returns an invalid argument error.
-  zetasql_base::Status CheckHintName(absl::string_view name,
+  absl::Status CheckHintName(absl::string_view name,
                              const zetasql::ResolvedNodeKind node_kind) const;
 
   // Returns an OK if `value` represents a valid value for hints with name
   // `name` specified on a node of kind `node_kind`; otherwise, returns an
   // invalid argument error. `hint_map` is initialized to a mapping of
   // hint_name->hint_value of all the hints specified on the node.
-  zetasql_base::Status CheckHintValue(
+  absl::Status CheckHintValue(
       absl::string_view name, const zetasql::Value& value,
       const zetasql::ResolvedNodeKind node_kind,
       const absl::flat_hash_map<absl::string_view, zetasql::Value>& hint_map)

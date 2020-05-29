@@ -38,7 +38,7 @@ constexpr char kCommitTimestampSentinel[] = "spanner.commit_timestamp()";
 
 class CommitTimestamps : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     ZETASQL_RETURN_IF_ERROR(SetSchema({
         R"(
           CREATE TABLE Users(
@@ -63,7 +63,7 @@ class CommitTimestamps : public DatabaseTest {
             Name         STRING(MAX),
           ) PRIMARY KEY (ID, CommitTS DESC)
         )"}));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 };
 
@@ -82,11 +82,11 @@ TEST_F(CommitTimestamps, CannotWriteCommitTimestampToNonCommitTimestampColumn) {
   // column or to a timestamp column with allow_commit_timestamp set to false.
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"},
                      {6, "Levin", kCommitTimestampSentinel}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age", "NonCommitTS"},
                      {6, "Levin", 24, kCommitTimestampSentinel}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(CommitTimestamps, CanWriteMaxTimestampToTimestampColumn) {
@@ -108,7 +108,7 @@ TEST_F(CommitTimestamps, CannotWriteMaxTimestampToCommitTimestampColumn) {
 
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age", "CommitTS"},
                      {6, "Levin", 24, max_allowed_timestamp}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(CommitTimestamps, CannotWriteFutureTimestampToCommitTimestampColumn) {
@@ -120,7 +120,7 @@ TEST_F(CommitTimestamps, CannotWriteFutureTimestampToCommitTimestampColumn) {
           .value();
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age", "CommitTS"},
                      {6, "Levin", 24, future_timestamp}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(CommitTimestamps, CanWriteCommitTimestampToCommitTimestampKeyColumn) {
@@ -325,8 +325,8 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithCommitTimestamp) {
           MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}, 1,
                      kCommitTimestampSentinel, "Levin"),
       }),
-      in_prod_env() ? StatusIs(zetasql_base::StatusCode::kInvalidArgument)
-                    : StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+      in_prod_env() ? StatusIs(absl::StatusCode::kInvalidArgument)
+                    : StatusIs(absl::StatusCode::kAlreadyExists));
 
   Timestamp past_timestamp = MakePastTimestamp(std::chrono::seconds(2000));
   Timestamp past_timestamp2 = MakePastTimestamp(std::chrono::seconds(1000));
@@ -341,13 +341,13 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithCommitTimestamp) {
   EXPECT_THAT(
       Delete("CommitTimestampKeyTable",
              OpenOpen(Key(1, future_timestamp), Key(1, future_timestamp2))),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Range delete at (past, future) disallowed.
   EXPECT_THAT(
       Delete("CommitTimestampKeyTable",
              OpenOpen(Key(1, past_timestamp), Key(1, future_timestamp))),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // No-op delete at (future, future) allowed.
   ZETASQL_EXPECT_OK(
@@ -364,7 +364,7 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithCommitTimestamp) {
   EXPECT_THAT(
       Delete("CommitTimestampKeyTable",
              ClosedClosed(Key(1, future_timestamp), Key(1, future_timestamp))),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // No-op delete at (future, past) is allowed.
   ZETASQL_EXPECT_OK(Delete("CommitTimestampKeyTable",
@@ -399,13 +399,13 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithDescendingCommitTimestamp) {
   EXPECT_THAT(
       Delete("CommitTimestampDescKeyTable",
              OpenOpen(Key(1, future_timestamp2), Key(1, future_timestamp))),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Range delete at (future, past) disallowed.
   EXPECT_THAT(
       Delete("CommitTimestampDescKeyTable",
              OpenOpen(Key(1, future_timestamp), Key(1, past_timestamp))),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // No-op delete at (future, future) allowed.
   ZETASQL_EXPECT_OK(
@@ -422,7 +422,7 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithDescendingCommitTimestamp) {
   EXPECT_THAT(
       Delete("CommitTimestampDescKeyTable",
              ClosedClosed(Key(1, future_timestamp), Key(1, future_timestamp))),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // No-op delete at (past, future) is allowed.
   ZETASQL_EXPECT_OK(Delete("CommitTimestampDescKeyTable",

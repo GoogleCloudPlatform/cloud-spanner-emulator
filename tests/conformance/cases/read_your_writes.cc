@@ -34,7 +34,7 @@ constexpr char kCommitTimestampSentinel[] = "spanner.commit_timestamp()";
 
 class ReadYourWritesTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     ZETASQL_RETURN_IF_ERROR(SetSchema({
         R"(
           CREATE TABLE CommitTsTable (
@@ -71,7 +71,7 @@ class ReadYourWritesTest : public DatabaseTest {
         R"(
           CREATE UNIQUE INDEX UsersByEmail ON Users(email)
         )"}));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 };
 
@@ -111,15 +111,15 @@ TEST_F(ReadYourWritesTest, CannotReadPendingCommitTimestampInKey) {
 
   // Reading a pending commit_timestamp is not supported.
   EXPECT_THAT(QueryTransaction(txn, "SELECT ts FROM CommitTsTable"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Trying to read the non-timestamp key column is not supported.
   EXPECT_THAT(QueryTransaction(txn, "SELECT id FROM CommitTsTable"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Trying to read the non-key column val is also not supported.
   EXPECT_THAT(QueryTransaction(txn, "SELECT val FROM CommitTsTable"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Cannot read non-key values using index since primary key of table is part
   // of index implicitly.
@@ -127,13 +127,13 @@ TEST_F(ReadYourWritesTest, CannotReadPendingCommitTimestampInKey) {
       QueryTransaction(
           txn,
           "SELECT val FROM CommitTsTable@{force_index=CommitTsTableIndex}"),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(
       QueryTransaction(txn,
                        "SELECT val FROM "
                        "CommitTsTable@{force_index=CommitTsTableUniqueIndex}"),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(ReadYourWritesTest, CanReadAlreadyCommittedTimestampColumn) {
@@ -173,14 +173,14 @@ TEST_F(ReadYourWritesTest, CannotReadPendingCommitTimestampInColumn) {
 
   // Reading a pending commit_timestamp column is not supported.
   EXPECT_THAT(QueryTransaction(txn, "SELECT ts FROM NonKeyCommitTsTable"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Cannot read pending commit-timestamp column using index.
   EXPECT_THAT(QueryTransaction(
                   txn,
                   "SELECT ts FROM "
                   "NonKeyCommitTsTable@{force_index=NonKeyCommitTsIndexOnTs}"),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // TODO: These tests below fail since Sql query will always try to
@@ -261,7 +261,7 @@ TEST_F(ReadYourWritesTest, CannotViolateUniqueIndexConstraint) {
           txn,
           SqlStatement({SqlStatement(
               "INSERT INTO Users(userid, email) VALUES (222, 'a@foo.com')")})),
-      StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+      StatusIs(absl::StatusCode::kAlreadyExists));
 
   // Insert: 333 - 'a@foo.com' - violate unique index with commit.
   EXPECT_THAT(
@@ -269,7 +269,7 @@ TEST_F(ReadYourWritesTest, CannotViolateUniqueIndexConstraint) {
           txn,
           {SqlStatement(
               "INSERT INTO Users(userid, email) VALUES (222, 'a@foo.com')")}),
-      StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+      StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 }  // namespace test

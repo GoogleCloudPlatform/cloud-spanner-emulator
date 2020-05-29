@@ -21,7 +21,7 @@
 
 #include "google/protobuf/map.h"
 #include "re2/re2.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -39,7 +39,7 @@ using Labels = std::map<std::string, std::string>;
 
 // Validates the provided labels. For validation requirements, see
 //    https://cloud.google.com/spanner/docs/reference/rpc/google.spanner.v1#session
-zetasql_base::Status ValidateLabels(
+absl::Status ValidateLabels(
     const google::protobuf::Map<std::string, std::string>& labels);
 
 }  // namespace frontend

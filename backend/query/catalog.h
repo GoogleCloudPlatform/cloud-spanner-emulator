@@ -29,7 +29,7 @@
 #include "backend/query/function_catalog.h"
 #include "backend/query/queryable_table.h"
 #include "backend/schema/catalog/schema.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -54,22 +54,22 @@ class Catalog : public zetasql::EnumerableCatalog {
 
  private:
   // Implementation of the zetasql::Catalog interface.
-  zetasql_base::Status GetCatalog(const std::string& name, zetasql::Catalog** catalog,
+  absl::Status GetCatalog(const std::string& name, zetasql::Catalog** catalog,
                           const FindOptions& options) final;
-  zetasql_base::Status GetTable(const std::string& name, const zetasql::Table** table,
+  absl::Status GetTable(const std::string& name, const zetasql::Table** table,
                         const FindOptions& options) final;
-  zetasql_base::Status GetFunction(const std::string& name,
+  absl::Status GetFunction(const std::string& name,
                            const zetasql::Function** function,
                            const FindOptions& options) final;
 
   // Implementation of the zetasql::EnumerableCatalog interface.
-  zetasql_base::Status GetCatalogs(
+  absl::Status GetCatalogs(
       absl::flat_hash_set<const zetasql::Catalog*>* output) const final;
-  zetasql_base::Status GetTables(
+  absl::Status GetTables(
       absl::flat_hash_set<const zetasql::Table*>* output) const final;
-  zetasql_base::Status GetTypes(
+  absl::Status GetTypes(
       absl::flat_hash_set<const zetasql::Type*>* output) const final;
-  zetasql_base::Status GetFunctions(
+  absl::Status GetFunctions(
       absl::flat_hash_set<const zetasql::Function*>* output) const final;
 
   // Returns the information schema catalog (creating one if needed).

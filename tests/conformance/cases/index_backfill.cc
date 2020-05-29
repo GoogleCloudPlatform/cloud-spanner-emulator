@@ -31,7 +31,7 @@ using zetasql_base::testing::StatusIs;
 
 class IndexBackfillTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({
         R"(CREATE TABLE Users(
           UserId   INT64 NOT NULL,
@@ -63,7 +63,7 @@ TEST_F(IndexBackfillTest,
   EXPECT_THAT(
       UpdateSchema(
           {"CREATE UNIQUE INDEX UsersByNameAgeUnique ON Users(Name, Age)"}),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(IndexBackfillTest, ValidateCreationOfDuplicateIndexFails) {
@@ -71,7 +71,7 @@ TEST_F(IndexBackfillTest, ValidateCreationOfDuplicateIndexFails) {
       UpdateSchema({"CREATE INDEX UsersByNameAgeUnique ON Users(Name, Age)"}));
   EXPECT_THAT(
       UpdateSchema({"CREATE INDEX UsersByNameAgeUnique ON Users(Name, Age)"}),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(IndexBackfillTest, BackfillOfIndexOnInterleavedTableSucceeds) {
@@ -173,7 +173,7 @@ TEST_F(IndexBackfillTest, CannotBackfillIndexWithLargeKey) {
   ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age"}, {1, long_name, 20}));
 
   EXPECT_THAT(UpdateSchema({"CREATE INDEX UsersByName ON Users(Name)"}),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 }  // namespace

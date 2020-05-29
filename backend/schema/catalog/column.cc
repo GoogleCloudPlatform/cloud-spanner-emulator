@@ -19,7 +19,7 @@
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.pb.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
 #include "backend/datamodel/types.h"
@@ -29,7 +29,7 @@
 #include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -57,16 +57,16 @@ std::string Column::FullName() const {
   return absl::StrCat(table_->Name(), ".", name_);
 }
 
-zetasql_base::Status Column::Validate(SchemaValidationContext* context) const {
+absl::Status Column::Validate(SchemaValidationContext* context) const {
   return validate_(this, context);
 }
 
-zetasql_base::Status Column::ValidateUpdate(const SchemaNode* orig,
+absl::Status Column::ValidateUpdate(const SchemaNode* orig,
                                     SchemaValidationContext* context) const {
   return validate_update_(this, orig->As<const Column>(), context);
 }
 
-zetasql_base::Status Column::DeepClone(SchemaGraphEditor* editor,
+absl::Status Column::DeepClone(SchemaGraphEditor* editor,
                                const SchemaNode* orig) {
   ZETASQL_ASSIGN_OR_RETURN(const auto* table_clone, editor->Clone(table_));
   table_ = table_clone->As<const Table>();
@@ -91,26 +91,26 @@ zetasql_base::Status Column::DeepClone(SchemaGraphEditor* editor,
       is_nullable_ = source_column_->is_nullable_;
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status KeyColumn::Validate(SchemaValidationContext* context) const {
+absl::Status KeyColumn::Validate(SchemaValidationContext* context) const {
   return validate_(this, context);
 }
 
-zetasql_base::Status KeyColumn::ValidateUpdate(const SchemaNode* orig,
+absl::Status KeyColumn::ValidateUpdate(const SchemaNode* orig,
                                        SchemaValidationContext* context) const {
   return validate_update_(this, orig->As<const KeyColumn>(), context);
 }
 
-zetasql_base::Status KeyColumn::DeepClone(SchemaGraphEditor* editor,
+absl::Status KeyColumn::DeepClone(SchemaGraphEditor* editor,
                                   const SchemaNode* orig) {
   ZETASQL_ASSIGN_OR_RETURN(const auto* cloned_column, editor->Clone(column_));
   column_ = cloned_column->As<const Column>();
   if (column_->is_deleted()) {
     MarkDeleted();
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

@@ -66,7 +66,7 @@ class FlushTest : public testing::Test {
   const Column* string_col_;
 
   // Helper functions to use in tests.
-  zetasql_base::Status Write(absl::Time timestamp, const Key& key,
+  absl::Status Write(absl::Time timestamp, const Key& key,
                      const ValueList& values) {
     return storage_->Write(timestamp, table_->id(), key,
                            {int64_col_->id(), string_col_->id()}, values);

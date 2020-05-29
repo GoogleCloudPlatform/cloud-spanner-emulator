@@ -26,7 +26,7 @@ cc_library(
         ":context",
         ":ops",
         "//backend/schema/catalog:schema",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
     ],
 )
 
@@ -70,7 +70,7 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//backend/storage:iterator",
         "//common:errors",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
@@ -109,8 +109,8 @@ cc_library(
         "//common:errors",
         "//common:limits",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/public/functions:string",
     ],
 )
@@ -130,11 +130,11 @@ cc_test(
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:distributions",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:variant",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:value",
         "@com_google_zetasql//zetasql/public/functions:string",
@@ -150,7 +150,7 @@ cc_library(
         ":context",
         ":ops",
         "//common:errors",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
@@ -183,7 +183,7 @@ cc_library(
         "//backend/common:indexing",
         "//backend/schema/catalog:schema",
         "//common:errors",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
     ],
 )
 
@@ -217,7 +217,7 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//backend/storage:iterator",
         "//common:errors",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
     ],
 )
 

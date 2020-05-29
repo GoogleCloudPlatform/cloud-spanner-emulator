@@ -36,7 +36,7 @@
 #include "frontend/server/request_context.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -112,7 +112,7 @@ TEST_F(TransactionApiTest, CannotCommitNonExistentTransaction) {
 
   spanner_api::CommitResponse commit_response;
   EXPECT_THAT(Commit(commit_request, &commit_response),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(TransactionApiTest, CanCommitSingleUseReadWriteTransaction) {
@@ -133,7 +133,7 @@ TEST_F(TransactionApiTest, CannotCommitSingleUseReadOnlyTransaction) {
 
   spanner_api::CommitResponse commit_response;
   EXPECT_THAT(Commit(commit_request, &commit_response),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(TransactionApiTest, CannotCommitSingleUseInvalidTransactionMode) {
@@ -144,7 +144,7 @@ TEST_F(TransactionApiTest, CannotCommitSingleUseInvalidTransactionMode) {
 
   spanner_api::CommitResponse commit_response;
   EXPECT_THAT(Commit(commit_request, &commit_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(TransactionApiTest, CannotCommitInvalidTransactionType) {
@@ -154,7 +154,7 @@ TEST_F(TransactionApiTest, CannotCommitInvalidTransactionType) {
 
   spanner_api::CommitResponse commit_response;
   EXPECT_THAT(Commit(commit_request, &commit_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(TransactionApiTest, CommitTransactionIsIdempotent) {
@@ -214,7 +214,7 @@ TEST_F(TransactionApiTest, CannotRollbackSnapshotTransaction) {
   rollback_request.set_session(test_session_uri_);
 
   EXPECT_THAT(Rollback(rollback_request),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(TransactionApiTest, CannotRollbackAfterCommit) {
@@ -238,7 +238,7 @@ TEST_F(TransactionApiTest, CannotRollbackAfterCommit) {
   rollback_request.set_session(test_session_uri_);
 
   EXPECT_THAT(Rollback(rollback_request),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(TransactionApiTest, CannotCommitAfterRollback) {
@@ -262,7 +262,7 @@ TEST_F(TransactionApiTest, CannotCommitAfterRollback) {
 
   spanner_api::CommitResponse commit_response1;
   EXPECT_THAT(Commit(commit_request1, &commit_response1),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(TransactionApiTest, CannotUseTransactionAfterError) {
@@ -288,7 +288,7 @@ TEST_F(TransactionApiTest, CannotUseTransactionAfterError) {
 
   spanner_api::ResultSet read_response;
   EXPECT_THAT(Read(read_request, &read_response),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 
   // Subsequent operations on the transaction should continue to fail with
   // NotFound error.
@@ -298,7 +298,7 @@ TEST_F(TransactionApiTest, CannotUseTransactionAfterError) {
 
   spanner_api::CommitResponse commit_response1;
   EXPECT_THAT(Commit(commit_request1, &commit_response1),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 }  // namespace

@@ -128,7 +128,7 @@ TEST(InstanceManagerTest, DeleteInstance) {
 
   EXPECT_THAT(instance_manager.GetInstance("projects/123/instances/456"),
               zetasql_base::testing::StatusIs(
-                  zetasql_base::StatusCode::kNotFound,
+                  absl::StatusCode::kNotFound,
                   testing::MatchesRegex(".*Instance not found.*")));
 }
 

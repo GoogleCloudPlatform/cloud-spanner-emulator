@@ -26,7 +26,7 @@
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/transaction/options.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -37,7 +37,7 @@ zetasql_base::StatusOr<backend::ReadOnlyOptions> ReadOnlyOptionsFromProto(
     const google::spanner::v1::TransactionOptions::ReadOnly& proto);
 
 // Populates a ReadArg from a ReadRequest proto.
-zetasql_base::Status ReadArgFromProto(const backend::Schema& schema,
+absl::Status ReadArgFromProto(const backend::Schema& schema,
                               const google::spanner::v1::ReadRequest& request,
                               backend::ReadArg* read_arg);
 
@@ -46,7 +46,7 @@ zetasql_base::Status ReadArgFromProto(const backend::Schema& schema,
 // Only handles the types and values supported by Cloud Spanner. Invalid types
 // or values not supported by Cloud Spanner will return errors. If limit > 0,
 // will only convert first limit numbers of rows into result_pb.
-zetasql_base::Status RowCursorToResultSetProto(
+absl::Status RowCursorToResultSetProto(
     backend::RowCursor* cursor, int limit,
     google::spanner::v1::ResultSet* result_pb);
 

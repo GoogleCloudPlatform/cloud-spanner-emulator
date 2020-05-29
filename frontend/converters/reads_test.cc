@@ -25,14 +25,14 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "backend/access/write.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/schema/catalog/schema.h"
 #include "tests/common/row_cursor.h"
 #include "tests/common/schema_constructor.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -381,21 +381,21 @@ TEST_F(AccessProtosTest, CannotConvertInvalidRowCursorToResultSet) {
 
   TestRowCursor cursor1({"col1"}, {GeographyType()}, {});
   EXPECT_THAT(RowCursorToResultSetProto(&cursor1, 0, &result_pb),
-              StatusIs(zetasql_base::StatusCode::kInternal));
+              StatusIs(absl::StatusCode::kInternal));
 
   TestRowCursor cursor2({"col1"}, {NumericType()}, {});
   EXPECT_THAT(RowCursorToResultSetProto(&cursor2, 0, &result_pb),
-              StatusIs(zetasql_base::StatusCode::kInternal));
+              StatusIs(absl::StatusCode::kInternal));
 
   TestRowCursor cursor3({"col1"}, {DatetimeType()}, {});
   EXPECT_THAT(RowCursorToResultSetProto(&cursor3, 0, &result_pb),
-              StatusIs(zetasql_base::StatusCode::kInternal));
+              StatusIs(absl::StatusCode::kInternal));
 
   // Test invalid value.
   TestRowCursor cursor4({"col1"}, {Int64Type()},
                         {{Value(Datetime(zetasql::DatetimeValue()))}});
   EXPECT_THAT(RowCursorToResultSetProto(&cursor4, 0, &result_pb),
-              StatusIs(zetasql_base::StatusCode::kInternal));
+              StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(AccessProtosTest, CanReadArgsFromProto) {
@@ -442,7 +442,7 @@ TEST_F(AccessProtosTest, CannotReadArgsFromProtoWithNoKeySet) {
   )");
   backend::ReadArg read_arg;
   EXPECT_THAT(ReadArgFromProto(*schema_.get(), request, &read_arg),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(AccessProtosTest, CanReadArgsFromProtoWithEmptyKeySet) {
@@ -476,7 +476,7 @@ TEST_F(AccessProtosTest, CannotReadArgsFromProtoWithInvalidTable) {
   )");
   backend::ReadArg read_arg;
   EXPECT_THAT(ReadArgFromProto(*schema_.get(), request, &read_arg),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(AccessProtosTest,
@@ -497,7 +497,7 @@ TEST_F(AccessProtosTest,
   )");
   backend::ReadArg read_arg;
   EXPECT_THAT(ReadArgFromProto(*schema_.get(), request, &read_arg),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(AccessProtosTest, ParsesAllKeySet) {

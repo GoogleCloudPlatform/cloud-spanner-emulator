@@ -27,7 +27,7 @@
 #include "frontend/entities/session.h"
 #include "frontend/entities/transaction.h"
 #include "frontend/server/handler.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -39,20 +39,20 @@ namespace spanner_api = ::google::spanner::v1;
 
 namespace {
 
-zetasql_base::Status ValidateTransactionSelectorForRead(
+absl::Status ValidateTransactionSelectorForRead(
     const spanner_api::TransactionSelector& selector) {
   if (selector.selector_case() ==
           spanner_api::TransactionSelector::SelectorCase::kSingleUse &&
       selector.single_use().mode_case() != v1::TransactionOptions::kReadOnly) {
     return error::InvalidModeForReadOnlySingleUseTransaction();
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  //  namespace
 
 // Reads rows from the database, returning all results in a single reply.
-zetasql_base::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* request,
+absl::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* request,
                   spanner_api::ResultSet* response) {
   // Get session information.
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
@@ -64,7 +64,7 @@ zetasql_base::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* r
                    session->FindOrInitTransaction(request->transaction()));
 
   // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> zetasql_base::Status {
+  return txn->GuardedCall([&]() -> absl::Status {
     // Cannot read after commit or rollback.
     if (txn->IsCommitted() || txn->IsRolledback()) {
       return error::CannotReadOrQueryAfterCommitOrRollback();
@@ -95,7 +95,7 @@ REGISTER_GRPC_HANDLER(Spanner, Read);
 // StreamingReads do not support resume_tokens in the emulator. This
 // implementation does not limit the size of the response and therefore,
 // chunked_value will always be false.
-zetasql_base::Status StreamingRead(
+absl::Status StreamingRead(
     RequestContext* ctx, const spanner_api::ReadRequest* request,
     ServerStream<spanner_api::PartialResultSet>* stream) {
   // Get session information.
@@ -108,7 +108,7 @@ zetasql_base::Status StreamingRead(
                    session->FindOrInitTransaction(request->transaction()));
 
   // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> zetasql_base::Status {
+  return txn->GuardedCall([&]() -> absl::Status {
     // Cannot read after commit or rollback.
     if (txn->IsCommitted() || txn->IsRolledback()) {
       return error::CannotReadOrQueryAfterCommitOrRollback();
@@ -138,7 +138,7 @@ zetasql_base::Status StreamingRead(
     for (const auto& response : responses) {
       stream->Send(response);
     }
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   });
 }
 REGISTER_GRPC_HANDLER(Spanner, StreamingRead);

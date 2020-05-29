@@ -86,25 +86,25 @@ class TransactionStoreTest : public testing::Test {
   const Column* string_col_;
 
   // Helper functions to use in tests.
-  zetasql_base::Status Write(absl::Time timestamp, const Key& key,
+  absl::Status Write(absl::Time timestamp, const Key& key,
                      const ValueList& values) {
     return base_storage_->Write(timestamp, table_->id(), key,
                                 {int64_col_->id(), string_col_->id()}, values);
   }
 
-  zetasql_base::Status BufferInsert(const Key& key, std::vector<const Column*> columns,
+  absl::Status BufferInsert(const Key& key, std::vector<const Column*> columns,
                             const ValueList& values) {
     return transaction_store_.BufferWriteOp(
         InsertOp{table_, key, columns, values});
   }
 
-  zetasql_base::Status BufferUpdate(const Key& key, std::vector<const Column*> columns,
+  absl::Status BufferUpdate(const Key& key, std::vector<const Column*> columns,
                             const ValueList& values) {
     return transaction_store_.BufferWriteOp(
         UpdateOp{table_, key, columns, values});
   }
 
-  zetasql_base::Status BufferDelete(const Key& key) {
+  absl::Status BufferDelete(const Key& key) {
     return transaction_store_.BufferWriteOp(DeleteOp{table_, key});
   }
 
@@ -280,7 +280,7 @@ TEST_F(TransactionStoreTest, Lookup) {
               IsOkAndHoldsRow({Int64(1), String("new-value")}));
 
   // Row Int64(2) does not exist.
-  EXPECT_THAT(Lookup(Key({Int64(2)})), StatusIs(zetasql_base::StatusCode::kNotFound));
+  EXPECT_THAT(Lookup(Key({Int64(2)})), StatusIs(absl::StatusCode::kNotFound));
 
   // Row Int64(3) is inserted.
   EXPECT_THAT(Lookup(Key({Int64(3)})),
@@ -289,11 +289,11 @@ TEST_F(TransactionStoreTest, Lookup) {
   ZETASQL_EXPECT_OK(BufferDelete(Key({Int64(3)})));
 
   // Row Int64(3) has been deleted so it should return not found.
-  EXPECT_THAT(Lookup(Key({Int64(3)})), StatusIs(zetasql_base::StatusCode::kNotFound));
+  EXPECT_THAT(Lookup(Key({Int64(3)})), StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(TransactionStoreTest, LookupDelete) {
-  EXPECT_THAT(Lookup(Key({Int64(1)})), StatusIs(zetasql_base::StatusCode::kNotFound));
+  EXPECT_THAT(Lookup(Key({Int64(1)})), StatusIs(absl::StatusCode::kNotFound));
 
   ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
                          {Int64(1), String("value")}));
@@ -301,7 +301,7 @@ TEST_F(TransactionStoreTest, LookupDelete) {
               IsOkAndHoldsRow({Int64(1), String("value")}));
 
   ZETASQL_EXPECT_OK(BufferDelete(Key({Int64(1)})));
-  EXPECT_THAT(Lookup(Key({Int64(1)})), StatusIs(zetasql_base::StatusCode::kNotFound));
+  EXPECT_THAT(Lookup(Key({Int64(1)})), StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(TransactionStoreTest, LookupBaseStorage) {

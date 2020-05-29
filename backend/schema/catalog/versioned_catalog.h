@@ -58,7 +58,7 @@ class VersionedCatalog {
   // Adds a schema at a given timestamp. Returns an error if creation_time is
   // the same or prior to the largest timestamp in all of the schemas. In this
   // case, the new schema will not be added.
-  zetasql_base::Status AddSchema(absl::Time creation_time,
+  absl::Status AddSchema(absl::Time creation_time,
                          std::unique_ptr<const Schema> schema)
       ABSL_LOCKS_EXCLUDED(mu_);
 

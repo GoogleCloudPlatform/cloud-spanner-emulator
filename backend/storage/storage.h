@@ -23,7 +23,7 @@
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/storage/iterator.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -44,7 +44,7 @@ class Storage {
   // column value is not set, it returns an invalid zetasql::Value, i.e. one
   // for which is_valid() is false. Column values are always set in order of the
   // columns defined in column_ids.
-  virtual zetasql_base::Status Lookup(absl::Time timestamp, const TableID& table_id,
+  virtual absl::Status Lookup(absl::Time timestamp, const TableID& table_id,
                               const Key& key,
                               const std::vector<ColumnID>& column_ids,
                               std::vector<zetasql::Value>* values) const = 0;
@@ -53,7 +53,7 @@ class Storage {
   // sorted order. See comments on StorageIterator for more details. KeyRange
   // interval should be in KeyRange::ClosedOpen format. Non ClosedOpen ranges
   // will result in INVALID_ARGUMENT.
-  virtual zetasql_base::Status Read(absl::Time timestamp, const TableID& table_id,
+  virtual absl::Status Read(absl::Time timestamp, const TableID& table_id,
                             const KeyRange& key_range,
                             const std::vector<ColumnID>& column_ids,
                             std::unique_ptr<StorageIterator>* itr) const = 0;
@@ -61,7 +61,7 @@ class Storage {
   // Writes column values for given key at the specified timestamp. Column value
   // will be overwritten for non-unique <timestamp, table_id, key, column_id>
   // combination.
-  virtual zetasql_base::Status Write(absl::Time timestamp, const TableID& table_id,
+  virtual absl::Status Write(absl::Time timestamp, const TableID& table_id,
                              const Key& key,
                              const std::vector<ColumnID>& column_ids,
                              const std::vector<zetasql::Value>& values) = 0;
@@ -70,7 +70,7 @@ class Storage {
   // values at older timestamps are still accessible via Read and Lookup.
   // KeyRange interval should be in KeyRange::ClosedOpen format. Non ClosedOpen
   // ranges will result in INVALID_ARGUMENT.
-  virtual zetasql_base::Status Delete(absl::Time timestamp, const TableID& table_id,
+  virtual absl::Status Delete(absl::Time timestamp, const TableID& table_id,
                               const KeyRange& key_range) = 0;
 };
 

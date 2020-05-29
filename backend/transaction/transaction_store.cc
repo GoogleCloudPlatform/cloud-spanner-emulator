@@ -28,7 +28,7 @@
 #include "backend/storage/iterator.h"
 #include "backend/transaction/commit_timestamp.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -59,7 +59,7 @@ void ResetInvalidValuesToNull(absl::Span<const Column* const> columns,
 
 }  // namespace
 
-zetasql_base::Status TransactionStore::AcquireReadLock(
+absl::Status TransactionStore::AcquireReadLock(
     const Table* table, const KeyRange& key_range,
     absl::Span<const Column* const> columns) const {
   lock_handle_->EnqueueLock(LockRequest(LockMode::kShared, table->id(),
@@ -67,7 +67,7 @@ zetasql_base::Status TransactionStore::AcquireReadLock(
   return lock_handle_->Wait();
 }
 
-zetasql_base::Status TransactionStore::AcquireWriteLock(
+absl::Status TransactionStore::AcquireWriteLock(
     const Table* table, const KeyRange& key_range,
     absl::Span<const Column* const> columns) const {
   lock_handle_->EnqueueLock(LockRequest(LockMode::kExclusive, table->id(),
@@ -75,7 +75,7 @@ zetasql_base::Status TransactionStore::AcquireWriteLock(
   return lock_handle_->Wait();
 }
 
-zetasql_base::Status TransactionStore::BufferInsert(
+absl::Status TransactionStore::BufferInsert(
     const Table* table, const Key& key, absl::Span<const Column* const> columns,
     const ValueList& values) {
   // Acquire locks to prevent another transaction to modify this entity.
@@ -96,10 +96,10 @@ zetasql_base::Status TransactionStore::BufferInsert(
   }
   buffered_ops_[table][key] = std::make_pair(OpType::kInsert, row_values);
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status TransactionStore::BufferUpdate(
+absl::Status TransactionStore::BufferUpdate(
     const Table* table, const Key& key, absl::Span<const Column* const> columns,
     const ValueList& values) {
   // Acquire locks to prevent another transaction to modify this entity.
@@ -127,10 +127,10 @@ zetasql_base::Status TransactionStore::BufferUpdate(
   }
   buffered_ops_[table][key] = std::make_pair(op_type, row_values);
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status TransactionStore::BufferDelete(const Table* table,
+absl::Status TransactionStore::BufferDelete(const Table* table,
                                             const Key& key) {
   // Acquire locks to prevent another transaction to modify this entity.
   ZETASQL_RETURN_IF_ERROR(AcquireWriteLock(table, KeyRange::Point(key), {}));
@@ -142,10 +142,10 @@ zetasql_base::Status TransactionStore::BufferDelete(const Table* table,
   }
   buffered_ops_[table][key] = std::make_pair(OpType::kDelete, row_values);
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status TransactionStore::BufferWriteOp(const WriteOp& op) {
+absl::Status TransactionStore::BufferWriteOp(const WriteOp& op) {
   return std::visit(
       overloaded{
           [&](const InsertOp& op) {
@@ -167,7 +167,7 @@ zetasql_base::Status TransactionStore::BufferWriteOp(const WriteOp& op) {
 //   - insert: add to output storage iterator
 //   - update: these updates should be applied over the base storage row.
 //   - delete: should remove the key read from the base storage.
-zetasql_base::Status TransactionStore::Read(
+absl::Status TransactionStore::Read(
     const Table* table, const KeyRange& key_range,
     absl::Span<const Column* const> columns,
     std::unique_ptr<StorageIterator>* storage_itr,
@@ -259,7 +259,7 @@ zetasql_base::Status TransactionStore::Read(
   // transaction_store_ietrator in parallel and comparing the keys.
   sort(rows.begin(), rows.end(), SortByKey);
   *storage_itr = absl::make_unique<FixedRowStorageIterator>(std::move(rows));
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 bool TransactionStore::RowExistsInBuffer(const Table* table, const Key& key,

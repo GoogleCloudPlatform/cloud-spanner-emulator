@@ -28,7 +28,7 @@
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "common/limits.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -98,9 +98,13 @@ class Column : public SchemaNode {
   // SchemaNode interface implementation.
   // ------------------------------------
 
-  zetasql_base::Status Validate(SchemaValidationContext* context) const override;
+  std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
+    return SchemaNameInfo{.name = name_, .kind = "Column"};
+  }
 
-  zetasql_base::Status ValidateUpdate(const SchemaNode* orig,
+  absl::Status Validate(SchemaValidationContext* context) const override;
+
+  absl::Status ValidateUpdate(const SchemaNode* orig,
                               SchemaValidationContext* context) const override;
 
   std::string DebugString() const override {
@@ -115,8 +119,8 @@ class Column : public SchemaNode {
   friend class ColumnValidator;
 
   using ValidationFn =
-      std::function<zetasql_base::Status(const Column*, SchemaValidationContext*)>;
-  using UpdateValidationFn = std::function<zetasql_base::Status(
+      std::function<absl::Status(const Column*, SchemaValidationContext*)>;
+  using UpdateValidationFn = std::function<absl::Status(
       const Column*, const Column*, SchemaValidationContext*)>;
 
   // Constructors are private and only friend classes are able to build /
@@ -130,7 +134,7 @@ class Column : public SchemaNode {
     return absl::WrapUnique(new Column(*this));
   }
 
-  zetasql_base::Status DeepClone(SchemaGraphEditor* editor,
+  absl::Status DeepClone(SchemaGraphEditor* editor,
                          const SchemaNode* orig) override;
 
   // Validation delegates.
@@ -178,9 +182,9 @@ class KeyColumn : public SchemaNode {
   // SchemaNode interface implementation.
   // ------------------------------------
 
-  zetasql_base::Status Validate(SchemaValidationContext* context) const override;
+  absl::Status Validate(SchemaValidationContext* context) const override;
 
-  zetasql_base::Status ValidateUpdate(const SchemaNode* orig,
+  absl::Status ValidateUpdate(const SchemaNode* orig,
                               SchemaValidationContext* context) const override;
 
   std::string DebugString() const override {
@@ -194,8 +198,8 @@ class KeyColumn : public SchemaNode {
   friend class KeyColumnValidator;
 
   using ValidationFn =
-      std::function<zetasql_base::Status(const KeyColumn*, SchemaValidationContext*)>;
-  using UpdateValidationFn = std::function<zetasql_base::Status(
+      std::function<absl::Status(const KeyColumn*, SchemaValidationContext*)>;
+  using UpdateValidationFn = std::function<absl::Status(
       const KeyColumn*, const KeyColumn*, SchemaValidationContext*)>;
 
   KeyColumn(const ValidationFn& validate,
@@ -207,7 +211,7 @@ class KeyColumn : public SchemaNode {
     return absl::WrapUnique(new KeyColumn(*this));
   }
 
-  zetasql_base::Status DeepClone(SchemaGraphEditor* editor,
+  absl::Status DeepClone(SchemaGraphEditor* editor,
                          const SchemaNode* orig) override;
 
   // Validation delegates.

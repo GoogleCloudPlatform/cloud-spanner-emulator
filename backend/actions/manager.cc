@@ -30,36 +30,36 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-zetasql_base::Status ActionRegistry::ExecuteValidators(const ActionContext* ctx,
+absl::Status ActionRegistry::ExecuteValidators(const ActionContext* ctx,
                                                const WriteOp& op) {
   for (auto& validator : table_validators_[TableOf(op)]) {
     ZETASQL_RETURN_IF_ERROR(validator->Validate(ctx, op));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ActionRegistry::ExecuteEffectors(const ActionContext* ctx,
+absl::Status ActionRegistry::ExecuteEffectors(const ActionContext* ctx,
                                               const WriteOp& op) {
   for (auto& effector : table_effectors_[TableOf(op)]) {
     ZETASQL_RETURN_IF_ERROR(effector->Effect(ctx, op));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ActionRegistry::ExecuteModifiers(const ActionContext* ctx,
+absl::Status ActionRegistry::ExecuteModifiers(const ActionContext* ctx,
                                               const WriteOp& op) {
   for (auto& modifier : table_modifiers_[TableOf(op)]) {
     ZETASQL_RETURN_IF_ERROR(modifier->Modify(ctx, op));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ActionRegistry::ExecuteVerifiers(const ActionContext* ctx,
+absl::Status ActionRegistry::ExecuteVerifiers(const ActionContext* ctx,
                                               const WriteOp& op) {
   for (auto& verifier : table_verifiers_[TableOf(op)]) {
     ZETASQL_RETURN_IF_ERROR(verifier->Verify(ctx, op));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 ActionRegistry::ActionRegistry(const Schema* schema) : schema_(schema) {

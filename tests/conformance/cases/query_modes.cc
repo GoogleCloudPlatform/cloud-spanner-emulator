@@ -33,7 +33,7 @@ using zetasql_base::testing::StatusIs;
 
 class QueryModesTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     ZETASQL_RETURN_IF_ERROR(SetSchema({R"(
       CREATE TABLE Users(
         ID   INT64 NOT NULL,
@@ -45,7 +45,7 @@ class QueryModesTest : public DatabaseTest {
     ZETASQL_RETURN_IF_ERROR(Insert("Users", {"ID", "Name"}, {1, "John"}).status());
     ZETASQL_RETURN_IF_ERROR(Insert("Users", {"ID", "Name"}, {2, "Peter"}).status());
 
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 };
 
@@ -54,8 +54,8 @@ TEST_F(QueryModesTest, RejectsQueriesInPlanMode) {
   EXPECT_THAT(ToUtilStatusOr(client().AnalyzeSql(
                   Transaction(Transaction::ReadOnlyOptions()),
                   SqlStatement("select * from Users"))),
-              StatusIs(in_prod_env() ? zetasql_base::StatusCode::kOk
-                                     : zetasql_base::StatusCode::kUnimplemented));
+              StatusIs(in_prod_env() ? absl::StatusCode::kOk
+                                     : absl::StatusCode::kUnimplemented));
 }
 
 TEST_F(QueryModesTest, ProvidesBasicStatsInProfileMode) {

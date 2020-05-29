@@ -22,7 +22,7 @@
 #include "grpcpp/impl/codegen/sync_stream.h"
 #include "common/config.h"
 #include "frontend/server/request_context.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -73,7 +73,7 @@ class UnaryGRPCHandler final : public GRPCHandlerBase {
  public:
   // Signature of the user-defined handler function.
   using HandlerFn =
-      std::function<zetasql_base::Status(RequestContext*, const RequestT*, ResponseT*)>;
+      std::function<absl::Status(RequestContext*, const RequestT*, ResponseT*)>;
 
   // Constructs a wrapper around the user-defined handler function.
   UnaryGRPCHandler(const std::string& service_name,
@@ -81,13 +81,13 @@ class UnaryGRPCHandler final : public GRPCHandlerBase {
       : GRPCHandlerBase(service_name, method_name), fn_(fn) {}
 
   // Invokes the user-defined handler function wrapped by this class.
-  zetasql_base::Status Run(RequestContext* ctx, const RequestT* request,
+  absl::Status Run(RequestContext* ctx, const RequestT* request,
                    ResponseT* response) {
     if (config::should_log_requests()) {
       LOG(INFO) << "Request[" << service_name() << "." << method_name() << "]\n"
                 << request->DebugString();
     }
-    zetasql_base::Status status = fn_(ctx, request, response);
+    absl::Status status = fn_(ctx, request, response);
     if (config::should_log_requests()) {
       LOG(INFO) << "Response[" << service_name() << "." << method_name()
                 << "]\n"
@@ -106,7 +106,7 @@ template <typename RequestT, typename ResponseT>
 class ServerStreamingGRPCHandler final : public GRPCHandlerBase {
  public:
   // Signature of the user-defined handler function.
-  using HandlerFn = std::function<zetasql_base::Status(RequestContext*, const RequestT*,
+  using HandlerFn = std::function<absl::Status(RequestContext*, const RequestT*,
                                                ServerStream<ResponseT>*)>;
 
   // Constructs a wrapper around the user-defined handler function.
@@ -115,14 +115,14 @@ class ServerStreamingGRPCHandler final : public GRPCHandlerBase {
       : GRPCHandlerBase(service_name, method_name), fn_(fn) {}
 
   // Invokes the user-defined handler function wrapped by this class.
-  zetasql_base::Status Run(RequestContext* ctx, const RequestT* request,
+  absl::Status Run(RequestContext* ctx, const RequestT* request,
                    grpc::ServerWriterInterface<ResponseT>* writer) {
     if (config::should_log_requests()) {
       LOG(INFO) << "Request[" << service_name() << "." << method_name() << "]\n"
                 << request->DebugString();
     }
     ServerStream<ResponseT> stream(writer);
-    zetasql_base::Status status = fn_(ctx, request, &stream);
+    absl::Status status = fn_(ctx, request, &stream);
     if (config::should_log_requests()) {
       LOG(INFO) << "Response[" << service_name() << "." << method_name()
                 << "]\n"
@@ -146,7 +146,7 @@ class HandlerRegisterer {
   template <typename RequestT, typename ResponseT>
   HandlerRegisterer(const std::string& service_name,
                     const std::string& method_name,
-                    zetasql_base::Status (*fn)(RequestContext*, const RequestT*,
+                    absl::Status (*fn)(RequestContext*, const RequestT*,
                                        ResponseT*))
       : HandlerRegisterer(
             absl::make_unique<UnaryGRPCHandler<RequestT, ResponseT>>(
@@ -156,7 +156,7 @@ class HandlerRegisterer {
   template <typename RequestT, typename ResponseT>
   HandlerRegisterer(const std::string& service_name,
                     const std::string& method_name,
-                    zetasql_base::Status (*fn)(RequestContext*, const RequestT*,
+                    absl::Status (*fn)(RequestContext*, const RequestT*,
                                        ServerStream<ResponseT>*))
       : HandlerRegisterer(
             absl::make_unique<ServerStreamingGRPCHandler<RequestT, ResponseT>>(

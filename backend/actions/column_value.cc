@@ -27,7 +27,7 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -37,26 +37,7 @@ namespace backend {
 
 namespace {
 
-zetasql_base::Status ValidateNotNullColumnsPresent(
-    const Table* table, const std::vector<const Column*>& columns) {
-  // TODO: Find a way of doing this without creating a hash set for
-  // every insert.
-  absl::flat_hash_set<const Column*> inserted_columns;
-  for (const auto column : columns) {
-    if (!column->is_nullable()) {
-      inserted_columns.insert(column);
-    }
-  }
-  for (const auto column : table->columns()) {
-    if (!column->is_nullable() && !inserted_columns.contains(column)) {
-      return error::NonNullValueNotSpecifiedForInsert(table->Name(),
-                                                      column->Name());
-    }
-  }
-  return zetasql_base::OkStatus();
-}
-
-zetasql_base::Status ValidateColumnValueType(const Table* table,
+absl::Status ValidateColumnValueType(const Table* table,
                                      const Column* const column,
                                      const zetasql::Value& value) {
   // Check that type is same for both column and the corresponding value.
@@ -72,10 +53,10 @@ zetasql_base::Status ValidateColumnValueType(const Table* table,
     return error::NullValueForNotNullColumn(table->Name(), column->FullName());
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateKeyNotNull(const Table* table, const Key& key) {
+absl::Status ValidateKeyNotNull(const Table* table, const Key& key) {
   // Incoming key should already have the correct number of columns
   // corresponding to the primary key of the given table. So we do not check it
   // here.
@@ -88,14 +69,14 @@ zetasql_base::Status ValidateKeyNotNull(const Table* table, const Key& key) {
           primary_key.at(i)->column()->GetType()->DebugString());
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateColumnStringValue(const Table* table, const Column* column,
+absl::Status ValidateColumnStringValue(const Table* table, const Column* column,
                                        const zetasql::Value& value) {
   // Validate that strings do not exceed max length.
   if (!value.is_null()) {
-    zetasql_base::Status error;
+    absl::Status error;
     int64_t encoded_chars = 0;
     if (!zetasql::functions::LengthUtf8(value.string_value(), &encoded_chars,
                                           &error)) {
@@ -106,10 +87,10 @@ zetasql_base::Status ValidateColumnStringValue(const Table* table, const Column*
                                       column->effective_max_length());
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateColumnBytesValue(const Table* table, const Column* column,
+absl::Status ValidateColumnBytesValue(const Table* table, const Column* column,
                                       const zetasql::Value& value) {
   // Validate that bytes do not exceed max length.
   if (!value.is_null()) {
@@ -119,10 +100,10 @@ zetasql_base::Status ValidateColumnBytesValue(const Table* table, const Column* 
                                       column->effective_max_length());
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateColumnArrayValue(const Table* table, const Column* column,
+absl::Status ValidateColumnArrayValue(const Table* table, const Column* column,
                                       const zetasql::Value& value) {
   // Validate that bytes and string array element types do not exceed max
   // length.
@@ -137,10 +118,10 @@ zetasql_base::Status ValidateColumnArrayValue(const Table* table, const Column* 
       }
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateColumnTimestampValue(const Column* const column,
+absl::Status ValidateColumnTimestampValue(const Column* const column,
                                           const zetasql::Value& value,
                                           Clock* clock) {
   // Check that user provided timestamp value is not in future. Sentinel max
@@ -150,10 +131,10 @@ zetasql_base::Status ValidateColumnTimestampValue(const Column* const column,
       value.ToTime() > clock->Now()) {
     return error::CommitTimestampInFuture(value.ToTime());
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateInsertUpdateOp(const Table* table,
+absl::Status ValidateInsertUpdateOp(const Table* table,
                                     const std::vector<const Column*>& columns,
                                     const std::vector<zetasql::Value>& values,
                                     Clock* clock) {
@@ -178,33 +159,32 @@ zetasql_base::Status ValidateInsertUpdateOp(const Table* table,
         continue;
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateKeySize(const Table* table, const Key& key) {
+absl::Status ValidateKeySize(const Table* table, const Key& key) {
   int64_t key_size = key.LogicalSizeInBytes();
   if (key_size > limits::kMaxKeySizeBytes) {
     return error::KeyTooLarge(table->Name(), key_size,
                               limits::kMaxKeySizeBytes);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  //  namespace
 
-zetasql_base::Status ColumnValueValidator::Validate(const ActionContext* ctx,
+absl::Status ColumnValueValidator::Validate(const ActionContext* ctx,
                                             const InsertOp& op) const {
   ZETASQL_RETURN_IF_ERROR(ValidateKeySize(op.table, op.key));
-  ZETASQL_RETURN_IF_ERROR(ValidateNotNullColumnsPresent(op.table, op.columns));
   return ValidateInsertUpdateOp(op.table, op.columns, op.values, ctx->clock());
 }
 
-zetasql_base::Status ColumnValueValidator::Validate(const ActionContext* ctx,
+absl::Status ColumnValueValidator::Validate(const ActionContext* ctx,
                                             const UpdateOp& op) const {
   return ValidateInsertUpdateOp(op.table, op.columns, op.values, ctx->clock());
 }
 
-zetasql_base::Status ColumnValueValidator::Validate(const ActionContext* ctx,
+absl::Status ColumnValueValidator::Validate(const ActionContext* ctx,
                                             const DeleteOp& op) const {
   return ValidateKeyNotNull(op.table, op.key);
 }

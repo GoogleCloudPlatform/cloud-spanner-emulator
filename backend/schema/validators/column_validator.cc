@@ -64,7 +64,7 @@ bool IsAllowedTypeChange(const zetasql::Type* old_column_type,
 }
 
 // Validates size reductions and column type changes.
-zetasql_base::Status CheckAllowedColumnTypeChange(
+absl::Status CheckAllowedColumnTypeChange(
     const Column* old_column, const Column* new_column,
     const zetasql::Type* old_column_type,
     const zetasql::Type* new_column_type, SchemaValidationContext* context) {
@@ -98,12 +98,12 @@ zetasql_base::Status CheckAllowedColumnTypeChange(
           return BackfillColumnValue(old_column, new_column, context);
         });
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace
 
-zetasql_base::Status ColumnValidator::Validate(const Column* column,
+absl::Status ColumnValidator::Validate(const Column* column,
                                        SchemaValidationContext* context) {
   ZETASQL_RET_CHECK_NE(column->table_, nullptr);
   ZETASQL_RET_CHECK(!column->name_.empty());
@@ -114,9 +114,7 @@ zetasql_base::Status ColumnValidator::Validate(const Column* column,
              BaseType(column->type_)->IsBytes()));
 
   if (column->name_.length() > limits::kMaxSchemaIdentifierLength) {
-    return error::InvalidSchemaName("Column", column->Name(),
-                                    "name exceeds maximum allowed "
-                                    "identifier length");
+    return error::InvalidSchemaName("Column", column->Name());
   }
 
   if (column->source_column_) {
@@ -147,14 +145,14 @@ zetasql_base::Status ColumnValidator::Validate(const Column* column,
     return error::UnallowedCommitTimestampOption(column->FullName());
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ColumnValidator::ValidateUpdate(const Column* column,
+absl::Status ColumnValidator::ValidateUpdate(const Column* column,
                                              const Column* old_column,
                                              SchemaValidationContext* context) {
   if (column->is_deleted()) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   // Once set, column ID should never change.
@@ -193,10 +191,10 @@ zetasql_base::Status ColumnValidator::ValidateUpdate(const Column* column,
     }
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
+absl::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
                                           SchemaValidationContext* context) {
   ZETASQL_RET_CHECK_NE(key_column->column_, nullptr);
   if (key_column->column_->GetType()->IsArray()) {
@@ -208,19 +206,48 @@ zetasql_base::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
     return error::InvalidPrimaryKeyColumnType(key_column->column_->FullName(),
                                               "ARRAY");
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status KeyColumnValidator::ValidateUpdate(
+absl::Status KeyColumnValidator::ValidateUpdate(
     const KeyColumn* key_column, const KeyColumn* old_key_column,
     SchemaValidationContext* context) {
   if (key_column->is_deleted()) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
+  }
+
+  const auto* column = key_column->column_;
+  // If the underlying column of the key column has been altered,
+  // reject the update if the column is also a parent key column,
+  // unless it is a timestamp typed column and the update involves
+  // chaging the allow timestamp option.
+  if (context->IsModifiedNode(column)) {
+    bool is_commit_timestamp_option_change =
+        column->allows_commit_timestamp() !=
+        old_key_column->column_->allows_commit_timestamp();
+    if (!is_commit_timestamp_option_change) {
+      // If the key column is a child table column.
+      const auto* table_parent = column->table()->parent();
+      if (table_parent != nullptr) {
+        const auto* parent_column = table_parent->FindColumn(column->Name());
+        if (parent_column != nullptr) {
+          return error::AlteringParentColumn(column->FullName());
+        }
+      }
+
+      // If the key column is a parent table column.
+      for (const auto* child_table : column->table()->children()) {
+        if (child_table->FindKeyColumn(column->Name())) {
+          return error::CannotChangeKeyColumnWithChildTables(
+              column->FullName());
+        }
+      }
+    }
   }
 
   ZETASQL_RET_CHECK(!key_column->column_->is_deleted());
   ZETASQL_RET_CHECK_EQ(key_column->is_descending_, old_key_column->is_descending_);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

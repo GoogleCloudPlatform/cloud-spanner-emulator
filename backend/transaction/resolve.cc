@@ -25,7 +25,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/transaction/commit_timestamp.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -68,7 +68,7 @@ void CanonicalizeKeySetForTable(const KeySet& set, const Table* table,
   MakeDisjointKeyRanges(ordered_set, ranges);
 }
 
-zetasql_base::Status ValidateColumnsAreNotDuplicate(
+absl::Status ValidateColumnsAreNotDuplicate(
     const std::vector<std::string>& column_names) {
   CaseInsensitiveStringSet columns;
   for (const std::string& column_name : column_names) {
@@ -77,7 +77,26 @@ zetasql_base::Status ValidateColumnsAreNotDuplicate(
     }
     columns.insert(column_name);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
+}
+
+absl::Status ValidateNotNullColumnsPresent(
+    const Table* table, const std::vector<const Column*>& columns) {
+  // TODO: Find a way of doing this without creating a hash set for
+  // every insert.
+  absl::flat_hash_set<const Column*> inserted_columns;
+  for (const auto column : columns) {
+    if (!column->is_nullable()) {
+      inserted_columns.insert(column);
+    }
+  }
+  for (const auto column : table->columns()) {
+    if (!column->is_nullable() && !inserted_columns.contains(column)) {
+      return error::NonNullValueNotSpecifiedForInsert(table->Name(),
+                                                      column->Name());
+    }
+  }
+  return absl::OkStatus();
 }
 
 // Extracts the primary key column indices from the given list of columns. The
@@ -229,6 +248,16 @@ zetasql_base::StatusOr<ResolvedMutationOp> ResolveMutationOp(
           << "MutationOp has difference in size of column and value vectors, "
              "mutation op: "
           << mutation_op.DebugString();
+
+      // Insert, InsertOrUpdate and Replace mutation ops require that all
+      // not-null columns be present in the mutation. Note: this check is
+      // specifically done before InsertOrUpdate & Replace mutation ops are
+      // flattened.
+      if (mutation_op.type == MutationOpType::kInsert ||
+          mutation_op.type == MutationOpType::kInsertOrUpdate ||
+          mutation_op.type == MutationOpType::kReplace) {
+        ZETASQL_RETURN_IF_ERROR(ValidateNotNullColumnsPresent(table, columns));
+      }
 
       ZETASQL_ASSIGN_OR_RETURN(resolved_mutation_op.rows.emplace_back(),
                        MaybeSetCommitTimestampSentinel(columns, row));

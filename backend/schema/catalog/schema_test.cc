@@ -44,7 +44,7 @@ namespace {
 class SchemaTest : public testing::Test {
  public:
   SchemaTest()
-      : context_(nullptr, absl::Now()),
+      : context_(nullptr, nullptr, absl::Now()),
         type_factory_(absl::make_unique<zetasql::TypeFactory>()),
         base_schema_(test::CreateSchemaWithOneTable(type_factory_.get())) {}
 
@@ -230,9 +230,7 @@ TEST_F(SchemaTest, ColumnBuilder) {
       .set_type(type_factory_->get_int64());
   auto c5 = b5.build();
   EXPECT_EQ(c5->Validate(&context_),
-            error::InvalidSchemaName("Column", column_name,
-                                     "name exceeds maximum allowed identifier "
-                                     "length"));
+            error::InvalidSchemaName("Column", column_name));
 
   Column::Builder b6;
   b6.set_name("c6").set_id("C1").set_table(table).set_type(
@@ -268,7 +266,7 @@ TEST_F(SchemaTest, KeyColumnBuilder) {
   auto k2 = kb2.build();
   EXPECT_THAT(k2->Validate(&context_),
               zetasql_base::testing::StatusIs(
-                  zetasql_base::StatusCode::kInvalidArgument,
+                  absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("is part of the primary key")));
 }
 
@@ -325,9 +323,7 @@ TEST_F(SchemaTest, TableBuilder) {
   tb = table_builder(table_name);
   auto tinvalid = tb.build();
   EXPECT_EQ(tinvalid->Validate(&context_),
-            error::InvalidSchemaName("Table", table_name,
-                                     "name exceeds maximum allowed identifier "
-                                     "length"));
+            error::InvalidSchemaName("Table", table_name));
 }
 
 TEST_F(SchemaTest, IndexBuilder) {
@@ -449,9 +445,7 @@ TEST_F(SchemaTest, IndexBuilder) {
                          .set_index_data_table(idtb.get())
                          .build();
   EXPECT_EQ(invalid_idx->Validate(&context_),
-            error::InvalidSchemaName("Index", index_name,
-                                     "name exceeds maximum allowed identifier "
-                                     "length"));
+            error::InvalidSchemaName("Index", index_name));
 }
 
 // TODO: GetDatabaseDDL needs more robust testing with

@@ -27,7 +27,7 @@ cc_library(
         "//frontend/common:uris",
         "//frontend/entities:instance",
         "@com_github_grpc_grpc//:grpc++",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_absl//absl/status",
     ],
 )
 
@@ -57,9 +57,9 @@ cc_library(
         "//common:config",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/synchronization",
         "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:status",
     ],
 )
 
@@ -88,6 +88,7 @@ cc_library(
         ":environment",
         ":handler",
         ":request_context",
+        "//common:constants",
         "//common:errors",
         "//common:limits",
         "//frontend/common:status",
@@ -96,6 +97,7 @@ cc_library(
         "@com_google_absl//absl/memory",
         "@com_google_googleapis//google/iam/v1:iam_policy_cc_proto",
         "@com_google_googleapis//google/iam/v1:policy_cc_proto",
+        "@com_google_googleapis//google/rpc:error_details_cc_proto",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_grpc",
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",

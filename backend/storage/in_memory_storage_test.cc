@@ -24,7 +24,7 @@
 #include "absl/time/time.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/storage/iterator.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -133,7 +133,7 @@ TEST_F(InMemoryStorageTest, LookupByTimestamp) {
   absl::Time lookup_before_write_ts = write_ts - absl::Nanoseconds(1);
   EXPECT_THAT(storage_.Lookup(lookup_before_write_ts, kTableId0,
                               Key({Int64(1)}), {kColumnID}, &values),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   EXPECT_TRUE(values.empty());
 }
 
@@ -173,14 +173,14 @@ TEST_F(InMemoryStorageTest, LookupInvalidTableReturnsNotFoundError) {
   std::vector<zetasql::Value> values;
   EXPECT_THAT(
       storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 
   // Lookup invalid table_id in storage.
   ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
   EXPECT_THAT(storage_.Lookup(t0, "invalid-table_id_", Key({Int64(1)}),
                               {kColumnID}, &values),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(InMemoryStorageTest, ReadInvalidTableReturnsEmptyResult) {
@@ -206,7 +206,7 @@ TEST_F(InMemoryStorageTest, LookupMissingKeyReturnsNotFound) {
                            {String("value-1")}));
   EXPECT_THAT(
       storage_.Lookup(t0, kTableId0, Key({Int64(100)}), {kColumnID}, &values),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(InMemoryStorageTest, ReadMissingKeyReturnsEmptyItr) {
@@ -298,7 +298,7 @@ TEST_F(InMemoryStorageTest, LookupWithNullValuesReturnsInternalError) {
                            {String("value-1")}));
   EXPECT_THAT(storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                               /*values =*/nullptr),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInternal));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(InMemoryStorageTest, WriteWithEmptyKeyAndColumns) {
@@ -364,7 +364,7 @@ TEST_F(InMemoryStorageTest, DeleteLargeRangeFromSparseTable) {
     std::vector<zetasql::Value> values;
     EXPECT_THAT(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(5 * j)}),
                                 {kColumnID}, &values),
-                zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+                zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   }
 }
 
@@ -413,7 +413,7 @@ TEST_F(InMemoryStorageTest, DeletePartialKeyRangeFromTable) {
   for (int i = 10; i < 12; i++) {
     EXPECT_THAT(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(i)}),
                                 {kColumnID}, &values),
-                zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+                zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   }
   // Lookup for range [12, 15] should return valid values.
   for (int i = 12; i <= 15; i++) {
@@ -433,14 +433,14 @@ TEST_F(InMemoryStorageTest,
   ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, key, {}, {}));
   EXPECT_THAT(storage_.Delete(t0, kTableId0,
                               KeyRange::OpenClosed(Key({Int64(0)}), key)),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInternal));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(
       storage_.Delete(t0, kTableId0,
                       KeyRange::OpenOpen(Key({Int64(0)}), Key({Int64(2)}))),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInternal));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(storage_.Delete(t0, kTableId0,
                               KeyRange::ClosedClosed(Key({Int64(0)}), key)),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInternal));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(InMemoryStorageTest, DeleteUsingEmptyKeyRangeDeletesNothing) {
@@ -495,7 +495,7 @@ TEST_F(InMemoryStorageTest, DeleteUsingAllKeyRangeDeletesEverything) {
     std::vector<zetasql::Value> values;
     EXPECT_THAT(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(i)}),
                                 {kColumnID}, &values),
-                zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+                zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   }
   // Read
   ZETASQL_EXPECT_OK(
@@ -521,7 +521,7 @@ TEST_F(InMemoryStorageTest, DeleteUsingPrefixKeyRange) {
     EXPECT_THAT(
         storage_.Lookup(lookup_ts, kTableId0, Key({String("key"), Int64(i)}),
                         {kColumnID}, &values),
-        zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+        zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   }
   // Read
   ZETASQL_EXPECT_OK(storage_.Read(lookup_ts, kTableId0,
@@ -573,13 +573,13 @@ TEST_F(InMemoryStorageTest, LookupAtOrAfterDeleteTimestampReturnsInvalidValue) {
   // Lookup at delete timestamp.
   std::vector<zetasql::Value> values;
   EXPECT_THAT(storage_.Lookup(delete_ts, kTableId0, key, {kColumnID}, &values),
-              zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 
   // Lookup after delete timestamp.
   values.clear();
   EXPECT_THAT(
       storage_.Lookup(after_delete_ts, kTableId0, key, {kColumnID}, &values),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kNotFound));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(InMemoryStorageTest, LookupBeforeDeleteTimestampReturnsValidValue) {
@@ -687,16 +687,16 @@ TEST_F(InMemoryStorageTest,
   EXPECT_THAT(
       storage_.Read(t0, kTableId0, KeyRange::OpenClosed(Key({Int64(0)}), key),
                     {}, &itr_),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInternal));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(
       storage_.Read(t0, kTableId0,
                     KeyRange::OpenOpen(Key({Int64(0)}), Key({Int64(2)})), {},
                     &itr_),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInternal));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(
       storage_.Read(t0, kTableId0, KeyRange::ClosedClosed(Key({Int64(0)}), key),
                     {}, &itr_),
-      zetasql_base::testing::StatusIs(zetasql_base::StatusCode::kInternal));
+      zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 }  // namespace

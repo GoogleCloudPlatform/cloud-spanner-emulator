@@ -20,11 +20,9 @@
 #include <vector>
 
 #include "absl/memory/memory.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
-#include "tests/conformance/common/environment.h"
-#include "google/cloud/status_or.h"
 #include "google/cloud/spanner/backoff_policy.h"
 #include "google/cloud/spanner/batch_dml_result.h"
 #include "google/cloud/spanner/commit_result.h"
@@ -36,7 +34,9 @@
 #include "google/cloud/spanner/polling_policy.h"
 #include "google/cloud/spanner/retry_policy.h"
 #include "google/cloud/spanner/transaction.h"
-#include "zetasql/base/status.h"
+#include "google/cloud/status_or.h"
+#include "tests/conformance/common/environment.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -100,7 +100,7 @@ void DatabaseTest::SetUp() {
 
 void DatabaseTest::TearDown() { database_client_->DropDatabase(*database_); }
 
-zetasql_base::Status DatabaseTest::ResetDatabase() {
+absl::Status DatabaseTest::ResetDatabase() {
   const ConformanceTestGlobals& globals = GetConformanceTestGlobals();
   ZETASQL_RETURN_IF_ERROR(ToUtilStatus(database_client_->DropDatabase(*database_)));
   database_ = absl::make_unique<google::cloud::spanner::Database>(
@@ -110,12 +110,12 @@ zetasql_base::Status DatabaseTest::ResetDatabase() {
       database_client_->CreateDatabase(*database_).get().status());
 }
 
-zetasql_base::Status DatabaseTest::SetSchema(const std::vector<std::string>& schema) {
+absl::Status DatabaseTest::SetSchema(const std::vector<std::string>& schema) {
   auto status_or = database_client_->UpdateDatabase(*database_, schema).get();
   if (!status_or.ok()) {
     return ToUtilStatus(status_or.status());
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<DatabaseTest::UpdateDatabaseDdlMetadata>
@@ -151,6 +151,12 @@ using InsertOrUpdateMutationBuilder =
 using DeleteMutationBuilder = cloud::spanner::DeleteMutationBuilder;
 using Transaction = cloud::spanner::Transaction;
 using BatchDmlResult = cloud::spanner::BatchDmlResult;
+using PartitionedDmlResult = cloud::spanner::PartitionedDmlResult;
+
+zetasql_base::StatusOr<PartitionedDmlResult> DatabaseTest::ExecutePartitionedDml(
+    const SqlStatement& sql_statement) {
+  return ToUtilStatusOr(client().ExecutePartitionedDml(sql_statement));
+}
 
 zetasql_base::StatusOr<CommitResult> DatabaseTest::Commit(Mutations mutations) {
   return ToUtilStatusOr(client().Commit(
@@ -203,9 +209,9 @@ zetasql_base::StatusOr<BatchDmlResult> DatabaseTest::BatchDmlTransaction(
   return result.value();
 }
 
-zetasql_base::Status DatabaseTest::Rollback(Transaction txn) {
+absl::Status DatabaseTest::Rollback(Transaction txn) {
   auto status = client().Rollback(txn);
-  return zetasql_base::Status(zetasql_base::StatusCode(status.code()), status.message());
+  return absl::Status(absl::StatusCode(status.code()), status.message());
 }
 
 zetasql_base::StatusOr<CommitResult> DatabaseTest::Insert(

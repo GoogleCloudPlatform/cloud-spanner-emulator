@@ -27,7 +27,7 @@
 #include "frontend/entities/session.h"
 #include "frontend/server/environment.h"
 #include "frontend/server/handler.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace spanner_api = ::google::spanner::v1;
@@ -39,7 +39,7 @@ namespace emulator {
 namespace frontend {
 
 // Creates a new session.
-zetasql_base::Status CreateSession(RequestContext* ctx,
+absl::Status CreateSession(RequestContext* ctx,
                            const spanner_api::CreateSessionRequest* request,
                            spanner_api::Session* response) {
   // Validate the request.
@@ -66,7 +66,7 @@ zetasql_base::Status CreateSession(RequestContext* ctx,
 REGISTER_GRPC_HANDLER(Spanner, CreateSession);
 
 // Creates a batch of new sessions.
-zetasql_base::Status BatchCreateSessions(
+absl::Status BatchCreateSessions(
     RequestContext* ctx, const spanner_api::BatchCreateSessionsRequest* request,
     spanner_api::BatchCreateSessionsResponse* response) {
   // Validate the request.
@@ -100,12 +100,12 @@ zetasql_base::Status BatchCreateSessions(
   for (const auto& session : sessions) {
     ZETASQL_RETURN_IF_ERROR(session->ToProto(response->add_session()));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Spanner, BatchCreateSessions);
 
 // Gets information about a particular session.
-zetasql_base::Status GetSession(RequestContext* ctx,
+absl::Status GetSession(RequestContext* ctx,
                         const spanner_api::GetSessionRequest* request,
                         spanner_api::Session* response) {
   absl::string_view project_id, instance_id, database_id, session_id;
@@ -118,7 +118,7 @@ zetasql_base::Status GetSession(RequestContext* ctx,
 REGISTER_GRPC_HANDLER(Spanner, GetSession);
 
 // Lists all sessions in a given database that match the specified filter.
-zetasql_base::Status ListSessions(RequestContext* ctx,
+absl::Status ListSessions(RequestContext* ctx,
                           const spanner_api::ListSessionsRequest* request,
                           spanner_api::ListSessionsResponse* response) {
   // Validate the request.
@@ -154,12 +154,12 @@ zetasql_base::Status ListSessions(RequestContext* ctx,
                                        /*include_labels=*/true));
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Spanner, ListSessions);
 
 // Ends a session, releasing server resources associated with it.
-zetasql_base::Status DeleteSession(RequestContext* ctx,
+absl::Status DeleteSession(RequestContext* ctx,
                            const spanner_api::DeleteSessionRequest* request,
                            protobuf_api::Empty* response) {
   absl::string_view project_id, instance_id, database_id, session_id;

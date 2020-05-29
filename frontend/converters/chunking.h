@@ -22,7 +22,7 @@
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "absl/strings/string_view.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {

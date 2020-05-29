@@ -27,7 +27,7 @@ using zetasql_base::testing::StatusIs;
 
 class DmlTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({
         R"(
           CREATE TABLE Users(
@@ -169,8 +169,8 @@ TEST_F(DmlTest, CannotInsertMultipleRowsIntoSingletonTable) {
   EXPECT_THAT(
       CommitDml({SqlStatement("INSERT INTO Singleton (Col1, Col2) Values "
                               "('val11', 'val21'), ('val12', 'val22')")}),
-      StatusIs(in_prod_env() ? zetasql_base::StatusCode::kInvalidArgument
-                             : zetasql_base::StatusCode::kAlreadyExists));
+      StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
+                             : absl::StatusCode::kAlreadyExists));
 
   // Cannot insert multiple rows in multiple dml statements either in a
   // singleton table.
@@ -180,7 +180,7 @@ TEST_F(DmlTest, CannotInsertMultipleRowsIntoSingletonTable) {
   EXPECT_THAT(
       CommitDml({SqlStatement("INSERT INTO Singleton (Col1, Col2) Values "
                               "('val12', 'val22')")}),
-      StatusIs(zetasql_base::StatusCode::kAlreadyExists));
+      StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(DmlTest, CanUpdateEmptySingletonTable) {
@@ -226,12 +226,12 @@ TEST_F(DmlTest, CannotUseReadOnlyTransaction) {
   EXPECT_THAT(
       ExecuteDmlTransaction(Transaction(Transaction::ReadOnlyOptions()),
                             SqlStatement("INSERT INTO Users(ID) VALUES(1)")),
-      StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(QuerySingleUseTransaction(
                   Transaction::SingleUseOptions{Transaction::ReadOnlyOptions{}},
                   SqlStatement("INSERT INTO Users(ID) VALUES(1)")),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(DmlTest, CanInsertToArrayColumns) {
@@ -292,7 +292,7 @@ TEST_F(DmlTest, CannotCommitWithBadMutation) {
                             MakeInsert("Users", {"NON_EXISTENT_COLUMN"}, 3),
                             MakeInsert("Users", {"ID"}, 4),
                         }),
-      StatusIs(zetasql_base::StatusCode::kNotFound));
+      StatusIs(absl::StatusCode::kNotFound));
 
   // Check that the DML statement was not committed.
   EXPECT_THAT(Query("SELECT ID FROM Users"), IsOkAndHoldsRows({}));

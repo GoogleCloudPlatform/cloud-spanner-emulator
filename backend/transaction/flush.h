@@ -30,7 +30,7 @@ namespace backend {
 // Flushes each of the write ops to base storage at the given timestamp. Note
 // that calling this function isn't thread safe and appropriate database locks
 // should be acquired.
-zetasql_base::Status FlushWriteOpsToStorage(const std::vector<WriteOp>& write_ops,
+absl::Status FlushWriteOpsToStorage(const std::vector<WriteOp>& write_ops,
                                     Storage* base_storage,
                                     absl::Time commit_timestamp);
 

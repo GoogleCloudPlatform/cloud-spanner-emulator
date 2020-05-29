@@ -31,13 +31,15 @@
 #include "backend/transaction/read_write_transaction.h"
 #include "common/clock.h"
 #include "frontend/entities/database.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace frontend {
+
+namespace spanner_api = ::google::spanner::v1;
 
 // Transaction represents a database transaction within the frontend.
 //
@@ -48,11 +50,23 @@ namespace frontend {
 // and isolate it from gRPC API details.
 class Transaction {
  public:
+  enum Type {
+    kReadWrite,
+    kReadOnly,
+    kPartitionedDml,
+  };
+
+  enum Usage {
+    kSingleUse,
+    kMultiUse,
+  };
+
   Transaction(absl::variant<std::unique_ptr<backend::ReadWriteTransaction>,
                             std::unique_ptr<backend::ReadOnlyTransaction>>
                   backend_transaction,
-              const backend::QueryEngine* query_engine, bool is_single_use,
-              bool return_read_timestamp);
+              const backend::QueryEngine* query_engine,
+              const spanner_api::TransactionOptions& options,
+              const Usage& usage);
 
   // Mark the transaction as closed.  This indicates that the transaction is no
   // longer valid in the context of its owning session.  For example, prior
@@ -72,23 +86,23 @@ class Transaction {
   backend::TransactionID id() const;
 
   // Calls Read using the backend transaction.
-  zetasql_base::Status Read(const backend::ReadArg& read_arg,
+  absl::Status Read(const backend::ReadArg& read_arg,
                     std::unique_ptr<backend::RowCursor>* cursor);
 
   // Calls ExecuteSql using the backend transaction and query engine.
   zetasql_base::StatusOr<backend::QueryResult> ExecuteSql(const backend::Query& query);
 
   // Calls Write using the backend transaction.
-  zetasql_base::Status Write(const backend::Mutation& mutation);
+  absl::Status Write(const backend::Mutation& mutation);
 
   // Calls Commit using the backend transaction.
-  zetasql_base::Status Commit();
+  absl::Status Commit();
 
   // Calls Rollback using the backend transaction.
-  zetasql_base::Status Rollback();
+  absl::Status Rollback();
 
   // Returns the commit timestamp from the backend transaction.
-  zetasql_base::StatusOr<absl::Time> GetCommitTimestamp();
+  zetasql_base::StatusOr<absl::Time> GetCommitTimestamp() const;
 
   bool IsClosed() const ABSL_LOCKS_EXCLUDED(mu_);
 
@@ -101,11 +115,14 @@ class Transaction {
   bool IsRolledback() const;
 
   // Returns true if the current transaction is a ReadOnlyTransaction.
-  bool IsReadOnly() const;
+  bool IsReadOnly() const { return type_ == kReadOnly; }
+
+  // Returns true if the current transaction is a PartitionedDmlTransaction.
+  bool IsPartitionedDml() const { return type_ == kPartitionedDml; }
 
   // All transaction methods should be called inside GuardedCall so that the
   // transaction can be rolled back on any errors.
-  zetasql_base::Status GuardedCall(const std::function<zetasql_base::Status()>& fn)
+  absl::Status GuardedCall(const std::function<absl::Status()>& fn)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Disallow copy and assignment.
@@ -113,6 +130,14 @@ class Transaction {
   Transaction& operator=(const Transaction&) = delete;
 
  private:
+  backend::ReadOnlyTransaction* read_only() const {
+    return std::get<1>(transaction_).get();
+  }
+
+  backend::ReadWriteTransaction* read_write() const {
+    return std::get<0>(transaction_).get();
+  }
+
   // Returns true if the transaction is in the given state.
   bool HasState(const backend::ReadWriteTransaction::State& state) const;
 
@@ -135,6 +160,15 @@ class Transaction {
   // timestamp at which reads are be performed by the backend transaction.
   bool return_read_timestamp_;
 
+  // Usage type (single-use or multi-use) for this transaction.
+  const Usage usage_type_;
+
+  // Transaction type that determines read, write and partition use.
+  const Type type_;
+
+  // Options for the transaction from the original rpc request.
+  const spanner_api::TransactionOptions options_;
+
   // Mutex to guard state below.
   mutable absl::Mutex mu_;
 
@@ -142,7 +176,7 @@ class Transaction {
   bool closed_ ABSL_GUARDED_BY(mu_) = false;
 
   // Previous outcome of the transaction.
-  zetasql_base::Status status_ ABSL_GUARDED_BY(mu_);
+  absl::Status status_ ABSL_GUARDED_BY(mu_);
 };
 
 // Return true if the given transaction selector requires the transaction to be

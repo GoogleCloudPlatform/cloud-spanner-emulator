@@ -33,7 +33,7 @@
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -110,9 +110,13 @@ class Table : public SchemaNode {
   // SchemaNode interface implementation.
   // ------------------------------------
 
-  zetasql_base::Status Validate(SchemaValidationContext* context) const override;
+  std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
+    return SchemaNameInfo{.name = name_, .kind = "Table", .global = true};
+  }
 
-  zetasql_base::Status ValidateUpdate(const SchemaNode* orig,
+  absl::Status Validate(SchemaValidationContext* context) const override;
+
+  absl::Status ValidateUpdate(const SchemaNode* orig,
                               SchemaValidationContext* context) const override;
 
   std::string DebugString() const override {
@@ -126,8 +130,8 @@ class Table : public SchemaNode {
   friend class TableValidator;
 
   using ValidationFn =
-      std::function<zetasql_base::Status(const Table*, SchemaValidationContext*)>;
-  using UpdateValidationFn = std::function<zetasql_base::Status(
+      std::function<absl::Status(const Table*, SchemaValidationContext*)>;
+  using UpdateValidationFn = std::function<absl::Status(
       const Table*, const Table*, SchemaValidationContext*)>;
 
   // Constructors are private and only friend classes are able to build /
@@ -141,7 +145,7 @@ class Table : public SchemaNode {
     return clone;
   }
 
-  zetasql_base::Status DeepClone(SchemaGraphEditor* editor,
+  absl::Status DeepClone(SchemaGraphEditor* editor,
                          const SchemaNode* orig) override;
 
   // Validation delegates.

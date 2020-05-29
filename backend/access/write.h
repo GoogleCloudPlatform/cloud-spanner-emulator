@@ -25,7 +25,7 @@
 #include "zetasql/public/value.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -108,7 +108,7 @@ class RowWriter {
   virtual ~RowWriter() {}
 
   // Write applies the mutation m to the database.
-  virtual zetasql_base::Status Write(const Mutation& m) = 0;
+  virtual absl::Status Write(const Mutation& m) = 0;
 };
 
 }  // namespace backend

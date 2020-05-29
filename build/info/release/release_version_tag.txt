@@ -1,1 +1,1 @@
-cloud_spanner_emulator_qa_1000.0.1_public_20200429_00_RC00
+cloud_spanner_emulator_0.8.0_public_20200528_00_RC01_full_build

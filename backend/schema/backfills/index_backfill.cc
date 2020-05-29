@@ -34,7 +34,7 @@
 #include "backend/storage/iterator.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
 
@@ -43,7 +43,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-zetasql_base::Status BackfillIndex(const Index* index,
+absl::Status BackfillIndex(const Index* index,
                            const SchemaValidationContext* context) {
   absl::Span<const Column* const> base_columns =
       index->indexed_table()->columns();
@@ -76,7 +76,7 @@ zetasql_base::Status BackfillIndex(const Index* index,
     Row base_row = MakeRow(base_columns, row_values);
     // Backfill should return failed precondition error for invalid index keys.
     ZETASQL_ASSIGN_OR_RETURN(Key index_data_table_key, ComputeIndexKey(base_row, index),
-                     _.SetErrorCode(zetasql_base::StatusCode::kFailedPrecondition));
+                     _.SetErrorCode(absl::StatusCode::kFailedPrecondition));
     ValueList index_values = ComputeIndexValues(base_row, index);
     if (ShouldFilterIndexKey(index, index_data_table_key)) {
       continue;
@@ -99,7 +99,7 @@ zetasql_base::Status BackfillIndex(const Index* index,
         index_data_table_key, index_column_ids, index_values));
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

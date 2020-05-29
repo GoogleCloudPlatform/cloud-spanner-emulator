@@ -19,7 +19,7 @@
 #include "zetasql/public/type.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
@@ -27,10 +27,11 @@
 #include "backend/common/case.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "zetasql/base/ret_check.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -40,7 +41,7 @@ namespace backend {
 
 namespace {
 
-zetasql_base::Status CheckKeyPartCompatibility(const Table* interleaved_table,
+absl::Status CheckKeyPartCompatibility(const Table* interleaved_table,
                                        const KeyColumn* parent_key,
                                        const KeyColumn* child_key,
                                        bool ignore_nullability) {
@@ -99,7 +100,7 @@ zetasql_base::Status CheckKeyPartCompatibility(const Table* interleaved_table,
   // We ignore nullability check for scenarios where the child table
   // keys belong to a null filtered interleaved index.
   if (ignore_nullability) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   // Parent and child key column nullability should match.
@@ -110,10 +111,10 @@ zetasql_base::Status CheckKeyPartCompatibility(const Table* interleaved_table,
         child_key_col->is_nullable() ? "nullable" : "not null");
   }
 
-  return zetasql_base::Status();
+  return absl::Status();
 }
 
-zetasql_base::Status CheckInterleaveDepthLimit(const Table* table) {
+absl::Status CheckInterleaveDepthLimit(const Table* table) {
   int depth = 1;
   const Table* to_test = table;
   while (to_test->parent()) {
@@ -125,22 +126,19 @@ zetasql_base::Status CheckInterleaveDepthLimit(const Table* table) {
                                 limits::kMaxInterleavingDepth);
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace
 
-zetasql_base::Status TableValidator::Validate(const Table* table,
+absl::Status TableValidator::Validate(const Table* table,
                                       SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!table->name_.empty());
   ZETASQL_RET_CHECK(!table->id_.empty());
 
   if (table->is_public()) {
-    if (table->name_.length() > limits::kMaxSchemaIdentifierLength) {
-      return error::InvalidSchemaName("Table", table->name_,
-                                      "name exceeds maximum allowed "
-                                      "identifier length");
-    }
+    ZETASQL_RETURN_IF_ERROR(
+        GlobalSchemaNames::ValidateSchemaName("Table", table->name_));
   }
 
   const std::string object_type = OwningObjectType(table);
@@ -150,7 +148,7 @@ zetasql_base::Status TableValidator::Validate(const Table* table,
   CaseInsensitiveStringSet unique_columns;
   for (const Column* column : table->columns_) {
     ZETASQL_RET_CHECK_NE(column, nullptr);
-    const std::string& column_name = column->Name();
+    std::string column_name = column->Name();
     ZETASQL_RET_CHECK_EQ(column->table(), table);
     if (unique_columns.contains(column_name)) {
       return error::DuplicateColumnName(column->FullName());
@@ -209,7 +207,7 @@ zetasql_base::Status TableValidator::Validate(const Table* table,
     bool ignore_nullability = table->owner_index() != nullptr &&
                               table->owner_index()->is_null_filtered();
     ZETASQL_RET_CHECK(table->parent_table_->is_public());
-    const auto& parent_pk = table->parent_table_->primary_key();
+    auto parent_pk = table->parent_table_->primary_key();
     for (int i = 0; i < parent_pk.size(); ++i) {
       // The child has fewer primary key parts than the parent.
       if (i >= table->primary_key_.size()) {
@@ -243,10 +241,10 @@ zetasql_base::Status TableValidator::Validate(const Table* table,
     ZETASQL_RET_CHECK_EQ(table->owner_index_->index_data_table(), table);
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status TableValidator::ValidateUpdate(const Table* table,
+absl::Status TableValidator::ValidateUpdate(const Table* table,
                                             const Table* old_table,
                                             SchemaValidationContext* context) {
   if (table->is_deleted()) {
@@ -282,7 +280,8 @@ zetasql_base::Status TableValidator::ValidateUpdate(const Table* table,
                           return out->append(child->Name());
                         }));
     }
-    return zetasql_base::OkStatus();
+    context->global_names()->RemoveName(table->Name());
+    return absl::OkStatus();
   }
 
   // Name and ID should not change during cloning.
@@ -330,7 +329,7 @@ zetasql_base::Status TableValidator::ValidateUpdate(const Table* table,
     }
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

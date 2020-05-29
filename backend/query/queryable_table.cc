@@ -26,7 +26,7 @@
 #include "absl/types/span.h"
 #include "backend/access/read.h"
 #include "backend/query/queryable_column.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -70,10 +70,10 @@ class RowCursorEvaluatorTableIterator
 
   const zetasql::Value& GetValue(int i) const override { return values_[i]; }
 
-  zetasql_base::Status Status() const override { return cursor_->Status(); }
+  absl::Status Status() const override { return cursor_->Status(); }
 
   // Cancel is best-effort and not required.
-  zetasql_base::Status Cancel() override { return zetasql_base::OkStatus(); }
+  absl::Status Cancel() override { return absl::OkStatus(); }
 
  private:
   // The wrapped RowCursor.

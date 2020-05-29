@@ -19,7 +19,7 @@
 
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -29,10 +29,10 @@ namespace backend {
 // Implementation of Index::Validate() / Index::ValidateUpdate().
 class IndexValidator {
  public:
-  static zetasql_base::Status Validate(const Index* index,
+  static absl::Status Validate(const Index* index,
                                SchemaValidationContext* context);
 
-  static zetasql_base::Status ValidateUpdate(const Index* index, const Index* old_index,
+  static absl::Status ValidateUpdate(const Index* index, const Index* old_index,
                                      SchemaValidationContext* context);
 };
 

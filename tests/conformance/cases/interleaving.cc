@@ -15,7 +15,7 @@
 //
 
 #include "gmock/gmock.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -29,7 +29,7 @@ using zetasql_base::testing::StatusIs;
 
 class InterleavingTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     return SetSchema({
         R"(
         CREATE TABLE Users (
@@ -106,7 +106,7 @@ class InterleavingTest : public DatabaseTest {
 
 TEST_F(InterleavingTest, CannotInsertChildWithoutParent) {
   EXPECT_THAT(Insert("Threads", {"UserId", "ThreadId"}, {1, 1}),
-              StatusIs(zetasql_base::StatusCode::kNotFound));
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(InterleavingTest, CanInsertChildWithExistingParent) {
@@ -132,8 +132,8 @@ TEST_F(InterleavingTest, CanInsertParentAndChildInSameTransaction) {
                   MakeInsert("Threads", {"UserId", "ThreadId"}, 2, 1),
                   MakeInsert("Users", {"UserId", "Name"}, 2, "Douglas Adams"),
               }),
-              StatusIs(in_prod_env() ? zetasql_base::StatusCode::kInvalidArgument
-                                     : zetasql_base::StatusCode::kNotFound));
+              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
+                                     : absl::StatusCode::kNotFound));
 }
 
 TEST_F(InterleavingTest, CanPerformCascadingDeletes) {
@@ -219,7 +219,7 @@ TEST_F(InterleavingTest, CannotDeleteRowWithNoActionChildren) {
   // Attempt to delete a Thread fails since an ON DELETE NO ACTION child exists
   // in Snoozes table.
   EXPECT_THAT(Delete("Threads", Key(1, 1)),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Deleting following thread works since there doesn't exist a corresponding
   // row in Snoozes table.
@@ -244,7 +244,7 @@ TEST_F(InterleavingTest, CannotDeleteRowWithNoActionGrandChildren) {
   // Attempt to delete a row in Users fails since an ON DELETE NO ACTION grand
   // child exists in Snoozes table.
   EXPECT_THAT(Delete("Users", Key(1)),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Deleting following user works since there doesn't exist a corresponding
   // row in Snoozes table.
@@ -272,7 +272,7 @@ TEST_F(InterleavingTest, CannotDeleteRowWithNoActionChildrenSameTransaction) {
                   MakeDelete("Threads", parent_key_set),
                   MakeDelete("Snoozes", child_key_set),
               }),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Deleting the no-action child first works.
   ZETASQL_EXPECT_OK(Commit({
@@ -304,7 +304,7 @@ TEST_F(InterleavingTest, CannotInsertAndDeleteRowWithNoActionChild) {
           MakeInsert("Snoozes", {"UserId", "ThreadId", "SnoozeId"}, 1, 1, 1),
           MakeDelete("Threads", parent_key_set),
       }),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Deleting the no-action child first works.
   ZETASQL_EXPECT_OK(Commit({
@@ -324,12 +324,12 @@ TEST_F(InterleavingTest, CannotReplaceRowWithNoActionChild) {
   // Replace on a parent with no-action child does not work.
   EXPECT_THAT(
       Replace("Threads", {"UserId", "ThreadId", "Starred"}, {1, 1, false}),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Replace does not work even if replacing to same value.
   EXPECT_THAT(
       Replace("Threads", {"UserId", "ThreadId", "Starred"}, {1, 1, true}),
-      StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // However, replace works if no-action child is deleted first in the same
   // transaction.
@@ -342,6 +342,26 @@ TEST_F(InterleavingTest, CannotReplaceRowWithNoActionChild) {
 
   EXPECT_THAT(Read("Threads", {"UserId", "ThreadId", "Starred"}, Key(1, 1)),
               IsOkAndHoldsRow({1, 1, false}));
+}
+
+TEST_F(InterleavingTest, CanReplaceRowWithDeleteActionChild) {
+  PopulateDatabase();
+  // Parent & child rows exist.
+  EXPECT_THAT(Read("Threads", {"UserId", "ThreadId", "Starred"}, Key(1, 1)),
+              IsOkAndHoldsRow({1, 1, true}));
+  EXPECT_THAT(Read("Messages", {"UserId", "ThreadId", "MessageId", "Subject"},
+                   ClosedClosed(Key(1, 1, 1), Key(1, 1, 2))),
+              IsOkAndHoldsRows({{1, 1, 1, "a code review"},
+                                {1, 1, 2, "Re: a code review"}}));
+
+  // Replace on a parent triggers cascading deletes to child table.
+  ZETASQL_EXPECT_OK(
+      Replace("Threads", {"UserId", "ThreadId", "Starred"}, {1, 1, false}));
+
+  // Child rows are deleted.
+  EXPECT_THAT(Read("Messages", {"UserId", "ThreadId", "MessageId", "Subject"},
+                   ClosedClosed(Key(1, 1, 1), Key(1, 1, 2))),
+              IsOkAndHoldsRows({}));
 }
 
 }  // namespace

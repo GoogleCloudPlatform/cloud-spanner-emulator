@@ -22,7 +22,7 @@
 #include "zetasql/public/value.h"
 #include "backend/datamodel/key.h"
 #include "backend/storage/iterator.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -43,7 +43,7 @@ class FixedRowStorageIterator : public StorageIterator {
 
   // Implementation of the StorageIterator interface.
   bool Next() override;
-  zetasql_base::Status Status() const override;
+  absl::Status Status() const override;
   const class Key& Key() const override;
   int NumColumns() const override;
   const zetasql::Value& ColumnValue(int i) const override;

@@ -19,7 +19,7 @@
 
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -29,10 +29,10 @@ namespace backend {
 // Implementation of Table::Validate() / Table::ValidateUpdate().
 class TableValidator {
  public:
-  static zetasql_base::Status Validate(const Table* table,
+  static absl::Status Validate(const Table* table,
                                SchemaValidationContext* context);
 
-  static zetasql_base::Status ValidateUpdate(const Table* table, const Table* old_table,
+  static absl::Status ValidateUpdate(const Table* table, const Table* old_table,
                                      SchemaValidationContext* context);
 };
 

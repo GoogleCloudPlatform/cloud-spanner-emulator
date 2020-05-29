@@ -49,7 +49,7 @@ class TestRowCursor : public backend::RowCursor {
 
   bool Next() override { return ++idx_ < values_.size(); }
 
-  zetasql_base::Status Status() const override { return zetasql_base::OkStatus(); }
+  absl::Status Status() const override { return absl::OkStatus(); }
 
   int NumColumns() const override { return column_names_.size(); }
 

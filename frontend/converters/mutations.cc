@@ -34,7 +34,7 @@
 #include "frontend/converters/keys.h"
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -45,7 +45,7 @@ namespace spanner_api = ::google::spanner::v1;
 
 namespace {
 
-zetasql_base::Status WriteFromProto(const backend::Schema& schema,
+absl::Status WriteFromProto(const backend::Schema& schema,
                             const spanner_api::Mutation::Write& write_pb,
                             backend::MutationOpType op_type,
                             backend::Mutation* mutation) {
@@ -88,10 +88,10 @@ zetasql_base::Status WriteFromProto(const backend::Schema& schema,
   }
   mutation->AddWriteOp(op_type, table->Name(), std::move(column_names),
                        std::move(value_list));
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateDeleteRange(const backend::KeyRange& range) {
+absl::Status ValidateDeleteRange(const backend::KeyRange& range) {
   int max_columns =
       std::max(range.start_key().NumColumns(), range.limit_key().NumColumns());
   int min_columns =
@@ -99,7 +99,7 @@ zetasql_base::Status ValidateDeleteRange(const backend::KeyRange& range) {
 
   // No-op if no columns were specified at all.
   if (max_columns == 0) {
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
   // Early exit if one of the keys has more than one extra part.
@@ -119,10 +119,10 @@ zetasql_base::Status ValidateDeleteRange(const backend::KeyRange& range) {
     }
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status DeleteFromProto(const backend::Schema& schema,
+absl::Status DeleteFromProto(const backend::Schema& schema,
                              const spanner_api::Mutation::Delete& delete_pb,
                              backend::Mutation* mutation) {
   // Verify that the table exists.
@@ -144,12 +144,12 @@ zetasql_base::Status DeleteFromProto(const backend::Schema& schema,
   }
 
   mutation->AddDeleteOp(table->Name(), key_set);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace
 
-zetasql_base::Status MutationFromProto(
+absl::Status MutationFromProto(
     const backend::Schema& schema,
     const google::protobuf::RepeatedPtrField<spanner_api::Mutation>& mutation_pbs,
     backend::Mutation* mutation) {
@@ -183,7 +183,7 @@ zetasql_base::Status MutationFromProto(
         return error::MissingRequiredFieldError("Mutation.operation");
     }
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace frontend

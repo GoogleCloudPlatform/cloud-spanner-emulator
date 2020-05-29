@@ -16,7 +16,7 @@
 
 #include "backend/storage/in_memory_iterator.h"
 
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -28,8 +28,8 @@ FixedRowStorageIterator::FixedRowStorageIterator(std::vector<Row>&& rows)
 
 bool FixedRowStorageIterator::Next() { return ++pos_ < rows_.size(); }
 
-zetasql_base::Status FixedRowStorageIterator::Status() const {
-  return zetasql_base::OkStatus();
+absl::Status FixedRowStorageIterator::Status() const {
+  return absl::OkStatus();
 }
 
 const Key& FixedRowStorageIterator::Key() const { return rows_[pos_].first; }

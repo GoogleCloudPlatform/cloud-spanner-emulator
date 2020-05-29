@@ -17,7 +17,7 @@
 #include "frontend/entities/database.h"
 
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -25,10 +25,10 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
-zetasql_base::Status Database::ToProto(admin::database::v1::Database* database) {
+absl::Status Database::ToProto(admin::database::v1::Database* database) {
   database->set_name(database_uri_);
   database->set_state(admin::database::v1::Database::READY);
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace frontend

@@ -19,7 +19,7 @@
 #include "backend/actions/action.h"
 #include "backend/actions/ops.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 
 namespace google {
@@ -27,22 +27,22 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-zetasql_base::Status RowExistenceValidator::Validate(const ActionContext* ctx,
+absl::Status RowExistenceValidator::Validate(const ActionContext* ctx,
                                              const InsertOp& op) const {
   ZETASQL_ASSIGN_OR_RETURN(bool row_exists, ctx->store()->Exists(op.table, op.key));
   if (row_exists) {
     return error::RowAlreadyExists(op.table->Name(), op.key.DebugString());
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status RowExistenceValidator::Validate(const ActionContext* ctx,
+absl::Status RowExistenceValidator::Validate(const ActionContext* ctx,
                                              const UpdateOp& op) const {
   ZETASQL_ASSIGN_OR_RETURN(bool row_exists, ctx->store()->Exists(op.table, op.key));
   if (!row_exists) {
     return error::RowNotFound(op.table->Name(), op.key.DebugString());
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend

@@ -28,8 +28,8 @@ cc_library(
     hdrs = ["ddl_type_conversion.h"],
     deps = [
         "//backend/schema/ddl:operations_cc_proto",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )
@@ -61,9 +61,9 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//common:errors",
         "//common:limits",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_farmhash//:farmhash_fingerprint",
-        "@com_google_zetasql//zetasql/base:status",
     ],
 )
 
@@ -78,8 +78,8 @@ cc_test(
         "//common:limits",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
@@ -108,39 +108,23 @@ cc_library(
         "//backend/schema/parser:javacc_ddl_parser",
         "//common:errors",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )
 
 cc_test(
     name = "schema_updater_test",
-    srcs = [
-        "schema_updater_test.cc",
-    ],
+    srcs = ["schema_updater_test.cc"],
     deps = [
-        ":schema_updater",
-        "//backend/common:ids",
-        "//backend/schema/catalog:schema",
-        "//backend/schema/graph:schema_graph",
-        "//backend/schema/graph:schema_graph_editor",
-        "//backend/schema/graph:schema_node",
-        "//backend/storage:in_memory_storage",
-        "//common:errors",
-        "//common:limits",
+        "//backend/schema/updater/schema_updater_tests",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/time",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:type",
     ],
 )
 
@@ -148,9 +132,11 @@ cc_library(
     name = "schema_validation_context",
     hdrs = ["schema_validation_context.h"],
     deps = [
+        "//backend/schema/graph:schema_node",
         "//backend/storage",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:status",
     ],
 )
 
@@ -161,8 +147,8 @@ cc_library(
         "//backend/datamodel:key_range",
         "//backend/locking:manager",
         "//common:errors",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base:statusor",
     ],
 )

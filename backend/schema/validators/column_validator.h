@@ -19,7 +19,7 @@
 
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -29,20 +29,20 @@ namespace backend {
 // Implementation of Column::Validate() / Column::ValidateUpdate().
 class ColumnValidator {
  public:
-  static zetasql_base::Status Validate(const Column* column,
+  static absl::Status Validate(const Column* column,
                                SchemaValidationContext* context);
 
-  static zetasql_base::Status ValidateUpdate(const Column* column,
+  static absl::Status ValidateUpdate(const Column* column,
                                      const Column* old_column,
                                      SchemaValidationContext* context);
 };
 
 class KeyColumnValidator {
  public:
-  static zetasql_base::Status Validate(const KeyColumn* column,
+  static absl::Status Validate(const KeyColumn* column,
                                SchemaValidationContext* context);
 
-  static zetasql_base::Status ValidateUpdate(const KeyColumn* key_column,
+  static absl::Status ValidateUpdate(const KeyColumn* key_column,
                                      const KeyColumn* old_key_column,
                                      SchemaValidationContext* context);
 };

@@ -24,7 +24,7 @@
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
 #include "backend/datamodel/key_set.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -82,7 +82,7 @@ class RowCursor {
   // Returns the status of the iterator. Once the iterator enters an error
   // state, it remains in the error state. Calls to Next() will return
   // false in this state.
-  virtual zetasql_base::Status Status() const = 0;
+  virtual absl::Status Status() const = 0;
 
   // Returns the number of columns.
   virtual int NumColumns() const = 0;
@@ -109,7 +109,7 @@ class RowReader {
   virtual ~RowReader() {}
 
   // Reads rows from a database based on the provided read_arg.
-  virtual zetasql_base::Status Read(const ReadArg& read_arg,
+  virtual absl::Status Read(const ReadArg& read_arg,
                             std::unique_ptr<RowCursor>* cursor) = 0;
 };
 

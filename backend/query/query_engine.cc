@@ -33,7 +33,7 @@
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
@@ -47,7 +47,7 @@
 #include "common/errors.h"
 #include "frontend/converters/values.h"
 #include "zetasql/base/ret_check.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
 
@@ -61,6 +61,11 @@ bool IsDMLQuery(const std::string& query) {
   return query_kind == zetasql::RESOLVED_INSERT_STMT ||
          query_kind == zetasql::RESOLVED_UPDATE_STMT ||
          query_kind == zetasql::RESOLVED_DELETE_STMT;
+}
+
+bool IsDMLInsertQuery(const std::string& query) {
+  zetasql::ResolvedNodeKind query_kind = zetasql::GetStatementKind(query);
+  return query_kind == zetasql::RESOLVED_INSERT_STMT;
 }
 
 namespace {
@@ -83,7 +88,7 @@ class VectorsRowCursor : public RowCursor {
 
   bool Next() override { return ++row_index_ < column_values_.size(); }
 
-  zetasql_base::Status Status() const override { return zetasql_base::OkStatus(); }
+  absl::Status Status() const override { return absl::OkStatus(); }
 
   int NumColumns() const override { return column_names_.size(); }
 
@@ -130,16 +135,16 @@ zetasql_base::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> Analyze(
 
 // TODO : Replace with a better error transforming mechanism,
 // ideally hooking into ZetaSQL to control error messages.
-zetasql_base::Status MaybeTransformZetaSQLDMLError(zetasql_base::Status error) {
+absl::Status MaybeTransformZetaSQLDMLError(absl::Status error) {
   // For inserts to a primary key columm.
   if (absl::StartsWith(error.message(),
                        "Failed to insert row with primary key")) {
-    return zetasql_base::Status(zetasql_base::StatusCode::kAlreadyExists, error.message());
+    return absl::Status(absl::StatusCode::kAlreadyExists, error.message());
   }
 
   // For updates to a primary key column.
   if (absl::StartsWith(error.message(), "Cannot modify a primary key column")) {
-    return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument, error.message());
+    return absl::Status(absl::StatusCode::kInvalidArgument, error.message());
   }
 
   return error;
@@ -456,7 +461,7 @@ zetasql_base::StatusOr<QueryResult> QueryEngine::ExecuteSql(
       // If the value does not parse as the given type, the error code is
       // kInvalidArgument, not kFailedPrecondition, for example.
       if (!parsed_value.ok()) {
-        return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+        return absl::Status(absl::StatusCode::kInvalidArgument,
                             parsed_value.status().message());
       }
 

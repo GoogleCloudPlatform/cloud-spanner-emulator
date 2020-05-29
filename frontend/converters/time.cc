@@ -19,7 +19,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
 
@@ -32,7 +32,7 @@ namespace {
 // The following validation requirements are taken from timestamp.proto and
 // duration.proto
 
-zetasql_base::Status Validate(const google::protobuf::Timestamp& time) {
+absl::Status Validate(const google::protobuf::Timestamp& time) {
   const auto sec = time.seconds();
   const auto ns = time.nanos();
   // sec must be [0001-01-01T00:00:00Z, 9999-12-31T23:59:59.999999999Z]
@@ -42,10 +42,10 @@ zetasql_base::Status Validate(const google::protobuf::Timestamp& time) {
   if (ns < 0 || ns > 999999999) {
     return error::InvalidTime(absl::StrCat("nanos=", ns));
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status Validate(const google::protobuf::Duration& d) {
+absl::Status Validate(const google::protobuf::Duration& d) {
   const auto sec = d.seconds();
   const auto ns = d.nanos();
   if (sec < -315576000000 || sec > 315576000000) {
@@ -55,9 +55,9 @@ zetasql_base::Status Validate(const google::protobuf::Duration& d) {
     return error::InvalidTime(absl::StrCat("nanos=", ns));
   }
   if ((sec < 0 && ns > 0) || (sec > 0 && ns < 0)) {
-    return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument, "sign mismatch");
+    return absl::Status(absl::StatusCode::kInvalidArgument, "sign mismatch");
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace

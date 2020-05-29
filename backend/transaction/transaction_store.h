@@ -31,7 +31,7 @@
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/in_memory_iterator.h"
 #include "backend/storage/storage.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -65,7 +65,7 @@ class TransactionStore {
       : base_storage_(base_storage), lock_handle_(lock_handle) {}
 
   // Buffers a write operation. Acquires write locks.
-  zetasql_base::Status BufferWriteOp(const WriteOp& op);
+  absl::Status BufferWriteOp(const WriteOp& op);
 
   // Returns the column values for 'key' by merging information from the
   // buffered mutations and the base storage. Returns NOT_FOUND if 'key'
@@ -79,7 +79,7 @@ class TransactionStore {
   //
   // Boolean flag allow_pending_commit_timestamps_in_read can be set to false to
   // disallow returning pending_commit_timestamp values to clients.
-  zetasql_base::Status Read(const Table* table, const KeyRange& key_range,
+  absl::Status Read(const Table* table, const KeyRange& key_range,
                     absl::Span<const Column* const> columns,
                     std::unique_ptr<StorageIterator>* storage_itr,
                     bool allow_pending_commit_timestamps_in_read = true) const;
@@ -101,25 +101,25 @@ class TransactionStore {
   using RowOp = std::pair<OpType, Row>;
 
   // Acquires read locks for the specified column ranges.
-  zetasql_base::Status AcquireReadLock(const Table* table, const KeyRange& key_range,
+  absl::Status AcquireReadLock(const Table* table, const KeyRange& key_range,
                                absl::Span<const Column* const> columns) const;
 
   // Acquires write locks for the specified column ranges.
-  zetasql_base::Status AcquireWriteLock(const Table* table, const KeyRange& key_range,
+  absl::Status AcquireWriteLock(const Table* table, const KeyRange& key_range,
                                 absl::Span<const Column* const> columns) const;
 
   // Buffers an insert mutation. Acquires write locks.
-  zetasql_base::Status BufferInsert(const Table* table, const Key& key,
+  absl::Status BufferInsert(const Table* table, const Key& key,
                             absl::Span<const Column* const> columns,
                             const ValueList& values);
 
   // Buffers an update mutation. Acquires write locks.
-  zetasql_base::Status BufferUpdate(const Table* table, const Key& key,
+  absl::Status BufferUpdate(const Table* table, const Key& key,
                             absl::Span<const Column* const> columns,
                             const ValueList& values);
 
   // Buffers a delete mutation. Acquires write locks.
-  zetasql_base::Status BufferDelete(const Table* table, const Key& key);
+  absl::Status BufferDelete(const Table* table, const Key& key);
 
   // Returns true if a mutation has been buffered for 'key' and fills 'row'.
   bool RowExistsInBuffer(const Table* table, const Key& key, RowOp* row) const;

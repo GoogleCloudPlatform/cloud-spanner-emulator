@@ -28,7 +28,7 @@
 #include "frontend/entities/session.h"
 #include "frontend/entities/transaction.h"
 #include "frontend/server/handler.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace spanner_api = ::google::spanner::v1;
@@ -40,7 +40,7 @@ namespace emulator {
 namespace frontend {
 
 // Begins a new transaction.
-zetasql_base::Status BeginTransaction(
+absl::Status BeginTransaction(
     RequestContext* ctx, const spanner_api::BeginTransactionRequest* request,
     spanner_api::Transaction* response) {
   // Get session information.
@@ -55,12 +55,12 @@ zetasql_base::Status BeginTransaction(
   // Populate transaction proto in response.
   ZETASQL_ASSIGN_OR_RETURN(*response, txn->ToProto());
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Spanner, BeginTransaction);
 
 // Commits a transaction.
-zetasql_base::Status Commit(RequestContext* ctx,
+absl::Status Commit(RequestContext* ctx,
                     const spanner_api::CommitRequest* request,
                     spanner_api::CommitResponse* response) {
   // Get session information.
@@ -84,10 +84,10 @@ zetasql_base::Status Commit(RequestContext* ctx,
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn, maybe_txn);
 
   // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> zetasql_base::Status {
+  return txn->GuardedCall([&]() -> absl::Status {
     // Cannot commit a ReadOnlyTransaction.
     if (txn->IsReadOnly()) {
-      return error::CannotCommitRollbackReadOnlyTransaction();
+      return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
     }
 
     // Cannot commit after transaction has been rolled back.
@@ -100,7 +100,7 @@ zetasql_base::Status Commit(RequestContext* ctx,
       ZETASQL_ASSIGN_OR_RETURN(absl::Time commit_timestamp, txn->GetCommitTimestamp());
       ZETASQL_ASSIGN_OR_RETURN(*response->mutable_commit_timestamp(),
                        TimestampToProto(commit_timestamp));
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     // Process mutations and write to transaction store.
@@ -116,13 +116,13 @@ zetasql_base::Status Commit(RequestContext* ctx,
     ZETASQL_ASSIGN_OR_RETURN(absl::Time commit_timestamp, txn->GetCommitTimestamp());
     ZETASQL_ASSIGN_OR_RETURN(*response->mutable_commit_timestamp(),
                      TimestampToProto(commit_timestamp));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   });
 }
 REGISTER_GRPC_HANDLER(Spanner, Commit);
 
 // Rolls back a transaction, releasing any locks it holds.
-zetasql_base::Status Rollback(RequestContext* ctx,
+absl::Status Rollback(RequestContext* ctx,
                       const spanner_api::RollbackRequest* request,
                       protobuf_api::Empty* response) {
   // Get session information.
@@ -134,10 +134,10 @@ zetasql_base::Status Rollback(RequestContext* ctx,
                    session->FindAndUseTransaction(request->transaction_id()));
 
   // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> zetasql_base::Status {
+  return txn->GuardedCall([&]() -> absl::Status {
     // Can not rollback a ReadOnlyTransaction.
     if (txn->IsReadOnly()) {
-      return error::CannotCommitRollbackReadOnlyTransaction();
+      return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
     }
 
     // Committed transaction can not be rolled back.
@@ -147,7 +147,7 @@ zetasql_base::Status Rollback(RequestContext* ctx,
 
     // Rollback should be idempotent.
     if (txn->IsRolledback()) {
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     // Rollback the transaction.

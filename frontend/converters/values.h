@@ -20,7 +20,7 @@
 #include "google/protobuf/struct.pb.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

@@ -30,17 +30,16 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
-#include "frontend/server/server.h"
-#include "tests/conformance/common/environment.h"
 #include "google/cloud/spanner/client.h"
 #include "google/cloud/spanner/database_admin_client.h"
 #include "google/cloud/spanner/instance_admin_client.h"
 #include "google/cloud/spanner/keys.h"
 #include "google/cloud/spanner/mutations.h"
 #include "google/cloud/spanner/partition_options.h"
+#include "google/cloud/spanner/partitioned_dml_result.h"
 #include "google/cloud/spanner/query_partition.h"
 #include "google/cloud/spanner/read_options.h"
 #include "google/cloud/spanner/read_partition.h"
@@ -50,7 +49,9 @@
 #include "google/cloud/spanner/timestamp.h"
 #include "google/cloud/spanner/transaction.h"
 #include "google/cloud/spanner/value.h"
-#include "zetasql/base/status.h"
+#include "frontend/server/server.h"
+#include "tests/conformance/common/environment.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
 
@@ -115,6 +116,7 @@ class DatabaseTest : public ::testing::Test {
   using ReadPartition = cloud::spanner::ReadPartition;
   using PartitionOptions = cloud::spanner::PartitionOptions;
   using QueryPartition = cloud::spanner::QueryPartition;
+  using PartitionedDmlResult = cloud::spanner::PartitionedDmlResult;
 
   template <typename Duration>
   static Timestamp MakeTimestamp(
@@ -161,7 +163,7 @@ class DatabaseTest : public ::testing::Test {
   static zetasql_base::StatusOr<Timestamp> ParseRFC3339TimeSeconds(std::string input) {
     absl::Time result;
     if (!absl::ParseTime(absl::RFC3339_sec, input, &result, nullptr)) {
-      return zetasql_base::Status(zetasql_base::StatusCode::kInvalidArgument,
+      return absl::Status(absl::StatusCode::kInvalidArgument,
                           absl::StrCat("Failed to parse input time: ", input));
     }
     auto tp = std::chrono::time_point_cast<std::chrono::seconds>(
@@ -171,15 +173,15 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Callback intended to be implemented by subclasses to setup the database.
-  virtual zetasql_base::Status SetUpDatabase() = 0;
+  virtual absl::Status SetUpDatabase() = 0;
 
   // Resets the database used by the test case (a new database will be created).
   // This is intended for file based tests which run inside a single gunit test
   // case and need to reset the database for every file-based test case.
-  zetasql_base::Status ResetDatabase();
+  absl::Status ResetDatabase();
 
   // Sets the schema on the database created for this test.
-  zetasql_base::Status SetSchema(const std::vector<std::string>& schema);
+  absl::Status SetSchema(const std::vector<std::string>& schema);
 
   // Updates the schema of the database created for this test. Returning the
   // result in an `UpdateDatabaseDdlMetadata` message.
@@ -552,6 +554,10 @@ class DatabaseTest : public ::testing::Test {
                                               std::forward<Ts>(values)...);
   }
 
+  // Executes the Partition DML statement.
+  zetasql_base::StatusOr<PartitionedDmlResult> ExecutePartitionedDml(
+      const SqlStatement& sql_statement);
+
   // Commits the given mutations inside a transaction runner.
   zetasql_base::StatusOr<CommitResult> Commit(Mutations mutations);
 
@@ -587,7 +593,7 @@ class DatabaseTest : public ::testing::Test {
       Transaction txn, const std::vector<SqlStatement>& sql_statements);
 
   // Rollback the given transaction.
-  zetasql_base::Status Rollback(Transaction txn);
+  absl::Status Rollback(Transaction txn);
 
   // Group of helpers for committing single-row operations of various kinds.
   zetasql_base::StatusOr<CommitResult> Insert(std::string table,

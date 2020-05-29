@@ -126,7 +126,7 @@ TEST(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
 TEST(TypeProtos, DoesNotConvertUnknownTypesToProtos) {
   google::spanner::v1::Type actual_type_pb;
   EXPECT_EQ(
-      zetasql_base::StatusCode::kInternal,
+      absl::StatusCode::kInternal,
       TypeToProto(zetasql::types::Int32ArrayType(), &actual_type_pb).code());
 }
 
@@ -134,7 +134,7 @@ TEST(ValueProtos, DoesNotConvertUnknownProtosToTypes) {
   google::spanner::v1::Type unspecified_type_pb;
   zetasql::TypeFactory factory;
   const zetasql::Type* actual_type;
-  EXPECT_EQ(zetasql_base::StatusCode::kInvalidArgument,
+  EXPECT_EQ(absl::StatusCode::kInvalidArgument,
             TypeFromProto(unspecified_type_pb, &factory, &actual_type).code());
 }
 
@@ -142,7 +142,7 @@ TEST(TypeProtos, DoesNotConvertProtoArrayTypeWithUnspecifiedElementType) {
   zetasql::TypeFactory factory;
   const zetasql::Type* actual_type;
   EXPECT_EQ(
-      zetasql_base::StatusCode::kInvalidArgument,
+      absl::StatusCode::kInvalidArgument,
       TypeFromProto(PARSE_TEXT_PROTO("code: ARRAY"), &factory, &actual_type)
           .code());
 }

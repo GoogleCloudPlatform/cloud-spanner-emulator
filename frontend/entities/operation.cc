@@ -34,7 +34,7 @@ void Operation::SetMetadata(const google::protobuf::Message& metadata) {
   metadata_->CopyFrom(metadata);
 }
 
-void Operation::SetError(const zetasql_base::Status& status) {
+void Operation::SetError(const absl::Status& status) {
   absl::MutexLock lock(&mu_);
   status_ = status;
   response_.reset();
@@ -44,7 +44,7 @@ void Operation::SetResponse(const google::protobuf::Message& response) {
   absl::MutexLock lock(&mu_);
   response_.reset(response.New());
   response_->CopyFrom(response);
-  status_ = zetasql_base::OkStatus();
+  status_ = absl::OkStatus();
 }
 
 void Operation::ToProto(google::longrunning::Operation* operation_pb) {
@@ -60,7 +60,7 @@ void Operation::ToProto(google::longrunning::Operation* operation_pb) {
   if (response_ != nullptr) {
     ToAnyProto(*response_, operation_pb->mutable_response());
   } else if (!status_.ok()) {
-    operation_pb->mutable_error()->set_code(status_.error_code());
+    operation_pb->mutable_error()->set_code(status_.raw_code());
     operation_pb->mutable_error()->set_message(std::string(status_.message()));
   }
 }

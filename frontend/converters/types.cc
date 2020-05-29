@@ -25,43 +25,43 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
-zetasql_base::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
+absl::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
                            zetasql::TypeFactory* factory,
                            const zetasql::Type** type) {
   switch (type_pb.code()) {
     case google::spanner::v1::TypeCode::BOOL: {
       *type = factory->get_bool();
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case google::spanner::v1::TypeCode::INT64: {
       *type = factory->get_int64();
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case google::spanner::v1::TypeCode::TIMESTAMP: {
       *type = factory->get_timestamp();
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case google::spanner::v1::TypeCode::FLOAT64: {
       *type = factory->get_double();
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case google::spanner::v1::TypeCode::DATE: {
       *type = factory->get_date();
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case google::spanner::v1::TypeCode::STRING: {
       *type = factory->get_string();
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case google::spanner::v1::TypeCode::BYTES: {
       *type = factory->get_bytes();
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case google::spanner::v1::TypeCode::ARRAY: {
@@ -74,7 +74,7 @@ zetasql_base::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
           << "\nWhen parsing array element type of " << type_pb.DebugString();
       ZETASQL_RETURN_IF_ERROR(factory->MakeArrayType(element_type, type))
           << "\nWhen parsing " << type_pb.DebugString();
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case google::spanner::v1::TypeCode::STRUCT: {
@@ -90,7 +90,7 @@ zetasql_base::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
       }
       ZETASQL_RETURN_IF_ERROR(factory->MakeStructTypeFromVector(fields, type))
           << "\nWhen parsing " << type_pb.DebugString();
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     default:
@@ -98,42 +98,42 @@ zetasql_base::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
   }
 }
 
-zetasql_base::Status TypeToProto(const zetasql::Type* type,
+absl::Status TypeToProto(const zetasql::Type* type,
                          google::spanner::v1::Type* type_pb) {
   switch (type->kind()) {
     case zetasql::TYPE_BOOL: {
       type_pb->set_code(google::spanner::v1::TypeCode::BOOL);
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case zetasql::TYPE_INT64: {
       type_pb->set_code(google::spanner::v1::TypeCode::INT64);
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case zetasql::TYPE_DOUBLE: {
       type_pb->set_code(google::spanner::v1::TypeCode::FLOAT64);
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case zetasql::TYPE_TIMESTAMP: {
       type_pb->set_code(google::spanner::v1::TypeCode::TIMESTAMP);
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case zetasql::TYPE_DATE: {
       type_pb->set_code(google::spanner::v1::TypeCode::DATE);
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case zetasql::TYPE_STRING: {
       type_pb->set_code(google::spanner::v1::TypeCode::STRING);
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case zetasql::TYPE_BYTES: {
       type_pb->set_code(google::spanner::v1::TypeCode::BYTES);
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case zetasql::TYPE_ARRAY: {
@@ -142,7 +142,7 @@ zetasql_base::Status TypeToProto(const zetasql::Type* type,
                                   type_pb->mutable_array_element_type()))
           << "\nWhen converting array element type of " << type->DebugString()
           << " to proto";
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     case zetasql::TYPE_STRUCT: {
@@ -157,7 +157,7 @@ zetasql_base::Status TypeToProto(const zetasql::Type* type,
             << "\nWhen converting field #" << i << " of " << type->DebugString()
             << " to proto";
       }
-      return zetasql_base::OkStatus();
+      return absl::OkStatus();
     }
 
     default:

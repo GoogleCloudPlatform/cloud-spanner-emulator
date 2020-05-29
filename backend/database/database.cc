@@ -37,7 +37,7 @@
 #include "backend/storage/in_memory_storage.h"
 #include "backend/transaction/actions.h"
 #include "backend/transaction/options.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -101,10 +101,10 @@ SchemaChangeContext Database::GetSchemaChangeContext() {
   };
 }
 
-zetasql_base::Status Database::UpdateSchema(absl::Span<const std::string> statements,
+absl::Status Database::UpdateSchema(absl::Span<const std::string> statements,
                                     int* num_succesful_statements,
                                     absl::Time* commit_timestamp,
-                                    zetasql_base::Status* backfill_status) {
+                                    absl::Status* backfill_status) {
   if (statements.empty()) {
     return error::UpdateDatabaseMissingStatements();
   }
@@ -138,7 +138,7 @@ zetasql_base::Status Database::UpdateSchema(absl::Span<const std::string> statem
         update_timestamp, std::move(result.updated_schema)));
     action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema());
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 std::vector<std::string> Database::GetSchema() {

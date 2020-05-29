@@ -42,7 +42,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForInstances) {
     EXPECT_THAT(test_env()->instance_admin_client()->SetIamPolicy(&ctx, request,
                                                                   &response),
                 zetasql_base::testing::StatusIs(
-                    zetasql_base::StatusCode::kUnimplemented,
+                    absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }
 
@@ -54,7 +54,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForInstances) {
     EXPECT_THAT(test_env()->instance_admin_client()->GetIamPolicy(&ctx, request,
                                                                   &response),
                 zetasql_base::testing::StatusIs(
-                    zetasql_base::StatusCode::kUnimplemented,
+                    absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }
 
@@ -66,7 +66,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForInstances) {
     EXPECT_THAT(test_env()->instance_admin_client()->TestIamPermissions(
                     &ctx, request, &response),
                 zetasql_base::testing::StatusIs(
-                    zetasql_base::StatusCode::kUnimplemented,
+                    absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }
 }
@@ -80,7 +80,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForDatabases) {
     EXPECT_THAT(test_env()->database_admin_client()->SetIamPolicy(&ctx, request,
                                                                   &response),
                 zetasql_base::testing::StatusIs(
-                    zetasql_base::StatusCode::kUnimplemented,
+                    absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }
 
@@ -92,7 +92,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForDatabases) {
     EXPECT_THAT(test_env()->database_admin_client()->GetIamPolicy(&ctx, request,
                                                                   &response),
                 zetasql_base::testing::StatusIs(
-                    zetasql_base::StatusCode::kUnimplemented,
+                    absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }
 
@@ -104,7 +104,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForDatabases) {
     EXPECT_THAT(test_env()->database_admin_client()->TestIamPermissions(
                     &ctx, request, &response),
                 zetasql_base::testing::StatusIs(
-                    zetasql_base::StatusCode::kUnimplemented,
+                    absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }
 }

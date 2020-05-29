@@ -37,10 +37,10 @@ cc_library(
         "//backend/schema/ddl:operations_cc_proto",
         "//common:errors",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
         "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_google_zetasql//zetasql/base:statusor",
     ],
 )

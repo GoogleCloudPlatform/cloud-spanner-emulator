@@ -41,7 +41,7 @@
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
 #include "frontend/proto/partition_token.pb.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -53,7 +53,7 @@ namespace spanner_api = ::google::spanner::v1;
 
 namespace {
 
-zetasql_base::Status ResultSetMetadataToProto(backend::RowCursor* cursor,
+absl::Status ResultSetMetadataToProto(backend::RowCursor* cursor,
                                       v1::ResultSetMetadata* metadata_pb) {
   for (int i = 0; i < cursor->NumColumns(); ++i) {
     auto* field_pb = metadata_pb->mutable_row_type()->add_fields();
@@ -63,33 +63,33 @@ zetasql_base::Status ResultSetMetadataToProto(backend::RowCursor* cursor,
         << " when converting column " << cursor->ColumnName(i) << " of type "
         << cursor->ColumnType(i) << " at position " << i << " in row cursor";
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateStaleness(absl::Duration staleness) {
+absl::Status ValidateStaleness(absl::Duration staleness) {
   if (staleness < absl::ZeroDuration()) {
     return error::StalenessMustBeNonNegative();
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateMinReadTimestamp(absl::Time min_read_timestamp) {
+absl::Status ValidateMinReadTimestamp(absl::Time min_read_timestamp) {
   const int64_t timestamp = absl::ToUnixMicros(min_read_timestamp);
   if (timestamp < 0 || timestamp == std::numeric_limits<int64_t>::max()) {
     return error::InvalidMinReadTimestamp(min_read_timestamp);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidateExactReadTimestamp(absl::Time exact_read_timestamp) {
+absl::Status ValidateExactReadTimestamp(absl::Time exact_read_timestamp) {
   const int64_t timestamp = absl::ToUnixMicros(exact_read_timestamp);
   if (timestamp < 0 || timestamp == std::numeric_limits<int64_t>::max()) {
     return error::InvalidExactReadTimestamp(exact_read_timestamp);
   }
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status ValidatePartitionToken(
+absl::Status ValidatePartitionToken(
     const PartitionToken& partition_token,
     const google::spanner::v1::ReadRequest& request) {
   if (partition_token.session() != request.session()) {
@@ -123,7 +123,7 @@ zetasql_base::Status ValidatePartitionToken(
     return error::ReadFromDifferentParameters();
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace
@@ -173,7 +173,7 @@ zetasql_base::StatusOr<backend::ReadOnlyOptions> ReadOnlyOptionsFromProto(
   return options;
 }
 
-zetasql_base::Status ReadArgFromProto(const backend::Schema& schema,
+absl::Status ReadArgFromProto(const backend::Schema& schema,
                               const google::spanner::v1::ReadRequest& request,
                               backend::ReadArg* read_arg) {
   if (!request.has_key_set()) {
@@ -214,10 +214,10 @@ zetasql_base::Status ReadArgFromProto(const backend::Schema& schema,
   }
 
   ZETASQL_ASSIGN_OR_RETURN(read_arg->key_set, KeySetFromProto(key_set, *table));
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status RowCursorToResultSetProto(backend::RowCursor* cursor, int limit,
+absl::Status RowCursorToResultSetProto(backend::RowCursor* cursor, int limit,
                                        spanner_api::ResultSet* result_pb) {
   ZETASQL_RETURN_IF_ERROR(
       ResultSetMetadataToProto(cursor, result_pb->mutable_metadata()));
@@ -236,7 +236,7 @@ zetasql_base::Status RowCursorToResultSetProto(backend::RowCursor* cursor, int l
     }
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 zetasql_base::StatusOr<std::vector<spanner_api::PartialResultSet>>

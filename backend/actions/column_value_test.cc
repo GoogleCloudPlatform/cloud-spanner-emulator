@@ -37,7 +37,7 @@
 #include "common/limits.h"
 #include "tests/common/actions.h"
 #include "tests/common/schema_constructor.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -100,7 +100,7 @@ class ColumnValueTest : public test::ActionsTest {
         base_columns_(table_->columns()),
         validator_(absl::make_unique<ColumnValueValidator>()) {}
 
-  zetasql_base::Status ValidateInsert(const Values& values) {
+  absl::Status ValidateInsert(const Values& values) {
     return validator_->Validate(
         ctx(), Insert(table_, Key({Int64(1)}), base_columns_,
                       {values.int64_col, values.bool_col, values.date_col,
@@ -109,7 +109,7 @@ class ColumnValueTest : public test::ActionsTest {
                        values.array_bytes_col}));
   }
 
-  zetasql_base::Status ValidateUpdate(const Values& values) {
+  absl::Status ValidateUpdate(const Values& values) {
     return validator_->Validate(
         ctx(), Update(table_, Key({Int64(1)}), base_columns_,
                       {values.int64_col, values.bool_col, values.date_col,
@@ -136,57 +136,57 @@ TEST_F(ColumnValueTest, ValidateNotNullColumns) {
     Values values;
     values.int64_col = NullInt64();
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.bool_col = NullBool();
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.date_col = NullDate();
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.float_col = NullDouble();
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.string_col = NullString();
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.bytes_col = NullBytes();
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.timestamp_col = NullTimestamp();
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
 }
 
@@ -197,73 +197,73 @@ TEST_F(ColumnValueTest, ValidateColumnsAreCorrectTypes) {
     Values values;
     values.int64_col = String("");
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.bool_col = String("");
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.date_col = String("");
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.float_col = String("");
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.string_col = Int64(3);
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.bytes_col = String("");
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.timestamp_col = String("");
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.array_string_col = String("");
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
   {
     Values values;
     values.array_bytes_col = String("");
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
 }
 
@@ -271,7 +271,7 @@ TEST_F(ColumnValueTest, ValidateKeyDoesNotContainNullValuesForDelete) {
   ZETASQL_EXPECT_OK(validator_->Validate(ctx(), Delete(table_, Key({Int64(1)}))));
 
   EXPECT_THAT(validator_->Validate(ctx(), Delete(table_, Key({NullInt64()}))),
-              StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(ColumnValueTest, ValidateStringLength) {
@@ -287,9 +287,9 @@ TEST_F(ColumnValueTest, ValidateStringLength) {
   {
     values.string_col = String(exceed_max);
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
 }
 
@@ -306,9 +306,9 @@ TEST_F(ColumnValueTest, ValidateBytesLength) {
   {
     values.bytes_col = Bytes(exceed_max);
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
 }
 
@@ -325,9 +325,9 @@ TEST_F(ColumnValueTest, ValidateArrayStringLength) {
   {
     values.array_string_col = StringArray({exceed_max, exceed_max, exceed_max});
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
 }
 
@@ -344,9 +344,9 @@ TEST_F(ColumnValueTest, ValidateArrayBytesLength) {
   {
     values.array_bytes_col = BytesArray({exceed_max, exceed_max, exceed_max});
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kFailedPrecondition));
+                StatusIs(absl::StatusCode::kFailedPrecondition));
   }
 }
 
@@ -366,9 +366,9 @@ TEST_F(ColumnValueTest, ValidateUTF8StringEncoding) {
   // Random valid max length encoding.
   {
     std::string encoded_str;
-    zetasql_base::Status error;
+    absl::Status error;
     zetasql::functions::CodePointsToString(code_points, &encoded_str, &error);
-    EXPECT_EQ(error, zetasql_base::OkStatus());
+    EXPECT_EQ(error, absl::OkStatus());
     Values values;
     values.string_col = String(encoded_str);
     ZETASQL_EXPECT_OK(ValidateInsert(values));
@@ -379,9 +379,9 @@ TEST_F(ColumnValueTest, ValidateUTF8StringEncoding) {
   std::fill(code_points.begin(), code_points.end(), 0);
   {
     std::string encoded_str;
-    zetasql_base::Status error;
+    absl::Status error;
     zetasql::functions::CodePointsToString(code_points, &encoded_str, &error);
-    EXPECT_EQ(error, zetasql_base::OkStatus());
+    EXPECT_EQ(error, absl::OkStatus());
     Values values;
     values.string_col = String(encoded_str);
     ZETASQL_EXPECT_OK(ValidateInsert(values));
@@ -395,9 +395,9 @@ TEST_F(ColumnValueTest, ValidateUTF8StringEncoding) {
     std::string str(buf.get(), limits::kMaxStringColumnLength * 4);
     values.string_col = String(str);
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(absl::StatusCode::kInvalidArgument));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(absl::StatusCode::kInvalidArgument));
   }
 
   memset(buf.get(), 0xF0, limits::kMaxStringColumnLength * 4);
@@ -406,9 +406,9 @@ TEST_F(ColumnValueTest, ValidateUTF8StringEncoding) {
     std::string str(buf.get(), limits::kMaxStringColumnLength * 4);
     values.string_col = String(str);
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(absl::StatusCode::kInvalidArgument));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(absl::StatusCode::kInvalidArgument));
   }
 
   memset(buf.get(), 0xFF, limits::kMaxStringColumnLength * 4);
@@ -417,9 +417,9 @@ TEST_F(ColumnValueTest, ValidateUTF8StringEncoding) {
     std::string str(buf.get(), limits::kMaxStringColumnLength * 4);
     values.string_col = String(str);
     EXPECT_THAT(ValidateInsert(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(absl::StatusCode::kInvalidArgument));
     EXPECT_THAT(ValidateUpdate(values),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(absl::StatusCode::kInvalidArgument));
   }
 }
 

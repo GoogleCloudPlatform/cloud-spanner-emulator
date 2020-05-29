@@ -18,7 +18,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/substitute.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -34,7 +34,7 @@ using zetasql_base::testing::StatusIs;
 
 class PartitionReadsTest : public DatabaseTest {
  public:
-  zetasql_base::Status SetUpDatabase() override {
+  absl::Status SetUpDatabase() override {
     ZETASQL_RETURN_IF_ERROR(SetSchema({
         R"(
           CREATE TABLE Users(
@@ -53,7 +53,7 @@ class PartitionReadsTest : public DatabaseTest {
           ) PRIMARY KEY (UserId, ThreadId),
           INTERLEAVE IN PARENT Users ON DELETE CASCADE
         )"}));
-    return zetasql_base::OkStatus();
+    return absl::OkStatus();
   }
 
  protected:
@@ -83,7 +83,7 @@ TEST_F(PartitionReadsTest, CannotReadWithoutSession) {
   grpc::ClientContext context;
   EXPECT_THAT(raw_client()->PartitionRead(&context, partition_read_request,
                                           &partition_read_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionReadsTest, CannotReadWithoutTransaction) {
@@ -96,7 +96,7 @@ TEST_F(PartitionReadsTest, CannotReadWithoutTransaction) {
   grpc::ClientContext context;
   EXPECT_THAT(raw_client()->PartitionRead(&context, partition_read_request,
                                           &partition_read_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionReadsTest, CannotReadUsingSingleUseTransaction) {
@@ -114,7 +114,7 @@ TEST_F(PartitionReadsTest, CannotReadUsingSingleUseTransaction) {
   grpc::ClientContext context;
   EXPECT_THAT(raw_client()->PartitionRead(&context, partition_read_request,
                                           &partition_read_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // Tests using cpp client library.
@@ -123,7 +123,7 @@ TEST_F(PartitionReadsTest, CannotReadUsingBeginReadWriteTransaction) {
 
   // PartitionRead using a begin read-write transaction fails.
   EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"UserId", "Name"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionReadsTest, CannotReadUsingExistingReadWriteTransaction) {
@@ -132,7 +132,7 @@ TEST_F(PartitionReadsTest, CannotReadUsingExistingReadWriteTransaction) {
 
   // PartitionRead using an already started read-write transaction fails.
   EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"UserId", "Name"}),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionReadsTest, CannotReadUsingInvalidPartitionOptions) {
@@ -143,13 +143,13 @@ TEST_F(PartitionReadsTest, CannotReadUsingInvalidPartitionOptions) {
                                         .max_partitions = 100};
   EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"UserId", "Name"},
                             /**read_options =*/{}, partition_options),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Test that negative partition_size_bytes is not allowed.
   partition_options = {.partition_size_bytes = 10000, .max_partitions = -1};
   EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"UserId", "Name"},
                             /**read_options =*/{}, partition_options),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionReadsTest, CanReadUsingPartitionToken) {
@@ -164,6 +164,41 @@ TEST_F(PartitionReadsTest, CanReadUsingPartitionToken) {
   EXPECT_THAT(
       Read(partitions),
       IsOkAndHoldsUnorderedRows({{1, "Levin"}, {2, "Mark"}, {10, "Douglas"}}));
+}
+
+TEST_F(PartitionReadsTest, CanReadRangeUsingPartitionToken) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<ReadPartition> partitions,
+                       PartitionRead(txn, "Users", ClosedClosed(Key(1), Key(2)),
+                                     {"UserId", "Name"}));
+
+  EXPECT_THAT(Read(partitions),
+              IsOkAndHoldsUnorderedRows({{1, "Levin"}, {2, "Mark"}}));
+}
+
+TEST_F(PartitionReadsTest, CanReuseTransactionForPartitionReads) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        std::vector<ReadPartition> partitions,
+        PartitionRead(txn, "Users", ClosedClosed(Key(1), Key(2)),
+                      {"UserId", "Name"}));
+    EXPECT_GE(partitions.size(), 1);
+  }
+
+  {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        std::vector<ReadPartition> partitions,
+        PartitionRead(txn, "Users", OpenClosed(Key(1), Key(10)),
+                      {"UserId", "Name"}));
+    EXPECT_GE(partitions.size(), 1);
+  }
 }
 
 TEST_F(PartitionReadsTest, CannotSetReadLimitWithPartitionToken) {
@@ -223,7 +258,7 @@ TEST_F(PartitionReadsTest, CannotSetReadLimitWithPartitionToken) {
     grpc::ClientContext context;
     spanner_api::ResultSet read_response;
     EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
-                StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+                StatusIs(absl::StatusCode::kInvalidArgument));
   }
 }
 
@@ -269,7 +304,7 @@ TEST_F(PartitionReadsTest, CannotReadWithDifferentSession) {
   grpc::ClientContext context;
   spanner_api::ResultSet read_response;
   EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionReadsTest, CannotReadWithDifferentTransaction) {
@@ -313,7 +348,7 @@ TEST_F(PartitionReadsTest, CannotReadWithDifferentTransaction) {
   grpc::ClientContext context;
   spanner_api::ResultSet read_response;
   EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionReadsTest, CannotReadWithDifferentTable) {
@@ -356,7 +391,7 @@ TEST_F(PartitionReadsTest, CannotReadWithDifferentTable) {
   grpc::ClientContext context;
   spanner_api::ResultSet read_response;
   EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionReadsTest, CannotReadWithDifferentIndex) {
@@ -401,7 +436,7 @@ TEST_F(PartitionReadsTest, CannotReadWithDifferentIndex) {
   grpc::ClientContext context;
   spanner_api::ResultSet read_response;
   EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionReadsTest, CannotReadWithDifferentKeySet) {
@@ -445,7 +480,7 @@ TEST_F(PartitionReadsTest, CannotReadWithDifferentKeySet) {
   grpc::ClientContext context;
   spanner_api::ResultSet read_response;
   EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionReadsTest, CannotReadWithDifferentColumns) {
@@ -489,7 +524,7 @@ TEST_F(PartitionReadsTest, CannotReadWithDifferentColumns) {
   grpc::ClientContext context;
   spanner_api::ResultSet read_response;
   EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
-              StatusIs(zetasql_base::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

@@ -17,7 +17,7 @@
 #include "backend/schema/validators/index_validator.h"
 
 #include "absl/memory/memory.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
@@ -25,8 +25,9 @@
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
-#include "zetasql/base/status.h"
+#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -34,22 +35,16 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-zetasql_base::Status IndexValidator::Validate(const Index* index,
+absl::Status IndexValidator::Validate(const Index* index,
                                       SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!index->name_.empty());
   ZETASQL_RET_CHECK_NE(index->indexed_table_, nullptr);
   ZETASQL_RET_CHECK_NE(index->index_data_table_, nullptr);
 
-  if (index->name_.length() > limits::kMaxSchemaIdentifierLength) {
-    return error::InvalidSchemaName("Index", index->name_,
-                                    "name exceeds maximum allowed "
-                                    "identifier length");
-  }
-
+  ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName("Index", index->name_));
   if (absl::EqualsIgnoreCase(index->name_, "PRIMARY_KEY")) {
     return error::CannotNameIndexPrimaryKey();
   }
-
   if (absl::StartsWith(index->name_, "Dir_")) {
     return error::InvalidSchemaName("Index", index->name_);
   }
@@ -60,7 +55,7 @@ zetasql_base::Status IndexValidator::Validate(const Index* index,
 
   CaseInsensitiveStringSet keys_set;
   for (const auto* key_column : index->key_columns_) {
-    const std::string& column_name = key_column->column()->Name();
+    std::string column_name = key_column->column()->Name();
     const auto* column_type = key_column->column()->GetType();
     if (!IsSupportedKeyColumnType(column_type)) {
       return error::IndexRefsUnsupportedColumn(index->name_,
@@ -77,7 +72,7 @@ zetasql_base::Status IndexValidator::Validate(const Index* index,
 
   CaseInsensitiveStringSet stored_set;
   for (const auto* column : index->stored_columns_) {
-    const std::string& column_name = column->Name();
+    std::string column_name = column->Name();
     if (keys_set.contains(column_name)) {
       return error::IndexRefsKeyAsStoredColumn(index->name_, column_name);
     }
@@ -102,15 +97,16 @@ zetasql_base::Status IndexValidator::Validate(const Index* index,
     }
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
-zetasql_base::Status IndexValidator::ValidateUpdate(const Index* index,
+absl::Status IndexValidator::ValidateUpdate(const Index* index,
                                             const Index* old_index,
                                             SchemaValidationContext* context) {
   if (index->is_deleted()) {
     ZETASQL_RET_CHECK(index->index_data_table_->is_deleted());
-    return zetasql_base::OkStatus();
+    context->global_names()->RemoveName(index->Name());
+    return absl::OkStatus();
   }
 
   ZETASQL_RET_CHECK(!index->index_data_table()->is_deleted());
@@ -140,7 +136,7 @@ zetasql_base::Status IndexValidator::ValidateUpdate(const Index* index,
     }
   }
 
-  return zetasql_base::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace backend
