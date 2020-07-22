@@ -38,54 +38,46 @@ enum class ParserState {
   kReadingOutput,
 };
 
-// Container for input and exected result of a file based test case.
-struct FileBasedTestCase {
-  FileBasedTestCaseInput input;
-  FileBasedTestCaseOutput expected;
-};
-
 }  // namespace
 
-absl::Status RunTestCasesFromFile(const std::string& file,
-                                  const FileBasedTestOptions& options,
-                                  const FileBasedTestCaseExecutor& executor) {
-  FileBasedTestCase test_case;
+std::vector<FileBasedTestCase> ReadTestCasesFromFile(
+    const std::string& file, const FileBasedTestOptions& options) {
+  std::vector<FileBasedTestCase> test_cases;
+  FileBasedTestCase test_case(file, 1);
   std::string line;
+  int line_no = 0;
   ParserState state = ParserState::kReadingInput;
+
+  auto add_test_case = [&]() {
+    test_cases.emplace_back(std::move(test_case));
+    state = ParserState::kReadingInput;
+    test_case = FileBasedTestCase(file, line_no + 1);
+  };
 
   // Process the input file a line at a time.
   std::ifstream fin(file);
   while (std::getline(fin, line)) {
+    ++line_no;
     switch (state) {
       case ParserState::kReadingInput:
-        if (line == options.input_delimiter) {
+        if (line == options.test_case_delimiter) {
+          // The output text is expected to equal the input text.
+          test_case.expected.text = test_case.input.text;
+          add_test_case();
+        } else if (line == options.input_delimiter) {
           // We have seen the end of the input, move on to reading output.
           state = ParserState::kReadingOutput;
+        } else if (absl::StartsWith(line, options.comment_prefix)) {
+          // Skip lines with comments.
         } else {
-          // Add this line to the test case (unless it's a comment).
-          if (!absl::StartsWith(line, options.comment_prefix)) {
-            test_case.input.text += line + "\n";
-          }
+          // Add this line to the test case.
+          test_case.input.text += line + "\n";
         }
         break;
 
       case ParserState::kReadingOutput:
         if (line == options.test_case_delimiter) {
-          // We have seen the end of the test case, execute it.
-          zetasql_base::StatusOr<FileBasedTestCaseOutput> actual =
-              executor(test_case.input);
-
-          // Assert expectations.
-          ZETASQL_EXPECT_OK(actual.status());
-          if (actual.status().ok()) {
-            EXPECT_EQ(test_case.expected.text, actual.ValueOrDie().text)
-                << "for input:\n"
-                << test_case.input.text;
-          }
-
-          // Reset state for the next test case.
-          state = ParserState::kReadingInput;
-          test_case = FileBasedTestCase();
+          add_test_case();
         } else {
           // We are still consuming the test case output.
           test_case.expected.text += line + "\n";
@@ -94,14 +86,11 @@ absl::Status RunTestCasesFromFile(const std::string& file,
     }
   }
 
-  // Execute the final test case.
-  zetasql_base::StatusOr<FileBasedTestCaseOutput> actual = executor(test_case.input);
-  ZETASQL_EXPECT_OK(actual.status());
-  if (actual.status().ok()) {
-    EXPECT_EQ(test_case.expected.text, actual.ValueOrDie().text);
+  // Add the final test case if any.
+  if (state == ParserState::kReadingOutput || !test_case.input.text.empty()) {
+    add_test_case();
   }
-
-  return absl::OkStatus();
+  return test_cases;
 }
 
 std::string GetRunfilesDir(const std::string& dir) {

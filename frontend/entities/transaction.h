@@ -61,6 +61,17 @@ class Transaction {
     kMultiUse,
   };
 
+  // These operation types correspond to the handler that was invoked. For
+  // ExecuteSql handlers, the operation can be either kSql(read-only) or
+  // kDml(read-write).
+  enum class OpType {
+    kRead,
+    kCommit,
+    kSql,
+    kDml,
+    kRollback,
+  };
+
   Transaction(absl::variant<std::unique_ptr<backend::ReadWriteTransaction>,
                             std::unique_ptr<backend::ReadOnlyTransaction>>
                   backend_transaction,
@@ -68,7 +79,7 @@ class Transaction {
               const spanner_api::TransactionOptions& options,
               const Usage& usage);
 
-  // Mark the transaction as closed.  This indicates that the transaction is no
+  // Mark the transaction as closed. This indicates that the transaction is no
   // longer valid in the context of its owning session.  For example, prior
   // transactions are closed once a new transaction is started.
   void Close() ABSL_LOCKS_EXCLUDED(mu_);
@@ -114,29 +125,43 @@ class Transaction {
   // For ReadOnlyTransaction, always returns false.
   bool IsRolledback() const;
 
+  // Returns true if the current transaction has been aborted due to
+  // non-recoverable errors. For ReadOnlyTransaction, always returns false.
+  bool IsInvalid() const;
+
+  // Returns true if the current transaction has been aborted.
+  // For ReadOnlyTransaction & PartitionedDmlTransaction, always returns false.
+  bool IsAborted() const;
+
   // Returns true if the current transaction is a ReadOnlyTransaction.
   bool IsReadOnly() const { return type_ == kReadOnly; }
+
+  // Returns true if the current transaction is a ReadWriteTransaction.
+  bool IsReadWrite() const { return type_ == kReadWrite; }
 
   // Returns true if the current transaction is a PartitionedDmlTransaction.
   bool IsPartitionedDml() const { return type_ == kPartitionedDml; }
 
-  // All transaction methods should be called inside GuardedCall so that the
-  // transaction can be rolled back on any errors.
-  absl::Status GuardedCall(const std::function<absl::Status()>& fn)
+  // All transaction methods should be called inside GuardedCall.
+  absl::Status GuardedCall(OpType op, const std::function<absl::Status()>& fn)
       ABSL_LOCKS_EXCLUDED(mu_);
+
+  backend::ReadWriteTransaction* read_write() const {
+    return std::get<0>(transaction_).get();
+  }
+
+  backend::ReadOnlyTransaction* read_only() const {
+    return std::get<1>(transaction_).get();
+  }
 
   // Disallow copy and assignment.
   Transaction(const Transaction&) = delete;
   Transaction& operator=(const Transaction&) = delete;
 
  private:
-  backend::ReadOnlyTransaction* read_only() const {
-    return std::get<1>(transaction_).get();
-  }
-
-  backend::ReadWriteTransaction* read_write() const {
-    return std::get<0>(transaction_).get();
-  }
+  // Invalidates the backend transaction. This should only ever be invoked due
+  // to non-recoverable errors.
+  absl::Status Invalidate();
 
   // Returns true if the transaction is in the given state.
   bool HasState(const backend::ReadWriteTransaction::State& state) const;

@@ -21,6 +21,7 @@
 
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "backend/actions/ops.h"
 #include "backend/common/ids.h"
 #include "backend/datamodel/key.h"
@@ -124,6 +125,15 @@ class TransactionStore {
   // Returns true if a mutation has been buffered for 'key' and fills 'row'.
   bool RowExistsInBuffer(const Table* table, const Key& key, RowOp* row) const;
 
+  // Mark a given column non-readable if one or more values being written to it
+  // in the mutation contain pending commit timestamp.
+  void TrackColumnsForCommitTimestamp(absl::Span<const Column* const> columns,
+                                      const ValueList& values);
+
+  // Mark table and it's associated indices as non-readable if key in the
+  // mutation contains pending commit timestamp.
+  void TrackTableForCommitTimestamp(const Table* table, const Key& key);
+
   // Underlying storage for the database.
   const Storage* base_storage_;
 
@@ -132,6 +142,15 @@ class TransactionStore {
 
   // Map that stores the buffered mutations.
   absl::flat_hash_map<const Table*, std::map<Key, RowOp>> buffered_ops_;
+
+  // Set of non-key columns which have mutation with pending commit timestamp
+  // and are thus marked as non-readable in read-your-writes transactions.
+  absl::flat_hash_set<const Column*> commit_ts_columns_;
+
+  // Set of tables which have mutation with pending commit timestamp and are
+  // thus marked as non-readable in read-your-writes transactions. This also
+  // includes backing tables for indices of all such tables.
+  absl::flat_hash_set<const Table*> commit_ts_tables_;
 };
 
 }  // namespace backend

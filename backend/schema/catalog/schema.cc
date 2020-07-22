@@ -39,6 +39,15 @@ const Table* Schema::FindTable(const std::string& table_name) const {
   return itr->second;
 }
 
+const Table* Schema::FindTableCaseSensitive(
+    const std::string& table_name) const {
+  auto table = FindTable(table_name);
+  if (!table || table->Name() != table_name) {
+    return nullptr;
+  }
+  return table;
+}
+
 const Index* Schema::FindIndex(const std::string& index_name) const {
   auto itr = index_map_.find(index_name);
   if (itr == index_map_.end()) {

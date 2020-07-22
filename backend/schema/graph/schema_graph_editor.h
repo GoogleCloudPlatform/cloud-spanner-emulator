@@ -50,14 +50,14 @@ namespace backend {
 // not be re-used after a call to CanonicalizeGraph().
 class SchemaGraphEditor {
  public:
-  explicit SchemaGraphEditor(const SchemaGraph* original_graph,
-                             SchemaValidationContext* context)
+  SchemaGraphEditor(const SchemaGraph* original_graph,
+                    SchemaValidationContext* context)
       : original_graph_(original_graph),
         context_(context),
         cloned_pool_(absl::make_unique<SchemaObjectsPool>()) {}
 
   template <typename T>
-  using EditCallback = std::function<absl::Status(typename T::Editor&)>;
+  using EditCallback = std::function<absl::Status(typename T::Editor*)>;
 
   // Creates a modifiable clone of 'node'. If the node is already cloned
   // for modifcation, re-uses the existing clone. The clone is modified through
@@ -75,27 +75,29 @@ class SchemaGraphEditor {
         << "Graph has a deleted node. It must be canonicalized before "
         << "making further changes.";
 
-    ZETASQL_RET_CHECK(IsOriginalNode(node))
-        << "Only an existing node in the schema can be modified. ";
+    // Get an editable node.
+    T* editable = const_cast<SchemaNode*>(node)->As<T>();
+    ZETASQL_RET_CHECK_NE(editable, nullptr);
 
-    // Create a clone of the schema first.
-    if (clone_map_.empty()) {
-      ZETASQL_RETURN_IF_ERROR(InitCloneMap());
+    // Clone the node if it already exists.
+    if (IsOriginalNode(node)) {
+      // Create a clone of the schema first.
+      if (clone_map_.empty()) {
+        ZETASQL_RETURN_IF_ERROR(InitCloneMap());
+      }
+
+      // Edit the clone.
+      const auto* clone = FindClone(node);
+      ZETASQL_RET_CHECK_NE(clone, nullptr);
+      editable = const_cast<SchemaNode*>(clone)->As<T>();
+      ZETASQL_RET_CHECK_NE(editable, nullptr);
+
+      edited_clones_.insert(clone);
     }
 
-    const auto* editable_clone = FindClone(node);
-    ZETASQL_RET_CHECK_NE(editable_clone, nullptr);
-
-    edited_clones_.insert(editable_clone);
-    T* typed_clone = const_cast<SchemaNode*>(editable_clone)->As<T>();
-
-    // Create a editor with a clone to pass to the modification callback.
-    ZETASQL_RET_CHECK_NE(typed_clone, nullptr);
-    typename T::Editor editor(typed_clone);
-    ZETASQL_RETURN_IF_ERROR(edit_cb(editor));
-
-    // On succesful modification, register the clone.
-    return absl::OkStatus();
+    // Edit the node.
+    typename T::Editor editor(editable);
+    return edit_cb(&editor);
   }
 
   // Marks 'node' as deleted from the graph. The delete may result in
@@ -118,6 +120,27 @@ class SchemaGraphEditor {
   // ownership of the cloned sub-graph cannot be released from this class.
   // Callers should not directly call this method.
   zetasql_base::StatusOr<const SchemaNode*> Clone(const SchemaNode* node);
+
+  // Clones an iterable container of nodes in-place. Erases deleted nodes.
+  template <typename T, typename C>
+  absl::Status CloneContainer(C* nodes) {
+    for (auto it = nodes->begin(); it != nodes->end();) {
+      ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, Clone(*it));
+      if (schema_node->is_deleted()) {
+        it = nodes->erase(it);
+      } else {
+        *it = schema_node->template As<T>();
+        ++it;
+      }
+    }
+    return absl::OkStatus();
+  }
+
+  // Clones a vector of nodes in-place. Erases deleted nodes.
+  template <typename T>
+  absl::Status CloneVector(std::vector<const T*>* nodes) {
+    return CloneContainer<T>(nodes);
+  }
 
   // Returns true if the graph has any modifications.
   bool HasModifications() const {

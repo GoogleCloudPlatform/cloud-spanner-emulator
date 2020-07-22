@@ -19,6 +19,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
@@ -42,7 +43,11 @@ struct FileBasedTestOptions {
 
 // Input for a file based test case.
 struct FileBasedTestCaseInput {
+  FileBasedTestCaseInput(absl::string_view file_name, int line_no)
+      : file_name(file_name), line_no(line_no) {}
   std::string text;
+  std::string file_name;
+  int line_no;
 };
 
 // Output for a file based test case.
@@ -50,18 +55,17 @@ struct FileBasedTestCaseOutput {
   std::string text;
 };
 
-// Callback (impemented by test suites) which runs a file based test case.
-// Executors should return invalid status for invalid test case inputs. If the
-// test case input is valid, any errors from running the test case should be
-// formatted as text into the output.
-using FileBasedTestCaseExecutor =
-    std::function<zetasql_base::StatusOr<FileBasedTestCaseOutput>(
-        const FileBasedTestCaseInput&)>;
+// Container for input and exected result of a file-based test case.
+struct FileBasedTestCase {
+  FileBasedTestCase(absl::string_view file_name, int line_no)
+      : input(file_name, line_no) {}
+  FileBasedTestCaseInput input;
+  FileBasedTestCaseOutput expected;
+};
 
-// Runs all test cases in `file` via `executor`.
-absl::Status RunTestCasesFromFile(const std::string& file,
-                                  const FileBasedTestOptions& options,
-                                  const FileBasedTestCaseExecutor& executor);
+// Reads and returns all testcases in `file`.
+std::vector<FileBasedTestCase> ReadTestCasesFromFile(
+    const std::string& file, const FileBasedTestOptions& options);
 
 // Returns the runfiles directory for the given source-root relative directory.
 std::string GetRunfilesDir(const std::string& dir);

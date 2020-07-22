@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_OPTIONS_H_
 
 #include "absl/time/time.h"
+#include "backend/common/ids.h"
 
 namespace google {
 namespace spanner {
@@ -52,6 +53,17 @@ struct ReadOnlyOptions {
 
   // The read timestamp for kMinTimestamp and kExactTimestamp.
   absl::Time timestamp = absl::InfinitePast();
+};
+
+// Maintains the lock priority and retry attempts for a transaction such that
+// subsequent retries have fewer chances of an ABORT error. Documentation:
+// https://cloud.google.com/spanner/docs/reference/rest/v1/TransactionOptions#retrying-aborted-transactions
+struct RetryState {
+  // Initial abort retry count of the transaction.
+  int abort_retry_count = 0;
+
+  // Priority of the transaction.
+  TransactionPriority priority = 0;
 };
 
 // Options for creating a read write transaction.

@@ -57,9 +57,8 @@ class SchemaValidationContext {
   // separately.
   SchemaValidationContext() {}
 
-  explicit SchemaValidationContext(Storage* storage,
-                                   GlobalSchemaNames* global_names,
-                                   absl::Time pending_commit_timestamp)
+  SchemaValidationContext(Storage* storage, GlobalSchemaNames* global_names,
+                          absl::Time pending_commit_timestamp)
       : storage_(storage),
         global_names_(global_names),
         pending_commit_timestamp_(pending_commit_timestamp) {}

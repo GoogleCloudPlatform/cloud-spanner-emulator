@@ -70,6 +70,13 @@ std::string PrintName(const std::string& name) {
   return IsReservedWord(name) ? PrintQualifiedName(name) : name;
 }
 
+std::string PrintColumnNameList(absl::Span<const Column* const> columns) {
+  return absl::StrJoin(columns, ", ",
+                       [](std::string* out, const Column* column) {
+                         absl::StrAppend(out, PrintName(column->Name()));
+                       });
+}
+
 // Converts a column type and it's length (if applicable) to the corresponding
 // DDL type string.
 std::string TypeToString(const zetasql::Type* type,
@@ -160,9 +167,11 @@ std::string PrintIndex(const Index* index) {
 std::string PrintTable(const Table* table) {
   std::string table_string =
       absl::Substitute("CREATE TABLE $0 (\n", PrintName(table->Name()));
-  for (int i = 0; i < table->columns().size(); ++i) {
-    absl::StrAppend(&table_string, "  ", PrintColumn(table->columns()[i]),
-                    ",\n");
+  for (const Column* column : table->columns()) {
+    absl::StrAppend(&table_string, "  ", PrintColumn(column), ",\n");
+  }
+  for (const ForeignKey* foreign_key : table->foreign_keys()) {
+    absl::StrAppend(&table_string, "  ", PrintForeignKey(foreign_key), ",\n");
   }
   absl::StrAppend(&table_string, ") PRIMARY KEY(");
 
@@ -182,6 +191,20 @@ std::string PrintTable(const Table* table) {
     absl::StrAppend(&table_string, ")");
   }
   return table_string;
+}
+
+std::string PrintForeignKey(const ForeignKey* foreign_key) {
+  std::string out;
+  if (!foreign_key->constraint_name().empty()) {
+    absl::StrAppend(&out, "CONSTRAINT ",
+                    PrintName(foreign_key->constraint_name()), " ");
+  }
+  absl::StrAppend(&out, "FOREIGN KEY(",
+                  PrintColumnNameList(foreign_key->referencing_columns()),
+                  ") REFERENCES ",
+                  PrintName(foreign_key->referenced_table()->Name()), "(",
+                  PrintColumnNameList(foreign_key->referenced_columns()), ")");
+  return out;
 }
 
 std::vector<std::string> PrintDDLStatements(const Schema* schema) {

@@ -36,6 +36,8 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+class NetCatalog;
+
 // Implementation of zetasql::Catalog for the root catalog in the catalog
 // hierarchy. For more details, see code of zetasql::Catalog.
 class Catalog : public zetasql::EnumerableCatalog {
@@ -53,6 +55,8 @@ class Catalog : public zetasql::EnumerableCatalog {
   }
 
  private:
+  friend class NetCatalog;
+
   // Implementation of the zetasql::Catalog interface.
   absl::Status GetCatalog(const std::string& name, zetasql::Catalog** catalog,
                           const FindOptions& options) final;
@@ -76,6 +80,9 @@ class Catalog : public zetasql::EnumerableCatalog {
   zetasql::Catalog* GetInformationSchemaCatalog() const
       ABSL_LOCKS_EXCLUDED(mu_);
 
+  // Returns the NET catalog.
+  zetasql::Catalog* GetNetFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
+
   // The backend schema (which is the default schema in this catalog).
   const Schema* schema_;
 
@@ -91,6 +98,9 @@ class Catalog : public zetasql::EnumerableCatalog {
   // Information schema catalog (created only if accessed).
   mutable std::unique_ptr<zetasql::Catalog> information_schema_catalog_
       ABSL_GUARDED_BY(mu_);
+
+  // Sub-catalog for resolving NET function lookup.
+  mutable std::unique_ptr<zetasql::Catalog> net_catalog_ ABSL_GUARDED_BY(mu_);
 };
 
 }  // namespace backend

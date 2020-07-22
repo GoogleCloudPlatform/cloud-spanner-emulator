@@ -62,11 +62,18 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
     // Committed transaction.
     kCommitted,
 
-    // Rolledback transaction, cannot be retried.
+    // Rolledback transaction (initiated by user), cannot be retried.
     kRolledback,
+
+    // Transaction has been invalidated due to non-recoverable constraint
+    // errors. It cannot be retried. This is not the same as the transaction
+    // returning kAborted status error, in that case the transaction can be
+    // retried.
+    kInvalid,
   };
 
   ReadWriteTransaction(const ReadWriteOptions& options,
+                       const RetryState& retry_state,
                        TransactionID transaction_id, Clock* clock,
                        Storage* storage, LockManager* lock_manager,
                        const VersionedCatalog* const versioned_catalog,
@@ -82,6 +89,8 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
   absl::Status Commit() ABSL_LOCKS_EXCLUDED(mu_);
 
   absl::Status Rollback() ABSL_LOCKS_EXCLUDED(mu_);
+
+  absl::Status Invalidate() ABSL_LOCKS_EXCLUDED(mu_);
 
   zetasql_base::StatusOr<absl::Time> GetCommitTimestamp() ABSL_LOCKS_EXCLUDED(mu_);
 
@@ -99,8 +108,22 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
   // Returns the options for this transaction.
   const ReadWriteOptions& options() const { return options_; }
 
+  // Returns the retry state for this transaction.
+  const RetryState retry_state() const ABSL_LOCKS_EXCLUDED(mu_) {
+    absl::MutexLock lock(&mu_);
+    return retry_state_;
+  }
+
  private:
-  absl::Status GuardedCall(const std::function<absl::Status()>& fn)
+  enum class OpType {
+    kRead,
+    kWrite,
+    kCommit,
+    kRollback,
+    kInvalidate,
+  };
+
+  absl::Status GuardedCall(OpType op, const std::function<absl::Status()>& fn)
       ABSL_LOCKS_EXCLUDED(mu_);
   absl::Status ProcessWriteOps(const std::vector<WriteOp>& write_ops);
 
@@ -115,8 +138,14 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
   // Returns true if the given key exists within the table.
   bool KeyExists(const Table* table, const Key& key) const;
 
+  // Mutex that guards the state of this transaction.
+  mutable absl::Mutex mu_;
+
   // Options with which the transaction was created.
   ReadWriteOptions options_;
+
+  // Initial state of the transaction between retry attempts.
+  RetryState retry_state_ ABSL_GUARDED_BY(mu_);
 
   // ID for this transaction.
   const TransactionID id_;
@@ -142,9 +171,6 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
   ActionRegistry* action_registry_;
   std::unique_ptr<ActionContext> action_context_;
 
-  // Mutex that guards the state below.
-  mutable absl::Mutex mu_;
-
   // The commit timestamp chosen for this transaction.
   absl::Time commit_timestamp_ ABSL_GUARDED_BY(mu_);
 
@@ -153,9 +179,6 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
 
   // The state of this transaction.
   State state_ ABSL_GUARDED_BY(mu_) = State::kUninitialized;
-
-  // Number of times the transaction is aborted.
-  int abort_retry_count_ ABSL_GUARDED_BY(mu_) = 0;
 
   // The schema that is in effect at the timestamp picked for this transaction.
   const Schema* schema_ ABSL_GUARDED_BY(mu_);

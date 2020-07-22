@@ -50,6 +50,9 @@ class Schema {
   // if the table is not found. Name comparison is case-insensitive.
   const Table* FindTable(const std::string& table_name) const;
 
+  // Same as FindTable but case-sensitive.
+  const Table* FindTableCaseSensitive(const std::string& table_name) const;
+
   // Finds an index by its name. Returns a const pointer of the index, or
   // nullptr if the index is not found. Name comparison is case-insensitive.
   const Index* FindIndex(const std::string& index_name) const;
@@ -59,6 +62,9 @@ class Schema {
 
   // Return the underlying SchemaGraph owning the objects in the schema.
   const SchemaGraph* GetSchemaGraph() const { return graph_.get(); }
+
+  // Returns the number of indices in the schema.
+  int num_index() const { return index_map_.size(); }
 
  private:
   // Manages the lifetime of all schema objects. Maintains the order

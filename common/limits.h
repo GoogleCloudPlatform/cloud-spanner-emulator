@@ -39,7 +39,7 @@ constexpr int64_t kMaxGRPCErrorMessageLength = 1024;
 constexpr int kMaxTransactionsPerSession = 32;
 
 // Maximum number of tables per database.
-constexpr int kMaxTablesPerDatabase = 2048;
+constexpr int kMaxTablesPerDatabase = 2560;
 
 // Maximum length of a schema identifier e.g. table/column/index name.
 constexpr int kMaxSchemaIdentifierLength = 128;
@@ -55,13 +55,13 @@ constexpr int kMaxColumnsPerTable = 1024;
 constexpr int kMaxKeyColumns = 16;
 
 // Maximum interleaving depth, counting from the top-level table's children.
-constexpr int kMaxInterleavingDepth = 6;
+constexpr int kMaxInterleavingDepth = 7;
 
 // Maximum number of indexes per database.
-constexpr int kMaxIndexesPerDatabase = 4096;
+constexpr int kMaxIndexesPerDatabase = kMaxTablesPerDatabase * 2;
 
 // Maximum number of indexes per table.
-constexpr int kMaxIndexesPerTable = 32;
+constexpr int kMaxIndexesPerTable = 64;
 
 // Maximum number of sessions that can be created in a batch.
 constexpr int32_t kMaxBatchCreateSessionsCount = 100;
@@ -94,6 +94,9 @@ constexpr int64_t kMaxStreamingChunkSize = 1024 * 1024;  // 1 MB
 
 // Maximum size of a key in bytes.
 constexpr int kMaxKeySizeBytes = 8 * 1024;  // 8 KB
+
+// Maximum size of the query string.
+constexpr int kMaxQueryStringSize = 1024 * 1024;  // 1 K
 
 }  // namespace limits
 }  // namespace emulator

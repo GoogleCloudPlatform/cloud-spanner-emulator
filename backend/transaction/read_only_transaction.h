@@ -58,7 +58,7 @@ class ReadOnlyTransaction : public RowReader {
   absl::Time read_timestamp() const { return read_timestamp_; }
 
   // Returns the schema used by this transaction.
-  const Schema* schema() const { return schema_; }
+  const Schema* schema() const;
 
   // Returns the ID of this transaction.
   const TransactionID id() const { return id_; }
@@ -85,8 +85,8 @@ class ReadOnlyTransaction : public RowReader {
   // Underlying storage of the database.
   Storage* base_storage_;
 
-  // The schema that is in effect at the timestamp picked for this transaction.
-  const Schema* schema_;
+  // VersionedCatalog for the database provided at transaction creation.
+  const VersionedCatalog* const versioned_catalog_;
 
   // Transaction lock management.
   std::unique_ptr<LockHandle> lock_handle_;

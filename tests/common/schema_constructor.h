@@ -101,6 +101,35 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
   return std::move(maybe_schema.ValueOrDie());
 }
 
+// Creates a schema with two top level tables and one child table.
+inline std::unique_ptr<const backend::Schema> CreateSchemaWithMultiTables(
+    zetasql::TypeFactory* type_factory) {
+  auto maybe_schema = CreateSchemaFromDDL(
+      {
+          R"(
+              CREATE TABLE test_table (
+                int64_col INT64 NOT NULL,
+                string_col STRING(MAX)
+              ) PRIMARY KEY (int64_col)
+            )",
+          R"(
+              CREATE TABLE child_table (
+                int64_col INT64 NOT NULL,
+                child_key INT64 NOT NULL,
+              ) PRIMARY KEY (int64_col, child_key),
+              INTERLEAVE IN PARENT test_table ON DELETE CASCADE
+            )",
+          R"(
+              CREATE TABLE test_table2 (
+                int64_col INT64 NOT NULL,
+                string_col STRING(MAX)
+              ) PRIMARY KEY (int64_col)
+            )",
+      },
+      type_factory);
+  return std::move(maybe_schema.ValueOrDie());
+}
+
 }  // namespace test
 }  // namespace emulator
 }  // namespace spanner

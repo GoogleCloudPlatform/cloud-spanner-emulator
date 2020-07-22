@@ -97,6 +97,26 @@ TEST(GlobalSchemaNames, GenerateForeignKeyName) {
   EXPECT_THAT(names.GenerateForeignKeyName("Albums", ""), Not(IsOk()));
 }
 
+TEST(GlobalSchemaNames, GenerateManagedIndexName) {
+  GlobalSchemaNames names;
+  std::string first{"FirstName"}, last{"LastName"};
+  auto status = names.GenerateManagedIndexName("Songs", {&first, &last},
+                                               /*unique=*/false);
+  ZETASQL_EXPECT_OK(status);
+  EXPECT_THAT(status.value(),
+              Eq("IDX_Songs_FirstName_LastName_N_5849069C505A683F"));
+}
+
+TEST(GlobalSchemaNames, GenerateManagedUniqueIndexName) {
+  GlobalSchemaNames names;
+  std::string first{"FirstName"}, last{"LastName"};
+  auto status = names.GenerateManagedIndexName("Songs", {&first, &last},
+                                               /*unique=*/true);
+  ZETASQL_EXPECT_OK(status);
+  EXPECT_THAT(status.value(),
+              Eq("IDX_Songs_FirstName_LastName_U_E3AF278F4A7F7E44"));
+}
+
 TEST(GlobalSchemaNames, ValidateSchemaName) {
   ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", "Albums"));
 

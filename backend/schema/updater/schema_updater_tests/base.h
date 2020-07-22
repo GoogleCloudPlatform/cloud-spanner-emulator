@@ -31,6 +31,7 @@
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_graph_editor.h"
@@ -48,6 +49,10 @@ namespace test {
 
 // Matcher for matching a zetasql_base::StatusOr with an expected status.
 MATCHER_P(StatusIs, status, "") { return arg.status() == status; }
+
+MATCHER_P(NameIs, name, "") {
+  return arg->GetSchemaNameInfo().value().name == name;
+}
 
 MATCHER_P2(ColumnIs, name, type, "") {
   bool match = true;
@@ -113,6 +118,30 @@ MATCHER_P(SourceColumnIs, source, "") {
   EXPECT_TRUE(arg->GetType()->Equals(source->GetType()));
   EXPECT_EQ(arg->declared_max_length(), source->declared_max_length());
   return true;
+}
+
+template <typename T>
+std::string PrintNames(absl::Span<const T* const> nodes) {
+  return absl::StrJoin(nodes, ",", [](std::string* out, const T* node) {
+    absl::StrAppend(out, node->GetSchemaNameInfo().value().name);
+  });
+}
+
+template <typename T>
+std::string PrintNames(const std::vector<const T*> nodes) {
+  return PrintNames(absl::Span<const T* const>(nodes));
+}
+
+#define ASSERT_NOT_NULL(v) AssertNotNull((v), __FILE__, __LINE__)
+
+template <typename T>
+const T* AssertNotNull(const T* value, const char* file, int line) {
+  auto assert_not_null = [](const T* value, const char* file, int line) {
+    // Must be called in a function returning void.
+    ASSERT_NE(value, nullptr) << "  at " << file << ":" << line;
+  };
+  assert_not_null(value, file, line);
+  return value;
 }
 
 class SchemaUpdaterTest : public testing::Test {

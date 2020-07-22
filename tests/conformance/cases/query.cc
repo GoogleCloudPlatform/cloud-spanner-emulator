@@ -17,6 +17,7 @@
 #include <tuple>
 
 #include "gmock/gmock.h"
+#include "absl/status/status.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -58,7 +59,8 @@ class QueryTest : public DatabaseTest {
             Subject    STRING(MAX),
           ) PRIMARY KEY (UserId, ThreadId, MessageId),
           INTERLEAVE IN PARENT Threads ON DELETE CASCADE
-        )"});
+        )",
+    });
   }
 
  protected:
@@ -161,6 +163,19 @@ TEST_F(QueryTest, JSONFunctions) {
               IsOkAndHoldsRow({Value("world")}));
 }
 
+TEST_F(QueryTest, FormatFunction) {
+  EXPECT_THAT(Query(R"(SELECT FORMAT('%s %s', 'hello', 'world'))"),
+              IsOkAndHoldsRow({Value("hello world")}));
+
+  EXPECT_THAT(Query(R"(SELECT SAFE.FORMAT('%s %s', 'hello', 'world'))"),
+              IsOkAndHoldsRow({Value("hello world")}));
+}
+
+TEST_F(QueryTest, DISABLED_NETFunctions) {
+  const std::string query = R"(SELECT NET.IPV4_TO_INT64(b"\x00\x00\x00\x00"))";
+  EXPECT_THAT(Query(query), StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 TEST_F(QueryTest, CanReturnArrayOfStructTypedColumns) {
   using EmptyStruct = std::tuple<>;
   EXPECT_THAT(
@@ -225,6 +240,37 @@ TEST_F(QueryTest, Params) {
   EXPECT_THAT(
       QueryWithParams("SELECT @param", {{std::string(130, 'x'), Value(6)}}),
       StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(QueryTest, DefaultTimeZoneIsPacificTime) {
+  absl::TimeZone time_zone;
+  ASSERT_TRUE(absl::LoadTimeZone("America/Los_Angeles", &time_zone));
+  EXPECT_THAT(Query("SELECT TIMESTAMP '2020-12-01'"),
+              IsOkAndHoldsRow({Value(MakeTimestamp(absl::ToChronoTime(
+                  absl::FromCivil(absl::CivilDay(2020, 12, 1), time_zone))))}));
+}
+
+TEST_F(QueryTest, CheckQuerySizeLimitsAreEnforced) {
+  // Check that the query size limits enforcement is in place.
+  auto many_joins_query = [](int num_joins) {
+    std::string join_query = "SELECT t0.UserId FROM Users AS t0";
+    for (int i = 1; i <= num_joins; ++i) {
+      join_query = join_query + "\n" +
+                   absl::StrFormat("JOIN Users AS t%d ON t%d.UserId = t%d.Age ",
+                                   i, i - 1, i);
+    }
+    return join_query;
+  };
+  EXPECT_THAT(Query(many_joins_query(/*num_joins=*/16)),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("joins exceeds")));
+}
+
+TEST_F(QueryTest, QueryStringSizeLimit) {
+  auto query = absl::Substitute("SELECT \"$0\"", std::string(1024 * 1024, 'a'));
+  EXPECT_THAT(Query(query),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("Query string length")));
 }
 
 }  // namespace

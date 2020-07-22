@@ -492,6 +492,187 @@ TEST_F(CommitTimestamps, CanUpdateAndCommitPendingCommitTimestampInDml) {
               IsOkAndHoldsRows({{1, "Levin", result.commit_timestamp}}));
 }
 
+TEST_F(CommitTimestamps, InconsistentCommitTimestampInParent) {
+  ZETASQL_EXPECT_OK(SetSchema({
+      R"(
+        CREATE TABLE T1(
+          ts     TIMESTAMP,
+        ) PRIMARY KEY (ts)
+      )",
+      R"(
+        CREATE TABLE T2(
+          ts     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+          col2   STRING(MAX),
+        ) PRIMARY KEY (ts, col2), INTERLEAVE IN PARENT T1
+      )",
+      R"(
+        CREATE TABLE T3(
+          ts     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+          col2   STRING(MAX),
+          col3   STRING(MAX),
+        ) PRIMARY KEY (ts, col2, col3), INTERLEAVE IN PARENT T2
+      )"}));
+
+  // Same key column present in grandparent table's primary key doesn't have
+  // commit timestamp enabled.
+  EXPECT_THAT(Insert("T3", {"ts", "col2", "col3"},
+                     {kCommitTimestampSentinel, "val2", "val3"}),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(CommitTimestamps, InconsistentCommitTimestampInChildren) {
+  ZETASQL_EXPECT_OK(SetSchema({
+      R"(
+        CREATE TABLE T1(
+          ts     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+        ) PRIMARY KEY (ts)
+      )",
+      R"(
+        CREATE TABLE T2(
+          ts     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+          col2   STRING(MAX),
+        ) PRIMARY KEY (ts, col2), INTERLEAVE IN PARENT T1
+      )",
+      R"(
+        CREATE TABLE T3(
+          ts     TIMESTAMP,
+          col2   STRING(MAX),
+          col3   STRING(MAX),
+        ) PRIMARY KEY (ts, col2, col3), INTERLEAVE IN PARENT T2
+      )"}));
+
+  // Same key column present in grandchild table's primary key doesn't have
+  // commit timestamp enabled.
+  EXPECT_THAT(Insert("T1", {"ts"}, {kCommitTimestampSentinel}),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(CommitTimestamps, InconsistentCommitTimestampAllowedInSchema) {
+  ZETASQL_EXPECT_OK(SetSchema({
+      R"(
+        CREATE TABLE T1(
+          ts     TIMESTAMP,
+        ) PRIMARY KEY (ts)
+      )",
+      R"(
+        CREATE TABLE T2(
+          ts     TIMESTAMP,
+          col2   STRING(MAX),
+        ) PRIMARY KEY (ts, col2), INTERLEAVE IN PARENT T1
+      )"}));
+
+  // Expect that schema change to parent table to set allow_commit_timestamp to
+  // true is allowed, even if it's inconsistent with child table. Attempt to
+  // insert a pending commit
+  ZETASQL_EXPECT_OK(
+      SetSchema({"ALTER TABLE T1 ALTER COLUMN ts SET OPTIONS "
+                 "(allow_commit_timestamp = true)"}));
+  EXPECT_THAT(Insert("T2", {"ts", "col2"}, {kCommitTimestampSentinel, "val2"}),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+
+  // Set allow_commit_timestamp to true in child table to make it consistent
+  // with the same column in parent table.
+  ZETASQL_EXPECT_OK(
+      SetSchema({"ALTER TABLE T2 ALTER COLUMN ts SET OPTIONS "
+                 "(allow_commit_timestamp = true)"}));
+
+  // Insert in the child table now succeed as expected and the value inserted in
+  // the parent and child is same and is equal to the commit timestamp value.
+  {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        CommitResult result,
+        Commit({
+            MakeInsert("T1", {"ts"}, kCommitTimestampSentinel),
+            MakeInsert("T2", {"ts", "col2"}, kCommitTimestampSentinel, "val2"),
+        }));
+    EXPECT_THAT(ReadAll("T1", {"ts"}),
+                IsOkAndHoldsRows({{result.commit_timestamp}}));
+    EXPECT_THAT(ReadAll("T2", {"ts", "col2"}),
+                IsOkAndHoldsRows({{result.commit_timestamp, "val2"}}));
+  }
+
+  // Insert a row in parent table first. Followed by an attempt to insert in the
+  // child row in a separate commit request.
+  {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(CommitResult result,
+                         Commit({
+                             MakeInsert("T1", {"ts"}, kCommitTimestampSentinel),
+                         }));
+
+    // Cannot insert a commit timestamp into child row since it's value will be
+    // different from the one inserted in parent.
+    EXPECT_THAT(
+        Commit({
+            MakeInsert("T2", {"ts", "col2"}, kCommitTimestampSentinel, "val2"),
+        }),
+        StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
+                               : absl::StatusCode::kNotFound));
+
+    // Insert the same timestamp that was inserted into parent row will succeed.
+    ZETASQL_EXPECT_OK(Commit({
+        MakeInsert("T2", {"ts", "col2"}, result.commit_timestamp, "val2"),
+    }));
+  }
+}
+
+TEST_F(CommitTimestamps, CanInsertExplicitTimestampWithInconsistentSchema) {
+  // Interleave hierarchy with inconsistent allow_commit_timestamp in child.
+  ZETASQL_EXPECT_OK(SetSchema({
+      R"(
+        CREATE TABLE T1(
+          ts     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+        ) PRIMARY KEY (ts)
+      )",
+      R"(
+        CREATE TABLE T2(
+          ts     TIMESTAMP,
+          col2   STRING(MAX),
+        ) PRIMARY KEY (ts, col2), INTERLEAVE IN PARENT T1
+      )"}));
+
+  // Insert with same explicit timestamp succeeds in inconsistent interleave
+  // hierarchy.
+  {
+    Timestamp explicit_timestamp = MakePastTimestamp(std::chrono::seconds(10));
+    ZETASQL_ASSERT_OK(Commit({
+        MakeInsert("T1", {"ts"}, explicit_timestamp),
+        MakeInsert("T2", {"ts", "col2"}, explicit_timestamp, "val2"),
+    }));
+    EXPECT_THAT(ReadAll("T1", {"ts"}),
+                IsOkAndHoldsRows({{explicit_timestamp}}));
+    EXPECT_THAT(ReadAll("T2", {"ts", "col2"}),
+                IsOkAndHoldsRows({{explicit_timestamp, "val2"}}));
+  }
+
+  // Interleave hierarchy with inconsistent allow_commit_timestamp in parent.
+  ZETASQL_EXPECT_OK(SetSchema({
+      R"(
+        CREATE TABLE T3(
+          ts     TIMESTAMP,
+        ) PRIMARY KEY (ts)
+      )",
+      R"(
+        CREATE TABLE T4(
+          ts     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+          col2   STRING(MAX),
+        ) PRIMARY KEY (ts, col2), INTERLEAVE IN PARENT T3
+      )"}));
+
+  // Insert with same explicit timestamp succeeds in inconsistent interleave
+  // hierarchy.
+  {
+    Timestamp explicit_timestamp = MakePastTimestamp(std::chrono::seconds(10));
+    ZETASQL_ASSERT_OK(Commit({
+        MakeInsert("T3", {"ts"}, explicit_timestamp),
+        MakeInsert("T4", {"ts", "col2"}, explicit_timestamp, "val2"),
+    }));
+    EXPECT_THAT(ReadAll("T4", {"ts"}),
+                IsOkAndHoldsRows({{explicit_timestamp}}));
+    EXPECT_THAT(ReadAll("T4", {"ts", "col2"}),
+                IsOkAndHoldsRows({{explicit_timestamp, "val2"}}));
+  }
+}
+
 }  // namespace
 
 }  // namespace test

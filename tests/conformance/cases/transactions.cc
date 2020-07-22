@@ -143,25 +143,82 @@ TEST_F(TransactionsTest, ReadWriteTransactionRollbackReplayIsOk) {
   ZETASQL_EXPECT_OK(Rollback(txn));
 }
 
-// TODO : Disabled until replay behavior is changed to make it
-// in-line with Prod.
-TEST_F(TransactionsTest, DISABLED_ReadWriteTransactionInvalidatedAfterError) {
+TEST_F(TransactionsTest, ReadWriteTransactionInvalidatedAfterError) {
   auto txn = Transaction(Transaction::ReadWriteOptions());
   // Invalid mutation since all values are not present for the given columns.
-  auto mutation = InsertMutationBuilder("TestTable", {"key1", "key2", "col1"})
-                      .AddRow({Value("val1"), Value("val2")})
-                      .Build();
+  auto invalid_mutation =
+      InsertMutationBuilder("TestTable", {"key1", "key2", "col1"})
+          .AddRow({Value("val1"), Value("val2")})
+          .Build();
+  auto valid_mutation =
+      InsertMutationBuilder("TestTable", {"key1", "key2", "col1"})
+          .AddRow({Value("val1"), Value("val2"), Value("val3")})
+          .Build();
 
   // An error returned from commit due to invalid mutation.
-  EXPECT_THAT(CommitTransaction(txn, {mutation}),
+  EXPECT_THAT(CommitTransaction(txn, {invalid_mutation}),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+  // Second attempt to commit should replay the same error even with a valid
+  // mutation.
+  EXPECT_THAT(CommitTransaction(txn, {valid_mutation}),
               zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Cannot continue to use this transaction for subsequent Read / Write.
-  // The transaction replays the previous failed outcome for all subsequent
-  // requests using this transaction_id.
   auto result = Read(txn, "TestTable", {"key1", "key2", "col1"}, KeySet::All());
+  EXPECT_THAT(
+      result.status(),
+      (in_prod_env()
+           ? zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition)
+           : zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument)));
+}
+
+TEST_F(TransactionsTest, ReadWriteTransactionCannotCommitWithNonExistentTable) {
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  auto mutation =
+      InsertMutationBuilder("non_existent_table", {"key1", "key2", "col1"})
+          .AddRow({Value("val1"), Value("val2"), Value("val3")})
+          .Build();
+
+  // This returns an error since it can't find the table in the mutation.
+  EXPECT_THAT(CommitTransaction(txn, {mutation}),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(TransactionsTest, ReadWriteTransactionCanCommitAfterNotFoundRead) {
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  auto mutation = InsertMutationBuilder("TestTable", {"key1", "key2", "col1"})
+                      .AddRow({Value("val1"), Value("val2"), Value("val3")})
+                      .Build();
+
+  auto result =
+      Read(txn, "non_existent_table", {"key1", "key2"}, KeySet::All());
   EXPECT_THAT(result.status(),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+
+  // This succeeds since the previous read does not mark the transaction as
+  // invalid.
+  ZETASQL_EXPECT_OK(CommitTransaction(txn, {mutation}));
+}
+
+TEST_F(TransactionsTest, ReadWriteTransactionCannotCommitAfterNotFoundCommit) {
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  auto invalid_mutation =
+      InsertMutationBuilder("non_existent_table", {"key1", "key2", "col1"})
+          .AddRow({Value("val1"), Value("val2"), Value("val3")})
+          .Build();
+  auto valid_mutation =
+      InsertMutationBuilder("TestTable", {"key1", "key2", "col1"})
+          .AddRow({Value("val1"), Value("val2"), Value("val3")})
+          .Build();
+
+  // This returns an error since it can't find the table.
+  EXPECT_THAT(CommitTransaction(txn, {invalid_mutation}),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+
+  // This replays the previous error status since the transaction has been
+  // invalidated.
+  EXPECT_THAT(CommitTransaction(txn, {valid_mutation}),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(TransactionsTest, FailedMutationReleasesTransactionLocks) {

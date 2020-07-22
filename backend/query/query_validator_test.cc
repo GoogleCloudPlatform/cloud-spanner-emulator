@@ -14,13 +14,14 @@
 // limitations under the License.
 //
 
-#include "backend/query/hint_validator.h"
+#include "backend/query/query_validator.h"
 
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
+#include "backend/query/query_engine_options.h"
 #include "backend/query/queryable_table.h"
 #include "backend/schema/catalog/table.h"
 #include "tests/common/schema_constructor.h"
@@ -34,7 +35,7 @@ namespace {
 
 using zetasql_base::testing::StatusIs;
 
-class HintValidatorTest : public testing::Test {
+class QueryValidatorTest : public testing::Test {
  public:
   const Schema* schema() { return schema_.get(); }
 
@@ -44,7 +45,7 @@ class HintValidatorTest : public testing::Test {
       test::CreateSchemaWithOneTable(&type_factory_);
 };
 
-TEST_F(HintValidatorTest, ValidateUnsupportedHintReturnsError) {
+TEST_F(QueryValidatorTest, ValidateUnsupportedHintReturnsError) {
   QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
   std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
       zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
@@ -53,12 +54,13 @@ TEST_F(HintValidatorTest, ValidateUnsupportedHintReturnsError) {
       /*qualifier=*/"", /*name=*/"destroy_table",
       zetasql::MakeResolvedLiteral(zetasql::Value::Bool(true))));
 
-  HintValidator validator{schema()};
+  QueryEngineOptions opts;
+  QueryValidator validator{schema(), &opts};
   ASSERT_THAT(resolved_table_scan->Accept(&validator),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(HintValidatorTest, ValidateHintWithUnmatchedValueTypeReturnsError) {
+TEST_F(QueryValidatorTest, ValidateHintWithUnmatchedValueTypeReturnsError) {
   QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
   std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
       zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
@@ -67,12 +69,13 @@ TEST_F(HintValidatorTest, ValidateHintWithUnmatchedValueTypeReturnsError) {
       /*qualifier=*/"", /*name=*/"force_index",
       zetasql::MakeResolvedLiteral(zetasql::Value::Bool(true))));
 
-  HintValidator validator{schema()};
+  QueryEngineOptions opts;
+  QueryValidator validator{schema(), &opts};
   ASSERT_THAT(resolved_table_scan->Accept(&validator),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(HintValidatorTest, ValidateForceIndexHintWithBaseTableReturnsOK) {
+TEST_F(QueryValidatorTest, ValidateForceIndexHintWithBaseTableReturnsOK) {
   QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
   std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
       zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
@@ -81,11 +84,12 @@ TEST_F(HintValidatorTest, ValidateForceIndexHintWithBaseTableReturnsOK) {
       /*qualifier=*/"", /*name=*/"force_index",
       zetasql::MakeResolvedLiteral(zetasql::Value::String("_base_table"))));
 
-  HintValidator validator{schema()};
+  QueryEngineOptions opts;
+  QueryValidator validator{schema(), &opts};
   ZETASQL_ASSERT_OK(resolved_table_scan->Accept(&validator));
 }
 
-TEST_F(HintValidatorTest, ValidateForceIndexHintWithExistingIndexRetunsOK) {
+TEST_F(QueryValidatorTest, ValidateForceIndexHintWithExistingIndexRetunsOK) {
   QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
   std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
       zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
@@ -94,11 +98,12 @@ TEST_F(HintValidatorTest, ValidateForceIndexHintWithExistingIndexRetunsOK) {
       /*qualifier=*/"", /*name=*/"force_index",
       zetasql::MakeResolvedLiteral(zetasql::Value::String("test_index"))));
 
-  HintValidator validator{schema()};
+  QueryEngineOptions opts;
+  QueryValidator validator{schema(), &opts};
   ZETASQL_ASSERT_OK(resolved_table_scan->Accept(&validator));
 }
 
-TEST_F(HintValidatorTest,
+TEST_F(QueryValidatorTest,
        ValidateForceIndexHintWithNonexistingIndexReturnsError) {
   QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
   std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
@@ -108,9 +113,44 @@ TEST_F(HintValidatorTest,
       /*qualifier=*/"", /*name=*/"force_index",
       zetasql::MakeResolvedLiteral(zetasql::Value::String("buggy_index"))));
 
-  HintValidator validator{schema()};
+  QueryEngineOptions opts;
+  QueryValidator validator{schema(), &opts};
   ASSERT_THAT(resolved_table_scan->Accept(&validator),
               StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(QueryValidatorTest, CollectEmulatorOnlyOptionsFromHints) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
+      zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  resolved_table_scan->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"spanner_emulator",
+      /*name=*/"disable_query_null_filtered_index_check",
+      zetasql::MakeResolvedLiteral(zetasql::Value::Bool(true))));
+
+  {
+    QueryEngineOptions opts;
+    QueryValidator validator{schema(), &opts};
+    ZETASQL_ASSERT_OK(resolved_table_scan->Accept(&validator));
+    EXPECT_TRUE(opts.disable_query_null_filtered_index_check);
+  }
+
+  std::unique_ptr<zetasql::ResolvedQueryStmt> resolved_query_stmt =
+      zetasql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+                                       /*is_value_table=*/false,
+                                       std::move(resolved_table_scan));
+  resolved_query_stmt->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"spanner_emulator",
+      /*name=*/"disable_query_partitionability_check",
+      zetasql::MakeResolvedLiteral(zetasql::Value::Bool(true))));
+
+  {
+    QueryEngineOptions opts;
+    QueryValidator validator{schema(), &opts};
+    ZETASQL_ASSERT_OK(resolved_query_stmt->Accept(&validator));
+    EXPECT_TRUE(opts.disable_query_partitionability_check);
+  }
 }
 
 }  // namespace

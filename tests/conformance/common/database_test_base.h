@@ -317,6 +317,15 @@ class DatabaseTest : public ::testing::Test {
     return ProcessRowStreamForReadResult(result);
   }
 
+  zetasql_base::StatusOr<std::vector<ValueRow>> Read(std::string table,
+                                             std::vector<std::string> columns,
+                                             KeySet key_set, Transaction txn) {
+    auto result = client().Read(std::move(txn), std::move(table),
+                                std::move(key_set), std::move(columns));
+    ZETASQL_ASSIGN_OR_RETURN(auto read_result, ProcessRowStreamForReadResult(result));
+    return read_result.values;
+  }
+
   // Sinlge-use strong read returning ReadResult.
   zetasql_base::StatusOr<ReadResult> Read(
       std::string table, std::vector<std::string> columns, KeySet key_set,

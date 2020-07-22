@@ -1,1 +1,1 @@
-cloud_spanner_emulator_0.8.0_public_20200528_00_RC03_OSS_final
+cloud_spanner_emulator_1.0.0_public_20200721_00_RC00

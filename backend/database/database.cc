@@ -86,10 +86,12 @@ Database::CreateReadOnlyTransaction(const ReadOnlyOptions& options) {
 }
 
 zetasql_base::StatusOr<std::unique_ptr<ReadWriteTransaction>>
-Database::CreateReadWriteTransaction(const ReadWriteOptions& options) {
+Database::CreateReadWriteTransaction(const ReadWriteOptions& options,
+                                     const RetryState& retry_state) {
   return absl::make_unique<ReadWriteTransaction>(
-      options, transaction_id_generator_.NextId(), clock_, storage_.get(),
-      lock_manager_.get(), versioned_catalog_.get(), action_manager_.get());
+      options, retry_state, transaction_id_generator_.NextId(), clock_,
+      storage_.get(), lock_manager_.get(), versioned_catalog_.get(),
+      action_manager_.get());
 }
 
 SchemaChangeContext Database::GetSchemaChangeContext() {

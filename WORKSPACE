@@ -105,9 +105,9 @@ protobuf_deps()
 
 http_archive(
     name = "com_google_absl",
-    strip_prefix = "abseil-cpp-df3ea785d8c30a9503321a3d35ee7d35808f190d",
-    url = "https://github.com/abseil/abseil-cpp/archive/df3ea785d8c30a9503321a3d35ee7d35808f190d.tar.gz",
-    sha256 = "f368a8476f4e2e0eccf8a7318b98dafbe30b2600f4e3cf52636e5eb145aba06a",
+    strip_prefix = "abseil-cpp-81f34df8347a73c617f244f49cb916238857dc34",
+    url = "https://github.com/abseil/abseil-cpp/archive/81f34df8347a73c617f244f49cb916238857dc34.tar.gz",
+    sha256 = "89b1c570dd59cebf5127ff96b9b46ae8a7fe352cab4f9198e20dc7749ab8aa16",
 )
 
 http_archive(
@@ -133,12 +133,12 @@ grpc_deps()
 
 http_archive(
     name = "com_google_zetasql",
-    url = "https://github.com/google/zetasql/archive/7d983d3632702f200c8340933160c02f1d94e5a7.zip",
-    strip_prefix = "zetasql-7d983d3632702f200c8340933160c02f1d94e5a7",
+    url = "https://github.com/google/zetasql/archive/1aefaa7c62fc7a50def879bb7c4225ec6974b7ef.zip",
+    strip_prefix = "zetasql-1aefaa7c62fc7a50def879bb7c4225ec6974b7ef",
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
     patches = ["//build/bazel:zetasql.patch"],
-    sha256 = "35072a210111eb478d4cbc005496b4df026131127e2bf26a369d269b679a91ff",
+    sha256 = "6b14c9dfb87ee73f175b81188326eed0b37ae7b842962c2810f643ac51a4c779",
 )
 
 load("@com_google_zetasql//bazel:zetasql_deps_step_1.bzl", "zetasql_deps_step_1")

@@ -265,7 +265,7 @@ TEST_F(TransactionApiTest, CannotCommitAfterRollback) {
               StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
-TEST_F(TransactionApiTest, CannotUseTransactionAfterError) {
+TEST_F(TransactionApiTest, CanUseTransactionAfterReadError) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"(
     options { read_write {} }
   )");
@@ -290,15 +290,14 @@ TEST_F(TransactionApiTest, CannotUseTransactionAfterError) {
   EXPECT_THAT(Read(read_request, &read_response),
               StatusIs(absl::StatusCode::kNotFound));
 
-  // Subsequent operations on the transaction should continue to fail with
-  // NotFound error.
-  spanner_api::CommitRequest commit_request1;
-  commit_request1.set_transaction_id(transaction_response.id());
-  commit_request1.set_session(test_session_uri_);
+  // Subsequent operations on the transaction should work as normal since a not
+  // found error on read does not invalidate the transaction.
+  spanner_api::CommitRequest commit_request;
+  commit_request.set_transaction_id(transaction_response.id());
+  commit_request.set_session(test_session_uri_);
 
-  spanner_api::CommitResponse commit_response1;
-  EXPECT_THAT(Commit(commit_request1, &commit_response1),
-              StatusIs(absl::StatusCode::kNotFound));
+  spanner_api::CommitResponse commit_response;
+  ZETASQL_EXPECT_OK(Commit(commit_request, &commit_response));
 }
 
 }  // namespace

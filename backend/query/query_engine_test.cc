@@ -26,6 +26,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/memory/memory.h"
+#include "absl/strings/match.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/datamodel/key_set.h"
@@ -100,6 +101,7 @@ zetasql_base::StatusOr<std::vector<std::vector<zetasql::Value>>> GetAllColumnVal
 class QueryEngineTest : public testing::Test {
  public:
   const Schema* schema() { return schema_.get(); }
+  const Schema* multi_table_schema() { return multi_table_schema_.get(); }
   RowReader* reader() { return &reader_; }
   QueryEngine& query_engine() { return query_engine_; }
 
@@ -107,6 +109,8 @@ class QueryEngineTest : public testing::Test {
   zetasql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_ =
       test::CreateSchemaWithOneTable(&type_factory_);
+  std::unique_ptr<const Schema> multi_table_schema_ =
+      test::CreateSchemaWithMultiTables(&type_factory_);
   test::TestRowReader reader_{
       {{"test_table",
         {{"int64_col", "string_col"},
@@ -229,6 +233,87 @@ TEST_F(QueryEngineTest, ExecuteSqlSelectsCountFromTable) {
   EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(Int64Type()));
   EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
               IsOkAndHolds(ElementsAre(ElementsAre(Int64(3)))));
+}
+
+TEST_F(QueryEngineTest, PartitionableSimpleScan) {
+  Query query{"SELECT string_col FROM test_table"};
+  ZETASQL_ASSERT_OK(query_engine().IsPartitionable(
+      query, QueryContext{multi_table_schema(), reader()}));
+}
+
+TEST_F(QueryEngineTest, PartitionableSimpleScanFilter) {
+  Query query{"SELECT string_col FROM test_table WHERE string_col = 'a'"};
+  ZETASQL_ASSERT_OK(query_engine().IsPartitionable(
+      query, QueryContext{multi_table_schema(), reader()}));
+}
+
+TEST_F(QueryEngineTest, PartitionableSimpleScanSubqueryColumn) {
+  Query query{
+      "SELECT string_col, ARRAY(SELECT child_key from child_table) FROM "
+      "test_table"};
+  EXPECT_THAT(query_engine().IsPartitionable(
+                  query, QueryContext{multi_table_schema(), reader()}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("Query contains subquery.")));
+}
+
+TEST_F(QueryEngineTest, PartitionableSimpleScanNoTable) {
+  Query query{"SELECT a FROM UNNEST([1, 2, 3]) AS a"};
+  EXPECT_THAT(query_engine().IsPartitionable(
+                  query, QueryContext{multi_table_schema(), reader()}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("Query is not a simple table scan.")));
+}
+
+TEST_F(QueryEngineTest, PartitionableSimpleScanFilterNoTable) {
+  Query query{"SELECT a FROM UNNEST([1, 2, 3]) AS a WHERE a = 1"};
+  EXPECT_THAT(query_engine().IsPartitionable(
+                  query, QueryContext{multi_table_schema(), reader()}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("Query is not a simple table scan.")));
+}
+
+TEST_F(QueryEngineTest, PartitionableExecuteSqlSimpleScanFilterSubquery) {
+  Query query{
+      "SELECT string_col FROM test_table WHERE string_col = 'a' AND EXISTS "
+      "(SELECT child_key FROM child_table)"};
+  EXPECT_THAT(query_engine().IsPartitionable(
+                  query, QueryContext{multi_table_schema(), reader()}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("Query contains subquery.")));
+}
+
+TEST_F(QueryEngineTest, PartitionableSimpleScanFilterSubqueryInExpr) {
+  Query query{
+      "SELECT string_col FROM test_table WHERE int64_col IN "
+      "(SELECT child_key FROM child_table)"};
+  EXPECT_THAT(query_engine().IsPartitionable(
+                  query, QueryContext{multi_table_schema(), reader()}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("Query contains subquery.")));
+}
+
+TEST_F(QueryEngineTest, NonPartitionableSelectsFromTwoTable) {
+  Query query{"SELECT t1.string_col FROM test_table AS t1, test_table2 AS t2"};
+  EXPECT_THAT(query_engine().IsPartitionable(
+                  query, QueryContext{multi_table_schema(), reader()}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("Query is not a simple table scan.")));
+}
+
+// TODO: turn on test once parent child join implemented.
+TEST_F(QueryEngineTest, DISABLED_PartitionableParentChildTable) {
+  Query query{
+      "SELECT t1.string_col FROM test_table AS t1, child_table AS t2 WHERE "
+      "t1.int64_col = t2.int64_col"};
+  ZETASQL_ASSERT_OK(query_engine().IsPartitionable(
+      query, QueryContext{multi_table_schema(), reader()}));
 }
 
 class MockRowWriter : public RowWriter {

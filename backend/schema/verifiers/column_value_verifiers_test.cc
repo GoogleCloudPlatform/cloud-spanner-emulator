@@ -42,10 +42,6 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::types::BytesArrayType;
-using zetasql::types::StringArrayType;
-using zetasql::types::StringType;
-using zetasql::types::TimestampType;
 using zetasql::values::BytesArray;
 using zetasql::values::Int64;
 using zetasql::values::NullString;
@@ -77,9 +73,9 @@ class ColumnValueVerifiersTest : public ::testing::Test {
                             ) PRIMARY KEY (int64_col)
                           )"}));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadWriteTransaction> txn,
-        database_->CreateReadWriteTransaction(ReadWriteOptions()));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+                         database_->CreateReadWriteTransaction(
+                             ReadWriteOptions(), RetryState()));
 
     commit_ts_value_ = absl::Now() + absl::Minutes(15);
     Mutation m;

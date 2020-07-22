@@ -107,6 +107,7 @@ TEST_F(SchemaTest, Basic) {
 
   const Index* index = base_schema_->FindIndex("test_index");
   ASSERT_NE(index, nullptr);
+  EXPECT_EQ(table->FindIndex("test_index"), index);
   EXPECT_EQ(table->indexes().size(), 1);
   EXPECT_EQ(index->index_data_table()->owner_index(), index);
   EXPECT_EQ(index->indexed_table(), table);

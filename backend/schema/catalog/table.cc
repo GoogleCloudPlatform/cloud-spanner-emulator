@@ -17,15 +17,19 @@
 #include "backend/schema/catalog/table.h"
 
 #include "zetasql/public/type.h"
+#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/substitute.h"
 #include "backend/common/case.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
+#include "backend/schema/catalog/index.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "zetasql/base/ret_check.h"
@@ -43,6 +47,17 @@ const Column* Table::FindColumn(const std::string& column_name) const {
     return nullptr;
   }
   return itr->second;
+}
+
+const Index* Table::FindIndex(const std::string& index_name) const {
+  auto itr = std::find_if(
+      indexes_.begin(), indexes_.end(), [&index_name](const auto& index) {
+        return absl::EqualsIgnoreCase(index->Name(), index_name);
+      });
+  if (itr == indexes_.end()) {
+    return nullptr;
+  }
+  return *itr;
 }
 
 const Column* Table::FindColumnCaseSensitive(
@@ -67,6 +82,24 @@ const KeyColumn* Table::FindKeyColumn(const std::string& column_name) const {
     return nullptr;
   }
   return *it;
+}
+
+const ForeignKey* Table::FindForeignKey(
+    const std::string& constraint_name) const {
+  auto iter =
+      absl::c_find_if(foreign_keys_, [&](const ForeignKey* foreign_key) {
+        return absl::EqualsIgnoreCase(foreign_key->Name(), constraint_name);
+      });
+  return iter == std::end(foreign_keys_) ? nullptr : *iter;
+}
+
+const ForeignKey* Table::FindReferencingForeignKey(
+    const std::string& constraint_name) const {
+  auto iter = absl::c_find_if(
+      referencing_foreign_keys_, [&](const ForeignKey* foreign_key) {
+        return absl::EqualsIgnoreCase(foreign_key->Name(), constraint_name);
+      });
+  return iter == std::end(referencing_foreign_keys_) ? nullptr : *iter;
 }
 
 std::string Table::PrimaryKeyDebugString() const {
@@ -123,25 +156,10 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
     key_column = schema_node->As<const KeyColumn>();
   }
 
-  for (auto it = child_tables_.begin(); it != child_tables_.end();) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
-    if (schema_node->is_deleted()) {
-      it = child_tables_.erase(it);
-    } else {
-      *it = schema_node->As<const Table>();
-      ++it;
-    }
-  }
-
-  for (auto it = indexes_.begin(); it != indexes_.end();) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
-    if (schema_node->is_deleted()) {
-      it = indexes_.erase(it);
-    } else {
-      *it = schema_node->As<const Index>();
-      ++it;
-    }
-  }
+  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&child_tables_));
+  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&indexes_));
+  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&foreign_keys_));
+  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&referencing_foreign_keys_));
 
   if (owner_index_) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(owner_index_));

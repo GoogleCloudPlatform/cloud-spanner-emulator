@@ -103,24 +103,58 @@ absl::Status Session::ToProto(spanner_api::Session* session,
   return absl::OkStatus();
 }
 
+backend::RetryState Session::MakeRetryState(
+    const spanner_api::TransactionOptions& options, bool is_single_use_txn) {
+  mu_.AssertHeld();
+  backend::RetryState retry_state;
+  // Client libraries start a new transaction on the same session after
+  // encountering an ABORT exception. Documentation:
+  // https://cloud.google.com/spanner/docs/reference/rest/v1/TransactionOptions#retrying-aborted-transactions
+  // Find if there was an ABORT status returned on the previous read-write
+  // transaction for this session. Re-use the properties of backend read
+  // write transaction to maintain transaction priority and abort retry
+  // counts.
+  if (options.has_read_write() && !is_single_use_txn &&
+      active_transaction_ != nullptr && active_transaction_->IsReadWrite() &&
+      active_transaction_->IsAborted()) {
+    retry_state = active_transaction_->read_write()->retry_state();
+  }
+  return retry_state;
+}
+
 zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTransaction(
-    const spanner_api::TransactionOptions& options) {
+    const spanner_api::TransactionOptions& options,
+    const TransactionActivation& activation) {
   ZETASQL_RETURN_IF_ERROR(ValidateMultiUseTransactionOptions(options));
 
+  absl::MutexLock lock(&mu_);
   // Move-convert unique pointer returned by CreateTransaction to shared pointer
   // since session will also hold a reference to multi-use transaction object
   // for future uses.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
-                   CreateTransaction(options, Transaction::Usage::kMultiUse));
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::shared_ptr<Transaction> txn,
+      CreateTransaction(options, Transaction::Usage::kMultiUse,
+                        MakeRetryState(options, /*is_single_use_txn=*/false)));
 
   // Insert shared transaction object into transaction map.
-  absl::MutexLock lock(&mu_);
   transaction_map_.emplace(txn->id(), txn);
 
   // Clear older transactions if too many transactions are tracked by session.
   while (transaction_map_.size() > limits::kMaxTransactionsPerSession) {
     transaction_map_.begin()->second->Close();
     transaction_map_.erase(transaction_map_.begin());
+  }
+
+  if (activation == TransactionActivation::kInitializeAndActivate) {
+    // Assign this as the current active transaction.
+    active_transaction_ = txn;
+
+    // Remove transactions that came before this one.
+    auto it = transaction_map_.find(txn->id());
+    for (auto prev_txn = transaction_map_.begin(); prev_txn != it; ++prev_txn) {
+      prev_txn->second->Close();
+    }
+    transaction_map_.erase(transaction_map_.begin(), it);
   }
   return txn;
 }
@@ -129,18 +163,21 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>>
 Session::CreateSingleUseTransaction(
     const spanner_api::TransactionOptions& options) {
   ZETASQL_RETURN_IF_ERROR(ValidateSingleUseTransactionOptions(options));
-  return CreateTransaction(options, Transaction::Usage::kSingleUse);
+
+  absl::MutexLock lock(&mu_);
+  return CreateTransaction(options, Transaction::Usage::kSingleUse,
+                           MakeRetryState(options, /*is_single_use_txn=*/true));
 }
 
 zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateTransaction(
     const spanner_api::TransactionOptions& options,
-    const Transaction::Usage& usage) {
+    const Transaction::Usage& usage, const backend::RetryState& retry_state) {
   switch (options.mode_case()) {
     case v1::TransactionOptions::kReadOnly:
       return CreateReadOnly(options, usage);
     case v1::TransactionOptions::kReadWrite:
     case v1::TransactionOptions::kPartitionedDml:
-      return CreateReadWrite(options, usage);
+      return CreateReadWrite(options, usage, retry_state);
     default:
       return error::Internal(
           "Unexpected TransactionOptions.mode for create transaction.");
@@ -150,8 +187,6 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateTransaction(
 zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadOnly(
     const spanner_api::TransactionOptions& options,
     const Transaction::Usage& usage) {
-  absl::MutexLock lock(&mu_);
-
   // Populate read options.
   ZETASQL_ASSIGN_OR_RETURN(backend::ReadOnlyOptions read_only_options,
                    ReadOnlyOptionsFromProto(options.read_only()));
@@ -167,14 +202,13 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadOnly(
 
 zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadWrite(
     const spanner_api::TransactionOptions& options,
-    const Transaction::Usage& usage) {
-  absl::MutexLock lock(&mu_);
-
+    const Transaction::Usage& usage, const backend::RetryState& retry_state) {
   // Create a new backend read write transaction.
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<backend::ReadWriteTransaction> read_write_transaction,
       database_->backend()->CreateReadWriteTransaction(
-          backend::ReadWriteOptions()));
+          backend::ReadWriteOptions(), retry_state));
+
   return std::make_unique<Transaction>(std::move(read_write_transaction),
                                        database_->backend()->query_engine(),
                                        options, usage);
@@ -215,16 +249,9 @@ zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::FindOrInitTransact
   std::shared_ptr<Transaction> txn;
   switch (selector.selector_case()) {
     case spanner_api::TransactionSelector::SelectorCase::kBegin: {
-      ZETASQL_ASSIGN_OR_RETURN(txn, CreateMultiUseTransaction(selector.begin()));
-      absl::MutexLock lock(&mu_);
-      // Remove transactions that came before this one.
-      active_transaction_ = txn;
-      auto it = transaction_map_.find(txn->id());
-      for (auto prev_txn = transaction_map_.begin(); prev_txn != it;
-           ++prev_txn) {
-        prev_txn->second->Close();
-      }
-      transaction_map_.erase(transaction_map_.begin(), it);
+      ZETASQL_ASSIGN_OR_RETURN(txn, CreateMultiUseTransaction(
+                                selector.begin(),
+                                TransactionActivation::kInitializeAndActivate));
       break;
     }
     case spanner_api::TransactionSelector::SelectorCase::kId: {

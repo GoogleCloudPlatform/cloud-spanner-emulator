@@ -46,12 +46,13 @@ zetasql_base::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
 zetasql_base::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
     absl::Span<const KeyColumn* const> primary_key, const KeyRange& key_range);
 
-// Returns true if either primary key or columns for the rows contain special
-// sentinel timestamp value which should be replaced with commit timestamp of
-// transaction during flush.
-bool HasPendingCommitTimestampInReadResult(
-    const Table* table, absl::Span<const Column* const> columns,
-    const std::vector<FixedRowStorageIterator::Row>& rows);
+// Returns true if one of the values for a given column contains timestamp
+// sentinel value.
+bool IsPendingCommitTimestamp(const Column* column,
+                              const zetasql::Value& column_value);
+
+// Returns true if given key contains key part with timestamp sentinel value.
+bool HasPendingCommitTimestampInKey(const Table* table, const Key& key);
 
 // Replace commit timestamp sentinel value, if present, with transaction
 // commit timestamp for the given column value.

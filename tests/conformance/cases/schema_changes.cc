@@ -47,6 +47,7 @@ const char kSchemaChangeTestDataDir[] = "tests/conformance/data/schema_changes";
 // List of schema change test files within the directory above.
 const char* kSchemaChangeTestFiles[] = {
     "combined.test",
+    "foreign_key.test",
     "key_column_alteration.test",
 };
 
@@ -56,8 +57,9 @@ constexpr std::array<char, 10> kBytesLiteral = {'\xd0', '\xb0', '\xd0', '\xb1',
 
 const char kUnicodeStringLiteral[] = "абвгд";
 
-class SchemaChangeTest : public DatabaseTest,
-                         public ::testing::WithParamInterface<std::string> {
+class SchemaChangeTest
+    : public DatabaseTest,
+      public ::testing::WithParamInterface<FileBasedTestCase> {
  public:
   absl::Status SetUpDatabase() override { return absl::OkStatus(); }
 
@@ -100,20 +102,6 @@ class SchemaChangeTest : public DatabaseTest,
                                    ";\n"};
   }
 
-  // Runs all schema change test cases from the given test file.
-  absl::Status RunTestCasesFrom(const std::string& test_file) {
-    // TODO: Schema change tests take too long to run in prod, so
-    // skip them from now.
-    if (in_prod_env()) {
-      return absl::OkStatus();
-    }
-
-    return RunTestCasesFromFile(test_file, FileBasedTestOptions{},
-                                [this](const FileBasedTestCaseInput& input) {
-                                  return RunSchemaChangeTestCase(input);
-                                });
-  }
-
   // Returns list of all schema change test files.
   static std::vector<std::string> GetAllTestFiles() {
     std::vector<std::string> result;
@@ -123,15 +111,38 @@ class SchemaChangeTest : public DatabaseTest,
     }
     return result;
   }
+
+  // Returns list of all test cases from all the test case files.
+  static std::vector<FileBasedTestCase> GetAllTestCases() {
+    std::vector<FileBasedTestCase> test_cases;
+    for (const auto& file : GetAllTestFiles()) {
+      const auto file_cases =
+          ReadTestCasesFromFile(file, FileBasedTestOptions{});
+      test_cases.insert(test_cases.end(), file_cases.begin(), file_cases.end());
+    }
+    return test_cases;
+  }
 };
 
 TEST_P(SchemaChangeTest, FileBasedTests) {
-  ZETASQL_EXPECT_OK(RunTestCasesFrom(GetParam()));
+  const auto& input = GetParam().input;
+  const auto& expected = GetParam().expected;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto actual, RunSchemaChangeTestCase(input));
+  EXPECT_EQ(expected.text, actual.text)
+      << "for input at line number " << input.line_no << ":\n"
+      << input.text;
 }
 
 INSTANTIATE_TEST_SUITE_P(
     FileBasedTest, SchemaChangeTest,
-    testing::ValuesIn(SchemaChangeTest::GetAllTestFiles()));
+    testing::ValuesIn(SchemaChangeTest::GetAllTestCases()),
+    [](const testing::TestParamInfo<FileBasedTestCase>& info) {
+      const auto& input = info.param.input;
+      int start = input.file_name.find_last_of('/') + 1;
+      int limit = input.file_name.find_last_of('.');
+      return absl::StrCat(input.file_name.substr(start, limit - start), "_",
+                          input.line_no);
+    });
 
 TEST_F(SchemaChangeTest, NoStatements) {
   EXPECT_THAT(UpdateSchema(/*schema=*/{}),
@@ -358,36 +369,6 @@ TEST_F(SchemaChangeTest, AlterColumnArrayType) {
   // Check that the type was changed correctly.
   EXPECT_THAT(Read("test_table", {"string_arr_col"}, KeySet::All()),
               IsOkAndHoldsRow({Value(bytes_arr)}));
-}
-
-TEST_F(SchemaChangeTest, CreationOfIndexWithTooManyKeysFails) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"(
-    CREATE TABLE Photos(
-      PhotoId  INT64 NOT NULL,
-      ID1      INT64,
-      ID2      INT64,
-      ID3      INT64,
-      ID4      INT64,
-      ID5      INT64,
-      ID6      INT64,
-      ID7      INT64,
-      ID8      INT64,
-      ID9      INT64,
-      ID10     INT64,
-      ID11     INT64,
-      ID12     INT64,
-      ID13     INT64,
-      ID14     INT64,
-      ID15     INT64,
-      ID16     INT64,
-    ) PRIMARY KEY (PhotoId)
-  )"}));
-
-  EXPECT_THAT(
-      UpdateSchema(
-          {"CREATE INDEX PhotosIndex ON Photos(ID1, ID2, ID3, ID4, ID5, ID6, "
-           "ID7, ID8, ID9, ID10, ID11, ID12, ID13, ID14, ID15, ID16)"}),
-      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

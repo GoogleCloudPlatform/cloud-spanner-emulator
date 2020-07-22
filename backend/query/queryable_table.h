@@ -61,6 +61,8 @@ class QueryableTable : public zetasql::Table {
                : std::make_optional(primary_key_column_indexes_);
   }
 
+  const backend::Table* wrapped_table() const { return wrapped_table_; }
+
   // Override CreateEvaluatorTableIterator.
   zetasql_base::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
   CreateEvaluatorTableIterator(

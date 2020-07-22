@@ -325,7 +325,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_InterleaveDepth) {
   }
 
   EXPECT_THAT(UpdateSchema(schema.get(), statements),
-              StatusIs(error::DeepNesting("Table", "T6",
+              StatusIs(error::DeepNesting("Table", "T7",
                                           limits::kMaxInterleavingDepth)));
 }
 

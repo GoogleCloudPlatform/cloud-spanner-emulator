@@ -21,8 +21,10 @@
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
+#include "absl/status/status.h"
 #include "backend/access/read.h"
 #include "backend/query/query_engine.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "frontend/common/protos.h"
 #include "frontend/converters/partition.h"
@@ -155,78 +157,88 @@ absl::Status ExecuteSql(RequestContext* ctx,
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
 
-  // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> absl::Status {
-    // Cannot query after commit or rollback.
-    if (txn->IsCommitted() || txn->IsRolledback()) {
-      if (txn->IsPartitionedDml()) {
-        return error::CannotReusePartitionedDmlTransaction();
-      }
-      return error::CannotReadOrQueryAfterCommitOrRollback();
-    }
+  // Wrap all operations on this transaction so they are atomic.
+  return txn->GuardedCall(
+      backend::IsDMLQuery(request->sql()) ? Transaction::OpType::kDml
+                                          : Transaction::OpType::kSql,
+      [&]() -> absl::Status {
+        // Cannot query after commit, rollback, or non-recoverable error.
+        if (txn->IsInvalid()) {
+          return error::CannotUseTransactionAfterConstraintError();
+        }
+        if (txn->IsCommitted() || txn->IsRolledback()) {
+          if (txn->IsPartitionedDml()) {
+            return error::CannotReusePartitionedDmlTransaction();
+          }
+          return error::CannotReadOrQueryAfterCommitOrRollback();
+        }
 
-    // Convert and execute provided SQL statement.
-    ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
-                     QueryFromProto(request->sql(), request->params(),
-                                    request->param_types(),
-                                    txn->query_engine()->type_factory()));
-    auto maybe_result = txn->ExecuteSql(query);
-    if (!maybe_result.ok()) {
-      if (txn->IsPartitionedDml()) {
-        txn->Rollback().IgnoreError();
-      }
-      return maybe_result.status();
-    }
-    backend::QueryResult& result = maybe_result.value();
+        // Convert and execute provided SQL statement.
+        ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
+                         QueryFromProto(request->sql(), request->params(),
+                                        request->param_types(),
+                                        txn->query_engine()->type_factory()));
+        auto maybe_result = txn->ExecuteSql(query);
+        if (!maybe_result.ok()) {
+          absl::Status error = maybe_result.status();
+          if (txn->IsPartitionedDml()) {
+            // A Partitioned DML transaction will become invalidated on any
+            // error.
+            error.SetPayload(kConstraintError, absl::Cord(""));
+          }
+          return error;
+        }
+        backend::QueryResult& result = maybe_result.value();
 
-    // Populate transaction metadata.
-    if (ShouldReturnTransaction(request->transaction())) {
-      ZETASQL_ASSIGN_OR_RETURN(*response->mutable_metadata()->mutable_transaction(),
-                       txn->ToProto());
-    }
+        // Populate transaction metadata.
+        if (ShouldReturnTransaction(request->transaction())) {
+          ZETASQL_ASSIGN_OR_RETURN(*response->mutable_metadata()->mutable_transaction(),
+                           txn->ToProto());
+        }
 
-    if (IsDmlResult(result)) {
-      if (txn->IsPartitionedDml()) {
-        response->mutable_stats()->set_row_count_lower_bound(
-            result.modified_row_count);
-      } else {
-        response->mutable_stats()->set_row_count_exact(
-            result.modified_row_count);
-      }
-      // Set empty row type.
-      response->mutable_metadata()->mutable_row_type();
-    } else {
-      ZETASQL_RETURN_IF_ERROR(RowCursorToResultSetProto(result.rows.get(),
-                                                /*limit=*/0, response));
-    }
+        if (IsDmlResult(result)) {
+          if (txn->IsPartitionedDml()) {
+            response->mutable_stats()->set_row_count_lower_bound(
+                result.modified_row_count);
+          } else {
+            response->mutable_stats()->set_row_count_exact(
+                result.modified_row_count);
+          }
+          // Set empty row type.
+          response->mutable_metadata()->mutable_row_type();
+        } else {
+          ZETASQL_RETURN_IF_ERROR(RowCursorToResultSetProto(result.rows.get(),
+                                                    /*limit=*/0, response));
+        }
 
-    if (!request->partition_token().empty()) {
-      ZETASQL_ASSIGN_OR_RETURN(auto partition_token,
-                       PartitionTokenFromString(request->partition_token()));
-      ZETASQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
-      if (partition_token.empty_query_partition()) {
-        response->clear_rows();
-      }
-    }
+        if (!request->partition_token().empty()) {
+          ZETASQL_ASSIGN_OR_RETURN(
+              auto partition_token,
+              PartitionTokenFromString(request->partition_token()));
+          ZETASQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
+          if (partition_token.empty_query_partition()) {
+            response->clear_rows();
+          }
+        }
 
-    // Add basic stats for PROFILE mode. We do this to interoperate with REPL
-    // applications written for Cloud Spanner. The profile will not contain
-    // statistics for plan nodes.
-    if (request->query_mode() == spanner_api::ExecuteSqlRequest::PROFILE) {
-      AddQueryStatsFromQueryResult(
-          result, response->mutable_stats()->mutable_query_stats());
-    }
+        // Add basic stats for PROFILE mode. We do this to interoperate with
+        // REPL applications written for Cloud Spanner. The profile will not
+        // contain statistics for plan nodes.
+        if (request->query_mode() == spanner_api::ExecuteSqlRequest::PROFILE) {
+          AddQueryStatsFromQueryResult(
+              result, response->mutable_stats()->mutable_query_stats());
+        }
 
-    // Reject requests for PLAN mode. The emulator uses ZetaSQL reference
-    // implementation which performs an unoptimized execution of the SQL query.
-    // The plan chosen by ZetaSQL will have no relation to those generated by
-    // Cloud Spanner, so we reject the PLAN mode completely.
-    if (request->query_mode() == spanner_api::ExecuteSqlRequest::PLAN) {
-      return error::EmulatorDoesNotSupportQueryPlans();
-    }
+        // Reject requests for PLAN mode. The emulator uses ZetaSQL reference
+        // implementation which performs an unoptimized execution of the SQL
+        // query. The plan chosen by ZetaSQL will have no relation to those
+        // generated by Cloud Spanner, so we reject the PLAN mode completely.
+        if (request->query_mode() == spanner_api::ExecuteSqlRequest::PLAN) {
+          return error::EmulatorDoesNotSupportQueryPlans();
+        }
 
-    return absl::OkStatus();
-  });
+        return absl::OkStatus();
+      });
 }
 REGISTER_GRPC_HANDLER(Spanner, ExecuteSql);
 
@@ -250,88 +262,98 @@ absl::Status ExecuteStreamingSql(
                    session->FindOrInitTransaction(request->transaction()));
 
   // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> absl::Status {
-    // Cannot query after commit or rollback.
-    if (txn->IsCommitted() || txn->IsRolledback()) {
-      if (txn->IsPartitionedDml()) {
-        return error::CannotReusePartitionedDmlTransaction();
-      }
-      return error::CannotReadOrQueryAfterCommitOrRollback();
-    }
+  return txn->GuardedCall(
+      backend::IsDMLQuery(request->sql()) ? Transaction::OpType::kDml
+                                          : Transaction::OpType::kSql,
+      [&]() -> absl::Status {
+        // Cannot query after commit, rollback, or non-recoverable error.
+        if (txn->IsInvalid()) {
+          return error::CannotUseTransactionAfterConstraintError();
+        }
+        if (txn->IsCommitted() || txn->IsRolledback()) {
+          if (txn->IsPartitionedDml()) {
+            return error::CannotReusePartitionedDmlTransaction();
+          }
+          return error::CannotReadOrQueryAfterCommitOrRollback();
+        }
 
-    // Convert and execute provided SQL statement.
-    ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
-                     QueryFromProto(request->sql(), request->params(),
-                                    request->param_types(),
-                                    txn->query_engine()->type_factory()));
-    auto maybe_result = txn->ExecuteSql(query);
-    if (!maybe_result.ok()) {
-      if (txn->IsPartitionedDml()) {
-        txn->Rollback().IgnoreError();
-      }
-      return maybe_result.status();
-    }
-    backend::QueryResult& result = maybe_result.value();
+        // Convert and execute provided SQL statement.
+        ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
+                         QueryFromProto(request->sql(), request->params(),
+                                        request->param_types(),
+                                        txn->query_engine()->type_factory()));
+        auto maybe_result = txn->ExecuteSql(query);
+        if (!maybe_result.ok()) {
+          absl::Status error = maybe_result.status();
+          if (txn->IsPartitionedDml()) {
+            // A Partitioned DML transaction will become invalidated on any
+            // error.
+            error.SetPayload(kConstraintError, absl::Cord(""));
+          }
+          return error;
+        }
+        backend::QueryResult& result = maybe_result.value();
 
-    std::vector<spanner_api::PartialResultSet> responses;
-    if (IsDmlResult(result)) {
-      responses.emplace_back();
-      if (txn->IsPartitionedDml()) {
-        responses.back().mutable_stats()->set_row_count_lower_bound(
-            result.modified_row_count);
-      } else {
-        responses.back().mutable_stats()->set_row_count_exact(
-            result.modified_row_count);
-      }
-      // Set empty row type.
-      responses.back().mutable_metadata()->mutable_row_type();
-    } else {
-      ZETASQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
-                                      result.rows.get(), /*limit=*/0));
-    }
+        std::vector<spanner_api::PartialResultSet> responses;
+        if (IsDmlResult(result)) {
+          responses.emplace_back();
+          if (txn->IsPartitionedDml()) {
+            responses.back().mutable_stats()->set_row_count_lower_bound(
+                result.modified_row_count);
+          } else {
+            responses.back().mutable_stats()->set_row_count_exact(
+                result.modified_row_count);
+          }
+          // Set empty row type.
+          responses.back().mutable_metadata()->mutable_row_type();
+        } else {
+          ZETASQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
+                                          result.rows.get(), /*limit=*/0));
+        }
 
-    if (!request->partition_token().empty()) {
-      ZETASQL_ASSIGN_OR_RETURN(auto partition_token,
-                       PartitionTokenFromString(request->partition_token()));
-      ZETASQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
-      if (partition_token.empty_query_partition()) {
-        // Clear all partial responses except the first one. Return only
-        // metadata in the first partial response.
-        responses.resize(1);
-        responses.front().clear_values();
-        responses.front().clear_chunked_value();
-      }
-    }
+        if (!request->partition_token().empty()) {
+          ZETASQL_ASSIGN_OR_RETURN(
+              auto partition_token,
+              PartitionTokenFromString(request->partition_token()));
+          ZETASQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
+          if (partition_token.empty_query_partition()) {
+            // Clear all partial responses except the first one. Return only
+            // metadata in the first partial response.
+            responses.resize(1);
+            responses.front().clear_values();
+            responses.front().clear_chunked_value();
+          }
+        }
 
-    // Populate transaction metadata.
-    if (ShouldReturnTransaction(request->transaction())) {
-      ZETASQL_ASSIGN_OR_RETURN(
-          *responses.front().mutable_metadata()->mutable_transaction(),
-          txn->ToProto());
-    }
+        // Populate transaction metadata.
+        if (ShouldReturnTransaction(request->transaction())) {
+          ZETASQL_ASSIGN_OR_RETURN(
+              *responses.front().mutable_metadata()->mutable_transaction(),
+              txn->ToProto());
+        }
 
-    // Add basic stats for PROFILE mode. We do this to interoperate with REPL
-    // applications written for Cloud Spanner. The profile will not contain
-    // statistics for plan nodes.
-    if (request->query_mode() == spanner_api::ExecuteSqlRequest::PROFILE) {
-      AddQueryStatsFromQueryResult(
-          result, responses.front().mutable_stats()->mutable_query_stats());
-    }
+        // Add basic stats for PROFILE mode. We do this to interoperate with
+        // REPL applications written for Cloud Spanner. The profile will not
+        // contain statistics for plan nodes.
+        if (request->query_mode() == spanner_api::ExecuteSqlRequest::PROFILE) {
+          AddQueryStatsFromQueryResult(
+              result, responses.front().mutable_stats()->mutable_query_stats());
+        }
 
-    // Reject requests for PLAN mode. The emulator uses ZetaSQL reference
-    // implementation which performs an unoptimized execution of the SQL query.
-    // The plan chosen by ZetaSQL will have no relation to those generated by
-    // Cloud Spanner, so we reject the PLAN mode completely.
-    if (request->query_mode() == spanner_api::ExecuteSqlRequest::PLAN) {
-      return error::EmulatorDoesNotSupportQueryPlans();
-    }
+        // Reject requests for PLAN mode. The emulator uses ZetaSQL reference
+        // implementation which performs an unoptimized execution of the SQL
+        // query. The plan chosen by ZetaSQL will have no relation to those
+        // generated by Cloud Spanner, so we reject the PLAN mode completely.
+        if (request->query_mode() == spanner_api::ExecuteSqlRequest::PLAN) {
+          return error::EmulatorDoesNotSupportQueryPlans();
+        }
 
-    // Send results back to client.
-    for (const auto& response : responses) {
-      stream->Send(response);
-    }
-    return absl::OkStatus();
-  });
+        // Send results back to client.
+        for (const auto& response : responses) {
+          stream->Send(response);
+        }
+        return absl::OkStatus();
+      });
 }
 REGISTER_GRPC_HANDLER(Spanner, ExecuteStreamingSql);
 
@@ -358,10 +380,15 @@ absl::Status ExecuteBatchDml(RequestContext* ctx,
   if (txn->IsPartitionedDml()) {
     return error::BatchDmlOnlySupportsReadWriteTransaction();
   }
+  // Set default response status to OK. Any error will override this.
+  *response->mutable_status() = StatusToProto(absl::OkStatus());
 
   // Wrap all operations on this transaction so they are atomic.
-  return txn->GuardedCall([&]() -> absl::Status {
-    // Cannot query after commit or rollback.
+  return txn->GuardedCall(Transaction::OpType::kDml, [&]() -> absl::Status {
+    // Cannot query after commit, rollback, or non-recoverable error.
+    if (txn->IsInvalid()) {
+      return error::CannotUseTransactionAfterConstraintError();
+    }
     if (txn->IsCommitted() || txn->IsRolledback()) {
       return error::CannotReadOrQueryAfterCommitOrRollback();
     }

@@ -40,6 +40,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+class ForeignKey;
 class Index;
 
 // Table represents a table in a database.
@@ -80,6 +81,16 @@ class Table : public SchemaNode {
   // Returns the list of all columns of this table.
   absl::Span<const Column* const> columns() const { return columns_; }
 
+  // Returns the list of all foreign keys of this table.
+  absl::Span<const ForeignKey* const> foreign_keys() const {
+    return foreign_keys_;
+  }
+
+  // Returns the list of all foreign keys that are referencing this table.
+  absl::Span<const ForeignKey* const> referencing_foreign_keys() const {
+    return referencing_foreign_keys_;
+  }
+
   // Returns the list of all indexes on this table.
   absl::Span<const Index* const> indexes() const { return indexes_; }
 
@@ -96,12 +107,25 @@ class Table : public SchemaNode {
   // nullptr if the column is not found. Name comparison is case-insensitive.
   const Column* FindColumn(const std::string& column_name) const;
 
+  // Finds an index on the table by its name. Name comparison is
+  // case-insensitive.
+  const Index* FindIndex(const std::string& index_name) const;
+
   // Same as above, but name comparison is case-sensitive.
   const Column* FindColumnCaseSensitive(const std::string& column_name) const;
 
   // Finds a KeyColumn by name. Returns nullptr if table doesn't contain
   // a column named `column_name` or if it's not a key column.
   const KeyColumn* FindKeyColumn(const std::string& column_name) const;
+
+  // Returns the foreign key with a given constraint name. Returns nullptr if
+  // not found.
+  const ForeignKey* FindForeignKey(const std::string& constraint_name) const;
+
+  // Returns the foreign key with a given constraint name that references this
+  // table. Returns nullptr if not found.
+  const ForeignKey* FindReferencingForeignKey(
+      const std::string& constraint_name) const;
 
   // Prints a debug string for the primary key in the following format:
   // <key_col1>, <key_col2>, ..., <key_coln>
@@ -161,6 +185,14 @@ class Table : public SchemaNode {
 
   // List of table columns, in the same order as found in the corresponding DDL.
   std::vector<const Column*> columns_;
+
+  // List of foreign keys defined on this table, in the same order as found in
+  // the corresponding DDL.
+  std::vector<const ForeignKey*> foreign_keys_;
+
+  // List of foreign keys referencing this table, in the same order as added in
+  // the corresponding DDL.
+  std::vector<const ForeignKey*> referencing_foreign_keys_;
 
   // List of indexes referring to this table. These are owned by the Schema, not
   // by the Table.

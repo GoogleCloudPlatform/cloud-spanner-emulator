@@ -53,25 +53,24 @@ ReadOnlyTransaction::ReadOnlyTransaction(
       id_(transaction_id),
       clock_(clock),
       base_storage_(storage),
+      versioned_catalog_(versioned_catalog),
       lock_manager_(lock_manager) {
   lock_handle_ = lock_manager_->CreateHandle(transaction_id, /*priority=*/1);
   read_timestamp_ = PickReadTimestamp();
-  // Wait for any concurrent schema change or read-write transactions to commit
-  // before accessing any database state.
-  // TODO : Remove the wait from the constructor.
-  lock_handle_->WaitForSafeRead(read_timestamp_);
-  schema_ = versioned_catalog->GetSchema(read_timestamp_);
 }
 
 absl::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
                                        std::unique_ptr<RowCursor>* cursor) {
   absl::MutexLock lock(&mu_);
+  // Wait for any concurrent schema change or read-write transactions to commit
+  // before accessing database state to perform a read.
+  lock_handle_->WaitForSafeRead(read_timestamp_);
   if (clock_->Now() - read_timestamp_ >= kMaxStaleReadDuration) {
     return error::ReadTimestampPastVersionGCLimit(read_timestamp_);
   }
 
   ZETASQL_ASSIGN_OR_RETURN(const ResolvedReadArg resolved_read_arg,
-                   ResolveReadArg(read_arg, schema_));
+                   ResolveReadArg(read_arg, schema()));
 
   std::vector<std::unique_ptr<StorageIterator>> iterators;
   for (const auto& key_range : resolved_read_arg.key_ranges) {
@@ -84,6 +83,13 @@ absl::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
   *cursor = absl::make_unique<StorageIteratorRowCursor>(
       std::move(iterators), resolved_read_arg.columns);
   return absl::OkStatus();
+}
+
+const Schema* ReadOnlyTransaction::schema() const {
+  // Wait for any concurrent schema change or read-write transactions to commit
+  // before accessing database state to read schemas in versioned_catalog.
+  lock_handle_->WaitForSafeRead(read_timestamp_);
+  return versioned_catalog_->GetSchema(read_timestamp_);
 }
 
 absl::Time ReadOnlyTransaction::PickReadTimestamp() {

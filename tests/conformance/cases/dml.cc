@@ -53,7 +53,9 @@ class DmlTest : public DatabaseTest {
             Key      INT64,
             ArrayCol ARRAY<INT64>,
           ) PRIMARY KEY(Key)
-        )"});
+        )",
+        "CREATE INDEX NullableIndex ON Nullable(Value)",
+    });
   }
 
  protected:
@@ -296,6 +298,31 @@ TEST_F(DmlTest, CannotCommitWithBadMutation) {
 
   // Check that the DML statement was not committed.
   EXPECT_THAT(Query("SELECT ID FROM Users"), IsOkAndHoldsRows({}));
+}
+
+TEST_F(DmlTest, CanUseIndexHintInInsertStatement) {
+  ZETASQL_EXPECT_OK(Insert("Nullable", {"Key", "Value"}, {1, "Peter"}));
+
+  ZETASQL_EXPECT_OK(
+      CommitDml({SqlStatement("INSERT INTO Users(ID, Name) "
+                              "SELECT Key, Value "
+                              "FROM Nullable@{force_index=NullableIndex} ")}));
+
+  EXPECT_THAT(Query("SELECT ID, Name FROM Users ORDER BY ID"),
+              IsOkAndHoldsRow({1, "Peter"}));
+}
+
+TEST_F(DmlTest, CanUseIndexHintInUpdateStatement) {
+  ZETASQL_EXPECT_OK(Insert("Nullable", {"Key", "Value"}, {1, "Peter"}));
+  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name"}, {1, "Paul"}));
+
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+      "UPDATE Users SET Name = 'Peter' "
+      "WHERE ID IN "
+      "(SELECT Key FROM Nullable@{force_index=NullableIndex})")}));
+
+  EXPECT_THAT(Query("SELECT ID, Name FROM Users ORDER BY ID"),
+              IsOkAndHoldsRow({1, "Peter"}));
 }
 
 }  // namespace

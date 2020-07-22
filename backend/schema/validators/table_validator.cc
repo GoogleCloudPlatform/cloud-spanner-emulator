@@ -27,6 +27,7 @@
 #include "backend/common/case.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
 #include "common/limits.h"
@@ -231,6 +232,16 @@ absl::Status TableValidator::Validate(const Table* table,
   for (const Table* child : table->child_tables_) {
     ZETASQL_RET_CHECK_NE(child, nullptr);
     ZETASQL_RET_CHECK_EQ(child->parent(), table);
+  }
+
+  for (const ForeignKey* foreign_key : table->foreign_keys_) {
+    ZETASQL_RET_CHECK_NE(foreign_key, nullptr);
+    ZETASQL_RET_CHECK_EQ(foreign_key->referencing_table(), table);
+  }
+  for (const ForeignKey* referencing_foreign_key :
+       table->referencing_foreign_keys_) {
+    ZETASQL_RET_CHECK_NE(referencing_foreign_key, nullptr);
+    ZETASQL_RET_CHECK_EQ(referencing_foreign_key->referenced_table(), table);
   }
 
   if (table->owner_index_) {

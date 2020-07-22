@@ -93,10 +93,10 @@ class ReadWriteTransactionTest : public testing::Test {
   std::atomic<int> id_counter_ = 0;
 
   std::unique_ptr<ReadWriteTransaction> CreateReadWriteTransaction() {
-    ReadWriteOptions opts;
     return absl::make_unique<ReadWriteTransaction>(
-        opts, ++id_counter_, &clock_, storage_.get(), lock_manager_.get(),
-        versioned_catalog_.get(), action_manager_.get());
+        ReadWriteOptions(), RetryState(), ++id_counter_, &clock_,
+        storage_.get(), lock_manager_.get(), versioned_catalog_.get(),
+        action_manager_.get());
   }
 
   zetasql_base::StatusOr<std::vector<ValueList>> ReadAll(

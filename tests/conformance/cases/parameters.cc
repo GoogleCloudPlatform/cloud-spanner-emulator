@@ -23,7 +23,7 @@ namespace test {
 
 namespace {
 
-class UntypedParamsApiTest : public test::DatabaseTest {
+class ParamsApiTest : public test::DatabaseTest {
  protected:
   // Creates a new session for tests using raw grpc client.
   zetasql_base::StatusOr<std::string> CreateTestSession() {
@@ -90,7 +90,17 @@ class UntypedParamsApiTest : public test::DatabaseTest {
   std::string test_session_uri_;
 };
 
-TEST_F(UntypedParamsApiTest, UndeclaredParameters) {
+TEST_F(ParamsApiTest, NamedParameterInSqlNotSuppliedParametersInRequest) {
+  // The SQL query uses a named parameter, but none are supplied in the actual
+  // request.
+  google::protobuf::Struct params;
+  google::protobuf::Map<std::string, google::spanner::v1::Type> param_types;
+  auto query = R"(SELECT @any)";
+  EXPECT_THAT(Execute(query, params, param_types),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(ParamsApiTest, UndeclaredParameters) {
   // Parameter unused in query.
   google::protobuf::Struct params = PARSE_TEXT_PROTO(
       R"(fields {
@@ -116,7 +126,7 @@ TEST_F(UntypedParamsApiTest, UndeclaredParameters) {
          })");
   param_types = {};
   EXPECT_THAT(Execute("SELECT @WhereAmI > 1", params, param_types),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              testing::Not(zetasql_base::testing::IsOk()));
 
   // Declared and undeclared string parameters in same query.
   params = PARSE_TEXT_PROTO(
@@ -485,7 +495,7 @@ TEST_F(UntypedParamsApiTest, UndeclaredParameters) {
               zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(UntypedParamsApiTest, UndeclaredParametersBadEncoding) {
+TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
   // The provided parameter is a STRING, but the query expects a DOUBLE.
   google::protobuf::Struct params = PARSE_TEXT_PROTO(
       R"(fields {

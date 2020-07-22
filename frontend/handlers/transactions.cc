@@ -49,8 +49,10 @@ absl::Status BeginTransaction(
                    session_manager->GetSession(request->session()));
 
   // Create a new transaction.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
-                   session->CreateMultiUseTransaction(request->options()));
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::shared_ptr<Transaction> txn,
+      session->CreateMultiUseTransaction(
+          request->options(), Session::TransactionActivation::kInitializeOnly));
 
   // Populate transaction proto in response.
   ZETASQL_ASSIGN_OR_RETURN(*response, txn->ToProto());
@@ -84,13 +86,17 @@ absl::Status Commit(RequestContext* ctx,
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn, maybe_txn);
 
   // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> absl::Status {
+  return txn->GuardedCall(Transaction::OpType::kCommit, [&]() -> absl::Status {
     // Cannot commit a ReadOnlyTransaction.
     if (txn->IsReadOnly()) {
       return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
     }
 
-    // Cannot commit after transaction has been rolled back.
+    // Cannot commit after transaction has been rolled back or encountered a
+    // non-recoverable error.
+    if (txn->IsInvalid()) {
+      return error::CannotUseTransactionAfterConstraintError();
+    }
     if (txn->IsRolledback()) {
       return error::CannotCommitAfterRollback();
     }
@@ -133,26 +139,28 @@ absl::Status Rollback(RequestContext* ctx,
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindAndUseTransaction(request->transaction_id()));
 
-  // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> absl::Status {
-    // Can not rollback a ReadOnlyTransaction.
-    if (txn->IsReadOnly()) {
-      return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
-    }
+  // Wrap all operations on this transaction so they are atomic.
+  return txn->GuardedCall(
+      Transaction::OpType::kRollback, [&]() -> absl::Status {
+        // Can not rollback a ReadOnlyTransaction.
+        if (txn->IsReadOnly()) {
+          return error::
+              CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
+        }
 
-    // Committed transaction can not be rolled back.
-    if (txn->IsCommitted()) {
-      return error::CannotRollbackAfterCommit();
-    }
+        // Committed transaction can not be rolled back.
+        if (txn->IsCommitted()) {
+          return error::CannotRollbackAfterCommit();
+        }
 
-    // Rollback should be idempotent.
-    if (txn->IsRolledback()) {
-      return absl::OkStatus();
-    }
+        // Rollback should be idempotent.
+        if (txn->IsRolledback()) {
+          return absl::OkStatus();
+        }
 
-    // Rollback the transaction.
-    return txn->Rollback();
-  });
+        // Rollback the transaction.
+        return txn->Rollback();
+      });
 }
 REGISTER_GRPC_HANDLER(Spanner, Rollback);
 

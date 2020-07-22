@@ -44,6 +44,14 @@ class ReadYourWritesTest : public DatabaseTest {
           ) PRIMARY KEY (id, ts)
         )",
         R"(
+          CREATE TABLE CommitTsChildTable (
+            id STRING(MAX) NOT NULL,
+            ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+            ts2 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+            val2 STRING(MAX)
+          ) PRIMARY KEY (id, ts, ts2)
+        )",
+        R"(
           CREATE INDEX CommitTsTableIndex ON CommitTsTable(val)
         )",
         R"(
@@ -136,6 +144,215 @@ TEST_F(ReadYourWritesTest, CannotReadPendingCommitTimestampInKey) {
       StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+TEST_F(ReadYourWritesTest, CannotQueryTableWithPendingCommitTimestampKey) {
+  // Add a row with an explicit timestamp key, reading this row succeeds
+  // since there is no other row in buffer with a pending commit timestamp key.
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  auto explicit_ts = MakeNowTimestamp();
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsTable (id, ts, val) "
+                        "VALUES (@id, @ts, @val)",
+                        {{"id", Value("id1")},
+                         {"ts", Value(explicit_ts)},
+                         {"val", Value("val1")}})));
+
+  // Querying explicit timestamp in same transaction succeeds.
+  EXPECT_THAT(
+      QueryTransaction(
+          txn, "SELECT id, ts, val FROM CommitTsTable WHERE id = 'id1'"),
+      IsOkAndHoldsRows({{"id1", explicit_ts, "val1"}}));
+
+  // Add row with a pending commit timestamp key in the same transaction.
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsTable (id, ts, val) "
+                        "VALUES (@id, PENDING_COMMIT_TIMESTAMP(), @val)",
+                        {{"id", Value("id2")}, {"val", Value("val2")}})));
+
+  // Querying row with explicit timestamp now fails since the whole table is
+  // considered as locked when there is a row with pending commit timestamp
+  // in buffer, even when querying for the explicit timestamp added before.
+  EXPECT_THAT(
+      QueryTransaction(
+          txn, "SELECT id, ts, val FROM CommitTsTable WHERE id = 'id1'"),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(ReadYourWritesTest, CannotReadTableWithPendingCommitTimestampKey) {
+  // Add a row with an explicit timestamp key, reading this row succeeds since
+  // there is no other row in buffer with a pending commit timestamp key.
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  auto explicit_ts = MakeNowTimestamp();
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsTable (id, ts, val) "
+                        "VALUES (@id, @ts, @val)",
+                        {{"id", Value("id1")},
+                         {"ts", Value(explicit_ts)},
+                         {"val", Value("val1")}})));
+
+  // Reading an explicit commit timestamp key in same transaction succeeds.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key("id1", explicit_ts));
+    EXPECT_THAT(Read("CommitTsTable", {"id", "ts", "val"}, key_set, txn),
+                IsOkAndHoldsRows({{"id1", explicit_ts, "val1"}}));
+  }
+
+  // Add row with a pending commit timestamp key in the same transaction.
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsTable (id, ts, val) "
+                        "VALUES (@id, PENDING_COMMIT_TIMESTAMP(), @val)",
+                        {{"id", Value("id2")}, {"val", Value("val2")}})));
+
+  // Reading row with explicit timestamp now fails since the whole table is
+  // considered as locked when there is a row with pending commit timestamp in
+  // buffer.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key("id1", explicit_ts));
+    EXPECT_THAT(Read("CommitTsTable", {"id", "ts", "val"}, key_set, txn),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+}
+
+TEST_F(ReadYourWritesTest,
+       CannotReadIndexWithPendingCommitTimestampKeyInParentTable) {
+  // Add a row with an explicit timestamp key, reading this row using index
+  // succeeds since there is no other row in parent table with a pending commit
+  // timestamp key.
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  auto explicit_ts = MakeNowTimestamp();
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsTable (id, ts, val) "
+                        "VALUES (@id, @ts, @val)",
+                        {{"id", Value("id1")},
+                         {"ts", Value(explicit_ts)},
+                         {"val", Value("val1")}})));
+
+  // Reading an explicit commit timestamp key using index in same transaction
+  // succeeds.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key("val1"));
+    EXPECT_THAT(ReadWithIndex(txn, "CommitTsTable", "CommitTsTableIndex",
+                              {"id", "ts", "val"}, key_set),
+                IsOkAndHoldsRows({{"id1", explicit_ts, "val1"}}));
+  }
+
+  // Add row with a pending commit timestamp key in the same transaction.
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsTable (id, ts, val) "
+                        "VALUES (@id, PENDING_COMMIT_TIMESTAMP(), @val)",
+                        {{"id", Value("id2")}, {"val", Value("val2")}})));
+
+  // Reading row with explicit timestamp using index now fails since the whole
+  // table and the index is considered as locked when there is a row with
+  // pending commit timestamp in buffer.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key("val1"));
+    EXPECT_THAT(ReadWithIndex(txn, "CommitTsTable", "CommitTsTableIndex",
+                              {"id", "ts", "val"}, key_set),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+}
+
+TEST_F(ReadYourWritesTest,
+       CanReadChildTableWithPendingCommitTimestampKeyInParentTable) {
+  // Add a row with an explicit timestamp key in parent and child table. Reading
+  // this row in child table succeeds since there is no pending pending commit
+  // timestamp key in either the child table or it's parent table.
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  auto explicit_ts = MakeNowTimestamp();
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsTable (id, ts, val) "
+                        "VALUES (@id, @ts, @val)",
+                        {{"id", Value("id1")},
+                         {"ts", Value(explicit_ts)},
+                         {"val", Value("val1")}})));
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsChildTable (id, ts, ts2, val2) "
+                        "VALUES (@id, @ts, @ts2, @val2)",
+                        {{"id", Value("id1")},
+                         {"ts", Value(explicit_ts)},
+                         {"ts2", Value(explicit_ts)},
+                         {"val2", Value("val21")}})));
+
+  // Reading an explicit commit timestamp key from child table succeeds.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key("id1", explicit_ts, explicit_ts));
+    EXPECT_THAT(
+        Read("CommitTsChildTable", {"id", "ts", "ts2", "val2"}, key_set, txn),
+        IsOkAndHoldsRows({{"id1", explicit_ts, explicit_ts, "val21"}}));
+  }
+
+  // Add row with a pending commit timestamp key to parent table.
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsTable (id, ts, val) "
+                        "VALUES (@id, PENDING_COMMIT_TIMESTAMP(), @val)",
+                        {{"id", Value("id2")}, {"val", Value("val2")}})));
+
+  // Can still read row with explicit timestamp from child table since child
+  // table doesn't contain pending commit timestamp even if parent table
+  // contains pending commit timestamp.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key("id1", explicit_ts, explicit_ts));
+    EXPECT_THAT(
+        Read("CommitTsChildTable", {"id", "ts", "ts2", "val2"}, key_set, txn),
+        IsOkAndHoldsRows({{"id1", explicit_ts, explicit_ts, "val21"}}));
+  }
+}
+
+TEST_F(ReadYourWritesTest,
+       CanReadParentTableWithPendingCommitTimestampKeyInChildTable) {
+  // Add a row with an explicit timestamp key in parent and child table. Reading
+  // this row in child table succeeds since there is no pending pending commit
+  // timestamp key in either the child table or it's parent table.
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  auto explicit_ts = MakeNowTimestamp();
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsTable (id, ts, val) "
+                        "VALUES (@id, @ts, @val)",
+                        {{"id", Value("id1")},
+                         {"ts", Value(explicit_ts)},
+                         {"val", Value("val1")}})));
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsChildTable (id, ts, ts2, val2) "
+                        "VALUES (@id, @ts, @ts2, @val2)",
+                        {{"id", Value("id1")},
+                         {"ts", Value(explicit_ts)},
+                         {"ts2", Value(explicit_ts)},
+                         {"val2", Value("val21")}})));
+
+  // Reading an explicit commit timestamp key from child table succeeds.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key("id1", explicit_ts, explicit_ts));
+    EXPECT_THAT(
+        Read("CommitTsChildTable", {"id", "ts", "ts2", "val2"}, key_set, txn),
+        IsOkAndHoldsRows({{"id1", explicit_ts, explicit_ts, "val21"}}));
+  }
+
+  // Add row with a pending commit timestamp key to child table.
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTsChildTable (id, ts, ts2, val2) "
+                        "VALUES (@id, @ts, PENDING_COMMIT_TIMESTAMP(), @val2)",
+                        {{"id", Value("id1")},
+                         {"ts", Value(explicit_ts)},
+                         {"val2", Value("val22")}})));
+
+  // Reading row with explicit timestamp from parent table succeeds since it
+  // doesn't contain pending commit timestamp even if child table contains
+  // pending commit timestamp.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key("id1", explicit_ts));
+    EXPECT_THAT(Read("CommitTsTable", {"id", "ts", "val"}, key_set, txn),
+                IsOkAndHoldsRows({{"id1", explicit_ts, "val1"}}));
+  }
+}
+
 TEST_F(ReadYourWritesTest, CanReadAlreadyCommittedTimestampColumn) {
   // Reading a commit_timestamp column that doesn't include buffered mutations
   // works.
@@ -183,11 +400,8 @@ TEST_F(ReadYourWritesTest, CannotReadPendingCommitTimestampInColumn) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-// TODO: These tests below fail since Sql query will always try to
-// read all the columns, and not just the columns requested by the end user. Fix
-// sql query and enable the tests below.
 TEST_F(ReadYourWritesTest,
-       DISABLED_CanReadColumnsWithPendingCommitTimestampInNonKeyColumn) {
+       CanReadTableWithPendingCommitTimestampInNonKeyColumns) {
   // Perform writes and reads using the same transaction.
   auto txn = Transaction(Transaction::ReadWriteOptions());
   ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
@@ -199,12 +413,94 @@ TEST_F(ReadYourWritesTest,
   EXPECT_THAT(QueryTransaction(txn, "SELECT id, key FROM NonKeyCommitTsTable"),
               IsOkAndHoldsRows({{"id1", "key1"}}));
 
-  // Can read other non-commit-timestamp columns using index though.
+  // Reading other non-commit-timestamp columns using index also works.
   EXPECT_THAT(QueryTransaction(
                   txn,
                   "SELECT key FROM "
                   "NonKeyCommitTsTable@{force_index=NonKeyCommitTsIndexOnKey}"),
               IsOkAndHoldsRows({{"key1"}}));
+}
+
+TEST_F(ReadYourWritesTest, CannnotReadNonKeyColumnWithPendingCommitTimestamp) {
+  // Perform writes and reads using the same transaction.
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+
+  // Add a rows with non-key column ts set to an explicit timestamp value.
+  auto explicit_ts = MakeNowTimestamp();
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO NonKeyCommitTsTable (id, key, ts) "
+                        "VALUES (@id, @key, @ts)",
+                        {{"id", Value("id1")},
+                         {"key", Value("key1")},
+                         {"ts", Value(explicit_ts)}})));
+  // Reading the row with explicit timestamp column works.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key("id1", "key1"));
+    EXPECT_THAT(Read("NonKeyCommitTsTable", {"id", "key", "ts"}, key_set, txn),
+                IsOkAndHoldsRows({{"id1", "key1", explicit_ts}}));
+  }
+
+  // Add another row with the same non-key column being set to a pending commit
+  // timestamp value.
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO NonKeyCommitTsTable (id, key, ts) "
+                        "VALUES (@id, @key, PENDING_COMMIT_TIMESTAMP())",
+                        {{"id", Value("id2")}, {"key", Value("key2")}})));
+
+  // Reading the row with explicit timestamp column is not allowed now since
+  // the [table, column] family [NonKeyCommitTsTable, ts] is now considered not
+  // readable due to pending commit_ts.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key("id1", "key1"));
+    EXPECT_THAT(Read("NonKeyCommitTsTable", {"id", "key", "ts"}, key_set, txn),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+}
+
+TEST_F(ReadYourWritesTest,
+       CannnotReadIndexWithPendingCommitTimestampInNonKeyColumn) {
+  // Perform writes and reads using the same transaction.
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+
+  // Add a rows with non-key column ts set to an explicit timestamp value.
+  auto explicit_ts = MakeNowTimestamp();
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO NonKeyCommitTsTable (id, key, ts) "
+                        "VALUES (@id, @key, @ts)",
+                        {{"id", Value("id1")},
+                         {"key", Value("key1")},
+                         {"ts", Value(explicit_ts)}})));
+  // Reading the row with explicit timestamp column using index works.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key(explicit_ts));
+    EXPECT_THAT(
+        ReadWithIndex(txn, "NonKeyCommitTsTable", "NonKeyCommitTsIndexOnTs",
+                      {"id", "key", "ts"}, key_set),
+        IsOkAndHoldsRows({{"id1", "key1", explicit_ts}}));
+  }
+
+  // Add another row with the same non-key column being set to a pending commit
+  // timestamp value.
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO NonKeyCommitTsTable (id, key, ts) "
+                        "VALUES (@id, @key, PENDING_COMMIT_TIMESTAMP())",
+                        {{"id", Value("id2")}, {"key", Value("key2")}})));
+
+  // Reading the row with explicit timestamp column with index is not allowed
+  // now since the [table, column] family [NonKeyCommitTsTable, ts] and any
+  // associated index columns are now considered not readable due to pending
+  // commit_ts.
+  {
+    KeySet key_set;
+    key_set.AddKey(Key(explicit_ts));
+    EXPECT_THAT(
+        ReadWithIndex(txn, "NonKeyCommitTsTable", "NonKeyCommitTsIndexOnTs",
+                      {"id", "key", "ts"}, key_set),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+  }
 }
 
 TEST_F(ReadYourWritesTest, CanReadBufferedUpdatesToIndex) {

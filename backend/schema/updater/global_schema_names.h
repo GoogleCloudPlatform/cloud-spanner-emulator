@@ -47,10 +47,18 @@ class GlobalSchemaNames {
   // Removes a name if it exists; does nothing otherwise.
   void RemoveName(const std::string& name) { names_.erase(name); }
 
-  // Generates and adds a unique foreign key name.
+  // Generates and adds a unique foreign key name. If a gererated name already
+  // exists, its sequence number is increased until a unique name is found.
   zetasql_base::StatusOr<std::string> GenerateForeignKeyName(
       absl::string_view referencing_table_name,
       absl::string_view referenced_table_name);
+
+  // Generates a unique name for a managed index. The same name is always
+  // generated for the same arguments. Callers can then reuse an existing index
+  // with the same name, if any, or create a new index.
+  static zetasql_base::StatusOr<std::string> GenerateManagedIndexName(
+      absl::string_view table_name,
+      absl::Span<const std::string* const> column_names, bool unique);
 
   // Validates a schema name.
   static absl::Status ValidateSchemaName(absl::string_view type,
@@ -64,7 +72,8 @@ class GlobalSchemaNames {
  private:
   // Generates and adds a unique name. A sequence number is incremented and
   // added to the name until a unique name is found.
-  std::string GenerateSequencedName(absl::string_view base,
+  std::string GenerateSequencedName(absl::string_view type,
+                                    absl::string_view base,
                                     absl::string_view fingerprint);
 
   // Unique set of global names.

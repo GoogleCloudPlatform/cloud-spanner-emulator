@@ -16,12 +16,15 @@
 
 #include "backend/transaction/read_only_transaction.h"
 
+#include <ctime>
+
 #include "zetasql/public/type.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/schema.h"
@@ -128,6 +131,26 @@ TEST_F(ReadOnlyTransactionTest, GetSchema) {
                            &catalog);
   ASSERT_NE(txn2.schema(), nullptr);
   EXPECT_EQ(txn2.schema()->FindTable("test_table"), nullptr);
+}
+
+TEST_F(ReadOnlyTransactionTest, WaitsForFutureReadTime) {
+  VersionedCatalog catalog;
+  zetasql::TypeFactory type_factory{};
+  ZETASQL_EXPECT_OK(
+      catalog.AddSchema(t0_, test::CreateSchemaWithOneTable(&type_factory)));
+
+  ReadOnlyOptions opts;
+  opts.bound = TimestampBound::kExactTimestamp;
+  opts.timestamp = clock_.Now() + absl::Microseconds(1000);
+
+  ReadOnlyTransaction txn(opts, txn_id_, &clock_, &storage_, &lock_manager_,
+                          &catalog);
+  ASSERT_NE(txn.schema(), nullptr);
+  ASSERT_NE(txn.schema()->FindTable("test_table"), nullptr);
+
+  // A snapshot read at t0_ + 1000 will wait for read time to become current
+  // before being able to access database and return the schema.
+  EXPECT_GE(clock_.Now(), opts.timestamp);
 }
 
 }  // namespace

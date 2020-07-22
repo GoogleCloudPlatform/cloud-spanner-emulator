@@ -63,7 +63,8 @@ class Database {
 
   // Creates a read write transaction attached to this database.
   zetasql_base::StatusOr<std::unique_ptr<ReadWriteTransaction>>
-  CreateReadWriteTransaction(const ReadWriteOptions& options);
+  CreateReadWriteTransaction(const ReadWriteOptions& options,
+                             const RetryState& retry_state);
 
   // Updates the schema for this database.
   //

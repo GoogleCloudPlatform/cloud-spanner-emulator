@@ -21,6 +21,7 @@ licenses(["unencumbered"])
 cc_test(
     name = "emulator_conformance_test",
     srcs = ["emulator_conformance_test.cc"],
+    shard_count = 8,
     deps = [
         "//frontend/server",
         "//tests/common:proto_matchers",

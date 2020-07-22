@@ -3,9 +3,6 @@
 Cloud Spanner Emulator provides application developers with a locally-running,
 _emulated_ instance of Cloud Spanner to enable local development and testing.
 
-> :warning: The emulator is currently in beta. See below for known issues and
-            limitations.
-
 The main focus of the emulator is correctness - an application that runs against
 the emulator should be able to run against the Cloud Spanner service without any
 changes. It is not a goal of the emulator to be a performant standalone
@@ -24,6 +21,7 @@ and can be invoked via the [gcloud emulators](
 https://cloud.google.com/sdk/gcloud/reference/beta/emulators) command group:
 
 ```shell
+gcloud components update
 gcloud beta emulators spanner start
 ```
 
@@ -43,7 +41,8 @@ images are also tagged with version numbers, so you can run a specific version
 with:
 
 ```shell
-docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator:0.7.3
+VERSION=1.0.0
+docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator:$VERSION
 ```
 
 ### Via pre-built linux binaries
@@ -53,7 +52,7 @@ binary is not fully static, but has been tested on Ubuntu 16.04/18.04, CentOS 8,
 RHEL 8, and Debian 9/10.
 
 ```shell
-VERSION=0.7.3
+VERSION=1.0.0
 wget https://storage.googleapis.com/cloud-spanner-emulator/releases/${VERSION}/cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 tar zxvf cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 chmod u+x gateway_main emulator_main
@@ -120,13 +119,11 @@ constraint enforcement, and in-memory storage are implemented in this codebase.
 
 ## Features and Limitations
 
-> :warning: The emulator is currently in beta.
-
 Notable supported features:
 
 - DDL schema changes
 
-- Full SQL/DML query execution (beta exceptions noted below)
+- Full SQL/DML query execution (limitations noted below)
 
 - Non-SQL read and write methods
 
@@ -140,24 +137,13 @@ Notable supported features:
 
 - Information schema
 
-Limitations during the beta (will be removed at version 1.0.0):
+- Partitioned Read, Partitioned Query and Partitioned DML APIs
 
-- SQL functions TABLESAMPLE, JSON_VALUE, JSON_QUERY, CEILING, POWER,
-  CHARACTER_LENGTH, and FORMAT are not supported.
+Limitations (will be removed in subsequent releases):
 
-- Queries using some SQL functionality present in ZetaSQL but not in the
-  Cloud Spanner service will succeed instead of being rejected as invalid.
+- SQL function TABLESAMPLE is not supported.
 
-- Transactions are rolled-back on any error (in the Cloud Spanner service,
-  certain statements with errors, e.g. queries with invalid table names, do not
-  rollback the transaction).
-
-- PartitionedRead, PartitionedQuery, PartitionedDML are not supported. Note that
-  Cloud Spanner dataflow templates depend on the PartitionedQuery  API and hence
-  are not supported.
-
-- Untyped parameter bindings (used by client libraries written in languages with
-  dynamic typing) are not supported.
+- Cloud Spanner dataflow templates are not yet supported.
 
 - Foreign keys are not supported.
 
@@ -193,6 +179,9 @@ Notable limitations:
   guarantee the same query execution plan as the Cloud Spanner service, and
   hence query plans and statistics reporting are disabled on the emulator.
 
+- Some queries that use SQL functionality present in ZetaSQL but not in
+  Cloud Spanner service may succeed instead of being rejected as invalid.
+
 - Certain quotas and limits (such as admin api rate limits and mutation size
   limits) are not enforced.
 
@@ -209,14 +198,19 @@ Notable limitations:
 
 #### Which [client library](https://cloud.google.com/spanner/docs/reference/libraries) versions are supported?
 
-Cloud Spanner Java, Go and C++ client libraries support the emulator.
-Install the following version (or higher) to get emulator support:
+All Cloud Spanner client libraries support the emulator. Install the following
+version (or higher) to get emulator support:
 
-| Client Library | Version |
-|----------------|---------|
-| Java           | v1.51.0 |
-| Go             | v1.5.0  |
-| C++            | v0.9.x  |
+| Client Library | Version  |
+|----------------|----------|
+| C++            | v0.9.x   |
+| C#             | v3.1.0   |
+| Go             | v1.5.0   |
+| Java           | v1.51.0  |
+| Node.js        | v4.5.0   |
+| PHP            | v1.25.0  |
+| Python         | v1.15.0  |
+| Ruby           | v1.13.0  |
 
 #### How do I fix the client library error with "UNAUTHENTICATED: Credentials require .."?
 
@@ -238,14 +232,13 @@ absence of an ORDER BY clause.
 
 ## Contribute
 
-During the beta, we are not accepting external code contributions to this
-project.
+We are currently not accepting external code contributions to this project.
 
 ## Issues
 
-During the beta, we are not accepting issues for this project. Please feel free
-to ask questions or file requests/bugs using the existing Cloud Spanner
-[support channels](https://cloud.google.com/spanner/docs/getting-support).
+Please file bugs and feature requests using
+[GitHub's issue tracker](https://github.com/GoogleCloudPlatform/cloud-spanner-emulator/issues/new)
+or using the existing Cloud Spanner [support channels](https://cloud.google.com/spanner/docs/getting-support).
 
 ## License
 

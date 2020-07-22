@@ -21,6 +21,7 @@
 #include "absl/types/optional.h"
 #include "absl/types/span.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
@@ -41,6 +42,9 @@ std::string PrintIndex(const Index* index);
 
 // Prints the DDL statements for a table.
 std::string PrintTable(const Table* table);
+
+// Prints the DDL statements for a foreign key.
+std::string PrintForeignKey(const ForeignKey* foreign_key);
 
 // Converts an OnDeleteAction to its string representation.
 std::string OnDeleteActionToString(Table::OnDeleteAction action);

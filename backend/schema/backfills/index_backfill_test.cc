@@ -87,9 +87,9 @@ class BackfillTest : public ::testing::Test {
 
 TEST_F(BackfillTest, BackfillIndex) {
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadWriteTransaction> txn,
-        database_->CreateReadWriteTransaction(ReadWriteOptions()));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+                         database_->CreateReadWriteTransaction(
+                             ReadWriteOptions(), RetryState()));
 
     // Check that table exists and index doesn't.
     schema_ = txn->schema();
@@ -172,9 +172,9 @@ TEST_F(BackfillTest, BackfillIndex) {
 
 TEST_F(BackfillTest, BackfillIndexWithNulls) {
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadWriteTransaction> txn,
-        database_->CreateReadWriteTransaction(ReadWriteOptions()));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+                         database_->CreateReadWriteTransaction(
+                             ReadWriteOptions(), RetryState()));
 
     // Buffer mutations.
     Mutation m;
@@ -251,9 +251,9 @@ TEST_F(BackfillTest, BackfillIndexWithNulls) {
 
 TEST_F(BackfillTest, BackfillUniqueIndex) {
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadWriteTransaction> txn,
-        database_->CreateReadWriteTransaction(ReadWriteOptions()));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+                         database_->CreateReadWriteTransaction(
+                             ReadWriteOptions(), RetryState()));
 
     // Check that table exists and index doesn't.
     schema_ = txn->schema();

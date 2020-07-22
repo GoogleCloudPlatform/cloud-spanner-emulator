@@ -192,15 +192,107 @@ TEST_F(PartitionQueryTest, CanReuseTransactionForPartitionQuery) {
   }
 }
 
-// TODO : Implement check that sql statement in partition query is
-// root partitionable.
-TEST_F(PartitionQueryTest, DISABLED_CannotQueryNonRootPartitionableSql) {
+TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlOrderBy) {
   PopulateDatabase();
 
   Transaction txn{Transaction::ReadOnlyOptions{}};
 
   EXPECT_THAT(
       PartitionQuery(txn, "SELECT UserID, Name FROM Users ORDER BY Name"),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlNoTable) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  EXPECT_THAT(PartitionQuery(txn, "SELECT a FROM UNNEST([1, 2, 3]) AS a"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlFilterNoTable) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  EXPECT_THAT(
+      PartitionQuery(txn, "SELECT a FROM UNNEST([1, 2, 3]) AS a WHERE a = 1"),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlSubquery) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  EXPECT_THAT(PartitionQuery(txn,
+                             "SELECT UserID, Name FROM Users WHERE EXISTS "
+                             "(SELECT ThreadId FROM Threads)"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionQueryTest, DisableQueryPartitionabilityCheckForValidQuery) {
+  PopulateDatabase();
+
+  const std::string valid_query =
+      "SELECT ANY_VALUE(STARRED), USERID "
+      "FROM Threads WHERE Threadid=1 "
+      "GROUP BY UserId ";
+
+  {
+    Transaction txn{Transaction::ReadOnlyOptions{}};
+    // Query fails without the hint to disable partitionability check in
+    // emulator.
+    if (in_prod_env()) {
+      ZETASQL_EXPECT_OK(PartitionQuery(txn, valid_query));
+    } else {
+      EXPECT_THAT(PartitionQuery(txn, valid_query),
+                  StatusIs(absl::StatusCode::kInvalidArgument));
+    }
+  }
+
+  // With the hint to disable partitionability check, the Emulator is pacified
+  // and prod ignores the hint.
+  {
+    const auto modified_query = absl::StrCat(
+        "@{spanner_emulator.disable_query_partitionability_check=true}",
+        valid_query);
+    Transaction txn{Transaction::ReadOnlyOptions{}};
+    ZETASQL_EXPECT_OK(PartitionQuery(txn, modified_query));
+  }
+}
+
+TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlSubqueryInExpr) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  EXPECT_THAT(PartitionQuery(txn,
+                             "SELECT UserID, Name FROM Users WHERE UserID IN "
+                             "(SELECT ThreadId FROM Threads)"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlTwoTable) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  EXPECT_THAT(PartitionQuery(txn,
+                             "SELECT u.UserID, ARRAY(SELECT ThreadId FROM "
+                             "Threads) FROM Users AS u"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlOneTableOneIndex) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  EXPECT_THAT(
+      PartitionQuery(
+          txn, "SELECT u.UserID, b.Name FROM Users AS u, UsersByName AS b"),
       StatusIs(absl::StatusCode::kInvalidArgument));
 }
 

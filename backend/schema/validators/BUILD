@@ -22,16 +22,19 @@ cc_library(
     name = "schema_validators",
     srcs = [
         "column_validator.cc",
+        "foreign_key_validator.cc",
         "index_validator.cc",
         "table_validator.cc",
     ],
     hdrs = [
         "column_validator.h",
+        "foreign_key_validator.h",
         "index_validator.h",
         "table_validator.h",
     ],
     deps = [
         "//backend/common:case",
+        "//backend/common:ids",
         "//backend/datamodel:types",
         "//backend/schema/backfills:schema_backfillers",
         "//backend/schema/catalog:schema",
@@ -40,6 +43,7 @@ cc_library(
         "//backend/schema/verifiers:column_value_verifiers",
         "//common:errors",
         "//common:limits",
+        "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",

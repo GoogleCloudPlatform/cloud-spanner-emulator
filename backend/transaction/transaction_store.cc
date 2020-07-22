@@ -20,10 +20,12 @@
 
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "backend/common/rows.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/locking/request.h"
+#include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/iterator.h"
 #include "backend/transaction/commit_timestamp.h"
@@ -96,6 +98,8 @@ absl::Status TransactionStore::BufferInsert(
   }
   buffered_ops_[table][key] = std::make_pair(OpType::kInsert, row_values);
 
+  TrackColumnsForCommitTimestamp(columns, values);
+  TrackTableForCommitTimestamp(table, key);
   return absl::OkStatus();
 }
 
@@ -127,6 +131,8 @@ absl::Status TransactionStore::BufferUpdate(
   }
   buffered_ops_[table][key] = std::make_pair(op_type, row_values);
 
+  TrackColumnsForCommitTimestamp(columns, values);
+  TrackTableForCommitTimestamp(table, key);
   return absl::OkStatus();
 }
 
@@ -142,6 +148,7 @@ absl::Status TransactionStore::BufferDelete(const Table* table,
   }
   buffered_ops_[table][key] = std::make_pair(OpType::kDelete, row_values);
 
+  TrackTableForCommitTimestamp(table, key);
   return absl::OkStatus();
 }
 
@@ -249,9 +256,19 @@ absl::Status TransactionStore::Read(
 
   // Pending commit timestamp values in buffer cannot be returned to
   // clients.
-  if (!allow_pending_commit_timestamps_in_read &&
-      HasPendingCommitTimestampInReadResult(table, columns, rows)) {
-    return error::CannotReadPendingCommitTimestamp(table->Name());
+  if (!allow_pending_commit_timestamps_in_read) {
+    if (commit_ts_tables_.contains(table)) {
+      return error::CannotReadPendingCommitTimestamp(
+          absl::StrCat("Table ", table->Name()));
+    }
+    for (const auto column : columns) {
+      if (commit_ts_columns_.contains(column) ||
+          (column->source_column() != nullptr &&
+           commit_ts_columns_.contains(column->source_column()))) {
+        return error::CannotReadPendingCommitTimestamp(
+            absl::StrCat("Column ", column->Name()));
+      }
+    }
   }
 
   // Sort the keys to provide iterating in order.
@@ -276,6 +293,28 @@ bool TransactionStore::RowExistsInBuffer(const Table* table, const Key& key,
   }
   *row_op = row_op_itr->second;
   return true;
+}
+
+void TransactionStore::TrackColumnsForCommitTimestamp(
+    absl::Span<const Column* const> columns, const ValueList& values) {
+  DCHECK_EQ(columns.size(), values.size());
+  for (int i = 0; i < columns.size(); ++i) {
+    if (IsPendingCommitTimestamp(columns[i], values[i])) {
+      commit_ts_columns_.insert(columns[i]);
+    }
+  }
+}
+
+void TransactionStore::TrackTableForCommitTimestamp(const Table* table,
+                                                    const Key& key) {
+  if (HasPendingCommitTimestampInKey(table, key)) {
+    commit_ts_tables_.insert(table);
+
+    // Any time a table has a pending commit-ts in key, include all its indexes.
+    for (const Index* index : table->indexes()) {
+      commit_ts_tables_.insert(index->index_data_table());
+    }
+  }
 }
 
 zetasql_base::StatusOr<ValueList> TransactionStore::Lookup(

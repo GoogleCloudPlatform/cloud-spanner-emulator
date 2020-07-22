@@ -36,7 +36,8 @@ TEST_F(SchemaUpdaterTest, CreationOrder) {
       CREATE TABLE T2 (
         k1 INT64,
         k2 INT64,
-        c1 BYTES(MAX)
+        c1 BYTES(MAX),
+        CONSTRAINT fk2 FOREIGN KEY (k2) REFERENCES T1 (k2)
       ) PRIMARY KEY (k1,k2), INTERLEAVE IN PARENT T1
     )",
                                         R"(
@@ -63,6 +64,7 @@ TEST_F(SchemaUpdaterTest, CreationOrder) {
       t2->FindColumn("k1"),
       t2->FindColumn("k2"),
       t2->FindColumn("c1"),
+      t2->FindForeignKey("fk2"),
       t2->FindKeyColumn("k1"),
       t2->FindKeyColumn("k2"),
       t2,

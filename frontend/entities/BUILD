@@ -135,6 +135,7 @@ cc_library(
         "//backend/transaction:read_only_transaction",
         "//backend/transaction:read_write_transaction",
         "//common:clock",
+        "//common:constants",
         "//common:errors",
         "//frontend/converters:time",
         "//frontend/converters:types",

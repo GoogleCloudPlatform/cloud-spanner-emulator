@@ -49,6 +49,10 @@ constexpr char kResourceInfoBinaryHeader[] = "google.rpc.resourceinfo-bin";
 constexpr char kResourceInfoType[] =
     "type.googleapis.com/google.rpc.ResourceInfo";
 
+// ConstraintError URL used to mark if a transaction encountered a constraint
+// error. This does not correspond with an actual proto.
+constexpr char kConstraintError[] = "google.spanner.ConstraintError";
+
 // Session resource type.
 constexpr char kSessionResourceType[] =
     "type.googleapis.com/google.spanner.v1.Session";
@@ -60,5 +64,8 @@ constexpr char kDatabaseResourceType[] =
 // Instance resource type.
 constexpr char kInstanceResourceType[] =
     "type.googleapis.com/google.spanner.admin.instance.v1.Instance";
+
+// The default timezone used by the query engine.
+constexpr char kDefaultTimeZone[] = "America/Los_Angeles";
 
 #endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_CONSTANTS_H_

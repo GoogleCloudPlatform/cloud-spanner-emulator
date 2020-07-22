@@ -19,6 +19,7 @@
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/options.pb.h"
 #include "absl/time/time.h"
+#include "common/constants.h"
 
 namespace google {
 namespace spanner {
@@ -28,15 +29,19 @@ namespace backend {
 zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions() {
   zetasql::AnalyzerOptions options;
   absl::TimeZone time_zone;
-  absl::LoadTimeZone("America/Los_Angeles", &time_zone);
+  absl::LoadTimeZone(kDefaultTimeZone, &time_zone);
   options.set_default_time_zone(time_zone);
   options.set_error_message_mode(
       zetasql::AnalyzerOptions::ERROR_MESSAGE_MULTI_LINE_WITH_CARET);
 
-  options.set_prune_unused_columns(false);
   options.set_language_options(MakeGoogleSqlLanguageOptions());
 
   options.set_allow_undeclared_parameters(true);
+
+  // Spanner does not support positional parameters, so tell ZetaSQL to always
+  // use named parameter bindings.
+  options.set_parameter_mode(zetasql::PARAMETER_NAMED);
+
   return options;
 }
 
@@ -59,6 +64,21 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::RESOLVED_UPDATE_STMT,
       zetasql::RESOLVED_DELETE_STMT,
   });
+  return options;
+}
+
+static void DisableOption(zetasql::LanguageFeature feature,
+                          zetasql::LanguageOptions* options) {
+  std::set<zetasql::LanguageFeature> features(
+      options->GetEnabledLanguageFeatures());
+  features.erase(feature);
+  options->SetEnabledLanguageFeatures(features);
+}
+
+zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance() {
+  auto options = MakeGoogleSqlLanguageOptions();
+  DisableOption(zetasql::FEATURE_ANALYTIC_FUNCTIONS, &options);
+  DisableOption(zetasql::FEATURE_TABLESAMPLE, &options);
   return options;
 }
 

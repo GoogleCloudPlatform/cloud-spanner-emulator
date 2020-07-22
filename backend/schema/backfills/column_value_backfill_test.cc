@@ -60,9 +60,9 @@ class ColumnValueBackfillTest : public ::testing::Test {
                             ) PRIMARY KEY (int64_col)
                          )"}));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadWriteTransaction> txn,
-        database_->CreateReadWriteTransaction(ReadWriteOptions()));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+                         database_->CreateReadWriteTransaction(
+                             ReadWriteOptions(), RetryState()));
 
     const auto* test_table = txn->schema()->FindTable("TestTable");
     ASSERT_NE(test_table, nullptr);

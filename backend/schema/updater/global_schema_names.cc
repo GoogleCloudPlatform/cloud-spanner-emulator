@@ -71,18 +71,52 @@ zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateForeignKeyName(
   std::string base = absl::StrJoin(
       {absl::string_view{"FK"}, referencing_table_name, referenced_table_name},
       kSeparator);
-  return GenerateSequencedName(base, MakeFingerprint(base));
+  return GenerateSequencedName("Foreign Key", base, MakeFingerprint(base));
 }
 
 std::string GlobalSchemaNames::GenerateSequencedName(
-    absl::string_view base, absl::string_view fingerprint) {
+    absl::string_view type, absl::string_view base,
+    absl::string_view fingerprint) {
   for (std::uint64_t sequence = 1; true; ++sequence) {
     std::string suffix = absl::StrCat(fingerprint, kSeparator, sequence);
     std::string name = MakeName(base, suffix);
     if (names_.insert(name).second) {
+      VLOG(1) << "Generated " << type << " name: " << name;
       return name;
     }
   }
+}
+
+zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateManagedIndexName(
+    absl::string_view table_name,
+    absl::Span<const std::string* const> column_names, bool unique) {
+  ZETASQL_RET_CHECK(!table_name.empty());
+  ZETASQL_RET_CHECK(!column_names.empty());
+  // Index column names.
+  std::string columns = absl::StrJoin(column_names, kSeparator);
+  // Base name = index prefix + table name + column names.
+  std::string base = absl::StrJoin(
+      {absl::string_view("IDX"), table_name, absl::string_view(columns)},
+      kSeparator);
+  // Index codes, possibly empty.
+  std::string codes;
+  if (unique) {
+    absl::StrAppend(&codes, "U");
+  } else {
+    absl::StrAppend(&codes, "N");
+  }
+  absl::string_view codes_separator = codes.empty() ? "" : kSeparator;
+  // Signature = index prefix + table name + columns names + index codes.
+  std::string signature = absl::StrCat(base, codes_separator, codes);
+  // Fingerprint is based on the full, non-truncated signature of the index.
+  std::string fingerprint = MakeFingerprint(signature);
+  // Suffix = index codes + fingerprint.
+  std::string suffix = absl::StrCat(codes, codes_separator, fingerprint);
+  // Full name = truncated(index prefix + table name + column names)
+  //             + index codes + fingerprint.
+  std::string name = MakeName(base, suffix);
+  VLOG(1) << "Generated managed index name: " << name;
+  return name;
 }
 
 absl::Status GlobalSchemaNames::ValidateSchemaName(absl::string_view type,

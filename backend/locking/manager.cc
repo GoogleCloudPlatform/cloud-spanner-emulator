@@ -101,14 +101,13 @@ absl::Status LockManager::MarkCommitted(LockHandle* handle) {
 }
 
 void LockManager::WaitForSafeRead(absl::Time read_time) {
-  // TODO : Wait for read_time to become current if read_time is in
-  // future e.g., in the case of a exact_timestamp bound for read options.
-
-  // Requested read time can be in future for the case of exact timestamp bound
-  // for read options.
-  // https://cloud.google.com/spanner/docs/timestamp-bounds#introduction
-
   absl::MutexLock lock(&mu_);
+
+  // Wait for read time to become current if passed a future timestamp  for the
+  // case of exact timestamp bound for snapshot read.
+  // https://cloud.google.com/spanner/docs/timestamp-bounds#introduction
+  bool f = false;
+  mu_.AwaitWithDeadline(absl::Condition(&f), read_time);
 
   while (pending_commit_timestamp_ < read_time) {
     pending_commit_cvar_.Wait(&mu_);

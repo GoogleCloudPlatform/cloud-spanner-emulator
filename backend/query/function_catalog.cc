@@ -26,8 +26,10 @@
 #include "zetasql/public/function.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/type.h"
+#include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/ascii.h"
+#include "backend/query/analyzer_options.h"
 #include "common/constants.h"
 #include "absl/status/status.h"
 
@@ -68,23 +70,34 @@ std::unique_ptr<zetasql::Function> PendingCommitTimestampFunction() {
 }  // namespace
 
 FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory) {
+  // Add the subset of ZetaSQL built-in functions supported by Cloud Spanner.
+  AddZetaSQLBuiltInFunctions(type_factory);
+  // Add Cloud Spanner specific functions.
+  AddSpannerFunctions();
+  // Add aliases for the functions.
+  AddFunctionAliases();
+}
+
+void FunctionCatalog::AddZetaSQLBuiltInFunctions(
+    zetasql::TypeFactory* type_factory) {
+  // Get all the ZetaSQL built-in functions.
   std::map<std::string, std::unique_ptr<zetasql::Function>> function_map;
-  zetasql::ZetaSQLBuiltinFunctionOptions options{};
-  options.language_options.set_product_mode(zetasql::PRODUCT_EXTERNAL);
-  zetasql::GetZetaSQLFunctions(type_factory, options, &function_map);
-  // Move the data from the temporary function_map into functions_.
+  zetasql::GetZetaSQLFunctions(type_factory, MakeGoogleSqlLanguageOptions(),
+                                   &function_map);
+
+  // Move the data from the temporary function_map into functions_, keeping only
+  // the functions that are available in Cloud Spanner.
   for (auto iter = function_map.begin(); iter != function_map.end();
        iter = function_map.erase(iter)) {
     functions_[iter->first] = std::move(iter->second);
   }
+}
 
+void FunctionCatalog::AddSpannerFunctions() {
   // Add pending commit timestamp function to the list of known functions.
   auto pending_commit_ts_func = PendingCommitTimestampFunction();
   functions_[pending_commit_ts_func->Name()] =
       std::move(pending_commit_ts_func);
-
-  // Add aliases for the functions.
-  AddFunctionAliases();
 }
 
 void FunctionCatalog::GetFunction(const std::string& name,
@@ -102,6 +115,8 @@ void FunctionCatalog::GetFunctions(
 }
 
 void FunctionCatalog::AddFunctionAliases() {
+  std::vector<std::pair<std::string, std::unique_ptr<zetasql::Function>>>
+      aliases;
   for (auto it = functions_.begin(); it != functions_.end(); ++it) {
     const zetasql::Function* original_function = it->second.get();
     if (!original_function->alias_name().empty()) {
@@ -113,8 +128,13 @@ void FunctionCatalog::AddFunctionAliases() {
           original_function->Name(), original_function->GetGroup(),
           original_function->mode(), original_function->signatures(),
           function_options);
-      functions_.insert({alias_name, std::move(alias_function)});
+      aliases.emplace_back(
+          std::make_pair(alias_name, std::move(alias_function)));
     }
+  }
+
+  for (auto& alias : aliases) {
+    functions_.insert(std::move(alias));
   }
 }
 

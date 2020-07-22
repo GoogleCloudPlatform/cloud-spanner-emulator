@@ -22,6 +22,7 @@
 
 #include "zetasql/public/function.h"
 #include "zetasql/public/type.h"
+#include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
 #include "backend/common/case.h"
 
@@ -43,6 +44,10 @@ class FunctionCatalog {
       absl::flat_hash_set<const zetasql::Function*>* output) const;
 
  private:
+  void AddZetaSQLBuiltInFunctions(zetasql::TypeFactory* type_factory);
+
+  void AddSpannerFunctions();
+
   void AddFunctionAliases();
 
   CaseInsensitiveStringMap<std::unique_ptr<zetasql::Function>> functions_;

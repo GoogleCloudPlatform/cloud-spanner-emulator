@@ -107,11 +107,13 @@ cc_library(
         "//backend/schema/parser:ddl_parser",
         "//backend/schema/parser:javacc_ddl_parser",
         "//common:errors",
+        "//common:limits",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
+        "@com_google_protobuf//:protobuf_headers",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )

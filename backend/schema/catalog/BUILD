@@ -22,12 +22,14 @@ cc_library(
     name = "schema",
     srcs = [
         "column.cc",
+        "foreign_key.cc",
         "index.cc",
         "schema.cc",
         "table.cc",
     ],
     hdrs = [
         "column.h",
+        "foreign_key.h",
         "index.h",
         "schema.h",
         "table.h",
@@ -42,6 +44,7 @@ cc_library(
         "//backend/schema/updater:schema_validation_context",
         "//common:errors",
         "//common:limits",
+        "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",

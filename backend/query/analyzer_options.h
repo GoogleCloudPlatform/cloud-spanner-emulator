@@ -28,6 +28,8 @@ zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions();
 
 zetasql::LanguageOptions MakeGoogleSqlLanguageOptions();
 
+zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance();
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

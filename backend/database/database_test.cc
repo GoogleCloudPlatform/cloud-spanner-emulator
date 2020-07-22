@@ -100,8 +100,9 @@ TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
     ) PRIMARY KEY(k1)
   )"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
-                       db->CreateReadWriteTransaction(ReadWriteOptions()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<ReadWriteTransaction> txn,
+      db->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
 
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "T", {"k1", "k2"},
@@ -154,8 +155,9 @@ TEST_F(DatabaseTest, ConcurrentSchemaChangeIsAborted) {
 
   // Initiate a Read inside a read-write transaction to acquire locks.
   std::unique_ptr<RowCursor> row_cursor;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
-                       db->CreateReadWriteTransaction(ReadWriteOptions()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<ReadWriteTransaction> txn,
+      db->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
   ZETASQL_EXPECT_OK(txn->Read(read_column("T", "k1"), &row_cursor));
 
   absl::Status backfill_status;
@@ -195,8 +197,9 @@ TEST_F(DatabaseTest, SchemaChangeLocksSuccesfullyReleased) {
 
   // Can still run transactions as locks would have been released.
   std::unique_ptr<RowCursor> row_cursor;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
-                       db->CreateReadWriteTransaction(ReadWriteOptions()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<ReadWriteTransaction> txn,
+      db->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
   ZETASQL_EXPECT_OK(txn->Read(read_column("T", "k1"), &row_cursor));
   ZETASQL_EXPECT_OK(txn->Commit());
 }

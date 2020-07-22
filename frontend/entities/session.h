@@ -55,6 +55,15 @@ namespace frontend {
 //     https://cloud.google.com/spanner/docs/sessions
 class Session {
  public:
+  // Allows to initialize and activate transaction on the current session.
+  enum class TransactionActivation {
+    // Only initialize a transaction.
+    kInitializeOnly,
+
+    // Initialize and make it the current active transaction on this session.
+    kInitializeAndActivate,
+  };
+
   Session(const std::string& session_uri, const Labels& labels,
           const absl::Time create_time, std::shared_ptr<Database> database)
       : session_uri_(session_uri),
@@ -90,15 +99,17 @@ class Session {
 
   // Creates a new multi-use transaction.
   zetasql_base::StatusOr<std::shared_ptr<Transaction>> CreateMultiUseTransaction(
-      const google::spanner::v1::TransactionOptions& options);
+      const google::spanner::v1::TransactionOptions& options,
+      const TransactionActivation& activation) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Creates a new single-use transaction.
   zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateSingleUseTransaction(
-      const google::spanner::v1::TransactionOptions& options);
+      const google::spanner::v1::TransactionOptions& options)
+      ABSL_LOCKS_EXCLUDED(mu_);
 
   // Finds a transaction by id and sets it as the active transaction.
   zetasql_base::StatusOr<std::shared_ptr<Transaction>> FindAndUseTransaction(
-      const std::string& bytes);
+      const std::string& bytes) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Finds or creates a new transaction and sets it as the active transaction.
   zetasql_base::StatusOr<std::shared_ptr<Transaction>> FindOrInitTransaction(
@@ -108,7 +119,7 @@ class Session {
   // Create a transaction based on the provided options.
   zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateTransaction(
       const spanner_api::TransactionOptions& options,
-      const Transaction::Usage& usage);
+      const Transaction::Usage& usage, const backend::RetryState& retry_state);
 
   // Create a read-only transaction.
   zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateReadOnly(
@@ -118,7 +129,12 @@ class Session {
   // Create a read-write transaction.
   zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateReadWrite(
       const spanner_api::TransactionOptions& options,
-      const Transaction::Usage& usage);
+      const Transaction::Usage& usage, const backend::RetryState& retry_state);
+
+  // Builds the retry state from active transaction.
+  backend::RetryState MakeRetryState(
+      const spanner_api::TransactionOptions& options, bool is_single_use_txn)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // The URI for this session.
   const std::string session_uri_;

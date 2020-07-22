@@ -76,6 +76,12 @@ TEST_F(AnalyzeStatementTest, SelectNonexistentColumnReturnsError) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+TEST_F(AnalyzeStatementTest, SelectNestedCatalogFunctions) {
+  ZETASQL_EXPECT_OK(
+      AnalyzeStatement("SELECT "
+                       "NET.IPV4_TO_INT64(b\"\\x00\\x00\\x00\\x00\")"));
+}
+
 class CatalogTest : public testing::Test {
  public:
   zetasql::EnumerableCatalog& catalog() { return catalog_; }

@@ -64,8 +64,11 @@ absl::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* request,
                    session->FindOrInitTransaction(request->transaction()));
 
   // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> absl::Status {
-    // Cannot read after commit or rollback.
+  return txn->GuardedCall(Transaction::OpType::kRead, [&]() -> absl::Status {
+    // Cannot read after commit, rollback, or non-recoverable error.
+    if (txn->IsInvalid()) {
+      return error::CannotUseTransactionAfterConstraintError();
+    }
     if (txn->IsCommitted() || txn->IsRolledback()) {
       return error::CannotReadOrQueryAfterCommitOrRollback();
     }
@@ -108,8 +111,11 @@ absl::Status StreamingRead(
                    session->FindOrInitTransaction(request->transaction()));
 
   // Wrap all operations on this transaction so they are atomic .
-  return txn->GuardedCall([&]() -> absl::Status {
-    // Cannot read after commit or rollback.
+  return txn->GuardedCall(Transaction::OpType::kRead, [&]() -> absl::Status {
+    // Cannot read after commit, rollback, or non-recoverable error.
+    if (txn->IsInvalid()) {
+      return error::CannotUseTransactionAfterConstraintError();
+    }
     if (txn->IsCommitted() || txn->IsRolledback()) {
       return error::CannotReadOrQueryAfterCommitOrRollback();
     }

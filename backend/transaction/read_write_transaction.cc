@@ -25,6 +25,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
+#include "absl/random/random.h"
 #include "absl/status/status.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
@@ -52,6 +53,8 @@
 #include "backend/transaction/resolve.h"
 #include "backend/transaction/row_cursor.h"
 #include "common/clock.h"
+#include "common/config.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
@@ -125,20 +128,34 @@ zetasql_base::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
   return std::move(write_ops);
 }
 
+bool ShouldAbortOnFirstCommit() {
+  absl::BitGen gen;
+  return config::randomly_abort_txn_on_first_commit() &&
+         absl::uniform_int_distribution<int>(1, 100)(gen) <= 10;
+}
+
+RetryState MakeRetryState(const RetryState& retry_state, Clock* clock) {
+  RetryState state = retry_state;
+  state.priority = (retry_state.priority == 0 ? absl::ToUnixMicros(clock->Now())
+                                              : retry_state.priority);
+  return state;
+}
+
 }  // namespace
 
 ReadWriteTransaction::ReadWriteTransaction(
-    const ReadWriteOptions& options, TransactionID transaction_id, Clock* clock,
-    Storage* storage, LockManager* lock_manager,
-    const VersionedCatalog* const versioned_catalog,
+    const ReadWriteOptions& options, const RetryState& retry_state,
+    TransactionID transaction_id, Clock* clock, Storage* storage,
+    LockManager* lock_manager, const VersionedCatalog* const versioned_catalog,
     ActionManager* action_manager)
     : options_(options),
+      retry_state_(MakeRetryState(retry_state, clock)),
       id_(transaction_id),
       clock_(clock),
       base_storage_(storage),
       versioned_catalog_(versioned_catalog),
-      lock_handle_(lock_manager->CreateHandle(
-          transaction_id, /*priority_=*/absl::ToUnixMicros(clock_->Now()))),
+      lock_handle_(
+          lock_manager->CreateHandle(transaction_id, retry_state_.priority)),
       transaction_store_(absl::make_unique<TransactionStore>(
           base_storage_, lock_handle_.get())),
       action_manager_(action_manager),
@@ -161,7 +178,7 @@ zetasql_base::StatusOr<absl::Time> ReadWriteTransaction::GetCommitTimestamp() {
 
 absl::Status ReadWriteTransaction::Read(const ReadArg& read_arg,
                                         std::unique_ptr<RowCursor>* cursor) {
-  return GuardedCall([&]() -> absl::Status {
+  return GuardedCall(OpType::kRead, [&]() -> absl::Status {
     mu_.AssertHeld();
 
     ZETASQL_ASSIGN_OR_RETURN(const ResolvedReadArg& resolved_read_arg,
@@ -216,12 +233,19 @@ void ReadWriteTransaction::Reset() {
 }
 
 absl::Status ReadWriteTransaction::GuardedCall(
-    const std::function<absl::Status()>& fn) {
+    OpType op, const std::function<absl::Status()>& fn) {
   absl::MutexLock lock(&mu_);
   switch (state_) {
     case State::kRolledback: {
       return error::Internal(absl::StrCat(
           "Invalid call to Rolledback transaction. Transaction: ", id()));
+      break;
+    }
+    case State::kInvalid: {
+      if (op != OpType::kRollback) {
+        return error::Internal(absl::StrCat(
+            "Invalid call to Aborted transaction. Transaction: ", id()));
+      }
       break;
     }
     case State::kCommitted:
@@ -242,21 +266,27 @@ absl::Status ReadWriteTransaction::GuardedCall(
     case State::kActive: {
       if (schema_ != versioned_catalog_->GetLatestSchema()) {
         Reset();
-        abort_retry_count_++;
+        ++retry_state_.abort_retry_count;
         return error::AbortDueToConcurrentSchemaChange(id_);
       }
       break;
     }
   }
 
-  const absl::Status status = fn();
+  absl::Status status = fn();
 
   if (!status.ok()) {
-    // For all errors, reset the transaction state.
-    Reset();
-
     if (status.code() == absl::StatusCode::kAborted) {
-      abort_retry_count_++;
+      // Reset the transaction and release the lock handle. Always reset the
+      // transaction in the case of an abort error. Aborts do not invalidate the
+      // transaction.
+      Reset();
+      ++retry_state_.abort_retry_count;
+    } else if (op != OpType::kRead) {
+      // A failing read should never invalidate a transaction, but constraint
+      // errors on other operation types will invalidate it.
+      Reset();
+      status.SetPayload(kConstraintError, absl::Cord(""));
     }
   }
   return status;
@@ -285,13 +315,12 @@ absl::Status ReadWriteTransaction::ProcessWriteOps(
 }
 
 absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
-  return GuardedCall([&]() -> absl::Status {
+  return GuardedCall(OpType::kWrite, [&]() -> absl::Status {
     mu_.AssertHeld();
 
     for (const MutationOp& mutation_op : mutation.ops()) {
       ZETASQL_ASSIGN_OR_RETURN(ResolvedMutationOp resolved_mutation_op,
                        ResolveMutationOp(mutation_op, schema_, clock_->Now()));
-
       // Process Delete.
       if (resolved_mutation_op.type == MutationOpType::kDelete) {
         ZETASQL_ASSIGN_OR_RETURN(std::vector<WriteOp> write_ops,
@@ -319,8 +348,12 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
 }
 
 absl::Status ReadWriteTransaction::Commit() {
-  return GuardedCall([&]() -> absl::Status {
+  return GuardedCall(OpType::kCommit, [&]() -> absl::Status {
     mu_.AssertHeld();
+
+    if (retry_state_.abort_retry_count == 0 && ShouldAbortOnFirstCommit()) {
+      return error::AbortReadWriteTransactionOnFirstCommit(id_);
+    }
 
     // Pick a commit timestamp.
     ZETASQL_ASSIGN_OR_RETURN(commit_timestamp_, lock_handle_->ReserveCommitTimestamp());
@@ -333,7 +366,7 @@ absl::Status ReadWriteTransaction::Commit() {
       return flush_status;
     }
 
-    // Marks the transaction as committed.
+    // Mark the transaction as committed.
     state_ = State::kCommitted;
 
     // Unlock all locks.
@@ -344,14 +377,30 @@ absl::Status ReadWriteTransaction::Commit() {
 }
 
 absl::Status ReadWriteTransaction::Rollback() {
-  return GuardedCall([&]() -> absl::Status {
+  return GuardedCall(OpType::kRollback, [&]() -> absl::Status {
     mu_.AssertHeld();
 
-    // Reset the transaction state.
+    // Reset the transaction state. This is done to release the locks. The
+    // transaction cannot be reused.
     Reset();
 
     // Mark the transaction as rolledback.
     state_ = State::kRolledback;
+
+    return absl::OkStatus();
+  });
+}
+
+absl::Status ReadWriteTransaction::Invalidate() {
+  return GuardedCall(OpType::kInvalidate, [&]() -> absl::Status {
+    mu_.AssertHeld();
+
+    // Reset the transaction state. This is done to release the locks. The
+    // transaction cannot be reused.
+    Reset();
+
+    // Mark the transaction as invalidated.
+    state_ = State::kInvalid;
 
     return absl::OkStatus();
   });

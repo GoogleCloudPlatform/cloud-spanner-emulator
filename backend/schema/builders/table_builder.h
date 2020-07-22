@@ -24,6 +24,7 @@
 #include "absl/memory/memory.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/updater/schema_validation_context.h"
@@ -80,6 +81,16 @@ class Table::Builder {
     return *this;
   }
 
+  Builder& add_foreign_key(const ForeignKey* foreign_key) {
+    instance_->foreign_keys_.push_back(foreign_key);
+    return *this;
+  }
+
+  Builder& add_referencing_foreign_key(const ForeignKey* foreign_key) {
+    instance_->referencing_foreign_keys_.push_back(foreign_key);
+    return *this;
+  }
+
  private:
   std::unique_ptr<Table> instance_;
 };
@@ -108,6 +119,16 @@ class Table::Editor {
 
   Editor& set_on_delete(OnDeleteAction action) {
     instance_->on_delete_action_ = action;
+    return *this;
+  }
+
+  Editor& add_foreign_key(const ForeignKey* foreign_key) {
+    instance_->foreign_keys_.push_back(foreign_key);
+    return *this;
+  }
+
+  Editor& add_referencing_foreign_key(const ForeignKey* foreign_key) {
+    instance_->referencing_foreign_keys_.push_back(foreign_key);
     return *this;
   }
 

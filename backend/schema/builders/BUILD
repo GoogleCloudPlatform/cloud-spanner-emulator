@@ -22,6 +22,7 @@ cc_library(
     name = "schema_builders",
     hdrs = [
         "column_builder.h",
+        "foreign_key_builder.h",
         "index_builder.h",
         "table_builder.h",
     ],

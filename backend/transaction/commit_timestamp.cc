@@ -16,6 +16,9 @@
 
 #include "backend/transaction/commit_timestamp.h"
 
+#include <queue>
+
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "common/constants.h"
 #include "common/errors.h"
@@ -26,6 +29,16 @@ namespace emulator {
 namespace backend {
 
 namespace {
+
+bool IsPendingCommitTimestampStringValue(zetasql::Value column_value) {
+  return (!column_value.is_null() && column_value.type()->IsString() &&
+          column_value.string_value() == kCommitTimestampIdentifier);
+}
+
+bool IsPendingCommitTimestampSentinelValue(zetasql::Value column_value) {
+  return (!column_value.is_null() && column_value.type()->IsTimestamp() &&
+          column_value.ToTime() == kCommitTimestampValueSentinel);
+}
 
 absl::Status ValidateCommitTimestampKeyForDeleteOp(const Table* table,
                                                    const Key& key,
@@ -41,16 +54,60 @@ absl::Status ValidateCommitTimestampKeyForDeleteOp(const Table* table,
   return absl::OkStatus();
 }
 
+absl::Status ValidateCommitTimestampEnabledInHeirarchy(const Column* column) {
+  const Table* table = column->table();
+
+  // Validate that each of the parent table which contains this column as part
+  // of a primary key has commit timestamp enabled.
+  while (table->parent() != nullptr) {
+    table = table->parent();
+    const KeyColumn* key_column = table->FindKeyColumn(column->Name());
+    if (key_column == nullptr) {
+      break;
+    }
+    if (!key_column->column()->allows_commit_timestamp()) {
+      return error::CommitTimestampOptionNotEnabled(column->FullName());
+    }
+  }
+
+  // If the given column is a key_column, check that all the children which
+  // must contain the same key as part of their primary keys, also have
+  // commit timestamp enabled. Perform the validation in a breadth first order.
+  std::queue<const Table*> children_tables;
+  children_tables.push(table);
+  while (!children_tables.empty()) {
+    const Table* child_table = children_tables.front();
+    children_tables.pop();
+
+    const KeyColumn* key_column = child_table->FindKeyColumn(column->Name());
+    if (key_column == nullptr) {
+      // This shouldn't really happen, but would be caught by later action
+      // framework.
+      continue;
+    }
+    if (!key_column->column()->allows_commit_timestamp()) {
+      return error::CommitTimestampOptionNotEnabled(column->FullName());
+    }
+    for (const Table* child : child_table->children()) {
+      children_tables.push(child);
+    }
+  }
+  return absl::OkStatus();
+}
+
 zetasql_base::StatusOr<zetasql::Value> MaybeSetCommitTimestampSentinel(
     const Column* column, zetasql::Value column_value) {
-  if (column->GetType()->IsTimestamp() && column->allows_commit_timestamp()) {
-    if (!column_value.is_null() && column_value.type()->IsString() &&
-        column_value.string_value() == kCommitTimestampIdentifier) {
+  if (!column->GetType()->IsTimestamp()) return column_value;
+
+  if (column->allows_commit_timestamp()) {
+    if (IsPendingCommitTimestampStringValue(column_value)) {
+      ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampEnabledInHeirarchy(column));
       return zetasql::values::Timestamp(kCommitTimestampValueSentinel);
-    } else if (!column_value.is_null() && column_value.type()->IsTimestamp() &&
-               column_value.ToTime() == kCommitTimestampValueSentinel) {
+    } else if (IsPendingCommitTimestampSentinelValue(column_value)) {
       return error::CommitTimestampInFuture(column_value.ToTime());
     }
+  } else if (IsPendingCommitTimestampStringValue(column_value)) {
+    return error::CommitTimestampOptionNotEnabled(column->FullName());
   }
   return column_value;
 }
@@ -64,19 +121,6 @@ zetasql_base::StatusOr<Key> MaybeSetCommitTimestampSentinel(
     key.SetColumnValue(i, value);
   }
   return key;
-}
-
-// Returns true if the given column value contains sentinel timestamp value
-// and column allows commit timestamp to be set automatically. Signals that
-// value should be replaced with commit timestamp of transaction during flush.
-bool IsPendingCommitTimestamp(const Column* column,
-                              const zetasql::Value& column_value) {
-  if (column->allows_commit_timestamp() && !column_value.is_null() &&
-      column_value.type()->IsTimestamp() &&
-      column_value.ToTime() == kCommitTimestampValueSentinel) {
-    return true;
-  }
-  return false;
 }
 
 }  // namespace
@@ -137,26 +181,23 @@ zetasql_base::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
                   limit_key);
 }
 
-bool HasPendingCommitTimestampInReadResult(
-    const Table* table, absl::Span<const Column* const> columns,
-    const std::vector<FixedRowStorageIterator::Row>& rows) {
-  absl::Span<const KeyColumn* const> primary_key = table->primary_key();
-  for (const auto& [key, values] : rows) {
-    // Check that primary key of the row being read does not contain pending
-    // commit timestamp value(s).
-    for (int i = 0; i < key.NumColumns(); i++) {
-      if (IsPendingCommitTimestamp(primary_key[i]->column(),
-                                   key.ColumnValue(i))) {
-        return true;
-      }
-    }
+// Returns true if the given column value contains sentinel timestamp value
+// and column allows commit timestamp to be set automatically. Signals that
+// value should be replaced with commit timestamp of transaction during flush.
+bool IsPendingCommitTimestamp(const Column* column,
+                              const zetasql::Value& column_value) {
+  if (column->allows_commit_timestamp() &&
+      IsPendingCommitTimestampSentinelValue(column_value)) {
+    return true;
+  }
+  return false;
+}
 
-    // Check that non-primary-key columns being explicitly read do not contain
-    // pending commit timestamp value(s).
-    for (int i = 0; i < columns.size(); i++) {
-      if (IsPendingCommitTimestamp(columns[i], values[i])) {
-        return true;
-      }
+bool HasPendingCommitTimestampInKey(const Table* table, const Key& key) {
+  for (int i = 0; i < key.NumColumns(); i++) {
+    if (IsPendingCommitTimestamp(table->primary_key()[i]->column(),
+                                 key.ColumnValue(i))) {
+      return true;
     }
   }
   return false;

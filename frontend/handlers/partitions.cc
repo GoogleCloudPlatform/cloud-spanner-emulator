@@ -19,8 +19,11 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "google/spanner/v1/type.pb.h"
+#include "backend/query/query_engine.h"
+#include "common/config.h"
 #include "common/errors.h"
 #include "frontend/converters/partition.h"
+#include "frontend/converters/query.h"
 #include "frontend/converters/reads.h"
 #include "frontend/entities/session.h"
 #include "frontend/proto/partition_token.pb.h"
@@ -185,6 +188,16 @@ absl::Status PartitionQuery(RequestContext* ctx,
   if (ShouldReturnTransaction(request->transaction())) {
     ZETASQL_ASSIGN_OR_RETURN(*response->mutable_transaction(), txn->ToProto());
   }
+
+  // check query is partitionable.
+  ZETASQL_ASSIGN_OR_RETURN(
+      backend::Query query,
+      QueryFromProto(request->sql(), request->params(), request->param_types(),
+                     txn->query_engine()->type_factory()));
+  ZETASQL_RETURN_IF_ERROR(txn->query_engine()->IsPartitionable(
+      query,
+      backend::QueryContext{
+          .schema = txn->schema(), .reader = nullptr, .writer = nullptr}));
 
   // Add two partitions to result set, with first partition being empty.
   ZETASQL_ASSIGN_OR_RETURN(auto empty_partition_token,

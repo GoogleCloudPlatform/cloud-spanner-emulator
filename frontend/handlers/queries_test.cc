@@ -21,6 +21,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_replace.h"
@@ -121,6 +122,7 @@ TEST_F(QueryApiTest, ExecuteBatchDml) {
                                 metadata { row_type {} }
                                 stats { row_count_exact: 1 }
                               }
+                              status { code: 0 }
                             )"));
 }
 

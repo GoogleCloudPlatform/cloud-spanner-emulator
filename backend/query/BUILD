@@ -19,6 +19,11 @@ package(default_visibility = ["//:__subpackages__"])
 licenses(["unencumbered"])
 
 cc_library(
+    name = "query_engine_options",
+    hdrs = ["query_engine_options.h"],
+)
+
+cc_library(
     name = "query_engine",
     srcs = ["query_engine.cc"],
     hdrs = ["query_engine.h"],
@@ -27,18 +32,25 @@ cc_library(
         ":catalog",
         ":function_catalog",
         ":hint_rewriter",
-        ":hint_validator",
+        ":index_hint_validator",
+        ":partitionability_validator",
+        ":partitioned_dml_validator",
+        ":query_engine_options",
+        ":query_validator",
         "//backend/access:read",
         "//backend/access:write",
         "//backend/common:case",
         "//backend/datamodel:value",
+        "//backend/query/feature_filter:query_size_limits_checker",
         "//backend/schema/catalog:schema",
         "//common:constants",
         "//common:errors",
+        "//common:limits",
         "//frontend/converters:values",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/base:statusor",
@@ -75,6 +87,7 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:type",
@@ -87,6 +100,7 @@ cc_library(
     srcs = ["analyzer_options.cc"],
     hdrs = ["analyzer_options.h"],
     deps = [
+        "//common:constants",
         "@com_google_absl//absl/time",
         "@com_google_zetasql//zetasql/public:analyzer",
         "@com_google_zetasql//zetasql/public:options_cc_proto",
@@ -94,29 +108,38 @@ cc_library(
 )
 
 cc_library(
-    name = "hint_validator",
-    srcs = ["hint_validator.cc"],
-    hdrs = ["hint_validator.h"],
+    name = "query_validator",
+    srcs = ["query_validator.cc"],
+    hdrs = ["query_validator.h"],
     deps = [
+        ":analyzer_options",
+        ":query_engine_options",
         "//backend/common:case",
+        "//backend/query/feature_filter:gsql_supported_functions",
+        "//backend/query/feature_filter:sql_feature_filter",
+        "//backend/query/feature_filter:sql_features_view",
         "//backend/schema/catalog:schema",
         "//common:errors",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/public:analyzer",
+        "@com_google_zetasql//zetasql/public:language_options",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/resolved_ast",
+        "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
     ],
 )
 
 cc_test(
-    name = "hint_validator_test",
+    name = "query_validator_test",
     srcs = [
-        "hint_validator_test.cc",
+        "query_validator_test.cc",
     ],
     deps = [
-        ":hint_validator",
+        ":query_engine_options",
+        ":query_validator",
         ":queryable_table",
         "//backend/schema/catalog:schema",
         "//tests/common:proto_matchers",
@@ -281,6 +304,7 @@ cc_library(
         "function_catalog.h",
     ],
     deps = [
+        ":analyzer_options",
         "//backend/common:case",
         "//common:constants",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -290,5 +314,110 @@ cc_library(
         "@com_google_zetasql//zetasql/public:builtin_function_options",
         "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:type",
+    ],
+)
+
+cc_library(
+    name = "partitionability_validator",
+    srcs = ["partitionability_validator.cc"],
+    hdrs = ["partitionability_validator.h"],
+    deps = [
+        "//backend/schema/catalog:schema",
+        "//common:errors",
+        "@com_google_absl//absl/status",
+        "@com_google_zetasql//zetasql/resolved_ast",
+        "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "partitionability_validator_test",
+    srcs = [
+        "partitionability_validator_test.cc",
+    ],
+    deps = [
+        ":partitionability_validator",
+        ":query_engine",
+        ":queryable_table",
+        "//backend/schema/catalog:schema",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_schema_constructor",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:type_cc_proto",
+        "@com_google_zetasql//zetasql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "index_hint_validator",
+    srcs = ["index_hint_validator.cc"],
+    hdrs = ["index_hint_validator.h"],
+    deps = [
+        ":queryable_table",
+        "//backend/schema/catalog:schema",
+        "//common:errors",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/resolved_ast",
+        "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "index_hint_validator_test",
+    srcs = ["index_hint_validator_test.cc"],
+    deps = [
+        ":analyzer_options",
+        ":catalog",
+        ":function_catalog",
+        ":index_hint_validator",
+        ":queryable_table",
+        "//backend/schema/catalog:schema",
+        "//common:errors",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_schema_constructor",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/memory",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:analyzer",
+    ],
+)
+
+cc_library(
+    name = "partitioned_dml_validator",
+    hdrs = ["partitioned_dml_validator.h"],
+    deps = [
+        "//common:errors",
+        "@com_google_absl//absl/status",
+        "@com_google_zetasql//zetasql/resolved_ast",
+        "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "partitioned_dml_validator_test",
+    srcs = ["partitioned_dml_validator_test.cc"],
+    deps = [
+        ":analyzer_options",
+        ":catalog",
+        ":partitioned_dml_validator",
+        ":queryable_table",
+        "//common:errors",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_schema_constructor",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:analyzer",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:type_cc_proto",
+        "@com_google_zetasql//zetasql/resolved_ast",
     ],
 )

@@ -135,8 +135,11 @@ cc_library(
     name = "partitions",
     srcs = ["partitions.cc"],
     deps = [
+        "//backend/query:query_engine",
+        "//common:config",
         "//common:errors",
         "//frontend/converters:partition",
+        "//frontend/converters:query",
         "//frontend/converters:reads",
         "//frontend/entities:session",
         "//frontend/proto:partition_token_cc_proto",
@@ -197,6 +200,7 @@ cc_library(
     deps = [
         "//backend/access:read",
         "//backend/query:query_engine",
+        "//common:constants",
         "//common:errors",
         "//frontend/common:protos",
         "//frontend/converters:partition",
@@ -229,6 +233,7 @@ cc_test(
         "//tests/common:proto_matchers",
         "//tests/common:test_env",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",

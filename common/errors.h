@@ -124,12 +124,16 @@ absl::Status PartitionReadDoesNotSupportSingleUseTransaction();
 absl::Status PartitionReadNeedsReadOnlyTxn();
 absl::Status CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
 absl::Status CannotReusePartitionedDmlTransaction();
+absl::Status PartitionedDMLOnlySupportsSimpleQuery();
+absl::Status NoInsertForPartitionedDML();
 absl::Status InvalidOperationUsingPartitionedDmlTransaction();
 absl::Status CannotCommitAfterRollback();
 absl::Status CannotRollbackAfterCommit();
 absl::Status CannotReadOrQueryAfterCommitOrRollback();
+absl::Status CannotUseTransactionAfterConstraintError();
 absl::Status ReadTimestampPastVersionGCLimit(absl::Time timestamp);
 absl::Status AbortDueToConcurrentSchemaChange(backend::TransactionID id);
+absl::Status AbortReadWriteTransactionOnFirstCommit(backend::TransactionID id);
 
 // DDL errors.
 absl::Status EmptyDDLStatement();
@@ -171,6 +175,10 @@ absl::Status CannotChangeKeyColumnWithChildTables(
     absl::string_view column_name);
 absl::Status InvalidDropKeyColumn(absl::string_view colum_name,
                                   absl::string_view table_name);
+absl::Status TooManyTablesPerDatabase(absl::string_view table_name,
+                                      int64_t limit);
+absl::Status TooManyIndicesPerDatabase(absl::string_view index_name,
+                                       int64_t limit);
 absl::Status TooManyColumns(absl::string_view object_type,
                             absl::string_view object_name, int64_t limit);
 absl::Status TooManyKeys(absl::string_view object_type,
@@ -262,14 +270,17 @@ absl::Status MutationColumnAndValueSizeMismatch(int columns_size,
                                                 int values_size);
 absl::Status SchemaObjectAlreadyExists(absl::string_view schema_object,
                                        absl::string_view name);
+absl::Status ConstraintNotFound(absl::string_view constraint_name,
+                                absl::string_view table_name);
 
 // Commit timestamp errors.
 absl::Status CommitTimestampInFuture(absl::Time timestamp);
-absl::Status CannotReadPendingCommitTimestamp(absl::string_view table_name);
+absl::Status CannotReadPendingCommitTimestamp(absl::string_view entity_string);
 absl::Status CommitTimestampNotInFuture(absl::string_view column,
                                         absl::string_view key,
                                         absl::Time timestamp);
 absl::Status PendingCommitTimestampAllOrNone(int64_t index_num);
+absl::Status CommitTimestampOptionNotEnabled(absl::string_view column_name);
 
 // Time errors.
 absl::Status InvalidTime(absl::string_view msg);
@@ -330,11 +341,56 @@ absl::Status ColumnNotFoundInIndex(absl::string_view index,
                                    absl::string_view indexed_table,
                                    absl::string_view column);
 
+// Foreign key errors.
+absl::Status ForeignKeyColumnsRequired(absl::string_view table,
+                                       absl::string_view foreign_key);
+absl::Status ForeignKeyColumnCountMismatch(absl::string_view referencing_table,
+                                           absl::string_view referenced_table,
+                                           absl::string_view foreign_key);
+absl::Status ForeignKeyDuplicateColumn(absl::string_view column,
+                                       absl::string_view table,
+                                       absl::string_view foreign_key);
+absl::Status ForeignKeyColumnNotFound(absl::string_view column,
+                                      absl::string_view table,
+                                      absl::string_view foreign_key);
+absl::Status ForeignKeyColumnTypeUnsupported(absl::string_view column,
+                                             absl::string_view table,
+                                             absl::string_view foreign_key);
+absl::Status ForeignKeyCommitTimestampColumnUnsupported(
+    absl::string_view column, absl::string_view table,
+    absl::string_view foreign_key);
+absl::Status ForeignKeyColumnTypeMismatch(absl::string_view referencing_column,
+                                          absl::string_view referencing_table,
+                                          absl::string_view referenced_column,
+                                          absl::string_view referenced_table,
+                                          absl::string_view foreign_key);
+absl::Status ForeignKeyReferencedTableDropNotAllowed(
+    absl::string_view table, absl::string_view foreign_keys);
+absl::Status ForeignKeyColumnDropNotAllowed(absl::string_view column,
+                                            absl::string_view table,
+                                            absl::string_view foreign_keys);
+absl::Status ForeignKeyColumnNullabilityChangeNotAllowed(
+    absl::string_view column, absl::string_view table,
+    absl::string_view foreign_keys);
+absl::Status ForeignKeyColumnTypeChangeNotAllowed(
+    absl::string_view column, absl::string_view table,
+    absl::string_view foreign_keys);
+absl::Status ForeignKeyColumnSetCommitTimestampOptionNotAllowed(
+    absl::string_view column, absl::string_view table,
+    absl::string_view foreign_keys);
+
 // Query errors.
 absl::Status UnableToInferUndeclaredParameter(absl::string_view parameter_name);
 absl::Status InvalidHint(absl::string_view hint_string);
+absl::Status InvalidEmulatorHint(absl::string_view hint_string);
 absl::Status InvalidHintValue(absl::string_view hint_string,
                               absl::string_view value_string);
+absl::Status InvalidEmulatorHintValue(absl::string_view hint_string,
+                                      absl::string_view value_string);
+absl::Status QueryHintIndexNotFound(absl::string_view table_name,
+                                    absl::string_view index_name);
+absl::Status NullFilteredIndexUnusable(absl::string_view index_name);
+absl::Status NonPartitionableQuery(absl::string_view reason);
 absl::Status EmulatorDoesNotSupportQueryPlans();
 absl::Status InvalidStatementHintValue(absl::string_view hint_string,
                                        absl::string_view hint_value);
@@ -345,8 +401,36 @@ absl::Status InvalidBatchDmlRequest();
 absl::Status BatchDmlOnlySupportsReadWriteTransaction();
 absl::Status ExecuteBatchDmlOnlySupportsDmlStatements(int index,
                                                       absl::string_view query);
+// Unsupported query shape errors.
 absl::Status ReadOnlyTransactionDoesNotSupportDml(
     absl::string_view transaction_type);
+absl::Status UnsupportedFeatureSafe(absl::string_view feature_type,
+                                    absl::string_view info_message);
+absl::Status UnsupportedFunction(absl::string_view function_name);
+absl::Status UnsupportedHavingModifierWithDistinct();
+absl::Status UnsupportedIgnoreNullsInAggregateFunctions();
+absl::Status NullifStructNotSupported();
+absl::Status ComparisonNotSupported(int arg_num,
+                                    absl::string_view function_name);
+absl::Status StructComparisonNotSupported(absl::string_view function_name);
+absl::Status PendingCommitTimestampDmlValueOnly();
+absl::Status NoFeatureSupportDifferentTypeArrayCasts(
+    absl::string_view from_type, absl::string_view to_type);
+
+// Query size limits errors.
+absl::Status TooManyFunctions(int max_function_nodes);
+absl::Status TooManyNestedBooleanPredicates(int max_nested_function_nodes);
+absl::Status TooManyJoins(int max_Joins);
+absl::Status TooManyNestedSubqueries(int max_nested_subquery_expressions);
+absl::Status TooManyNestedSubselects(int max_nested_subselects);
+absl::Status TooManyNestedAggregates(int max_nested_group_by);
+absl::Status TooManyParameters(int max_parameters);
+absl::Status TooManyAggregates(int max_columns_in_group_by);
+absl::Status TooManyUnions(int max_unions_in_query);
+absl::Status TooManySubqueryChildren(int max_subquery_expression_children);
+absl::Status TooManyStructFields(int max_struct_fields);
+absl::Status TooManyNestedStructs(int max_nested_struct_depth);
+absl::Status QueryStringTooLong(int query_length, int max_length);
 
 // Partition Read errors.
 absl::Status InvalidBytesPerBatch(absl::string_view message_name);

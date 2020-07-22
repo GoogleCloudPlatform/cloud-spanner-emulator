@@ -162,7 +162,7 @@ TEST_F(PartitionedDmlTest, CannotInsertUsingPartitionedDml) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(PartitionedDmlTest, DISABLED_InvalidPartitionedDmlStatement) {
+TEST_F(PartitionedDmlTest, PartitionedDMLOnlySupportsSimpleQuery) {
   EXPECT_THAT(ExecutePartitionedDml(SqlStatement(
                   "UPDATE Users SET Name = 'foo' "
                   "WHERE ID = (SELECT ID FROM Users WHERE Name = 'Levin')")),

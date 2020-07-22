@@ -21,6 +21,7 @@
 #include <string>
 
 #include "zetasql/public/value.h"
+#include "absl/status/status.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "absl/types/variant.h"
@@ -32,6 +33,7 @@
 #include "backend/query/query_engine.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_write_transaction.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "frontend/converters/time.h"
 #include "frontend/converters/types.h"
@@ -68,13 +70,6 @@ Transaction::Type TypeFromTransactionOptions(
       return Transaction::Type::kReadOnly;
     }
   }
-}
-
-absl::Status ValidatePartitionedDmlQuery(const backend::Query& query) {
-  if (!backend::IsDMLQuery(query.sql) || backend::IsDMLInsertQuery(query.sql)) {
-    return error::InvalidOperationUsingPartitionedDmlTransaction();
-  }
-  return absl::OkStatus();
 }
 
 }  // namespace
@@ -139,6 +134,16 @@ bool Transaction::IsRolledback() const {
   return HasState(backend::ReadWriteTransaction::State::kRolledback);
 }
 
+bool Transaction::IsInvalid() const {
+  mu_.AssertHeld();
+  return HasState(backend::ReadWriteTransaction::State::kInvalid);
+}
+
+bool Transaction::IsAborted() const {
+  absl::MutexLock lock(&mu_);
+  return type_ == kReadWrite && status_.code() == absl::StatusCode::kAborted;
+}
+
 bool Transaction::IsCommitted() const {
   mu_.AssertHeld();
   return HasState(backend::ReadWriteTransaction::State::kCommitted);
@@ -201,14 +206,12 @@ zetasql_base::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
                                        .writer = read_write()});
     }
     case kPartitionedDml: {
-      ZETASQL_RETURN_IF_ERROR(ValidatePartitionedDmlQuery(query));
+      auto context = backend::QueryContext{
+          .schema = schema(), .reader = read_write(), .writer = read_write()};
+      ZETASQL_RETURN_IF_ERROR(query_engine_->IsValidPartitionedDML(query, context));
       // PartitionedDml will auto-commit transactions and cannot be reused.
-      ZETASQL_ASSIGN_OR_RETURN(
-          backend::QueryResult result,
-          query_engine_->ExecuteSql(
-              query, backend::QueryContext{.schema = schema(),
-                                           .reader = read_write(),
-                                           .writer = read_write()}));
+      ZETASQL_ASSIGN_OR_RETURN(backend::QueryResult result,
+                       query_engine_->ExecuteSql(query, context));
       ZETASQL_RETURN_IF_ERROR(read_write()->Commit());
       return result;
     }
@@ -229,6 +232,14 @@ absl::Status Transaction::Commit() {
     return read_write()->Commit();
   }
   return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
+}
+
+absl::Status Transaction::Invalidate() {
+  mu_.AssertHeld();
+  if (type_ == kReadWrite) {
+    return read_write()->Invalidate();
+  }
+  return error::Internal("Read only transaction cannot be invalidated.");
 }
 
 absl::Status Transaction::Rollback() {
@@ -254,18 +265,33 @@ zetasql_base::StatusOr<absl::Time> Transaction::GetCommitTimestamp() const {
   return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
 }
 
-absl::Status Transaction::GuardedCall(const std::function<absl::Status()>& fn) {
+absl::Status Transaction::GuardedCall(OpType op,
+                                      const std::function<absl::Status()>& fn) {
   absl::MutexLock lock(&mu_);
 
-  // Can not reuse a transaction that previously encountered an error.
-  // Replay the last error status for the given transaction.
-  ZETASQL_RETURN_IF_ERROR(status_);
+  // Cannot reuse a transaction that previously encountered an error.
+  // Replay the last error status for the given transaction. Status will not be
+  // replayed for rollback operations.
+  if (!status_.ok() && op != OpType::kRollback) {
+    return status_;
+  }
 
-  const absl::Status status = fn();
-  if (!status.ok() && status.code() != absl::StatusCode::kAborted) {
+  // We only want to record the status for non-read operations, since read-only
+  // operations can never cause the transaction to be aborted and never repeat
+  // status errors. Non-DML SQL statements are read-only.
+  const absl::Status call_status = fn();
+  absl::Status status(call_status.code(), call_status.message());
+
+  if (!status.ok()) {
+    const auto constraint_error = call_status.GetPayload(kConstraintError);
+    if (op == OpType::kCommit || constraint_error.has_value() ||
+        status.code() == absl::StatusCode::kAborted) {
+      status_ = status;
+      Invalidate().IgnoreError();
+    }
+  }
+  if (op == OpType::kRollback) {
     status_ = status;
-    // For all errors (except ABORT), reset the transaction state.
-    Rollback().IgnoreError();
   }
   return status;
 }

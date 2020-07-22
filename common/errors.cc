@@ -407,7 +407,11 @@ absl::Status AbortConcurrentTransaction(int64_t requestor_id, int64_t holder_id)
       absl::StatusCode::kAborted,
       absl::StrCat("Transaction ", requestor_id,
                    " aborted due to active transaction ", holder_id,
-                   ". The emulator only supports one transaction at a time."));
+                   ". The emulator only supports one transaction at a time. "
+                   "Some best practices to avoid ABORT errors in Cloud Spanner "
+                   "service are:\n1. Avoid use of nested transactions.\n2. "
+                   "Explicitly Rollback failed transactions.\n3. All "
+                   "transactions should be running inside of retry loops.\n"));
 }
 
 absl::Status TransactionNotFound(backend::TransactionID id) {
@@ -496,6 +500,17 @@ absl::Status CannotReusePartitionedDmlTransaction() {
       "PartitionedDml transaction may only be used to execute one statement");
 }
 
+absl::Status PartitionedDMLOnlySupportsSimpleQuery() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "Partitioned DML only supports fully partitionable statements.");
+}
+
+absl::Status NoInsertForPartitionedDML() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "INSERT is not supported for Partitioned DML");
+}
+
 absl::Status InvalidOperationUsingPartitionedDmlTransaction() {
   return absl::Status(absl::StatusCode::kInvalidArgument,
                       "PartitionedDml Transactions may only be used to execute "
@@ -521,11 +536,28 @@ absl::Status CannotReadOrQueryAfterCommitOrRollback() {
       "committed or rolledback.");
 }
 
+absl::Status CannotUseTransactionAfterConstraintError() {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      "Cannot use a transaction after it has been invalidated "
+                      "due to a constraint error.");
+}
+
 absl::Status AbortDueToConcurrentSchemaChange(backend::TransactionID id) {
   return absl::Status(
       absl::StatusCode::kAborted,
       absl::StrCat("Transaction: ", id,
                    " aborted due to concurrent schema change."));
+}
+
+absl::Status AbortReadWriteTransactionOnFirstCommit(backend::TransactionID id) {
+  return absl::Status(
+      absl::StatusCode::kAborted,
+      absl::StrCat(
+          "Transaction: ", id,
+          " was aborted in the emulator to mimic production behavior that can "
+          "ABORT transactions due to a variety of reasons. All transactions "
+          "should be running inside of retry loops, and should "
+          "tolerate aborts (which will happen in production occasionally)."));
 }
 
 absl::Status ReadTimestampPastVersionGCLimit(absl::Time timestamp) {
@@ -545,15 +577,18 @@ absl::Status EmptyDDLStatement() {
 absl::Status DDLStatementWithErrors(absl::string_view ddl_string,
                                     const std::vector<std::string>& errors) {
   if (errors.empty()) return absl::OkStatus();
+  // Avoid submits errors due to trailing spaces.
+  std::string separator = ddl_string.at(0) == '\n' ? "" : " ";
   if (errors.size() == 1) {
     return absl::Status(
         absl::StatusCode::kInvalidArgument,
-        absl::StrCat("DDL statement ", ddl_string, " has error ", errors[0]));
+        absl::StrCat("Error parsing Spanner DDL statement:", separator,
+                     ddl_string, " has error ", errors[0]));
   }
-  return absl::Status(
-      absl::StatusCode::kInvalidArgument,
-      absl::StrCat("DDL statement ", ddl_string, " has errors:\n-",
-                   absl::StrJoin(errors, "\n-")));
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::StrCat("Errors parsing Spanner DDL statement:",
+                                   separator, ddl_string, " has errors:\n-",
+                                   absl::StrJoin(errors, "\n-")));
 }
 
 // Schema errors.
@@ -697,6 +732,22 @@ absl::Status TooManyIndicesPerTable(absl::string_view index_name,
       absl::Substitute("Cannot add index $0 to table $1: too many indices "
                        "(limit $2 per table).",
                        index_name, table_name, limit));
+}
+
+absl::Status TooManyTablesPerDatabase(absl::string_view table_name,
+                                      int64_t limit) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Cannot add Table $0 : too many tables "
+                                       "(limit $1 per database).",
+                                       table_name, limit));
+}
+
+absl::Status TooManyIndicesPerDatabase(absl::string_view index_name,
+                                       int64_t limit) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Cannot add Index $0 : too many indexes "
+                                       "(limit $1 per database).",
+                                       index_name, limit));
 }
 
 absl::Status DeepNesting(absl::string_view object_type,
@@ -988,6 +1039,13 @@ absl::Status SchemaObjectAlreadyExists(absl::string_view schema_object,
                       absl::Substitute("Duplicate name in schema: $0.", name));
 }
 
+absl::Status ConstraintNotFound(absl::string_view constraint_name,
+                                absl::string_view table_name) {
+  return absl::Status(absl::StatusCode::kNotFound,
+                      absl::Substitute("$0 is not a constraint in $1",
+                                       constraint_name, table_name));
+}
+
 absl::Status CannotChangeColumnType(absl::string_view column_name,
                                     absl::string_view old_type,
                                     absl::string_view new_type) {
@@ -1024,12 +1082,12 @@ absl::Status CommitTimestampNotInFuture(absl::string_view column,
           column, key, absl::FormatTime(timestamp)));
 }
 
-absl::Status CannotReadPendingCommitTimestamp(absl::string_view table_name) {
+absl::Status CannotReadPendingCommitTimestamp(absl::string_view entity_string) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
       absl::Substitute("$0 cannot be accessed because it, or its "
                        "associated index, has a pending CommitTimestamp",
-                       table_name));
+                       entity_string));
 }
 
 absl::Status PendingCommitTimestampAllOrNone(int64_t index_num) {
@@ -1039,6 +1097,17 @@ absl::Status PendingCommitTimestampAllOrNone(int64_t index_num) {
           "Invalid use of PENDING_COMMIT_TIMESTAMP in column $0. All values "
           "for the column must be PENDING_COMMIT_TIMESTAMP() or none of them.",
           index_num));
+}
+
+absl::Status CommitTimestampOptionNotEnabled(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot write commit timestamp because the allow_commit_timestamp "
+          "column option is not set to true for column $0, or for all "
+          "corresponding shared key columns in this table's interleaved table "
+          "hierarchy.",
+          column_name));
 }
 
 // Time errors.
@@ -1232,6 +1301,131 @@ absl::Status ColumnNotFoundInIndex(absl::string_view index,
                    "secondary-indexes#read-with-index)."));
 }
 
+// Foreign key errors.
+absl::Status ForeignKeyColumnsRequired(absl::string_view table,
+                                       absl::string_view foreign_key) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "At least one column is required for table `$0` in foreign key `$1`.",
+          foreign_key, table));
+}
+
+absl::Status ForeignKeyColumnCountMismatch(absl::string_view referencing_table,
+                                           absl::string_view referenced_table,
+                                           absl::string_view foreign_key) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("The number of columns are different for table `$0` and "
+                       "table `$1` in foreign key `$2`.",
+                       referencing_table, referenced_table, foreign_key));
+}
+
+absl::Status ForeignKeyDuplicateColumn(absl::string_view column,
+                                       absl::string_view table,
+                                       absl::string_view foreign_key) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Column `$0` used more than once for table `$1` in foreign key `$2`.",
+          column, table, foreign_key));
+}
+
+absl::Status ForeignKeyColumnNotFound(absl::string_view column,
+                                      absl::string_view table,
+                                      absl::string_view foreign_key) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Column `$0` not found for table `$1` in foreign key `$2`.", column,
+          table, foreign_key));
+}
+
+absl::Status ForeignKeyColumnTypeUnsupported(absl::string_view column,
+                                             absl::string_view table,
+                                             absl::string_view foreign_key) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Column `$0` for foreign key `$1` on "
+                                       "table `$2` has an unsupported type.",
+                                       column, foreign_key, table));
+}
+
+absl::Status ForeignKeyCommitTimestampColumnUnsupported(
+    absl::string_view column, absl::string_view table,
+    absl::string_view foreign_key) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Commit timestamp column is not supported for column "
+                       "`$0` of table `$1` in foreign key `$2`.",
+                       column, table, foreign_key));
+}
+
+absl::Status ForeignKeyColumnTypeMismatch(absl::string_view referencing_column,
+                                          absl::string_view referencing_table,
+                                          absl::string_view referenced_column,
+                                          absl::string_view referenced_table,
+                                          absl::string_view foreign_key) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "The column types are different for column `$0` of table `$1` and "
+          "column `$2` of table `$3` in foreign key `$4`.",
+          referencing_column, referencing_table, referenced_column,
+          referenced_table, foreign_key));
+}
+
+absl::Status ForeignKeyReferencedTableDropNotAllowed(
+    absl::string_view table, absl::string_view foreign_keys) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot drop table `$0`. It is referenced by one or more foreign "
+          "keys: $1. You must drop the foreign keys before dropping the table.",
+          table, foreign_keys));
+}
+
+absl::Status ForeignKeyColumnDropNotAllowed(absl::string_view column,
+                                            absl::string_view table,
+                                            absl::string_view foreign_keys) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot drop column `$0` from table `$1`. It is used by "
+                       "one or more foreign keys: $2. You must drop the "
+                       "foreign keys before dropping the column.",
+                       column, table, foreign_keys));
+}
+
+absl::Status ForeignKeyColumnNullabilityChangeNotAllowed(
+    absl::string_view column, absl::string_view table,
+    absl::string_view foreign_keys) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot change the nullability for column `$0` of table "
+                       "`$1`. It is used by one or more foreign keys: $2.",
+                       column, table, foreign_keys));
+}
+
+absl::Status ForeignKeyColumnTypeChangeNotAllowed(
+    absl::string_view column, absl::string_view table,
+    absl::string_view foreign_keys) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot change the type for column `$0` of table `$1`. "
+                       "It is used by one or more foreign keys: $2.",
+                       column, table, foreign_keys));
+}
+
+absl::Status ForeignKeyColumnSetCommitTimestampOptionNotAllowed(
+    absl::string_view column, absl::string_view table,
+    absl::string_view foreign_key) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot set the commit_timestamp option for column `$0` of table "
+          "`$1`. It is used by one or more foreign keys: $2.",
+          column, table, foreign_key));
+}
+
 // Query errors.
 absl::Status UnableToInferUndeclaredParameter(
     absl::string_view parameter_name) {
@@ -1244,11 +1438,68 @@ absl::Status InvalidHint(absl::string_view hint_string) {
                       absl::Substitute("Unsupported hint: $0.", hint_string));
 }
 
+absl::Status InvalidEmulatorHint(absl::string_view hint_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Invalid emulator-only hint: $0.", hint_string));
+}
+
 absl::Status InvalidHintValue(absl::string_view hint_string,
                               absl::string_view value_string) {
   return absl::Status(absl::StatusCode::kInvalidArgument,
                       absl::Substitute("Invalid hint value for: $0 hint: $1.",
                                        hint_string, value_string));
+}
+
+absl::Status InvalidEmulatorHintValue(absl::string_view hint_string,
+                                      absl::string_view value_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Invalid hint value for emulator-only hint $0: $1.",
+                       hint_string, value_string));
+}
+
+absl::Status QueryHintIndexNotFound(absl::string_view table_name,
+                                    absl::string_view index_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The table $0 does not have a secondary index "
+                       "called $1",
+                       table_name, index_name));
+}
+
+absl::Status NullFilteredIndexUnusable(absl::string_view index_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "The emulator is not able to determine whether the "
+          "null filtered index $0 can be used to answer this query as it "
+          "may filter out nulls that may be required to answer the query. "
+          "Please test this query against Cloud Spanner. If you confirm "
+          "against Cloud Spanner that the null filtered index can be used to "
+          "answer the query, set the hint @{spanner_emulator."
+          "disable_query_null_filtered_index_check=false} on the table "
+          "to bypass this check in the emulator. This hint will be ignored by "
+          "the production Cloud Spanner service and the emulator will accept "
+          "the query and return a valid result when it is run with the check "
+          "disabled.",
+          index_name));
+}
+
+absl::Status NonPartitionableQuery(absl::string_view reason) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::StrCat(
+          "The emulator is not able to determine whether this query is "
+          "partitionable. Please test this query against Cloud Spanner to "
+          "confirm it is partitionable. If you confirm it is partitionable, "
+          "set the hint @{spanner_emulator."
+          "disable_query_partitionability_check=false} on the query statement "
+          "to bypass this check in the emulator. This hint will be ignored by "
+          "the production Cloud Spanner service and the emulator will accept "
+          "the query and return a valid result when it is run with the check "
+          "disabled. ",
+          "Possible reason why the query may not be partitionable: ", reason));
 }
 
 absl::Status InvalidBatchDmlRequest() {
@@ -1277,6 +1528,171 @@ absl::Status ReadOnlyTransactionDoesNotSupportDml(
           "DML statements can only be performed in a read-write or "
           "partitioned-dml transaction. Current transaction type is $0.",
           transaction_type));
+}
+
+// Unsupported query shape errors.
+absl::Status UnsupportedFeatureSafe(absl::string_view feature_type,
+                                    absl::string_view info_message) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Unsupported $0: $1", feature_type, info_message));
+}
+
+absl::Status UnsupportedFunction(absl::string_view function_name) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("Unsupported built-in function: $0", function_name));
+}
+
+absl::Status UnsupportedHavingModifierWithDistinct() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "Aggregates with DISTINCT are not supported with a HAVING modifier.");
+}
+
+absl::Status UnsupportedIgnoreNullsInAggregateFunctions() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "IGNORE NULLS and RESPECT NULLS in functions other than ARRAY_AGG are "
+      "not supported");
+}
+
+absl::Status NullifStructNotSupported() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "NULLIF is not supported for arguments of STRUCT type.");
+}
+
+absl::Status ComparisonNotSupported(int arg_num,
+                                    absl::string_view function_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Argument $0 does not support comparison in function "
+                       "$1",
+                       arg_num, function_name));
+}
+
+absl::Status StructComparisonNotSupported(absl::string_view function_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Comparison between structs are not supported in "
+                       "function $0",
+                       function_name));
+}
+
+absl::Status PendingCommitTimestampDmlValueOnly() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "The PENDING_COMMIT_TIMESTAMP() function may only be used as a "
+      "value for INSERT or UPDATE of an appropriately typed column. It "
+      "cannot be used in SELECT, or as the input to any other scalar "
+      "expression.");
+}
+
+absl::Status NoFeatureSupportDifferentTypeArrayCasts(
+    absl::string_view from_type, absl::string_view to_type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Casting between arrays with incompatible element types "
+                       "is not supported: Invalid cast from $0 to $1.",
+                       from_type, to_type));
+}
+
+absl::Status TooManyFunctions(int max_function_nodes) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Number of functions exceeds the maximum allowed limit of $0.",
+          max_function_nodes));
+}
+
+absl::Status TooManyNestedBooleanPredicates(int max_nested_function_nodes) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Number of nested boolean predicates exceeds the "
+                       "maximum allowed limit of $0.",
+                       max_nested_function_nodes));
+}
+
+absl::Status TooManyJoins(int max_joins) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Number of joins exceeds the maximum allowed limit of $0.",
+          max_joins));
+}
+
+absl::Status TooManyNestedSubqueries(int max_nested_subquery_expressions) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Number of nested subqueries exceeds "
+                                       "the maximum allowed limit of $0.",
+                                       max_nested_subquery_expressions));
+}
+
+absl::Status TooManyNestedSubselects(int max_nested_subselects) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Number of nested subselects exceeds "
+                                       "the maximum allowed limit of $0.",
+                                       max_nested_subselects));
+}
+
+absl::Status TooManyNestedAggregates(int max_nested_group_by) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Number of nested aggregations exceeds "
+                                       "the maximum allowed limit of $0.",
+                                       max_nested_group_by));
+}
+
+absl::Status TooManyParameters(int max_parameters) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Number of parameters in query exceeds "
+                                       "the maximum allowed limit of $0.",
+                                       max_parameters));
+}
+
+absl::Status TooManyAggregates(int max_columns_in_group_by) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Number of grouping columns exceeds the maximum allowed limit of $0.",
+          max_columns_in_group_by));
+}
+
+absl::Status TooManyUnions(int max_unions_in_query) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Number of UNION operations exceeds the maximum allowed limit of $0.",
+          max_unions_in_query));
+}
+
+absl::Status TooManySubqueryChildren(int max_subquery_expression_children) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Number of child subqueries exceeds the maximum allowed limit of $0.",
+          max_subquery_expression_children));
+}
+
+absl::Status TooManyStructFields(int max_struct_fields) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Number of struct fields exceeds the maximum allowed limit of $0.",
+          max_struct_fields));
+}
+
+absl::Status TooManyNestedStructs(int max_nested_struct_depth) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Number of nested struct types exceeds "
+                                       "the maximum allowed limit of $0.",
+                                       max_nested_struct_depth));
+}
+
+absl::Status QueryStringTooLong(int query_length, int max_length) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Query string length of $0 exceeds "
+                                       "maximum allowed length of $1",
+                                       query_length, max_length));
 }
 
 absl::Status EmulatorDoesNotSupportQueryPlans() {

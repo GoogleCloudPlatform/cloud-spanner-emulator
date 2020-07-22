@@ -54,9 +54,14 @@ cc_library(
     testonly = 1,
     srcs = [
         "common.cc",
+        "foreign_key.cc",
         "index.cc",
         "table.cc",
     ],
-    deps = [":base"],
+    deps = [
+        ":base",
+        "//backend/schema/catalog:schema",
+        "@com_google_absl//absl/strings",
+    ],
     alwayslink = 1,
 )

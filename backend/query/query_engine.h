@@ -24,6 +24,7 @@
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
 #include "absl/memory/memory.h"
+#include "absl/status/status.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/query/function_catalog.h"
@@ -52,9 +53,6 @@ struct Query {
 
 // Returns true if the given query is a DML statement.
 bool IsDMLQuery(const std::string& query);
-
-// Returns true if the given query is a DML INSERT statement.
-bool IsDMLInsertQuery(const std::string& query);
 
 // QueryResult specifies the output of a query request.
 struct QueryResult {
@@ -90,8 +88,18 @@ class QueryEngine {
       : type_factory_(type_factory), function_catalog_(type_factory) {}
 
   // Executes a SQL query (SELECT query or DML).
+  // Skip execution if validate_only is true.
   zetasql_base::StatusOr<QueryResult> ExecuteSql(const Query& query,
                                          const QueryContext& context) const;
+
+  // Returns OK if query is partitionable.
+  absl::Status IsPartitionable(const Query& query,
+                               const QueryContext& context) const;
+
+  // Returns OK if the 'query' is a DML statement that can be executed through
+  // partitioned DML.
+  absl::Status IsValidPartitionedDML(const Query& query,
+                                     const QueryContext& context) const;
 
   zetasql::TypeFactory* type_factory() const { return type_factory_; }
 
