@@ -139,11 +139,11 @@ Notable supported features:
 
 - Partitioned Read, Partitioned Query and Partitioned DML APIs
 
-Limitations (will be removed in subsequent releases):
+Features not currently available:
 
 - SQL function TABLESAMPLE is not supported.
 
-- Cloud Spanner dataflow templates are not yet supported.
+- Cloud Spanner dataflow templates are not supported.
 
 - Foreign keys are not supported.
 
