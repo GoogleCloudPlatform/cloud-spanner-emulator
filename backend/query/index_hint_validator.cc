@@ -16,17 +16,60 @@
 
 #include "backend/query/index_hint_validator.h"
 
+#include <algorithm>
+
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "backend/query/queryable_table.h"
+#include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
+#include "re2/re2.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+namespace {
+
+// Query hints using generated names of managed indexes are special-cased. The
+// emulator and production name generators use different fingerprint algorithms,
+// so the generated names have different suffixes. A hint using a managed
+// index's name that was generated in production never matches the name of the
+// emulator's index, and vice versa. In order to permit the use of production
+// queries in the emulator, names generated in production are permitted in the
+// emulator. However, in order to avoid the unintentional and unsupported use of
+// emulator generated names in production, names generated in the emulator are
+// not allowed in query hints, neither in production nor in the emulator.
+
+// Returns true if an index name matches the signature of a generated managed
+// index name. See also GlobalSchemaNames::GenerateManagedIndexName.
+bool MatchesManagedIndexName(absl::string_view table_name,
+                             absl::string_view index_name) {
+  return RE2::FullMatch(index_name, absl::StrCat("IDX_", table_name, "_",
+                                                 "\\w+", "_", "[0-9A-Z]{16}"));
+}
+
+// Returns true if an index's name matches the name of an index created in the
+// emulator with GlobalSchemaNames::GenerateManagedIndexName.
+bool HasGeneratedEmulatorName(const Index* index) {
+  if (!index->is_managed()) {
+    return false;  // Only managed indexes have generated names.
+  }
+  auto columns = index->key_columns();
+  std::vector<std::string> column_names;
+  std::transform(
+      columns.begin(), columns.end(), std::back_inserter(column_names),
+      [](const KeyColumn* column) { return column->column()->Name(); });
+  return index->Name() == GlobalSchemaNames::GenerateManagedIndexName(
+                              index->indexed_table()->Name(), column_names,
+                              index->is_null_filtered(), index->is_unique())
+                              .value();
+}
+
+}  // namespace
 
 absl::Status IndexHintValidator::VisitResolvedTableScan(
     const zetasql::ResolvedTableScan* table_scan) {
@@ -67,8 +110,14 @@ absl::Status IndexHintValidator::ValidateIndexesForTables() {
     auto query_table = table->GetAs<QueryableTable>();
     auto schema_table = query_table->wrapped_table();
     const auto* index = schema_table->FindIndex(index_name);
+    // See comments above regarding special-casing of managed indexes.
     if (index == nullptr) {
+      if (MatchesManagedIndexName(schema_table->Name(), index_name)) {
+        return absl::OkStatus();
+      }
       return error::QueryHintIndexNotFound(schema_table->Name(), index_name);
+    } else if (HasGeneratedEmulatorName(index)) {
+      return error::QueryHintManagedIndexNotSupported(index_name);
     }
 
     if (index->is_null_filtered() && !disable_null_filtered_index_check_) {

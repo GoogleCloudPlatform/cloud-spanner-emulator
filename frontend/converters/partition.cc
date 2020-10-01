@@ -16,6 +16,7 @@
 
 #include "frontend/converters/partition.h"
 
+#include "zetasql/base/statusor.h"
 #include "absl/strings/substitute.h"
 #include "common/errors.h"
 #include "zetasql/base/ret_check.h"

@@ -18,6 +18,7 @@
 
 #include "absl/strings/substitute.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "common/errors.h"
@@ -26,6 +27,16 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+const Table* ForeignKey::referencing_data_table() const {
+  return referencing_index_ == nullptr ? referencing_table_
+                                       : referencing_index_->index_data_table();
+}
+
+const Table* ForeignKey::referenced_data_table() const {
+  return referenced_index_ == nullptr ? referenced_table_
+                                      : referenced_index_->index_data_table();
+}
 
 absl::Status ForeignKey::Validate(SchemaValidationContext* context) const {
   return validate_(this, context);
@@ -48,6 +59,12 @@ absl::Status ForeignKey::DeepClone(SchemaGraphEditor* editor,
       column = schema_node->As<const Column>();
     }
   }
+  for (const Index** index : {&referencing_index_, &referenced_index_}) {
+    if (*index != nullptr) {
+      ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*index));
+      *index = schema_node->As<const Index>();
+    }
+  }
   // Dropping a table automatically drops its foreign keys and backing indexes.
   if (referencing_table_->is_deleted()) {
     MarkDeleted();
@@ -63,9 +80,11 @@ std::string ForeignKey::DebugString() const {
                          });
   };
   return absl::Substitute(
-      "FK:$0:$1($2):$3($4)", Name(), referencing_table_->Name(),
-      column_names(referencing_columns_), referenced_table_->Name(),
-      column_names(referenced_columns_));
+      "FK:$0:$1($2)[$3]:$4($5)[$6]", Name(), referencing_table_->Name(),
+      column_names(referencing_columns_),
+      referencing_index_ == nullptr ? "PK" : referencing_index_->Name(),
+      referenced_table_->Name(), column_names(referenced_columns_),
+      referenced_index_ == nullptr ? "PK" : referenced_index_->Name());
 }
 
 }  // namespace backend

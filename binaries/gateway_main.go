@@ -46,6 +46,11 @@ var (
 		"If true, the gateway will copy the emulator's stderr to its stderr.")
 	logRequests = flag.Bool("log_requests", false,
 		"If true, gRPC requests and responses will be logged to stdout.")
+
+	// Emulator specific flags.
+	enableFaultInjection = flag.Bool("enable_fault_injection", false,
+		"If true, the emulator will inject faults at runtime (e.g. randomly abort commit "+
+			"requests to allow testing application abort-retry behavior).")
 )
 
 // resolveGRPCBinary figures out the full path to the grpc binary from the --grpc_binary flag.
@@ -87,12 +92,13 @@ func main() {
 	// Start the gateway http server. This will run the emulator grpc server as a subprocess and
 	// proxy http/json requests into grpc requests.
 	gwopts := gateway.Options{
-		GatewayAddress:     fmt.Sprintf("%s:%d", *hostname, *httpPort),
-		FrontendBinary:     resolveGRPCBinary(),
-		FrontendAddress:    fmt.Sprintf("%s:%d", *hostname, *grpcPort),
-		CopyEmulatorStdout: *copyEmulatorStdout,
-		CopyEmulatorStderr: *copyEmulatorStderr,
-		LogRequests:        *logRequests,
+		GatewayAddress:       fmt.Sprintf("%s:%d", *hostname, *httpPort),
+		FrontendBinary:       resolveGRPCBinary(),
+		FrontendAddress:      fmt.Sprintf("%s:%d", *hostname, *grpcPort),
+		CopyEmulatorStdout:   *copyEmulatorStdout,
+		CopyEmulatorStderr:   *copyEmulatorStderr,
+		LogRequests:          *logRequests,
+		EnableFaultInjection: *enableFaultInjection,
 	}
 	gw := gateway.New(gwopts)
 	gw.Run()

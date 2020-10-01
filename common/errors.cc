@@ -39,6 +39,14 @@ absl::Status Internal(absl::string_view msg) {
   return absl::Status(absl::StatusCode::kInternal, msg);
 }
 
+absl::Status CycleDetected(absl::string_view object_type,
+                           absl::string_view cycle) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Cycle detected while analysing $0, "
+                                       "which include objects ($1)",
+                                       object_type, cycle));
+}
+
 // Project errors.
 absl::Status InvalidProjectURI(absl::string_view uri) {
   return absl::Status(absl::StatusCode::kInvalidArgument,
@@ -296,6 +304,16 @@ absl::Status CouldNotParseStringAsDouble(absl::string_view str) {
           "data-types#floating-point-type for more details"));
 }
 
+absl::Status CouldNotParseStringAsNumeric(absl::string_view str) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::StrCat(
+          "Could not parse ", str,
+          " as a NUMERIC. The NUMERIC type supports 38 digits of precision and "
+          "9 digits of scale. See "
+          "https://cloud.google.com/spanner/docs/data-types for more details"));
+}
+
 absl::Status CouldNotParseStringAsTimestamp(absl::string_view str,
                                             absl::string_view error) {
   return absl::Status(
@@ -471,6 +489,28 @@ absl::Status DmlDoesNotSupportSingleUseTransaction() {
                       "transactions, to avoid replay.");
 }
 
+absl::Status DmlSequenceOutOfOrder(int64_t request_seqno, int64_t last_seqno,
+                                   absl::string_view sql_statement) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Request has an out-of-order seqno. Request seqno=$0. Last seen "
+          "seqno=$1. The sequence number must be monotonically increasing "
+          "within the transaction. If a request arrives for the first time "
+          "with an out-of-order sequence number, the transaction will be "
+          "invalidated.\nRequested SQL: $2",
+          request_seqno, last_seqno, sql_statement));
+}
+
+absl::Status ReplayRequestMismatch(int64_t request_seqno,
+                                   absl::string_view sql_statement) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Previously received a different "
+                       "request with this seqno. seqno=$0\nRequested SQL: $1",
+                       request_seqno, sql_statement));
+}
+
 absl::Status PartitionReadDoesNotSupportSingleUseTransaction() {
   return absl::Status(absl::StatusCode::kInvalidArgument,
                       "Partition reads may not be performed in single-use "
@@ -568,6 +608,16 @@ absl::Status ReadTimestampPastVersionGCLimit(absl::Time timestamp) {
                    " has exceeded the maximum timestamp staleness"));
 }
 
+absl::Status ReadTimestampTooFarInFuture(absl::Time timestamp) {
+  return absl::Status(
+      absl::StatusCode::kDeadlineExceeded,
+      absl::StrCat(
+          "Read-only transaction timestamp ", absl::FormatTime(timestamp),
+          " is more than 1 hour in future. This request will execute for longer"
+          " than the configured Cloud Spanner server deadline of 1 hour and"
+          " will return with the DEADLINE_EXCEEDED error."));
+}
+
 // DDL errors.
 absl::Status EmptyDDLStatement() {
   return absl::Status(absl::StatusCode::kInvalidArgument,
@@ -580,10 +630,9 @@ absl::Status DDLStatementWithErrors(absl::string_view ddl_string,
   // Avoid submits errors due to trailing spaces.
   std::string separator = ddl_string.at(0) == '\n' ? "" : " ";
   if (errors.size() == 1) {
-    return absl::Status(
-        absl::StatusCode::kInvalidArgument,
-        absl::StrCat("Error parsing Spanner DDL statement:", separator,
-                     ddl_string, " has error ", errors[0]));
+    return absl::Status(absl::StatusCode::kInvalidArgument,
+                        absl::StrCat("Error parsing Spanner DDL statement:",
+                                     separator, ddl_string, " : ", errors[0]));
   }
   return absl::Status(absl::StatusCode::kInvalidArgument,
                       absl::StrCat("Errors parsing Spanner DDL statement:",
@@ -614,12 +663,13 @@ absl::Status CannotNameIndexPrimaryKey() {
       "Cannot use reserved name PRIMARY_KEY for a secondary index");
 }
 
-absl::Status CannotCreateIndexOnArrayColumns(absl::string_view index_name,
-                                             absl::string_view column_name) {
+absl::Status CannotCreateIndexOnColumn(absl::string_view index_name,
+                                       absl::string_view column_name,
+                                       absl::string_view column_type) {
   return absl::Status(
       absl::StatusCode::kFailedPrecondition,
-      absl::Substitute("Cannot reference ARRAY $1 in the creation of index $0.",
-                       index_name, column_name));
+      absl::Substitute("Cannot reference $2 $1 in the creation of index $0.",
+                       index_name, column_name, column_type));
 }
 
 absl::Status InvalidPrimaryKeyColumnType(absl::string_view column_name,
@@ -986,6 +1036,15 @@ absl::Status TableNotFoundAtTimestamp(absl::string_view table_name,
 absl::Status IndexNotFound(absl::string_view index_name) {
   return absl::Status(absl::StatusCode::kNotFound,
                       absl::Substitute("Index not found: $0", index_name));
+}
+
+absl::Status DropForeignKeyManagedIndex(absl::string_view index_name,
+                                        absl::string_view foreign_key_names) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot drop index `$0`. It is in use by foreign keys: "
+                       "$1.",
+                       index_name, foreign_key_names));
 }
 
 absl::Status ColumnNotFound(absl::string_view table_name,
@@ -1426,6 +1485,74 @@ absl::Status ForeignKeyColumnSetCommitTimestampOptionNotAllowed(
           column, table, foreign_key));
 }
 
+absl::Status ForeignKeyReferencedKeyNotFound(
+    absl::string_view foreign_key, absl::string_view referencing_table,
+    absl::string_view referenced_table, absl::string_view referenced_key) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Foreign key `$0` constraint violation on table `$1`. "
+                       "Cannot find referenced key `$3` in table `$2`.",
+                       foreign_key, referencing_table, referenced_table,
+                       referenced_key));
+}
+
+absl::Status ForeignKeyReferencingKeyFound(absl::string_view foreign_key,
+                                           absl::string_view referencing_table,
+                                           absl::string_view referenced_table,
+                                           absl::string_view referencing_key) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Foreign key `$0` constraint violation when deleting or updating "
+          "referenced key `$3` in table `$2`. A row with that key exists in "
+          "the referencing table `$1`.",
+          foreign_key, referencing_table, referenced_table, referencing_key));
+}
+
+absl::Status NumericTypeNotEnabled() {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      "NUMERIC type is not implemented.");
+}
+
+// Generated column errors.
+absl::Status GeneratedColumnsNotEnabled() {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      "Generated columns are not enabled.");
+}
+
+absl::Status NonStoredGeneratedColumnUnsupported(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("Generated column `$0` without the STORED "
+                       "attribute is not supported.",
+                       column_name));
+}
+
+absl::Status GeneratedColumnDefinitionParseError(absl::string_view table_name,
+                                                 absl::string_view column_name,
+                                                 absl::string_view message) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Error parsing the definition of generated column `$0`.`$1`: $2",
+          table_name, column_name, message));
+}
+
+absl::Status NonScalarExpressionInColumnExpression(absl::string_view type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot use non-scalar expressions inside $0.", type));
+}
+
+absl::Status ColumnExpressionMaxDepthExceeded(int depth, int max_depth) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Expression depth of $0 exceeds the maximum allowed depth of $1.",
+          depth, max_depth));
+}
+
 // Query errors.
 absl::Status UnableToInferUndeclaredParameter(
     absl::string_view parameter_name) {
@@ -1466,6 +1593,16 @@ absl::Status QueryHintIndexNotFound(absl::string_view table_name,
       absl::Substitute("The table $0 does not have a secondary index "
                        "called $1",
                        table_name, index_name));
+}
+
+absl::Status QueryHintManagedIndexNotSupported(absl::string_view index_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Cannot use managed index $0 in query hints. The name of this index "
+          "was generated in the emulator. Only names generated in production "
+          "are permitted.",
+          index_name));
 }
 
 absl::Status NullFilteredIndexUnusable(absl::string_view index_name) {
@@ -1534,7 +1671,7 @@ absl::Status ReadOnlyTransactionDoesNotSupportDml(
 absl::Status UnsupportedFeatureSafe(absl::string_view feature_type,
                                     absl::string_view info_message) {
   return absl::Status(
-      absl::StatusCode::kInvalidArgument,
+      absl::StatusCode::kUnimplemented,
       absl::Substitute("Unsupported $0: $1", feature_type, info_message));
 }
 
@@ -1546,19 +1683,19 @@ absl::Status UnsupportedFunction(absl::string_view function_name) {
 
 absl::Status UnsupportedHavingModifierWithDistinct() {
   return absl::Status(
-      absl::StatusCode::kInvalidArgument,
+      absl::StatusCode::kUnimplemented,
       "Aggregates with DISTINCT are not supported with a HAVING modifier.");
 }
 
 absl::Status UnsupportedIgnoreNullsInAggregateFunctions() {
   return absl::Status(
-      absl::StatusCode::kInvalidArgument,
+      absl::StatusCode::kUnimplemented,
       "IGNORE NULLS and RESPECT NULLS in functions other than ARRAY_AGG are "
       "not supported");
 }
 
 absl::Status NullifStructNotSupported() {
-  return absl::Status(absl::StatusCode::kInvalidArgument,
+  return absl::Status(absl::StatusCode::kUnimplemented,
                       "NULLIF is not supported for arguments of STRUCT type.");
 }
 

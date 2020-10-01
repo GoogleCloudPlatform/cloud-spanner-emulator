@@ -21,6 +21,7 @@
 #include <string>
 
 #include "absl/base/thread_annotations.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
@@ -59,26 +60,42 @@ std::vector<std::shared_ptr<Database>> GetDatabasesByInstance(
 zetasql_base::StatusOr<std::shared_ptr<Database>> DatabaseManager::CreateDatabase(
     const std::string& database_uri,
     const std::vector<std::string>& create_statements) {
+  // Perform bulk of the work outside the database manager lock to allow
+  // CreateDatabase calls to execute in parallel. A common test pattern is to
+  // Create/Drop a database per unit test, and run unit tests in parallel. So
+  // we want to optimize this use case.
+  absl::string_view project_id, instance_id, database_id;
+  ZETASQL_RETURN_IF_ERROR(
+      ParseDatabaseUri(database_uri, &project_id, &instance_id, &database_id));
+  std::string instance_uri = MakeInstanceUri(project_id, instance_id);
+
+  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<backend::Database> backend_db,
+                   backend::Database::Create(clock_, create_statements));
+  auto database = std::make_shared<Database>(
+      database_uri, std::move(backend_db), clock_->Now());
+
+  // Now update the database manager state. We could do the validation checks
+  // at the top of this function, but we would have to do it here again anyway,
+  // so we don't bother optimizing that case.
   absl::MutexLock lock(&mu_);
+
+  // Check that a database with this name does not already exist.
   auto itr = database_map_.find(database_uri);
   if (itr != database_map_.end()) {
     return error::DatabaseAlreadyExists(database_uri);
   }
 
-  absl::string_view project_id, instance_id, database_id;
-  ZETASQL_RETURN_IF_ERROR(
-      ParseDatabaseUri(database_uri, &project_id, &instance_id, &database_id));
-  std::string instance_uri = MakeInstanceUri(project_id, instance_id);
-  if (GetDatabasesByInstance(database_map_, instance_uri).size() >=
+  // Check that the user did not exceed their database quota.
+  if (num_databases_per_instance_[instance_uri] >=
       limits::kMaxDatabasesPerInstance) {
     return error::TooManyDatabasesPerInstance(instance_uri);
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<backend::Database> backend_db,
-                   backend::Database::Create(clock_, create_statements));
-  database_map_[database_uri] = std::make_shared<Database>(
-      database_uri, std::move(backend_db), clock_->Now());
-  return database_map_.find(database_uri)->second;
+  // Record this database in the database manager.
+  database_map_[database_uri] = database;
+  num_databases_per_instance_[instance_uri] += 1;
+
+  return database;
 }
 
 zetasql_base::StatusOr<std::shared_ptr<Database>> DatabaseManager::GetDatabase(
@@ -93,7 +110,13 @@ zetasql_base::StatusOr<std::shared_ptr<Database>> DatabaseManager::GetDatabase(
 
 absl::Status DatabaseManager::DeleteDatabase(const std::string& database_uri) {
   absl::MutexLock lock(&mu_);
-  database_map_.erase(database_uri);
+  if (database_map_.erase(database_uri) > 0) {
+    absl::string_view project_id, instance_id, database_id;
+    ZETASQL_RETURN_IF_ERROR(ParseDatabaseUri(database_uri, &project_id, &instance_id,
+                                     &database_id));
+    std::string instance_uri = MakeInstanceUri(project_id, instance_id);
+    num_databases_per_instance_[instance_uri] -= 1;
+  }
   return absl::OkStatus();
 }
 

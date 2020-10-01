@@ -15,6 +15,8 @@
 //
 
 #include "backend/schema/updater/schema_updater_tests/base.h"
+#include "common/feature_flags.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -826,6 +828,46 @@ TEST_F(SchemaUpdaterTest, ChangeKeyColumn) {
       ALTER TABLE T2 ALTER COLUMN k1 STRING(30)
     )"}),
               StatusIs(error::AlteringParentColumn("T2.k1")));
+}
+
+TEST_F(SchemaUpdaterTest, CreateTable_NumericColumns) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_numeric_type = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    CREATE TABLE T(
+      col1 INT64,
+      col2 NUMERIC,
+      col3 ARRAY<NUMERIC>
+    ) PRIMARY KEY(col1))"}));
+
+  auto t = schema->FindTable("T");
+  EXPECT_NE(t, nullptr);
+  EXPECT_EQ(t->columns().size(), 3);
+  EXPECT_EQ(t->primary_key().size(), 1);
+
+  auto col1 = t->columns()[0];
+  EXPECT_THAT(col1, ColumnIs("col1", types::Int64Type()));
+  EXPECT_THAT(col1, IsKeyColumnOf(t, "ASC"));
+
+  auto col2 = t->columns()[1];
+  EXPECT_THAT(col2, ColumnIs("col2", types::NumericType()));
+
+  auto col3 = t->columns()[2];
+  EXPECT_THAT(col3, ColumnIs("col3", types::NumericArrayType()));
+}
+
+// TODO: Modify this test once NUMERIC is supported in keys
+TEST_F(SchemaUpdaterTest, CreateTable_NumericAsPK) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_numeric_type = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(CreateSchema({R"(
+      CREATE TABLE T (
+        k1 NUMERIC
+      ) PRIMARY KEY (k1)
+    )"}),
+              StatusIs(error::InvalidPrimaryKeyColumnType("T.k1", "NUMERIC")));
 }
 
 }  // namespace

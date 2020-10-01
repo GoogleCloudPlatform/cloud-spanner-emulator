@@ -25,7 +25,7 @@ FROM gcr.io/cloud-spanner-emulator-builder/build-base as build
 # the required files to maximize chances that the layer will be cached. There
 # does not seem to be a nicer way to do this than multiple COPY commands as
 # COPY copies the contents of the source, not the directory itself.
-COPY BUILD WORKSPACE .bazelrc src/
+COPY BUILD.bazel WORKSPACE .bazelrc src/
 COPY common      src/common/
 COPY gateway     src/gateway/
 COPY frontend    src/frontend/

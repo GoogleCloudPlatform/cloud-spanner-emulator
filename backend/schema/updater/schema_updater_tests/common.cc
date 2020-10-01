@@ -49,13 +49,19 @@ TEST_F(SchemaUpdaterTest, CreationOrder) {
 
   auto t1 = schema->FindTable("T1");
   auto t2 = schema->FindTable("T2");
+  auto fk2 = t2->FindForeignKey("fk2");
+  auto fk2_idx1 = fk2->referenced_index();
+  auto fk2_idx1_dt = fk2_idx1->index_data_table();
+  auto fk2_idx2 = fk2->referencing_index();
+  auto fk2_idx2_dt = fk2_idx2->index_data_table();
   auto idx1 = schema->FindIndex("Idx1");
-  auto idx2 = schema->FindIndex("Idx2");
   auto idx1_dt = idx1->index_data_table();
+  auto idx2 = schema->FindIndex("Idx2");
   auto idx2_dt = idx2->index_data_table();
 
   // Check that the nodes are added in topological order so that they
   // are cloned and validated in topological order.
+  // clang-format off
   std::vector<const SchemaNode*> expected = {
       t1->FindColumn("k1"),
       t1->FindColumn("k2"),
@@ -64,9 +70,21 @@ TEST_F(SchemaUpdaterTest, CreationOrder) {
       t2->FindColumn("k1"),
       t2->FindColumn("k2"),
       t2->FindColumn("c1"),
-      t2->FindForeignKey("fk2"),
       t2->FindKeyColumn("k1"),
       t2->FindKeyColumn("k2"),
+      fk2,
+      fk2_idx1_dt->FindColumn("k2"),
+      fk2_idx1_dt->FindColumn("k1"),
+      fk2_idx1_dt->FindKeyColumn("k2"),
+      fk2_idx1_dt->FindKeyColumn("k1"),
+      fk2_idx1,
+      fk2_idx1_dt,
+      fk2_idx2_dt->FindColumn("k2"),
+      fk2_idx2_dt->FindColumn("k1"),
+      fk2_idx2_dt->FindKeyColumn("k2"),
+      fk2_idx2_dt->FindKeyColumn("k1"),
+      fk2_idx2,
+      fk2_idx2_dt,
       t2,
       idx1_dt->FindColumn("k1"),
       idx1_dt->FindKeyColumn("k1"),
@@ -82,6 +100,7 @@ TEST_F(SchemaUpdaterTest, CreationOrder) {
       idx2,
       idx2_dt,
   };
+  // clang-format on
 
   EXPECT_THAT(schema->GetSchemaGraph()->GetSchemaNodes(),
               testing::ElementsAreArray(expected));

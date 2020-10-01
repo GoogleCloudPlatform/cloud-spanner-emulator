@@ -37,6 +37,8 @@ using zetasql::types::DateType;
 using zetasql::types::EmptyStructType;
 using zetasql::types::Int64ArrayType;
 using zetasql::types::Int64Type;
+using zetasql::types::NumericArrayType;
+using zetasql::types::NumericType;
 using zetasql::types::StringType;
 using zetasql::types::TimestampType;
 
@@ -47,6 +49,8 @@ using zetasql::values::Double;
 using zetasql::values::Int64;
 using zetasql::values::Int64Array;
 using zetasql::values::Null;
+using zetasql::values::Numeric;
+using zetasql::values::NumericArray;
 using zetasql::values::String;
 using zetasql::values::Struct;
 using zetasql::values::Timestamp;
@@ -77,10 +81,19 @@ TEST(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
        "string_value: '2015-01-02T03:04:05.000000067Z'"},
       {String("Hello, World!"), "string_value: 'Hello, World!'"},
       {Bytes("Hello, World!"), "string_value: 'SGVsbG8sIFdvcmxkIQ=='"},
+      {Numeric(zetasql::NumericValue::FromStringStrict("-123456789.987654321")
+                   .value()),
+       "string_value: '-123456789.987654321'"},
       {Int64Array({}), "list_value: { values [] }"},
       {Int64Array({1, 2, 3}),
        "list_value: { values [{string_value: '1'}, {string_value: '2'}, "
        "{string_value: '3'}] }"},
+      {NumericArray(
+           {zetasql::NumericValue::FromStringStrict("-23.923").value(),
+            zetasql::NumericValue::FromStringStrict("987.234").value(),
+            zetasql::NumericValue::FromStringStrict("987.234e-3").value()}),
+       "list_value: { values [{string_value: '-23.923'}, {string_value: "
+       "'987.234'}, {string_value: '0.987234' }] }"},
       {Struct(EmptyStructType(), {}), "list_value: { values: [] }"},
       {Struct(str_int_pair, {String("One"), Int64(2)}),
        "list_value: { values[{string_value: 'One'}, {string_value: '2'}] }"},
@@ -117,7 +130,9 @@ TEST(ValueProtos, DoesNotParseProtosWithMismatchingTypes) {
       {TimestampType(), "number_value: -1"},
       {StringType(), "number_value: 1.0"},
       {BytesType(), "number_value: -1"},
+      {NumericType(), "number_value: 1"},
       {Int64ArrayType(), "string_value: '1'"},
+      {NumericArrayType(), "string_value: '1'"},
       {EmptyStructType(), "bool_value: false"},
   };
   for (const auto& entry : test_cases) {
@@ -173,6 +188,23 @@ TEST(ValueProtos, DoesNotParseInvalidBytes) {
       ValueFromProto(PARSE_TEXT_PROTO("string_value: ';;Z'"), BytesType()),
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
+
+TEST(ValueProtos, DoesNotParseInvalidNumeric) {
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: '9252.a53'"),
+                             NumericType()),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+  // Scale exceeds 9
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: '0.0000000001'"),
+                             NumericType()),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+  // Integer portion has more than 29 digits.
+  EXPECT_THAT(
+      ValueFromProto(
+          PARSE_TEXT_PROTO("string_value: '123456789123456789123456789000.1'"),
+          NumericType()),
+      StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
 }  // namespace
 
 }  // namespace frontend

@@ -85,28 +85,23 @@ class DatabaseTest : public ::testing::Test {
 
  protected:
   // Bring several symbols into the namespace of this class for readability.
-  template <typename T>
-  using Array = std::vector<google::cloud::optional<T>>;
   using Bytes = cloud::spanner::Bytes;
   using Client = cloud::spanner::Client;
   using CommitResult = cloud::spanner::CommitResult;
   using Date = cloud::spanner::Date;
   using Mutation = cloud::spanner::Mutation;
   using Mutations = cloud::spanner::Mutations;
+  using Numeric = cloud::spanner::Numeric;
   using Transaction = cloud::spanner::Transaction;
   using SqlStatement = cloud::spanner::SqlStatement;
   using BatchDmlResult = cloud::spanner::BatchDmlResult;
   using DmlResult = cloud::spanner::DmlResult;
+  using GetDatabaseDdlResponse = admin::database::v1::GetDatabaseDdlResponse;
   using UpdateDatabaseDdlMetadata =
       admin::database::v1::UpdateDatabaseDdlMetadata;
-  using GetDatabaseDdlResponse = admin::database::v1::GetDatabaseDdlResponse;
-
   using KeyBound = cloud::spanner::KeyBound;
   using KeySet = cloud::spanner::KeySet;
-
   using Row = cloud::spanner::Row;
-  template <typename T>
-  using optional = cloud::optional<T>;
   using ReadOptions = cloud::spanner::ReadOptions;
   using Value = cloud::spanner::Value;
   using Timestamp = cloud::spanner::Timestamp;
@@ -117,6 +112,12 @@ class DatabaseTest : public ::testing::Test {
   using PartitionOptions = cloud::spanner::PartitionOptions;
   using QueryPartition = cloud::spanner::QueryPartition;
   using PartitionedDmlResult = cloud::spanner::PartitionedDmlResult;
+
+  template <typename T>
+  using Array = std::vector<google::cloud::optional<T>>;
+
+  template <typename T>
+  using optional = cloud::optional<T>;
 
   template <typename Duration>
   static Timestamp MakeTimestamp(
@@ -133,7 +134,7 @@ class DatabaseTest : public ::testing::Test {
     return google::cloud::spanner::MakeTimestamp(tp).value();
   }
 
-  static Timestamp MakePastTimestamp(std::chrono::seconds past_duration) {
+  static Timestamp MakePastTimestamp(std::chrono::nanoseconds past_duration) {
     return google::cloud::spanner::MakeTimestamp(
                std::chrono::system_clock::now() - past_duration)
         .value();
@@ -145,7 +146,8 @@ class DatabaseTest : public ::testing::Test {
         .value();
   }
 
-  static Timestamp MakeFutureTimestamp(std::chrono::seconds future_duration) {
+  static Timestamp MakeFutureTimestamp(
+      std::chrono::nanoseconds future_duration) {
     return google::cloud::spanner::MakeTimestamp(
                std::chrono::system_clock::now() + future_duration)
         .value();
@@ -170,6 +172,14 @@ class DatabaseTest : public ::testing::Test {
                   std::chrono::system_clock::from_time_t(0)) +
               std::chrono::seconds(absl::ToUnixSeconds(result));
     return google::cloud::spanner::MakeTimestamp(tp).value();
+  }
+
+  google::protobuf::Timestamp AbslTimeToProto(absl::Time time) {
+    const int64_t s = absl::ToUnixSeconds(time);
+    google::protobuf::Timestamp proto;
+    proto.set_seconds(s);
+    proto.set_nanos((time - absl::FromUnixSeconds(s)) / absl::Nanoseconds(1));
+    return proto;
   }
 
   // Callback intended to be implemented by subclasses to setup the database.
@@ -246,6 +256,12 @@ class DatabaseTest : public ::testing::Test {
       return os;
     }
 
+    // Returns the list of values;
+    absl::Span<const Value> values() const { return row_; }
+
+    // Adds a new value.
+    void add(const Value& value) { row_.push_back(value); }
+
    private:
     // Underlying vector of Value objects.
     std::vector<Value> row_;
@@ -273,10 +289,25 @@ class DatabaseTest : public ::testing::Test {
     return zetasql_base::testing::IsOkAndHolds(testing::ElementsAre(row));
   }
 
-  // Converts a list of literal key parts into a singleton KeySet.
+  // Converts a list of literal key parts into a Key.
   template <typename... Ts>
   cloud::spanner::Key Key(Ts... ts) {
     return cloud::spanner::MakeKey(ts...);
+  }
+
+  // Converts a list of keys into a KeySet.
+  KeySet Keys(const std::vector<cloud::spanner::Key>& keys) {
+    KeySet key_set;
+    for (const auto& key : keys) {
+      key_set.AddKey(key);
+    }
+    return key_set;
+  }
+
+  // Converts a list of literal key parts into a singleton KeySet.
+  template <typename... Ts>
+  KeySet Singleton(Ts... ts) {
+    return Keys({cloud::spanner::MakeKey(ts...)});
   }
 
   // Convenience functions to create key_set with a single key_range.
@@ -435,7 +466,7 @@ class DatabaseTest : public ::testing::Test {
   // Run a SQL query with the given bound parameters and return the results.
   zetasql_base::StatusOr<std::vector<ValueRow>> QueryWithParams(
       const std::string& query,
-      google::cloud::spanner::SqlStatement::ParamType params) {
+      cloud::spanner::SqlStatement::ParamType params) {
     auto result = client().ExecuteQuery(
         google::cloud::spanner::SqlStatement(query, std::move(params)));
     std::vector<ValueRow> retval;

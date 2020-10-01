@@ -16,6 +16,7 @@
 
 #include "backend/common/indexing.h"
 
+#include "zetasql/base/statusor.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "zetasql/base/status_macros.h"

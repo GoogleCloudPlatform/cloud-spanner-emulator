@@ -19,6 +19,7 @@
 #include <map>
 #include <string>
 
+#include "zetasql/base/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"

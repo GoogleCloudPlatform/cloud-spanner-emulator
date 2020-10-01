@@ -68,7 +68,12 @@ std::vector<FileBasedTestCase> ReadTestCasesFromFile(
           // We have seen the end of the input, move on to reading output.
           state = ParserState::kReadingOutput;
         } else if (absl::StartsWith(line, options.comment_prefix)) {
-          // Skip lines with comments.
+          // Skip lines with comments and evaluate flags.
+          if (absl::StrContains(line, options.normalize_flag)) {
+            test_case.input.normalize = true;
+          } else if (absl::StrContains(line, options.regex_flag)) {
+            test_case.input.regex = true;
+          }
         } else {
           // Add this line to the test case.
           test_case.input.text += line + "\n";

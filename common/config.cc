@@ -25,20 +25,11 @@ ABSL_FLAG(bool, log_requests, false,
           "If true, gRPC request and response messages are streamed to the "
           "INFO log. This switch is intended for emulator debugging.");
 
-// TODO: Client libraries handle ABORT errors by retrying with a
-// new transaction on the same session. This needs to be correctly handled
-// by the frontend::Transaction to maintain the following between retries:
-// - transaction priority
-// - abort retry count
 ABSL_FLAG(
-    bool, randomly_abort_txn_on_first_commit, false,
-    "If true, the emulator will randomly ABORT Commit requests for "
-    "customers to develop and test against such failure scenarios. Customers "
-    "should handle ABORTs within a retry loop in their application (which will "
-    "happen in production occasionally). Client applications that use Cloud "
-    "Spanner's client libraries don't need to handle this "
-    "case, but instead use the TransactionManager/TransactionRunner "
-    "implementations to manage their transaction.");
+    bool, enable_fault_injection, false,
+    "If true, the emulator will inject faults to allow testing application "
+    "error handling behavior. For instance, transaction Commits may be aborted "
+    "to facilitate application abort-retry testing.");
 
 namespace google {
 namespace spanner {
@@ -49,8 +40,8 @@ std::string grpc_host_port() { return absl::GetFlag(FLAGS_host_port); }
 
 bool should_log_requests() { return absl::GetFlag(FLAGS_log_requests); }
 
-bool randomly_abort_txn_on_first_commit() {
-  return absl::GetFlag(FLAGS_randomly_abort_txn_on_first_commit);
+bool fault_injection_enabled() {
+  return absl::GetFlag(FLAGS_enable_fault_injection);
 }
 
 }  // namespace config

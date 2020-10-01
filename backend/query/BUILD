@@ -89,6 +89,7 @@ cc_test(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
@@ -101,6 +102,7 @@ cc_library(
     hdrs = ["analyzer_options.h"],
     deps = [
         "//common:constants",
+        "//common:feature_flags",
         "@com_google_absl//absl/time",
         "@com_google_zetasql//zetasql/public:analyzer",
         "@com_google_zetasql//zetasql/public:options_cc_proto",
@@ -289,6 +291,7 @@ cc_library(
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/types:span",
+        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:evaluator_table_iterator",
         "@com_google_zetasql//zetasql/public:value",
@@ -310,6 +313,7 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:builtin_function",
         "@com_google_zetasql//zetasql/public:builtin_function_options",
         "@com_google_zetasql//zetasql/public:function",
@@ -359,12 +363,14 @@ cc_library(
     deps = [
         ":queryable_table",
         "//backend/schema/catalog:schema",
+        "//backend/schema/updater:global_schema_names",
         "//common:errors",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/resolved_ast",
         "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
+        "@com_googlesource_code_re2//:re2",
     ],
 )
 

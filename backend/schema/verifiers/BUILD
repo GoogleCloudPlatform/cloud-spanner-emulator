@@ -72,3 +72,32 @@ cc_test(
         "@com_google_zetasql//zetasql/public:value",
     ],
 )
+
+cc_library(
+    name = "foreign_key_verifiers",
+    srcs = ["foreign_key_verifiers.cc"],
+    hdrs = ["foreign_key_verifiers.h"],
+    deps = [
+        "//backend/common:ids",
+        "//backend/schema/catalog:schema",
+        "//backend/schema/updater:schema_validation_context",
+        "//common:errors",
+        "@com_google_absl//absl/status",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "foreign_key_verifiers_test",
+    srcs = ["foreign_key_verifiers_test.cc"],
+    deps = [
+        ":foreign_key_verifiers",
+        "//backend/database",
+        "//backend/transaction:read_write_transaction",
+        "//common:clock",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)

@@ -46,6 +46,7 @@ int64_t LogicalBytesInternal(const zetasql::Value& value) {
       return value.string_value().size();
     case zetasql::TYPE_BYTES:
       return value.bytes_value().size();
+    // TODO: Add support for NUMERIC in keys
     default:
       // Key columns should have already been validated, so invalid key columns
       // should not occur.

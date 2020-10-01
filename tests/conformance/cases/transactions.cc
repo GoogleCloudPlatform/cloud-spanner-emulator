@@ -19,10 +19,14 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
+#include "absl/strings/substitute.h"
 #include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "google/cloud/spanner/mutations.h"
 #include "google/cloud/spanner/timestamp.h"
 #include "google/cloud/spanner/transaction.h"
+#include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
 #include "absl/status/status.h"
 
@@ -48,6 +52,17 @@ class TransactionsTest : public DatabaseTest {
         col1 STRING(MAX)
       ) PRIMARY KEY (key1, key2)
     )"});
+  }
+
+ protected:
+  // Creates a new session for tests using raw grpc client.
+  zetasql_base::StatusOr<spanner_api::Session> CreateSession() {
+    grpc::ClientContext context;
+    spanner_api::CreateSessionRequest request;
+    request.set_database(std::string(database()->FullName()));  // NOLINT
+    spanner_api::Session response;
+    ZETASQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
+    return response;
   }
 };
 
@@ -128,6 +143,84 @@ TEST_F(TransactionsTest, ReadOnlyTransactionCheckReadTimestamp) {
   EXPECT_THAT(result->values,
               testing::ElementsAre(ValueRow{"value1", "value2", "value3"}));
   EXPECT_THAT(result->has_read_timestamp, true);
+}
+
+TEST_F(TransactionsTest, CanBeginTransactionWithReadTimestampTooFarInFuture) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+
+  // Begin a new read-only multi-use transaction with a read timestamp 2 hours
+  // in future.
+  spanner_api::BeginTransactionRequest begin_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            options { read_only { return_read_timestamp: true } }
+          )",
+          session.name()));
+  *begin_request.mutable_options()
+       ->mutable_read_only()
+       ->mutable_read_timestamp() =
+      AbslTimeToProto(absl::Now() + absl::Hours(2));
+
+  spanner_api::Transaction txn;
+  grpc::ClientContext context;
+  ZETASQL_EXPECT_OK(raw_client()->BeginTransaction(&context, begin_request, &txn));
+  EXPECT_TRUE(txn.has_read_timestamp());
+
+  // Read using this transaction fails though since the read timestamp is too
+  // far in the future. Don't run this against prod though, since prod will
+  // return with deadline exceeded after waiting for 1 hour.
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(absl::Substitute(
+      R"(
+        session: "$0"
+        transaction { id: "$1" }
+        table: "TestTable"
+        columns: "key1"
+        columns: "key2"
+        key_set { all: true }
+      )",
+      session.name(), txn.id()));
+  {
+    spanner_api::ResultSet read_response;
+    grpc::ClientContext context;
+    if (!in_prod_env()) {
+      EXPECT_THAT(raw_client()->Read(&context, read_request, &read_response),
+                  StatusIs(absl::StatusCode::kDeadlineExceeded));
+    }
+  }
+}
+
+TEST_F(TransactionsTest, DmlWithReadOnlyTransactionFails) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+
+  // Begin a new read-only transaction
+  spanner_api::BeginTransactionRequest begin_request =
+      PARSE_TEXT_PROTO(absl::Substitute(
+          R"(
+            session: "$0"
+            options { read_only {} }
+          )",
+          session.name()));
+
+  spanner_api::Transaction txn;
+  grpc::ClientContext context;
+  ZETASQL_EXPECT_OK(raw_client()->BeginTransaction(&context, begin_request, &txn));
+
+  // Attempt DML with a transaction that was marked as read only.
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(absl::Substitute(
+      R"pb(
+        session: "$0"
+        transaction { id: "$1" }
+        sql: "INSERT INTO TestTable(key1) VALUES('val1')"
+        seqno: 1
+      )pb",
+      session.name(), txn.id()));
+  {
+    grpc::ClientContext context;
+    spanner_api::ResultSet response;
+    auto result = raw_client()->ExecuteSql(&context, request, &response);
+    EXPECT_THAT(result, StatusIs(absl::StatusCode::kInvalidArgument));
+  }
 }
 
 TEST_F(TransactionsTest, ReadWriteTransactionRollbackReplayIsOk) {

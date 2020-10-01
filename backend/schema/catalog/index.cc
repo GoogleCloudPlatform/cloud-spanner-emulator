@@ -50,6 +50,8 @@ std::string Index::FullDebugString() const {
   absl::StrAppend(&result,
                   "Null Filtering: ", (is_null_filtered_ ? "true" : "false"),
                   "\n");
+  absl::StrAppend(&result, "Managed: ", (is_managed() ? "true" : "false"),
+                  "\n");
   absl::StrAppend(&result, "Column :: Source Column :\n");
   for (const Column* column : index_data_table_->columns()) {
     absl::StrAppend(&result, column->Name(), " :: ",
@@ -93,6 +95,13 @@ absl::Status Index::DeepClone(SchemaGraphEditor* editor,
   for (const Column*& stored_column : stored_columns_) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(stored_column));
     stored_column = schema_node->As<const Column>();
+  }
+
+  if (!managing_nodes_.empty()) {
+    ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&managing_nodes_));
+    if (managing_nodes_.empty()) {
+      MarkDeleted();
+    }
   }
 
   return absl::OkStatus();

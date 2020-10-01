@@ -26,6 +26,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/memory/memory.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/match.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"

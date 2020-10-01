@@ -81,6 +81,14 @@ absl::Status ForeignKeyValidator::Validate(const ForeignKey* foreign_key,
   ZETASQL_RET_CHECK_EQ(foreign_key->referenced_table_->FindReferencingForeignKey(
                    foreign_key->Name()),
                foreign_key);
+  ZETASQL_RET_CHECK_EQ(foreign_key->referencing_data_table(),
+               foreign_key->referencing_index_ == nullptr
+                   ? foreign_key->referencing_table_
+                   : foreign_key->referencing_index_->index_data_table());
+  ZETASQL_RET_CHECK_EQ(foreign_key->referenced_data_table(),
+               foreign_key->referenced_index_ == nullptr
+                   ? foreign_key->referenced_table_
+                   : foreign_key->referenced_index_->index_data_table());
 
   std::string referencing_table_name = foreign_key->referencing_table_->Name();
   std::string referenced_table_name = foreign_key->referenced_table_->Name();
@@ -104,15 +112,15 @@ absl::Status ForeignKeyValidator::Validate(const ForeignKey* foreign_key,
     for (const Column* column : columns) {
       if (!names.insert(column->Name()).second) {
         return error::ForeignKeyDuplicateColumn(
-            column->Name(), referencing_table_name, foreign_key_name);
+            column->Name(), column->table()->Name(), foreign_key_name);
       }
       if (!IsSupportedKeyColumnType(column->GetType())) {
         return error::ForeignKeyColumnTypeUnsupported(
-            column->Name(), referencing_table_name, foreign_key_name);
+            column->Name(), column->table()->Name(), foreign_key_name);
       }
       if (column->allows_commit_timestamp()) {
         return error::ForeignKeyCommitTimestampColumnUnsupported(
-            column->Name(), referencing_table_name, foreign_key_name);
+            column->Name(), column->table()->Name(), foreign_key_name);
       }
     }
   }

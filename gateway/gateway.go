@@ -39,12 +39,13 @@ import (
 
 // Options encapsulates options for the emulator gateway.
 type Options struct {
-	GatewayAddress     string
-	FrontendBinary     string
-	FrontendAddress    string
-	CopyEmulatorStdout bool
-	CopyEmulatorStderr bool
-	LogRequests        bool
+	GatewayAddress       string
+	FrontendBinary       string
+	FrontendAddress      string
+	CopyEmulatorStdout   bool
+	CopyEmulatorStderr   bool
+	LogRequests          bool
+	EnableFaultInjection bool
 }
 
 // Gateway implements the emulator gateway server.
@@ -60,14 +61,18 @@ func New(opts Options) *Gateway {
 // Run starts the emulator gateway server.
 func (gw *Gateway) Run() {
 	// Start the emulator grpc server and redirect its output.
-	logRequests := "--nolog_requests"
-	if gw.opts.LogRequests {
-		logRequests = "--log_requests"
-	}
-	cmd := exec.Command(gw.opts.FrontendBinary,
+	emulatorArgs := []string{
 
-		logRequests,
-		"--host_port", gw.opts.FrontendAddress)
+		"--host_port", gw.opts.FrontendAddress,
+	}
+	if gw.opts.LogRequests {
+		emulatorArgs = append(emulatorArgs, "--log_requests")
+	}
+	if gw.opts.EnableFaultInjection {
+		emulatorArgs = append(emulatorArgs, "--enable_fault_injection")
+	}
+
+	cmd := exec.Command(gw.opts.FrontendBinary, emulatorArgs...)
 
 	// Proxy emulator log to gateway log.
 	if gw.opts.CopyEmulatorStdout {

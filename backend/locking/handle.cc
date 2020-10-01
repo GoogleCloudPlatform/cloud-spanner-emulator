@@ -16,6 +16,7 @@
 
 #include "backend/locking/handle.h"
 
+#include "zetasql/base/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "backend/locking/manager.h"
 

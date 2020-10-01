@@ -221,6 +221,48 @@ TEST_F(IndexTest, ValidateKeyTooLargeFails) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+// TODO: Update NumericIndexTests once NUMERIC is supported in
+// keys/indexes.
+class NumericIndexTest : public DatabaseTest {
+ public:
+  absl::Status SetUpDatabase() override {
+    return SetSchema({
+        R"(CREATE TABLE Accounts(
+          ID   INT64 NOT NULL,
+          Name STRING(MAX),
+          Money NUMERIC
+        ) PRIMARY KEY (ID)
+      )",
+        "CREATE INDEX AccountsByNameStoringMoney ON Accounts(Name) STORING "
+        "(Money)",
+    });
+  }
+};
+
+TEST_F(NumericIndexTest, BasicRead) {
+  Numeric adam_money =
+      cloud::spanner::MakeNumeric("-9999999999999999123.456789").value();
+  Numeric bill_money = cloud::spanner::MakeNumeric("123.456789").value();
+  Numeric john_money = cloud::spanner::MakeNumeric("0").value();
+  Numeric zack_money = cloud::spanner::MakeNumeric("999999999.456789").value();
+
+  ZETASQL_EXPECT_OK(
+      Insert("Accounts", {"ID", "Name", "Money"}, {0, "Zack", zack_money}));
+  ZETASQL_EXPECT_OK(
+      Insert("Accounts", {"ID", "Name", "Money"}, {1, "John", john_money}));
+  ZETASQL_EXPECT_OK(
+      Insert("Accounts", {"ID", "Name", "Money"}, {2, "Adam", adam_money}));
+  ZETASQL_EXPECT_OK(
+      Insert("Accounts", {"ID", "Name", "Money"}, {3, "Bill", bill_money}));
+
+  EXPECT_THAT(ReadAllWithIndex("Accounts", "AccountsByNameStoringMoney",
+                               {"Name", "Money"}),
+              IsOkAndHoldsRows({{"Adam", adam_money},
+                                {"Bill", bill_money},
+                                {"John", john_money},
+                                {"Zack", zack_money}}));
+}
+
 }  // namespace
 
 }  // namespace test

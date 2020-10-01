@@ -1,0 +1,160 @@
+//
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+
+TOKEN:
+{
+    <#QUOTE_S_CONTENTS:  (~["\\", "'", "\n", "\r"] | "\\" ~[])>
+  | <#QUOTE_D_CONTENTS:  (~["\\", "\"", "\n", "\r"] | "\\" ~[])>
+  | <#QUOTE_S3_CONTENTS: (   ~["\\", "'"]
+                           | "\\" ~[]
+                           | "'" ~["\\", "'"]
+                           | "'\\" ~[]
+                           | "''" ~["\\", "'"]
+                           | "''\\" ~[]
+                         )>
+  | <#QUOTE_D3_CONTENTS: (   ~["\\", "\""]
+                           | "\\" ~[]
+                           | "\"" ~["\\", "\""]
+                           | "\"\\" ~[]
+                           | "\"\"" ~["\\", "\""]
+                           | "\"\"\\" ~[]
+                         )>
+}
+<DEFAULT> MORE : { "'''" : QUOTE_S3_BODY }
+<QUOTE_S3_BODY> TOKEN :
+{
+  <STRING_S3_LITERAL: (<QUOTE_S3_CONTENTS>)* "'''">
+  {
+    ValidateStringLiteral(matchedToken, true);
+  } : DEFAULT
+}
+
+<DEFAULT> MORE : { "\"\"\"" : QUOTE_D3_BODY }
+<QUOTE_D3_BODY> TOKEN :
+{
+  <STRING_D3_LITERAL: (<QUOTE_D3_CONTENTS>)* "\"\"\"">
+  {
+    ValidateStringLiteral(matchedToken, true);
+  } : DEFAULT
+}
+<DEFAULT> MORE : { "r'''" : QUOTE_SR3_BODY }
+<QUOTE_SR3_BODY> TOKEN :
+{
+  <STRING_SR3_LITERAL: (<QUOTE_S3_CONTENTS>)* "'''">
+  {
+    ValidateStringLiteral(matchedToken, true);
+  } : DEFAULT
+}
+
+<DEFAULT> MORE : { "r\"\"\"" : QUOTE_DR3_BODY }
+<QUOTE_DR3_BODY> TOKEN :
+{
+  <STRING_DR3_LITERAL: (<QUOTE_D3_CONTENTS>)* "\"\"\"">
+  {
+    ValidateStringLiteral(matchedToken, true);
+  } : DEFAULT
+}
+<DEFAULT> MORE : { "b'''" : QUOTE_SB3_BODY }
+<QUOTE_SB3_BODY> TOKEN :
+{
+  <BYTES_S3_LITERAL: (<QUOTE_S3_CONTENTS>)* "'''">
+  {
+    ValidateBytesLiteral(matchedToken);
+  } : DEFAULT
+}
+
+<DEFAULT> MORE : { "b\"\"\"" : QUOTE_DB3_BODY }
+<QUOTE_DB3_BODY> TOKEN :
+{
+  <BYTES_D3_LITERAL: (<QUOTE_D3_CONTENTS>)* "\"\"\"">
+  {
+      ValidateBytesLiteral(matchedToken);
+  } : DEFAULT
+}
+<DEFAULT> MORE : { "rb'''" : QUOTE_SRB3_BODY }
+<DEFAULT> MORE : { "br'''" : QUOTE_SRB3_BODY }
+<QUOTE_SRB3_BODY> TOKEN :
+{
+  <BYTES_SR3_LITERAL: (<QUOTE_S3_CONTENTS>)* "'''">
+  {
+    ValidateBytesLiteral(matchedToken);
+  } : DEFAULT
+}
+
+<DEFAULT> MORE : { "rb\"\"\"" : QUOTE_DRB3_BODY }
+<DEFAULT> MORE : { "br\"\"\"" : QUOTE_DRB3_BODY }
+<QUOTE_DRB3_BODY> TOKEN :
+{
+  <BYTES_DR3_LITERAL: (<QUOTE_D3_CONTENTS>)* "\"\"\"">
+  {
+    ValidateBytesLiteral(matchedToken);
+  } : DEFAULT
+}
+<QUOTE_S3_BODY, QUOTE_SR3_BODY, QUOTE_SB3_BODY, QUOTE_SRB3_BODY> TOKEN :
+{
+  <UNCLOSED_SQ3: (<QUOTE_S3_CONTENTS>)* ("'" | "''")?> : DEFAULT
+}
+<QUOTE_D3_BODY, QUOTE_DR3_BODY, QUOTE_DB3_BODY, QUOTE_DRB3_BODY> TOKEN :
+{
+  <UNCLOSED_DQ3: (<QUOTE_D3_CONTENTS>)* ("\"" | "\"\"")?> : DEFAULT
+}
+TOKEN:
+{
+    <STRING_LITERAL:        (   ( "'" (<QUOTE_S_CONTENTS>)* "'" )
+                              | ( "\"" (<QUOTE_D_CONTENTS>)* "\"" ))>
+    {
+      ValidateStringLiteral(matchedToken, false);
+    }
+  | <STRING_R_LITERAL:  "r" (   ( "'" (<QUOTE_S_CONTENTS>)* "'" )
+                              | ( "\"" (<QUOTE_D_CONTENTS>)* "\""))>
+    {
+      ValidateStringLiteral(matchedToken, true);
+    }
+  | <BYTES_LITERAL:     "b" (   ( "'" (<QUOTE_S_CONTENTS>)* "'" )
+                              | ("\"" (<QUOTE_D_CONTENTS>)* "\""))>
+    {
+      ValidateBytesLiteral(matchedToken);
+    }
+  | <BYTES_R_LITERAL:   ("rb" | "br")
+                              ( ( "'" (<QUOTE_S_CONTENTS>)* "'" )
+                              | ( "\"" (<QUOTE_D_CONTENTS>)* "\"" ))>
+    {
+      ValidateBytesLiteral(matchedToken);
+    }
+}
+
+void any_string_literal() :
+{}
+{
+      <STRING_LITERAL>
+    | <STRING_R_LITERAL>
+    | <STRING_S3_LITERAL>
+    | <STRING_D3_LITERAL>
+    | <STRING_SR3_LITERAL>
+    | <STRING_DR3_LITERAL>
+}
+
+void any_bytes_literal() :
+{}
+{
+      <BYTES_LITERAL>
+    | <BYTES_R_LITERAL>
+    | <BYTES_S3_LITERAL>
+    | <BYTES_D3_LITERAL>
+    | <BYTES_SR3_LITERAL>
+    | <BYTES_DR3_LITERAL>
+}

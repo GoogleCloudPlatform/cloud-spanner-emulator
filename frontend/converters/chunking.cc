@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "absl/memory/memory.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/substitute.h"
 #include "common/errors.h"
 #include "zetasql/base/status_macros.h"

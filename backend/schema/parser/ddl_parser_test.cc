@@ -20,6 +20,8 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "common/feature_flags.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -29,6 +31,7 @@ namespace ddl {
 
 namespace {
 
+using ::testing::HasSubstr;
 using ::zetasql_base::testing::IsOkAndHolds;
 using ::zetasql_base::testing::StatusIs;
 
@@ -86,6 +89,18 @@ TEST(ParseCreateTable, CannotParseCreateTableWithoutName) {
                     ) PRIMARY KEY ()
                     )"),
               StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(ParseCreateTable, CannotParseCreateTableWithoutPrimaryKey) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"(
+                    CREATE TABLE Users (
+                      UserId INT64 NOT NULL,
+                      Name STRING(MAX)
+                    )
+                    )"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Expecting 'PRIMARY' but found 'EOF'")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumn) {
@@ -673,6 +688,62 @@ TEST(ParseCreateTable, CanParseAlterTableWithDropConstraint) {
                   )")));
 }
 
+TEST(ParseCreateTable, CannotParseNumericWhenDisabled) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_numeric_type = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(ParseDDLStatement(
+                  R"(
+                    CREATE TABLE T (
+                      K INT64 NOT NULL,
+                      NumericVal NUMERIC,
+                      NumericArr ARRAY<NUMERIC>
+                    ) PRIMARY KEY (K)
+                  )"),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("NUMERIC type is not implemented.")));
+}
+
+TEST(ParseCreateTable, CanParseCreateTableWithNumeric) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_numeric_type = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"(
+                    CREATE TABLE T (
+                      K INT64 NOT NULL,
+                      NumericVal NUMERIC,
+                      NumericArr ARRAY<NUMERIC>
+                    ) PRIMARY KEY (K)
+                  )"),
+      IsOkAndHolds(test::EqualsProto(
+          R"(
+            create_table {
+              table_name: "T"
+              columns {
+                column_name: "K"
+                properties { column_type { type: INT64 } }
+                constraints { not_null { nullable: false } }
+              }
+              columns {
+                column_name: "NumericVal"
+                properties { column_type { type: NUMERIC } }
+              }
+              columns {
+                column_name: "NumericArr"
+                properties {
+                  column_type {
+                    type: ARRAY
+                    array_subtype: { type: NUMERIC }
+                  }
+                }
+              }
+              constraints { primary_key { key_part { key_column_name: "K" } } }
+            }
+          )")));
+}
+
 // CREATE INDEX
 
 TEST(ParseCreateIndex, CanParseCreateIndexBasicImplicitlyGlobal) {
@@ -929,6 +1000,51 @@ TEST(ParseAlterTable, CanParseAddColumnNamedColumnNoQuotes) {
                         column {
                           column_name: "COLUMN"
                           properties { column_type { type: STRING } }
+                        }
+                      }
+                    }
+                  )")));
+}
+
+TEST(ParseAlterTable, CanParseAddNumericColumn) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_numeric_type = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(ParseDDLStatement(
+                  R"(
+                    ALTER TABLE T ADD COLUMN G NUMERIC
+                  )"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"(
+                    alter_table {
+                      table_name: "T"
+                      alter_column {
+                        type: ADD
+                        column {
+                          column_name: "G"
+                          properties { column_type { type: NUMERIC } }
+                        }
+                      }
+                    }
+                  )")));
+  EXPECT_THAT(ParseDDLStatement(
+                  R"(
+                    ALTER TABLE T ADD COLUMN H ARRAY<NUMERIC>
+                  )"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"(
+                    alter_table {
+                      table_name: "T"
+                      alter_column {
+                        type: ADD
+                        column {
+                          column_name: "H"
+                          properties {
+                            column_type {
+                              type: ARRAY
+                              array_subtype: { type: NUMERIC }
+                            }
+                          }
                         }
                       }
                     }
@@ -1568,6 +1684,203 @@ TEST(AllowCommitTimestamp, SetThroughOptions) {
                       }
                     }
                   )")));
+}
+
+TEST(AllowCommitTimestamp, CannotParseInvalidOptionValue) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"(
+                    CREATE TABLE Users (
+                      UserId INT64,
+                      UpdateTs TIMESTAMP OPTIONS (
+                        allow_commit_timestamp= bogus,
+                      )
+                    ) PRIMARY KEY ()
+                  )"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Encountered 'bogus' while parsing: option_key_val")));
+}
+
+TEST(ParseToken, CannotParseUnterminatedTripleQuote) {
+  static const char* const statements[] = {
+      "'''",        "''''",          "'''''",       "'''abc",
+      "'''abc''",   "'''abc'",       "r'''abc",     "b'''abc",
+      "\"\"\"",     "\"\"\"\"",      "\"\"\"\"\"",  "rb\"\"\"abc",
+      "\"\"\"abc",  "\"\"\"abc\"\"", "\"\"\"abc\"", "r\"\"\"abc",
+      "b\"\"\"abc", "rb\"\"\"abc",
+  };
+  for (const char* statement : statements) {
+    EXPECT_THAT(
+        ParseDDLStatement(statement),
+        StatusIs(absl::StatusCode::kInvalidArgument,
+                 HasSubstr("Encountered an unclosed triple quoted string")));
+  }
+}
+
+TEST(ParseToken, CannotParseIllegalStringEscape) {
+  EXPECT_THAT(
+      ParseDDLStatement("\"\xc2\""),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Encountered Structurally invalid UTF8 string")));
+}
+
+TEST(ParseToken, CannotParseIllegalBytesEscape) {
+  EXPECT_THAT(
+      ParseDDLStatement("b'''k\\u0030'''"),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr(
+              "Encountered Illegal escape sequence: Unicode escape sequence")));
+}
+
+class GeneratedColumns : public ::testing::Test {
+ public:
+  GeneratedColumns() {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_stored_generated_columns = true;
+    setter_ = absl::make_unique<test::ScopedEmulatorFeatureFlagsSetter>(flags);
+  }
+
+ private:
+  std::unique_ptr<test::ScopedEmulatorFeatureFlagsSetter> setter_;
+};
+
+TEST_F(GeneratedColumns, CanParseCreateTableWithStoredGeneratedColumn) {
+  EXPECT_THAT(ParseDDLStatement(R"(
+                CREATE TABLE T (
+                  K INT64 NOT NULL,
+                  V INT64,
+                  G INT64 AS (K + V) STORED,
+                  G2 INT64 AS (G +
+                               K * V) STORED,
+                ) PRIMARY KEY (K))"),
+              IsOkAndHolds(test::EqualsProto(R"d(
+                create_table {
+                  table_name: "T"
+                  columns {
+                    column_name: "K"
+                    properties {
+                      column_type {
+                        type: INT64
+                      }
+                    }
+                    constraints {
+                      not_null {
+                        nullable: false
+                      }
+                    }
+                  }
+                  columns {
+                    column_name: "V"
+                    properties {
+                      column_type {
+                        type: INT64
+                      }
+                    }
+                  }
+                  columns {
+                    column_name: "G"
+                    properties {
+                      column_type {
+                        type: INT64
+                      }
+                      expression: "(K + V)"
+                    }
+                  }
+                  columns {
+                    column_name: "G2"
+                    properties {
+                      column_type {
+                        type: INT64
+                      }
+                      expression: "(G +\n                               K * V)"
+                    }
+                  }
+                  constraints {
+                    primary_key {
+                      key_part {
+                        key_column_name: "K"
+                      }
+                    }
+                  }
+                })d")));
+}
+
+TEST_F(GeneratedColumns, CanParseAlterTableAddStoredGeneratedColumn) {
+  EXPECT_THAT(
+      ParseDDLStatement("ALTER TABLE T ADD COLUMN G INT64 AS (K + V) STORED"),
+      IsOkAndHolds(test::EqualsProto(
+          R"d(
+            alter_table {
+              table_name: "T"
+              alter_column {
+                type: ADD
+                column {
+                  column_name: "G"
+                  properties {
+                    column_type {
+                      type: INT64
+                    }
+                    expression: "(K + V)"
+                  }
+                }
+              }
+            }
+          )d")));
+}
+
+TEST_F(GeneratedColumns, CanParseAlterTableAlterStoredGeneratedColumn) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "ALTER TABLE T ALTER COLUMN G INT64 NOT NULL AS (K + V) STORED"),
+      IsOkAndHolds(test::EqualsProto(
+          R"d(
+            alter_table {
+              table_name: "T"
+              alter_column {
+                column_name: "G"
+                type: ALTER
+                column {
+                  column_name: "G"
+                  properties {
+                    column_type {
+                      type: INT64
+                    }
+                    expression: "(K + V)"
+                  }
+                  constraints {
+                    not_null {
+                      nullable: false
+                    }
+                  }
+                }
+              }
+            }
+          )d")));
+}
+
+TEST_F(GeneratedColumns, CannotCreateNonStoredGeneratedColumn) {
+  EXPECT_THAT(
+      ParseDDLStatement("ALTER TABLE T ADD COLUMN G INT64 AS (K + V)"),
+      StatusIs(
+          absl::StatusCode::kUnimplemented,
+          HasSubstr("Generated column `G` without the STORED attribute is not "
+                    "supported.")));
+}
+
+TEST_F(GeneratedColumns, CannotCreateStoredGeneratedColumnWhenDisabled) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_stored_generated_columns = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(ParseDDLStatement(R"(
+      CREATE TABLE T (
+        K INT64 NOT NULL,
+        V INT64,
+        G INT64 AS (K + V) STORED
+       ) PRIMARY KEY (K)
+    )"),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("Generated columns are not enabled.")));
 }
 
 }  // namespace

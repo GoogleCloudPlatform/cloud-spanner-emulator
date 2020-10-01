@@ -30,8 +30,8 @@ std::string grpc_host_port();
 // If true, gRPC requests and response messages are streamed to the INFO log.
 bool should_log_requests();
 
-// If true, read-write transactions will abort on first use.
-bool randomly_abort_txn_on_first_commit();
+// Returns true if fault injection is enabled.
+bool fault_injection_enabled();
 
 }  // namespace config
 }  // namespace emulator

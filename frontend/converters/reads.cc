@@ -22,6 +22,7 @@
 #include "google/spanner/v1/transaction.pb.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "backend/access/write.h"
 #include "backend/datamodel/key.h"

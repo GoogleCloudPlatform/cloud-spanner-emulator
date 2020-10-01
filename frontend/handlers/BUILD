@@ -147,6 +147,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_zetasql//zetasql/base:statusor",
     ],
     alwayslink = 1,
 )
@@ -214,6 +215,10 @@ cc_library(
         "//frontend/server:handler",
         "//frontend/server:request_context",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings:cord",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:variant",
+        "@com_google_farmhash//:farmhash_fingerprint",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_zetasql//zetasql/base:statusor",
@@ -337,6 +342,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_zetasql//zetasql/base:statusor",
     ],
     alwayslink = 1,
 )

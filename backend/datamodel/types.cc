@@ -42,6 +42,7 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
     case zetasql::TypeKind::TYPE_BYTES:
     case zetasql::TypeKind::TYPE_TIMESTAMP:
     case zetasql::TypeKind::TYPE_DATE:
+    case zetasql::TypeKind::TYPE_NUMERIC:
       return true;
     default:
       return false;
@@ -50,7 +51,9 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
 
 bool IsSupportedKeyColumnType(const zetasql::Type* type) {
   // According to https://cloud.google.com/spanner/docs/data-types
-  if (type->IsArray()) {
+  // TODO: Add support for NUMERIC in keys and remove the numeric
+  // in OR condition below
+  if (type->IsArray() || type->IsNumericType()) {
     return false;
   }
   return IsSupportedColumnType(type);

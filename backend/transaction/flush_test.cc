@@ -20,6 +20,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "zetasql/base/statusor.h"
 #include "absl/time/time.h"
 #include "backend/actions/ops.h"
 #include "backend/storage/in_memory_storage.h"

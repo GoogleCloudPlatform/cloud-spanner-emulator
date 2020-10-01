@@ -35,6 +35,37 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+namespace {
+
+absl::Status GetDropManagedIndexError(
+    absl::string_view index_name,
+    absl::Span<const SchemaNode* const> managing_nodes) {
+  std::vector<std::string> foreign_key_names;
+  std::vector<std::string> other_names;
+  for (const SchemaNode* node : managing_nodes) {
+    auto name_info = node->GetSchemaNameInfo();
+    if (name_info.has_value()) {
+      if (name_info->kind == "Foreign Key") {
+        foreign_key_names.push_back(absl::StrCat("`", name_info->name, "`"));
+      } else {
+        other_names.push_back(
+            absl::StrCat("`", name_info->name, "` (", name_info->kind, ")"));
+      }
+    } else {
+      other_names.push_back("(no schema name info available)");
+    }
+  }
+  if (!foreign_key_names.empty()) {
+    return error::DropForeignKeyManagedIndex(
+        index_name, absl::StrJoin(foreign_key_names, ", "));
+  }
+  ZETASQL_RET_CHECK_FAIL() << "Unknown type of managed index: index name=`"
+                   << index_name << "` managing nodes=["
+                   << absl::StrJoin(other_names, ", ") << "]";
+}
+
+}  // namespace
+
 absl::Status IndexValidator::Validate(const Index* index,
                                       SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!index->name_.empty());
@@ -104,12 +135,18 @@ absl::Status IndexValidator::ValidateUpdate(const Index* index,
                                             const Index* old_index,
                                             SchemaValidationContext* context) {
   if (index->is_deleted()) {
+    if (!index->managing_nodes_.empty()) {
+      return GetDropManagedIndexError(index->name_, index->managing_nodes_);
+    }
     ZETASQL_RET_CHECK(index->index_data_table_->is_deleted());
     context->global_names()->RemoveName(index->Name());
     return absl::OkStatus();
   }
 
   ZETASQL_RET_CHECK(!index->index_data_table()->is_deleted());
+  for (const SchemaNode* managing_node : index->managing_nodes_) {
+    ZETASQL_RET_CHECK(!managing_node->is_deleted());
+  }
 
   ZETASQL_RET_CHECK_EQ(index->name_, old_index->name_);
   ZETASQL_RET_CHECK_EQ(index->is_null_filtered_, old_index->is_null_filtered_);

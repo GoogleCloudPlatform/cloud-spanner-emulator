@@ -18,6 +18,7 @@
 
 #include <vector>
 
+#include "zetasql/base/statusor.h"
 #include "absl/strings/match.h"
 #include "backend/common/case.h"
 #include "backend/common/rows.h"

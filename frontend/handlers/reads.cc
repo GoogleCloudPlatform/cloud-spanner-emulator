@@ -39,6 +39,16 @@ namespace spanner_api = ::google::spanner::v1;
 
 namespace {
 
+absl::Duration kMaxFutureReadDuration = absl::Hours(1);
+
+absl::Status ValidateReadTimestampNotTooFarInFuture(absl::Time read_timestamp,
+                                                    absl::Time now) {
+  if (read_timestamp - now > kMaxFutureReadDuration) {
+    return error::ReadTimestampTooFarInFuture(read_timestamp);
+  }
+  return absl::OkStatus();
+}
+
 absl::Status ValidateTransactionSelectorForRead(
     const spanner_api::TransactionSelector& selector) {
   if (selector.selector_case() ==
@@ -71,6 +81,11 @@ absl::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* request,
     }
     if (txn->IsCommitted() || txn->IsRolledback()) {
       return error::CannotReadOrQueryAfterCommitOrRollback();
+    }
+    if (txn->IsReadOnly()) {
+      ZETASQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
+      ZETASQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
+          read_timestamp, ctx->env()->clock()->Now()));
     }
 
     // Parse read request.
@@ -110,7 +125,7 @@ absl::Status StreamingRead(
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
 
-  // Wrap all operations on this transaction so they are atomic .
+  // Wrap all operations on this transaction so they are atomic.
   return txn->GuardedCall(Transaction::OpType::kRead, [&]() -> absl::Status {
     // Cannot read after commit, rollback, or non-recoverable error.
     if (txn->IsInvalid()) {
@@ -118,6 +133,11 @@ absl::Status StreamingRead(
     }
     if (txn->IsCommitted() || txn->IsRolledback()) {
       return error::CannotReadOrQueryAfterCommitOrRollback();
+    }
+    if (txn->IsReadOnly()) {
+      ZETASQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
+      ZETASQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
+          read_timestamp, ctx->env()->clock()->Now()));
     }
 
     // Parse read request.

@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include "zetasql/base/statusor.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -22,6 +23,10 @@ namespace emulator {
 namespace test {
 
 namespace {
+
+using zetasql_base::testing::IsOk;
+using zetasql_base::testing::IsOkAndHolds;
+using zetasql_base::testing::StatusIs;
 
 class ParamsApiTest : public test::DatabaseTest {
  protected:
@@ -90,6 +95,51 @@ class ParamsApiTest : public test::DatabaseTest {
   std::string test_session_uri_;
 };
 
+TEST_F(ParamsApiTest, Params) {
+  // The majority of the test cases set the parameter to a certain value and
+  // expect the returned row to contain said value. This lambda just captures
+  // that pattern.
+  auto expect_selected = [this](Value v) {
+    EXPECT_THAT(QueryWithParams("SELECT @param",
+                                {{"param", v}, {"unused_param", Value(6)}}),
+                IsOkAndHoldsRow({v}));
+  };
+
+  expect_selected(Value(6));
+  expect_selected(Value("str"));
+  expect_selected(Value(""));
+  expect_selected(Value(Bytes("bytes")));
+  expect_selected(
+      Value(cloud::spanner::MakeNumeric("-2353250901550135.12453024").value()));
+  expect_selected(
+      Value(MakeTimestamp(absl::ToChronoTime(absl::FromUnixNanos(1)))));
+  expect_selected(Value(MakeTimestamp(absl::ToChronoTime(
+      absl::FromCivil(absl::CivilDay(1970, 1, 11), absl::FixedTimeZone(0))))));
+  expect_selected(Value(std::vector<bool>{true, false}));
+
+  EXPECT_THAT(
+      QueryWithParams("SELECT @param * @param",
+                      {{"param", Value(-2.0)}, {"unused_param", Value(6)}}),
+      IsOkAndHoldsRow({4.0}));
+
+  EXPECT_THAT(
+      QueryWithParams("SELECT @param * @param",
+                      {{"param", Value(-0.0)}, {"unused_param", Value(6)}}),
+      IsOkAndHoldsRow({0.0}));
+
+  EXPECT_THAT(
+      QueryWithParams("SELECT @param * @param",
+                      {{"param", Value(2.0)}, {"unused_param", Value(6)}}),
+      IsOkAndHoldsRow({4.0}));
+
+  EXPECT_THAT(QueryWithParams("SELECT @`p\\`ram`", {{"p`ram", Value(6)}}),
+              IsOkAndHoldsRow({6}));
+
+  EXPECT_THAT(
+      QueryWithParams("SELECT @param", {{std::string(130, 'x'), Value(6)}}),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 TEST_F(ParamsApiTest, NamedParameterInSqlNotSuppliedParametersInRequest) {
   // The SQL query uses a named parameter, but none are supplied in the actual
   // request.
@@ -97,7 +147,7 @@ TEST_F(ParamsApiTest, NamedParameterInSqlNotSuppliedParametersInRequest) {
   google::protobuf::Map<std::string, google::spanner::v1::Type> param_types;
   auto query = R"(SELECT @any)";
   EXPECT_THAT(Execute(query, params, param_types),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(ParamsApiTest, UndeclaredParameters) {
@@ -116,7 +166,7 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
       R"(metadata { row_type { fields { type { code: INT64 } } } }
          rows { values { string_value: "1" } })");
   EXPECT_THAT(Execute("SELECT 1", params, param_types),
-              zetasql_base::testing::IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(test::EqualsProto(result)));
 
   // Parameter used but value not provided.
   params = PARSE_TEXT_PROTO(
@@ -126,7 +176,7 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
          })");
   param_types = {};
   EXPECT_THAT(Execute("SELECT @WhereAmI > 1", params, param_types),
-              testing::Not(zetasql_base::testing::IsOk()));
+              testing::Not(IsOk()));
 
   // Declared and undeclared string parameters in same query.
   params = PARSE_TEXT_PROTO(
@@ -148,7 +198,7 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
       R"(metadata { row_type { fields { type { code: BOOL } } } }
          rows { values { bool_value: true } })");
   EXPECT_THAT(Execute("SELECT @p = @q", params, param_types),
-              zetasql_base::testing::IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(test::EqualsProto(result)));
 
   // Roundtrip values of all supported scalar types.
   params = PARSE_TEXT_PROTO(
@@ -173,38 +223,46 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
            value { string_value: "-1" }
          }
          fields {
+           key: "pnumeric"
+           value { string_value: "-99999900001412413135315315.3140124" }
+         }
+         fields {
            key: "ptimestamp"
            value { string_value: "1970-01-01T00:00:00.000001Z" }
          }
       )");
   param_types = {};
-  result = PARSE_TEXT_PROTO(R"(metadata {
-                                 row_type {
-                                   fields { type { code: BOOL } }
-                                   fields { type { code: INT64 } }
-                                   fields { type { code: FLOAT64 } }
-                                   fields { type { code: STRING } }
-                                   fields { type { code: BYTES } }
-                                   fields { type { code: BOOL } }
-                                 }
-                               }
-                               rows {
-                                 values { bool_value: true }
-                                 values { string_value: "-1" }
-                                 values { number_value: 1.5 }
-                                 values { string_value: "str" }
-                                 values { string_value: "Ynl0ZXM=" }
-                                 values { bool_value: true }
-                               })");
+  result = PARSE_TEXT_PROTO(
+      R"(metadata {
+           row_type {
+             fields { type { code: BOOL } }
+             fields { type { code: INT64 } }
+             fields { type { code: FLOAT64 } }
+             fields { type { code: STRING } }
+             fields { type { code: BYTES } }
+             fields { type { code: BOOL } }
+             fields { type { code: NUMERIC } }
+           }
+         }
+         rows {
+           values { bool_value: true }
+           values { string_value: "-1" }
+           values { number_value: 1.5 }
+           values { string_value: "str" }
+           values { string_value: "Ynl0ZXM=" }
+           values { bool_value: true }
+           values { string_value: "-99999900001412413135315315.3140124" }
+         })");
   EXPECT_THAT(Execute(R"(SELECT
                     CAST(@pBool AS BOOL),
                     CAST(@pInt64 AS INT64),
                     CAST(@pDouble AS FLOAT64),
                     CAST(@pString AS STRING),
                     CAST(@pBytes AS BYTES),
-                    CAST(@pBytes AS BYTES) = b"bytes")",
+                    CAST(@pBytes AS BYTES) = b"bytes",
+                    CAST(@pNumeric AS NUMERIC))",
                       params, param_types),
-              zetasql_base::testing::IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(test::EqualsProto(result)));
 
   // Roundtrip NULL values of all supported scalar types.
   params = PARSE_TEXT_PROTO(
@@ -229,6 +287,10 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
            value { null_value: NULL_VALUE }
          }
          fields {
+           key: "pnumeric"
+           value { null_value: NULL_VALUE }
+         }
+         fields {
            key: "ptimestamp"
            value { string_value: "1970-01-01T00:00:00.000001Z" }
          }
@@ -242,9 +304,11 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                                    fields { type { code: STRING } }
                                    fields { type { code: BYTES } }
                                    fields { type { code: BOOL } }
+                                   fields { type { code: NUMERIC } }
                                  }
                                }
                                rows {
+                                 values { null_value: NULL_VALUE }
                                  values { null_value: NULL_VALUE }
                                  values { null_value: NULL_VALUE }
                                  values { null_value: NULL_VALUE }
@@ -258,9 +322,10 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                     CAST(@pDouble AS FLOAT64),
                     CAST(@pString AS STRING),
                     CAST(@pBytes AS BYTES),
-                    CAST(@pBytes AS BYTES) = b"bytes")",
+                    CAST(@pBytes AS BYTES) = b"bytes",
+                    CAST(@pNumeric AS NUMERIC))",
                       params, param_types),
-              zetasql_base::testing::IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(test::EqualsProto(result)));
 
   // Roundtrip values of all supported array types.
   params = PARSE_TEXT_PROTO(
@@ -310,6 +375,15 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
            }
          }
          fields {
+           key: "pnumericarray"
+           value {
+             list_value {
+               values { null_value: NULL_VALUE }
+               values { string_value: "123.456" }
+             }
+           }
+         }
+         fields {
            key: "ptimestamp"
            value { string_value: "1970-01-01T00:00:00.000001Z" }
          }
@@ -347,6 +421,12 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                                        array_element_type { code: BYTES }
                                      }
                                    }
+                                   fields {
+                                     type {
+                                       code: ARRAY
+                                       array_element_type { code: NUMERIC }
+                                     }
+                                   }
                                  }
                                }
                                rows {
@@ -380,6 +460,12 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                                      values { string_value: "Ynl0ZXM=" }
                                    }
                                  }
+                                 values {
+                                   list_value {
+                                     values { null_value: NULL_VALUE }
+                                     values { string_value: "123.456" }
+                                   }
+                                 }
                                })");
   EXPECT_THAT(Execute(
                   R"(SELECT
@@ -387,9 +473,10 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                 CAST(@pInt64Array AS ARRAY<INT64>),
                 CAST(@pDoubleArray AS ARRAY<FLOAT64>),
                 CAST(@pStringArray AS ARRAY<STRING>),
-                CAST(@pBytesArray AS ARRAY<BYTES>))",
+                CAST(@pBytesArray AS ARRAY<BYTES>),
+                CAST(@pNumericArray AS ARRAY<NUMERIC>))",
                   params, param_types),
-              zetasql_base::testing::IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(test::EqualsProto(result)));
 
   // Roundtrip NULL values of all supported array types.
   params = PARSE_TEXT_PROTO(
@@ -411,6 +498,10 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
          }
          fields {
            key: "pstringarray"
+           value { null_value: NULL_VALUE }
+         }
+         fields {
+           key: "pnumericarray"
            value { null_value: NULL_VALUE }
          }
          fields {
@@ -452,9 +543,16 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                  array_element_type { code: BYTES }
                }
              }
+             fields {
+               type {
+                 code: ARRAY
+                 array_element_type { code: NUMERIC }
+               }
+             }
            }
          }
          rows {
+           values { null_value: NULL_VALUE }
            values { null_value: NULL_VALUE }
            values { null_value: NULL_VALUE }
            values { null_value: NULL_VALUE }
@@ -467,9 +565,10 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                 CAST(@pInt64Array AS ARRAY<INT64>),
                 CAST(@pDoubleArray AS ARRAY<FLOAT64>),
                 CAST(@pStringArray AS ARRAY<STRING>),
-                CAST(@pBytesArray AS ARRAY<BYTES>))",
+                CAST(@pBytesArray AS ARRAY<BYTES>),
+                CAST(@pNumericArray AS ARRAY<NUMERIC>))",
                   params, param_types),
-              zetasql_base::testing::IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(test::EqualsProto(result)));
 
   // Error message for unsupported undeclared parameter types.
   params = PARSE_TEXT_PROTO(
@@ -480,7 +579,7 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
   param_types = {};
   EXPECT_THAT(
       Execute("SELECT CAST(@pTimestamp AS TIMESTAMP)", params, param_types),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
   params = PARSE_TEXT_PROTO(
       R"(fields {
            key: "pdate"
@@ -492,7 +591,7 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
          })");
   param_types = {};
   EXPECT_THAT(Execute("SELECT CAST(@pDate AS DATE)", params, param_types),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
@@ -514,8 +613,8 @@ TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
   google::protobuf::Map<std::string, google::spanner::v1::Type> param_types = {};
   EXPECT_THAT(Execute("SELECT DoubleValue from test_table WHERE DoubleValue=@p",
                       params, param_types),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
-                                        testing::HasSubstr("FLOAT64")));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("FLOAT64")));
 
   // The provided parameter is a DOUBLE, but the query expects a STRING.
   params = PARSE_TEXT_PROTO(
@@ -535,8 +634,8 @@ TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
   param_types = {};
   EXPECT_THAT(Execute("SELECT StrValue FROM test_table WHERE StrValue=@p",
                       params, param_types),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
-                                        testing::HasSubstr("STRING")));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("STRING")));
 
   // The provided parameter is a DOUBLE, but the query expects an INT64.
   params = PARSE_TEXT_PROTO(
@@ -556,8 +655,8 @@ TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
   param_types = {};
   EXPECT_THAT(Execute("SELECT IntValue FROM test_table WHERE IntValue=@p",
                       params, param_types),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
-                                        testing::HasSubstr("INT64")));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("INT64")));
 
   // The provided parameter is a DOUBLE, but the query expects an INT64.
   params = PARSE_TEXT_PROTO(
@@ -575,8 +674,8 @@ TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
          })");
   param_types = {};
   EXPECT_THAT(Execute("SELECT @p", params, param_types),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
-                                        testing::HasSubstr("INT64")));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("INT64")));
 }
 
 }  // namespace

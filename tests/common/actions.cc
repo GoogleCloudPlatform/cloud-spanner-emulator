@@ -21,6 +21,7 @@
 
 #include "zetasql/public/value.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/time/time.h"
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"

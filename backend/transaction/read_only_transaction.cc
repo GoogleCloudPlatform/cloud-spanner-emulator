@@ -121,14 +121,21 @@ absl::Time ReadOnlyTransaction::PickReadTimestamp() {
       break;
     }
     case TimestampBound::kMinTimestamp: {
-      // Randomly choose staleness to mimic production behavior of reading
-      // from potentially lagging replicas.
-      read_timestamp_ = get_random_stale_timestamp(options_.timestamp);
+      if (options_.timestamp >= clock_->Now()) {
+        // If min timestamp bound is set in future, we want to wait until that
+        // time arrives before returning a read result, thus set read_timestamp
+        // to be same as the min timestamp provided.
+        read_timestamp_ = options_.timestamp;
+      } else {
+        // Randomly choose staleness to mimic production behavior of reading
+        // from potentially lagging replicas.
+        read_timestamp_ = get_random_stale_timestamp(options_.timestamp);
+      }
       break;
     }
     case TimestampBound::kMaxStaleness: {
-      // Randomly choose staleness to mimick production behavior of reading
-      // from potentially lagging replicas.
+      // Randomly choose staleness to mimic production behavior of reading from
+      // potentially lagging replicas. Bounded staleness cannot be negative.
       read_timestamp_ =
           get_random_stale_timestamp(clock_->Now() - options_.staleness);
       break;

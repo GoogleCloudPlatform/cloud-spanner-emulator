@@ -23,7 +23,10 @@
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
+#include "absl/status/status.h"
 #include "absl/time/time.h"
+#include "absl/types/optional.h"
+#include "absl/types/variant.h"
 #include "backend/common/ids.h"
 #include "backend/query/query_engine.h"
 #include "backend/schema/catalog/schema.h"
@@ -72,6 +75,35 @@ class Transaction {
     kRollback,
   };
 
+  // Indicates the DML error handling mode. This is used to differentiate
+  // between requests, replays, and registration errors.
+  enum class DMLErrorHandlingMode {
+    kDmlRequest,
+    kDmlReplay,
+    kDmlRegistrationError,
+  };
+
+  // RequestReplayState tracks the state for DML operations. DML requests can be
+  // replayed. If a replayed request is detected, the previously saved state and
+  // outcome will be used.
+  struct RequestReplayState {
+    // Indicates the final status of the request. Used for replaying the status.
+    // For BatchDml requests, this is not used since the status will be
+    // saved/returned in the response.
+    absl::Status status;
+
+    // The hash of the request that generated this state. This is used to detect
+    // request replays with a reused sequence number but with a different
+    // request.
+    int64_t request_hash;
+
+    // "outcome" can be one of two types:
+    //   a) ResultSet - Used by ExecuteSql and ExecuteStreamingSql handler.
+    //   b) ExecuteBatchDmlResponse - Used by ExecuteBatchDml handler.
+    absl::variant<spanner_api::ResultSet, spanner_api::ExecuteBatchDmlResponse>
+        outcome;
+  };
+
   Transaction(absl::variant<std::unique_ptr<backend::ReadWriteTransaction>,
                             std::unique_ptr<backend::ReadOnlyTransaction>>
                   backend_transaction,
@@ -111,6 +143,9 @@ class Transaction {
 
   // Calls Rollback using the backend transaction.
   absl::Status Rollback();
+
+  // Returns the read timestamp from the backend transaction.
+  zetasql_base::StatusOr<absl::Time> GetReadTimestamp() const;
 
   // Returns the commit timestamp from the backend transaction.
   zetasql_base::StatusOr<absl::Time> GetCommitTimestamp() const;
@@ -154,11 +189,43 @@ class Transaction {
     return std::get<1>(transaction_).get();
   }
 
+  // Returns the current transaction status.
+  absl::Status Status() const;
+
+  // If status is a constraint error, it invalidates the transaction and sets
+  // the transaction status.
+  void MaybeInvalidate(const absl::Status& status);
+
+  // Registers a new RequestReplayState using the given sequence number. If a
+  // state already exists for a given sequence number with a different request
+  // hash, an error will be returned in the Status field of RequestReplayState.
+  // If a state already exists for a given sequence number with a matching
+  // request hash, the replay state will be returned. If this is a new sequence
+  // number, a new replay state will be registered and nullopt will be returned.
+  absl::optional<RequestReplayState> LookupOrRegisterDmlRequest(
+      int64_t seqno, int64_t request_hash, const std::string& sql_statement);
+
+  // Sets the replay outcome for the current DML request if it completed
+  // successfully.
+  void SetDmlReplayOutcome(absl::variant<spanner_api::ResultSet,
+                                         spanner_api::ExecuteBatchDmlResponse>
+                               outcome);
+
+  // Returns the DML request type.
+  DMLErrorHandlingMode DMLErrorType() const;
+
   // Disallow copy and assignment.
   Transaction(const Transaction&) = delete;
   Transaction& operator=(const Transaction&) = delete;
 
  private:
+  // Sets the status within the DML RequestReplayState for the currently
+  // executing DML. If the current request failed due to a registration error
+  // (sequence out of order or request hash mismatch), this will be a no-op.
+  // When a DML replay request is received this saved status will be replayed
+  // instead of repeating the execution of that operation.
+  void SetDmlRequestReplayStatus(const absl::Status& status);
+
   // Invalidates the backend transaction. This should only ever be invoked due
   // to non-recoverable errors.
   absl::Status Invalidate();
@@ -170,9 +237,6 @@ class Transaction {
   absl::variant<std::unique_ptr<backend::ReadWriteTransaction>,
                 std::unique_ptr<backend::ReadOnlyTransaction>>
       transaction_;
-
-  // Returns the read timestamp from the backend transaction.
-  zetasql_base::StatusOr<absl::Time> GetReadTimestamp() const;
 
   // The query engine for executing queries.
   const backend::QueryEngine* query_engine_;
@@ -202,6 +266,15 @@ class Transaction {
 
   // Previous outcome of the transaction.
   absl::Status status_ ABSL_GUARDED_BY(mu_);
+
+  // DML sequence number of the current request.
+  int64_t current_dml_seqno_ ABSL_GUARDED_BY(mu_);
+
+  // The type of DML request.
+  DMLErrorHandlingMode dml_error_mode_;
+
+  // DML sequence request map.
+  std::map<int64_t, RequestReplayState> dml_requests_ ABSL_GUARDED_BY(mu_);
 };
 
 // Return true if the given transaction selector requires the transaction to be

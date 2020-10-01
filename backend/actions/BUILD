@@ -125,6 +125,7 @@ cc_test(
         "//common:limits",
         "//tests/common:actions",
         "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
         "//tests/common:test_schema_constructor",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/memory",
@@ -184,6 +185,7 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//common:errors",
         "@com_google_absl//absl/status",
+        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
 
@@ -236,6 +238,41 @@ cc_test(
 )
 
 cc_library(
+    name = "foreign_key",
+    srcs = ["foreign_key.cc"],
+    hdrs = ["foreign_key.h"],
+    deps = [
+        ":action",
+        ":context",
+        ":ops",
+        "//backend/datamodel:key_range",
+        "//backend/schema/catalog:schema",
+        "//backend/storage:iterator",
+        "//common:errors",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "foreign_key_test",
+    srcs = ["foreign_key_test.cc"],
+    deps = [
+        ":context",
+        ":foreign_key",
+        ":ops",
+        "//tests/common:actions",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_schema_constructor",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/types:variant",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
     name = "manager",
     srcs = ["manager.cc"],
     hdrs = ["manager.h"],
@@ -244,12 +281,15 @@ cc_library(
         ":column_value",
         ":context",
         ":existence",
+        ":foreign_key",
         ":index",
         ":interleave",
         ":ops",
         ":unique_index",
         "//backend/schema/catalog:schema",
         "//common:errors",
+        "@com_google_absl//absl/container:node_hash_map",
         "@com_google_absl//absl/memory",
+        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )

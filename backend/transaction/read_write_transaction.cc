@@ -27,6 +27,7 @@
 #include "absl/memory/memory.h"
 #include "absl/random/random.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
@@ -130,8 +131,8 @@ zetasql_base::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
 
 bool ShouldAbortOnFirstCommit() {
   absl::BitGen gen;
-  return config::randomly_abort_txn_on_first_commit() &&
-         absl::uniform_int_distribution<int>(1, 100)(gen) <= 10;
+  return config::fault_injection_enabled() &&
+         absl::uniform_int_distribution<int>(1, 100)(gen) <= 5;
 }
 
 RetryState MakeRetryState(const RetryState& retry_state, Clock* clock) {

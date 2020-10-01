@@ -108,6 +108,7 @@ TEST_F(BatchDmlTest, DISABLED_ConstraintErrorOnBatchDmlReplaysError) {
   auto result = BatchDmlTransaction(
       txn,
       {SqlStatement("INSERT Users(ID, Name, Age) VALUES (1, 'Levin', 27)")});
+  ZETASQL_EXPECT_OK(result);
   EXPECT_THAT(ToUtilStatus(result.value().status),
               StatusIs(absl::StatusCode::kAlreadyExists));
 
@@ -127,6 +128,7 @@ TEST_F(BatchDmlTest, QueryNotAllowedInBatchDml) {
 
   // Invalid argument error for executing non-Dml statement.
   auto result = BatchDmlTransaction(txn, {SqlStatement("SELECT * FROM Users")});
+  ZETASQL_EXPECT_OK(result);
   EXPECT_THAT(ToUtilStatus(result.value().status),
               StatusIs(absl::StatusCode::kInvalidArgument));
 
@@ -172,26 +174,36 @@ TEST_F(BatchDmlTest, ConcurrentTransactionWithBatchDmlNotAllowed) {
   auto result = BatchDmlTransaction(
       txn1,
       {SqlStatement("INSERT Users(ID, Name, Age) VALUES (1, 'Levin', 27)")});
+  ZETASQL_ASSERT_OK(result);
   ZETASQL_ASSERT_OK(ToUtilStatus(result.value().status));
 
   // Subsequent transactions will abort.
   result = BatchDmlTransaction(
       txn2,
       {SqlStatement("INSERT Users(ID, Name, Age) VALUES (2, 'Mark', 37)")});
-  EXPECT_THAT(result.status(),
-              StatusIs(in_prod_env() ? absl::StatusCode::kOk
-                                     : absl::StatusCode::kAborted));
-
+  // The Status can come from the call Status or the `BatchDmlResult`
+  auto status = !result.ok() ? result.status() : ToUtilStatus(result->status);
+  EXPECT_THAT(status, StatusIs(in_prod_env() ? absl::StatusCode::kOk
+                                             : absl::StatusCode::kAborted));
   // Commit first transaction succeeds.
   ZETASQL_EXPECT_OK(CommitTransaction(txn1, {}));
 
-  // Subsequent txn2 can now make progress.
-  result = BatchDmlTransaction(
-      txn2,
-      {SqlStatement("INSERT Users(ID, Name, Age) VALUES (2, 'Mark', 37)")});
-  EXPECT_THAT(ToUtilStatus(result.value().status),
-              StatusIs(in_prod_env() ? absl::StatusCode::kAlreadyExists
-                                     : absl::StatusCode::kOk));
+  if (status.code() == absl::StatusCode::kAborted) {
+    // A real application should use the Transaction runner which restarts the
+    // transaction after ABORTED; we have to do it ourselves.
+    txn2 = MakeReadWriteTransaction(txn2);
+
+    // Subsequent txn2 can now make progress.
+    result = BatchDmlTransaction(
+        txn2,
+        {SqlStatement("INSERT Users(ID, Name, Age) VALUES (2, 'Mark', 37)")});
+    // The Status can come from the call Status or the `BatchDmlResult`
+    auto status = !result.ok() ? result.status() : ToUtilStatus(result->status);
+    EXPECT_THAT(status, StatusIs(absl::StatusCode::kOk));
+  }
+
+  // Commit second transaction succeeds.
+  ZETASQL_EXPECT_OK(CommitTransaction(txn2, {}));
 }
 
 TEST_F(BatchDmlTest, InvalidDmlFailsButCommitSucceeds) {
@@ -231,7 +243,9 @@ TEST_F(BatchDmlTest, BatchDmlFailsInReadOnlyTxn) {
   result = BatchDmlTransaction(
       txn, {SqlStatement(
                "INSERT InvalidTable(ID, Name, Age) VALUES (1, 'Levin', 27)")});
-  EXPECT_THAT(result.status(), StatusIs(absl::StatusCode::kInvalidArgument));
+  // The Status can come from the call Status or the `BatchDmlResult`
+  auto status = !result.ok() ? result.status() : ToUtilStatus(result->status);
+  EXPECT_THAT(status, StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

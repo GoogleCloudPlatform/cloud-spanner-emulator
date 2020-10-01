@@ -20,6 +20,7 @@
 #include "zetasql/public/options.pb.h"
 #include "absl/time/time.h"
 #include "common/constants.h"
+#include "common/feature_flags.h"
 
 namespace google {
 namespace spanner {
@@ -52,7 +53,8 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
   options.set_product_mode(zetasql::PRODUCT_EXTERNAL);
   options.SetEnabledLanguageFeatures({
       zetasql::FEATURE_TIMESTAMP_NANOS,
-      zetasql::FEATURE_TABLESAMPLE,
+      // TODO: Reenable zetasql::FEATURE_TABLESAMPLE once AST
+      // filtering lands.
       zetasql::FEATURE_V_1_1_HAVING_IN_AGGREGATE,
       zetasql::FEATURE_V_1_1_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
       zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL,
@@ -64,6 +66,11 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::RESOLVED_UPDATE_STMT,
       zetasql::RESOLVED_DELETE_STMT,
   });
+
+  if (EmulatorFeatureFlags::instance().flags().enable_numeric_type) {
+    options.EnableLanguageFeature(zetasql::FEATURE_NUMERIC_TYPE);
+  }
+
   return options;
 }
 

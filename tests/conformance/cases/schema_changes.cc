@@ -19,6 +19,8 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/algorithm/container.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/ascii.h"
 #include "google/cloud/spanner/bytes.h"
 #include "google/cloud/spanner/mutations.h"
@@ -37,7 +39,10 @@ namespace {
 
 using cloud::spanner::Bytes;
 using cloud::spanner::InsertMutationBuilder;
+using testing::Eq;
+using testing::MatchesRegex;
 using zetasql_base::testing::StatusIs;
+
 template <class T>
 using optional = google::cloud::optional<T>;
 
@@ -48,6 +53,7 @@ const char kSchemaChangeTestDataDir[] = "tests/conformance/data/schema_changes";
 const char* kSchemaChangeTestFiles[] = {
     "combined.test",
     "foreign_key.test",
+    "generated_column.test",
     "key_column_alteration.test",
 };
 
@@ -128,9 +134,25 @@ TEST_P(SchemaChangeTest, FileBasedTests) {
   const auto& input = GetParam().input;
   const auto& expected = GetParam().expected;
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto actual, RunSchemaChangeTestCase(input));
-  EXPECT_EQ(expected.text, actual.text)
-      << "for input at line number " << input.line_no << ":\n"
-      << input.text;
+  std::string actual_text = actual.text;
+  std::string expected_text = expected.text;
+  if (input.normalize) {
+    auto normalize = [](std::string* text) {
+      RE2::GlobalReplace(text, "\n", " ");
+      RE2::GlobalReplace(text, R"(\\n)", " ");
+      RE2::GlobalReplace(text, R"(\\')", "'");
+      absl::RemoveExtraAsciiWhitespace(text);
+    };
+    normalize(&actual_text);
+    normalize(&expected_text);
+  }
+  std::string message = absl::StrCat("for input at line number ", input.line_no,
+                                     ":\n", input.text);
+  if (input.regex) {
+    EXPECT_THAT(actual_text, MatchesRegex(expected_text)) << message;
+  } else {
+    EXPECT_THAT(actual_text, Eq(expected_text)) << message;
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(

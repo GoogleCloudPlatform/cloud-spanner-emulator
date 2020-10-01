@@ -99,9 +99,21 @@ TEST(GlobalSchemaNames, GenerateForeignKeyName) {
 
 TEST(GlobalSchemaNames, GenerateManagedIndexName) {
   GlobalSchemaNames names;
-  std::string first{"FirstName"}, last{"LastName"};
-  auto status = names.GenerateManagedIndexName("Songs", {&first, &last},
-                                               /*unique=*/false);
+  auto status =
+      names.GenerateManagedIndexName("Songs", {"FirstName", "LastName"},
+                                     /*null_filtered=*/false,
+                                     /*unique=*/false);
+  ZETASQL_EXPECT_OK(status);
+  EXPECT_THAT(status.value(),
+              Eq("IDX_Songs_FirstName_LastName_09F682A0D8AF2F47"));
+}
+
+TEST(GlobalSchemaNames, GenerateManagedNullFilteredIndexName) {
+  GlobalSchemaNames names;
+  auto status =
+      names.GenerateManagedIndexName("Songs", {"FirstName", "LastName"},
+                                     /*null_filtered=*/true,
+                                     /*unique=*/false);
   ZETASQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(),
               Eq("IDX_Songs_FirstName_LastName_N_5849069C505A683F"));
@@ -109,9 +121,21 @@ TEST(GlobalSchemaNames, GenerateManagedIndexName) {
 
 TEST(GlobalSchemaNames, GenerateManagedUniqueIndexName) {
   GlobalSchemaNames names;
-  std::string first{"FirstName"}, last{"LastName"};
-  auto status = names.GenerateManagedIndexName("Songs", {&first, &last},
-                                               /*unique=*/true);
+  auto status =
+      names.GenerateManagedIndexName("Songs", {"FirstName", "LastName"},
+                                     /*null_filtered=*/false,
+                                     /*unique=*/true);
+  ZETASQL_EXPECT_OK(status);
+  EXPECT_THAT(status.value(),
+              Eq("IDX_Songs_FirstName_LastName_U_E3AF278F4A7F7E44"));
+}
+
+TEST(GlobalSchemaNames, GenerateManagedNullFilteredUniqueIndexName) {
+  GlobalSchemaNames names;
+  auto status =
+      names.GenerateManagedIndexName("Songs", {"FirstName", "LastName"},
+                                     /*null_filtered=*/true,
+                                     /*unique=*/true);
   ZETASQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(),
               Eq("IDX_Songs_FirstName_LastName_U_E3AF278F4A7F7E44"));

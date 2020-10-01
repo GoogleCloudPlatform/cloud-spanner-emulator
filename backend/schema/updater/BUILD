@@ -30,6 +30,7 @@ cc_library(
         "//backend/schema/ddl:operations_cc_proto",
         "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )
@@ -64,6 +65,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_farmhash//:farmhash_fingerprint",
+        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
 
@@ -98,6 +100,10 @@ cc_library(
         ":schema_validation_context",
         "//backend/common:ids",
         "//backend/datamodel:types",
+        "//backend/query:analyzer_options",
+        "//backend/query:catalog",
+        "//backend/query:query_engine_options",
+        "//backend/query:query_validator",
         "//backend/schema/backfills:schema_backfillers",
         "//backend/schema/builders:schema_builders",
         "//backend/schema/catalog:schema",
@@ -106,15 +112,24 @@ cc_library(
         "//backend/schema/graph:schema_graph_editor",
         "//backend/schema/parser:ddl_parser",
         "//backend/schema/parser:javacc_ddl_parser",
+        "//backend/schema/verifiers:foreign_key_verifiers",
+        "//common:constants",
         "//common:errors",
         "//common:limits",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
         "@com_google_protobuf//:protobuf_headers",
+        "@com_google_zetasql//zetasql/base:statusor",
+        "@com_google_zetasql//zetasql/public:analyzer",
+        "@com_google_zetasql//zetasql/public:simple_catalog",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/resolved_ast",
+        "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
     ],
 )
 
@@ -152,5 +167,30 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
         "@com_google_zetasql//zetasql/base:statusor",
+    ],
+)
+
+cc_library(
+    name = "graph_dependency_helper",
+    hdrs = ["graph_dependency_helper.h"],
+    deps = [
+        "//backend/common:case",
+        "//common:errors",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/base:ret_check",
+    ],
+)
+
+cc_test(
+    name = "graph_dependency_helper_test",
+    srcs = ["graph_dependency_helper_test.cc"],
+    deps = [
+        ":graph_dependency_helper",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

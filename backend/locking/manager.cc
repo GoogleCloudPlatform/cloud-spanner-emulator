@@ -16,6 +16,7 @@
 
 #include "backend/locking/manager.h"
 
+#include "zetasql/base/statusor.h"
 #include "absl/strings/substitute.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"

@@ -64,12 +64,11 @@ buildifier_dependencies()
 ################################################################################
 
 http_archive(
-    name="com_google_googleapis",
-    url = "https://github.com/googleapis/googleapis/archive/eba3897fff7c49ed85d3c47fc96fe96e47f6f684.zip",
-    strip_prefix="googleapis-eba3897fff7c49ed85d3c47fc96fe96e47f6f684",
-    # Patches missing C++ build rules for Spanner and IAM protos
-    patches = ["@//build/bazel:googleapis.patch"],
-    sha256 = "e12e955d937682a01dbceed657ce79f412e374347e23883bc559fadc1af39b10",
+    name = "com_google_googleapis",
+    url = "https://github.com/googleapis/googleapis/archive/59f97e6044a1275f83427ab7962a154c00d915b5.tar.gz",
+    strip_prefix = "googleapis-59f97e6044a1275f83427ab7962a154c00d915b5",
+    sha256 = "5e785c25b1d57973e7481b4da226d7c73056ea22c7545bf6d14dbebf6e99b073",
+    build_file = "@//build/bazel:googleapis.BUILD",
 )
 
 load("@com_google_googleapis//:repository_rules.bzl", "switched_rules_by_language")
@@ -158,19 +157,15 @@ load("@com_google_zetasql//bazel:zetasql_deps_step_4.bzl", "zetasql_deps_step_4"
 zetasql_deps_step_4()
 
 http_archive(
-    name = "com_github_googleapis_google_cloud_cpp_spanner",
-    url = "https://github.com/googleapis/google-cloud-cpp-spanner/archive/5a03fc23b85af214ed8e5954c50f351c20afe814.tar.gz",
-    strip_prefix = "google-cloud-cpp-spanner-5a03fc23b85af214ed8e5954c50f351c20afe814",
-    sha256 = "4132228b8e64bb3dac2e13132f97534780f42a4e4ba472d88e85dc2d6488a6c0",
+    name = "com_github_googleapis_google_cloud_cpp",
+    url = "https://github.com/googleapis/google-cloud-cpp/archive/2a0aeef05715fba00a8fbcfd0d85a4afeecf0722.tar.gz",
+    strip_prefix = "google-cloud-cpp-2a0aeef05715fba00a8fbcfd0d85a4afeecf0722",
+    sha256 = "17d635d6b6b32aec8b6e069aeb0780bd77855adaa48da20e55047264e4a5c0ea",
 )
 
-load("@com_github_googleapis_google_cloud_cpp_spanner//bazel:google_cloud_cpp_spanner_deps.bzl", "google_cloud_cpp_spanner_deps")
+load("@com_github_googleapis_google_cloud_cpp//bazel:google_cloud_cpp_deps.bzl", "google_cloud_cpp_deps")
 
-google_cloud_cpp_spanner_deps()
-
-load("@com_github_googleapis_google_cloud_cpp_common//bazel:google_cloud_cpp_common_deps.bzl", "google_cloud_cpp_common_deps")
-
-google_cloud_cpp_common_deps()
+google_cloud_cpp_deps()
 
 ################################################################################
 # Go Build Support                                                             #

@@ -68,6 +68,24 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   void FillIndexColumnsTable(zetasql::SimpleTable* index_columns);
 
   void AddColumnOptionsTable();
+
+  zetasql::SimpleTable* AddTableConstraintsTable();
+  void FillTableConstraintsTable(zetasql::SimpleTable* table_constraints);
+
+  zetasql::SimpleTable* AddConstraintTableUsageTable();
+  void FillConstraintTableUsageTable(
+      zetasql::SimpleTable* constraint_table_usage);
+
+  zetasql::SimpleTable* AddReferentialConstraintsTable();
+  void FillReferentialConstraintsTable(
+      zetasql::SimpleTable* referential_constraints);
+
+  zetasql::SimpleTable* AddKeyColumnUsageTable();
+  void FillKeyColumnUsageTable(zetasql::SimpleTable* key_column_usage);
+
+  zetasql::SimpleTable* AddConstraintColumnUsageTable();
+  void FillConstraintColumnUsageTable(
+      zetasql::SimpleTable* constraint_column_usage);
 };
 
 }  // namespace backend

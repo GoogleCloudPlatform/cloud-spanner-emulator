@@ -16,6 +16,7 @@
 
 #include "backend/schema/updater/global_schema_names.h"
 
+#include "zetasql/base/statusor.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "common/errors.h"
@@ -88,8 +89,8 @@ std::string GlobalSchemaNames::GenerateSequencedName(
 }
 
 zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateManagedIndexName(
-    absl::string_view table_name,
-    absl::Span<const std::string* const> column_names, bool unique) {
+    absl::string_view table_name, const std::vector<std::string>& column_names,
+    bool null_filtered, bool unique) {
   ZETASQL_RET_CHECK(!table_name.empty());
   ZETASQL_RET_CHECK(!column_names.empty());
   // Index column names.
@@ -101,8 +102,9 @@ zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateManagedIndexName(
   // Index codes, possibly empty.
   std::string codes;
   if (unique) {
+    // Single code of 'U' for unique indexes whether null-filtered or not.
     absl::StrAppend(&codes, "U");
-  } else {
+  } else if (null_filtered) {
     absl::StrAppend(&codes, "N");
   }
   absl::string_view codes_separator = codes.empty() ? "" : kSeparator;

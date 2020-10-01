@@ -383,10 +383,6 @@ TEST_F(AccessProtosTest, CannotConvertInvalidRowCursorToResultSet) {
   EXPECT_THAT(RowCursorToResultSetProto(&cursor1, 0, &result_pb),
               StatusIs(absl::StatusCode::kInternal));
 
-  TestRowCursor cursor2({"col1"}, {NumericType()}, {});
-  EXPECT_THAT(RowCursorToResultSetProto(&cursor2, 0, &result_pb),
-              StatusIs(absl::StatusCode::kInternal));
-
   TestRowCursor cursor3({"col1"}, {DatetimeType()}, {});
   EXPECT_THAT(RowCursorToResultSetProto(&cursor3, 0, &result_pb),
               StatusIs(absl::StatusCode::kInternal));

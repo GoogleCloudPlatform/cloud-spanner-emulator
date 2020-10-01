@@ -16,7 +16,7 @@
 
 """Build rules for generating parser for the given grammar file with Javacc."""
 
-def generate_javacc_parser(name, srcs, parser_class_name, extra_headers, **kwds):
+def generate_javacc_parser(name, srcs, parser_class_name, extra_deps, extra_headers, extra_srcs, **kwds):
     """Builds a javacc parser in C++ from the given grammar definition.
 
     Args:
@@ -25,7 +25,9 @@ def generate_javacc_parser(name, srcs, parser_class_name, extra_headers, **kwds)
         parser_class_name (string): Name of the parser class defined as part of
         grammar definition in .jjt file that is used by javacc to name
         intermediate ast and parser files.
+        extra_deps (list): List of dependencies required by javacc parser.
         extra_headers (list): List of headers required by javacc parser.
+        extra_srcs (list): List of cpp source files required by javacc parser.
         **kwds (args): Optional parameters to pass to build rules.
     """
 
@@ -96,7 +98,7 @@ def generate_javacc_parser(name, srcs, parser_class_name, extra_headers, **kwds)
     # Finally use generated AST and Parser files to produce c++ parser.
     native.cc_library(
         name = name,
-        srcs = schema_ast_genfiles + schema_parser_genfiles,
+        srcs = schema_ast_genfiles + schema_parser_genfiles + extra_srcs,
         hdrs = [
             parser_class_name + ".h",
             parser_class_name + "TokenManager.h",
@@ -114,7 +116,8 @@ def generate_javacc_parser(name, srcs, parser_class_name, extra_headers, **kwds)
         deps = [
             "@com_google_zetasql//zetasql/base",
             "@com_google_absl//absl/base:core_headers",
+            "@com_google_absl//absl/status",
             "@com_google_absl//absl/strings",
-        ],
+        ] + extra_deps,
         **kwds
     )

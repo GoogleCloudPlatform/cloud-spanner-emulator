@@ -98,6 +98,9 @@ constexpr int kMaxKeySizeBytes = 8 * 1024;  // 8 KB
 // Maximum size of the query string.
 constexpr int kMaxQueryStringSize = 1024 * 1024;  // 1 K
 
+// Maximum depth of column expressions.
+constexpr int kColumnExpressionMaxDepth = 20;
+
 }  // namespace limits
 }  // namespace emulator
 }  // namespace spanner

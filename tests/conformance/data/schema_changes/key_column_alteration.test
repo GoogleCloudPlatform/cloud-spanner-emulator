@@ -27,6 +27,34 @@ CREATE TABLE T2 (
 ) PRIMARY KEY(ts),
   INTERLEAVE IN PARENT T1 ON DELETE CASCADE;
 ==
+CREATE TABLE baz (
+  column1 STRING(32) NOT NULL,
+  column2 STRING(64) NOT NULL,
+) PRIMARY KEY(column1, column2);
+CREATE TABLE foo (
+  column1 STRING(32) NOT NULL,
+  column2 STRING(64) NOT NULL,
+  column3 STRING(32) NOT NULL,
+  created TIMESTAMP NOT NULL,
+) PRIMARY KEY(column1, column2, column3, created DESC),
+  INTERLEAVE IN PARENT baz ON DELETE CASCADE;
+ALTER TABLE foo ALTER COLUMN created SET OPTIONS
+(allow_commit_timestamp = true)
+--
+CREATE TABLE baz (
+  column1 STRING(32) NOT NULL,
+  column2 STRING(64) NOT NULL,
+) PRIMARY KEY(column1, column2);
+CREATE TABLE foo (
+  column1 STRING(32) NOT NULL,
+  column2 STRING(64) NOT NULL,
+  column3 STRING(32) NOT NULL,
+  created TIMESTAMP NOT NULL OPTIONS (
+    allow_commit_timestamp = true
+  ),
+) PRIMARY KEY(column1, column2, column3, created DESC),
+  INTERLEAVE IN PARENT baz ON DELETE CASCADE;
+==
 CREATE TABLE T1 (
   ts TIMESTAMP
 ) PRIMARY KEY(ts);

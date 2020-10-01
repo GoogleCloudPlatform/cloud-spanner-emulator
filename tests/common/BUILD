@@ -124,6 +124,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:value",
     ],
@@ -162,5 +163,15 @@ cc_library(
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
+    name = "scoped_feature_flags_setter",
+    hdrs = [
+        "scoped_feature_flags_setter.h",
+    ],
+    deps = [
+        "//common:feature_flags",
     ],
 )

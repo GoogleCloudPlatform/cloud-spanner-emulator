@@ -20,8 +20,10 @@
 #include <memory>
 #include <string>
 
+#include "google/spanner/v1/spanner.pb.h"
 #include "zetasql/public/value.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "absl/types/variant.h"
@@ -70,6 +72,10 @@ Transaction::Type TypeFromTransactionOptions(
       return Transaction::Type::kReadOnly;
     }
   }
+}
+
+bool HasPayload(const absl::Status& status, const std::string& url) {
+  return status.GetPayload(url).has_value();
 }
 
 }  // namespace
@@ -265,35 +271,132 @@ zetasql_base::StatusOr<absl::Time> Transaction::GetCommitTimestamp() const {
   return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
 }
 
+absl::Status Transaction::Status() const {
+  mu_.AssertHeld();
+
+  return status_;
+}
+
+void Transaction::MaybeInvalidate(const absl::Status& status) {
+  mu_.AssertHeld();
+
+  if (HasPayload(status, kConstraintError)) {
+    status_ = absl::Status(status.code(), status.message());
+    Invalidate().IgnoreError();
+  }
+}
+
+absl::optional<Transaction::RequestReplayState>
+Transaction::LookupOrRegisterDmlRequest(int64_t seqno, int64_t request_hash,
+                                        const std::string& sql_statement) {
+  mu_.AssertHeld();
+
+  current_dml_seqno_ = seqno;
+  const auto request = dml_requests_.find(seqno);
+  if (request == dml_requests_.end()) {
+    // If the request was not found, then it is a new request. Check to see that
+    // it isn't out of order.
+    if (!dml_requests_.empty() && seqno < dml_requests_.rbegin()->first) {
+      Transaction::RequestReplayState state;
+      state.status = error::DmlSequenceOutOfOrder(
+          seqno, dml_requests_.rbegin()->first, sql_statement);
+      // This is marked as a dml replay for error handling purposes. We do not
+      // want this status to be recorded within SetDmlRequestReplayStatus.
+      dml_error_mode_ = DMLErrorHandlingMode::kDmlRegistrationError;
+      return state;
+    }
+
+    // Order was valid, so we record the new sequence number.
+    dml_requests_.emplace(
+        seqno, Transaction::RequestReplayState{.status = absl::OkStatus(),
+                                               .request_hash = request_hash});
+    dml_error_mode_ = DMLErrorHandlingMode::kDmlRequest;
+    return absl::nullopt;
+  }
+
+  // Request was found, check to see that the request hash matches.
+  if (request_hash != request->second.request_hash) {
+    Transaction::RequestReplayState state = request->second;
+    state.status = error::ReplayRequestMismatch(seqno, sql_statement);
+    dml_error_mode_ = DMLErrorHandlingMode::kDmlRegistrationError;
+    return state;
+  }
+
+  // Return the saved status for this sequence.
+  dml_error_mode_ = DMLErrorHandlingMode::kDmlReplay;
+  return request->second;
+}
+
+void Transaction::SetDmlRequestReplayStatus(const absl::Status& status) {
+  mu_.AssertHeld();
+
+  // Ignore replays and registration errors.
+  if (dml_error_mode_ == DMLErrorHandlingMode::kDmlReplay ||
+      dml_error_mode_ == DMLErrorHandlingMode::kDmlRegistrationError) {
+    return;
+  }
+  const auto request = dml_requests_.find(current_dml_seqno_);
+  DCHECK(request != dml_requests_.end());
+  if (request != dml_requests_.end()) {
+    request->second.status = status;
+  }
+}
+
+void Transaction::SetDmlReplayOutcome(
+    absl::variant<spanner_api::ResultSet, spanner_api::ExecuteBatchDmlResponse>
+        outcome) {
+  mu_.AssertHeld();
+
+  // Ignore invalid transactions.
+  if (IsInvalid()) {
+    return;
+  }
+  const auto request = dml_requests_.find(current_dml_seqno_);
+  DCHECK(request != dml_requests_.end())
+      << "DML sequence number was not registered.";
+  if (request != dml_requests_.end()) {
+    request->second.outcome = outcome;
+  }
+}
+
+Transaction::DMLErrorHandlingMode Transaction::DMLErrorType() const {
+  return dml_error_mode_;
+}
+
 absl::Status Transaction::GuardedCall(OpType op,
                                       const std::function<absl::Status()>& fn) {
   absl::MutexLock lock(&mu_);
 
   // Cannot reuse a transaction that previously encountered an error.
   // Replay the last error status for the given transaction. Status will not be
-  // replayed for rollback operations.
-  if (!status_.ok() && op != OpType::kRollback) {
-    return status_;
+  // replayed for rollback operations. DML/BatchDML operations will check for
+  // this inside of the handler since dml sequence number replay must be checked
+  // first.
+  if (op != OpType::kDml && op != OpType::kRollback) {
+    ZETASQL_RETURN_IF_ERROR(status_);
   }
 
   // We only want to record the status for non-read operations, since read-only
   // operations can never cause the transaction to be aborted and never repeat
   // status errors. Non-DML SQL statements are read-only.
   const absl::Status call_status = fn();
-  absl::Status status(call_status.code(), call_status.message());
 
-  if (!status.ok()) {
-    const auto constraint_error = call_status.GetPayload(kConstraintError);
-    if (op == OpType::kCommit || constraint_error.has_value() ||
-        status.code() == absl::StatusCode::kAborted) {
-      status_ = status;
+  if (!call_status.ok()) {
+    if (op == OpType::kCommit || HasPayload(call_status, kConstraintError) ||
+        call_status.code() == absl::StatusCode::kAborted) {
+      status_ = absl::Status(call_status.code(), call_status.message());
       Invalidate().IgnoreError();
+    }
+    if (op == OpType::kDml) {
+      SetDmlRequestReplayStatus(call_status);
     }
   }
   if (op == OpType::kRollback) {
-    status_ = status;
+    status_ = call_status;
   }
-  return status;
+
+  // Strip payload from return status.
+  return absl::Status(call_status.code(), call_status.message());
 }
 
 bool ShouldReturnTransaction(

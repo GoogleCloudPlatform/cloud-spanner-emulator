@@ -23,6 +23,7 @@
 #include "zetasql/public/evaluator_table_iterator.h"
 #include "zetasql/public/value.h"
 #include "absl/memory/memory.h"
+#include "zetasql/base/statusor.h"
 #include "absl/types/span.h"
 #include "backend/access/read.h"
 #include "backend/query/queryable_column.h"

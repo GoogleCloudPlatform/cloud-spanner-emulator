@@ -94,6 +94,16 @@ class Index : public SchemaNode {
   // Returns true if null filtering is enabled for this index.
   bool is_null_filtered() const { return is_null_filtered_; }
 
+  // Returns true if this index is managed by other schema nodes. Managed
+  // indexes are regular indexes except for their lifecycles. Users cannot
+  // create, alter or drop managed indexes.
+  bool is_managed() const { return !managing_nodes_.empty(); }
+
+  // Returns the nodes that are managing this index.
+  absl::Span<const SchemaNode* const> managing_nodes() const {
+    return managing_nodes_;
+  }
+
   // Returns a detailed string which lists information about this index.
   std::string FullDebugString() const;
 
@@ -112,6 +122,7 @@ class Index : public SchemaNode {
   std::string DebugString() const override;
 
   class Builder;
+  class Editor;
 
  private:
   friend class IndexValidator;
@@ -157,6 +168,12 @@ class Index : public SchemaNode {
   // order as they appear in the CREATE INDEX statement. References are
   // to the corresponding columns in 'index_data_table_'.
   std::vector<const Column*> stored_columns_;
+
+  // Nodes that are managing this index. The first node creates the index and
+  // adds itself as a managing node. Subsequent nodes that can share this index
+  // add themselves as a managing node rather than creating a new index. Dropped
+  // nodes remove themselves. The last node dropped also drops this index.
+  std::vector<const SchemaNode*> managing_nodes_;
 
   // Whether the indexed columns form a unique key. If true, additional
   // constraints will be checked to enforce uniqueness for the Index.

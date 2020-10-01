@@ -16,6 +16,7 @@
 
 #include "backend/schema/updater/ddl_type_conversion.h"
 
+#include "zetasql/base/statusor.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
@@ -46,6 +47,8 @@ zetasql_base::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       return type_factory->get_timestamp();
     case ddl::ColumnType::DATE:
       return type_factory->get_date();
+    case ddl::ColumnType::NUMERIC:
+      return type_factory->get_numeric();
     case ddl::ColumnType::ARRAY: {
       ZETASQL_RET_CHECK(ddl_type.has_array_subtype())
           << "Missing array_subtype field for ddl::ColumnType input: "
@@ -88,6 +91,7 @@ ddl::ColumnType GoogleSqlTypeToDDLColumnType(const zetasql::Type* type) {
   if (type->IsBytes()) ddl_type.set_type(ddl::ColumnType::BYTES);
   if (type->IsTimestamp()) ddl_type.set_type(ddl::ColumnType::TIMESTAMP);
   if (type->IsDate()) ddl_type.set_type(ddl::ColumnType::DATE);
+  if (type->IsNumericType()) ddl_type.set_type(ddl::ColumnType::NUMERIC);
   return ddl_type;
 }
 

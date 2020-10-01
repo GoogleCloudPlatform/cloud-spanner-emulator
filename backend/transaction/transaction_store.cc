@@ -20,6 +20,7 @@
 
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "backend/common/rows.h"

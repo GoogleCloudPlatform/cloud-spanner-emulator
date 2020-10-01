@@ -17,16 +17,14 @@
 #include "backend/schema/printer/print_ddl.h"
 
 #include <memory>
-#include <string_view>
 #include <vector>
 
-#include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
-#include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "backend/common/case.h"
 #include "backend/datamodel/types.h"
+#include "backend/schema/parser/ddl_reserved_words.h"
 
 namespace google {
 namespace spanner {
@@ -35,39 +33,12 @@ namespace backend {
 
 namespace {
 
-const CaseInsensitiveStringSet* SchemaReservedWords() {
-  static const CaseInsensitiveStringSet* const reserved_words =
-      new CaseInsensitiveStringSet{
-          // clang-format off
-"ALL", "AND", "ANY", "ARRAY", "AS", "ASC", "ASSERT_ROWS_MODIFIED", "AT",
-"BETWEEN", "BY", "CASE", "CAST", "COLLATE", "CONTAINS", "CREATE", "CROSS",
-"CUBE", "CURRENT", "DEFAULT", "DEFINE", "DESC", "DISTINCT", "ELSE", "END",
-"ENUM", "ESCAPE", "EXCEPT", "EXCLUDE", "EXISTS", "EXTRACT", "FALSE", "FETCH",
-"FOLLOWING", "FOR", "FROM", "FULL", "GROUP", "GROUPING", "GROUPS", "HASH",
-"HAVING", "IF", "IGNORE", "IN", "INNER", "INTERSECT", "INTERVAL", "INTO",
-"IS", "JOIN", "LATERAL", "LEFT", "LIKE", "LIMIT", "LOOKUP", "MERGE", "NATURAL",
-"NEW", "NO", "NOT", "NULL", "NULLS", "OF", "ON", "OR", "ORDER", "OUTER", "OVER",
-"PARTITION", "PRECEDING", "PROTO", "RANGE", "RECURSIVE", "RESPECT", "RIGHT",
-"ROLLUP", "ROWS", "SELECT", "SET", "SOME", "STRUCT", "TABLESAMPLE", "THEN",
-"TO", "TREAT", "TRUE", "UNBOUNDED", "UNION", "UNNEST", "USING", "WHEN", "WHERE",
-"WINDOW", "WITH", "WITHIN",
-          // clang-format on
-      };
-  return reserved_words;
-}
-
-// Check to see if a variable name matches a KeyWord and enclose in backticks if
-// that is true.
-bool IsReservedWord(const std::string& name) {
-  return SchemaReservedWords()->contains(name);
-}
-
 std::string PrintQualifiedName(const std::string& name) {
   return absl::Substitute("`$0`", name);
 }
 
 std::string PrintName(const std::string& name) {
-  return IsReservedWord(name) ? PrintQualifiedName(name) : name;
+  return ddl::IsReservedWord(name) ? PrintQualifiedName(name) : name;
 }
 
 std::string PrintColumnNameList(absl::Span<const Column* const> columns) {
@@ -119,6 +90,11 @@ std::string PrintColumn(const Column* column) {
       ColumnTypeToString(column->GetType(), column->declared_max_length()));
   if (!column->is_nullable()) {
     absl::StrAppend(&ddl_string, " NOT NULL");
+  }
+  if (column->is_generated()) {
+    absl::StrAppend(
+        &ddl_string,
+        absl::Substitute(" AS $0 STORED", column->expression().value()));
   }
   if (column->GetType()->IsTimestamp() &&
       column->has_allows_commit_timestamp()) {
@@ -220,7 +196,9 @@ std::vector<std::string> PrintDDLStatements(const Schema* schema) {
                 return i1->Name() < i2->Name();
               });
     for (auto index : indexes) {
-      statements.push_back(PrintIndex(index));
+      if (!index->is_managed()) {
+        statements.push_back(PrintIndex(index));
+      }
     }
   }
   return statements;

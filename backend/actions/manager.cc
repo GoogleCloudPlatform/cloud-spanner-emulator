@@ -18,8 +18,10 @@
 
 #include <memory>
 
+#include "zetasql/base/statusor.h"
 #include "backend/actions/column_value.h"
 #include "backend/actions/existence.h"
+#include "backend/actions/foreign_key.h"
 #include "backend/actions/index.h"
 #include "backend/actions/interleave.h"
 #include "backend/actions/unique_index.h"
@@ -102,6 +104,16 @@ void ActionRegistry::BuildActionRegistry() {
         table_verifiers_[index->index_data_table()].emplace_back(
             absl::make_unique<UniqueIndexVerifier>(index));
       }
+    }
+
+    // Actions for foreign keys.
+    for (const ForeignKey* foreign_key : table->foreign_keys()) {
+      table_verifiers_[foreign_key->referencing_data_table()].emplace_back(
+          absl::make_unique<ForeignKeyReferencingVerifier>(foreign_key));
+    }
+    for (const ForeignKey* foreign_key : table->referencing_foreign_keys()) {
+      table_verifiers_[foreign_key->referenced_data_table()].emplace_back(
+          absl::make_unique<ForeignKeyReferencedVerifier>(foreign_key));
     }
   }
 }

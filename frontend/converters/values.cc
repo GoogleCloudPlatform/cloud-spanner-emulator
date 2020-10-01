@@ -18,6 +18,7 @@
 
 #include "zetasql/public/functions/date_time_util.h"
 #include "zetasql/public/options.pb.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/strip.h"
@@ -148,6 +149,19 @@ zetasql_base::StatusOr<zetasql::Value> ValueFromProto(
       return zetasql::values::Bytes(bytes);
     }
 
+    case zetasql::TypeKind::TYPE_NUMERIC: {
+      if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
+        return error::ValueProtoTypeMismatch(value_pb.DebugString(),
+                                             type->DebugString());
+      }
+      auto status_or_numeric =
+          zetasql::NumericValue::FromStringStrict(value_pb.string_value());
+      if (!status_or_numeric.ok()) {
+        return error::CouldNotParseStringAsNumeric(value_pb.string_value());
+      }
+      return zetasql::values::Numeric(status_or_numeric.value());
+    }
+
     case zetasql::TypeKind::TYPE_ARRAY: {
       if (value_pb.kind_case() != google::protobuf::Value::kListValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
@@ -258,6 +272,11 @@ zetasql_base::StatusOr<google::protobuf::Value> ValueToProto(
 
     case zetasql::TypeKind::TYPE_STRING: {
       value_pb.set_string_value(value.string_value());
+      break;
+    }
+
+    case zetasql::TypeKind::TYPE_NUMERIC: {
+      value_pb.set_string_value(value.numeric_value().ToString());
       break;
     }
 

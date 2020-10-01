@@ -15,6 +15,7 @@
 //
 
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
 

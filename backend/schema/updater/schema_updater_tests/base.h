@@ -47,7 +47,7 @@ namespace emulator {
 namespace backend {
 namespace test {
 
-// Matcher for matching a zetasql_base::StatusOr with an expected status.
+// Matcher for matching an zetasql_base::StatusOr with an expected status.
 MATCHER_P(StatusIs, status, "") { return arg.status() == status; }
 
 MATCHER_P(NameIs, name, "") {

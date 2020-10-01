@@ -58,7 +58,8 @@ class GlobalSchemaNames {
   // with the same name, if any, or create a new index.
   static zetasql_base::StatusOr<std::string> GenerateManagedIndexName(
       absl::string_view table_name,
-      absl::Span<const std::string* const> column_names, bool unique);
+      const std::vector<std::string>& column_names, bool null_filtered,
+      bool unique);
 
   // Validates a schema name.
   static absl::Status ValidateSchemaName(absl::string_view type,

@@ -123,18 +123,47 @@ class SchemaValidationContext {
     return edited_nodes_->contains(node);
   }
 
+  // Returns the pointer to the first node added with a given name
+  // (case-insensitive) using the node's SchemaNameInfo. Returns nullptr if not
+  // found. Also returns nullptr if nodes with that name were found but were the
+  // wrong type.
+  template <typename T>
+  const T* FindAddedNode(absl::string_view name) const {
+    for (const auto& node : *added_nodes_) {
+      auto info = node->GetSchemaNameInfo().value_or(SchemaNameInfo{});
+      if (info.name == name) {
+        const T* candidate = node.get()->As<T>();
+        if (info.global || candidate != nullptr) {
+          return candidate;
+        }
+      }
+    }
+    return nullptr;
+  }
+
  private:
   friend class SchemaGraphEditor;
 
-  // Sets the 'edited_nodes' map maintained by the 'SchemaGraphEditor'
+  // Saves a pointer to the 'edited_nodes' maintained by the 'SchemaGraphEditor'
   // to allow nodes to check through the SchemaValidationContext if they were
   // modified by user action or just cloned during the processing of a schema
   // update.
-  void set_edited_map(absl::flat_hash_set<const SchemaNode*>* edited_nodes) {
+  void set_edited_nodes(
+      const absl::flat_hash_set<const SchemaNode*>* edited_nodes) {
     edited_nodes_ = edited_nodes;
   }
 
   const absl::flat_hash_set<const SchemaNode*>* edited_nodes_ = nullptr;
+
+  // Saves a pointer to the 'added_nodes' maintained by the 'SchemaGraphEditor'
+  // to allow nodes to check through the SchemaValidationContext if they were
+  // added by user action.
+  void set_added_nodes(
+      const std::vector<std::unique_ptr<const SchemaNode>>* added_nodes) {
+    added_nodes_ = added_nodes;
+  }
+
+  const std::vector<std::unique_ptr<const SchemaNode>>* added_nodes_ = nullptr;
 
   // Used to read data from the database for verifiers. Not owned.
   Storage* storage_;

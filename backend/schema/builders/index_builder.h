@@ -79,8 +79,35 @@ class Index::Builder {
     return *this;
   }
 
+  Builder& add_managing_node(const SchemaNode* node) {
+    instance_->managing_nodes_.push_back(node);
+    return *this;
+  }
+
  private:
   std::unique_ptr<Index> instance_;
+};
+
+class Index::Editor {
+ public:
+  explicit Editor(Index* instance) : instance_(instance) {}
+
+  const Index* get() const { return instance_; }
+
+  Editor& add_managing_node(const SchemaNode* node) {
+    instance_->managing_nodes_.push_back(node);
+    return *this;
+  }
+
+  Editor& remove_managing_node(const SchemaNode* node) {
+    auto& nodes = instance_->managing_nodes_;
+    nodes.erase(std::remove(nodes.begin(), nodes.end(), node), nodes.end());
+    return *this;
+  }
+
+ private:
+  // Not owned.
+  Index* instance_;
 };
 
 }  // namespace backend

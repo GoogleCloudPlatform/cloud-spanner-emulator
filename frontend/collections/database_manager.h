@@ -22,6 +22,7 @@
 #include <string>
 
 #include "absl/base/thread_annotations.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/synchronization/mutex.h"
 #include "common/clock.h"
 #include "frontend/entities/database.h"
@@ -64,6 +65,10 @@ class DatabaseManager {
 
   // Map from database URI to database objects.
   std::map<std::string, std::shared_ptr<Database>> database_map_
+      ABSL_GUARDED_BY(mu_);
+
+  // Count of databases per instance.
+  absl::flat_hash_map<std::string, int> num_databases_per_instance_
       ABSL_GUARDED_BY(mu_);
 };
 

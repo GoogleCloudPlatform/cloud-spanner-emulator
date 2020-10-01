@@ -15,158 +15,6 @@
 //
 
 
-
-SKIP:
-{
-    <WHITE_SPACE: (" " | "\n" | "\r" | "\t" | "\b" | "\f" |
-        "\u000b" | "\013" |
-        "\u00a0" | "\302\240" |
-        "\u2000" | "\342\200\200" |
-        "\u2001" | "\342\200\201" |
-        "\u2002" | "\342\200\202" |
-        "\u2003" | "\342\200\203" |
-        "\u2004" | "\342\200\204" |
-        "\u2005" | "\342\200\205" |
-        "\u2006" | "\342\200\206" |
-        "\u2007" | "\342\200\207" |
-        "\u2008" | "\342\200\210" |
-        "\u2009" | "\342\200\211" |
-        "\u200A" | "\342\200\212" |
-        "\u202f" | "\342\200\257" |
-        "\u205f" | "\342\201\237" |
-        "\u3000" | "\343\200\200"
-    )>
-}
-TOKEN:
-{
-    <ALL:                     "all">
-  | <AND:                     "and">
-  | <ANY:                     "any">
-  | <ARRAY:                   "array">
-  | <AS:                      "as">
-  | <ASC:                     "asc">
-  | <ASSERT_ROWS_MODIFIED:    "assert_rows_modified">
-  | <AT:                      "at">
-  | <BETWEEN:                 "between">
-  | <BY:                      "by">
-  | <CASE:                    "case">
-  | <CAST:                    "cast">
-  | <COLLATE:                 "collate">
-  | <CONTAINS:                "contains">
-  | <CREATE:                  "create">
-  | <CROSS:                   "cross">
-  | <CUBE:                    "cube">
-  | <CURRENT:                 "current">
-  | <DEFAULTT:                "default">
-  | <DEFINE:                  "define">
-  | <DESC:                    "desc">
-  | <DISTINCT:                "distinct">
-  | <ELSE:                    "else">
-  | <END:                     "end">
-  | <ENUM:                    "enum">
-  | <ESCAPE:                  "escape">
-  | <EXCEPT:                  "except">
-  | <EXCLUDE:                 "exclude">
-  | <EXISTS:                  "exists">
-  | <EXTRACT:                 "extract">
-  | <FALSE:                   "false">
-  | <FETCH:                   "fetch">
-  | <FOLLOWING:               "following">
-  | <FOR:                     "for">
-  | <FROM:                    "from">
-  | <FULL:                    "full">
-  | <GROUP:                   "group">
-  | <GROUPING:                "grouping">
-  | <GROUPS:                  "groups">
-  | <HASH:                    "hash">
-  | <HAVING:                  "having">
-  | <IF:                      "if">
-  | <IGNORE:                  "ignore">
-  | <IN:                      "in">
-  | <INNER:                   "inner">
-  | <INTERSECT:               "intersect">
-  | <INTERVAL:                "interval">
-  | <INTO:                    "into">
-  | <IS:                      "is">
-  | <JOIN:                    "join">
-  | <LATERAL:                 "lateral">
-  | <LEFT:                    "left">
-  | <LIKE:                    "like">
-  | <LIMIT:                   "limit">
-  | <LOOKUP:                  "lookup">
-  | <MERGE:                   "merge">
-  | <NATURAL:                 "natural">
-  | <NEW:                     "new">
-  | <NO:                      "no">
-  | <NOT:                     "not">
-  | <NULLL:                   "null">
-  | <NULLS:                   "nulls">
-  | <OF:                      "of">
-  | <ON:                      "on">
-  | <OR:                      "or">
-  | <ORDER:                   "order">
-  | <OUTER:                   "outer">
-  | <OVER:                    "over">
-  | <PARTITION:               "partition">
-  | <PRECEDING:               "preceding">
-  | <PROTO:                   "proto">
-  | <RANGE:                   "range">
-  | <RECURSIVE:               "recursive">
-  | <RESPECT:                 "respect">
-  | <RIGHT:                   "right">
-  | <ROLLUP:                  "rollup">
-  | <ROWS:                    "rows">
-  | <SELECT:                  "select">
-  | <SET:                     "set">
-  | <SOME:                    "some">
-  | <STRUCT:                  "struct">
-  | <TABLESAMPLE:             "tablesample">
-  | <THEN:                    "then">
-  | <TO:                      "to">
-  | <TREAT:                   "treat">
-  | <TRUE:                    "true">
-  | <UNBOUNDED:               "unbounded">
-  | <UNION:                   "union">
-  | <UNNEST:                  "unnest">
-  | <USING:                   "using">
-  | <WHEN:                    "when">
-  | <WHERE:                   "where">
-  | <WINDOW:                  "window">
-  | <WITH:                    "with">
-  | <WITHIN:                  "within">
-}
-TOKEN:
-{
-    <ACTION:                 "action">
-  | <ADD:                    "add">
-  | <ALTER:                  "alter">
-  | <BOOL:                   "bool">
-  | <BYTES:                  "bytes">
-  | <CASCADE:                "cascade">
-  | <COLUMN:                 "column">
-  | <CONSTRAINT:             "constraint">
-  | <DATABASE:               "database">
-  | <DATE:                   "date">
-  | <DELETE:                 "delete">
-  | <DROP:                   "drop">
-  | <FLOAT64:                "float64">
-  | <FOREIGN:                "foreign">
-  | <INDEX:                  "index">
-  | <INT64:                  "int64">
-  | <INTERLEAVE:             "interleave">
-  | <KEY:                    "key">
-  | <MAX:                    "max">
-  | <NULL_FILTERED:          "null_filtered">
-  | <OPTIONS:                "options">
-  | <PARENT:                 "parent">
-  | <PRIMARY:                "primary">
-  | <REFERENCES:             "references">
-  | <STORING:                "storing">
-  | <STRING:                 "string">
-  | <TABLE:                  "table">
-  | <TIMESTAMP:              "timestamp">
-  | <UNIQUE:                 "unique">
-}
 TOKEN:
 {
     <#DEC_DIGIT:            ["0"-"9"]>
@@ -195,39 +43,6 @@ void identifier_list() :
 {
   (identifier() #identifier) ("," identifier() #identifier)*
 }
-void pseudoReservedWord() #void :
-{}
-{
-    <ACTION>
-  | <ADD>
-  | <ALTER>
-  | <BOOL>
-  | <BYTES>
-  | <CASCADE>
-  | <COLUMN>
-  | <CONSTRAINT>
-  | <DATABASE>
-  | <DATE>
-  | <DELETE>
-  | <DROP>
-  | <FLOAT64>
-  | <FOREIGN>
-  | <INDEX>
-  | <INT64>
-  | <INTERLEAVE>
-  | <KEY>
-  | <MAX>
-  | <NULL_FILTERED>
-  | <OPTIONS>
-  | <PARENT>
-  | <PRIMARY>
-  | <REFERENCES>
-  | <STORING>
-  | <STRING>
-  | <TABLE>
-  | <TIMESTAMP>
-  | <UNIQUE>
-}
 
 void path() :
 {}
@@ -238,6 +53,11 @@ void int_value() :
 {}
 {
   <INTEGER_LITERAL>
+}
+void string_value() :
+{}
+{
+  any_string_literal()
 }
 void ddl_statement() :
 {}
@@ -286,6 +106,7 @@ void table_element() #void :
 {}
 {
     LOOKAHEAD(3) foreign_key()
+  | LOOKAHEAD(3) check_constraint()
   | column_def()
 }
 
@@ -295,6 +116,7 @@ void column_def() :
   identifier() #name
   column_type()
   [ <NOT> <NULLL> #not_null ]
+  [ generation_clause() ]
   [ options_clause() ]
 }
 
@@ -303,6 +125,7 @@ void column_def_alter_attrs() :
 {
   column_type()
   [ <NOT> <NULLL> #not_null ]
+  [ generation_clause() ]
 }
 
 void column_def_alter() :
@@ -322,6 +145,7 @@ void column_type() :
   | <BYTES> "(" column_length() #length ")"
   | <TIMESTAMP>
   | <DATE>
+  | <NUMERIC>
   | <ARRAY> "<" column_type() ">"
 }
 
@@ -329,6 +153,13 @@ void column_length() :
 {}
 {
   <MAX> | int_value()
+}
+
+void generation_clause() :
+{}
+{
+  <AS> "(" expression() #expression ")"
+  [<STORED> #stored]
 }
 
 void primary_key() #void :
@@ -345,6 +176,19 @@ void foreign_key() :
     "(" identifier_list() #referencing_columns ")"
   <REFERENCES> identifier() #referenced_table
     "(" identifier_list() #referenced_columns ")"
+}
+
+void statement_token_no_paren() :
+{}
+{
+  googlesql_statement_token_no_paren()
+}
+
+void check_constraint() :
+{}
+{
+  [ <CONSTRAINT> identifier() #constraint_name ]
+  <CHECK> "(" expression() #check_constraint_expression ")"
 }
 
 void table_interleave_clause() :
@@ -429,6 +273,7 @@ void option_key_val() :
     | <TRUE> #bool_true_val
     | <FALSE> #bool_false_val
     | <INTEGER_LITERAL> #integer_val
+    | string_value()  #str_val
   )
 }
 
@@ -464,11 +309,14 @@ void alter_table_statement() :
     | LOOKAHEAD(3) <ALTER> #alter_column <COLUMN>
         (identifier() #name) column_def_alter()
     | <SET> #set_on_delete on_delete_clause()
-    | LOOKAHEAD(3) <ADD> foreign_key()
+    | LOOKAHEAD(4) <ADD> foreign_key()
+    | <ADD> check_constraint()
   )
 }
 
 TOKEN:
 {
   <UNEXPECTED_CHARACTER: ~[]>
+  | <ILLEGAL_STRING_ESCAPE: "\\" ~[]> : DEFAULT
+  | <ILLEGAL_BYTES_ESCAPE: "\\" ~[]> : DEFAULT
 }

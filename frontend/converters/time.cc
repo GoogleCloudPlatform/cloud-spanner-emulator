@@ -16,6 +16,7 @@
 
 #include "frontend/converters/time.h"
 
+#include "zetasql/base/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "common/errors.h"

@@ -16,6 +16,7 @@
 
 #include "frontend/server/request_context.h"
 
+#include "zetasql/base/statusor.h"
 #include "frontend/common/uris.h"
 #include "frontend/entities/instance.h"
 #include "zetasql/base/status_macros.h"

@@ -54,7 +54,9 @@ class SchemaGraphEditor {
                     SchemaValidationContext* context)
       : original_graph_(original_graph),
         context_(context),
-        cloned_pool_(absl::make_unique<SchemaObjectsPool>()) {}
+        cloned_pool_(absl::make_unique<SchemaObjectsPool>()) {
+    context_->set_added_nodes(&added_nodes_);
+  }
 
   template <typename T>
   using EditCallback = std::function<absl::Status(typename T::Editor*)>;

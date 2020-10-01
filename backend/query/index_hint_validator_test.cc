@@ -65,7 +65,9 @@ class IndexHintValidatorTest : public testing::Test {
                                           R"(
       CREATE NULL_FILTERED INDEX NF_I1 ON T1(col1))",
                                           R"(
-      CREATE NULL_FILTERED INDEX I3 ON T3(col3))"},
+      CREATE NULL_FILTERED INDEX I3 ON T3(col3))",
+                                          R"(
+      ALTER TABLE T2 ADD FOREIGN KEY(col2) REFERENCES T1(col1))"},
                                       &type_factory_));
 
     catalog_ = absl::make_unique<Catalog>(schema_.get(), &fn_catalog_,
@@ -173,6 +175,23 @@ TEST_F(IndexHintValidatorTest, DisableNullFilteredIndexCheck) {
 TEST_F(IndexHintValidatorTest,
        NullFilteredIndexCanOnlyBeUsedForNotNullColumns) {
   auto output = AnalyzeQuery("SELECT col3 FROM T3@{force_index=I3}");
+  auto stmt = output->resolved_statement();
+  IndexHintValidator validator{schema()};
+  ZETASQL_EXPECT_OK(stmt->Accept(&validator));
+}
+
+TEST_F(IndexHintValidatorTest, EmulatorManagedIndexName) {
+  auto output = AnalyzeQuery(
+      "SELECT k1 FROM T1@{force_index=IDX_T1_col1_U_EA26CF5871E82344}");
+  auto stmt = output->resolved_statement();
+  IndexHintValidator validator{schema()};
+  EXPECT_EQ(stmt->Accept(&validator), error::QueryHintManagedIndexNotSupported(
+                                          "IDX_T1_col1_U_EA26CF5871E82344"));
+}
+
+TEST_F(IndexHintValidatorTest, NonEmulatorManagedIndexName) {
+  auto output = AnalyzeQuery(
+      "SELECT k1 FROM T1@{force_index=IDX_T1_col1_U_EA26CF5871E82340}");
   auto stmt = output->resolved_statement();
   IndexHintValidator validator{schema()};
   ZETASQL_EXPECT_OK(stmt->Accept(&validator));

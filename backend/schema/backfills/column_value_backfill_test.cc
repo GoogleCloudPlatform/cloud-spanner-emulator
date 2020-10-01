@@ -25,6 +25,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "zetasql/base/statusor.h"
 #include "absl/types/span.h"
 #include "backend/database/database.h"
 #include "backend/datamodel/key_set.h"

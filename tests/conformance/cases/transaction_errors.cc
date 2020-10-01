@@ -16,6 +16,7 @@
 
 #include "gmock/gmock.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -142,6 +143,10 @@ TEST_F(TransactionErrorTest, DMLInvalidInsertInvalidatesTransaction) {
 
   // Insert a row that already exists which causes a constraint failure.
   EXPECT_THAT(Query(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'test')"),
+              StatusIs(absl::StatusCode::kAlreadyExists));
+
+  // Attempting another insert fails even with a new row.
+  EXPECT_THAT(Query(txn, "INSERT INTO Users(ID, Name) VALUES(2, 'test')"),
               StatusIs(absl::StatusCode::kAlreadyExists));
 
   // Try to commit the transaction, it should fail with the same error that

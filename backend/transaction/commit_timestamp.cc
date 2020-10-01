@@ -18,6 +18,7 @@
 
 #include <queue>
 
+#include "zetasql/base/statusor.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "common/constants.h"

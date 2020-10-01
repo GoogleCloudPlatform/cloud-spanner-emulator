@@ -1,0 +1,250 @@
+CREATE TABLE Users (
+  UserId STRING(MAX) NOT NULL,
+  Name STRING(MAX),
+  NameAlias STRING(MAX),
+  Age INT64,
+  AgePlusOne INT64 AS (Age+1) STORED,
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ADD COLUMN AgePlusTwo INT64 AS (Age+2) STORED;
+--
+CREATE TABLE Users (
+  UserId STRING(MAX) NOT NULL,
+  Name STRING(MAX),
+  NameAlias STRING(MAX),
+  Age INT64,
+  AgePlusOne INT64 AS (Age+1) STORED,
+  AgePlusTwo INT64 AS (Age+2) STORED,
+) PRIMARY KEY(UserId);
+==
+CREATE TABLE t (
+  id INT64 NOT NULL,
+  a STRING(MAX) AS (CONCAT(b,b)) STORED,
+  b STRING(MAX) AS (c) STORED,
+  c STRING(MAX),
+) PRIMARY KEY(id);
+==
+CREATE TABLE t (
+  id INT64 NOT NULL,
+  c STRING(MAX) AS (CONCAT(b, d)) STORED,
+  b STRING(MAX) AS (CONCAT(a)) STORED,
+  a STRING(MAX),
+  d STRING(MAX),
+  e STRING(MAX),
+) PRIMARY KEY(id);
+==
+CREATE TABLE t (
+  id INT64 NOT NULL,
+  a STRING(MAX) AS (b) STORED,
+  b STRING(MAX) AS (CONCAT(c, d)) STORED,
+  c STRING(MAX),
+  d STRING(MAX) AS (c) STORED,
+) PRIMARY KEY(id);
+==
+CREATE TABLE GeneratedColumnDataCoalescing (
+  id STRING(MAX) NOT NULL,
+  i64 INT64,
+  gen_i64_to_f64 FLOAT64 AS (i64) STORED,
+) PRIMARY KEY(id);
+==
+CREATE TABLE T (
+  id INT64,
+  a INT64,
+  expr INT64 AS (a) STORED,
+) PRIMARY KEY(id);
+ALTER TABLE T DROP COLUMN expr;
+ALTER TABLE T DROP COLUMN a;
+--
+CREATE TABLE T (
+  id INT64,
+) PRIMARY KEY(id);
+==
+CREATE TABLE Network (
+  id INT64,
+  int_field1 INT64,
+  int_field2 INT64,
+  net_mask FLOAT64 AS (SAFE_DIVIDE(int_field1, int_field2)) STORED,
+) PRIMARY KEY(id);
+==
+CREATE TABLE T (
+  id INT64,
+  string_field STRING(MAX),
+  gen BYTES(MAX) AS (SAFE.MD5(string_field)) STORED,
+) PRIMARY KEY(id);
+==
+CREATE TABLE Network (
+  id INT64,
+  val64 INT64,
+  net_mask BYTES(MAX) AS (NET.IP_NET_MASK(val64, val64)) STORED,
+) PRIMARY KEY(id);
+--
+ERROR: Error parsing the definition of generated column `Network`.`net_mask`: Unsupported built-in function: NET.IP_NET_MASK
+==
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL AS (1) STORED,
+) PRIMARY KEY(id);
+==
+CREATE TABLE T (
+  id INT64,
+  expr INT64 AS (1) STORED,
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr INT64 NOT NULL AS (1) STORED;
+--
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL AS (1) STORED,
+) PRIMARY KEY(id);
+==
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL AS (1) STORED,
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr INT64 AS (1) STORED;
+--
+CREATE TABLE T (
+  id INT64,
+  expr INT64 AS (1) STORED,
+) PRIMARY KEY(id);
+==
+CREATE TABLE T1 (
+  Id INT64 NOT NULL,
+  Value STRING(MAX),
+  ValueGen STRING(MAX) AS (CONCAT('[', Value, ']')) STORED,
+) PRIMARY KEY(Id);
+CREATE INDEX T1ByValueGen ON T1(ValueGen);
+CREATE NULL_FILTERED INDEX T1ByValueGenNotNull ON T1(ValueGen);
+CREATE INDEX T1ByValueStoringValueGen ON T1(Value) STORING (ValueGen);
+CREATE NULL_FILTERED INDEX T1ByValueStoringValueGenNotNull ON T1(Value) STORING (ValueGen);
+==
+CREATE TABLE T (
+  id INT64,
+  name STRING(64),
+  expr STRING(64) AS (name) STORED,
+) PRIMARY KEY(id);
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  id_plus_one INT64 AS (id1 + 1) STORED,
+) PRIMARY KEY(id);
+--
+ERROR: Error parsing the definition of generated column `Users`.`id_plus_one`: Unrecognized name: id1 [at 1:2]
+(id1 + 1)
+ ^
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX)
+) PRIMARY KEY(id);
+ALTER TABLE Users ADD COLUMN new_column INT64 AS (unknown_column + 1) STORED;
+--
+ERROR: Error parsing the definition of generated column `Users`.`new_column`: Unrecognized name: unknown_column [at 1:2]
+(unknown_column + 1)
+ ^
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  id_plus_one INT64 AS (SUBSTR(UserName, 1)) STORED,
+) PRIMARY KEY(id);
+--
+ERROR: Error parsing the definition of generated column `Users`.`id_plus_one`: Expected type INT64; found STRING [at 1:2]
+(SUBSTR(UserName, 1))
+ ^
+==
+CREATE TABLE GeneratedColumnDataCoalescing (
+  id STRING(MAX) NOT NULL,
+  i64 INT64,
+  gen_i64_to_b BOOL as (i64) STORED,
+) PRIMARY KEY (id);
+--
+ERROR: Error parsing the definition of generated column `GeneratedColumnDataCoalescing`.`gen_i64_to_b`: Expected type BOOL; found INT64 [at 1:2]
+(i64)
+ ^
+==
+CREATE TABLE T (
+  id INT64 NOT NULL,
+  a INT64 as (b) STORED,
+  b INT64 as (A) STORED
+) PRIMARY KEY(id);
+--
+ERROR: Cycle detected while analysing generated column, which include objects (a,b)
+==
+create table t (
+  id INT64 NOT NULL,
+  a INT64 as (a+1) STORED
+) PRIMARY KEY(id);
+--
+ERROR: Cycle detected while analysing generated column, which include objects (a)
+==
+create table t (
+  id INT64 NOT NULL,
+  d INT64,
+  c INT64 as (a) STORED,
+  b INT64 as (c) STORED,
+  a INT64 as (b) STORED
+) PRIMARY KEY(id);
+--
+ERROR: Cycle detected while analysing generated column, which include objects (c,a,b)
+==
+create table t (
+  id INT64 NOT NULL,
+  b INT64 as (c) STORED,
+  c INT64 as (a) STORED,
+  a INT64 as (b) STORED
+) PRIMARY KEY(id);
+--
+ERROR: Cycle detected while analysing generated column, which include objects (b,c,a)
+==
+create table t (
+  id INT64 NOT NULL,
+  a INT64 as (b) STORED,
+  b INT64 as (d) STORED,
+  c INT64 as (b) STORED,
+  d INT64 as (c) STORED
+) PRIMARY KEY(id);
+--
+ERROR: Cycle detected while analysing generated column, which include objects (a,b,d,c)
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  userName STRING(MAX)
+) PRIMARY KEY(id);
+ALTER TABLE Users ADD COLUMN col INT64 AS (col+1) STORED;
+--
+ERROR: Cycle detected while analysing generated column, which include objects (col)
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  StrCol STRING(MAX),
+  StrExpr STRING(MAX) AS (CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, "1"))))))))))))))))))))) STORED,
+) PRIMARY KEY(id);
+--
+ERROR: Error parsing the definition of generated column `Users`.`StrExpr`: Expression depth of 21 exceeds the maximum allowed depth of 20.
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  StrCol STRING(MAX)
+) PRIMARY KEY(id);
+ALTER TABLE Users ADD COLUMN StrExpr STRING(MAX) AS (CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, "1"))))))))))))))))))))) STORED;
+--
+ERROR: Error parsing the definition of generated column `Users`.`StrExpr`: Expression depth of 21 exceeds the maximum allowed depth of 20.
+==
+CREATE TABLE T (
+  expr BOOL AS ((SELECT true) INTERSECT ALL (SELECT true)) STORED,
+) PRIMARY KEY();
+--
+ERROR: Error parsing the definition of generated column `T`.`expr`: Cannot use non-scalar expressions inside stored generated columns.
+==
+CREATE TABLE TableWithSelect1 (
+  val INT64 AS (SELECT 1) STORED,
+) PRIMARY KEY();
+--
+ERROR: Error parsing the definition of generated column `TableWithSelect1`.`val`: Cannot use non-scalar expressions inside stored generated columns.
+==
+CREATE TABLE TableWithNestedSubquery (
+  val ARRAY<INT64> AS (ARRAY_REVERSE(ARRAY(SELECT 1))) STORED,
+) PRIMARY KEY();
+--
+ERROR: Error parsing the definition of generated column `TableWithNestedSubquery`.`val`: Cannot use non-scalar expressions inside stored generated columns.
+==

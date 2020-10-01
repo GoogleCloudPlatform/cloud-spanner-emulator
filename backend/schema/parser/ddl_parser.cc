@@ -24,6 +24,7 @@
 
 #include "zetasql/base/logging.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/match.h"
@@ -32,7 +33,9 @@
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/DDLParserTree.h"
 #include "backend/schema/parser/ddl_includes.h"
+#include "backend/schema/parser/ddl_token_validation_utils.h"
 #include "common/errors.h"
+#include "common/feature_flags.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
@@ -60,6 +63,62 @@ bool IsPrintable(absl::string_view str) {
   return true;
 }
 
+// Returns the image of the token with special handling of EOF.
+static std::string GetTokenRepresentation(Token* token) {
+  if (token->kind == _EOF) {
+    // token->image is empty string which is not helpful.
+    return "'EOF'";
+  }
+
+  if (token->kind == UNEXPECTED_CHARACTER) {
+    // The next character is not any of the known kinds of whitespace, and not
+    // something we expected in any production. If the character is non-ASCII,
+    // we produce an error message suggesting one common source of such
+    // characters. Whatever the case, we suppress further error messages.
+    std::string token_str = token->toString();
+    if (token_str[0] & 0x80) {
+      return "a non-ASCII UTF-8 character. Did you perhaps copy the Spanner "
+             "Cloud DDL statements from a word-processed document, including "
+             "non-breaking spaces or smart quotes?";
+    } else if (!IsPrintable(token_str)) {
+      return absl::StrCat("a non-printable ASCII character ('",
+                          absl::CEscape(token_str), "').");
+    }
+    return absl::StrCat("an unknown character ('", token_str, "').");
+  }
+
+  if (token->kind == ILLEGAL_STRING_ESCAPE) {
+    // Revalidate the token image to get an error message.
+    std::string error_string;
+    absl::Status status =
+        ValidateStringLiteralImage(token->image,
+                                   /*force=*/true, &error_string);
+    if (status.ok()) {
+      return "Internal error: revalidation of string failed";
+    }
+    return error_string;
+  }
+
+  if (token->kind == ILLEGAL_BYTES_ESCAPE) {
+    // Revalidate the token image to get an error message.
+    std::string error_string;
+    absl::Status status =
+        ValidateBytesLiteralImage(token->image, &error_string);
+    if (status.ok()) {
+      return "Internal error: revalidation of bytes failed";
+    }
+    return error_string;
+  }
+
+  if (token->kind == UNCLOSED_SQ3 || token->kind == UNCLOSED_DQ3) {
+    return absl::StrCat("Syntax error on line ", token->beginLine, ", column ",
+                        token->beginColumn,
+                        ": Encountered an unclosed triple quoted string.");
+  }
+
+  return absl::StrCat("'", token->image, "'");
+}
+
 class DDLErrorHandler : public ErrorHandler {
  public:
   explicit DDLErrorHandler(std::vector<std::string>* errors)
@@ -72,34 +131,23 @@ class DDLErrorHandler : public ErrorHandler {
     if (ignore_further_errors_) {
       return;
     }
-    if (actual->kind == UNEXPECTED_CHARACTER) {
-      std::string bad_character_string;
-      if (actual->toString()[0] & 0x80) {
-        bad_character_string =
-            "a non-ASCII UTF-8 character. Did you perhaps copy the Cloud "
-            "Spanner DDL statements from a word-processed document, including "
-            "non-breaking spaces or smart quotes?";
-      } else if (!IsPrintable(actual->toString())) {
-        bad_character_string =
-            absl::StrCat("a non-printable ASCII character (\"",
-                         absl::CEscape(actual->toString()), "\").");
-      } else {
-        bad_character_string = absl::StrCat("an unknown character (\"",
-                                            actual->toString(), "\").");
-      }
-      errors_->push_back(absl::StrCat("Syntax error on line ",
-                                      actual->beginLine, ", column ",
-                                      actual->beginColumn, ": Expecting '",
-                                      absl::AsciiStrToUpper(expected_token),
-                                      "' but found ", bad_character_string));
-      ignore_further_errors_ = true;
-    } else {
-      errors_->push_back(
-          absl::StrCat("Syntax error on line ", actual->beginLine, ", column ",
-                       actual->beginColumn, ": Expecting '",
-                       absl::AsciiStrToUpper(expected_token), "' but found '",
-                       actual->image.c_str(), "'"));
+    // expected_kind is -1 when the next token is not expected, when choosing
+    // the next rule based on next token. Every invocation of
+    // handleUnexpectedToken with expeced_kind=-1 is followed by a call to
+    // handleParserError. We process the error there.
+    if (expected_kind == -1) {
+      return;
     }
+
+    // The parser would continue to throw unexpected token at us but only the
+    // first error is the cause.
+    ignore_further_errors_ = true;
+
+    errors_->push_back(
+        absl::StrCat("Syntax error on line ", actual->beginLine, ", column ",
+                     actual->beginColumn, ": Expecting '",
+                     absl::AsciiStrToUpper(expected_token), "' but found ",
+                     GetTokenRepresentation(actual)));
   }
 
   void handleParseError(Token* last, Token* unexpected,
@@ -108,10 +156,12 @@ class DDLErrorHandler : public ErrorHandler {
     if (ignore_further_errors_) {
       return;
     }
-    errors_->push_back(
-        absl::StrCat("Syntax error on line ", unexpected->beginLine,
-                     ", column ", unexpected->beginColumn, ": Encountered '",
-                     unexpected->image, "' while parsing: ", production));
+    ignore_further_errors_ = true;
+
+    errors_->push_back(absl::StrCat(
+        "Syntax error on line ", unexpected->beginLine, ", column ",
+        unexpected->beginColumn, ": Encountered ",
+        GetTokenRepresentation(unexpected), " while parsing: ", production));
   }
 
   int getErrorCount() override { return errors_->size(); }
@@ -131,8 +181,7 @@ zetasql_base::StatusOr<std::unique_ptr<SimpleNode>> ParseDDLStatementToNode(
   // Instantiate a new DDLParser with given statement and custom error handler.
   std::vector<std::string> errors;
   DDLErrorHandler error_handler(&errors);
-  DDLParser parser(new DDLParserTokenManager(
-      new CharStream(statement.data(), statement.size(), 1, 1)));
+  DDLParser parser(new DDLParserTokenManager(new DDLCharStream(statement)));
   parser.setErrorHandler(&error_handler);
 
   // Parse the input statement as a valid DDL statement into a node.
@@ -218,6 +267,10 @@ absl::Status VisitColumnTypeNode(const SimpleNode* column_type_node,
     return error::Internal(
         absl::StrCat("Unrecognized column type: ", type_name));
   }
+  if (type == ColumnType::NUMERIC &&
+      !EmulatorFeatureFlags::instance().flags().enable_numeric_type) {
+    return error::NumericTypeNotEnabled();
+  }
   column_type->set_type(type);
 
   if (type == ColumnType::ARRAY) {
@@ -238,6 +291,42 @@ absl::Status VisitColumnTypeNode(const SimpleNode* column_type_node,
   return absl::OkStatus();
 }
 
+absl::Status VisitGenerationClauseNode(const SimpleNode* node,
+                                       ColumnDefinition* column_definition,
+                                       absl::string_view ddl_text) {
+  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTGENERATION_CLAUSE));
+  if (!EmulatorFeatureFlags::instance()
+           .flags()
+           .enable_stored_generated_columns) {
+    return error::GeneratedColumnsNotEnabled();
+  }
+  bool is_stored = false;
+  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
+    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
+    switch (child->getId()) {
+      case JJTEXPRESSION: {
+        int node_offset = child->absolute_begin_column();
+        int node_length = child->absolute_end_column() - node_offset;
+        column_definition->mutable_properties()->set_expression(absl::StrCat(
+            "(", absl::ClippedSubstr(ddl_text, node_offset, node_length), ")"));
+        break;
+      }
+      case JJTSTORED: {
+        is_stored = true;
+        break;
+      }
+      default:
+        return error::Internal(absl::StrCat(
+            "Unexpected generated column info: ", child->toString()));
+    }
+  }
+  if (!is_stored) {
+    return error::NonStoredGeneratedColumnUnsupported(
+        column_definition->column_name());
+  }
+
+  return absl::OkStatus();
+}
 zetasql_base::StatusOr<std::string> GetOptionName(const SimpleNode* node) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTOPTION_KEY_VAL));
   if (node->jjtGetNumChildren() < 2) {
@@ -297,6 +386,7 @@ absl::Status VisitColumnOptionListNode(const SimpleNode* node,
 
 absl::Status VisitColumnNode(const SimpleNode* node,
                              ColumnDefinition* column_definition,
+                             absl::string_view ddl_text,
                              std::vector<std::string>* errors) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCOLUMN_DEF));
 
@@ -316,6 +406,10 @@ absl::Status VisitColumnNode(const SimpleNode* node,
       case JJTNOT_NULL:
         column_definition->add_constraints()->mutable_not_null()->set_nullable(
             false);
+        break;
+      case JJTGENERATION_CLAUSE:
+        ZETASQL_RETURN_IF_ERROR(
+            VisitGenerationClauseNode(child, column_definition, ddl_text));
         break;
       case JJTOPTIONS_CLAUSE:
         ZETASQL_RETURN_IF_ERROR(VisitColumnOptionListNode(
@@ -493,6 +587,7 @@ absl::Status VisitForeignKeyNode(const SimpleNode* node,
 }
 
 absl::Status VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
+                                  absl::string_view ddl_text,
                                   std::vector<std::string>* errors) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCREATE_TABLE_STATEMENT));
 
@@ -504,7 +599,8 @@ absl::Status VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
         table->set_table_name(child->image());
         break;
       case JJTCOLUMN_DEF:
-        ZETASQL_RETURN_IF_ERROR(VisitColumnNode(child, table->add_columns(), errors));
+        ZETASQL_RETURN_IF_ERROR(
+            VisitColumnNode(child, table->add_columns(), ddl_text, errors));
         break;
       case JJTFOREIGN_KEY:
         ZETASQL_RETURN_IF_ERROR(VisitForeignKeyNode(
@@ -587,12 +683,14 @@ absl::Status VisitDropStatementNode(const SimpleNode* node,
 
 absl::Status VisitAlterTableAddColumnNode(const SimpleNode* node,
                                           AlterTable* alter_table,
+                                          absl::string_view ddl_text,
                                           std::vector<std::string>* errors) {
   ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* column_node,
                    GetChildAtIndexWithType(node, 2, JJTCOLUMN_DEF));
   AlterColumn* alter_column = alter_table->mutable_alter_column();
   alter_column->set_type(AlterColumn::ADD);
-  return VisitColumnNode(column_node, alter_column->mutable_column(), errors);
+  return VisitColumnNode(column_node, alter_column->mutable_column(), ddl_text,
+                         errors);
 }
 
 absl::Status VisitAlterTableDropColumnNode(const SimpleNode* node,
@@ -607,6 +705,7 @@ absl::Status VisitAlterTableDropColumnNode(const SimpleNode* node,
 
 absl::Status VisitAlterColumnAttrsNode(const SimpleNode* node,
                                        ColumnDefinition* column_definition,
+                                       absl::string_view ddl_text,
                                        std::vector<std::string>* errors) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCOLUMN_DEF_ALTER_ATTRS));
 
@@ -624,6 +723,10 @@ absl::Status VisitAlterColumnAttrsNode(const SimpleNode* node,
         column_definition->add_constraints()->mutable_not_null()->set_nullable(
             false);
         break;
+      case JJTGENERATION_CLAUSE:
+        ZETASQL_RETURN_IF_ERROR(
+            VisitGenerationClauseNode(child, column_definition, ddl_text));
+        break;
       default:
         return error::Internal(
             absl::StrCat("Unexpected alter column info: ", child->toString()));
@@ -634,6 +737,7 @@ absl::Status VisitAlterColumnAttrsNode(const SimpleNode* node,
 
 absl::Status VisitAlterColumnNode(const SimpleNode* node,
                                   AlterColumn* alter_column,
+                                  absl::string_view ddl_text,
                                   std::vector<std::string>* errors) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCOLUMN_DEF_ALTER));
 
@@ -650,7 +754,7 @@ absl::Status VisitAlterColumnNode(const SimpleNode* node,
     }
     case JJTCOLUMN_DEF_ALTER_ATTRS:
       ZETASQL_RETURN_IF_ERROR(VisitAlterColumnAttrsNode(
-          child, alter_column->mutable_column(), errors));
+          child, alter_column->mutable_column(), ddl_text, errors));
       break;
     default:
       return error::Internal(
@@ -661,6 +765,7 @@ absl::Status VisitAlterColumnNode(const SimpleNode* node,
 
 absl::Status VisitAlterTableAlterColumnNode(const SimpleNode* node,
                                             AlterTable* alter_table,
+                                            absl::string_view ddl_text,
                                             std::vector<std::string>* errors) {
   // Set name of the column to be altered.
   ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* column_name_node,
@@ -677,7 +782,8 @@ absl::Status VisitAlterTableAlterColumnNode(const SimpleNode* node,
   // Set altered column definition.
   ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* alter_column_node,
                    GetChildAtIndexWithType(node, 3, JJTCOLUMN_DEF_ALTER));
-  return VisitAlterColumnNode(alter_column_node, alter_column, errors);
+  return VisitAlterColumnNode(alter_column_node, alter_column, ddl_text,
+                              errors);
 }
 
 absl::Status VisitAlterTableSetOnDelete(const SimpleNode* node,
@@ -725,6 +831,7 @@ absl::Status VisitAlterTableDropConstraint(const SimpleNode* node,
 
 absl::Status VisitAlterTableNode(const SimpleNode* node,
                                  DDLStatement* statement,
+                                 absl::string_view ddl_text,
                                  std::vector<std::string>* errors) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTALTER_TABLE_STATEMENT));
 
@@ -738,11 +845,12 @@ absl::Status VisitAlterTableNode(const SimpleNode* node,
   ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, 1));
   switch (child->getId()) {
     case JJTADD_COLUMN:
-      return VisitAlterTableAddColumnNode(node, alter_table, errors);
+      return VisitAlterTableAddColumnNode(node, alter_table, ddl_text, errors);
     case JJTDROP_COLUMN:
       return VisitAlterTableDropColumnNode(node, alter_table);
     case JJTALTER_COLUMN:
-      return VisitAlterTableAlterColumnNode(node, alter_table, errors);
+      return VisitAlterTableAlterColumnNode(node, alter_table, ddl_text,
+                                            errors);
     case JJTSET_ON_DELETE:
       return VisitAlterTableSetOnDelete(node, alter_table);
     case JJTFOREIGN_KEY:
@@ -756,7 +864,8 @@ absl::Status VisitAlterTableNode(const SimpleNode* node,
 }
 
 zetasql_base::StatusOr<DDLStatement> BuildDDLStatement(
-    const SimpleNode* root, std::vector<std::string>* errors) {
+    const SimpleNode* root, absl::string_view ddl_text,
+    std::vector<std::string>* errors) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(root, JJTDDL_STATEMENT));
   if (root->jjtGetNumChildren() != 1) {
     return error::Internal(
@@ -769,7 +878,7 @@ zetasql_base::StatusOr<DDLStatement> BuildDDLStatement(
   switch (child->getId()) {
     case JJTCREATE_TABLE_STATEMENT:
       ZETASQL_RETURN_IF_ERROR(VisitCreateTableNode(
-          child, statement.mutable_create_table(), errors));
+          child, statement.mutable_create_table(), ddl_text, errors));
       break;
     case JJTCREATE_INDEX_STATEMENT:
       ZETASQL_RETURN_IF_ERROR(
@@ -780,7 +889,7 @@ zetasql_base::StatusOr<DDLStatement> BuildDDLStatement(
       break;
     }
     case JJTALTER_TABLE_STATEMENT:
-      ZETASQL_RETURN_IF_ERROR(VisitAlterTableNode(child, &statement, errors));
+      ZETASQL_RETURN_IF_ERROR(VisitAlterTableNode(child, &statement, ddl_text, errors));
       break;
     default:
       return error::Internal(
@@ -842,7 +951,7 @@ zetasql_base::StatusOr<DDLStatement> ParseDDLStatement(absl::string_view input) 
   // Try to read root node as a valid DDLStatement.
   std::vector<std::string> errors;
   DDLStatement statement;
-  ZETASQL_ASSIGN_OR_RETURN(statement, BuildDDLStatement(node.get(), &errors));
+  ZETASQL_ASSIGN_OR_RETURN(statement, BuildDDLStatement(node.get(), input, &errors));
   if (!errors.empty()) {
     return error::DDLStatementWithErrors(input, errors);
   }

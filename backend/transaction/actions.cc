@@ -20,6 +20,7 @@
 
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "backend/actions/context.h"
 #include "backend/actions/existence.h"
 #include "backend/actions/interleave.h"

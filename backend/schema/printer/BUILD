@@ -30,7 +30,7 @@ cc_library(
         "//backend/common:case",
         "//backend/datamodel:types",
         "//backend/schema/catalog:schema",
-        "@com_google_absl//absl/container:flat_hash_set",
+        "//backend/schema/parser:ddl_reserved_words",  # buildcleaner: keep
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",

@@ -40,6 +40,7 @@ class ArraysTest : public DatabaseTest {
         NumArray       ARRAY<INT64>,
         MaxStringArray ARRAY<STRING(MAX)>,
         TimestampArray ARRAY<TIMESTAMP>,
+        NumericArray   ARRAY<NUMERIC>,
         DateArray      ARRAY<DATE>,
       ) PRIMARY KEY (ID)
     )"});
@@ -52,28 +53,41 @@ TEST_F(ArraysTest, InsertBasicArraysSucceed) {
   Array<std::int64_t> num_arr{1, 2, 3};
   Array<Timestamp> timestamp_arr{Timestamp(), Timestamp(), Timestamp()};
   Array<Date> date_arr{Date(/*year=*/1, /*month=*/1, /*day=*/1)};
+  Array<Numeric> numeric_arr{
+      cloud::spanner::MakeNumeric("-124523523.235235").value(),
+      cloud::spanner::MakeNumeric("0.000000001").value(),
+      cloud::spanner::MakeNumeric("99999999999999999999999999999.999999999")
+          .value()};
 
   ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "StringArray"}, {1, string_arr}));
   ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "BytesArray"}, {2, bytes_arr}));
   ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "NumArray"}, {3, num_arr}));
   ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "TimestampArray"}, {4, timestamp_arr}));
   ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "DateArray"}, {5, date_arr}));
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "NumericArray"}, {6, numeric_arr}));
 
   EXPECT_THAT(
       ReadAll("TestTable", {"ID", "StringArray", "BytesArray", "NumArray",
-                            "TimestampArray", "DateArray"}),
+                            "TimestampArray", "DateArray", "NumericArray"}),
       IsOkAndHoldsRows({
           {1, string_arr, Null<Array<Bytes>>(), Null<Array<std::int64_t>>(),
-           Null<Array<Timestamp>>(), Null<Array<Date>>()},
+           Null<Array<Timestamp>>(), Null<Array<Date>>(),
+           Null<Array<Numeric>>()},
           {2, Null<Array<std::string>>(), bytes_arr,
            Null<Array<std::int64_t>>(), Null<Array<Timestamp>>(),
-           Null<Array<Date>>()},
+           Null<Array<Date>>(), Null<Array<Numeric>>()},
           {3, Null<Array<std::string>>(), Null<Array<Bytes>>(), num_arr,
-           Null<Array<Timestamp>>(), Null<Array<Date>>()},
+           Null<Array<Timestamp>>(), Null<Array<Date>>(),
+           Null<Array<Numeric>>()},
           {4, Null<Array<std::string>>(), Null<Array<Bytes>>(),
-           Null<Array<std::int64_t>>(), timestamp_arr, Null<Array<Date>>()},
+           Null<Array<std::int64_t>>(), timestamp_arr, Null<Array<Date>>(),
+           Null<Array<Numeric>>()},
           {5, Null<Array<std::string>>(), Null<Array<Bytes>>(),
-           Null<Array<std::int64_t>>(), Null<Array<Timestamp>>(), date_arr},
+           Null<Array<std::int64_t>>(), Null<Array<Timestamp>>(), date_arr,
+           Null<Array<Numeric>>()},
+          {6, Null<Array<std::string>>(), Null<Array<Bytes>>(),
+           Null<Array<std::int64_t>>(), Null<Array<Timestamp>>(),
+           Null<Array<Date>>(), numeric_arr},
       }));
 }
 

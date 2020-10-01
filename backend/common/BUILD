@@ -119,6 +119,7 @@ cc_library(
         "//backend/datamodel:value",
         "//backend/schema/catalog:schema",
         "//common:errors",
+        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
 

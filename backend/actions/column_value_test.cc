@@ -37,6 +37,7 @@
 #include "common/limits.h"
 #include "tests/common/actions.h"
 #include "tests/common/schema_constructor.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -45,6 +46,7 @@ namespace emulator {
 namespace backend {
 namespace {
 
+using emulator::test::ScopedEmulatorFeatureFlagsSetter;
 using zetasql::values::Bool;
 using zetasql::values::Bytes;
 using zetasql::values::BytesArray;
@@ -56,8 +58,10 @@ using zetasql::values::NullBytes;
 using zetasql::values::NullDate;
 using zetasql::values::NullDouble;
 using zetasql::values::NullInt64;
+using zetasql::values::NullNumeric;
 using zetasql::values::NullString;
 using zetasql::values::NullTimestamp;
+using zetasql::values::Numeric;
 using zetasql::values::String;
 using zetasql::values::StringArray;
 using zetasql::values::Timestamp;
@@ -73,12 +77,17 @@ struct Values {
   zetasql::Value timestamp_col = Timestamp(absl::Now());
   zetasql::Value array_string_col = StringArray({"test"});
   zetasql::Value array_bytes_col = BytesArray({"01234"});
+  zetasql::Value numeric_col =
+      Numeric(zetasql::NumericValue::FromStringStrict("1234567890.123456789")
+                  .value());
 };
 
 class ColumnValueTest : public test::ActionsTest {
  public:
   ColumnValueTest()
-      : schema_(emulator::test::CreateSchemaFromDDL(
+      : scoped_flags_setter_({.enable_stored_generated_columns = false,
+                              .enable_numeric_type = true}),
+        schema_(emulator::test::CreateSchemaFromDDL(
                     {
                         R"(
                             CREATE TABLE TestTable (
@@ -91,6 +100,7 @@ class ColumnValueTest : public test::ActionsTest {
                               timestamp_col TIMESTAMP NOT NULL,
                               array_string_col ARRAY<STRING(MAX)>,
                               array_bytes_col ARRAY<BYTES(MAX)>,
+                              numeric_col NUMERIC NOT NULL,
                             ) PRIMARY KEY (int64_col)
                           )",
                     },
@@ -106,7 +116,7 @@ class ColumnValueTest : public test::ActionsTest {
                       {values.int64_col, values.bool_col, values.date_col,
                        values.float_col, values.string_col, values.bytes_col,
                        values.timestamp_col, values.array_string_col,
-                       values.array_bytes_col}));
+                       values.array_bytes_col, values.numeric_col}));
   }
 
   absl::Status ValidateUpdate(const Values& values) {
@@ -115,11 +125,12 @@ class ColumnValueTest : public test::ActionsTest {
                       {values.int64_col, values.bool_col, values.date_col,
                        values.float_col, values.string_col, values.bytes_col,
                        values.timestamp_col, values.array_string_col,
-                       values.array_bytes_col}));
+                       values.array_bytes_col, values.numeric_col}));
   }
 
  protected:
   // Test components.
+  ScopedEmulatorFeatureFlagsSetter scoped_flags_setter_;
   zetasql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
 
@@ -188,6 +199,14 @@ TEST_F(ColumnValueTest, ValidateNotNullColumns) {
     EXPECT_THAT(ValidateUpdate(values),
                 StatusIs(absl::StatusCode::kFailedPrecondition));
   }
+  {
+    Values values;
+    values.numeric_col = NullNumeric();
+    EXPECT_THAT(ValidateInsert(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+    EXPECT_THAT(ValidateUpdate(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
 }
 
 TEST_F(ColumnValueTest, ValidateColumnsAreCorrectTypes) {
@@ -244,6 +263,14 @@ TEST_F(ColumnValueTest, ValidateColumnsAreCorrectTypes) {
   {
     Values values;
     values.timestamp_col = String("");
+    EXPECT_THAT(ValidateInsert(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+    EXPECT_THAT(ValidateUpdate(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+  {
+    Values values;
+    values.numeric_col = String("");
     EXPECT_THAT(ValidateInsert(values),
                 StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),

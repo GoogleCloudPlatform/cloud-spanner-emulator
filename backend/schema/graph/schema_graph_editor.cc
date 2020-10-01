@@ -22,6 +22,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/str_join.h"
 #include "backend/schema/graph/schema_node.h"
 #include "zetasql/base/ret_check.h"
@@ -143,7 +144,7 @@ SchemaGraphEditor::CanonicalizeGraph() {
   std::unique_ptr<SchemaGraph> cloned_graph = nullptr;
   // Set the edited nodes in the context so that nodes can check
   // if they were edited/cloned inside ValidateUpdate()/Validate().
-  context_->set_edited_map(&edited_clones_);
+  context_->set_edited_nodes(&edited_clones_);
   if (deleted_node_) {
     VLOG(2) << "Canonicalizing deletes";
     ZETASQL_RETURN_IF_ERROR(CanonicalizeDeletion());

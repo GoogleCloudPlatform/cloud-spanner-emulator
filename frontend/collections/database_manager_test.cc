@@ -116,6 +116,37 @@ TEST_F(DatabaseManagerTest, ListDatabaseWithSimilarInstanceUri) {
   EXPECT_EQ(databases[0]->database_uri(), database_uri_);
 }
 
+TEST_F(DatabaseManagerTest, DatabaseQuotaIsEnforced) {
+  std::string database_uri_prefix =
+      "projects/test-project/instances/test-instance/databases/test-database-";
+
+  // Create 100 databases.
+  for (int i = 1; i <= 100; ++i) {
+    std::string database_uri = absl::StrCat(database_uri_prefix, i);
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        std::shared_ptr<Database> database,
+        database_manager_.CreateDatabase(database_uri, empty_schema_));
+  }
+
+  // The next database creation should fail.
+  EXPECT_THAT(database_manager_.CreateDatabase(
+                  absl::StrCat(database_uri_prefix, 101), empty_schema_),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kResourceExhausted));
+
+  // But creating a database in another instance should not fail.
+  ZETASQL_EXPECT_OK(database_manager_.CreateDatabase(
+      absl::StrCat("projects/test-project/instances/test-instance-2/databases/"
+                   "test-database-",
+                   101),
+      empty_schema_));
+
+  // If we clear some quota, we can create a database again.
+  ZETASQL_EXPECT_OK(
+      database_manager_.DeleteDatabase(absl::StrCat(database_uri_prefix, 100)));
+  ZETASQL_EXPECT_OK(database_manager_.CreateDatabase(
+      absl::StrCat(database_uri_prefix, 101), empty_schema_));
+}
+
 }  // namespace frontend
 }  // namespace emulator
 }  // namespace spanner

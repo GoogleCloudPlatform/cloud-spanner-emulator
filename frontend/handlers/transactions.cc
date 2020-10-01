@@ -18,6 +18,7 @@
 #include "google/spanner/v1/mutation.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
+#include "zetasql/base/statusor.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_only_transaction.h"
 #include "backend/transaction/read_write_transaction.h"

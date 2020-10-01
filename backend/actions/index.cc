@@ -18,6 +18,7 @@
 
 #include <iterator>
 
+#include "zetasql/base/statusor.h"
 #include "backend/common/indexing.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"

@@ -29,6 +29,8 @@ namespace error {
 
 // Generic errors.
 absl::Status Internal(absl::string_view msg);
+absl::Status CycleDetected(absl::string_view object_type,
+                           absl::string_view cycle);
 
 // Project errors.
 absl::Status InvalidProjectURI(absl::string_view uri);
@@ -86,6 +88,7 @@ absl::Status ValueProtoTypeMismatch(absl::string_view proto,
                                     absl::string_view expected_type);
 absl::Status CouldNotParseStringAsInteger(absl::string_view str);
 absl::Status CouldNotParseStringAsDouble(absl::string_view str);
+absl::Status CouldNotParseStringAsNumeric(absl::string_view str);
 absl::Status CouldNotParseStringAsTimestamp(absl::string_view str,
                                             absl::string_view error);
 absl::Status TimestampMustBeInUTCTimeZone(absl::string_view str);
@@ -120,6 +123,10 @@ absl::Status InvalidReadOptionForMultiUseTransaction(
     absl::string_view timestamp_bound);
 absl::Status InvalidModeForReadOnlySingleUseTransaction();
 absl::Status DmlDoesNotSupportSingleUseTransaction();
+absl::Status DmlSequenceOutOfOrder(int64_t request_seqno, int64_t last_seqno,
+                                   absl::string_view sql_statement);
+absl::Status ReplayRequestMismatch(int64_t request_seqno,
+                                   absl::string_view sql_statement);
 absl::Status PartitionReadDoesNotSupportSingleUseTransaction();
 absl::Status PartitionReadNeedsReadOnlyTxn();
 absl::Status CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
@@ -132,6 +139,7 @@ absl::Status CannotRollbackAfterCommit();
 absl::Status CannotReadOrQueryAfterCommitOrRollback();
 absl::Status CannotUseTransactionAfterConstraintError();
 absl::Status ReadTimestampPastVersionGCLimit(absl::Time timestamp);
+absl::Status ReadTimestampTooFarInFuture(absl::Time timestamp);
 absl::Status AbortDueToConcurrentSchemaChange(backend::TransactionID id);
 absl::Status AbortReadWriteTransactionOnFirstCommit(backend::TransactionID id);
 
@@ -147,8 +155,9 @@ absl::Status InvalidConstraintName(absl::string_view constraint_type,
                                    absl::string_view constraint_name,
                                    absl::string_view reserved_prefix);
 absl::Status CannotNameIndexPrimaryKey();
-absl::Status CannotCreateIndexOnArrayColumns(absl::string_view index_name,
-                                             absl::string_view column_name);
+absl::Status CannotCreateIndexOnColumn(absl::string_view index_name,
+                                       absl::string_view column_name,
+                                       absl::string_view column_type);
 absl::Status InvalidPrimaryKeyColumnType(absl::string_view column_name,
                                          absl::string_view type);
 absl::Status InvalidColumnLength(absl::string_view column_name,
@@ -255,6 +264,8 @@ absl::Status TableNotFound(absl::string_view table_name);
 absl::Status TableNotFoundAtTimestamp(absl::string_view table_name,
                                       absl::Time timestamp);
 absl::Status IndexNotFound(absl::string_view index_name);
+absl::Status DropForeignKeyManagedIndex(absl::string_view index_name,
+                                        absl::string_view foreign_key_names);
 absl::Status ColumnNotFound(absl::string_view table_name,
                             absl::string_view column_name);
 absl::Status ColumnNotFoundAtTimestamp(absl::string_view table_name,
@@ -378,6 +389,23 @@ absl::Status ForeignKeyColumnTypeChangeNotAllowed(
 absl::Status ForeignKeyColumnSetCommitTimestampOptionNotAllowed(
     absl::string_view column, absl::string_view table,
     absl::string_view foreign_keys);
+absl::Status ForeignKeyReferencedKeyNotFound(
+    absl::string_view foreign_key, absl::string_view referencing_table,
+    absl::string_view referenced_table, absl::string_view referenced_key);
+absl::Status ForeignKeyReferencingKeyFound(absl::string_view foreign_key,
+                                           absl::string_view referencing_table,
+                                           absl::string_view referenced_table,
+                                           absl::string_view referencing_key);
+
+absl::Status NumericTypeNotEnabled();
+// Generated column errors
+absl::Status GeneratedColumnsNotEnabled();
+absl::Status NonStoredGeneratedColumnUnsupported(absl::string_view column_name);
+absl::Status GeneratedColumnDefinitionParseError(absl::string_view table_name,
+                                                 absl::string_view column_name,
+                                                 absl::string_view message);
+absl::Status NonScalarExpressionInColumnExpression(absl::string_view type);
+absl::Status ColumnExpressionMaxDepthExceeded(int depth, int max_depth);
 
 // Query errors.
 absl::Status UnableToInferUndeclaredParameter(absl::string_view parameter_name);
@@ -389,6 +417,7 @@ absl::Status InvalidEmulatorHintValue(absl::string_view hint_string,
                                       absl::string_view value_string);
 absl::Status QueryHintIndexNotFound(absl::string_view table_name,
                                     absl::string_view index_name);
+absl::Status QueryHintManagedIndexNotSupported(absl::string_view index_name);
 absl::Status NullFilteredIndexUnusable(absl::string_view index_name);
 absl::Status NonPartitionableQuery(absl::string_view reason);
 absl::Status EmulatorDoesNotSupportQueryPlans();

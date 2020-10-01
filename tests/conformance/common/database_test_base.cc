@@ -21,6 +21,7 @@
 
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "google/cloud/spanner/backoff_policy.h"
@@ -59,7 +60,7 @@ void DatabaseTest::SetUp() {
   // default TestEnv conformance tests wait quite a while for admin operations
   // like create instance/database/schema.
   auto retry_policy = absl::make_unique<cloud::spanner::LimitedTimeRetryPolicy>(
-      std::chrono::seconds(60));
+      std::chrono::seconds(120));
   auto backoff_policy =
       absl::make_unique<cloud::spanner::ExponentialBackoffPolicy>(
           std::chrono::milliseconds(1), std::chrono::milliseconds(2), 1.01);

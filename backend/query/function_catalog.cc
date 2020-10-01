@@ -28,6 +28,7 @@
 #include "zetasql/public/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/ascii.h"
 #include "backend/query/analyzer_options.h"
 #include "common/constants.h"

@@ -16,14 +16,14 @@
 
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_INCLUDES_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_INCLUDES_H_
-#include "backend/schema/parser/Token.h"
 #include "backend/schema/parser/CharStream.h"
-#include "backend/schema/parser/JavaCC.h"
-#include "backend/schema/parser/Node.h"
 #include "backend/schema/parser/DDLParser.h"
 #include "backend/schema/parser/DDLParserTokenManager.h"
 #include "backend/schema/parser/DDLParserTree.h"
 #include "backend/schema/parser/DDLParserTreeConstants.h"
 #include "backend/schema/parser/ErrorHandler.h"
+#include "backend/schema/parser/JavaCC.h"
+#include "backend/schema/parser/Node.h"
+#include "backend/schema/parser/Token.h"
 
 #endif

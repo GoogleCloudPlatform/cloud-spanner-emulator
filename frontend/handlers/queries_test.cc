@@ -119,7 +119,6 @@ TEST_F(QueryApiTest, ExecuteBatchDml) {
                                 stats { row_count_exact: 1 }
                               }
                               result_sets {
-                                metadata { row_type {} }
                                 stats { row_count_exact: 1 }
                               }
                               status { code: 0 }
@@ -154,10 +153,7 @@ TEST_F(QueryApiTest, ExecuteBatchDmlFailsOnInvalidDmlStatement) {
   // Ignoring the status.message field to avoid brittle tests.
   EXPECT_THAT(response, Partially(EqualsProto(
                             R"(
-                              result_sets {
-                                metadata { row_type {} }
-                                stats { row_count_exact: 1 }
-                              }
+                              result_sets { stats { row_count_exact: 1 } }
                               status { code: 3 }
                             )")));
 }

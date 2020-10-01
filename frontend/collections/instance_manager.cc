@@ -20,6 +20,7 @@
 
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
 #include "absl/memory/memory.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"

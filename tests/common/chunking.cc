@@ -19,6 +19,7 @@
 #include "google/protobuf/struct.pb.h"
 #include "absl/memory/memory.h"
 #include "absl/random/random.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/substitute.h"
 #include "absl/types/optional.h"
 #include "common/errors.h"

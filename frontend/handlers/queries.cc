@@ -21,7 +21,10 @@
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
-#include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
+#include "absl/strings/cord.h"
+#include "absl/types/optional.h"
+#include "absl/types/variant.h"
 #include "backend/access/read.h"
 #include "backend/query/query_engine.h"
 #include "common/constants.h"
@@ -37,6 +40,7 @@
 #include "frontend/proto/partition_token.pb.h"
 #include "frontend/server/handler.h"
 #include "frontend/server/request_context.h"
+#include "farmhash.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 #include "zetasql/base/statusor.h"
@@ -49,6 +53,16 @@ namespace frontend {
 namespace spanner_api = ::google::spanner::v1;
 
 namespace {
+
+absl::Duration kMaxFutureReadDuration = absl::Hours(1);
+
+absl::Status ValidateReadTimestampNotTooFarInFuture(absl::Time read_timestamp,
+                                                    absl::Time now) {
+  if (read_timestamp - now > kMaxFutureReadDuration) {
+    return error::ReadTimestampTooFarInFuture(read_timestamp);
+  }
+  return absl::OkStatus();
+}
 
 absl::Status ValidateTransactionSelectorForQuery(
     const spanner_api::TransactionSelector& selector, bool is_dml) {
@@ -140,6 +154,40 @@ zetasql_base::StatusOr<backend::QueryResult> ExecuteQuery(
   return txn->ExecuteSql(query);
 }
 
+template <typename Request>
+int64_t SerializeAndHashRequest(const Request& request) {
+  std::string serialized_request;
+  {
+    // Serialize the request proto deterministically.
+    // Message::SerializeToString() is not guaranteed to deterministically
+    // generate the same string for a message that contains map fields.
+    // We create the output stream in an inner scope so that it gets flushed
+    // in the destructor before computing the fingerprint.
+    google::protobuf::io::StringOutputStream stream(&serialized_request);
+    google::protobuf::io::CodedOutputStream output(&stream);
+    output.SetSerializationDeterministic(true);
+    request.SerializeToCodedStream(&output);
+  }
+  return farmhash::Fingerprint64(serialized_request);
+}
+
+int64_t HashRequest(const spanner_api::ExecuteSqlRequest* request) {
+  spanner_api::ExecuteSqlRequest copy = *request;
+  // Clearing resume token and sequence number so that the hash is based
+  // entirely on the sql statement.
+  copy.clear_resume_token();
+  copy.set_seqno(0);
+  return SerializeAndHashRequest(copy);
+}
+
+int64_t HashRequest(const spanner_api::ExecuteBatchDmlRequest* request) {
+  spanner_api::ExecuteBatchDmlRequest copy = *request;
+  // Clearing sequence number so that the hash is based entirely on the sql
+  // statement.
+  copy.set_seqno(0);
+  return SerializeAndHashRequest(copy);
+}
+
 }  //  namespace
 
 // Executes a SQL statement, returning all results in a single reply.
@@ -152,16 +200,39 @@ absl::Status ExecuteSql(RequestContext* ctx,
                    GetSession(ctx, request->session()));
 
   // Get underlying transaction.
-  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(
-      request->transaction(), backend::IsDMLQuery(request->sql())));
+  bool is_dml_query = backend::IsDMLQuery(request->sql());
+  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction(),
+                                                      is_dml_query));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
 
   // Wrap all operations on this transaction so they are atomic.
   return txn->GuardedCall(
-      backend::IsDMLQuery(request->sql()) ? Transaction::OpType::kDml
-                                          : Transaction::OpType::kSql,
+      is_dml_query ? Transaction::OpType::kDml : Transaction::OpType::kSql,
       [&]() -> absl::Status {
+        // Register DML request and check for status replay.
+        if (is_dml_query) {
+          const auto state = txn->LookupOrRegisterDmlRequest(
+              request->seqno(), HashRequest(request), request->sql());
+          if (state.has_value()) {
+            if (!state->status.ok()) {
+              return state->status;
+            }
+            if (!absl::holds_alternative<spanner_api::ResultSet>(
+                    state->outcome)) {
+              return error::ReplayRequestMismatch(request->seqno(),
+                                                  request->sql());
+            }
+            *response = absl::get<spanner_api::ResultSet>(state->outcome);
+            return state->status;
+          }
+
+          // DML needs to explicitly check the transaction status since
+          // the DML sequence number replay should take priority over returning
+          // a previously encountered error status.
+          ZETASQL_RETURN_IF_ERROR(txn->Status());
+        }
+
         // Cannot query after commit, rollback, or non-recoverable error.
         if (txn->IsInvalid()) {
           return error::CannotUseTransactionAfterConstraintError();
@@ -171,6 +242,14 @@ absl::Status ExecuteSql(RequestContext* ctx,
             return error::CannotReusePartitionedDmlTransaction();
           }
           return error::CannotReadOrQueryAfterCommitOrRollback();
+        }
+        if (txn->IsReadOnly()) {
+          if (is_dml_query) {
+            return error::ReadOnlyTransactionDoesNotSupportDml("ReadOnly");
+          }
+          ZETASQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
+          ZETASQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
+              read_timestamp, ctx->env()->clock()->Now()));
         }
 
         // Convert and execute provided SQL statement.
@@ -237,6 +316,9 @@ absl::Status ExecuteSql(RequestContext* ctx,
           return error::EmulatorDoesNotSupportQueryPlans();
         }
 
+        if (is_dml_query) {
+          txn->SetDmlReplayOutcome(*response);
+        }
         return absl::OkStatus();
       });
 }
@@ -256,16 +338,44 @@ absl::Status ExecuteStreamingSql(
                    GetSession(ctx, request->session()));
 
   // Get underlying transaction.
-  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(
-      request->transaction(), backend::IsDMLQuery(request->sql())));
+  bool is_dml_query = backend::IsDMLQuery(request->sql());
+  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction(),
+                                                      is_dml_query));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
 
-  // Wrap all operations on this transaction so they are atomic .
+  // Wrap all operations on this transaction so they are atomic.
   return txn->GuardedCall(
-      backend::IsDMLQuery(request->sql()) ? Transaction::OpType::kDml
-                                          : Transaction::OpType::kSql,
+      is_dml_query ? Transaction::OpType::kDml : Transaction::OpType::kSql,
       [&]() -> absl::Status {
+        // Register DML request and check for status replay.
+        if (is_dml_query) {
+          const auto state = txn->LookupOrRegisterDmlRequest(
+              request->seqno(), HashRequest(request), request->sql());
+          if (state.has_value()) {
+            if (!state->status.ok()) {
+              return state->status;
+            }
+            if (!absl::holds_alternative<spanner_api::ResultSet>(
+                    state->outcome)) {
+              return error::ReplayRequestMismatch(request->seqno(),
+                                                  request->sql());
+            }
+            spanner_api::PartialResultSet response;
+            spanner_api::ResultSet replay_result =
+                absl::get<spanner_api::ResultSet>(state->outcome);
+            *response.mutable_stats() = replay_result.stats();
+            *response.mutable_metadata() = replay_result.metadata();
+            stream->Send(response);
+            return state->status;
+          }
+
+          // DML needs to explicitly check the transaction status since
+          // the DML sequence number replay should take priority over returning
+          // a previously encountered error status.
+          ZETASQL_RETURN_IF_ERROR(txn->Status());
+        }
+
         // Cannot query after commit, rollback, or non-recoverable error.
         if (txn->IsInvalid()) {
           return error::CannotUseTransactionAfterConstraintError();
@@ -275,6 +385,14 @@ absl::Status ExecuteStreamingSql(
             return error::CannotReusePartitionedDmlTransaction();
           }
           return error::CannotReadOrQueryAfterCommitOrRollback();
+        }
+        if (txn->IsReadOnly()) {
+          if (is_dml_query) {
+            return error::ReadOnlyTransactionDoesNotSupportDml("ReadOnly");
+          }
+          ZETASQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
+          ZETASQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
+              read_timestamp, ctx->env()->clock()->Now()));
         }
 
         // Convert and execute provided SQL statement.
@@ -352,6 +470,13 @@ absl::Status ExecuteStreamingSql(
         for (const auto& response : responses) {
           stream->Send(response);
         }
+
+        if (is_dml_query) {
+          spanner_api::ResultSet replay_result;
+          *replay_result.mutable_stats() = responses[0].stats();
+          *replay_result.mutable_metadata() = responses[0].metadata();
+          txn->SetDmlReplayOutcome(replay_result);
+        }
         return absl::OkStatus();
       });
 }
@@ -380,11 +505,38 @@ absl::Status ExecuteBatchDml(RequestContext* ctx,
   if (txn->IsPartitionedDml()) {
     return error::BatchDmlOnlySupportsReadWriteTransaction();
   }
+
   // Set default response status to OK. Any error will override this.
   *response->mutable_status() = StatusToProto(absl::OkStatus());
 
   // Wrap all operations on this transaction so they are atomic.
   return txn->GuardedCall(Transaction::OpType::kDml, [&]() -> absl::Status {
+    // Register DML request and check for status replay.
+    const auto state = txn->LookupOrRegisterDmlRequest(
+        request->seqno(), HashRequest(request), request->statements(0).sql());
+    if (state.has_value()) {
+      if (!state->status.ok() &&
+          txn->DMLErrorType() ==
+              Transaction::DMLErrorHandlingMode::kDmlRegistrationError) {
+        return state->status;
+      }
+      if (!absl::holds_alternative<spanner_api::ExecuteBatchDmlResponse>(
+              state->outcome)) {
+        return error::ReplayRequestMismatch(request->seqno(),
+                                            request->statements(0).sql());
+      }
+      *response =
+          absl::get<spanner_api::ExecuteBatchDmlResponse>(state->outcome);
+
+      // BatchDml always returns OK status with the error being populated in the
+      // response.
+      return absl::OkStatus();
+    }
+    // DML needs to explicitly check the transaction status since
+    // the DML sequence number replay should take priority over returning
+    // a previously encountered error status.
+    ZETASQL_RETURN_IF_ERROR(txn->Status());
+
     // Cannot query after commit, rollback, or non-recoverable error.
     if (txn->IsInvalid()) {
       return error::CannotUseTransactionAfterConstraintError();
@@ -396,33 +548,43 @@ absl::Status ExecuteBatchDml(RequestContext* ctx,
     for (int index = 0; index < request->statements_size(); ++index) {
       const auto& statement = request->statements(index);
       if (!backend::IsDMLQuery(statement.sql())) {
-        *response->mutable_status() =
-            StatusToProto(error::ExecuteBatchDmlOnlySupportsDmlStatements(
-                index, statement.sql()));
+        absl::Status error = error::ExecuteBatchDmlOnlySupportsDmlStatements(
+            index, statement.sql());
+        *response->mutable_status() = StatusToProto(error);
+        txn->SetDmlReplayOutcome(*response);
         return absl::OkStatus();
       }
 
-      auto maybe_result = ExecuteQuery(statement, txn);
+      const auto maybe_result = ExecuteQuery(statement, txn);
       if (!maybe_result.ok() &&
           maybe_result.status().code() != absl::StatusCode::kAborted) {
-        *response->mutable_status() = StatusToProto(maybe_result.status());
+        absl::Status error = maybe_result.status();
+        *response->mutable_status() = StatusToProto(error);
+        txn->SetDmlReplayOutcome(*response);
+        txn->MaybeInvalidate(error);
         return absl::OkStatus();
       } else if (maybe_result.status().code() == absl::StatusCode::kAborted) {
         return maybe_result.status();
       }
-      auto& result = maybe_result.value();
+
+      const auto& result = maybe_result.value();
       spanner_api::ResultSet* result_set = response->add_result_sets();
       result_set->mutable_stats()->set_row_count_exact(
           result.modified_row_count);
-      result_set->mutable_metadata()->mutable_row_type();
 
-      // Populate transaction metadata.
-      if (ShouldReturnTransaction(request->transaction())) {
-        ZETASQL_ASSIGN_OR_RETURN(*result_set->mutable_metadata()->mutable_transaction(),
-                         txn->ToProto());
+      // Only populate metadata for first result set.
+      if (index == 0) {
+        result_set->mutable_metadata()->mutable_row_type();
+        if (ShouldReturnTransaction(request->transaction())) {
+          ZETASQL_ASSIGN_OR_RETURN(
+              *result_set->mutable_metadata()->mutable_transaction(),
+              txn->ToProto());
+        }
       }
     }
 
+    // Set the replay outcome.
+    txn->SetDmlReplayOutcome(*response);
     return absl::OkStatus();
   });
 }

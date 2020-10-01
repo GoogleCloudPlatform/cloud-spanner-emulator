@@ -41,7 +41,7 @@ class Table;
 class Column : public SchemaNode {
  public:
   // Returns the name of the column.
-  std::string Name() const { return name_; }
+  const std::string& Name() const { return name_; }
 
   // Qualified name of the column.
   std::string FullName() const;
@@ -89,6 +89,16 @@ class Column : public SchemaNode {
     return 0;
   }
 
+  // Returns whether the column is a generated column.
+  bool is_generated() const { return expression_.has_value(); }
+
+  // Returns the expression if the column is a generated column.
+  const absl::optional<std::string>& expression() const { return expression_; }
+
+  absl::Span<const Column* const> dependent_columns() const {
+    return dependent_columns_;
+  }
+
   // Returns the source column.
   const Column* source_column() const { return source_column_; }
 
@@ -110,6 +120,9 @@ class Column : public SchemaNode {
   std::string DebugString() const override {
     return absl::Substitute("C:$0[$1]($2)", Name(), id_, type_->DebugString());
   }
+
+  // Populates dependent_columns_.
+  void PopulateDependentColumns();
 
   // TODO : Make external friend classes instead of nested classes.
   class Builder;
@@ -136,7 +149,6 @@ class Column : public SchemaNode {
 
   absl::Status DeepClone(SchemaGraphEditor* editor,
                          const SchemaNode* orig) override;
-
   // Validation delegates.
   const ValidationFn validate_;
 
@@ -165,6 +177,14 @@ class Column : public SchemaNode {
 
   // Length for STRING and BYTES. If unset, indicates the max allowed length.
   absl::optional<int64_t> declared_max_length_ = absl::nullopt;
+
+  // For a generated column, this is the generation expression.
+  absl::optional<std::string> expression_ = absl::nullopt;
+
+  // For a generated column, this is the list of columns that this column
+  // references in its expression.
+  std::vector<std::string> dependent_column_names_;
+  std::vector<const Column*> dependent_columns_;
 
   // The table containing the column.
   const Table* table_ = nullptr;

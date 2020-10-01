@@ -19,6 +19,7 @@
 #include <map>
 
 #include "zetasql/public/type.h"
+#include "zetasql/base/statusor.h"
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
 

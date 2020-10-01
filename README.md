@@ -41,7 +41,7 @@ images are also tagged with version numbers, so you can run a specific version
 with:
 
 ```shell
-VERSION=1.0.0
+VERSION=1.1.0
 docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator:$VERSION
 ```
 
@@ -52,7 +52,7 @@ binary is not fully static, but has been tested on Ubuntu 16.04/18.04, CentOS 8,
 RHEL 8, and Debian 9/10.
 
 ```shell
-VERSION=1.0.0
+VERSION=1.1.0
 wget https://storage.googleapis.com/cloud-spanner-emulator/releases/${VERSION}/cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 tar zxvf cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 chmod u+x gateway_main emulator_main
@@ -125,6 +125,8 @@ Notable supported features:
 
 - Full SQL/DML query execution (limitations noted below)
 
+- DML sequence numbers
+
 - Non-SQL read and write methods
 
 - Instance and Database admin APIs including long running operations
@@ -139,13 +141,13 @@ Notable supported features:
 
 - Partitioned Read, Partitioned Query and Partitioned DML APIs
 
+- Foreign keys
+
 Features not currently available:
 
 - SQL function TABLESAMPLE is not supported.
 
 - Cloud Spanner dataflow templates are not supported.
-
-- Foreign keys are not supported.
 
 Notable limitations:
 
@@ -192,6 +194,12 @@ Notable limitations:
 
 - Server-side monitoring and logging functionality such as audit logs,
   stackdriver logging, and stackdriver monitoring are not supported.
+
+- Foreign key [backing index](
+  https://cloud.google.com/spanner/docs/foreign-keys/overview#backing-indexes)
+  names generated in production Cloud Spanner are usable in emulator query
+  hints. However, index names generated in the emulator cannot be used in the
+  emulator or in production.
 
 ## Frequently Asked Questions (FAQ)
 

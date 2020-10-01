@@ -992,6 +992,19 @@ CREATE TABLE B (
 --
 ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
+CREATE TABLE T(
+  A INT64,
+  B TIMESTAMP NOT NULL
+) PRIMARY KEY (A);
+ALTER TABLE T ALTER COLUMN B SET OPTIONS(allow_commit_timestamp=true);
+--
+CREATE TABLE T (
+  A INT64,
+  B TIMESTAMP NOT NULL OPTIONS (
+    allow_commit_timestamp = true
+  ),
+) PRIMARY KEY(A);
+==
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (

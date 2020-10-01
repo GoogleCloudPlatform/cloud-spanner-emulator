@@ -16,6 +16,8 @@
 
 #include "backend/schema/updater/schema_updater_tests/base.h"
 
+#include "zetasql/base/statusor.h"
+
 namespace google {
 namespace spanner {
 namespace emulator {

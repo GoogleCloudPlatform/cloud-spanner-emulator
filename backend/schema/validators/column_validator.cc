@@ -197,14 +197,19 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
 absl::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
                                           SchemaValidationContext* context) {
   ZETASQL_RET_CHECK_NE(key_column->column_, nullptr);
-  if (key_column->column_->GetType()->IsArray()) {
+  const std::string type_name =
+      key_column->column_->GetType()->IsArray()
+          ? "ARRAY"
+          : key_column->column_->GetType()->ShortTypeName(
+                zetasql::PRODUCT_EXTERNAL);
+  if (!IsSupportedKeyColumnType(key_column->column_->GetType())) {
     if (key_column->column()->table()->owner_index()) {
-      return error::CannotCreateIndexOnArrayColumns(
+      return error::CannotCreateIndexOnColumn(
           key_column->column()->table()->owner_index()->Name(),
-          key_column->column()->Name());
+          key_column->column()->Name(), type_name);
     }
     return error::InvalidPrimaryKeyColumnType(key_column->column_->FullName(),
-                                              "ARRAY");
+                                              type_name);
   }
   return absl::OkStatus();
 }

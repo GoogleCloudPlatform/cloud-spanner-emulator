@@ -16,6 +16,7 @@
 
 #include "backend/common/rows.h"
 
+#include "zetasql/base/statusor.h"
 #include "common/errors.h"
 
 namespace google {

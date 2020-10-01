@@ -34,6 +34,7 @@
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/time/time.h"
 #include "backend/access/read.h"

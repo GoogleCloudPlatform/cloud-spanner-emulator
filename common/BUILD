@@ -82,3 +82,24 @@ cc_library(
     hdrs = ["config.h"],
     deps = ["@com_google_absl//absl/flags:flag"],
 )
+
+cc_library(
+    name = "feature_flags",
+    hdrs = ["feature_flags.h"],
+    deps = [
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+cc_test(
+    name = "feature_flags_test",
+    srcs = ["feature_flags_test.cc"],
+    deps = [
+        ":feature_flags",
+        "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)

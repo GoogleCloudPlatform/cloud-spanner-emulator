@@ -17,6 +17,7 @@
 #include "frontend/converters/keys.h"
 
 #include "zetasql/public/value.h"
+#include "zetasql/base/statusor.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"

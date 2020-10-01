@@ -21,7 +21,9 @@
 #include "tests/common/proto_matchers.h"
 #include "google/cloud/spanner/create_instance_request_builder.h"
 #include "google/cloud/spanner/instance_admin_client.h"
+#include "common/feature_flags.h"
 #include "frontend/server/server.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/environment.h"
 
 namespace google {
@@ -82,6 +84,11 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
     globals_->connection_options = std::move(connection_options);
     globals_->in_prod_env = false;
     SetConformanceTestGlobals(globals_.get());
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_stored_generated_columns = true;
+    flags.enable_numeric_type = true;
+    feature_flags_ =
+        absl::make_unique<test::ScopedEmulatorFeatureFlagsSetter>(flags);
   }
 
  private:
@@ -90,6 +97,8 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
 
   // Globals that need to be provided by a conformance test endpoint.
   std::unique_ptr<ConformanceTestGlobals> globals_;
+
+  std::unique_ptr<test::ScopedEmulatorFeatureFlagsSetter> feature_flags_;
 };
 
 }  // namespace test

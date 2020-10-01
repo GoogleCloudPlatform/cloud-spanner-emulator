@@ -20,6 +20,7 @@
 #include "zetasql/public/type.pb.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
 #include "backend/datamodel/types.h"
@@ -76,6 +77,11 @@ absl::Status Column::DeepClone(SchemaGraphEditor* editor,
     MarkDeleted();
   }
 
+  for (const Column*& column : dependent_columns_) {
+    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));
+    column = schema_node->As<const Column>();
+  }
+
   if (source_column_) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* source_column_clone,
                      editor->Clone(source_column_));
@@ -92,6 +98,17 @@ absl::Status Column::DeepClone(SchemaGraphEditor* editor,
     }
   }
   return absl::OkStatus();
+}
+
+void Column::PopulateDependentColumns() {
+  dependent_columns_.clear();
+  for (absl::string_view dep_name : dependent_column_names_) {
+    if (absl::EqualsIgnoreCase(dep_name, name_)) {
+      dependent_columns_.push_back(this);
+    } else {
+      dependent_columns_.push_back(table_->FindColumn(std::string(dep_name)));
+    }
+  }
 }
 
 absl::Status KeyColumn::Validate(SchemaValidationContext* context) const {

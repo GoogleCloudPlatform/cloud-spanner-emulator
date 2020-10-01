@@ -19,6 +19,7 @@
 
 #include <memory>
 
+#include "absl/container/node_hash_map.h"
 #include "absl/memory/memory.h"
 #include "backend/actions/action.h"
 #include "backend/actions/context.h"
@@ -60,19 +61,19 @@ class ActionRegistry {
   const Schema* schema_;
 
   // List of validators per table.
-  std::map<const Table*, std::vector<std::unique_ptr<Validator>>>
+  absl::node_hash_map<const Table*, std::vector<std::unique_ptr<Validator>>>
       table_validators_;
 
   // List of effectors per table.
-  std::map<const Table*, std::vector<std::unique_ptr<Effector>>>
+  absl::node_hash_map<const Table*, std::vector<std::unique_ptr<Effector>>>
       table_effectors_;
 
   // List of modifiers per table.
-  std::map<const Table*, std::vector<std::unique_ptr<Modifier>>>
+  absl::node_hash_map<const Table*, std::vector<std::unique_ptr<Modifier>>>
       table_modifiers_;
 
   // List of verifiers per table.
-  std::map<const Table*, std::vector<std::unique_ptr<Verifier>>>
+  absl::node_hash_map<const Table*, std::vector<std::unique_ptr<Verifier>>>
       table_verifiers_;
 };
 
@@ -88,7 +89,7 @@ class ActionManager {
       const Schema* schema) const;
 
  private:
-  std::map<const Schema*, std::unique_ptr<ActionRegistry>> registry_;
+  absl::node_hash_map<const Schema*, std::unique_ptr<ActionRegistry>> registry_;
 };
 
 }  // namespace backend

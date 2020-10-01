@@ -116,7 +116,7 @@ TEST_F(CommitTimestamps, CannotWriteFutureTimestampToCommitTimestampColumn) {
   // column.
   Timestamp future_timestamp =
       google::cloud::spanner::MakeTimestamp(std::chrono::system_clock::now() +
-                                            std::chrono::seconds(1))
+                                            std::chrono::minutes(1))
           .value();
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age", "CommitTS"},
                      {6, "Levin", 24, future_timestamp}),

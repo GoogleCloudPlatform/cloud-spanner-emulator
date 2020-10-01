@@ -15,6 +15,8 @@
 //
 
 #include "backend/schema/updater/schema_updater_tests/base.h"
+#include "common/feature_flags.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -27,19 +29,23 @@ namespace types = zetasql::types;
 namespace {
 
 TEST_F(SchemaUpdaterTest, CreateIndex) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_numeric_type = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         k1 INT64 NOT NULL,
         c1 STRING(10),
-        c2 STRING(MAX)
+        c2 STRING(MAX),
+        c3 NUMERIC
       ) PRIMARY KEY (k1)
     )",
                                         R"(
       CREATE INDEX Idx1 ON T(c1)
     )",
                                         R"(
-      CREATE INDEX Idx2 ON T(c1) STORING(c2))",
+      CREATE INDEX Idx2 ON T(c1) STORING(c2, c3))",
                                     }));
 
   auto idx = schema->FindIndex("Idx1");
@@ -78,11 +84,15 @@ TEST_F(SchemaUpdaterTest, CreateIndex) {
 
   auto idx2 = schema->FindIndex("Idx2");
   EXPECT_NE(idx2, nullptr);
-  EXPECT_EQ(idx2->stored_columns().size(), 1);
+  EXPECT_EQ(idx2->stored_columns().size(), 2);
   auto t_c2 = t->FindColumn("c2");
   auto idx2_c2 = idx2->stored_columns()[0];
   EXPECT_THAT(idx2_c2, ColumnIs("c2", type_factory_.get_string()));
   EXPECT_THAT(idx2_c2, SourceColumnIs(t_c2));
+  auto t_c3 = t->FindColumn("c3");
+  auto idx2_c3 = idx2->stored_columns()[1];
+  EXPECT_THAT(idx2_c3, ColumnIs("c3", type_factory_.get_numeric()));
+  EXPECT_THAT(idx2_c3, SourceColumnIs(t_c3));
 }
 
 TEST_F(SchemaUpdaterTest, CreateIndex_NoKeys) {
@@ -318,7 +328,7 @@ TEST_F(SchemaUpdaterTest, CreateIndex_UnsupportedArrayTypeKeyColumn) {
                             R"(
       CREATE INDEX Idx ON T(c1)
     )"}),
-              StatusIs(error::CannotCreateIndexOnArrayColumns("Idx", "c1")));
+              StatusIs(error::CannotCreateIndexOnColumn("Idx", "c1", "ARRAY")));
 }
 
 TEST_F(SchemaUpdaterTest, CreateIndex_ArrayStoredColumn) {
@@ -400,6 +410,25 @@ TEST_F(SchemaUpdaterTest, DropIndex) {
   // Check that the index data table (and other dependent nodes) are
   // also deleted.
   EXPECT_EQ(new_schema->GetSchemaGraph()->GetSchemaNodes().size(), 4);
+}
+
+// TODO: Modify this test once NUMERIC is supported in keys
+TEST_F(SchemaUpdaterTest, CreateIndex_NumericColumn) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_numeric_type = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(
+      CreateSchema({
+          R"(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 NUMERIC
+      ) PRIMARY KEY (col1)
+    )",
+          R"(
+      CREATE INDEX Idx ON T(col2)
+    )"}),
+      StatusIs(error::CannotCreateIndexOnColumn("Idx", "col2", "NUMERIC")));
 }
 
 }  // namespace

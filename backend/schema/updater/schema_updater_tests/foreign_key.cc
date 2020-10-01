@@ -16,8 +16,11 @@
 
 #include "backend/schema/catalog/foreign_key.h"
 
+#include <initializer_list>
+
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
+#include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 
 namespace google {
@@ -31,19 +34,43 @@ namespace {
 struct Expected {
   std::string constraint_name;
   std::string generated_name;
+
   const Table* referencing_table;
   std::vector<const Column*> referencing_columns;
+  const Index* referencing_index;
+
   const Table* referenced_table;
   std::vector<const Column*> referenced_columns;
+  const Index* referenced_index;
 };
 
-Expected BuildExpected(
-    const Schema* schema, const std::string& constraint_name,
-    const std::string& generated_name,
-    const std::string& referencing_table_name,
-    const std::vector<std::string>& referencing_column_names,
-    const std::string& referenced_table_name,
-    const std::vector<std::string>& referenced_column_names) {
+Expected BuildExpected(const Schema* schema, const std::string& constraint_name,
+                       const std::string& referencing_table_name,
+                       const std::vector<std::string>& referencing_column_names,
+                       const std::string& referencing_index_name,
+                       const std::string& referenced_table_name,
+                       const std::vector<std::string>& referenced_column_names,
+                       const std::string& referenced_index_name,
+                       int sequence_number = 1) {
+  // Generates and returns a constraint name if one was not provided. Returns an
+  // empty string if a name was provided.
+  auto generated_name = [&]() -> std::string {
+    if (!constraint_name.empty()) {
+      return "";
+    }
+    GlobalSchemaNames names;
+    for (int i = 1; true; ++i) {
+      std::string name = names
+                             .GenerateForeignKeyName(referencing_table_name,
+                                                     referenced_table_name)
+                             .value();
+      if (i == sequence_number) {
+        return name;
+      }
+    }
+  };
+
+  // Returns a vector of catalog columns corresponding to a given list of name.
   auto columns = [&](const Table* table,
                      absl::Span<const std::string> column_names) {
     std::vector<const Column*> columns;
@@ -52,25 +79,45 @@ Expected BuildExpected(
     }
     return columns;
   };
+
+  // Looks up the expected schema objects.
   const Table* referencing_table =
       ASSERT_NOT_NULL(schema->FindTable(referencing_table_name));
+  const Index* referencing_index =
+      referencing_index_name.empty()
+          ? nullptr
+          : ASSERT_NOT_NULL(schema->FindIndex(referencing_index_name));
   const Table* referenced_table =
       ASSERT_NOT_NULL(schema->FindTable(referenced_table_name));
-  Expected expected{
-      constraint_name,   generated_name,
-      referencing_table, columns(referencing_table, referencing_column_names),
-      referenced_table,  columns(referenced_table, referenced_column_names)};
-  return expected;
+  const Index* referenced_index =
+      referenced_index_name.empty()
+          ? nullptr
+          : ASSERT_NOT_NULL(schema->FindIndex(referenced_index_name));
+
+  // Returns the expected results.
+  return {constraint_name,
+          generated_name(),
+          referencing_table,
+          columns(referencing_table, referencing_column_names),
+          referencing_index,
+          referenced_table,
+          columns(referenced_table, referenced_column_names),
+          referenced_index};
+}
+
+std::string Print(const Index* index) {
+  return index == nullptr ? "PK" : index->Name();
 }
 
 std::string Print(const Expected& expected) {
   return absl::Substitute(
-      "FK:$0:$1($2):$3($4)",
+      "FK:$0:$1($2)[$3]:$4($5)[$6]",
       absl::StrCat(expected.constraint_name, expected.generated_name),
       expected.referencing_table->Name(),
       PrintNames(expected.referencing_columns),
-      expected.referenced_table->Name(),
-      PrintNames<Column>(expected.referenced_columns));
+      Print(expected.referencing_index), expected.referenced_table->Name(),
+      PrintNames<Column>(expected.referenced_columns),
+      Print(expected.referenced_index));
 }
 
 MATCHER_P2(IsForeignKeyOf, table, expected, Print(expected)) {
@@ -137,6 +184,23 @@ MATCHER_P2(IsForeignKeyOf, table, expected, Print(expected)) {
                 expected.referencing_columns);
   check_columns("referenced", fk->referenced_columns(),
                 expected.referenced_columns);
+
+  auto contains_managing_node = [](const Index* index, const ForeignKey* node) {
+    auto managing_nodes = index->managing_nodes();
+    return absl::c_find(managing_nodes, node) != managing_nodes.end();
+  };
+  check(fk->referencing_index() == expected.referencing_index,
+        "Wrong referencing index");
+  if (expected.referencing_index != nullptr) {
+    check(contains_managing_node(expected.referencing_index, fk),
+          "Foreign key not found in the referencing index managing nodes");
+  }
+  check(fk->referenced_index() == expected.referenced_index,
+        "Wrong referenced index");
+  if (expected.referenced_index != nullptr) {
+    check(contains_managing_node(expected.referenced_index, fk),
+          "Foreign key not found in the referenced index managing nodes");
+  }
   return match;
 }
 
@@ -158,8 +222,11 @@ TEST_F(SchemaUpdaterTest, CreateTableWithForeignKey) {
 
   const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
   const ForeignKey* c = ASSERT_NOT_NULL(u->FindForeignKey("C"));
-  EXPECT_THAT(c, IsForeignKeyOf(u, BuildExpected(schema.get(), "C", "", "U",
-                                                 {"A", "B"}, "T", {"X", "Y"})));
+  EXPECT_THAT(
+      c, IsForeignKeyOf(
+             u, BuildExpected(schema.get(), "C", "U", {"A", "B"},
+                              "IDX_U_A_B_N_8C11B65ACA7F01B9", "T", {"X", "Y"},
+                              "IDX_T_X_Y_U_5AD6E41B495C5BB9")));
 }
 
 TEST_F(SchemaUpdaterTest, CreateTableWithUnnamedForeignKey) {
@@ -171,17 +238,18 @@ TEST_F(SchemaUpdaterTest, CreateTableWithUnnamedForeignKey) {
     )",
                                         R"(
       CREATE TABLE U (
-        A INT64,
+        A INT64 NOT NULL,
         FOREIGN KEY (A) REFERENCES T (X),
       ) PRIMARY KEY (A)
     )"}));
 
+  Expected expected =
+      BuildExpected(schema.get(), "", "U", {"A"}, "", "T", {"X"}, "");
+
   const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
   const ForeignKey* c =
-      ASSERT_NOT_NULL(u->FindForeignKey("FK_U_T_FFADEDEE3430D435_1"));
-  EXPECT_THAT(c, IsForeignKeyOf(u, BuildExpected(schema.get(), "",
-                                                 "FK_U_T_FFADEDEE3430D435_1",
-                                                 "U", {"A"}, "T", {"X"})));
+      ASSERT_NOT_NULL(u->FindForeignKey(expected.generated_name));
+  EXPECT_THAT(c, IsForeignKeyOf(u, expected));
 }
 
 TEST_F(SchemaUpdaterTest, CreateTableWithSelfReferencingForeignKey) {
@@ -196,8 +264,9 @@ TEST_F(SchemaUpdaterTest, CreateTableWithSelfReferencingForeignKey) {
 
   const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
   const ForeignKey* c = ASSERT_NOT_NULL(u->FindForeignKey("C"));
-  EXPECT_THAT(c, IsForeignKeyOf(u, BuildExpected(schema.get(), "C", "", "U",
-                                                 {"B"}, "U", {"A"})));
+  EXPECT_THAT(c, IsForeignKeyOf(u, BuildExpected(schema.get(), "C", "U", {"B"},
+                                                 "IDX_U_B_N_DC7E529471D378CF",
+                                                 "U", {"A"}, "")));
 }
 
 TEST_F(SchemaUpdaterTest, AddForeignKey) {
@@ -205,21 +274,23 @@ TEST_F(SchemaUpdaterTest, AddForeignKey) {
                                         R"(
       CREATE TABLE T (
         X INT64,
+        Y INT64,
       ) PRIMARY KEY (X)
     )",
                                         R"(
       CREATE TABLE U (
-        A INT64,
+        A INT64 NOT NULL,
       ) PRIMARY KEY (A)
     )",
                                         R"(
-      ALTER TABLE U ADD CONSTRAINT C FOREIGN KEY (A) REFERENCES T (X)
+      ALTER TABLE U ADD CONSTRAINT C FOREIGN KEY (A) REFERENCES T (Y)
     )"}));
 
   const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
   const ForeignKey* c = ASSERT_NOT_NULL(u->FindForeignKey("C"));
-  EXPECT_THAT(c, IsForeignKeyOf(u, BuildExpected(schema.get(), "C", "", "U",
-                                                 {"A"}, "T", {"X"})));
+  EXPECT_THAT(
+      c, IsForeignKeyOf(u, BuildExpected(schema.get(), "C", "U", {"A"}, "", "T",
+                                         {"Y"}, "IDX_T_Y_U_3E1CA8A966CF5C7A")));
 }
 
 TEST_F(SchemaUpdaterTest, DropForeignKey) {

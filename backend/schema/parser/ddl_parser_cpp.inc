@@ -20,11 +20,14 @@ options {
   NODE_SCOPE_HOOK = true;
   VISITOR = true;
   NODE_INCLUDES = "backend/schema/parser/ddl_node_base.h";
+  TOKEN_MANAGER_INCLUDES =
+      "backend/schema/parser/ddl_token_validation.h";
   USER_CHAR_STREAM = true;
   NODE_EXTENDS = "NodeBase";
   NAMESPACE = "google::spanner::emulator::backend::ddl";
-  TOKEN_INCLUDES = "backend/schema/parser/ddl_token_base.h";
+  TOKEN_INCLUDES = "backend/schema/parser/ddl_char_stream.h";
   TOKEN_EXTENDS = "TokenBase";
+  COMMON_TOKEN_ACTION = true;
 }
 PARSER_BEGIN(DDLParser)
  private:
@@ -70,4 +73,9 @@ PARSER_END(DDLParser)
 
 TOKEN_MGR_DECLS:
 {
+ public:
+  void CommonTokenAction(Token * t) {
+    const DDLCharStream* stream = dynamic_cast<DDLCharStream*>(input_stream);
+    t->set_absolute_position(stream->token_begin(), t->image.size());
+  }
 }

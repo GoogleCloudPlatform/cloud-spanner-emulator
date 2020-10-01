@@ -110,17 +110,8 @@ TEST_F(RangeReadsTest, CanReadUsingEmptyKeyBounds) {
       Read("Users", {"ID", "Name", "Age"}, ClosedClosed(Key(), Key(1))),
       IsOkAndHoldsRows({{Null<std::int64_t>(), "Adam", 20}, {1, "John", 22}}));
 
-  // NOTE: Cloud spanner does not handle this case correctly, so we have an
-  // exception here where a read timestamp is returned with an empty key range
-  // being passed in. Cloud spanner does not support returning a read timestamp
-  // with empty key ranges.
-  if (in_prod_env()) {
-    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(), Key(1))),
-                StatusIs(absl::StatusCode::kUnimplemented));
-  } else {
-    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(), Key(1))),
-                IsOkAndHoldsRows({}));
-  }
+  EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(), Key(1))),
+              IsOkAndHoldsRows({}));
 
   // Can read using a open closed range with empty end key.
   EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(1), Key())),
@@ -128,15 +119,8 @@ TEST_F(RangeReadsTest, CanReadUsingEmptyKeyBounds) {
                                 {4, "Matthew", 33},
                                 {5, Null<std::string>(), 18}}));
 
-  // Cloud spanner does not support returning a read timestamp with empty key
-  // ranges.
-  if (in_prod_env()) {
-    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(1), Key())),
-                StatusIs(absl::StatusCode::kUnimplemented));
-  } else {
-    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(1), Key())),
-                IsOkAndHoldsRows({}));
-  }
+  EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(1), Key())),
+              IsOkAndHoldsRows({}));
 
   // Can read using a closed open range with empty start key.
   EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(), Key(1))),

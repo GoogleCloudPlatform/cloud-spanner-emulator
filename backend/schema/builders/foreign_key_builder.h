@@ -32,8 +32,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-// Build a new foreign key. Foreign keys are not editable - i.e., enable/disable
-// enforcement is not supported.
+// Build a new foreign key.
 class ForeignKey::Builder {
  public:
   Builder()
@@ -77,6 +76,26 @@ class ForeignKey::Builder {
 
  private:
   std::unique_ptr<ForeignKey> instance_;
+};
+
+// Assign the backing indexes to a foreign key.
+class ForeignKey::Editor {
+ public:
+  explicit Editor(ForeignKey* instance) : instance_(instance) {}
+
+  Editor& set_referencing_index(const Index* index) {
+    instance_->referencing_index_ = index;
+    return *this;
+  }
+
+  Editor& set_referenced_index(const Index* index) {
+    instance_->referenced_index_ = index;
+    return *this;
+  }
+
+ private:
+  // Not owned.
+  ForeignKey* instance_;
 };
 
 }  // namespace backend

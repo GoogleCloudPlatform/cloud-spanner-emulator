@@ -111,6 +111,7 @@ message ColumnType {
     TIMESTAMP = 6;
     DATE = 7;
     ARRAY = 8;
+    NUMERIC = 9;
   }
   optional Type type = 1;
   optional ColumnType array_subtype = 2;
@@ -123,6 +124,8 @@ message ColumnProperties {
 
   // Stored columns are used by index definitions.
   optional string stored = 2;
+  // If present, refers to the generation expression of a generated column.
+  optional string expression = 5;
 }
 
 message IndexProperties {

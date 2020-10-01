@@ -20,6 +20,7 @@
 #include "absl/status/status.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
+#include "google/cloud/spanner/numeric.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -60,6 +61,18 @@ class QueryTest : public DatabaseTest {
           ) PRIMARY KEY (UserId, ThreadId, MessageId),
           INTERLEAVE IN PARENT Threads ON DELETE CASCADE
         )",
+        R"(
+          CREATE TABLE ScalarTypesTable (
+            intVal INT64 NOT NULL,
+            boolVal BOOL,
+            bytesVal BYTES(MAX),
+            dateVal DATE,
+            floatVal FLOAT64,
+            stringVal STRING(MAX),
+            numericVal NUMERIC,
+            timestampVal TIMESTAMP
+          ) PRIMARY KEY(intVal)
+        )",
     });
   }
 
@@ -88,8 +101,28 @@ class QueryTest : public DatabaseTest {
                            {2, 1, 1, "Lunch today?"},
                            {2, 2, 1, "Suzanne Collins will be absent"},
                            {3, 1, 1, "Interview Notification"}}));
+
+    ZETASQL_EXPECT_OK(MultiInsert(
+        "ScalarTypesTable",
+        {"intVal", "boolVal", "bytesVal", "dateVal", "floatVal", "stringVal",
+         "numericVal", "timestampVal"},
+        {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
+          Null<std::string>(), Null<Numeric>(), Null<Timestamp>()},
+         {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
+          cloud::spanner::MakeNumeric("123.456789").value(), Timestamp()}}));
   }
 };
+
+TEST_F(QueryTest, CanReadScalarTypes) {
+  PopulateDatabase();
+  EXPECT_THAT(
+      Query("SELECT * FROM ScalarTypesTable ORDER BY intVal ASC"),
+      IsOkAndHoldsRows(
+          {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
+            Null<std::string>(), Null<Numeric>(), Null<Timestamp>()},
+           {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
+            cloud::spanner::MakeNumeric("123.456789").value(), Timestamp()}}));
+}
 
 TEST_F(QueryTest, CanCastScalarTypes) {
   EXPECT_THAT(Query(R"(
@@ -171,6 +204,62 @@ TEST_F(QueryTest, FormatFunction) {
               IsOkAndHoldsRow({Value("hello world")}));
 }
 
+TEST_F(QueryTest, DateTimestampArithmeticFunctions) {
+  EXPECT_THAT(Query(R"(SELECT DATE_ADD(DATE '2020-12-25', INTERVAL 5 DAY))"),
+              IsOkAndHoldsRow({Value(absl::CivilDay(2020, 12, 30))}));
+
+  EXPECT_THAT(Query(R"(SELECT DATE_SUB(DATE '2020-12-25', INTERVAL 5 DAY))"),
+              IsOkAndHoldsRow({Value(absl::CivilDay(2020, 12, 20))}));
+
+  EXPECT_THAT(
+      Query(R"(SELECT DATE_DIFF(DATE '2020-12-25', DATE '2020-12-20', DAY))"),
+      IsOkAndHoldsRow({Value(5)}));
+
+  EXPECT_THAT(Query(R"(SELECT DATE_TRUNC(DATE '2020-12-25', MONTH))"),
+              IsOkAndHoldsRow({Value(absl::CivilDay(2020, 12, 1))}));
+
+  EXPECT_THAT(Query(R"(SELECT EXTRACT(WEEK FROM DATE '2020-12-25'))"),
+              IsOkAndHoldsRow({Value(51)}));
+
+  absl::TimeZone time_zone;
+  ASSERT_TRUE(absl::LoadTimeZone("UTC", &time_zone));
+  auto time_value =
+      absl::FromCivil(absl::CivilMinute(2020, 12, 1, 15, 30), time_zone);
+
+  EXPECT_THAT(Query(R"(SELECT TIMESTAMP_ADD(
+     TIMESTAMP "2020-12-01 15:30:00+00",
+     INTERVAL 10 MINUTE
+  ))"),
+              IsOkAndHoldsRow({MakeTimestamp(
+                  absl::ToChronoTime(time_value + absl::Minutes(10)))}));
+
+  EXPECT_THAT(Query(R"(SELECT TIMESTAMP_SUB(
+      TIMESTAMP "2020-12-01 15:30:00+00",
+      INTERVAL 10 MINUTE
+  ))"),
+              IsOkAndHoldsRow({MakeTimestamp(
+                  absl::ToChronoTime(time_value - absl::Minutes(10)))}));
+
+  EXPECT_THAT(Query(R"(SELECT TIMESTAMP_DIFF(
+    TIMESTAMP "2020-12-01 15:30:00+00",
+    TIMESTAMP "2020-12-01 14:30:00+00",
+    HOUR
+  ))"),
+              IsOkAndHoldsRow({Value(1)}));
+
+  EXPECT_THAT(Query(R"(SELECT TIMESTAMP_TRUNC(
+    TIMESTAMP "2020-12-25 15:30:00+00", DAY, "UTC"
+  ))"),
+              IsOkAndHoldsRow({MakeTimestamp(absl::ToChronoTime(
+                  absl::FromCivil(absl::CivilDay(2020, 12, 25), time_zone)))}));
+
+  EXPECT_THAT(Query(R"(SELECT EXTRACT(
+     HOUR FROM TIMESTAMP "2020-12-25 15:30:00+00"
+     AT TIME ZONE "UTC"
+  ))"),
+              IsOkAndHoldsRow({Value(15)}));
+}
+
 TEST_F(QueryTest, DISABLED_NETFunctions) {
   const std::string query = R"(SELECT NET.IPV4_TO_INT64(b"\x00\x00\x00\x00"))";
   EXPECT_THAT(Query(query), StatusIs(absl::StatusCode::kInvalidArgument));
@@ -197,49 +286,6 @@ TEST_F(QueryTest, FunctionAliasesAreAvailable) {
 
   EXPECT_THAT(Query("SELECT CEILING(1.6)"), IsOkAndHoldsRow({2.0}));
   EXPECT_THAT(Query("SELECT CEIL(1.6)"), IsOkAndHoldsRow({2.0}));
-}
-
-TEST_F(QueryTest, Params) {
-  // The majority of the test cases set the parameter to a certain value and
-  // expect the returned row to contain said value. This lambda just captures
-  // that pattern.
-  auto expect_selected = [this](Value v) {
-    EXPECT_THAT(QueryWithParams("SELECT @param",
-                                {{"param", v}, {"unused_param", Value(6)}}),
-                IsOkAndHoldsRow({v}));
-  };
-
-  expect_selected(Value(6));
-  expect_selected(Value("str"));
-  expect_selected(Value(""));
-  expect_selected(Value(Bytes("bytes")));
-  expect_selected(
-      Value(MakeTimestamp(absl::ToChronoTime(absl::FromUnixNanos(1)))));
-  expect_selected(Value(MakeTimestamp(absl::ToChronoTime(
-      absl::FromCivil(absl::CivilDay(1970, 1, 11), absl::FixedTimeZone(0))))));
-  expect_selected(Value(std::vector<bool>{true, false}));
-
-  EXPECT_THAT(
-      QueryWithParams("SELECT @param * @param",
-                      {{"param", Value(-2.0)}, {"unused_param", Value(6)}}),
-      IsOkAndHoldsRow({4.0}));
-
-  EXPECT_THAT(
-      QueryWithParams("SELECT @param * @param",
-                      {{"param", Value(-0.0)}, {"unused_param", Value(6)}}),
-      IsOkAndHoldsRow({0.0}));
-
-  EXPECT_THAT(
-      QueryWithParams("SELECT @param * @param",
-                      {{"param", Value(2.0)}, {"unused_param", Value(6)}}),
-      IsOkAndHoldsRow({4.0}));
-
-  EXPECT_THAT(QueryWithParams("SELECT @`p\\`ram`", {{"p`ram", Value(6)}}),
-              IsOkAndHoldsRow({6}));
-
-  EXPECT_THAT(
-      QueryWithParams("SELECT @param", {{std::string(130, 'x'), Value(6)}}),
-      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(QueryTest, DefaultTimeZoneIsPacificTime) {

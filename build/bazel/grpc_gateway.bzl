@@ -159,13 +159,13 @@ def generate_grpc_gateway(
         name = name,
         srcs = [":" + name + "_gen"],
         deps = deps + [
-            "@com_github_golang_protobuf//descriptor:go_default_library",
-            "@com_github_golang_protobuf//proto:go_default_library",
             "@org_golang_google_grpc//:go_default_library",
             "@org_golang_google_grpc//codes:go_default_library",
             "@org_golang_google_grpc//grpclog:go_default_library",
             "@org_golang_google_grpc//status:go_default_library",
             "@grpc_ecosystem_grpc_gateway//runtime:go_default_library",
             "@grpc_ecosystem_grpc_gateway//utilities:go_default_library",
+            "@com_github_golang_protobuf//descriptor:go_default_library",
+            "@com_github_golang_protobuf//proto:go_default_library",
         ],
     )
