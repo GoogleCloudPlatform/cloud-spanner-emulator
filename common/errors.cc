@@ -39,14 +39,6 @@ absl::Status Internal(absl::string_view msg) {
   return absl::Status(absl::StatusCode::kInternal, msg);
 }
 
-absl::Status CycleDetected(absl::string_view object_type,
-                           absl::string_view cycle) {
-  return absl::Status(absl::StatusCode::kFailedPrecondition,
-                      absl::Substitute("Cycle detected while analysing $0, "
-                                       "which include objects ($1)",
-                                       object_type, cycle));
-}
-
 // Project errors.
 absl::Status InvalidProjectURI(absl::string_view uri) {
   return absl::Status(absl::StatusCode::kInvalidArgument,

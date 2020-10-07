@@ -29,7 +29,6 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/updater/global_schema_names.h"
-#include "backend/schema/updater/graph_dependency_helper.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "zetasql/base/ret_check.h"
@@ -252,25 +251,6 @@ absl::Status TableValidator::Validate(const Table* table,
     ZETASQL_RET_CHECK(!table->primary_key_.empty());
     ZETASQL_RET_CHECK_EQ(table->owner_index_->index_data_table(), table);
   }
-
-  // Validate generated columns.
-  auto column_name = [](const Column* const& column) -> absl::string_view {
-    return column->Name();
-  };
-  GraphDependencyHelper<const Column*, column_name> cycle_detector(
-      /*object_type=*/"generated column");
-  for (const Column* column : table->columns()) {
-    ZETASQL_RETURN_IF_ERROR(cycle_detector.AddNodeIfNotExists(column));
-  }
-  for (const Column* column : table->columns()) {
-    if (column->is_generated()) {
-      for (const Column* dep : column->dependent_columns()) {
-        ZETASQL_RETURN_IF_ERROR(
-            cycle_detector.AddEdgeIfNotExists(column->Name(), dep->Name()));
-      }
-    }
-  }
-  ZETASQL_RETURN_IF_ERROR(cycle_detector.DetectCycle());
 
   return absl::OkStatus();
 }
