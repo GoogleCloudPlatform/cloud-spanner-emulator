@@ -35,7 +35,7 @@ zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions() {
   options.set_error_message_mode(
       zetasql::AnalyzerOptions::ERROR_MESSAGE_MULTI_LINE_WITH_CARET);
 
-  options.set_language_options(MakeGoogleSqlLanguageOptions());
+  options.set_language(MakeGoogleSqlLanguageOptions());
 
   options.set_allow_undeclared_parameters(true);
 
