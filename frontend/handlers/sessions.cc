@@ -48,6 +48,10 @@ absl::Status CreateSession(RequestContext* ctx,
                                    &instance_id, &database_id));
   ZETASQL_RETURN_IF_ERROR(ValidateLabels(request->session().labels()));
 
+  // Check that the instance is valid.
+  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
+                   GetInstance(ctx, MakeInstanceUri(project_id, instance_id)));
+
   // Fetch the database.
   ZETASQL_ASSIGN_OR_RETURN(
       std::shared_ptr<Database> database,
@@ -77,6 +81,10 @@ absl::Status BatchCreateSessions(
   if (request->session_count() < 0) {
     return error::TooFewSessions(request->session_count());
   }
+
+  // Check that the instance is valid.
+  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
+                   GetInstance(ctx, MakeInstanceUri(project_id, instance_id)));
 
   // Fetch the database to ensure that it exists.
   ZETASQL_ASSIGN_OR_RETURN(
@@ -125,6 +133,10 @@ absl::Status ListSessions(RequestContext* ctx,
   absl::string_view project_id, instance_id, database_id;
   ZETASQL_RETURN_IF_ERROR(ParseDatabaseUri(request->database(), &project_id,
                                    &instance_id, &database_id));
+
+  // Check that the instance is valid.
+  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
+                   GetInstance(ctx, MakeInstanceUri(project_id, instance_id)));
 
   // Fetch the database to ensure that it exists.
   ZETASQL_ASSIGN_OR_RETURN(

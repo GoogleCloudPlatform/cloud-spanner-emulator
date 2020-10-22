@@ -673,6 +673,53 @@ TEST_F(CommitTimestamps, CanInsertExplicitTimestampWithInconsistentSchema) {
   }
 }
 
+// Test to verify that commit timestamps are propagated to index columns.
+class CommitTimestampIndexingTest : public DatabaseTest {
+ public:
+  absl::Status SetUpDatabase() override {
+    ZETASQL_RETURN_IF_ERROR(SetSchema({
+        R"(
+          CREATE TABLE Base (
+            ID            INT64,
+            KeyCommitTS1  TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+            KeyCommitTS2  TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+            Name          STRING(MAX),
+            ValueCommitTS TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+          ) PRIMARY KEY (ID, KeyCommitTS1, KeyCommitTS2)
+        )",
+        R"(
+          CREATE INDEX BaseByName
+          ON Base(KeyCommitTS1, Name) STORING (ValueCommitTS)
+        )"}));
+    return absl::OkStatus();
+  }
+};
+
+TEST_F(CommitTimestampIndexingTest, CommitTimestampIsPropagatedToIndex) {
+  // Writing to the base table should write to the index.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      CommitResult result,
+      Insert("Base",
+             {"ID", "KeyCommitTS1", "KeyCommitTS2", "Name", "ValueCommitTS"},
+             {1, kCommitTimestampSentinel, kCommitTimestampSentinel, "Mark",
+              kCommitTimestampSentinel}));
+
+  // Read from the base table.
+  EXPECT_THAT(
+      ReadAll("Base",
+              {"ID", "KeyCommitTS1", "KeyCommitTS2", "Name", "ValueCommitTS"}),
+      IsOkAndHoldsRows({{1, result.commit_timestamp, result.commit_timestamp,
+                         "Mark", result.commit_timestamp}}));
+
+  // Read from the index.
+  EXPECT_THAT(
+      ReadAllWithIndex(
+          "Base", "BaseByName",
+          {"ID", "KeyCommitTS1", "KeyCommitTS2", "Name", "ValueCommitTS"}),
+      IsOkAndHoldsRows({{1, result.commit_timestamp, result.commit_timestamp,
+                         "Mark", result.commit_timestamp}}));
+}
+
 }  // namespace
 
 }  // namespace test
