@@ -29,6 +29,8 @@ namespace error {
 
 // Generic errors.
 absl::Status Internal(absl::string_view msg);
+absl::Status CycleDetected(absl::string_view object_type,
+                           absl::string_view cycle);
 
 // Project errors.
 absl::Status InvalidProjectURI(absl::string_view uri);

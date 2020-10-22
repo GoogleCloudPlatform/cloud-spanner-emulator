@@ -22,6 +22,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -88,10 +89,11 @@ class SessionsTest : public DatabaseTest {
   // Lists the active sessions up to the specified `page_size` limit and sets
   // `page_token` to the page token for the next page of results.
   zetasql_base::StatusOr<std::vector<spanner_api::Session>> ListSessionsPage(
-      int32_t page_size = 1, std::string* page_token = nullptr) {
+      const std::string& uri, int32_t page_size = 1,
+      std::string* page_token = nullptr) {
     std::vector<spanner_api::Session> sessions;
     v1::ListSessionsRequest request;
-    request.set_database(database()->FullName());
+    request.set_database(uri);
     request.set_page_size(page_size);
     v1::ListSessionsResponse response;
     if (page_token) {
@@ -130,11 +132,11 @@ class SessionsTest : public DatabaseTest {
 
   // Batch-creates the specified number of sessions.
   zetasql_base::StatusOr<std::vector<std::string>> BatchCreateSessions(
-      int32_t num_sessions) {
+      const std::string& uri, int32_t num_sessions) {
     std::vector<std::string> sessions;
     grpc::ClientContext context;
     v1::BatchCreateSessionsRequest request;
-    request.set_database(database()->FullName());
+    request.set_database(uri);
     request.set_session_count(num_sessions);
     v1::BatchCreateSessionsResponse response;
     ZETASQL_RETURN_IF_ERROR(
@@ -163,6 +165,30 @@ TEST_F(SessionsTest, CreateSessionWithLabel) {
   EXPECT_EQ(session.labels_size(), 0);
   EXPECT_TRUE(session.has_create_time());
   EXPECT_TRUE(session.has_approximate_last_use_time());
+}
+
+TEST_F(SessionsTest, ListSessionsWithNonExistentInstanceReturnsNotFound) {
+  // This returns "Instance not found" instead of "Database not found".
+  std::string page_token;
+  auto status = ListSessionsPage(
+      "projects/test-project/instances/fake-instance/databases/test-database",
+      4, &page_token);
+  EXPECT_THAT(status, StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(SessionsTest,
+       BatchCreatesSessionWithNonExistentInstanceReturnsNotFound) {
+  // This returns "Instance not found" instead of "Database not found".
+  auto status = BatchCreateSessions(
+      "projects/test-project/instances/fake-instance/databases/test-database",
+      1);
+  EXPECT_THAT(status, StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(SessionsTest, CreatesSessionWithNonExistentInstanceReturnsNotFound) {
+  EXPECT_THAT(CreateSession("projects/test-project/instances/fake-instance/"
+                            "databases/test-database"),
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(SessionsTest, CreatesSessionWithNonExistentDatabaseReturnsNotFound) {
@@ -239,8 +265,9 @@ TEST_F(SessionsTest, ListSessionsWithPageSize) {
   actual.reserve(10);
   std::string page_token;
   for (int page_size : {4, 3, 2, 1}) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto sessions_list,
-                         ListSessionsPage(page_size, &page_token));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        auto sessions_list,
+        ListSessionsPage(database()->FullName(), page_size, &page_token));
     EXPECT_EQ(sessions_list.size(), page_size);
     for (auto& session : sessions_list) {
       actual.emplace_back(session.name());
@@ -261,8 +288,9 @@ TEST_F(SessionsTest, ListAllSessions) {
 
   // Setting page size to -1 returns all sessions.
   std::string page_token;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto sessions_list,
-                       ListSessionsPage(/*page_size=*/-1, &page_token));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto sessions_list,
+      ListSessionsPage(database()->FullName(), /*page_size=*/-1, &page_token));
   std::vector<std::string> actual;
   actual.reserve(5);
   for (auto& session : sessions_list) {
@@ -277,14 +305,17 @@ TEST_F(SessionsTest, ListSessionsWithLabels) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession({{"abc", "def"}}));
 
   std::string page_token;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto sessions_list,
-                       ListSessionsPage(/*page_size=*/-1, &page_token));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto sessions_list,
+      ListSessionsPage(database()->FullName(), /*page_size=*/-1, &page_token));
   EXPECT_EQ(sessions_list[0].labels_size(), 1);
   EXPECT_EQ(sessions_list[0].labels().find("abc")->second, "def");
 }
 
 TEST_F(SessionsTest, BatchCreateSessionReturnsMultipleSessions) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto sessions, BatchCreateSessions(/*num_sessions=*/10));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto sessions,
+      BatchCreateSessions(database()->FullName(), /*num_sessions=*/10));
   // Check that we have the right number.
   EXPECT_EQ(10, sessions.size());
 
@@ -297,14 +328,15 @@ TEST_F(SessionsTest, BatchCreateSessionReturnsMultipleSessions) {
 }
 
 TEST_F(SessionsTest, BatchCreateSessionsReturnsErrorsOnInvalidArg) {
-  EXPECT_THAT(BatchCreateSessions(/*num_sessions=*/-1),
+  EXPECT_THAT(BatchCreateSessions(database()->FullName(), /*num_sessions=*/-1),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(SessionsTest, BatchCreateSessionSilentlyTruncatesRequestCount) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto sessions,
-                       BatchCreateSessions(
-                           /*num_sessions=*/kMaxBatchCreateSessionsCount * 3));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto sessions,
+      BatchCreateSessions(database()->FullName(),
+                          /*num_sessions=*/kMaxBatchCreateSessionsCount * 3));
   EXPECT_EQ(sessions.size(), kMaxBatchCreateSessionsCount);
 }
 

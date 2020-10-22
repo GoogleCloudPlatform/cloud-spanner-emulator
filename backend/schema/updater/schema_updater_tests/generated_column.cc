@@ -42,7 +42,7 @@ TEST_F(GeneratedColumnSchemaUpdaterTest, Basic) {
       CREATE TABLE T (
         K INT64 NOT NULL,
         V STRING(10),
-        G1 INT64 NOT NULL AS (K + LENGTH(V)) STORED,
+        G1 INT64 NOT NULL AS (k + LENGTH(v)) STORED,
       ) PRIMARY KEY (K)
     )",
                                                   R"(
@@ -64,10 +64,20 @@ TEST_F(GeneratedColumnSchemaUpdaterTest, Basic) {
   EXPECT_FALSE(col->is_nullable());
   EXPECT_TRUE(col->is_generated());
   EXPECT_TRUE(col->expression().has_value());
-  EXPECT_EQ(col->expression().value(), "(K + LENGTH(V))");
-  EXPECT_THAT(col->dependent_column_names(),
-              testing::UnorderedElementsAreArray({"K", "V"}));
+  EXPECT_EQ(col->expression().value(), "(k + LENGTH(v))");
 
+  auto get_column_names = [](absl::Span<const Column* const> columns,
+                             std::vector<std::string>* column_names) {
+    column_names->clear();
+    column_names->reserve(columns.size());
+    for (const Column* col : columns) {
+      column_names->push_back(col->Name());
+    }
+  };
+  std::vector<std::string> dependent_column_names;
+  get_column_names(col->dependent_columns(), &dependent_column_names);
+  EXPECT_THAT(dependent_column_names,
+              testing::UnorderedElementsAreArray({"K", "V"}));
   col = table->FindColumn("G2");
   ASSERT_NE(col, nullptr);
   EXPECT_EQ(col->Name(), "G2");
@@ -76,7 +86,8 @@ TEST_F(GeneratedColumnSchemaUpdaterTest, Basic) {
   EXPECT_TRUE(col->is_generated());
   EXPECT_TRUE(col->expression().has_value());
   EXPECT_EQ(col->expression().value(), "(G1 + G1)");
-  EXPECT_THAT(col->dependent_column_names(),
+  get_column_names(col->dependent_columns(), &dependent_column_names);
+  EXPECT_THAT(dependent_column_names,
               testing::UnorderedElementsAreArray({"G1"}));
 }
 

@@ -39,6 +39,7 @@ cc_library(
         "//backend/schema/backfills:schema_backfillers",
         "//backend/schema/catalog:schema",
         "//backend/schema/updater:global_schema_names",
+        "//backend/schema/updater:graph_dependency_helper",
         "//backend/schema/updater:schema_validation_context",
         "//backend/schema/verifiers:column_value_verifiers",
         "//common:errors",

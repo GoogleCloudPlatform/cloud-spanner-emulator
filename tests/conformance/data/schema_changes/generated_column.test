@@ -162,6 +162,58 @@ ERROR: Error parsing the definition of generated column `GeneratedColumnDataCoal
 (i64)
  ^
 ==
+CREATE TABLE T (
+  id INT64 NOT NULL,
+  a INT64 as (b) STORED,
+  b INT64 as (A) STORED
+) PRIMARY KEY(id);
+--
+ERROR: Cycle detected while analysing generated column, which include objects (a,b)
+==
+create table t (
+  id INT64 NOT NULL,
+  a INT64 as (a+1) STORED
+) PRIMARY KEY(id);
+--
+ERROR: Cycle detected while analysing generated column, which include objects (a)
+==
+create table t (
+  id INT64 NOT NULL,
+  d INT64,
+  c INT64 as (a) STORED,
+  b INT64 as (c) STORED,
+  a INT64 as (b) STORED
+) PRIMARY KEY(id);
+--
+ERROR: Cycle detected while analysing generated column, which include objects (c,a,b)
+==
+create table t (
+  id INT64 NOT NULL,
+  b INT64 as (c) STORED,
+  c INT64 as (a) STORED,
+  a INT64 as (b) STORED
+) PRIMARY KEY(id);
+--
+ERROR: Cycle detected while analysing generated column, which include objects (b,c,a)
+==
+create table t (
+  id INT64 NOT NULL,
+  a INT64 as (b) STORED,
+  b INT64 as (d) STORED,
+  c INT64 as (b) STORED,
+  d INT64 as (c) STORED
+) PRIMARY KEY(id);
+--
+ERROR: Cycle detected while analysing generated column, which include objects (a,b,d,c)
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  userName STRING(MAX)
+) PRIMARY KEY(id);
+ALTER TABLE Users ADD COLUMN col INT64 AS (col+1) STORED;
+--
+ERROR: Cycle detected while analysing generated column, which include objects (col)
+==
 CREATE TABLE Users (
   id INT64 NOT NULL,
   StrCol STRING(MAX),

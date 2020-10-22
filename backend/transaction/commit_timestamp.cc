@@ -187,7 +187,9 @@ zetasql_base::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
 // value should be replaced with commit timestamp of transaction during flush.
 bool IsPendingCommitTimestamp(const Column* column,
                               const zetasql::Value& column_value) {
-  if (column->allows_commit_timestamp() &&
+  if ((column->allows_commit_timestamp() ||
+       (column->source_column() &&
+        column->source_column()->allows_commit_timestamp())) &&
       IsPendingCommitTimestampSentinelValue(column_value)) {
     return true;
   }
