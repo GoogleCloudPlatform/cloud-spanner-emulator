@@ -20,6 +20,7 @@
 #include "google/spanner/v1/type.pb.h"
 #include "zetasql/public/type.h"
 #include "absl/status/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

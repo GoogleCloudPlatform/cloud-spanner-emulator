@@ -42,7 +42,6 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:optional",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:type_cc_proto",
         "@com_google_zetasql//zetasql/public:value",
         "@com_google_zetasql//zetasql/public/functions:string",
@@ -69,6 +68,39 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_library(
+    name = "check_constraint_verifiers",
+    srcs = ["check_constraint_verifiers.cc"],
+    hdrs = ["check_constraint_verifiers.h"],
+    deps = [
+        "//backend/actions:check_constraint",
+        "//backend/datamodel:key_range",
+        "//backend/query:catalog",
+        "//backend/query:function_catalog",
+        "//backend/schema/catalog:schema",
+        "//backend/schema/updater:schema_validation_context",
+        "//common:errors",
+        "@com_google_absl//absl/status",
+    ],
+)
+
+cc_test(
+    name = "check_constraint_verifiers_test",
+    srcs = ["check_constraint_verifiers_test.cc"],
+    deps = [
+        ":check_constraint_verifiers",
+        "//backend/database",
+        "//backend/transaction:read_write_transaction",
+        "//common:clock",
+        "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )

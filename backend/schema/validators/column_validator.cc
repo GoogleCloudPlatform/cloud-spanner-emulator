@@ -145,6 +145,19 @@ absl::Status ColumnValidator::Validate(const Column* column,
     return error::UnallowedCommitTimestampOption(column->FullName());
   }
 
+  if (column->is_generated()) {
+    if (column->table()->FindKeyColumn(column->Name())) {
+      return error::CannotUseGeneratedColumnInPrimaryKey(
+          column->table()->Name(), column->Name());
+    }
+    for (const Column* dep : column->dependent_columns()) {
+      if (dep->allows_commit_timestamp()) {
+        return error::CannotUseCommitTimestampOnGeneratedColumnDependency(
+            dep->Name());
+      }
+    }
+  }
+
   return absl::OkStatus();
 }
 
@@ -161,6 +174,45 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
   // For a non-deleted column, the objects it depends on should
   // also be alive.
   ZETASQL_RET_CHECK(!column->table_->is_deleted());
+  // It is invalid to drop a column which is referenced by a generated column.
+  for (const Column* dep : column->dependent_columns()) {
+    if (dep->is_deleted()) {
+      return error::InvalidDropColumnReferencedByGeneratedColumn(
+          dep->Name(), column->table()->Name(), column->Name());
+    }
+  }
+  if (column->is_generated() && !old_column->is_generated()) {
+    return error::CannotConvertRegularColumnToGeneratedColumn(
+        column->table()->Name(), column->Name());
+  }
+  if (!column->is_generated() && old_column->is_generated()) {
+    return error::CannotConvertGeneratedColumnToRegularColumn(
+        column->table()->Name(), column->Name());
+  }
+  if (column->is_generated() && old_column->is_generated()) {
+    if (!column->GetType()->Equals(old_column->GetType())) {
+      return error::CannotAlterStoredGeneratedColumnDataType(
+          column->table()->Name(), column->Name());
+    }
+    if (column->expression().value() != old_column->expression().value()) {
+      return error::CannotAlterGeneratedColumnExpression(
+          column->table()->Name(), column->Name());
+    }
+  }
+  if (!column->GetType()->Equals(old_column->GetType())) {
+    for (const Column* generated_column : column->table()->columns()) {
+      if (generated_column->is_generated()) {
+        for (const Column* dep : generated_column->dependent_columns()) {
+          if (column == dep) {
+            return error::
+                CannotAlterColumnDataTypeWithDependentStoredGeneratedColumn(
+                    column->Name());
+          }
+        }
+      }
+    }
+  }
+
   if (column->source_column_) {
     // There is no valid scenario under which a source column drop should
     // trigger a cascading drop on referencing column.

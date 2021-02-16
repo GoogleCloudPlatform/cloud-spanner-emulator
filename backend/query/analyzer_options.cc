@@ -52,9 +52,8 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
   options.set_name_resolution_mode(zetasql::NAME_RESOLUTION_DEFAULT);
   options.set_product_mode(zetasql::PRODUCT_EXTERNAL);
   options.SetEnabledLanguageFeatures({
+      zetasql::FEATURE_TABLESAMPLE,
       zetasql::FEATURE_TIMESTAMP_NANOS,
-      // TODO: Reenable zetasql::FEATURE_TABLESAMPLE once AST
-      // filtering lands.
       zetasql::FEATURE_V_1_1_HAVING_IN_AGGREGATE,
       zetasql::FEATURE_V_1_1_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
       zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL,
@@ -85,7 +84,6 @@ static void DisableOption(zetasql::LanguageFeature feature,
 zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance() {
   auto options = MakeGoogleSqlLanguageOptions();
   DisableOption(zetasql::FEATURE_ANALYTIC_FUNCTIONS, &options);
-  DisableOption(zetasql::FEATURE_TABLESAMPLE, &options);
   return options;
 }
 

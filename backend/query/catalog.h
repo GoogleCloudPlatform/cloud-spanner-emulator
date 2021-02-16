@@ -23,6 +23,7 @@
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
 #include "zetasql/public/simple_catalog.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "backend/access/read.h"
 #include "backend/common/case.h"

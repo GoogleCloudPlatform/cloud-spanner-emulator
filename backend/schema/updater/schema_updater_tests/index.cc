@@ -29,9 +29,6 @@ namespace types = zetasql::types;
 namespace {
 
 TEST_F(SchemaUpdaterTest, CreateIndex) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_numeric_type = true;
-  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -414,9 +411,6 @@ TEST_F(SchemaUpdaterTest, DropIndex) {
 
 // TODO: Modify this test once NUMERIC is supported in keys
 TEST_F(SchemaUpdaterTest, CreateIndex_NumericColumn) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_numeric_type = true;
-  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(
       CreateSchema({
           R"(

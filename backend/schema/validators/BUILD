@@ -21,12 +21,14 @@ licenses(["unencumbered"])
 cc_library(
     name = "schema_validators",
     srcs = [
+        "check_constraint_validator.cc",
         "column_validator.cc",
         "foreign_key_validator.cc",
         "index_validator.cc",
         "table_validator.cc",
     ],
     hdrs = [
+        "check_constraint_validator.h",
         "column_validator.h",
         "foreign_key_validator.h",
         "index_validator.h",
@@ -34,12 +36,12 @@ cc_library(
     ],
     deps = [
         "//backend/common:case",
+        "//backend/common:graph_dependency_helper",
         "//backend/common:ids",
         "//backend/datamodel:types",
         "//backend/schema/backfills:schema_backfillers",
         "//backend/schema/catalog:schema",
         "//backend/schema/updater:global_schema_names",
-        "//backend/schema/updater:graph_dependency_helper",
         "//backend/schema/updater:schema_validation_context",
         "//backend/schema/verifiers:column_value_verifiers",
         "//common:errors",

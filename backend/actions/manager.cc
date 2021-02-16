@@ -19,12 +19,15 @@
 #include <memory>
 
 #include "zetasql/base/statusor.h"
+#include "backend/actions/check_constraint.h"
 #include "backend/actions/column_value.h"
 #include "backend/actions/existence.h"
 #include "backend/actions/foreign_key.h"
+#include "backend/actions/generated_column.h"
 #include "backend/actions/index.h"
 #include "backend/actions/interleave.h"
 #include "backend/actions/unique_index.h"
+#include "backend/schema/catalog/check_constraint.h"
 #include "common/errors.h"
 
 namespace google {
@@ -64,7 +67,9 @@ absl::Status ActionRegistry::ExecuteVerifiers(const ActionContext* ctx,
   return absl::OkStatus();
 }
 
-ActionRegistry::ActionRegistry(const Schema* schema) : schema_(schema) {
+ActionRegistry::ActionRegistry(const Schema* schema,
+                               const FunctionCatalog* function_catalog)
+    : schema_(schema), catalog_(schema, function_catalog) {
   BuildActionRegistry();
 }
 
@@ -115,11 +120,29 @@ void ActionRegistry::BuildActionRegistry() {
       table_verifiers_[foreign_key->referenced_data_table()].emplace_back(
           absl::make_unique<ForeignKeyReferencedVerifier>(foreign_key));
     }
+
+    // Actions for check constraints.
+    for (const CheckConstraint* check_constraint : table->check_constraints()) {
+      table_verifiers_[table].emplace_back(
+          absl::make_unique<CheckConstraintVerifier>(check_constraint,
+                                                     &catalog_));
+    }
+
+    // Effector for generated columns.
+    for (const Column* column : table->columns()) {
+      if (column->is_generated()) {
+        table_effectors_[table].emplace_back(
+            absl::make_unique<GeneratedColumnEffector>(table, &catalog_));
+        break;
+      }
+    }
   }
 }
 
-void ActionManager::AddActionsForSchema(const Schema* schema) {
-  registry_[schema] = absl::make_unique<ActionRegistry>(schema);
+void ActionManager::AddActionsForSchema(
+    const Schema* schema, const FunctionCatalog* function_catalog) {
+  registry_[schema] =
+      absl::make_unique<ActionRegistry>(schema, function_catalog);
 }
 
 zetasql_base::StatusOr<ActionRegistry*> ActionManager::GetActionsForSchema(

@@ -1,0 +1,359 @@
+CREATE TABLE T (
+  A INT64,
+  CONSTRAINT col_a_gt_zero CHECK(A > 0),
+) PRIMARY KEY(A);
+--
+CREATE TABLE T (
+  A INT64,
+  CONSTRAINT col_a_gt_zero CHECK(A > 0),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  CHECK(A > B),
+  A INT64,
+  B INT64,
+) PRIMARY KEY(A);
+--
+CREATE TABLE T (
+  A INT64,
+  B INT64,
+  CHECK(A > B),
+) PRIMARY KEY(A);
+==
+create table T (
+  A INT64,
+  constraint col_a_gt_zero check (A > 0),
+) primary key(A);
+--
+CREATE TABLE T (
+  A INT64,
+  CONSTRAINT col_a_gt_zero CHECK(A > 0),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  CHECK(A > 0),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  B INT64,
+  CHECK(A > B),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  B INT64,
+  CONSTRAINT b_gt_zero CHECK(B > 0),
+  CHECK(A > B),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  B INT64 AS (A+1) STORED,
+  CHECK(B > A),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  B INT64 AS (A) STORED,
+  C INT64 AS (B + A) STORED,
+  CHECK(C > 0),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  CHECK(abs(A) = 1),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  CHECK([1, 2][OFFSET(A)] = 2),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+  CONSTRAINT value_gt_zero CHECK(Value>0),
+) PRIMARY KEY(A);
+ALTER TABLE T DROP CONSTRAINT value_gt_zero;
+--
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+) PRIMARY KEY(A);
+ALTER TABLE T ADD CONSTRAINT value_gt_zero check(Value > 0);
+--
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+  CONSTRAINT value_gt_zero CHECK(Value > 0),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+) PRIMARY KEY(A);
+ALTER TABLE T ADD CONSTRAINT value_gt_A check(Value > A);
+--
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+  CONSTRAINT value_gt_A CHECK(Value > A),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+  GenCol INT64 as (Value + 1) STORED,
+) PRIMARY KEY(A);
+ALTER TABLE T ADD CONSTRAINT gen_col_gt_A check(GenCol > A);
+--
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+  GenCol INT64 AS (Value + 1) STORED,
+  CONSTRAINT gen_col_gt_A CHECK(GenCol > A),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+  CONSTRAINT value_gt_zero check(Value>0),
+) PRIMARY KEY(A);
+ALTER TABLE T DROP CONSTRAINT value_gt_zero;
+ALTER TABLE T ADD CONSTRAINT value_gt_zero check(Value > 0);
+--
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+  CONSTRAINT value_gt_zero CHECK(Value > 0),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+  CONSTRAINT value_gt_zero check(Value>0),
+) PRIMARY KEY(A);
+DROP TABLE T;
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+  CONSTRAINT value_gt_zero check(Value>0),
+) PRIMARY KEY(A);
+--
+CREATE TABLE T (
+  A INT64,
+  Value INT64,
+  CONSTRAINT value_gt_zero CHECK(Value>0),
+) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  A INT64 NOT NULL,
+  CONSTRAINT _col_a_gt_zero CHECK(A > 0),
+) PRIMARY KEY(A);
+--
+ERROR:  name not valid: _col_a_gt_zero.
+==
+CREATE TABLE T1 (
+  A INT64,
+  CONSTRAINT a_gt_zero CHECK(A > 0),
+) PRIMARY KEY(A);
+
+CREATE TABLE T2 (
+  A INT64,
+  CONSTRAINT a_gt_zero CHECK(A > 0),
+) PRIMARY KEY(A);
+--
+ERROR: Duplicate name in schema: a_gt_zero.
+==
+CREATE TABLE T1 (
+  A INT64,
+  CONSTRAINT T2 CHECK(A > 0),
+) PRIMARY KEY(A);
+
+CREATE TABLE T2 (
+  A INT64,
+  CONSTRAINT a_gt_zero CHECK(A > 0),
+) PRIMARY KEY(A);
+--
+ERROR: Duplicate name in schema: T2.
+==
+CREATE TABLE T (
+  A INT64,
+  CONSTRAINT const_check CHECK(1 > 0),
+) PRIMARY KEY(A);
+--
+ERROR: Check constraint `T`.`const_check` does not use any non generated column. Expression: '1 > 0'. A check constraint expression requires at least one non-generated column as dependency.
+==
+CREATE TABLE T (
+  A INT64,
+  B INT64 as (1) STORED,
+  CONSTRAINT const_check CHECK(B > 0),
+) PRIMARY KEY(A);
+--
+ERROR: Check constraint `T`.`const_check` does not use any non generated column. Expression: 'B > 0'. A check constraint expression requires at least one non-generated column as dependency.
+==
+CREATE TABLE T (
+  A INT64,
+  B INT64 as (1) STORED,
+  C INT64 as (B) STORED,
+  CONSTRAINT const_check CHECK(C > 0),
+) PRIMARY KEY(A);
+--
+ERROR: Check constraint `T`.`const_check` does not use any non generated column. Expression: 'C > 0'. A check constraint expression requires at least one non-generated column as dependency.
+==
+CREATE TABLE T (
+  A INT64,
+  C INT64 AS (B) STORED,
+  B INT64 AS (1) STORED,
+  CONSTRAINT const_check CHECK(C > 0),
+) PRIMARY KEY(A);
+--
+ERROR: Check constraint `T`.`const_check` does not use any non generated column. Expression: 'C > 0'. A check constraint expression requires at least one non-generated column as dependency.
+==
+CREATE TABLE T (
+  A INT64,
+  C INT64 AS (1) STORED,
+  B INT64 AS (C) STORED,
+  CONSTRAINT const_check CHECK(B > 0),
+) PRIMARY KEY(A);
+--
+ERROR: Check constraint `T`.`const_check` does not use any non generated column. Expression: 'B > 0'. A check constraint expression requires at least one non-generated column as dependency.
+==
+# --normalize
+CREATE TABLE T (
+  A INT64,
+  constraint a_is_not_zero CHECK(A B C),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'A B C' from check constraint 'a_is_not_zero' in table 'T': Syntax error: Expected end of input but got identifier "B" [at 1:3]\nA B C\n ^
+==
+# --normalize
+CREATE TABLE T1 (
+  A1 INT64,
+) PRIMARY KEY(A1);
+
+CREATE TABLE T2 (
+  A INT64,
+  B INT64,
+  check (A1 > 0),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'A1 > 0' from check constraint '<unnamed>' in table 'T2': Unrecognized name: A1 [at 1:1]\nA1 > 0\n^
+==
+# --normalize
+CREATE TABLE T (
+  A INT64,
+  check (CAST(1 as INT32)),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'CAST(1 as INT32)' from check constraint '<unnamed>' in table 'T': Type not found: INT32 [at 1:11]\nCAST(1 as INT32)\n ^
+==
+# --normalize
+CREATE TABLE T (
+  A INT64,
+  check (CAST(1 as INT64)),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'CAST(1 as INT64)' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found INT64 [at 1:1]\nCAST(1 as INT64)\n ^
+==
+# --normalize
+CREATE TABLE T (
+  A INT64,
+  check (CAST(1 as FLOAT)),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'CAST(1 as FLOAT)' from check constraint '<unnamed>' in table 'T': Type not found: FLOAT [at 1:11]\nCAST(1 as FLOAT)\n ^
+==
+# --normalize
+CREATE TABLE T (
+  A INT64,
+  check (CAST(1 as FLOAT64)),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'CAST(1 as FLOAT64)' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found FLOAT64 [at 1:1]\nCAST(1 as FLOAT64)\n ^
+==
+# --normalize
+CREATE TABLE T (
+  A INT64,
+  check ("1 is gt 0"),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression '"1 is gt 0"' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found STRING [at 1:1] "1 is gt 0" ^
+==
+# --normalize
+CREATE TABLE T (
+  A INT64,
+  check (CAST("1 is gt 0" as BYTES)),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'CAST("1 is gt 0" as BYTES)' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found BYTES [at 1:1] CAST("1 is gt 0" as BYTES) ^
+==
+# --normalize
+CREATE TABLE T (
+  A INT64,
+  Ts TIMESTAMP,
+  check (Ts),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'Ts' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found TIMESTAMP [at 1:1] Ts ^
+==
+# --normalize
+CREATE TABLE T (
+  A INT64,
+  Day DATE,
+  check (Day),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'Day' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found DATE [at 1:1] Day ^
+==
+CREATE TABLE T1 (
+  A INT64,
+) PRIMARY KEY(A);
+
+CREATE TABLE T2 (
+  A INT64,
+  B INT64,
+  constraint fk_t2_b_t1_a check (exists (select t1.A as a from T1 t1 where t1.A = B)),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'exists (select t1.A as a from T1 t1 where t1.A = B)' from check constraint 'fk_t2_b_t1_a' in table 'T2': Cannot use non-scalar expressions inside check constraints.
+==
+# --normalize
+CREATE TABLE T (
+  A INT64,
+  CHECK (ARRAY_LENGTH(ARRAY(SELECT 1)) > A)
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'ARRAY_LENGTH(ARRAY(SELECT 1)) > A' from check constraint '<unnamed>' in table 'T': Cannot use non-scalar expressions inside check constraints.
+==
+CREATE TABLE T (
+  A INT64,
+  B INT64,
+  check (EXTRACT(YEAR from CURRENT_TIMESTAMP()) > 2018),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing expression 'EXTRACT(YEAR from CURRENT_TIMESTAMP()) > 2018' from check constraint '<unnamed>' in table 'T': Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of check constraints must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
+==
+CREATE TABLE T (
+  A INT64,
+  B INT64 as (EXTRACT(YEAR from CURRENT_TIMESTAMP())) STORED,
+  check (B > A),
+) PRIMARY KEY(A);
+--
+ERROR: Error parsing the definition of generated column `T`.`B`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
+==
+CREATE TABLE T (
+  A INT64,
+  B INT64 as (EXTRACT(YEAR from CURRENT_TIMESTAMP())),
+  C INT64 as (B),
+  check (C > A),
+) PRIMARY KEY(A);
+--
+ERROR: Generated column `B` without the STORED attribute is not supported.

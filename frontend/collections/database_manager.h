@@ -23,6 +23,8 @@
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "common/clock.h"
 #include "frontend/entities/database.h"

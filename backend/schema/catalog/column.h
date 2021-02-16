@@ -22,6 +22,7 @@
 
 #include "zetasql/public/type.h"
 #include "absl/memory/memory.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
 #include "backend/common/ids.h"

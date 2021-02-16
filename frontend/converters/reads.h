@@ -21,6 +21,8 @@
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
+#include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/common/ids.h"

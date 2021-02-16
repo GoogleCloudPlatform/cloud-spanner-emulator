@@ -20,6 +20,7 @@
 #include "google/spanner/v1/mutation.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
+#include "absl/status/status.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/common/ids.h"

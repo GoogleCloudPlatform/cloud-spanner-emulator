@@ -26,6 +26,7 @@
 #include "frontend/entities/instance.h"
 #include "frontend/entities/operation.h"
 #include "frontend/server/handler.h"
+#include "re2/re2.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
@@ -149,11 +150,9 @@ absl::Status CreateInstance(RequestContext* ctx,
     return error::InstanceNameMismatch(request->instance().name());
   }
 
-  // Validate instance name within character limits.
-  if (request->instance_id().size() < limits::kMinInstanceNameLength ||
-      request->instance_id().size() > limits::kMaxInstanceNameLength) {
-    return error::InvalidInstanceName(request->instance_id());
-  }
+  // Validate instance name.
+  ZETASQL_RETURN_IF_ERROR(ValidateInstanceId(request->instance_id()));
+
   // Validate labels.
   ZETASQL_RETURN_IF_ERROR(ValidateLabels(request->instance().labels()));
 

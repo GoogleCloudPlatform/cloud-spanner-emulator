@@ -27,6 +27,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"

@@ -1735,14 +1735,11 @@ TEST(ParseToken, CannotParseIllegalBytesEscape) {
 
 class GeneratedColumns : public ::testing::Test {
  public:
-  GeneratedColumns() {
-    EmulatorFeatureFlags::Flags flags;
-    flags.enable_stored_generated_columns = true;
-    setter_ = absl::make_unique<test::ScopedEmulatorFeatureFlagsSetter>(flags);
-  }
+  GeneratedColumns()
+      : feature_flags_({.enable_stored_generated_columns = true}) {}
 
  private:
-  std::unique_ptr<test::ScopedEmulatorFeatureFlagsSetter> setter_;
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
 
 TEST_F(GeneratedColumns, CanParseCreateTableWithStoredGeneratedColumn) {
@@ -1881,6 +1878,306 @@ TEST_F(GeneratedColumns, CannotCreateStoredGeneratedColumnWhenDisabled) {
     )"),
               StatusIs(absl::StatusCode::kUnimplemented,
                        HasSubstr("Generated columns are not enabled.")));
+}
+
+class CheckConstraint : public ::testing::Test {
+ public:
+  CheckConstraint()
+      : feature_flags_({.enable_stored_generated_columns = true,
+                        .enable_numeric_type = true,
+                        .enable_check_constraint = true}) {}
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
+};
+
+TEST_F(CheckConstraint, CannotParseCreateTableWithCheckConstraintFlagOff) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_check_constraint = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(ParseDDLStatement("CREATE TABLE T ("
+                                "  Id INT64,"
+                                "  Value INT64,"
+                                "  CHECK(Value > 0),"
+                                "  CONSTRAINT value_gt_zero CHECK(Value > 0),"
+                                "  CHECK(Value > 1),"
+                                ") PRIMARY KEY(Id)"),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("Check Constraint is not implemented.")));
+}
+
+TEST_F(CheckConstraint, CanParseCreateTableWithCheckConstraint) {
+  EXPECT_THAT(ParseDDLStatement("CREATE TABLE T ("
+                                "  Id INT64,"
+                                "  Value INT64,"
+                                "  CHECK(Value > 0),"
+                                "  CONSTRAINT value_gt_zero CHECK(Value > 0),"
+                                "  CHECK(Value > 1),"
+                                ") PRIMARY KEY(Id)"),
+              IsOkAndHolds(test::EqualsProto(R"d(
+                create_table {
+                  table_name: "T"
+                    columns {
+                      column_name: "Id"
+                      properties {
+                        column_type {
+                          type: INT64
+                        }
+                      }
+                    }
+                    columns {
+                      column_name: "Value"
+                      properties {
+                        column_type {
+                          type: INT64
+                        }
+                      }
+                    }
+                    constraints {
+                      check {
+                        sql_expression: "Value > 0"
+                      }
+                    }
+                    constraints {
+                      check {
+                        constraint_name: "value_gt_zero"
+                        sql_expression: "Value > 0"
+                      }
+                    }
+                    constraints {
+                      check {
+                        sql_expression: "Value > 1"
+                      }
+                    }
+                    constraints {
+                      primary_key {
+                        key_part {
+                          key_column_name: "Id"
+                        }
+                      }
+                    }
+                  })d")));
+}
+
+TEST_F(CheckConstraint, CanParseAlterTableAddCheckConstraint) {
+  EXPECT_THAT(
+      ParseDDLStatement("ALTER TABLE T ADD CONSTRAINT B_GT_ZERO CHECK(B > 0)"),
+      IsOkAndHolds(test::EqualsProto(R"d(
+        alter_table {
+          table_name: "T"
+          alter_constraint {
+            constraint_name: "B_GT_ZERO"
+            type: ADD
+            constraint {
+              check {
+                constraint_name: "B_GT_ZERO"
+                sql_expression: "B > 0"
+              }
+            }
+          }
+        }
+      )d")));
+}
+
+TEST_F(CheckConstraint, CanParseAlterTableAddUnamedCheckConstraint) {
+  EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ADD CHECK(B > 0)"),
+              IsOkAndHolds(test::EqualsProto(R"d(
+                alter_table {
+                  table_name: "T"
+                  alter_constraint {
+                    type: ADD
+                    constraint {
+                      check {
+                        sql_expression: "B > 0"
+                      }
+                    }
+                  }
+                }
+              )d")));
+}
+
+TEST_F(CheckConstraint, CanParseEscapingCharsInCheckConstraint) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"d(ALTER TABLE T ADD CHECK(B > CONCAT(')\'"', ''''")''', "'\")", """'")""")))d"),
+      IsOkAndHolds(test::EqualsProto(R"d(
+                alter_table {
+                  table_name: "T"
+                  alter_constraint {
+                    type: ADD
+                    constraint {
+                      check {
+                        sql_expression: "B > CONCAT(\')\\\'\"\', \'\'\'\'\")\'\'\', \"\'\\\")\", \"\"\"\'\")\"\"\")"
+                      }
+                    }
+                  }
+                }
+              )d")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"d(ALTER TABLE T ADD CHECK(B > CONCAT(b')\'"', b''''")''', b"'\")", b"""'")""")))d"),
+      IsOkAndHolds(test::EqualsProto(R"d(
+                alter_table {
+                  table_name: "T"
+                  alter_constraint {
+                    type: ADD
+                    constraint {
+                      check {
+                        sql_expression: "B > CONCAT(b\')\\\'\"\', b\'\'\'\'\")\'\'\', b\"\'\\\")\", b\"\"\"\'\")\"\"\")"
+                      }
+                    }
+                  }
+                }
+              )d")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"(ALTER TABLE T ADD CHECK(B > '\a\b\r\n\t\\'))"),
+      IsOkAndHolds(test::EqualsProto(R"d(
+                alter_table {
+                  table_name: "T"
+                  alter_constraint {
+                    type: ADD
+                    constraint {
+                      check {
+                        sql_expression: "B > \'\\a\\b\\r\\n\\t\\\\\'"
+                      }
+                    }
+                  }
+                }
+              )d")));
+
+  // The DDL statement indentation is intended for the two cases following.
+  EXPECT_THAT(ParseDDLStatement(
+                  R"d(ALTER TABLE T ADD CHECK(B > CONCAT('\n', ''''line 1
+  line 2''', "\n", """line 11
+  line22""")))d"),
+              IsOkAndHolds(test::EqualsProto(R"d(
+                alter_table {
+                  table_name: "T"
+                  alter_constraint {
+                    type: ADD
+                    constraint {
+                      check {
+                        sql_expression: "B > CONCAT(\'\\n\', \'\'\'\'line 1\n  line 2\'\'\', \"\\n\", \"\"\"line 11\n  line22\"\"\")"
+                      }
+                    }
+                  }
+                }
+              )d")));
+
+  EXPECT_THAT(ParseDDLStatement(
+                  R"d(ALTER TABLE T ADD CHECK(B > CONCAT(b'\n', b''''line 1
+  line 2''', b"\n", b"""line 11
+  line22""")))d"),
+              IsOkAndHolds(test::EqualsProto(R"d(
+                alter_table {
+                  table_name: "T"
+                  alter_constraint {
+                    type: ADD
+                    constraint {
+                      check {
+                        sql_expression: "B > CONCAT(b\'\\n\', b\'\'\'\'line 1\n  line 2\'\'\', b\"\\n\", b\"\"\"line 11\n  line22\"\"\")"
+                      }
+                    }
+                  }
+                }
+              )d")));
+}
+
+TEST_F(CheckConstraint, CanParseRegexContainsInCheckConstraint) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"(ALTER TABLE T ADD CHECK(REGEXP_CONTAINS(B, r'f\(a,(.*),d\)')))"),
+      IsOkAndHolds(test::EqualsProto(R"d(
+                alter_table {
+                  table_name: "T"
+                  alter_constraint {
+                    type: ADD
+                    constraint {
+                      check {
+                        sql_expression: "REGEXP_CONTAINS(B, r\'f\\(a,(.*),d\\)\')"
+                      }
+                    }
+                  }
+                }
+              )d")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"(ALTER TABLE T ADD CHECK(REGEXP_CONTAINS(B, rb'f\(a,(.*),d\)')))"),
+      IsOkAndHolds(test::EqualsProto(R"d(
+                alter_table {
+                  table_name: "T"
+                  alter_constraint {
+                    type: ADD
+                    constraint {
+                      check {
+                        sql_expression: "REGEXP_CONTAINS(B, rb\'f\\(a,(.*),d\\)\')"
+                      }
+                    }
+                  }
+                }
+              )d")));
+}
+
+TEST_F(CheckConstraint, CanParseOctalNumberInCheckConstraint) {
+  EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ADD CHECK(B > 05)"),
+              IsOkAndHolds(test::EqualsProto(R"d(
+                alter_table {
+                  table_name: "T"
+                  alter_constraint {
+                    type: ADD
+                    constraint {
+                      check {
+                        sql_expression: "B > 05"
+                      }
+                    }
+                  }
+                }
+              )d")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("ALTER TABLE T ADD CHECK(B > 005 + 5 + 0.5 + .5e2)"),
+      IsOkAndHolds(test::EqualsProto(R"d(
+        alter_table {
+          table_name: "T"
+          alter_constraint {
+            type: ADD
+            constraint {
+              check {
+                sql_expression: "B > 005 + 5 + 0.5 + .5e2"
+              }
+            }
+          }
+        }
+      )d")));
+}
+
+TEST_F(CheckConstraint, ParseSyntaxErrorsInCheckConstraint) {
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE TABLE T ("
+                        "  Id INT64,"
+                        "  Value INT64,"
+                        "  CONSTRAINT ALL CHECK(Value > 0),"
+                        ") PRIMARY KEY(Id)"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Encountered 'ALL' while parsing: column_type")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("ALTER TABLE T ADD CHECK(B > '\\c')"),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Expecting ')' but found Illegal escape sequence: \\c")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("ALTER TABLE T ADD CONSTRAINT GROUPS CHECK(B > `A`))"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Encountered 'GROUPS' while parsing: identifier")));
+
+  EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ADD CHECK(()"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Expecting ')' but found 'EOF'")));
 }
 
 }  // namespace

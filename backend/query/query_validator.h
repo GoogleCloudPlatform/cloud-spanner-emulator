@@ -58,6 +58,9 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
 
   absl::Status VisitResolvedCast(const zetasql::ResolvedCast* node) override;
 
+  absl::Status VisitResolvedSampleScan(
+      const zetasql::ResolvedSampleScan* node) override;
+
  private:
   // Validates the child hint nodes of `node`.
   absl::Status ValidateHints(const zetasql::ResolvedNode* node) const;

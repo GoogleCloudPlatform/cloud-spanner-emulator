@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_SERVER_REQUEST_CONTEXT_H_
 
 #include "grpcpp/server_context.h"
+#include "zetasql/base/statusor.h"
 #include "frontend/server/environment.h"
 
 namespace google {

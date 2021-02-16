@@ -75,7 +75,8 @@ class ReadWriteTransactionTest : public testing::Test {
                           .ValueOrDie()))),
         action_manager_(absl::make_unique<ActionManager>()) {
     action_manager_->AddActionsForSchema(
-        versioned_catalog_->GetSchema(absl::InfiniteFuture()));
+        versioned_catalog_->GetSchema(absl::InfiniteFuture()),
+        /*function_catalog=*/nullptr);
   }
 
  protected:
@@ -404,7 +405,8 @@ TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {
                     type_factory_.get())
                     .ValueOrDie();
   ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
-  action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema());
+  action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
+                                       /*function_catalog=*/nullptr);
 
   // Transaction should return latest schema unless an operation is performed.
   ASSERT_NE(txn->schema()->FindTable("new_table"), nullptr);
@@ -427,7 +429,8 @@ TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {
                type_factory_.get())
                .ValueOrDie();
   ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
-  action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema());
+  action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
+                                       /*function_catalog=*/nullptr);
 
   // Transaction is aborted.
   EXPECT_THAT(txn->Write(m), StatusIs(absl::StatusCode::kAborted));

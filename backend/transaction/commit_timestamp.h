@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_COMMIT_TIMESTAMP_H_
 
 #include "zetasql/public/type.h"
+#include "zetasql/base/statusor.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
 #include "backend/schema/catalog/column.h"

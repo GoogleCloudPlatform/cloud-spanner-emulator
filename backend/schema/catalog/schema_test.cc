@@ -44,7 +44,9 @@ namespace {
 class SchemaTest : public testing::Test {
  public:
   SchemaTest()
-      : context_(nullptr, nullptr, absl::Now()),
+      : context_(/*storage =*/nullptr, /*global_names =*/nullptr,
+                 /*type_factory =*/nullptr,
+                 /*pending_commit_timestamp =*/absl::Now()),
         type_factory_(absl::make_unique<zetasql::TypeFactory>()),
         base_schema_(test::CreateSchemaWithOneTable(type_factory_.get())) {}
 

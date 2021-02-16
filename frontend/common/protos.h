@@ -21,6 +21,7 @@
 #include "google/protobuf/duration.pb.h"
 #include "google/protobuf/timestamp.pb.h"
 #include "google/rpc/status.pb.h"
+#include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "absl/status/status.h"

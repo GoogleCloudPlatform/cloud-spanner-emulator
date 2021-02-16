@@ -51,7 +51,7 @@ void ResetInvalidValuesToNull(absl::Span<const Column* const> columns,
     return;
   }
 
-  DCHECK(columns.size() == values->size());
+  ZETASQL_DCHECK(columns.size() == values->size());
 
   for (int i = 0; i < columns.size(); ++i) {
     if (!values->at(i).is_valid()) {
@@ -298,7 +298,7 @@ bool TransactionStore::RowExistsInBuffer(const Table* table, const Key& key,
 
 void TransactionStore::TrackColumnsForCommitTimestamp(
     absl::Span<const Column* const> columns, const ValueList& values) {
-  DCHECK_EQ(columns.size(), values.size());
+  ZETASQL_DCHECK_EQ(columns.size(), values.size());
   for (int i = 0; i < columns.size(); ++i) {
     if (IsPendingCommitTimestamp(columns[i], values[i])) {
       commit_ts_columns_.insert(columns[i]);

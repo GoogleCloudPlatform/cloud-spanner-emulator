@@ -25,11 +25,11 @@
 #include "absl/strings/str_join.h"
 #include "absl/strings/substitute.h"
 #include "backend/common/case.h"
+#include "backend/common/graph_dependency_helper.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/updater/global_schema_names.h"
-#include "backend/schema/updater/graph_dependency_helper.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "zetasql/base/ret_check.h"
@@ -331,8 +331,8 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
       continue;
     }
 
-    // New columns cannot be nullable.
-    if (!column->is_nullable()) {
+    // New columns cannot be nullable unless it is a generated column.
+    if (!column->is_nullable() && !column->is_generated()) {
       return error::AddingNotNullColumn(table->name_, column->Name());
     }
   }

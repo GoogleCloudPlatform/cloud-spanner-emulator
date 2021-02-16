@@ -640,7 +640,6 @@ absl::Status DDLStatementWithErrors(absl::string_view ddl_string,
                                    absl::StrJoin(errors, "\n-")));
 }
 
-// Schema errors.
 absl::Status InvalidSchemaName(absl::string_view object_kind,
                                absl::string_view identifier) {
   return absl::Status(
@@ -1509,9 +1508,48 @@ absl::Status ForeignKeyReferencingKeyFound(absl::string_view foreign_key,
           foreign_key, referencing_table, referenced_table, referencing_key));
 }
 
+absl::Status CheckConstraintNotEnabled() {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      "Check Constraint is not implemented.");
+}
+
+absl::Status CheckConstraintViolated(absl::string_view check_constraint_name,
+                                     absl::string_view table_name,
+                                     absl::string_view key_debug_string) {
+  return absl::Status(
+      absl::StatusCode::kOutOfRange,
+      absl::Substitute("Check constraint `$0`.`$1` is violated for key $2",
+                       table_name, check_constraint_name, key_debug_string));
+}
+
+absl::Status CheckConstraintNotUsingAnyNonGeneratedColumn(
+    absl::string_view table_name, absl::string_view check_constraint_name,
+    absl::string_view expression) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Check constraint `$0`.`$1` does not use any "
+          "non generated column. Expression: '$2'. A check "
+          "constraint expression requires at least one non-generated column "
+          "as dependency.",
+          table_name, check_constraint_name, expression));
+}
+
 absl::Status NumericTypeNotEnabled() {
   return absl::Status(absl::StatusCode::kUnimplemented,
                       "NUMERIC type is not implemented.");
+}
+
+// Check constraint errors.
+absl::Status CheckConstraintExpressionParseError(
+    absl::string_view table_name, absl::string_view check_constraint_expression,
+    absl::string_view check_constraint_name, absl::string_view message) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Error parsing expression '$0' from check constraint "
+                       "'$1' in table '$2': $3",
+                       check_constraint_expression, check_constraint_name,
+                       table_name, message));
 }
 
 // Generated column errors.
@@ -1551,6 +1589,99 @@ absl::Status ColumnExpressionMaxDepthExceeded(int depth, int max_depth) {
       absl::Substitute(
           "Expression depth of $0 exceeds the maximum allowed depth of $1.",
           depth, max_depth));
+}
+
+absl::Status InvalidDropColumnReferencedByGeneratedColumn(
+    absl::string_view column_name, absl::string_view table_name,
+    absl::string_view referencing_column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot drop column `$0` from table `$1` "
+                       "because it is referenced by generated column `$2`.",
+                       column_name, table_name, referencing_column_name));
+}
+
+absl::Status CannotConvertGeneratedColumnToRegularColumn(
+    absl::string_view table_name, absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Cannot convert generated column `$0.$1` to a regular column.",
+          table_name, column_name));
+}
+
+absl::Status CannotConvertRegularColumnToGeneratedColumn(
+    absl::string_view table_name, absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot convert column `$0.$1` to a generated column.",
+                       table_name, column_name));
+}
+
+absl::Status CannotAlterStoredGeneratedColumnDataType(
+    absl::string_view table_name, absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Cannot change the data type of a stored generated column `$0.$1`.",
+          table_name, column_name));
+}
+
+absl::Status CannotAlterGeneratedColumnExpression(
+    absl::string_view table_name, absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Cannot change the expression of a generated column `$0.$1` because "
+          "it is stored or have other dependencies.",
+          table_name, column_name));
+}
+
+absl::Status CannotAlterColumnDataTypeWithDependentStoredGeneratedColumn(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot change the data type of column `$0`, which "
+                       "has a dependent stored generated column.",
+                       column_name));
+}
+
+absl::Status CannotUseCommitTimestampOnGeneratedColumnDependency(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot use commit timestamp column `$0` as a "
+                       "dependency of a materialized generated column.",
+                       column_name));
+}
+
+absl::Status CannotUseGeneratedColumnInPrimaryKey(
+    absl::string_view table_name, absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Generated column `$0.$1` cannot be part of the "
+                       "primary key.",
+                       table_name, column_name));
+}
+
+absl::Status CannotWriteToGeneratedColumn(absl::string_view table_name,
+                                          absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot write into generated column `$0.$1`.",
+                       table_name, column_name));
+}
+
+absl::Status NonDeterministicFunctionInColumnExpression(
+    absl::string_view function_name, absl::string_view expression_use) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Expression is non-deterministic due to the use of non-determinstic "
+          "function `$0`. Expression of $1 must yield "
+          "the same value for the same dependent column values. "
+          "Non-deterministic functions inside the expressions are not allowed.",
+          function_name, expression_use));
 }
 
 // Query errors.
@@ -1615,7 +1746,7 @@ absl::Status NullFilteredIndexUnusable(absl::string_view index_name) {
           "Please test this query against Cloud Spanner. If you confirm "
           "against Cloud Spanner that the null filtered index can be used to "
           "answer the query, set the hint @{spanner_emulator."
-          "disable_query_null_filtered_index_check=false} on the table "
+          "disable_query_null_filtered_index_check=true} on the table "
           "to bypass this check in the emulator. This hint will be ignored by "
           "the production Cloud Spanner service and the emulator will accept "
           "the query and return a valid result when it is run with the check "
@@ -1732,6 +1863,16 @@ absl::Status NoFeatureSupportDifferentTypeArrayCasts(
       absl::Substitute("Casting between arrays with incompatible element types "
                        "is not supported: Invalid cast from $0 to $1.",
                        from_type, to_type));
+}
+
+absl::Status UnsupportedTablesampleRepeatable() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "REPEATABLE is not supported");
+}
+
+absl::Status UnsupportedTablesampleSystem() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "SYSTEM sampling is not supported");
 }
 
 absl::Status TooManyFunctions(int max_function_nodes) {

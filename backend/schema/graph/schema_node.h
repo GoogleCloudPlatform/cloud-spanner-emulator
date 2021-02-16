@@ -20,7 +20,7 @@
 #include <memory>
 
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

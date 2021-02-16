@@ -20,11 +20,12 @@
 #include <memory>
 #include <string>
 
+#include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "google/cloud/spanner/connection_options.h"
 #include "google/cloud/status.h"
 #include "google/cloud/status_or.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

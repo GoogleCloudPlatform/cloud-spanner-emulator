@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 #include "tests/conformance/common/database_test_base.h"
 

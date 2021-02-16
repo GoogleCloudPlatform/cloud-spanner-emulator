@@ -38,7 +38,6 @@
 #include "common/feature_flags.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {
@@ -291,6 +290,13 @@ absl::Status VisitColumnTypeNode(const SimpleNode* column_type_node,
   return absl::OkStatus();
 }
 
+absl::string_view GetExpressionStr(const SimpleNode& expression_node,
+                                   absl::string_view ddl_text) {
+  int node_offset = expression_node.absolute_begin_column();
+  int node_length = expression_node.absolute_end_column() - node_offset;
+  return absl::ClippedSubstr(ddl_text, node_offset, node_length);
+}
+
 absl::Status VisitGenerationClauseNode(const SimpleNode* node,
                                        ColumnDefinition* column_definition,
                                        absl::string_view ddl_text) {
@@ -305,10 +311,8 @@ absl::Status VisitGenerationClauseNode(const SimpleNode* node,
     ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
     switch (child->getId()) {
       case JJTEXPRESSION: {
-        int node_offset = child->absolute_begin_column();
-        int node_length = child->absolute_end_column() - node_offset;
-        column_definition->mutable_properties()->set_expression(absl::StrCat(
-            "(", absl::ClippedSubstr(ddl_text, node_offset, node_length), ")"));
+        column_definition->mutable_properties()->set_expression(
+            absl::StrCat("(", GetExpressionStr(*child, ddl_text), ")"));
         break;
       }
       case JJTSTORED: {
@@ -586,6 +590,33 @@ absl::Status VisitForeignKeyNode(const SimpleNode* node,
   return absl::OkStatus();
 }
 
+absl::Status VisitCheckConstraintNode(const SimpleNode* node,
+                                      absl::string_view ddl_text,
+                                      CheckConstraint* check_constraint) {
+  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCHECK_CONSTRAINT));
+  if (!EmulatorFeatureFlags::instance().flags().enable_check_constraint) {
+    return error::CheckConstraintNotEnabled();
+  }
+
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
+    switch (child->getId()) {
+      case JJTCONSTRAINT_NAME:
+        check_constraint->set_constraint_name(child->image());
+        break;
+      case JJTCHECK_CONSTRAINT_EXPRESSION: {
+        check_constraint->set_sql_expression(
+            std::string(GetExpressionStr(*child, ddl_text)));  // NOLINT
+        break;
+      }
+      default:
+        return error::Internal(absl::StrCat(
+            "Unexpected check constraint attribute: ", child->toString()));
+    }
+  }
+  return absl::OkStatus();
+}
+
 absl::Status VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
                                   absl::string_view ddl_text,
                                   std::vector<std::string>* errors) {
@@ -605,6 +636,10 @@ absl::Status VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
       case JJTFOREIGN_KEY:
         ZETASQL_RETURN_IF_ERROR(VisitForeignKeyNode(
             child, table->add_constraints()->mutable_foreign_key()));
+        break;
+      case JJTCHECK_CONSTRAINT:
+        ZETASQL_RETURN_IF_ERROR(VisitCheckConstraintNode(
+            child, ddl_text, table->add_constraints()->mutable_check()));
         break;
       case JJTPRIMARY_KEY:
         ZETASQL_RETURN_IF_ERROR(VisitKeyNode(
@@ -829,6 +864,26 @@ absl::Status VisitAlterTableDropConstraint(const SimpleNode* node,
   return absl::OkStatus();
 }
 
+absl::Status VisitAlterTableAddCheckConstraint(const SimpleNode* node,
+                                               AlterTable* alter_table,
+                                               absl::string_view ddl_text) {
+  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* check_constraint,
+                   GetChildAtIndexWithType(node, 1, JJTCHECK_CONSTRAINT));
+  ZETASQL_RETURN_IF_ERROR(
+      VisitCheckConstraintNode(check_constraint, ddl_text,
+                               alter_table->mutable_alter_constraint()
+                                   ->mutable_constraint()
+                                   ->mutable_check()));
+  const std::string& constraint_name =
+      alter_table->alter_constraint().constraint().check().constraint_name();
+  if (!constraint_name.empty()) {
+    alter_table->mutable_alter_constraint()->set_constraint_name(
+        constraint_name);
+  }
+  alter_table->mutable_alter_constraint()->set_type(AlterConstraint::ADD);
+  return absl::OkStatus();
+}
+
 absl::Status VisitAlterTableNode(const SimpleNode* node,
                                  DDLStatement* statement,
                                  absl::string_view ddl_text,
@@ -855,6 +910,8 @@ absl::Status VisitAlterTableNode(const SimpleNode* node,
       return VisitAlterTableSetOnDelete(node, alter_table);
     case JJTFOREIGN_KEY:
       return VisitAlterTableAddForeignKey(node, alter_table);
+    case JJTCHECK_CONSTRAINT:
+      return VisitAlterTableAddCheckConstraint(node, alter_table, ddl_text);
     case JJTDROP_CONSTRAINT:
       return VisitAlterTableDropConstraint(node, alter_table);
     default:

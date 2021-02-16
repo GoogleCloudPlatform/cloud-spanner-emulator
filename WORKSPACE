@@ -104,9 +104,9 @@ protobuf_deps()
 
 http_archive(
     name = "com_google_absl",
-    strip_prefix = "abseil-cpp-81f34df8347a73c617f244f49cb916238857dc34",
-    url = "https://github.com/abseil/abseil-cpp/archive/81f34df8347a73c617f244f49cb916238857dc34.tar.gz",
-    sha256 = "89b1c570dd59cebf5127ff96b9b46ae8a7fe352cab4f9198e20dc7749ab8aa16",
+    strip_prefix = "abseil-cpp-fbdff6f3ae0ba977a69f172e85ecaede535e70f6",
+    url = "https://github.com/abseil/abseil-cpp/archive/fbdff6f3ae0ba977a69f172e85ecaede535e70f6.tar.gz",
+    sha256 = "6e0299e74f5ce48b3321acc831020065918e8530a78d5d6231ebee45fc9f5f96",
 )
 
 http_archive(
@@ -132,12 +132,12 @@ grpc_deps()
 
 http_archive(
     name = "com_google_zetasql",
-    url = "https://github.com/google/zetasql/archive/1aefaa7c62fc7a50def879bb7c4225ec6974b7ef.zip",
-    strip_prefix = "zetasql-1aefaa7c62fc7a50def879bb7c4225ec6974b7ef",
+    url = "https://github.com/google/zetasql/archive/6a4e35f2a18549c991476f6ca9504ac3a4ad21a7.zip",
+    strip_prefix = "zetasql-6a4e35f2a18549c991476f6ca9504ac3a4ad21a7",
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
     patches = ["//build/bazel:zetasql.patch"],
-    sha256 = "6b14c9dfb87ee73f175b81188326eed0b37ae7b842962c2810f643ac51a4c779",
+    sha256 = "e7706c55c850accbc71f165560daad5465723eb2e0af959c0aaf03d1312ed8f2"
 )
 
 load("@com_google_zetasql//bazel:zetasql_deps_step_1.bzl", "zetasql_deps_step_1")
@@ -158,9 +158,9 @@ zetasql_deps_step_4()
 
 http_archive(
     name = "com_github_googleapis_google_cloud_cpp",
-    url = "https://github.com/googleapis/google-cloud-cpp/archive/2a0aeef05715fba00a8fbcfd0d85a4afeecf0722.tar.gz",
-    strip_prefix = "google-cloud-cpp-2a0aeef05715fba00a8fbcfd0d85a4afeecf0722",
-    sha256 = "17d635d6b6b32aec8b6e069aeb0780bd77855adaa48da20e55047264e4a5c0ea",
+    url = "https://github.com/googleapis/google-cloud-cpp/archive/v1.22.0.tar.gz",
+    strip_prefix = "google-cloud-cpp-1.22.0",
+    sha256 = "2f52dcc679a31e738c01fb68aa0fc966fe0be5322d1a4ec7e6337363281a4704",
 )
 
 load("@com_github_googleapis_google_cloud_cpp//bazel:google_cloud_cpp_deps.bzl", "google_cloud_cpp_deps")

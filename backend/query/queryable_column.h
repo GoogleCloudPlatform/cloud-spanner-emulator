@@ -45,6 +45,10 @@ class QueryableColumn : public zetasql::Column {
     return wrapped_column_->GetType();
   }
 
+  bool IsWritableColumn() const override {
+    return !wrapped_column_->is_generated();
+  }
+
   const backend::Column* wrapped_column() const { return wrapped_column_; }
 
  private:

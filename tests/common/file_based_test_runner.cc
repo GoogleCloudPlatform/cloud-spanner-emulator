@@ -18,6 +18,7 @@
 
 #include <fstream>
 
+#include "zetasql/base/logging.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -102,7 +103,7 @@ std::string GetRunfilesDir(const std::string& dir) {
   std::string error;
   auto runfiles = bazel::tools::cpp::runfiles::Runfiles::CreateForTest(&error);
   if (!error.empty()) {
-    LOG(WARNING) << "Error when fetching runfiles: " << error;
+    ZETASQL_LOG(WARNING) << "Error when fetching runfiles: " << error;
     return "";
   }
   return runfiles->Rlocation(

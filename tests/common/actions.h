@@ -23,6 +23,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/memory/memory.h"
+#include "zetasql/base/statusor.h"
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
 #include "backend/storage/in_memory_storage.h"

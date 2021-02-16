@@ -676,7 +676,7 @@ TEST(ChunkingTest, RandomChunking) {
   int64_t time = absl::ToUnixNanos(absl::Now());
   std::seed_seq seed({time});
   absl::BitGen gen(seed);
-  LOG(INFO) << "Testing random chunking with seed: " << time;
+  ZETASQL_LOG(INFO) << "Testing random chunking with seed: " << time;
 
   const int kNumColumnsMin = 10;
   const int kNumColumnsMax = 200;

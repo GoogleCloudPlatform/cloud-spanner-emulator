@@ -169,6 +169,13 @@ absl::Status FilterResolvedFunction(
   if (name == "nullif" && function_call.argument_list(0)->type()->IsStruct()) {
     return error::NullifStructNotSupported();
   }
+  // TODO: Enable numeric signatures for math functions exp, sqrt,
+  // ln, log, and log10 after the feature has been released in spanner.
+  if ((name == "log" || name == "ln" || name == "log10" || name == "exp" ||
+       name == "sqrt") &&
+      function_call.signature().argument(0).type()->IsNumericType()) {
+    return error::UnsupportedFunction(name);
+  }
 
   return absl::OkStatus();
 }
@@ -180,7 +187,7 @@ absl::Status FilterSafeModeFunction(
       zetasql::ResolvedFunctionCallBaseEnums::SAFE_ERROR_MODE) {
     safe_mode = true;
   } else {
-    DCHECK_EQ(function_call.error_mode(),
+    ZETASQL_DCHECK_EQ(function_call.error_mode(),
               zetasql::ResolvedFunctionCallBaseEnums::DEFAULT_ERROR_MODE);
   }
   ZETASQL_RET_CHECK(!safe_mode || function_call.function()->SupportsSafeErrorMode())

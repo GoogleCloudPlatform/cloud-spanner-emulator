@@ -33,15 +33,15 @@ namespace backend {
 // InformationSchemaCatalog provides the INFORMATION_SCHEMA tables.
 //
 // ZetaSQL reference implementation accesses table data via the catalog objects
-// themselves. Hence, this class also provides the data backing the infromation
-// schema tables.
+// themselves. Hence, this class provides both the catalog and the data
+// backing the information schema tables.
 //
 // Cloud Spanner's information schema is documented at:
 //   https://cloud.google.com/spanner/docs/information-schema
 //
-// The emulator only exposes the default (user) schema via INFORMATION_SCHEMA.
-// In production, in addition to the default schema, INFORMATION_SCHEMA and
-// SPANNER_SYS schemas are also exposed.
+// The emulator only exposes the default (user) schema and INFORMATION_SCHEMA.
+// In production, SPANNER_SYS schemas are also exposed which are not available
+// in the emulator.
 //
 // This class is tested via tests/conformance/cases/information_schema.cc
 class InformationSchemaCatalog : public zetasql::SimpleCatalog {
@@ -71,6 +71,9 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
 
   zetasql::SimpleTable* AddTableConstraintsTable();
   void FillTableConstraintsTable(zetasql::SimpleTable* table_constraints);
+
+  zetasql::SimpleTable* AddCheckConstraintsTable();
+  void FillCheckConstraintsTable(zetasql::SimpleTable* check_constraints);
 
   zetasql::SimpleTable* AddConstraintTableUsageTable();
   void FillConstraintTableUsageTable(

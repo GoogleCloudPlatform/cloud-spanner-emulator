@@ -20,6 +20,7 @@
 #include <string>
 
 #include "google/protobuf/map.h"
+#include "absl/status/status.h"
 #include "re2/re2.h"
 #include "absl/status/status.h"
 

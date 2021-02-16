@@ -35,6 +35,7 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "$safe_array_at_ordinal",
         "array_concat",
         "array_concat_agg",
+        "array_is_distinct",
         "array_length",
         "array_reverse",
         "array_to_string",

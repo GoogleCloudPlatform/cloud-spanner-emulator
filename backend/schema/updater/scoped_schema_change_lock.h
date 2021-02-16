@@ -19,6 +19,7 @@
 
 #include <memory>
 
+#include "zetasql/base/statusor.h"
 #include "absl/time/time.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/locking/handle.h"
@@ -26,7 +27,6 @@
 #include "backend/locking/request.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

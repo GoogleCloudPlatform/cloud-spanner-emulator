@@ -22,6 +22,7 @@
 
 #include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "backend/access/read.h"
@@ -115,6 +116,8 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
   }
 
  private:
+  friend class TransactionOpsProcessor;
+
   enum class OpType {
     kRead,
     kWrite,

@@ -21,6 +21,7 @@
 
 #include "google/longrunning/operations.pb.h"
 #include "google/protobuf/message.h"
+#include "absl/status/status.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/status/status.h"
 

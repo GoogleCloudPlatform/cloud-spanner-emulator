@@ -22,6 +22,8 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
+#include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/graph/schema_objects_pool.h"
@@ -29,7 +31,6 @@
 #include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

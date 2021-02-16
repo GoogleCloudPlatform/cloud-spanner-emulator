@@ -20,7 +20,9 @@
 #include <memory>
 #include <vector>
 
+#include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/storage/storage.h"
@@ -58,9 +60,11 @@ class SchemaValidationContext {
   SchemaValidationContext() {}
 
   SchemaValidationContext(Storage* storage, GlobalSchemaNames* global_names,
+                          zetasql::TypeFactory* type_factory,
                           absl::Time pending_commit_timestamp)
       : storage_(storage),
         global_names_(global_names),
+        type_factory_(type_factory),
         pending_commit_timestamp_(pending_commit_timestamp) {}
 
   // TODO : Split out into a separate StatementValidationContext.
@@ -83,6 +87,9 @@ class SchemaValidationContext {
 
   // Access to the current schema's set of global names.
   GlobalSchemaNames* global_names() const { return global_names_; }
+
+  // Access to the current database's type factory.
+  zetasql::TypeFactory* type_factory() const { return type_factory_; }
 
   // Returns the pending commit timestamp.
   absl::Time pending_commit_timestamp() const {
@@ -170,6 +177,9 @@ class SchemaValidationContext {
 
   // Global names for schema objects.
   GlobalSchemaNames* global_names_;
+
+  // Type factory used for all ZetaSQL operations on the database.
+  zetasql::TypeFactory* type_factory_;
 
   // Planned commit time for the schema change.
   absl::Time pending_commit_timestamp_;

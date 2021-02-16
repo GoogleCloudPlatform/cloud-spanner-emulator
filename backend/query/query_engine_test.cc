@@ -28,6 +28,7 @@
 #include "absl/memory/memory.h"
 #include "zetasql/base/statusor.h"
 #include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/datamodel/key_set.h"
@@ -407,6 +408,59 @@ TEST_F(QueryEngineTest, ConnotUpdatePrimaryKey) {
                   QueryContext{schema(), reader(), &writer}),
               zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
+
+// Tests for @{parameter_sensitive=always|never|auto} query hint.
+struct ParameterSensitiveHintInfo {
+  // Value of @{parameter_sensitive} hint.
+  std::string hint_value;
+  // A flag to indicate whether the value is supported or not.
+  bool is_valid;
+  static std::vector<ParameterSensitiveHintInfo> TestCases() {
+    return {
+        {.hint_value = "auto", .is_valid = true},
+        {.hint_value = "never", .is_valid = true},
+        {.hint_value = "always", .is_valid = true},
+        {.hint_value = "abc", .is_valid = false},
+        {.hint_value = "12", .is_valid = false},
+    };
+  }
+};
+
+class ParameterSensitiveHintTests
+    : public QueryEngineTest,
+      public ::testing::WithParamInterface<ParameterSensitiveHintInfo> {};
+
+TEST_P(ParameterSensitiveHintTests, TestParameterSensitiveHint) {
+  const ParameterSensitiveHintInfo& test_params = GetParam();
+  SCOPED_TRACE(absl::StrCat("hint=", test_params.hint_value));
+
+  const auto query =
+      absl::StrCat("@{parameter_sensitive=", test_params.hint_value,
+                   "} SELECT string_col FROM test_table");
+  if (test_params.is_valid) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(QueryResult result,
+                         query_engine().ExecuteSql(
+                             Query{query}, QueryContext{schema(), reader()}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("string_col"));
+    EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(StringType()));
+    EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+                IsOkAndHolds(UnorderedElementsAre(
+                    ElementsAre(String("one")), ElementsAre(String("two")),
+                    ElementsAre(String("four")))));
+  } else {
+    EXPECT_THAT(query_engine().ExecuteSql(Query{query},
+                                          QueryContext{schema(), reader()}),
+                zetasql_base::testing::StatusIs(
+                    absl::StatusCode::kInvalidArgument,
+                    testing::HasSubstr(
+                        "Invalid hint value for: parameter_sensitive hint")));
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    RunParameterSensitiveHintTests, ParameterSensitiveHintTests,
+    testing::ValuesIn(ParameterSensitiveHintInfo::TestCases()));
 
 }  // namespace
 

@@ -92,9 +92,24 @@ absl::Status ValidateNotNullColumnsPresent(
     }
   }
   for (const auto column : table->columns()) {
-    if (!column->is_nullable() && !inserted_columns.contains(column)) {
+    // Writing null to non-nullable generated columns is temporarily fine,
+    // since the violation may be fixed later by a generated operation to update
+    // the column.
+    if (!column->is_nullable() && !column->is_generated() &&
+        !inserted_columns.contains(column)) {
       return error::NonNullValueNotSpecifiedForInsert(table->Name(),
                                                       column->Name());
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status ValidateGeneratedColumnsNotPresent(
+    const Table* table, const std::vector<const Column*>& columns) {
+  for (const Column* column : columns) {
+    if (column->is_generated() &&
+        table->FindKeyColumn(column->Name()) == nullptr) {
+      return error::CannotWriteToGeneratedColumn(table->Name(), column->Name());
     }
   }
   return absl::OkStatus();
@@ -259,6 +274,8 @@ zetasql_base::StatusOr<ResolvedMutationOp> ResolveMutationOp(
           mutation_op.type == MutationOpType::kReplace) {
         ZETASQL_RETURN_IF_ERROR(ValidateNotNullColumnsPresent(table, columns));
       }
+
+      ZETASQL_RETURN_IF_ERROR(ValidateGeneratedColumnsNotPresent(table, columns));
 
       ZETASQL_ASSIGN_OR_RETURN(resolved_mutation_op.rows.emplace_back(),
                        MaybeSetCommitTimestampSentinel(columns, row));

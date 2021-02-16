@@ -160,9 +160,22 @@ TEST_F(DatabaseApiTest, CreateDatabaseWithInvalidDatabaseName) {
   // Name less than 2 characters.
   EXPECT_THAT(CreateDatabase(test_instance_uri_, "a"),
               StatusIs(absl::StatusCode::kInvalidArgument));
+
   // Name greater than 30 characters.
   EXPECT_THAT(CreateDatabase(test_instance_uri_,
                              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  // Only lowercase allowed.
+  EXPECT_THAT(CreateDatabase(test_instance_uri_, "AAAAA"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  // Non-alphanumeric characters are not allowed.
+  EXPECT_THAT(CreateDatabase(test_instance_uri_, "aaaa!@#$aaa"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  // Cannot end with hypen.
+  EXPECT_THAT(CreateDatabase(test_instance_uri_, "aaaa-aaaa-"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 

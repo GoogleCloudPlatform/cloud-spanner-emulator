@@ -28,7 +28,7 @@ namespace test {
 namespace {
 
 // TODO: Replace all uses of internal C++ client library details.
-using google::cloud::spanner::internal::MakeSingleUseTransaction;
+using google::cloud::spanner_internal::MakeSingleUseTransaction;
 using zetasql_base::testing::StatusIs;
 
 class BatchDmlTest : public DatabaseTest {
@@ -95,7 +95,7 @@ TEST_F(BatchDmlTest, DifferentDmlStatementsSucceed) {
               IsOkAndHoldsRows({{1, "Mark", 27}, {3, "Dan", 27}}));
 }
 
-TEST_F(BatchDmlTest, DISABLED_ConstraintErrorOnBatchDmlReplaysError) {
+TEST_F(BatchDmlTest, ConstraintErrorOnBatchDmlReplaysError) {
   ZETASQL_ASSERT_OK(CommitBatchDml(
       {SqlStatement("INSERT Users(ID, Name, Age) VALUES (1, 'Levin', 27)")}));
 

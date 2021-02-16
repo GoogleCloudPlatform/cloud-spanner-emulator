@@ -21,6 +21,7 @@
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 #include "absl/strings/cord.h"
 #include "absl/types/optional.h"
@@ -43,7 +44,6 @@
 #include "farmhash.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

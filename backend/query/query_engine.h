@@ -25,12 +25,12 @@
 #include "zetasql/public/value.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/schema.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {
@@ -87,6 +87,10 @@ class QueryEngine {
   explicit QueryEngine(zetasql::TypeFactory* type_factory)
       : type_factory_(type_factory), function_catalog_(type_factory) {}
 
+  // Returns the name of the table that a given DML query modifies.
+  zetasql_base::StatusOr<std::string> GetDmlTargetTable(const Query& query,
+                                                const Schema* schema) const;
+
   // Executes a SQL query (SELECT query or DML).
   // Skip execution if validate_only is true.
   zetasql_base::StatusOr<QueryResult> ExecuteSql(const Query& query,
@@ -102,6 +106,8 @@ class QueryEngine {
                                      const QueryContext& context) const;
 
   zetasql::TypeFactory* type_factory() const { return type_factory_; }
+
+  const FunctionCatalog* function_catalog() const { return &function_catalog_; }
 
  private:
   zetasql::TypeFactory* type_factory_;

@@ -24,6 +24,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/time/time.h"
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
@@ -35,7 +36,6 @@
 #include "common/clock.h"
 #include "frontend/entities/database.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

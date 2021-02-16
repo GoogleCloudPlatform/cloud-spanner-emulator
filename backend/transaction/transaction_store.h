@@ -22,6 +22,8 @@
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "backend/actions/ops.h"
 #include "backend/common/ids.h"
 #include "backend/datamodel/key.h"

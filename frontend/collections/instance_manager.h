@@ -19,10 +19,10 @@
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
+#include "zetasql/base/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "frontend/entities/instance.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

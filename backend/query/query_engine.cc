@@ -32,10 +32,12 @@
 #include "zetasql/public/value.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 #include "absl/strings/match.h"
+#include "absl/strings/substitute.h"
 #include "absl/time/time.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
@@ -43,6 +45,7 @@
 #include "backend/datamodel/value.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
+#include "backend/query/dml_query_validator.h"
 #include "backend/query/feature_filter/query_size_limits_checker.h"
 #include "backend/query/hint_rewriter.h"
 #include "backend/query/index_hint_validator.h"
@@ -50,6 +53,8 @@
 #include "backend/query/partitioned_dml_validator.h"
 #include "backend/query/query_engine_options.h"
 #include "backend/query/query_validator.h"
+#include "backend/query/queryable_column.h"
+#include "backend/query/queryable_table.h"
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
@@ -57,20 +62,11 @@
 #include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
-
-bool IsDMLQuery(const std::string& query) {
-  zetasql::ResolvedNodeKind query_kind = zetasql::GetStatementKind(query);
-  return query_kind == zetasql::RESOLVED_INSERT_STMT ||
-         query_kind == zetasql::RESOLVED_UPDATE_STMT ||
-         query_kind == zetasql::RESOLVED_DELETE_STMT;
-}
-
 namespace {
 
 // A RowCursor backed by vectors (one per each row) of values.
@@ -177,15 +173,23 @@ absl::Status MaybeTransformZetaSQLDMLError(absl::Status error) {
   return error;
 }
 
+bool IsGenerated(const zetasql::Column* column) {
+  return column->GetAs<QueryableColumn>()->wrapped_column()->is_generated();
+}
+
 // Builds a INSERT mutation and returns it along with a count of inserted rows.
 std::pair<Mutation, int64_t> BuildInsert(
     std::unique_ptr<zetasql::EvaluatorTableModifyIterator> iterator,
     MutationOpType op_type,
     const CaseInsensitiveStringSet& pending_ts_columns) {
   const zetasql::Table* table = iterator->table();
+  absl::flat_hash_set<int> generated_columns;
   std::vector<std::string> column_names;
-  column_names.reserve(table->NumColumns());
   for (int i = 0; i < table->NumColumns(); ++i) {
+    if (IsGenerated(table->GetColumn(i))) {
+      generated_columns.insert(i);
+      continue;
+    }
     column_names.push_back(table->GetColumn(i)->Name());
   }
 
@@ -193,6 +197,9 @@ std::pair<Mutation, int64_t> BuildInsert(
   while (iterator->NextRow()) {
     values.emplace_back();
     for (int i = 0; i < table->NumColumns(); ++i) {
+      if (generated_columns.contains(i)) {
+        continue;
+      }
       if (pending_ts_columns.find(column_names[i]) !=
           pending_ts_columns.end()) {
         values.back().push_back(
@@ -214,9 +221,13 @@ std::pair<Mutation, int64_t> BuildUpdate(
     MutationOpType op_type,
     const CaseInsensitiveStringSet& pending_ts_columns) {
   const zetasql::Table* table = iterator->table();
+  absl::flat_hash_set<int> generated_columns;
   std::vector<std::string> column_names;
-  column_names.reserve(table->NumColumns());
   for (int i = 0; i < table->NumColumns(); ++i) {
+    if (IsGenerated(table->GetColumn(i))) {
+      generated_columns.insert(i);
+      continue;
+    }
     column_names.push_back(table->GetColumn(i)->Name());
   }
 
@@ -224,6 +235,9 @@ std::pair<Mutation, int64_t> BuildUpdate(
   while (iterator->NextRow()) {
     values.emplace_back();
     for (int i = 0; i < table->NumColumns(); ++i) {
+      if (generated_columns.contains(i)) {
+        continue;
+      }
       if (pending_ts_columns.find(column_names[i]) !=
           pending_ts_columns.end()) {
         values.back().push_back(
@@ -311,7 +325,8 @@ zetasql_base::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsIn
         update_item_list) {
   CaseInsensitiveStringSet pending_ts_columns;
   for (const auto& update_item : update_item_list) {
-    if (IsPendingCommitTimestamp(*update_item->set_value())) {
+    if (update_item->set_value() &&
+        IsPendingCommitTimestamp(*update_item->set_value())) {
       std::string column_name = update_item->target()
                                     ->GetAs<zetasql::ResolvedColumnRef>()
                                     ->column()
@@ -496,6 +511,12 @@ zetasql_base::StatusOr<std::map<std::string, zetasql::Value>> ExtractParameters(
   return params;
 }
 
+bool IsDMLStmt(const zetasql::ResolvedNodeKind& query_kind) {
+  return query_kind == zetasql::RESOLVED_INSERT_STMT ||
+         query_kind == zetasql::RESOLVED_UPDATE_STMT ||
+         query_kind == zetasql::RESOLVED_DELETE_STMT;
+}
+
 zetasql_base::StatusOr<std::unique_ptr<zetasql::ResolvedStatement>>
 ExtractValidatedResolvedStatementAndOptions(
     const zetasql::AnalyzerOutput* analyzer_output, const Schema* schema,
@@ -511,8 +532,13 @@ ExtractValidatedResolvedStatementAndOptions(
   // Validate the query and extract and return any options specified
   // through hint if the caller requested them.
   QueryEngineOptions options;
-  QueryValidator query_validator{schema, &options};
-  ZETASQL_RETURN_IF_ERROR(statement->Accept(&query_validator));
+  std::unique_ptr<QueryValidator> query_validator =
+      IsDMLStmt(analyzer_output->resolved_statement()->node_kind())
+          ? absl::WrapUnique<DMLQueryValidator>(
+                new DMLQueryValidator(schema, &options))
+          : absl::WrapUnique<QueryValidator>(
+                new QueryValidator(schema, &options));
+  ZETASQL_RETURN_IF_ERROR(statement->Accept(query_validator.get()));
   if (query_engine_options != nullptr) {
     *query_engine_options = options;
   }
@@ -530,7 +556,53 @@ ExtractValidatedResolvedStatementAndOptions(
   return statement;
 }
 
+// Implements ResolvedASTVisitor to get the target table that various DML
+// statements modify.
+class ExtractDmlTargetTableVisitor : public zetasql::ResolvedASTVisitor {
+ public:
+  absl::optional<std::string> target_table() const { return target_table_; }
+
+ private:
+  absl::Status VisitResolvedInsertStmt(
+      const zetasql::ResolvedInsertStmt* node) override {
+    target_table_ = node->table_scan()->table()->Name();
+    return absl::OkStatus();
+  }
+  absl::Status VisitResolvedDeleteStmt(
+      const zetasql::ResolvedDeleteStmt* node) override {
+    target_table_ = node->table_scan()->table()->Name();
+    return absl::OkStatus();
+  }
+  absl::Status VisitResolvedUpdateStmt(
+      const zetasql::ResolvedUpdateStmt* node) override {
+    target_table_ = node->table_scan()->table()->Name();
+    return absl::OkStatus();
+  }
+
+  absl::optional<std::string> target_table_;
+};
+
 }  // namespace
+
+zetasql_base::StatusOr<std::string> QueryEngine::GetDmlTargetTable(
+    const Query& query, const Schema* schema) const {
+  Catalog catalog(schema, &function_catalog_, nullptr);
+  ZETASQL_ASSIGN_OR_RETURN(auto analyzer_output,
+                   Analyze(query.sql, query.declared_params, &catalog,
+                           type_factory_, /*prune_unused_columns=*/true));
+  ZETASQL_ASSIGN_OR_RETURN(auto params,
+                   ExtractParameters(query, analyzer_output.get()));
+  ZETASQL_ASSIGN_OR_RETURN(auto statement, ExtractValidatedResolvedStatementAndOptions(
+                                       analyzer_output.get(), schema));
+
+  ExtractDmlTargetTableVisitor visitor;
+  ZETASQL_RETURN_IF_ERROR(statement->Accept(&visitor));
+  if (!visitor.target_table()) {
+    return absl::InvalidArgumentError(absl::Substitute(
+        "The given query does not contain a DML statement: $0", query.sql));
+  }
+  return *visitor.target_table();
+}
 
 zetasql_base::StatusOr<QueryResult> QueryEngine::ExecuteSql(
     const Query& query, const QueryContext& context) const {
@@ -548,8 +620,7 @@ zetasql_base::StatusOr<QueryResult> QueryEngine::ExecuteSql(
                        analyzer_output.get(), context.schema));
 
   QueryResult result;
-  if (analyzer_output->resolved_statement()->node_kind() ==
-      zetasql::RESOLVED_QUERY_STMT) {
+  if (!IsDMLStmt(analyzer_output->resolved_statement()->node_kind())) {
     ZETASQL_ASSIGN_OR_RETURN(auto cursor,
                      EvaluateQuery(resolved_statement.get(), params,
                                    type_factory_, &result.num_output_rows));
@@ -612,6 +683,11 @@ absl::Status QueryEngine::IsValidPartitionedDML(
   // Check that the DML statement is partitionable.
   PartitionedDMLValidator validator;
   return resolved_statement->Accept(&validator);
+}
+
+bool IsDMLQuery(const std::string& query) {
+  zetasql::ResolvedNodeKind query_kind = zetasql::GetStatementKind(query);
+  return IsDMLStmt(query_kind);
 }
 
 }  // namespace backend

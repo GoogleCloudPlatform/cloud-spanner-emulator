@@ -71,13 +71,24 @@ CREATE TABLE T (
   gen BYTES(MAX) AS (SAFE.MD5(string_field)) STORED,
 ) PRIMARY KEY(id);
 ==
-CREATE TABLE Network (
+CREATE TABLE T (
   id INT64,
-  val64 INT64,
-  net_mask BYTES(MAX) AS (NET.IP_NET_MASK(val64, val64)) STORED,
+  ts TIMESTAMP OPTIONS (
+    allow_commit_timestamp = false
+  ),
+  expr TIMESTAMP AS (ts) STORED OPTIONS (
+    allow_commit_timestamp = false
+  ),
+) PRIMARY KEY(id);
+==
+# --regex
+CREATE TABLE T (
+  id INT64,
+  data BYTES(MAX),
+  gen INT64 AS (ASCII(data)) STORED,
 ) PRIMARY KEY(id);
 --
-ERROR: Error parsing the definition of generated column `Network`.`net_mask`: Unsupported built-in function: NET.IP_NET_MASK
+ERROR: Error parsing the definition of generated column `T`.`gen`: Unsupported built-in function: (ascii|ASCII).*
 ==
 CREATE TABLE T (
   id INT64,
@@ -89,6 +100,16 @@ CREATE TABLE T (
   expr INT64 AS (1) STORED,
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER COLUMN expr INT64 NOT NULL AS (1) STORED;
+--
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL AS (1) STORED,
+) PRIMARY KEY(id);
+==
+CREATE TABLE T (
+  id INT64
+) PRIMARY KEY(id);
+ALTER TABLE T ADD COLUMN expr INT64 NOT NULL AS (1) STORED;
 --
 CREATE TABLE T (
   id INT64,
@@ -125,6 +146,42 @@ CREATE TABLE T (
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
+  id_plus_one INT64 AS (id + 1) STORED
+) PRIMARY KEY(id);
+ALTER TABLE Users ALTER COLUMN id_plus_one INT64 AS (id * 2) STORED;
+--
+ERROR: Cannot change the expression of a generated column `Users.id_plus_one` because it is stored or have other dependencies.
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  id_plus_one INT64
+) PRIMARY KEY(id);
+ALTER TABLE Users ALTER COLUMN id_plus_one INT64 AS (id + 1) STORED;
+--
+ERROR: Cannot convert column `Users.id_plus_one` to a generated column.
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  id_plus_one INT64 AS (id + 1) STORED
+) PRIMARY KEY(id);
+ALTER TABLE Users ALTER COLUMN id_plus_one INT64;
+--
+ERROR: Cannot convert generated column `Users.id_plus_one` to a regular column.
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  id_plus_one INT64 AS (id + 1) STORED
+) PRIMARY KEY(id);
+ALTER TABLE Users ALTER COLUMN id_plus_one INT64 AS (id + 1);
+--
+ERROR: Generated column `id_plus_one` without the STORED attribute is not supported.
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
   id_plus_one INT64 AS (id1 + 1) STORED,
 ) PRIMARY KEY(id);
 --
@@ -141,6 +198,40 @@ ALTER TABLE Users ADD COLUMN new_column INT64 AS (unknown_column + 1) STORED;
 ERROR: Error parsing the definition of generated column `Users`.`new_column`: Unrecognized name: unknown_column [at 1:2]
 (unknown_column + 1)
  ^
+==
+CREATE TABLE T (
+  id INT64 NOT NULL,
+  expr STRING(MAX) AS (ERROR("")) STORED,
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr BYTES(MAX) AS (ERROR("")) STORED;
+--
+ERROR: Cannot change the data type of a stored generated column `T.expr`.
+==
+CREATE TABLE T (
+  id INT64 NOT NULL,
+  expr ARRAY<STRING(MAX)> AS ([]) STORED,
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr ARRAY<BYTES(MAX)> AS ([]) STORED;
+--
+ERROR: Cannot change the data type of a stored generated column `T.expr`.
+==
+CREATE TABLE T (
+  id INT64 NOT NULL,
+  a STRING(MAX),
+  b BYTES(MAX) AS (CAST(a AS BYTES)) STORED,
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN a BYTES(MAX);
+--
+ERROR: Cannot change the data type of column `a`, which has a dependent stored generated column.
+==
+CREATE TABLE T (
+  id INT64 NOT NULL,
+  a ARRAY<STRING(MAX)>,
+  b BYTES(MAX) AS (CAST(a[OFFSET(0)] AS BYTES)) STORED,
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN a ARRAY<BYTES(MAX)>;
+--
+ERROR: Cannot change the data type of column `a`, which has a dependent stored generated column.
 ==
 CREATE TABLE Users (
   id INT64 NOT NULL,
@@ -161,6 +252,13 @@ CREATE TABLE GeneratedColumnDataCoalescing (
 ERROR: Error parsing the definition of generated column `GeneratedColumnDataCoalescing`.`gen_i64_to_b`: Expected type BOOL; found INT64 [at 1:2]
 (i64)
  ^
+==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  id_plus_one INT64 AS (id + 1) STORED
+) PRIMARY KEY(id_plus_one);
+--
+ERROR: Generated column `Users.id_plus_one` cannot be part of the primary key.
 ==
 CREATE TABLE T (
   id INT64 NOT NULL,
@@ -231,6 +329,34 @@ ALTER TABLE Users ADD COLUMN StrExpr STRING(MAX) AS (CONCAT(StrCol, CONCAT(StrCo
 ERROR: Error parsing the definition of generated column `Users`.`StrExpr`: Expression depth of 21 exceeds the maximum allowed depth of 20.
 ==
 CREATE TABLE T (
+  id INT64,
+  a INT64,
+  expr INT64 AS (a) STORED,
+) PRIMARY KEY(id);
+ALTER TABLE T DROP COLUMN a;
+--
+ERROR: Cannot drop column `a` from table `T` because it is referenced by generated column `expr`.
+==
+CREATE TABLE T (
+  id INT64,
+  a INT64,
+  expr1 INT64 AS (a) STORED,
+  expr2 INT64 AS (expr1) STORED
+) PRIMARY KEY (id);
+ALTER TABLE T DROP COLUMN expr1;
+--
+ERROR: Cannot drop column `expr1` from table `T` because it is referenced by generated column `expr2`.
+==
+CREATE TABLE T (
+  id INT64,
+  a   STRING(MAX),
+  b   BYTES(MAX) AS (FROM_HEX(a)) STORED
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN a BYTES(MAX);
+--
+ERROR: Cannot change the data type of column `a`, which has a dependent stored generated column.
+==
+CREATE TABLE T (
   expr BOOL AS ((SELECT true) INTERSECT ALL (SELECT true)) STORED,
 ) PRIMARY KEY();
 --
@@ -248,3 +374,41 @@ CREATE TABLE TableWithNestedSubquery (
 --
 ERROR: Error parsing the definition of generated column `TableWithNestedSubquery`.`val`: Cannot use non-scalar expressions inside stored generated columns.
 ==
+CREATE TABLE T (
+  id INT64,
+  expr TIMESTAMP AS (CURRENT_TIMESTAMP()) STORED,
+) PRIMARY KEY(id);
+--
+ERROR: Error parsing the definition of generated column `T`.`expr`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
+==
+CREATE TABLE T(
+  id INT64,
+  ts TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+  expr TIMESTAMP AS (ts) STORED
+) PRIMARY KEY(id);
+--
+ERROR: Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
+==
+CREATE TABLE T(
+  id INT64,
+  ts TIMESTAMP OPTIONS (allow_commit_timestamp = true)
+) PRIMARY KEY(id);
+ALTER TABLE T ADD COLUMN expr TIMESTAMP AS (ts) STORED;
+--
+ERROR: Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
+==
+CREATE TABLE T(
+  id INT64,
+  ts TIMESTAMP,
+  expr TIMESTAMP AS (ts) STORED
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN ts SET OPTIONS (allow_commit_timestamp = true);
+--
+ERROR: Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
+==
+CREATE TABLE T (
+  id INT64,
+  expr TIMESTAMP AS (PENDING_COMMIT_TIMESTAMP()) STORED,
+) PRIMARY KEY(id);
+--
+ERROR: Error parsing the definition of generated column `T`.`expr`: The PENDING_COMMIT_TIMESTAMP() function may only be used as a value for INSERT or UPDATE of an appropriately typed column. It cannot be used in SELECT, or as the input to any other scalar expression.

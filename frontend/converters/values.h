@@ -20,6 +20,7 @@
 #include "google/protobuf/struct.pb.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
+#include "zetasql/base/statusor.h"
 #include "absl/status/status.h"
 
 namespace google {

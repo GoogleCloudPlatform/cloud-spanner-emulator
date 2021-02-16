@@ -22,7 +22,7 @@
 // Name of the function to write the commit timestamp in a DML statement. Cloud
 // Spanner selects the commit timestamp when the transaction commits.
 constexpr char kPendingCommitTimestampFunctionName[] =
-    "PENDING_COMMIT_TIMESTAMP";
+    "pending_commit_timestamp";
 
 // String used to tell cloud spanner to insert the commit timestamp into a
 // TIMESTAMP column with allow_commit_timestamp option set to true upon

@@ -51,7 +51,7 @@ PARSER_BEGIN(DDLParser)
   SimpleNode* GetParseResult() {
     Node* result;
     if (errorHandler->getErrorCount() == 0) {
-      CHECK_NE(static_cast<Node*>(NULL), jjtree.peekNode());
+      ZETASQL_CHECK_NE(static_cast<Node*>(NULL), jjtree.peekNode());
       result = jjtree.popNode();
     } else {
       result = NULL;

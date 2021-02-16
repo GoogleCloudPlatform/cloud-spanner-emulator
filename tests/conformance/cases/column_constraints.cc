@@ -15,6 +15,7 @@
 //
 
 #include "gmock/gmock.h"
+#include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {

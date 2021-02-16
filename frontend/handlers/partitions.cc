@@ -19,6 +19,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "google/spanner/v1/type.pb.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 #include "backend/query/query_engine.h"
 #include "common/config.h"

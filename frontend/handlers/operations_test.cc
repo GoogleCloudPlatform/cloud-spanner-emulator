@@ -40,7 +40,7 @@ class OperationApiTest : public test::ServerTest {
     google::longrunning::Operation operation;
     instance_api::CreateInstanceRequest request = PARSE_TEXT_PROTO(R"(
       parent: "projects/123"
-      instance_id: "456"
+      instance_id: "instance-456"
       instance { config: "emulator-config" display_name: "" node_count: 3 }
     )");
     grpc::ClientContext ctx;
@@ -51,21 +51,22 @@ class OperationApiTest : public test::ServerTest {
 
 TEST_F(OperationApiTest, ListsOperations) {
   operations_api::ListOperationsRequest request = PARSE_TEXT_PROTO(R"(
-    name: "projects/123/instances/456/operations"
+    name: "projects/123/instances/instance-456/operations"
   )");
   operations_api::ListOperationsResponse response;
   grpc::ClientContext context;
   ZETASQL_EXPECT_OK(test_env()->operations_client()->ListOperations(&context, request,
                                                             &response));
-  EXPECT_THAT(
-      response, test::proto::Partially(test::EqualsProto(R"(
-        operations { name: "projects/123/instances/456/operations/_auto0" }
-      )")));
+  EXPECT_THAT(response, test::proto::Partially(test::EqualsProto(R"(
+                operations {
+                  name: "projects/123/instances/instance-456/operations/_auto0"
+                }
+              )")));
 }
 
 TEST_F(OperationApiTest, ListsOperationsInvalidUri) {
   operations_api::ListOperationsRequest request = PARSE_TEXT_PROTO(R"(
-    name: "projects/123/instance/456/operations"
+    name: "projects/123/instance/instance-456/operations"
   )");
   operations_api::ListOperationsResponse response;
   grpc::ClientContext context;
@@ -78,20 +79,21 @@ TEST_F(OperationApiTest, ListsOperationsInvalidUri) {
 
 TEST_F(OperationApiTest, GetOperation) {
   operations_api::GetOperationRequest request = PARSE_TEXT_PROTO(R"(
-    name: "projects/123/instances/456/operations/_auto0"
+    name: "projects/123/instances/instance-456/operations/_auto0"
   )");
   operations_api::Operation operation;
   grpc::ClientContext context;
   ZETASQL_EXPECT_OK(test_env()->operations_client()->GetOperation(&context, request,
                                                           &operation));
-  EXPECT_THAT(operation,
-              test::proto::Partially(test::EqualsProto(
-                  R"(name: "projects/123/instances/456/operations/_auto0")")));
+  EXPECT_THAT(
+      operation,
+      test::proto::Partially(test::EqualsProto(
+          R"(name: "projects/123/instances/instance-456/operations/_auto0")")));
 }
 
 TEST_F(OperationApiTest, GetOperationInvalidUri) {
   operations_api::GetOperationRequest request = PARSE_TEXT_PROTO(R"(
-    name: "projects/123/instances/456/operation/_auto0"
+    name: "projects/123/instances/instance-456/operation/_auto0"
   )");
   operations_api::Operation operation;
   grpc::ClientContext context;

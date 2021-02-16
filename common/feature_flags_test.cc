@@ -31,20 +31,20 @@ namespace {
 TEST(EmulatorFeatureFlags, Basic) {
   const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
 
-  EXPECT_FALSE(features.flags().enable_stored_generated_columns);
-  EXPECT_FALSE(features.flags().enable_numeric_type);
+  EXPECT_TRUE(features.flags().enable_stored_generated_columns);
+  EXPECT_TRUE(features.flags().enable_numeric_type);
 
   {
     EmulatorFeatureFlags::Flags flags;
-    flags.enable_stored_generated_columns = true;
-    flags.enable_numeric_type = true;
+    flags.enable_stored_generated_columns = false;
+    flags.enable_numeric_type = false;
     test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-    EXPECT_TRUE(features.flags().enable_stored_generated_columns);
-    EXPECT_TRUE(features.flags().enable_numeric_type);
+    EXPECT_FALSE(features.flags().enable_stored_generated_columns);
+    EXPECT_FALSE(features.flags().enable_numeric_type);
   }
 
-  EXPECT_FALSE(features.flags().enable_stored_generated_columns);
-  EXPECT_FALSE(features.flags().enable_numeric_type);
+  EXPECT_TRUE(features.flags().enable_stored_generated_columns);
+  EXPECT_TRUE(features.flags().enable_numeric_type);
 }
 
 }  // namespace

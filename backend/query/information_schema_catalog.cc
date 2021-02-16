@@ -63,7 +63,7 @@ const std::vector<ColumnsMetaEntry>* ColumnsMetadata() {
     {"COLUMNS", "COLUMN_DEFAULT", "YES", "BYTES(MAX)"},
     {"COLUMNS", "COLUMN_NAME", "NO", "STRING(MAX)"},
     {"COLUMNS", "DATA_TYPE", "YES", "STRING(MAX)"},
-    {"COLUMNS", "GENERATION_EXPRESSION", "NO", "STRING(MAX)"},
+    {"COLUMNS", "GENERATION_EXPRESSION", "YES", "STRING(MAX)"},
     {"COLUMNS", "IS_GENERATED", "NO", "STRING(MAX)"},
     {"COLUMNS", "IS_NULLABLE", "YES", "STRING(MAX)"},
     {"COLUMNS", "IS_STORED", "YES", "STRING(MAX)"},
@@ -283,7 +283,7 @@ const ColumnsMetaEntry& GetColumnMetadata(const zetasql::Table* table,
                                           const zetasql::Column* column) {
   auto m = FindMetadata(ColumnsMetadata(), table->Name(), column->Name());
   if (m == ColumnsMetadata()->end()) {
-    LOG(DFATAL) << "Missing metadata for column " << table->Name() << "."
+    ZETASQL_LOG(DFATAL) << "Missing metadata for column " << table->Name() << "."
                 << column->Name();
   }
   return *m;
@@ -307,6 +307,20 @@ std::string CheckNotNullName(const T* table, const C* column) {
   return absl::StrCat("CK_IS_NOT_NULL_", table->Name(), "_", column->Name());
 }
 
+std::string CheckNotNullClause(absl::string_view column_name) {
+  return absl::StrCat(column_name, " IS NOT NULL");
+}
+
+// If a foreign key uses the primary key for the referenced table as the
+// referenced index, referenced_index() will return nullptr. In this case,
+// construct the primary key index name from the table name for information
+// schema purposes.
+std::string ForeignKeyReferencedIndexName(const ForeignKey* foreign_key) {
+  return foreign_key->referenced_index()
+             ? foreign_key->referenced_index()->Name()
+             : PrimaryKeyName(foreign_key->referenced_table());
+}
+
 }  // namespace
 
 InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
@@ -317,6 +331,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
   auto* indexes = AddIndexesTable();
   auto* index_columns = AddIndexColumnsTable();
   AddColumnOptionsTable();
+  auto* check_constraints = AddCheckConstraintsTable();
   auto* table_constraints = AddTableConstraintsTable();
   auto* constraint_table_usage = AddConstraintTableUsageTable();
   auto* referential_constraints = AddReferentialConstraintsTable();
@@ -330,6 +345,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
   FillColumnsTable(columns);
   FillIndexesTable(indexes);
   FillIndexColumnsTable(index_columns);
+  FillCheckConstraintsTable(check_constraints);
   FillTableConstraintsTable(table_constraints);
   FillConstraintTableUsageTable(constraint_table_usage);
   FillReferentialConstraintsTable(referential_constraints);
@@ -411,17 +427,20 @@ void InformationSchemaCatalog::FillTablesTable(zetasql::SimpleTable* tables) {
 
 zetasql::SimpleTable* InformationSchemaCatalog::AddColumnsTable() {
   // Setup table schema.
-  auto columns =
-      new zetasql::SimpleTable("COLUMNS", {{"TABLE_CATALOG", StringType()},
-                                             {"TABLE_SCHEMA", StringType()},
-                                             {"TABLE_NAME", StringType()},
-                                             {"COLUMN_NAME", StringType()},
-                                             {"ORDINAL_POSITION", Int64Type()},
-                                             {"COLUMN_DEFAULT", BytesType()},
-                                             {"DATA_TYPE", StringType()},
-                                             {"IS_NULLABLE", StringType()},
-                                             {"SPANNER_TYPE", StringType()},
-                                             {"SPANNER_STATE", StringType()}});
+  auto columns = new zetasql::SimpleTable(
+      "COLUMNS", {{"TABLE_CATALOG", StringType()},
+                  {"TABLE_SCHEMA", StringType()},
+                  {"TABLE_NAME", StringType()},
+                  {"COLUMN_NAME", StringType()},
+                  {"ORDINAL_POSITION", Int64Type()},
+                  {"COLUMN_DEFAULT", BytesType()},
+                  {"DATA_TYPE", StringType()},
+                  {"IS_NULLABLE", StringType()},
+                  {"SPANNER_TYPE", StringType()},
+                  {"IS_GENERATED", StringType()},
+                  {"GENERATION_EXPRESSION", StringType()},
+                  {"IS_STORED", StringType()},
+                  {"SPANNER_STATE", StringType()}});
   AddOwnedTable(columns);
   return columns;
 }
@@ -433,6 +452,12 @@ void InformationSchemaCatalog::FillColumnsTable(
   for (const Table* table : default_schema_->tables()) {
     int pos = 1;
     for (const Column* column : table->columns()) {
+      absl::string_view expression;
+      if (column->is_generated()) {
+        expression = column->expression().value();
+        absl::ConsumePrefix(&expression, "(");
+        absl::ConsumeSuffix(&expression, ")");
+      }
       rows.push_back({
           // table_catalog
           String(""),
@@ -453,6 +478,12 @@ void InformationSchemaCatalog::FillColumnsTable(
           // spanner_type
           String(ColumnTypeToString(column->GetType(),
                                     column->declared_max_length())),
+          // is_generated
+          String(column->is_generated() ? "ALWAYS" : "NEVER"),
+          // generation_expression
+          column->is_generated() ? String(expression) : NullString(),
+          // is_stored
+          column->is_generated() ? String("YES") : NullString(),
           // spanner_state
           String("COMMITTED"),
       });
@@ -484,6 +515,12 @@ void InformationSchemaCatalog::FillColumnsTable(
           String(metadata.is_nullable),
           // spanner_type
           String(metadata.spanner_type),
+          // is_generated
+          String("NEVER"),
+          // generation_expression
+          NullString(),
+          // is_stored
+          NullString(),
           // spanner_state
           NullString(),
       });
@@ -875,6 +912,32 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
       });
     }
 
+    // Add the check constraints defined by the ZETASQL_CHECK keyword.
+    for (const auto* check_constraint : table->check_constraints()) {
+      rows.push_back({
+          // constraint_catalog
+          String(""),
+          // constraint_schema
+          String(""),
+          // constraint_name
+          String(check_constraint->Name()),
+          // table_catalog
+          String(""),
+          // table_schema
+          String(""),
+          // table_name
+          String(table->Name()),
+          // constraint_type,
+          String("CHECK"),
+          // is_deferrable,
+          String("NO"),
+          // initially_deferred,
+          String("NO"),
+          // enforced,
+          String("YES"),
+      });
+    }
+
     // Add the foreign keys.
     for (const auto* foreign_key : table->foreign_keys()) {
       rows.push_back({
@@ -901,28 +964,30 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
       });
 
       // Add the foreign key's unique backing index as a unique constraint.
-      rows.push_back({
-          // constraint_catalog
-          String(""),
-          // constraint_schema
-          String(""),
-          // constraint_name
-          String(foreign_key->referenced_index()->Name()),
-          // table_catalog
-          String(""),
-          // table_schema
-          String(""),
-          // table_name
-          String(foreign_key->referenced_table()->Name()),
-          // constraint_type,
-          String("UNIQUE"),
-          // is_deferrable,
-          String("NO"),
-          // initially_deferred,
-          String("NO"),
-          // enforced,
-          String("YES"),
-      });
+      if (foreign_key->referenced_index()) {
+        rows.push_back({
+            // constraint_catalog
+            String(""),
+            // constraint_schema
+            String(""),
+            // constraint_name
+            String(foreign_key->referenced_index()->Name()),
+            // table_catalog
+            String(""),
+            // table_schema
+            String(""),
+            // table_name
+            String(foreign_key->referenced_table()->Name()),
+            // constraint_type,
+            String("UNIQUE"),
+            // is_deferrable,
+            String("NO"),
+            // initially_deferred,
+            String("NO"),
+            // enforced,
+            String("YES"),
+        });
+      }
     }
   }
 
@@ -987,6 +1052,90 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
   table_constraints->SetContents(rows);
 }
 
+zetasql::SimpleTable* InformationSchemaCatalog::AddCheckConstraintsTable() {
+  // Setup table schema.
+  auto check_constraints = new zetasql::SimpleTable(
+      "CHECK_CONSTRAINTS", {
+                               {"CONSTRAINT_CATALOG", StringType()},
+                               {"CONSTRAINT_SCHEMA", StringType()},
+                               {"CONSTRAINT_NAME", StringType()},
+                               {"CHECK_CLAUSE", StringType()},
+                               {"SPANNER_STATE", StringType()},
+                           });
+
+  // Add table to catalog.
+  AddOwnedTable(check_constraints);
+  return check_constraints;
+}
+
+void InformationSchemaCatalog::FillCheckConstraintsTable(
+    zetasql::SimpleTable* check_constraints) {
+  std::vector<std::vector<zetasql::Value>> rows;
+
+  // Add the user table check constraints.
+  for (const auto* table : default_schema_->tables()) {
+    // Add the NOT NULL check constraints.
+    for (const auto* column : table->columns()) {
+      if (column->is_nullable()) {
+        continue;
+      }
+      rows.push_back({
+          // constraint_catalog
+          String(""),
+          // constraint_schema
+          String(""),
+          // constraint_name
+          String(CheckNotNullName(table, column)),
+          // check clause
+          String(CheckNotNullClause(column->Name())),
+          // spanner state
+          String("COMMITTED"),
+      });
+    }
+
+    // Add the check constraints defined by the ZETASQL_CHECK keyword.
+    for (const auto* check_constraint : table->check_constraints()) {
+      rows.push_back({
+          // constraint_catalog
+          String(""),
+          // constraint_schema
+          String(""),
+          // constraint_name
+          String(check_constraint->Name()),
+          // check clasue
+          String(check_constraint->expression()),
+          // spanner state
+          String("COMMITTED"),
+      });
+    }
+  }
+
+  // Add the information schema constraints.
+  for (const auto* table : this->tables()) {
+    // Add the NOT NULL check constraints.
+    for (int i = 0; i < table->NumColumns(); ++i) {
+      const auto* column = table->GetColumn(i);
+      const auto& metadata = GetColumnMetadata(table, column);
+      if (IsNullable(metadata)) {
+        continue;
+      }
+      rows.push_back({
+          // constraint_catalog
+          String(""),
+          // constraint_schema
+          String(kInformationSchema),
+          // constraint_name
+          String(CheckNotNullName(table, column)),
+          // check clause
+          String(CheckNotNullClause(column->Name())),
+          // spanner state
+          String("COMMITTED"),
+      });
+    }
+  }
+  check_constraints->SetContents(rows);
+}
+
 zetasql::SimpleTable*
 InformationSchemaCatalog::AddConstraintTableUsageTable() {
   // Setup table schema.
@@ -1048,6 +1197,24 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable(
       });
     }
 
+    // Add the check constraints defined by the ZETASQL_CHECK keyword.
+    for (const auto* check_constraint : table->check_constraints()) {
+      rows.push_back({
+          // table_catalog
+          String(""),
+          // table_schema
+          String(""),
+          // table_name
+          String(table->Name()),
+          // constraint_catalog
+          String(""),
+          // constraint_schema
+          String(""),
+          // constraint_name
+          String(check_constraint->Name()),
+      });
+    }
+
     // Add the foreign keys.
     for (const auto* foreign_key : table->foreign_keys()) {
       rows.push_back({
@@ -1066,20 +1233,22 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable(
       });
 
       // Add the foreign key's unique backing index as a unique constraint.
-      rows.push_back({
-          // table_catalog
-          String(""),
-          // table_schema
-          String(""),
-          // table_name
-          String(foreign_key->referenced_table()->Name()),
-          // constraint_catalog
-          String(""),
-          // constraint_schema
-          String(""),
-          // constraint_name
-          String(foreign_key->referenced_index()->Name()),
-      });
+      if (foreign_key->referenced_index()) {
+        rows.push_back({
+            // table_catalog
+            String(""),
+            // table_schema
+            String(""),
+            // table_name
+            String(foreign_key->referenced_table()->Name()),
+            // constraint_catalog
+            String(""),
+            // constraint_schema
+            String(""),
+            // constraint_name
+            String(foreign_key->referenced_index()->Name()),
+        });
+      }
     }
   }
 
@@ -1170,7 +1339,7 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable(
           // unique_constraint_schema
           String(""),
           // unique_constraint_name
-          String(foreign_key->referenced_index()->Name()),
+          String(ForeignKeyReferencedIndexName(foreign_key)),
           // match_option
           String("SIMPLE"),
           // update_rule
@@ -1265,29 +1434,31 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable(
       }
 
       // Add the foreign key's unique backing index columns.
-      int index_ordinal = 1;
-      for (const auto* key_column :
-           foreign_key->referenced_index()->key_columns()) {
-        rows.push_back({
-            // constraint_catalog
-            String(""),
-            // constraint_schema
-            String(""),
-            // constraint_name
-            String(foreign_key->referenced_index()->Name()),
-            // table_catalog
-            String(""),
-            // table_schema
-            String(""),
-            // table_name
-            String(foreign_key->referenced_table()->Name()),
-            // column_name
-            String(key_column->column()->Name()),
-            // ordinal_position
-            Int64(index_ordinal++),
-            // position_in_unique_constraint
-            NullString(),
-        });
+      if (foreign_key->referenced_index()) {
+        int index_ordinal = 1;
+        for (const auto* key_column :
+             foreign_key->referenced_index()->key_columns()) {
+          rows.push_back({
+              // constraint_catalog
+              String(""),
+              // constraint_schema
+              String(""),
+              // constraint_name
+              String(foreign_key->referenced_index()->Name()),
+              // table_catalog
+              String(""),
+              // table_schema
+              String(""),
+              // table_name
+              String(foreign_key->referenced_table()->Name()),
+              // column_name
+              String(key_column->column()->Name()),
+              // ordinal_position
+              Int64(index_ordinal++),
+              // position_in_unique_constraint
+              NullInt64(),
+          });
+        }
       }
     }
   }
@@ -1396,6 +1567,28 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
       });
     }
 
+    // Add the check constraints defined by the ZETASQL_CHECK keyword.
+    for (const auto* check_constraint : table->check_constraints()) {
+      for (const auto* dep_column : check_constraint->dependent_columns()) {
+        rows.push_back({
+            // table_catalog
+            String(""),
+            // table_schema
+            String(""),
+            // table_name
+            String(table->Name()),
+            // column_name
+            String(dep_column->Name()),
+            // constraint_catalog
+            String(""),
+            // constraint_schema
+            String(""),
+            // constraint_name
+            String(check_constraint->Name()),
+        });
+      }
+    }
+
     // Add the foreign keys.
     for (const auto* foreign_key : table->foreign_keys()) {
       // Add the foreign key referenced columns.
@@ -1419,24 +1612,26 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
       }
 
       // Add the foreign key's unique backing index columns.
-      for (const auto* key_column :
-           foreign_key->referenced_index()->key_columns()) {
-        rows.push_back({
-            // table_catalog
-            String(""),
-            // table_schema
-            String(""),
-            // table_name
-            String(foreign_key->referenced_table()->Name()),
-            // column_name
-            String(key_column->column()->Name()),
-            // constraint_catalog
-            String(""),
-            // constraint_schema
-            String(""),
-            // constraint_name
-            String(foreign_key->referenced_index()->Name()),
-        });
+      if (foreign_key->referenced_index()) {
+        for (const auto* key_column :
+             foreign_key->referenced_index()->key_columns()) {
+          rows.push_back({
+              // table_catalog
+              String(""),
+              // table_schema
+              String(""),
+              // table_name
+              String(foreign_key->referenced_table()->Name()),
+              // column_name
+              String(key_column->column()->Name()),
+              // constraint_catalog
+              String(""),
+              // constraint_schema
+              String(""),
+              // constraint_name
+              String(foreign_key->referenced_index()->Name()),
+          });
+        }
       }
     }
   }

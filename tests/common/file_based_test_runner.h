@@ -22,7 +22,6 @@
 #include <vector>
 
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

@@ -19,6 +19,7 @@
 
 #include <string>
 
+#include "absl/status/status.h"
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
 #include "backend/schema/catalog/table.h"

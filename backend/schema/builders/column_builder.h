@@ -68,6 +68,11 @@ class Column::Builder {
     return *this;
   }
 
+  Builder& clear_expression() {
+    instance_->expression_.reset();
+    return *this;
+  }
+
   Builder& add_dependent_column_name(const std::string& column_name) {
     instance_->dependent_column_names_.push_back(column_name);
     return *this;
@@ -117,6 +122,11 @@ class Column::Editor {
 
   Editor& set_expression(const std::string& expression) {
     instance_->expression_ = expression;
+    return *this;
+  }
+
+  Editor& clear_expression() {
+    instance_->expression_.reset();
     return *this;
   }
 

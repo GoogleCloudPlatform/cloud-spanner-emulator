@@ -30,6 +30,7 @@ cc_library(
     deps = [
         ":analyzer_options",
         ":catalog",
+        ":dml_query_validator",
         ":function_catalog",
         ":hint_rewriter",
         ":index_hint_validator",
@@ -37,6 +38,8 @@ cc_library(
         ":partitioned_dml_validator",
         ":query_engine_options",
         ":query_validator",
+        ":queryable_column",
+        ":queryable_table",
         "//backend/access:read",
         "//backend/access:write",
         "//backend/common:case",
@@ -47,6 +50,7 @@ cc_library(
         "//common:errors",
         "//common:limits",
         "//frontend/converters:values",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
@@ -131,6 +135,17 @@ cc_library(
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/resolved_ast",
         "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "dml_query_validator",
+    srcs = ["dml_query_validator.cc"],
+    hdrs = ["dml_query_validator.h"],
+    deps = [
+        ":query_validator",
+        "//common:constants",
+        "@com_google_absl//absl/status",
     ],
 )
 

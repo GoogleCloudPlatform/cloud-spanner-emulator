@@ -19,6 +19,7 @@
 
 #include <vector>
 
+#include "absl/status/status.h"
 #include "backend/schema/graph/schema_node.h"
 #include "absl/status/status.h"
 

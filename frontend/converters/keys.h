@@ -19,11 +19,11 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/keys.pb.h"
+#include "zetasql/base/statusor.h"
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/schema/catalog/schema.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

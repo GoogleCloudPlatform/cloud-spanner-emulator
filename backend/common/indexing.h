@@ -18,13 +18,13 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_COMMON_INDEXING_H_
 
 #include "zetasql/public/value.h"
+#include "zetasql/base/statusor.h"
 #include "backend/common/rows.h"
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/value.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

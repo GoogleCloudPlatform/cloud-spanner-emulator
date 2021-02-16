@@ -48,8 +48,10 @@ absl::Status ValidateColumnValueType(const Table* table,
   }
 
   // Check that we are not attempting to write null values to non-nullable
-  // columns.
-  if (value.is_null() && !column->is_nullable()) {
+  // columns. Writing null to non-nullable generated columns is temporarily
+  // fine, since the violation may be fixed later by a generated operation
+  // to update the column.
+  if (value.is_null() && !column->is_nullable() && !column->is_generated()) {
     return error::NullValueForNotNullColumn(table->Name(), column->FullName());
   }
 

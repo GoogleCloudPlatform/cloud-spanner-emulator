@@ -30,7 +30,7 @@ namespace backend {
 
 absl::Status PartitionabilityValidator::ValidatePartitionability(
     const zetasql::ResolvedNode* node) {
-  DCHECK(node->node_kind() == zetasql::RESOLVED_QUERY_STMT);
+  ZETASQL_DCHECK(node->node_kind() == zetasql::RESOLVED_QUERY_STMT);
   if (HasSubquery(node)) {
     return error::NonPartitionableQuery("Query contains subquery.");
   }
@@ -93,7 +93,7 @@ absl::Status PartitionabilityValidator::ValidateSimpleScan(
 
 bool PartitionabilityValidator::HasSubquery(
     const zetasql::ResolvedNode* node) {
-  DCHECK(node != nullptr);
+  ZETASQL_DCHECK(node != nullptr);
   if (node->node_kind() == zetasql::RESOLVED_SUBQUERY_EXPR) {
     return true;
   }

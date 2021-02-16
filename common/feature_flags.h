@@ -30,10 +30,10 @@ namespace emulator {
 class EmulatorFeatureFlags {
  public:
   struct Flags {
-    // Generated columns are in development.
-    bool enable_stored_generated_columns = false;
-    // Numeric type is in development.
-    bool enable_numeric_type = false;
+    bool enable_stored_generated_columns = true;
+    // TODO: Remove flag in subsequent release
+    bool enable_numeric_type = true;
+    bool enable_check_constraint = false;
   };
 
   static const EmulatorFeatureFlags& instance() {

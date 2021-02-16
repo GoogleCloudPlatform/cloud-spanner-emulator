@@ -49,7 +49,7 @@ class ColumnRemappedRowCursor : public backend::RowCursor {
         }
       }
     }
-    DCHECK_EQ(column_index_map_.size(), column_names.size());
+    ZETASQL_DCHECK_EQ(column_index_map_.size(), column_names.size());
   }
 
   bool Next() override { return wrapped_cursor_->Next(); }

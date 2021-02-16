@@ -40,6 +40,7 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//backend/storage:iterator",
         "//common:clock",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
@@ -71,7 +72,6 @@ cc_library(
         "//backend/storage:iterator",
         "//common:errors",
         "@com_google_absl//absl/status",
-        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
 
@@ -92,6 +92,23 @@ cc_test(
         "@com_google_absl//absl/types:variant",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
+    name = "check_constraint",
+    srcs = ["check_constraint.cc"],
+    hdrs = ["check_constraint.h"],
+    deps = [
+        ":action",
+        ":ops",
+        "//backend/query:analyzer_options",
+        "//backend/schema/catalog:schema",
+        "//common:errors",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/public:evaluator",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 
@@ -152,7 +169,6 @@ cc_library(
         ":ops",
         "//common:errors",
         "@com_google_absl//absl/status",
-        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
 
@@ -186,6 +202,25 @@ cc_library(
         "//common:errors",
         "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/base:statusor",
+    ],
+)
+
+cc_library(
+    name = "generated_column",
+    srcs = ["generated_column.cc"],
+    hdrs = ["generated_column.h"],
+    deps = [
+        ":action",
+        ":ops",
+        "//backend/common:graph_dependency_helper",
+        "//backend/query:analyzer_options",
+        "//backend/schema/catalog:schema",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:evaluator",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 
@@ -278,18 +313,23 @@ cc_library(
     hdrs = ["manager.h"],
     deps = [
         ":action",
+        ":check_constraint",
         ":column_value",
         ":context",
         ":existence",
         ":foreign_key",
+        ":generated_column",
         ":index",
         ":interleave",
         ":ops",
         ":unique_index",
+        "//backend/query:catalog",
+        "//backend/query:function_catalog",
         "//backend/schema/catalog:schema",
         "//common:errors",
         "@com_google_absl//absl/container:node_hash_map",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/base:statusor",
     ],
 )

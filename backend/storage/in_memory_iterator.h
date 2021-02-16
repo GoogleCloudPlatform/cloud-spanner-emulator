@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "zetasql/public/value.h"
+#include "absl/status/status.h"
 #include "backend/datamodel/key.h"
 #include "backend/storage/iterator.h"
 #include "absl/status/status.h"
