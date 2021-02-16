@@ -18,11 +18,11 @@ There are multiple ways to invoke the emulator.
 
 The emulator is included in the [Google Cloud SDK](https://cloud.google.com/sdk)
 and can be invoked via the [gcloud emulators](
-https://cloud.google.com/sdk/gcloud/reference/beta/emulators) command group:
+https://cloud.google.com/sdk/gcloud/reference/emulators) command group:
 
 ```shell
 gcloud components update
-gcloud beta emulators spanner start
+gcloud emulators spanner start
 ```
 
 ### Via pre-built docker image
@@ -41,7 +41,7 @@ images are also tagged with version numbers, so you can run a specific version
 with:
 
 ```shell
-VERSION=1.1.1
+VERSION=1.2.0
 docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator:$VERSION
 ```
 
@@ -52,7 +52,7 @@ binary is not fully static, but has been tested on Ubuntu 16.04/18.04, CentOS 8,
 RHEL 8, and Debian 9/10.
 
 ```shell
-VERSION=1.1.1
+VERSION=1.2.0
 wget https://storage.googleapis.com/cloud-spanner-emulator/releases/${VERSION}/cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 tar zxvf cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 chmod u+x gateway_main emulator_main

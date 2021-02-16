@@ -58,10 +58,21 @@ class GCloudDatabaseAdminTest(emulator.TestCase):
         self.RunGCloud('spanner', 'databases', 'create', 'test-database',
                        '--instance=test-instance'), self.JoinLines(''))
     # List the databases.
-    self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'list',
-                       '--instance=test-instance'),
-        self.JoinLines('NAME           STATE', 'test-database  READY'))
+    # TODO : Remove version check after GCloud version is updated.
+    if self.GCloudVersion() < 328:
+      self.assertEqual(
+          self.RunGCloud('spanner', 'databases', 'list',
+                         '--instance=test-instance'),
+          self.JoinLines(
+              'NAME           STATE',
+              'test-database  READY'))
+    else:
+      self.assertEqual(
+          self.RunGCloud('spanner', 'databases', 'list',
+                         '--instance=test-instance'),
+          self.JoinLines(
+              'NAME           STATE  VERSION_RETENTION_PERIOD  EARLIEST_VERSION_TIME',
+              'test-database  READY'))
 
   def testDeleteDatabase(self):
     # Create an instance.
