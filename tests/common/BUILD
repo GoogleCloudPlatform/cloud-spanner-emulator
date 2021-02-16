@@ -74,6 +74,7 @@ cc_library(
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base",
+        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
@@ -104,6 +105,7 @@ cc_library(
         "//backend/schema/updater:schema_updater",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
+        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )
@@ -161,7 +163,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base:statusor",
+        "@com_google_zetasql//zetasql/base",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

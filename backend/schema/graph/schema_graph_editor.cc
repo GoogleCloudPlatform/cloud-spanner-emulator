@@ -44,7 +44,7 @@ SchemaNode* SchemaGraphEditor::MakeNewClone(const SchemaNode* node) {
 
 absl::Status SchemaGraphEditor::InitCloneMap() {
   // First, make a clone of the graph.
-  VLOG(2) << "First cloning pass";
+  ZETASQL_VLOG(2) << "First cloning pass";
   for (const auto* schema_node : original_graph_->GetSchemaNodes()) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* cloned_node, Clone(schema_node));
     new_nodes_.push_back(cloned_node);
@@ -55,12 +55,12 @@ absl::Status SchemaGraphEditor::InitCloneMap() {
 
 absl::Status SchemaGraphEditor::FixupInternal(const SchemaNode* original,
                                               SchemaNode* mutable_clone) {
-  VLOG(4) << std::string(depth_, ' ') << "Fixing "
+  ZETASQL_VLOG(4) << std::string(depth_, ' ') << "Fixing "
           << NodeKindString(mutable_clone) << " node :" << mutable_clone;
   ++depth_;
   ZETASQL_RETURN_IF_ERROR(mutable_clone->DeepClone(this, original));
   --depth_;
-  VLOG(4) << std::string(depth_, ' ')
+  ZETASQL_VLOG(4) << std::string(depth_, ' ')
           << "Finished fixing node: " << mutable_clone->DebugString();
   return absl::OkStatus();
 }
@@ -88,7 +88,7 @@ zetasql_base::StatusOr<const SchemaNode*> SchemaGraphEditor::Clone(
   NodeKind kind = GetNodeKind(node);
   const SchemaNode* clone = FindClone(node);
   if (clone != nullptr) {
-    VLOG(5) << std::string(depth_, ' ') << "Found already visited "
+    ZETASQL_VLOG(5) << std::string(depth_, ' ') << "Found already visited "
             << NodeKindString(clone) << " node :" << clone->DebugString();
     ret = clone;
   } else if (kind == kAdded || kind == kEdited || kind == kCloned) {
@@ -100,12 +100,12 @@ zetasql_base::StatusOr<const SchemaNode*> SchemaGraphEditor::Clone(
   } else {
     ZETASQL_RET_CHECK_EQ(kind, kOriginal);
     ZETASQL_RET_CHECK(!node->is_deleted());
-    VLOG(3) << std::string(depth_, ' ') << "Cloning " << NodeKindString(node)
+    ZETASQL_VLOG(3) << std::string(depth_, ' ') << "Cloning " << NodeKindString(node)
             << " node: " << node->DebugString();
 
     SchemaNode* mutable_clone = MakeNewClone(node);
     ZETASQL_RETURN_IF_ERROR(FixupInternal(node, mutable_clone));
-    VLOG(3) << std::string(depth_, ' ')
+    ZETASQL_VLOG(3) << std::string(depth_, ' ')
             << "Finished cloning node: " << node->DebugString();
     ret = mutable_clone;
   }
@@ -146,10 +146,10 @@ SchemaGraphEditor::CanonicalizeGraph() {
   // if they were edited/cloned inside ValidateUpdate()/Validate().
   context_->set_edited_nodes(&edited_clones_);
   if (deleted_node_) {
-    VLOG(2) << "Canonicalizing deletes";
+    ZETASQL_VLOG(2) << "Canonicalizing deletes";
     ZETASQL_RETURN_IF_ERROR(CanonicalizeDeletion());
   } else {
-    VLOG(2) << "Canonicalizing edits and additions";
+    ZETASQL_VLOG(2) << "Canonicalizing edits and additions";
     ZETASQL_RETURN_IF_ERROR(CanonicalizeEdits());
   }
   ZETASQL_RETURN_IF_ERROR(CheckInvariants());
@@ -183,7 +183,7 @@ absl::Status SchemaGraphEditor::CanonicalizeEdits() {
 
   // Run a fixup/cloning pass so that changes from edit nodes in the cloned
   // graph are propagated to their neighbors.
-  VLOG(2) << "Fixing clones";
+  ZETASQL_VLOG(2) << "Fixing clones";
   for (const auto* clone : new_nodes_) {
     ZETASQL_RETURN_IF_ERROR(Fixup(clone));
   }
@@ -192,7 +192,7 @@ absl::Status SchemaGraphEditor::CanonicalizeEdits() {
   ZETASQL_RET_CHECK_EQ(new_nodes_.size(), num_original_nodes());
   ZETASQL_RET_CHECK_EQ(cloned_pool_->size(), num_original_nodes());
 
-  VLOG(2) << "Fixing added nodes";
+  ZETASQL_VLOG(2) << "Fixing added nodes";
   for (auto& added_node : added_nodes_) {
     ZETASQL_RETURN_IF_ERROR(Fixup(added_node.get()));
     new_nodes_.push_back(added_node.get());
@@ -243,7 +243,7 @@ absl::Status SchemaGraphEditor::CanonicalizeDeletion() {
     } else {
       deletions = new_deletions;
     }
-    VLOG(5) << "Fixup pass " << i + 1 << " deletions: " << new_deletions;
+    ZETASQL_VLOG(5) << "Fixup pass " << i + 1 << " deletions: " << new_deletions;
   }
   delete_fixup_ = false;
 

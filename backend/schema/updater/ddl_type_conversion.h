@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_DDL_TYPE_CONVERSION_H_
 
 #include "zetasql/public/type.h"
+#include "zetasql/base/statusor.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "absl/status/status.h"
 

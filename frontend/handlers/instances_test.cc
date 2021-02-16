@@ -124,6 +124,22 @@ TEST_F(InstanceApiTest, CreateInstanceWithInvalidName) {
                              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                              &operation),
               StatusIs(absl::StatusCode::kInvalidArgument));
+
+  // Underscore is not allowed.
+  EXPECT_THAT(CreateInstance("aaaa_aaaa", &operation),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  // Only lowercase is allowed.
+  EXPECT_THAT(CreateInstance("AAAA", &operation),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  // Cannot end with hypen.
+  EXPECT_THAT(CreateInstance("aaaa-aaaa-", &operation),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  // Non-alphanumeric characters are not allowed.
+  EXPECT_THAT(CreateInstance("aaaa!@#$aaa", &operation),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(InstanceApiTest, CreateInstance) {

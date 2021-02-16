@@ -42,13 +42,16 @@ TEST(HintRewriterTest, RewritesOnlyEmptyHintQualifier) {
   std::vector<std::unique_ptr<zetasql::ResolvedOutputColumn>> output_columns;
   output_columns.push_back(zetasql::MakeResolvedOutputColumn(
       "test_col",
-      zetasql::ResolvedColumn(/*column_id=*/1, "test_table", "test_col",
+      zetasql::ResolvedColumn(/*column_id=*/1,
+                                zetasql::IdString::MakeGlobal("test_table"),
+                                zetasql::IdString::MakeGlobal("test_col"),
                                 zetasql::types::StringType())));
   const auto& statement = zetasql::MakeResolvedQueryStmt(
       std::move(output_columns), /*is_value_table=*/false,
       zetasql::MakeResolvedTableScan(
           {zetasql::ResolvedColumn(
-              /*column_id=*/1, "test_table", "test_col",
+              /*column_id=*/1, zetasql::IdString::MakeGlobal("test_table"),
+              zetasql::IdString::MakeGlobal("test_col"),
               zetasql::types::StringType())},
           &table, /*for_system_time_expr=*/nullptr));
   statement->add_hint_list(zetasql::MakeResolvedOption(

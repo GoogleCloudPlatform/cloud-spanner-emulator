@@ -48,6 +48,12 @@ constexpr absl::string_view kSpannerQueryEngineHintPrefix = "spanner";
 // Hints related to adaptive execution.
 constexpr absl::string_view kHintEnableAdaptivePlans = "enable_adaptive_plans";
 
+// Parameter sensitive plans hint
+constexpr absl::string_view kHintParameterSensitive = "parameter_sensitive";
+constexpr absl::string_view kHintParameterSensitiveAlways = "always";
+constexpr absl::string_view kHintParameterSensitiveAuto = "auto";
+constexpr absl::string_view kHintParameterSensitiveNever = "never";
+
 // Indexes
 constexpr absl::string_view kHintForceIndex = "force_index";
 
@@ -165,7 +171,8 @@ absl::Status QueryValidator::CheckSpannerHintName(
       {zetasql::RESOLVED_QUERY_STMT,
        {kHintForceIndex, kHintJoinTypeDeprecated, kHintJoinMethod,
         kHashJoinBuildSide, kHintJoinForceOrder, kHintConstantFolding,
-        kUseAdditionalParallelism, kHintEnableAdaptivePlans}},
+        kUseAdditionalParallelism, kHintEnableAdaptivePlans,
+        kHintParameterSensitive}},
       {zetasql::RESOLVED_SUBQUERY_EXPR,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
         kHintJoinBatch, kHintJoinForceOrder}},
@@ -207,6 +214,7 @@ absl::Status QueryValidator::CheckHintValue(
       new absl::flat_hash_map<absl::string_view, const zetasql::Type*,
                               zetasql_base::StringViewCaseHash, zetasql_base::StringViewCaseEqual>{{
           {kHintJoinTypeDeprecated, zetasql::types::StringType()},
+          {kHintParameterSensitive, zetasql::types::StringType()},
           {kHintJoinMethod, zetasql::types::StringType()},
           {kHashJoinBuildSide, zetasql::types::StringType()},
           {kHintJoinBatch, zetasql::types::BoolType()},
@@ -243,6 +251,13 @@ absl::Status QueryValidator::CheckHintValue(
           absl::EqualsIgnoreCase(string_value, kHintJoinTypeHash) ||
           absl::EqualsIgnoreCase(string_value,
                                  kHintJoinTypeNestedLoopDeprecated))) {
+      return error::InvalidHintValue(name, value.DebugString());
+    }
+  } else if (absl::EqualsIgnoreCase(name, kHintParameterSensitive)) {
+    const std::string& string_value = value.string_value();
+    if (!(absl::EqualsIgnoreCase(string_value, kHintParameterSensitiveAlways) ||
+          absl::EqualsIgnoreCase(string_value, kHintParameterSensitiveAuto) ||
+          absl::EqualsIgnoreCase(string_value, kHintParameterSensitiveNever))) {
       return error::InvalidHintValue(name, value.DebugString());
     }
   } else if (absl::EqualsIgnoreCase(name, kHashJoinBuildSide)) {
@@ -363,6 +378,19 @@ absl::Status QueryValidator::VisitResolvedAggregateFunctionCall(
 absl::Status QueryValidator::VisitResolvedCast(
     const zetasql::ResolvedCast* node) {
   ZETASQL_RETURN_IF_ERROR(CheckAllowedCasts(node->expr()->type(), node->type()));
+  return zetasql::ResolvedASTVisitor::DefaultVisit(node);
+}
+
+absl::Status QueryValidator::VisitResolvedSampleScan(
+    const zetasql::ResolvedSampleScan* node) {
+  if (node->repeatable_argument()) {
+    return error::UnsupportedTablesampleRepeatable();
+  }
+
+  if (absl::EqualsIgnoreCase(node->method(), "system")) {
+    return error::UnsupportedTablesampleSystem();
+  }
+
   return zetasql::ResolvedASTVisitor::DefaultVisit(node);
 }
 

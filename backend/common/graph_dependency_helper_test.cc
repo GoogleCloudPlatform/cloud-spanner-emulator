@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-#include "backend/schema/updater/graph_dependency_helper.h"
+#include "backend/common/graph_dependency_helper.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

@@ -17,8 +17,8 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_PARTITION_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_PARTITION_H_
 
-#include "frontend/proto/partition_token.pb.h"
 #include "zetasql/base/statusor.h"
+#include "frontend/proto/partition_token.pb.h"
 
 namespace google {
 namespace spanner {

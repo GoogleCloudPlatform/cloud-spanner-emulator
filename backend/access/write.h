@@ -23,6 +23,7 @@
 
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
+#include "absl/status/status.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
 #include "absl/status/status.h"

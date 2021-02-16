@@ -21,6 +21,7 @@
 
 #include "zetasql/public/type.h"
 #include "absl/memory/memory.h"
+#include "zetasql/base/statusor.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "absl/status/status.h"

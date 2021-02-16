@@ -21,9 +21,13 @@
 
 #include "absl/container/node_hash_map.h"
 #include "absl/memory/memory.h"
+#include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "backend/actions/action.h"
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
+#include "backend/query/catalog.h"
+#include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
 
@@ -38,7 +42,8 @@ namespace backend {
 // database.
 class ActionRegistry {
  public:
-  explicit ActionRegistry(const Schema* schema);
+  explicit ActionRegistry(const Schema* schema,
+                          const FunctionCatalog* function_catalog);
 
   // Executes the list of validators that apply to the given operation.
   absl::Status ExecuteValidators(const ActionContext* ctx, const WriteOp& op);
@@ -75,14 +80,18 @@ class ActionRegistry {
   // List of verifiers per table.
   absl::node_hash_map<const Table*, std::vector<std::unique_ptr<Verifier>>>
       table_verifiers_;
+
+  // Used for function resolution in actions.
+  Catalog catalog_;
 };
 
 // ActionManager manages the registry of actions for each schema in the
 // database.
 class ActionManager {
  public:
-  // Builds the registry of actions for given schema.
-  void AddActionsForSchema(const Schema* schema);
+  // Builds the registry of actions for given schema and function_catalog.
+  void AddActionsForSchema(const Schema* schema,
+                           const FunctionCatalog* function_catalog);
 
   // Returns the action registry for given schema.
   zetasql_base::StatusOr<ActionRegistry*> GetActionsForSchema(

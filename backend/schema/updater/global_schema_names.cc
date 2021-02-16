@@ -17,6 +17,7 @@
 #include "backend/schema/updater/global_schema_names.h"
 
 #include "zetasql/base/statusor.h"
+#include "absl/strings/str_format.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "common/errors.h"
@@ -75,6 +76,14 @@ zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateForeignKeyName(
   return GenerateSequencedName("Foreign Key", base, MakeFingerprint(base));
 }
 
+zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateCheckConstraintName(
+    absl::string_view table_name) {
+  ZETASQL_RET_CHECK(!table_name.empty());
+  std::string base =
+      absl::StrJoin({absl::string_view{"CK"}, table_name}, kSeparator);
+  return GenerateSequencedName("Check Constraint", base, MakeFingerprint(base));
+}
+
 std::string GlobalSchemaNames::GenerateSequencedName(
     absl::string_view type, absl::string_view base,
     absl::string_view fingerprint) {
@@ -82,7 +91,7 @@ std::string GlobalSchemaNames::GenerateSequencedName(
     std::string suffix = absl::StrCat(fingerprint, kSeparator, sequence);
     std::string name = MakeName(base, suffix);
     if (names_.insert(name).second) {
-      VLOG(1) << "Generated " << type << " name: " << name;
+      ZETASQL_VLOG(1) << "Generated " << type << " name: " << name;
       return name;
     }
   }
@@ -117,7 +126,7 @@ zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateManagedIndexName(
   // Full name = truncated(index prefix + table name + column names)
   //             + index codes + fingerprint.
   std::string name = MakeName(base, suffix);
-  VLOG(1) << "Generated managed index name: " << name;
+  ZETASQL_VLOG(1) << "Generated managed index name: " << name;
   return name;
 }
 

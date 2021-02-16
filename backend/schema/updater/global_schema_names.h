@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_GLOBAL_SCHEMA_NAMES_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_GLOBAL_SCHEMA_NAMES_H_
 
+#include "zetasql/base/statusor.h"
 #include "absl/strings/string_view.h"
 #include "backend/common/case.h"
 #include "backend/schema/catalog/schema.h"
@@ -46,6 +47,12 @@ class GlobalSchemaNames {
 
   // Removes a name if it exists; does nothing otherwise.
   void RemoveName(const std::string& name) { names_.erase(name); }
+
+  // Generates and adds a unique check constraint name. If a gererated name
+  // already exists, its sequence number is increased until a unique name is
+  // found.
+  zetasql_base::StatusOr<std::string> GenerateCheckConstraintName(
+      absl::string_view table_name);
 
   // Generates and adds a unique foreign key name. If a gererated name already
   // exists, its sequence number is increased until a unique name is found.

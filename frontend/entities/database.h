@@ -20,6 +20,7 @@
 #include <string>
 
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
+#include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "backend/database/database.h"
 #include "absl/status/status.h"

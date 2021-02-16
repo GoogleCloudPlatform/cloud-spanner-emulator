@@ -24,10 +24,12 @@
 #include "zetasql/public/type.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
+#include "absl/status/status.h"
 #include "absl/strings/substitute.h"
 #include "absl/types/span.h"
 #include "backend/common/case.h"
 #include "backend/common/ids.h"
+#include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/graph/schema_graph_editor.h"
@@ -86,6 +88,11 @@ class Table : public SchemaNode {
     return foreign_keys_;
   }
 
+  // Returns the list of all check constraints of this table.
+  absl::Span<const CheckConstraint* const> check_constraints() const {
+    return check_constraints_;
+  }
+
   // Returns the list of all foreign keys that are referencing this table.
   absl::Span<const ForeignKey* const> referencing_foreign_keys() const {
     return referencing_foreign_keys_;
@@ -117,6 +124,11 @@ class Table : public SchemaNode {
   // Finds a KeyColumn by name. Returns nullptr if table doesn't contain
   // a column named `column_name` or if it's not a key column.
   const KeyColumn* FindKeyColumn(const std::string& column_name) const;
+
+  // Returns the check constraint with a given constraint name. Returns nullptr
+  // if not found.
+  const CheckConstraint* FindCheckConstraint(
+      const std::string& constraint_name) const;
 
   // Returns the foreign key with a given constraint name. Returns nullptr if
   // not found.
@@ -185,6 +197,10 @@ class Table : public SchemaNode {
 
   // List of table columns, in the same order as found in the corresponding DDL.
   std::vector<const Column*> columns_;
+
+  // List of check constraints defined on this table, in the same order as found
+  // in the corresponding DDL.
+  std::vector<const CheckConstraint*> check_constraints_;
 
   // List of foreign keys defined on this table, in the same order as found in
   // the corresponding DDL.

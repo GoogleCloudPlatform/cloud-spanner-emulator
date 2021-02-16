@@ -27,14 +27,11 @@ using google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
 
 class GeneratedColumnSchemaUpdaterTest : public SchemaUpdaterTest {
  public:
-  GeneratedColumnSchemaUpdaterTest() {
-    EmulatorFeatureFlags::Flags flags;
-    flags.enable_stored_generated_columns = true;
-    setter_ = absl::make_unique<ScopedEmulatorFeatureFlagsSetter>(flags);
-  }
+  GeneratedColumnSchemaUpdaterTest()
+      : feature_flags_({.enable_stored_generated_columns = true}) {}
 
  private:
-  std::unique_ptr<ScopedEmulatorFeatureFlagsSetter> setter_;
+  ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
 
 TEST_F(GeneratedColumnSchemaUpdaterTest, Basic) {

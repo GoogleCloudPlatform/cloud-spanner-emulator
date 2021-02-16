@@ -24,6 +24,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/container/node_hash_set.h"
 #include "absl/synchronization/mutex.h"
 
 namespace google {
@@ -36,7 +37,7 @@ TEST(UniqueIdGeneratorTest, basic) {
   UniqueIdGenerator<std::string> id_generator(1);
   std::vector<std::thread> threads;
   absl::Mutex mu;
-  std::unordered_set<std::string> id_set;
+  absl::node_hash_set<std::string> id_set;
 
   // Generate 100 unique ids and put them into id_set.
   for (int i = 0; i < 100; ++i) {

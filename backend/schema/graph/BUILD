@@ -21,10 +21,7 @@ licenses(["unencumbered"])
 cc_library(
     name = "schema_node",
     hdrs = ["schema_node.h"],
-    deps = [
-        "@com_google_absl//absl/status",
-        "@com_google_zetasql//zetasql/base:statusor",
-    ],
+    deps = ["@com_google_absl//absl/status"],
 )
 
 cc_library(

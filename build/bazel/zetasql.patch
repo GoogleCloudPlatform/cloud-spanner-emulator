@@ -1,11 +1,11 @@
 --- zetasql/base/BUILD
 +++ zetasql/base/BUILD
 @@ -20,1 +20,1 @@
--    default_visibility = ["//:__subpackages__"],
+-    default_visibility = [":zetasql_implementation"],
 +    default_visibility = ["//visibility:public"],
 
 --- zetasql/base/testing/BUILD
 +++ zetasql/base/testing/BUILD
 @@ -19,1 +19,1 @@
--package(default_visibility = ["//:__subpackages__"])
+-package(default_visibility = ["//zetasql/base:zetasql_implementation"])
 +package(default_visibility = ["//visibility:public"])

@@ -54,6 +54,7 @@ cc_library(
     name = "schema_updater_tests",
     testonly = 1,
     srcs = [
+        "check_constraint.cc",
         "common.cc",
         "foreign_key.cc",
         "generated_column.cc",

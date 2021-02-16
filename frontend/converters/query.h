@@ -21,9 +21,9 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
+#include "zetasql/base/statusor.h"
 #include "backend/query/query_engine.h"
 #include "common/errors.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

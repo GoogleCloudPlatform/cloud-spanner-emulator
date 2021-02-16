@@ -398,6 +398,19 @@ absl::Status ForeignKeyReferencingKeyFound(absl::string_view foreign_key,
                                            absl::string_view referencing_key);
 
 absl::Status NumericTypeNotEnabled();
+
+// Check constraint errors
+absl::Status CheckConstraintNotEnabled();
+absl::Status CheckConstraintViolated(absl::string_view check_constraint_name,
+                                     absl::string_view table_name,
+                                     absl::string_view key_debug_string);
+absl::Status CheckConstraintExpressionParseError(
+    absl::string_view table_name, absl::string_view check_constraint_expression,
+    absl::string_view check_constraint_name, absl::string_view message);
+absl::Status CheckConstraintNotUsingAnyNonGeneratedColumn(
+    absl::string_view table_name, absl::string_view check_constraint_name,
+    absl::string_view expression);
+
 // Generated column errors
 absl::Status GeneratedColumnsNotEnabled();
 absl::Status NonStoredGeneratedColumnUnsupported(absl::string_view column_name);
@@ -406,7 +419,27 @@ absl::Status GeneratedColumnDefinitionParseError(absl::string_view table_name,
                                                  absl::string_view message);
 absl::Status NonScalarExpressionInColumnExpression(absl::string_view type);
 absl::Status ColumnExpressionMaxDepthExceeded(int depth, int max_depth);
-
+absl::Status InvalidDropColumnReferencedByGeneratedColumn(
+    absl::string_view column_name, absl::string_view table_name,
+    absl::string_view referencing_column_name);
+absl::Status CannotConvertGeneratedColumnToRegularColumn(
+    absl::string_view table_name, absl::string_view column_name);
+absl::Status CannotConvertRegularColumnToGeneratedColumn(
+    absl::string_view table_name, absl::string_view column_name);
+absl::Status CannotAlterStoredGeneratedColumnDataType(
+    absl::string_view table_name, absl::string_view column_name);
+absl::Status CannotAlterGeneratedColumnExpression(
+    absl::string_view table_name, absl::string_view column_name);
+absl::Status CannotAlterColumnDataTypeWithDependentStoredGeneratedColumn(
+    absl::string_view column_name);
+absl::Status CannotUseCommitTimestampOnGeneratedColumnDependency(
+    absl::string_view column_name);
+absl::Status CannotUseGeneratedColumnInPrimaryKey(
+    absl::string_view table_name, absl::string_view column_name);
+absl::Status CannotWriteToGeneratedColumn(absl::string_view table_name,
+                                          absl::string_view column_name);
+absl::Status NonDeterministicFunctionInColumnExpression(
+    absl::string_view function_name, absl::string_view expression_use);
 // Query errors.
 absl::Status UnableToInferUndeclaredParameter(absl::string_view parameter_name);
 absl::Status InvalidHint(absl::string_view hint_string);
@@ -445,6 +478,8 @@ absl::Status StructComparisonNotSupported(absl::string_view function_name);
 absl::Status PendingCommitTimestampDmlValueOnly();
 absl::Status NoFeatureSupportDifferentTypeArrayCasts(
     absl::string_view from_type, absl::string_view to_type);
+absl::Status UnsupportedTablesampleRepeatable();
+absl::Status UnsupportedTablesampleSystem();
 
 // Query size limits errors.
 absl::Status TooManyFunctions(int max_function_nodes);

@@ -19,7 +19,10 @@
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
 #include "zetasql/base/statusor.h"
+#include "backend/actions/generated_column.h"
 #include "backend/datamodel/types.h"
+#include "backend/query/catalog.h"
+#include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/table.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
@@ -94,6 +97,43 @@ absl::Status BackfillColumnValue(const Column* old_column,
   }
 
   return absl::OkStatus();
+}
+
+absl::Status BackfillGeneratedColumnValue(
+    const Column* generated_column, const SchemaValidationContext* context) {
+  ZETASQL_RET_CHECK(generated_column != nullptr && generated_column->is_generated());
+  ZETASQL_RET_CHECK_NE(context, nullptr);
+  FunctionCatalog function_catalog(context->type_factory());
+  Catalog catalog(context->new_schema(), &function_catalog);
+  const Table* table = generated_column->table();
+  GeneratedColumnEffector effector(table, &catalog);
+
+  std::vector<ColumnID> column_ids = GetColumnIDs(table->columns());
+  std::unique_ptr<StorageIterator> itr;
+  ZETASQL_RETURN_IF_ERROR(context->storage()->Read(context->pending_commit_timestamp(),
+                                           table->id(), KeyRange::All(),
+                                           column_ids, &itr));
+  while (itr->Next()) {
+    zetasql::ParameterValueMap row_column_values;
+    for (int i = 0; i < itr->NumColumns(); ++i) {
+      // Storage returns invalid values if a value is not present, in which case
+      // we convert it into a typed NULL.
+      row_column_values[table->columns()[i]->Name()] =
+          itr->ColumnValue(i).is_valid()
+              ? itr->ColumnValue(i)
+              : zetasql::Value::Null(table->columns()[i]->GetType());
+    }
+
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::Value value,
+                     effector.ComputeGeneratedColumnValue(generated_column,
+                                                          row_column_values));
+
+    ZETASQL_RETURN_IF_ERROR(context->storage()->Write(
+        context->pending_commit_timestamp(), table->id(), itr->Key(),
+        {generated_column->id()}, {value}));
+  }
+
+  return itr->Status();
 }
 
 }  // namespace backend

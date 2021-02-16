@@ -33,6 +33,7 @@
 #include "backend/transaction/options.h"
 #include "common/errors.h"
 #include "tests/common/actions.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -49,6 +50,10 @@ using zetasql::values::NullString;
 using zetasql::values::String;
 
 class ColumnValueBackfillTest : public ::testing::Test {
+ public:
+  ColumnValueBackfillTest()
+      : emulator_feature_flags_({.enable_stored_generated_columns = true}) {}
+
  protected:
   void SetUp() override {
     std::vector<std::string> create_statements;
@@ -121,6 +126,7 @@ class ColumnValueBackfillTest : public ::testing::Test {
   std::unique_ptr<Database> database_;
   const zetasql::ArrayType* string_array_type_ = nullptr;
   const zetasql::ArrayType* bytes_array_type_ = nullptr;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter emulator_feature_flags_;
 };
 
 TEST_F(ColumnValueBackfillTest, FailedBackfillHasNoEffect) {
@@ -159,6 +165,37 @@ TEST_F(ColumnValueBackfillTest, BackfillArrayType) {
                   Array(bytes_array_type_, {Bytes("ФдΣβaA"), NullBytes()}),
                   Null(bytes_array_type_),
               }));
+}
+
+TEST_F(ColumnValueBackfillTest, BackfillGeneratedColumn) {
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    ALTER TABLE TestTable
+      ADD COLUMN gen_col_1 STRING(MAX) AS (string_col) STORED
+    )"}));
+
+  EXPECT_THAT(ColumnValues("gen_col_1"), testing::ElementsAreArray({
+                                             String("ФдΣβaA"),
+                                             NullString(),
+                                         }));
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    ALTER TABLE TestTable
+      ADD COLUMN gen_col_2 STRING(MAX) AS (gen_col_1) STORED
+    )"}));
+  EXPECT_THAT(ColumnValues("gen_col_2"), testing::ElementsAreArray({
+                                             String("ФдΣβaA"),
+                                             NullString(),
+                                         }));
+}
+
+TEST_F(ColumnValueBackfillTest, BackfillGeneratedColumnNotNullFail) {
+  EXPECT_THAT(
+      UpdateSchema({R"(
+    ALTER TABLE TestTable
+      ADD COLUMN gen_col STRING(MAX) NOT NULL AS (string_col) STORED
+    )"}),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          testing::HasSubstr("Cannot specify a null value for column")));
 }
 
 }  // namespace

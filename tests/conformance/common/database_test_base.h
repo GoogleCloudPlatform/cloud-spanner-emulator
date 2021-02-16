@@ -31,6 +31,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "google/cloud/spanner/client.h"
@@ -53,7 +54,6 @@
 #include "tests/conformance/common/environment.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {
@@ -243,6 +243,7 @@ class DatabaseTest : public ::testing::Test {
 
     // Comparison operator for use in gUnit expectations.
     bool operator==(const ValueRow& other) const { return row_ == other.row_; }
+    bool operator!=(const ValueRow& other) const { return row_ != other.row_; }
 
     // Serialization operator for use in gUnit expectations.
     friend std::ostream& operator<<(std::ostream& os, const ValueRow& r) {

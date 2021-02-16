@@ -20,7 +20,6 @@
 #include "backend/actions/ops.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

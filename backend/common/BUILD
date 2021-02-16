@@ -39,6 +39,7 @@ cc_test(
         ":ids",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/container:node_hash_set",
         "@com_google_absl//absl/synchronization",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
@@ -141,5 +142,30 @@ cc_library(
     name = "variant",
     hdrs = [
         "variant.h",
+    ],
+)
+
+cc_library(
+    name = "graph_dependency_helper",
+    hdrs = ["graph_dependency_helper.h"],
+    deps = [
+        ":case",
+        "//common:errors",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/base:ret_check",
+    ],
+)
+
+cc_test(
+    name = "graph_dependency_helper_test",
+    srcs = ["graph_dependency_helper_test.cc"],
+    deps = [
+        ":graph_dependency_helper",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

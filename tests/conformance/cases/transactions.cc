@@ -38,7 +38,8 @@ namespace test {
 namespace {
 
 using cloud::spanner::InsertMutationBuilder;
-using google::cloud::spanner::internal::MakeSingleUseTransaction;
+// TODO: Replace all uses of internal C++ client library details.
+using google::cloud::spanner_internal::MakeSingleUseTransaction;
 using zetasql_base::testing::IsOk;
 using zetasql_base::testing::StatusIs;
 

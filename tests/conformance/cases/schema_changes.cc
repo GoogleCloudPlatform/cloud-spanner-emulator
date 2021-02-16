@@ -20,6 +20,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/algorithm/container.h"
+#include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 #include "absl/strings/ascii.h"
 #include "google/cloud/spanner/bytes.h"
@@ -51,9 +52,8 @@ const char kSchemaChangeTestDataDir[] = "tests/conformance/data/schema_changes";
 
 // List of schema change test files within the directory above.
 const char* kSchemaChangeTestFiles[] = {
-    "combined.test",
-    "foreign_key.test",
-    "generated_column.test",
+    "check_constraint.test",      "combined.test",
+    "foreign_key.test",           "generated_column.test",
     "key_column_alteration.test",
 };
 
@@ -94,7 +94,7 @@ class SchemaChangeTest
       absl::string_view message(status.message());
       if (absl::ConsumePrefix(
               &message, "Error in non-idempotent operation UpdateDatabase: ")) {
-        message.remove_suffix(message.length() - message.rfind("[") + 1);
+        message.remove_suffix(message.length() - message.rfind('[') + 1);
       }
 
       // Return the expected error message.
@@ -141,6 +141,7 @@ TEST_P(SchemaChangeTest, FileBasedTests) {
       RE2::GlobalReplace(text, "\n", " ");
       RE2::GlobalReplace(text, R"(\\n)", " ");
       RE2::GlobalReplace(text, R"(\\')", "'");
+      RE2::GlobalReplace(text, R"(\\")", "\"");
       absl::RemoveExtraAsciiWhitespace(text);
     };
     normalize(&actual_text);
@@ -217,6 +218,21 @@ TEST_F(SchemaChangeTest, PartialSuccess) {
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto ddl_statements, GetDatabaseDdl());
   EXPECT_EQ(ddl_statements.size(), 2);
+}
+
+TEST_F(SchemaChangeTest, AddColumns) {
+  ZETASQL_EXPECT_OK(SetSchema({R"(
+     CREATE TABLE test_table (
+       int64_col INT64 NOT NULL,
+     ) PRIMARY KEY(int64_col)
+  )"}));
+  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col"}, {Value(1)}));
+
+  ZETASQL_EXPECT_OK(UpdateSchema(
+      {"ALTER TABLE test_table ADD COLUMN string_col STRING(MAX)"}));
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"ALTER TABLE test_table "
+                    "ADD COLUMN gen_int64_col INT64 AS (int64_col) STORED"}));
 }
 
 TEST_F(SchemaChangeTest, AlterColumnTypeChange) {

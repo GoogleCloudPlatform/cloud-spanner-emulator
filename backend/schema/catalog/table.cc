@@ -27,6 +27,7 @@
 #include "absl/strings/substitute.h"
 #include "backend/common/case.h"
 #include "backend/datamodel/types.h"
+#include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
@@ -82,6 +83,16 @@ const KeyColumn* Table::FindKeyColumn(const std::string& column_name) const {
     return nullptr;
   }
   return *it;
+}
+
+const CheckConstraint* Table::FindCheckConstraint(
+    const std::string& constraint_name) const {
+  auto iter = absl::c_find_if(check_constraints_,
+                              [&](const CheckConstraint* check_constraint) {
+                                return absl::EqualsIgnoreCase(
+                                    check_constraint->Name(), constraint_name);
+                              });
+  return iter == std::end(check_constraints_) ? nullptr : *iter;
 }
 
 const ForeignKey* Table::FindForeignKey(
@@ -158,6 +169,7 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
 
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&child_tables_));
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&indexes_));
+  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&check_constraints_));
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&foreign_keys_));
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&referencing_foreign_keys_));
 

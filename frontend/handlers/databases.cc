@@ -22,6 +22,7 @@
 #include "backend/database/database.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/ddl_parser.h"
+#include "backend/schema/printer/print_ddl.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "frontend/common/uris.h"
@@ -101,11 +102,8 @@ absl::Status CreateDatabase(RequestContext* ctx,
       backend::ddl::ParseCreateDatabase(request->create_statement()));
   std::string database_name = stmt.database_name();
 
-  // Validate database name within character limits.
-  if (database_name.size() < limits::kMinDatabaseNameLength ||
-      database_name.size() > limits::kMaxDatabaseNameLength) {
-    return error::InvalidDatabaseName(database_name);
-  }
+  // Validate database name.
+  ZETASQL_RETURN_IF_ERROR(ValidateDatabaseId(database_name));
 
   // Create the database.
   std::string database_uri = MakeDatabaseUri(request->parent(), database_name);
@@ -253,8 +251,8 @@ absl::Status GetDatabaseDdl(RequestContext* ctx,
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Database> database,
                    GetDatabase(ctx, request->database()));
 
-  std::vector<std::string> ddl_statements = database->backend()->GetSchema();
-  for (auto statement : ddl_statements) {
+  for (const auto& statement :
+       backend::PrintDDLStatements(database->backend()->GetLatestSchema())) {
     response->add_statements(statement);
   }
   return absl::OkStatus();

@@ -44,7 +44,6 @@
 #include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
-#include "zetasql/base/statusor.h"
 #include "zetasql/base/time_proto_util.h"
 
 namespace google {
@@ -336,7 +335,7 @@ void Transaction::SetDmlRequestReplayStatus(const absl::Status& status) {
     return;
   }
   const auto request = dml_requests_.find(current_dml_seqno_);
-  DCHECK(request != dml_requests_.end());
+  ZETASQL_DCHECK(request != dml_requests_.end());
   if (request != dml_requests_.end()) {
     request->second.status = status;
   }
@@ -352,7 +351,7 @@ void Transaction::SetDmlReplayOutcome(
     return;
   }
   const auto request = dml_requests_.find(current_dml_seqno_);
-  DCHECK(request != dml_requests_.end())
+  ZETASQL_DCHECK(request != dml_requests_.end())
       << "DML sequence number was not registered.";
   if (request != dml_requests_.end()) {
     request->second.outcome = outcome;

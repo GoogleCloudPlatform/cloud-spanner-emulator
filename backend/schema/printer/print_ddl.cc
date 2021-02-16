@@ -17,6 +17,7 @@
 #include "backend/schema/printer/print_ddl.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "absl/strings/str_cat.h"
@@ -24,6 +25,7 @@
 #include "absl/strings/substitute.h"
 #include "backend/common/case.h"
 #include "backend/datamodel/types.h"
+#include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/parser/ddl_reserved_words.h"
 
 namespace google {
@@ -149,6 +151,10 @@ std::string PrintTable(const Table* table) {
   for (const ForeignKey* foreign_key : table->foreign_keys()) {
     absl::StrAppend(&table_string, "  ", PrintForeignKey(foreign_key), ",\n");
   }
+  for (const CheckConstraint* check_constraint : table->check_constraints()) {
+    absl::StrAppend(&table_string, "  ", PrintCheckConstraint(check_constraint),
+                    ",\n");
+  }
   absl::StrAppend(&table_string, ") PRIMARY KEY(");
 
   std::vector<std::string> pk_clause;
@@ -167,6 +173,16 @@ std::string PrintTable(const Table* table) {
     absl::StrAppend(&table_string, ")");
   }
   return table_string;
+}
+
+std::string PrintCheckConstraint(const CheckConstraint* check_constraint) {
+  std::string out;
+  if (!check_constraint->has_generated_name()) {
+    absl::StrAppend(&out, "CONSTRAINT ", PrintName(check_constraint->Name()),
+                    " ");
+  }
+  absl::StrAppend(&out, "CHECK(", check_constraint->expression(), ")");
+  return out;
 }
 
 std::string PrintForeignKey(const ForeignKey* foreign_key) {

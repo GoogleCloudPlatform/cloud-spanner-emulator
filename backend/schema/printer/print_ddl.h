@@ -43,6 +43,9 @@ std::string PrintIndex(const Index* index);
 // Prints the DDL statements for a table.
 std::string PrintTable(const Table* table);
 
+// Prints the DDL statements for a check constraint.
+std::string PrintCheckConstraint(const CheckConstraint* check_constraint);
+
 // Prints the DDL statements for a foreign key.
 std::string PrintForeignKey(const ForeignKey* foreign_key);
 

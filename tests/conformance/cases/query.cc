@@ -18,6 +18,7 @@
 
 #include "gmock/gmock.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_format.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
 #include "google/cloud/spanner/numeric.h"

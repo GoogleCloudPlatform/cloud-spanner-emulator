@@ -22,6 +22,8 @@
 #include <vector>
 
 #include "zetasql/public/type.h"
+#include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
@@ -30,6 +32,7 @@
 #include "backend/common/ids.h"
 #include "backend/locking/manager.h"
 #include "backend/query/query_engine.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/versioned_catalog.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "backend/storage/storage.h"
@@ -38,7 +41,6 @@
 #include "backend/transaction/read_write_transaction.h"
 #include "common/clock.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {
@@ -99,9 +101,8 @@ class Database {
                             absl::Time* commit_timestamp,
                             absl::Status* backfill_status);
 
-  // Retrives the sdl statements that correspond to the current version of the
-  // schema.
-  std::vector<std::string> GetSchema();
+  // Retrives the current version of the schema.
+  const Schema* GetLatestSchema() const;
 
   // Used to execute queries against the database.
   QueryEngine* query_engine() { return query_engine_.get(); }

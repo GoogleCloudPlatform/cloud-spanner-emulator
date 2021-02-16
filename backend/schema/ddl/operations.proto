@@ -66,6 +66,10 @@ message CommitTimestampConstraint {
   optional bool is_commit_timestamp = 1;
 }
 
+message CheckConstraint {
+  optional string constraint_name = 1;
+  optional string sql_expression = 2;
+}
 
 // Foregin key constraint on a combination of one-or-more columns.
 message ForeignKeyConstraint {
@@ -83,6 +87,7 @@ message Constraint {
     ColumnLengthConstraint column_length = 4;
     PrimaryKeyConstraint primary_key = 6;
     CommitTimestampConstraint commit_timestamp = 7;
+    CheckConstraint check = 8;
   }
 }
 

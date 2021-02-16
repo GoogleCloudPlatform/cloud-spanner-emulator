@@ -21,6 +21,7 @@ licenses(["unencumbered"])
 cc_library(
     name = "schema_builders",
     hdrs = [
+        "check_constraint_builder.h",
         "column_builder.h",
         "foreign_key_builder.h",
         "index_builder.h",
@@ -33,6 +34,7 @@ cc_library(
         "//backend/schema/updater:schema_validation_context",
         "//backend/schema/validators:schema_validators",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )

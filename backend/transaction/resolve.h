@@ -19,12 +19,12 @@
 
 #include <vector>
 
+#include "zetasql/base/statusor.h"
 #include "absl/time/time.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

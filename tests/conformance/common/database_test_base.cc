@@ -44,12 +44,6 @@ namespace spanner {
 namespace emulator {
 namespace test {
 
-// TODO: Remove use of internal methods after they have become
-// publicly available in the cloud spanner cpp library (see
-// https://github.com/googleapis/google-cloud-cpp-spanner/issues/1211).
-using ::google::cloud::spanner::internal::CreateDefaultDatabaseAdminStub;
-using ::google::cloud::spanner::internal::MakeDatabaseAdminConnection;
-
 void DatabaseTest::SetUp() {
   // Get the global environment in which the test runs.
   const ConformanceTestGlobals& globals = GetConformanceTestGlobals();
@@ -75,10 +69,9 @@ void DatabaseTest::SetUp() {
 
   // Setup the database client.
   database_client_ = absl::make_unique<cloud::spanner::DatabaseAdminClient>(
-      cloud::spanner::internal::MakeDatabaseAdminConnection(
-          CreateDefaultDatabaseAdminStub(*globals.connection_options),
-          retry_policy->clone(), backoff_policy->clone(),
-          polling_policy->clone()));
+      cloud::spanner::MakeDatabaseAdminConnection(
+          *globals.connection_options, retry_policy->clone(),
+          backoff_policy->clone(), polling_policy->clone()));
   ZETASQL_ASSERT_OK(ToUtilStatusOr(database_client_->CreateDatabase(*database_).get()));
 
   // Setup a client to interact with the database.

@@ -1,5 +1,19 @@
 # Changes
 
+## v1.2.0
+
+### New Features
+
+* Added support for ARRAY_IS_DISTINCT and TABLESAMPLE functions.
+* Added NUMERIC types.
+* Added generated columns.
+* Allow @{parameter_sensitive=always|auto|never} hint for ParameterSensitive plans.
+
+### Bugs
+
+* Fixed crash due to interaction between foreign keys and information schema (#10).
+* Reject instance names with an underscore (#13).
+
 ## v1.1.1
 
 ### Bugs

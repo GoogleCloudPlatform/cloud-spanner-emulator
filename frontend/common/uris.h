@@ -19,6 +19,7 @@
 
 #include <string>
 
+#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/status/status.h"
 
@@ -40,11 +41,17 @@ absl::Status ParseInstanceUri(absl::string_view resource_uri,
                               absl::string_view* project_id,
                               absl::string_view* instance_id);
 
+// Validates an instance name.
+absl::Status ValidateInstanceId(absl::string_view instance_id);
+
 // Parses a database URI into its components.
 absl::Status ParseDatabaseUri(absl::string_view resource_uri,
                               absl::string_view* project_id,
                               absl::string_view* instance_id,
                               absl::string_view* database_id);
+
+// Validates a database name.
+absl::Status ValidateDatabaseId(absl::string_view database_id);
 
 // Parses a session URI into its components.
 absl::Status ParseSessionUri(absl::string_view resource_uri,

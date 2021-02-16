@@ -106,6 +106,16 @@ absl::Status ParseInstanceUri(absl::string_view resource_uri,
   return absl::OkStatus();
 }
 
+absl::Status ValidateInstanceId(absl::string_view instance_id) {
+  static LazyRE2 instance_id_matcher{"[a-z][-a-z0-9]*[a-z0-9]"};
+  if (instance_id.size() < limits::kMinInstanceNameLength ||
+      instance_id.size() > limits::kMaxInstanceNameLength ||
+      !RE2::FullMatch(instance_id, *instance_id_matcher)) {
+    return error::InvalidInstanceName(instance_id);
+  }
+  return absl::OkStatus();
+}
+
 absl::Status ParseDatabaseUri(absl::string_view resource_uri,
                               absl::string_view* project_id,
                               absl::string_view* instance_id,
@@ -118,6 +128,16 @@ absl::Status ParseDatabaseUri(absl::string_view resource_uri,
   }
   if (!ConsumeDatabase(&resource_uri, database_id)) {
     return error::InvalidDatabaseURI(resource_uri);
+  }
+  return absl::OkStatus();
+}
+
+absl::Status ValidateDatabaseId(absl::string_view database_id) {
+  static LazyRE2 database_id_matcher{"[a-z][-a-z0-9_]*[a-z0-9]"};
+  if (database_id.size() < limits::kMinDatabaseNameLength ||
+      database_id.size() > limits::kMaxDatabaseNameLength ||
+      !RE2::FullMatch(database_id, *database_id_matcher)) {
+    return error::InvalidDatabaseName(database_id);
   }
   return absl::OkStatus();
 }

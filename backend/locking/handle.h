@@ -18,6 +18,8 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_LOCKING_HANDLE_H_
 
 #include "absl/base/thread_annotations.h"
+#include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "backend/locking/request.h"

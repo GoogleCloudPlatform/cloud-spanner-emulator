@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_STORAGE_STORAGE_H_
 
 #include "zetasql/public/value.h"
+#include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "backend/datamodel/key.h"

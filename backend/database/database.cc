@@ -32,7 +32,6 @@
 #include "backend/locking/request.h"
 #include "backend/query/query_engine.h"
 #include "backend/schema/catalog/versioned_catalog.h"
-#include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "backend/schema/updater/scoped_schema_change_lock.h"
 #include "backend/storage/in_memory_storage.h"
@@ -74,7 +73,8 @@ zetasql_base::StatusOr<std::unique_ptr<Database>> Database::Create(
   }
 
   database->action_manager_->AddActionsForSchema(
-      database->versioned_catalog_->GetLatestSchema());
+      database->versioned_catalog_->GetLatestSchema(),
+      database->query_engine_->function_catalog());
 
   return database;
 }
@@ -139,14 +139,14 @@ absl::Status Database::UpdateSchema(absl::Span<const std::string> statements,
   if (result.updated_schema != nullptr) {
     ZETASQL_RETURN_IF_ERROR(versioned_catalog_->AddSchema(
         update_timestamp, std::move(result.updated_schema)));
-    action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema());
+    action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
+                                         query_engine_->function_catalog());
   }
   return absl::OkStatus();
 }
 
-std::vector<std::string> Database::GetSchema() {
-  const Schema* schema = versioned_catalog_->GetLatestSchema();
-  return PrintDDLStatements(schema);
+const Schema* Database::GetLatestSchema() const {
+  return versioned_catalog_->GetLatestSchema();
 }
 
 }  // namespace backend

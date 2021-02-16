@@ -831,9 +831,6 @@ TEST_F(SchemaUpdaterTest, ChangeKeyColumn) {
 }
 
 TEST_F(SchemaUpdaterTest, CreateTable_NumericColumns) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_numeric_type = true;
-  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
@@ -859,9 +856,6 @@ TEST_F(SchemaUpdaterTest, CreateTable_NumericColumns) {
 
 // TODO: Modify this test once NUMERIC is supported in keys
 TEST_F(SchemaUpdaterTest, CreateTable_NumericAsPK) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_numeric_type = true;
-  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(CreateSchema({R"(
       CREATE TABLE T (
         k1 NUMERIC

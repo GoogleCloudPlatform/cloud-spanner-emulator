@@ -143,9 +143,11 @@ Notable supported features:
 
 - Foreign keys
 
-Features not currently available:
+- NUMERIC type
 
-- SQL function TABLESAMPLE is not supported.
+- Generated columns
+
+Features not currently available:
 
 - Cloud Spanner dataflow templates are not supported.
 

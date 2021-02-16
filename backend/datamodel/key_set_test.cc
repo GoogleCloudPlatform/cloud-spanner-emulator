@@ -417,7 +417,7 @@ TEST(KeySet, CanonicalizesRandomKeySet) {
   if (seed < 0) {
     seed = std::time(nullptr);
   }
-  LOG(INFO) << "Seeding CanonicalizesRandomKeySet with test seed " << seed;
+  ZETASQL_LOG(INFO) << "Seeding CanonicalizesRandomKeySet with test seed " << seed;
   std::srand(seed);
 
   // This test generates several test cases randomly with multiple interval

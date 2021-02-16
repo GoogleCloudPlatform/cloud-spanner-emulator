@@ -31,8 +31,8 @@ cc_library(
         "//backend/common:ids",
         "//backend/locking:manager",
         "//backend/query:query_engine",
+        "//backend/schema/catalog:schema",
         "//backend/schema/catalog:versioned_catalog",
-        "//backend/schema/printer:print_ddl",
         "//backend/schema/updater:schema_updater",
         "//backend/schema/updater:scoped_schema_change_lock",
         "//backend/storage",
@@ -70,7 +70,6 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

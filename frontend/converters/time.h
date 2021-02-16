@@ -20,9 +20,9 @@
 #include "google/protobuf/any.pb.h"
 #include "google/protobuf/duration.pb.h"
 #include "google/protobuf/timestamp.pb.h"
+#include "zetasql/base/statusor.h"
 #include "absl/time/time.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

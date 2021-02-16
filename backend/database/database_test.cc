@@ -31,7 +31,6 @@
 #include "backend/transaction/options.h"
 #include "common/clock.h"
 #include "common/errors.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

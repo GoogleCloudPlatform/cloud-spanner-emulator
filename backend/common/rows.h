@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_COMMON_ROWS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_COMMON_ROWS_H_
 
+#include "zetasql/base/statusor.h"
 #include "backend/datamodel/value.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"

@@ -23,6 +23,7 @@
 
 #include "absl/memory/memory.h"
 #include "backend/common/ids.h"
+#include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
@@ -119,6 +120,11 @@ class Table::Editor {
 
   Editor& set_on_delete(OnDeleteAction action) {
     instance_->on_delete_action_ = action;
+    return *this;
+  }
+
+  Editor& add_check_constraint(const CheckConstraint* check_constraint) {
+    instance_->check_constraints_.push_back(check_constraint);
     return *this;
   }
 

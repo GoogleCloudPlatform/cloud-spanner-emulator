@@ -47,6 +47,10 @@ constexpr char kInstanceConfigName[] = "test-config";
 // Environment for emulator conformance tests.
 class EmulatorConformanceTestEnvironment : public testing::Environment {
  public:
+  EmulatorConformanceTestEnvironment()
+      : feature_flags_({.enable_stored_generated_columns = true,
+                        .enable_numeric_type = true,
+                        .enable_check_constraint = true}) {}
   void SetUp() override {
     // Setup emulator server.
     frontend::Server::Options options;
@@ -84,11 +88,6 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
     globals_->connection_options = std::move(connection_options);
     globals_->in_prod_env = false;
     SetConformanceTestGlobals(globals_.get());
-    EmulatorFeatureFlags::Flags flags;
-    flags.enable_stored_generated_columns = true;
-    flags.enable_numeric_type = true;
-    feature_flags_ =
-        absl::make_unique<test::ScopedEmulatorFeatureFlagsSetter>(flags);
   }
 
  private:
@@ -98,7 +97,7 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
   // Globals that need to be provided by a conformance test endpoint.
   std::unique_ptr<ConformanceTestGlobals> globals_;
 
-  std::unique_ptr<test::ScopedEmulatorFeatureFlagsSetter> feature_flags_;
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
 
 }  // namespace test

@@ -22,10 +22,11 @@
 #include <string>
 
 #include "absl/base/thread_annotations.h"
+#include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "frontend/entities/operation.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {

@@ -103,8 +103,10 @@ TEST_F(PartitionabilityValidatorTest, ValidateSubqueryColumnNonPartitionable) {
   // set up a computed column with subquery expr.
   std::unique_ptr<const zetasql::ResolvedExpr> subquery_expr =
       zetasql::MakeResolvedSubqueryExpr();
-  zetasql::ResolvedColumn column{/*column_id=*/1, "table_name", "col_name",
-                                   type_factory()->get_string()};
+  zetasql::ResolvedColumn column{
+      /*column_id=*/1, zetasql::IdString::MakeGlobal("table_name"),
+      zetasql::IdString::MakeGlobal("col_name"),
+      type_factory()->get_string()};
   std::unique_ptr<const zetasql::ResolvedComputedColumn> expr =
       zetasql::MakeResolvedComputedColumn(column, std::move(subquery_expr));
 

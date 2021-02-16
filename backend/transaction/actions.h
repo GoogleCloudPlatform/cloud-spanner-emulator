@@ -23,17 +23,20 @@
 
 #include "zetasql/public/value.h"
 #include "absl/memory/memory.h"
+#include "absl/status/status.h"
+#include "zetasql/base/statusor.h"
 #include "backend/actions/context.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/iterator.h"
 #include "backend/transaction/transaction_store.h"
-#include "zetasql/base/statusor.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+class ReadWriteTransaction;
 
 // TransactionReadOnlyStore provides a storage for the actions executed within a
 // transaction.

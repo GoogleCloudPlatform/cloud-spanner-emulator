@@ -344,6 +344,7 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
         }
       }
     }
+
     return ApplyStatementVerifiers();
   });
 }
