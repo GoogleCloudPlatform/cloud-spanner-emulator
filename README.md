@@ -239,6 +239,12 @@ The emulator intentionally randomizes query results with no ORDER BY clause.
 You should not depend on ordering done by the Cloud Spanner service in the
 absence of an ORDER BY clause.
 
+#### Why does the emulator fail with "Check failed: LoadTimeZone(...)"
+
+The emulator relies on the absl library which in turns uses the 
+[tzdata library](https://www.iana.org/time-zones). The tzdata library must be
+installed on the system which emulator is running. This will need to be added to
+the docker build file if you are running through docker.
 
 ## Contribute
 
