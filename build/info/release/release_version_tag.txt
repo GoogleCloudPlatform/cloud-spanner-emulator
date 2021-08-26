@@ -1,0 +1,1 @@
+cloud_spanner_emulator_1.3.0_public_20210819_01_RC04_final
