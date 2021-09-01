@@ -409,20 +409,31 @@ TEST_F(SchemaUpdaterTest, DropIndex) {
   EXPECT_EQ(new_schema->GetSchemaGraph()->GetSchemaNodes().size(), 4);
 }
 
-// TODO: Modify this test once NUMERIC is supported in keys
 TEST_F(SchemaUpdaterTest, CreateIndex_NumericColumn) {
-  EXPECT_THAT(
-      CreateSchema({
-          R"(
+  EmulatorFeatureFlags::Flags flags;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
         col2 NUMERIC
       ) PRIMARY KEY (col1)
     )",
-          R"(
+                                        R"(
       CREATE INDEX Idx ON T(col2)
-    )"}),
-      StatusIs(error::CannotCreateIndexOnColumn("Idx", "col2", "NUMERIC")));
+    )"}));
+
+  auto t = schema->FindTable("T");
+  auto col2 = t->FindColumn("col2");
+  EXPECT_TRUE(col2->GetType()->IsNumericType());
+
+  auto idx = schema->FindIndex("Idx");
+  EXPECT_NE(idx, nullptr);
+  EXPECT_EQ(idx->key_columns().size(), 1);
+
+  auto idx_data = idx->index_data_table();
+  EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col2));
 }
 
 }  // namespace

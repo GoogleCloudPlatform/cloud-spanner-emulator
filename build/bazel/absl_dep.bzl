@@ -14,9 +14,14 @@
 # limitations under the License.
 #
 
-# Format: //devtools/kokoro/config/proto/build.proto
+"""Loads absl dependency needed to compile the OSS version of emulator."""
 
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-# Location of the bash script. Should have value <git_on_borg_scm.name>/<path_from_repository_root>.
-# git_on_borg_scm.name is specified in the job configuration (next section).
-build_file: "cloud-spanner-emulator/build/kokoro/gcp_windows/kokoro_build.bat"
+def absl_dep():
+    http_archive(
+        name = "com_google_absl",
+        strip_prefix = "abseil-cpp-a50ae369a30f99f79d7559002aba3413dac1bd48",
+        url = "https://github.com/abseil/abseil-cpp/archive/a50ae369a30f99f79d7559002aba3413dac1bd48.tar.gz",
+        sha256 = "be2a9d7ea7ee15f9317b57beff37e8ffb67418fb0df64592366b04c8618c2584",
+    )

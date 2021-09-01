@@ -16,6 +16,8 @@
 
 #include "backend/query/information_schema_catalog.h"
 
+#include <string>
+
 #include "backend/schema/printer/print_ddl.h"
 
 namespace google {
@@ -140,6 +142,10 @@ const std::vector<ColumnsMetaEntry>* ColumnsMetadata() {
     {"SCHEMATA", "CATALOG_NAME", "NO", "STRING(MAX)"},
     {"SCHEMATA", "EFFECTIVE_TIMESTAMP", "YES", "INT64"},
     {"SCHEMATA", "SCHEMA_NAME", "NO", "STRING(MAX)"},
+    {"SPANNER_STATISTICS", "ALLOW_GC", "NO", "BOOL"},
+    {"SPANNER_STATISTICS", "CATALOG_NAME", "NO", "STRING(MAX)"},
+    {"SPANNER_STATISTICS", "PACKAGE_NAME", "NO", "STRING(MAX)"},
+    {"SPANNER_STATISTICS", "SCHEMA_NAME", "NO", "STRING(MAX)"},
     {"TABLES", "ON_DELETE_ACTION", "YES", "STRING(MAX)"},
     {"TABLES", "PARENT_TABLE_NAME", "YES", "STRING(MAX)"},
     {"TABLES", "SPANNER_STATE", "YES", "STRING(MAX)"},
@@ -252,6 +258,9 @@ const std::vector<IndexColumnsMetaEntry>* IndexColumnsMetadata() {
     {"REFERENTIAL_CONSTRAINTS", "CONSTRAINT_SCHEMA", "NO", "ASC", "STRING(MAX)"},  // NOLINT
     {"SCHEMATA", "CATALOG_NAME", "NO", "ASC", "STRING(MAX)"},
     {"SCHEMATA", "SCHEMA_NAME", "NO", "ASC", "STRING(MAX)"},
+    {"SPANNER_STATISTICS", "CATALOG_NAME", "NO", "ASC", "STRING(MAX)"},
+    {"SPANNER_STATISTICS", "SCHEMA_NAME", "NO", "ASC", "STRING(MAX)"},
+    {"SPANNER_STATISTICS", "PACKAGE_NAME", "NO", "ASC", "STRING(MAX)"},
     {"TABLES", "TABLE_CATALOG", "NO", "ASC", "STRING(MAX)"},
     {"TABLES", "TABLE_NAME", "NO", "ASC", "STRING(MAX)"},
     {"TABLES", "TABLE_SCHEMA", "NO", "ASC", "STRING(MAX)"},
@@ -326,6 +335,7 @@ std::string ForeignKeyReferencedIndexName(const ForeignKey* foreign_key) {
 InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
     : zetasql::SimpleCatalog(kName), default_schema_(default_schema) {
   AddSchemataTable();
+  AddSpannerStatisticsTable();
   auto* tables = AddTablesTable();
   auto* columns = AddColumnsTable();
   auto* indexes = AddIndexesTable();
@@ -367,6 +377,20 @@ void InformationSchemaCatalog::AddSchemataTable() {
   // Add table to catalog.
   schemata->SetContents(rows);
   AddOwnedTable(schemata);
+}
+
+void InformationSchemaCatalog::AddSpannerStatisticsTable() {
+  // Setup table schema.
+  auto spanner_statistics = new zetasql::SimpleTable(
+      "SPANNER_STATISTICS", {{"CATALOG_NAME", StringType()},
+                             {"SCHEMA_NAME", StringType()},
+                             {"PACKAGE_NAME", StringType()},
+                             {"ALLOW_GC", BoolType()}});
+
+  // Skip statistics rows in emulator.
+
+  // Add table to catalog.
+  AddOwnedTable(spanner_statistics);
 }
 
 zetasql::SimpleTable* InformationSchemaCatalog::AddTablesTable() {

@@ -33,6 +33,7 @@
 #include "backend/common/ids.h"
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
+#include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
 #include "backend/schema/catalog/versioned_catalog.h"
 #include "backend/storage/in_memory_storage.h"
@@ -628,6 +629,16 @@ TEST_F(ReadWriteTransactionTest, IndexUniquenessFailTest) {
 
   auto txn = CreateReadWriteTransaction();
   EXPECT_THAT(txn->Write(m), StatusIs(absl::StatusCode::kAlreadyExists));
+}
+
+TEST_F(ReadWriteTransactionTest, UpdateAfterDeleteFails) {
+  Mutation m;
+  m.AddDeleteOp("test_table", KeySet{Key{{Int64(4)}}});
+  m.AddWriteOp(MutationOpType::kUpdate, "test_table",
+               {"int64_col", "string_col"}, {{Int64(4), String("value")}});
+
+  auto txn = CreateReadWriteTransaction();
+  EXPECT_THAT(txn->Write(m), StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

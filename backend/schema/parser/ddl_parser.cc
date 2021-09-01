@@ -266,10 +266,6 @@ absl::Status VisitColumnTypeNode(const SimpleNode* column_type_node,
     return error::Internal(
         absl::StrCat("Unrecognized column type: ", type_name));
   }
-  if (type == ColumnType::NUMERIC &&
-      !EmulatorFeatureFlags::instance().flags().enable_numeric_type) {
-    return error::NumericTypeNotEnabled();
-  }
   column_type->set_type(type);
 
   if (type == ColumnType::ARRAY) {

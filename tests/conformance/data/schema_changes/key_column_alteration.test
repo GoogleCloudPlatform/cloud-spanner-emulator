@@ -1,3 +1,15 @@
+# Can't alter parent key columns.
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  UserId STRING(20) NOT NULL
+) PRIMARY KEY(UserId), INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+ALTER TABLE Albums ALTER COLUMN UserId STRING(40) NOT NULL;
+--
+ERROR: Cannot alter parent key column Albums.UserId.
+==
+# Remove NOT NULL from key in table with children.
 CREATE TABLE Users (
   UserId INT64 NOT NULL
 ) PRIMARY KEY(UserId);
@@ -8,6 +20,8 @@ ALTER TABLE Users ALTER COLUMN UserId INT64;
 --
 ERROR: Requested change to key column Users.UserId could not be made.
 ==
+# allow_commit_timestamp option can be altered independently of
+# the parent key column.
 CREATE TABLE T1 (
   ts TIMESTAMP
 ) PRIMARY KEY(ts);
@@ -55,6 +69,7 @@ CREATE TABLE foo (
 ) PRIMARY KEY(column1, column2, column3, created DESC),
   INTERLEAVE IN PARENT baz ON DELETE CASCADE;
 ==
+# No-op alters of key columns are still invalid
 CREATE TABLE T1 (
   ts TIMESTAMP
 ) PRIMARY KEY(ts);

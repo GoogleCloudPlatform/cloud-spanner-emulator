@@ -41,6 +41,7 @@ class GeneratedColumnTest : public DatabaseTest {
           G1 INT64 AS (G2 + 1) STORED,
           G2 INT64 NOT NULL AS (v1 + v2) STORED,
           G3 INT64 AS (G1) STORED,
+          V3 INT64,
         ) PRIMARY KEY (K)
       )",
         R"(CREATE TABLE TypeCoercion(
@@ -173,10 +174,11 @@ TEST_F(GeneratedColumnTest, Index) {
 }
 
 TEST_F(GeneratedColumnTest, DML) {
-  ZETASQL_ASSERT_OK(
-      CommitDml({SqlStatement("INSERT T(K, V1, V2) VALUES (1, 1, 1)"),
-                 SqlStatement("UPDATE T SET V1 = 2, V2 = 2 WHERE K = 1")}));
-  EXPECT_THAT(Query("SELECT G1, G2, G3 FROM T"), IsOkAndHoldsRows({{5, 4, 5}}));
+  ZETASQL_ASSERT_OK(CommitDml(
+      {SqlStatement("INSERT T(K, V1, V2, V3) VALUES (1, 1, 1, 1)"),
+       SqlStatement("UPDATE T SET V1 = 2, V2 = 2, V3 = 2 WHERE K = 1")}));
+  EXPECT_THAT(Query("SELECT V1, V2, V3, G1, G2, G3 FROM T"),
+              IsOkAndHoldsRows({{2, 2, 2, 5, 4, 5}}));
 }
 
 TEST_F(GeneratedColumnTest, NotNull) {

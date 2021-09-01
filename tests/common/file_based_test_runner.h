@@ -39,12 +39,6 @@ struct FileBasedTestOptions {
   // Prefix for comments.
   std::string comment_prefix = "# ";
 
-  // Flag indicating the expected and actual texts should be normalized for
-  // simpler cross-platform matching, including replacing newlines with spaces,
-  // removing extraneous spaces, replacing escape sequences with the escaped
-  // characters, etc.
-  std::string normalize_flag = "--normalize";
-
   // Flag indicating the expected text is a regular expression.
   std::string regex_flag = "--regex";
 };
@@ -54,7 +48,6 @@ struct FileBasedTestCaseInput {
   FileBasedTestCaseInput(absl::string_view file_name, int line_no)
       : file_name(file_name), line_no(line_no) {}
   std::string text;
-  bool normalize = false;
   bool regex = false;
   std::string file_name;
   int line_no = 0;

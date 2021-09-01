@@ -322,8 +322,14 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
     for (const MutationOp& mutation_op : mutation.ops()) {
       ZETASQL_ASSIGN_OR_RETURN(ResolvedMutationOp resolved_mutation_op,
                        ResolveMutationOp(mutation_op, schema_, clock_->Now()));
+      const std::string& table_name = resolved_mutation_op.table->Name();
       // Process Delete.
       if (resolved_mutation_op.type == MutationOpType::kDelete) {
+        std::vector<KeyRange>& key_ranges =
+            deleted_key_ranges_by_table_[table_name];
+        key_ranges.insert(key_ranges.end(),
+                          resolved_mutation_op.key_ranges.begin(),
+                          resolved_mutation_op.key_ranges.end());
         ZETASQL_ASSIGN_OR_RETURN(std::vector<WriteOp> write_ops,
                          FlattenDeleteOp(resolved_mutation_op.table,
                                          resolved_mutation_op.key_ranges,
@@ -333,6 +339,15 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
       } else {
         // Process Insert, Update, Replace and InsertOrUpdate.
         for (int i = 0; i < resolved_mutation_op.rows.size(); i++) {
+          if (resolved_mutation_op.type == MutationOpType::kUpdate) {
+            for (const KeyRange& key_range :
+                 deleted_key_ranges_by_table_[table_name]) {
+              if (key_range.Contains(resolved_mutation_op.keys[i])) {
+                return error::UpdateDeletedRowInTransaction(
+                    table_name, resolved_mutation_op.keys[i].DebugString());
+              }
+            }
+          }
           ZETASQL_ASSIGN_OR_RETURN(
               std::vector<WriteOp> write_ops,
               FlattenNonDeleteOpRow(

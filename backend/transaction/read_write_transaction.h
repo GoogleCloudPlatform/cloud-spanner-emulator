@@ -29,8 +29,10 @@
 #include "backend/access/write.h"
 #include "backend/actions/context.h"
 #include "backend/actions/manager.h"
+#include "backend/common/case.h"
 #include "backend/common/ids.h"
 #include "backend/datamodel/key.h"
+#include "backend/datamodel/key_range.h"
 #include "backend/locking/handle.h"
 #include "backend/locking/manager.h"
 #include "backend/schema/catalog/schema.h"
@@ -185,6 +187,8 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
 
   // The schema that is in effect at the timestamp picked for this transaction.
   const Schema* schema_ ABSL_GUARDED_BY(mu_);
+
+  CaseInsensitiveStringMap<std::vector<KeyRange>> deleted_key_ranges_by_table_;
 };
 
 }  // namespace backend

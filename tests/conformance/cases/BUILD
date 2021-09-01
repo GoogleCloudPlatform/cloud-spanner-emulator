@@ -71,8 +71,9 @@ cc_library(
     deps = [
         "//tests/common:file_based_test_runner",
         "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
         "//tests/conformance/common:database_test_base",
-        "@com_github_googleapis_google_cloud_cpp//google/cloud/spanner:spanner_client",
+        "@com_github_googleapis_google_cloud_cpp//:spanner",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",

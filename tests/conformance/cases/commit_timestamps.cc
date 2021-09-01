@@ -674,6 +674,36 @@ TEST_F(CommitTimestamps, CanInsertExplicitTimestampWithInconsistentSchema) {
   }
 }
 
+// TODO: This is a bug. This actually should pass on the emulator.
+// It passes when run against spanner test env.
+TEST_F(CommitTimestamps, BatchDmlFailsWithMultipleRowsWithCommitTimestamp) {
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+
+  auto result = BatchDmlTransaction(
+      txn, {SqlStatement("INSERT INTO Users(ID, Name, CommitTS) "
+                         "VALUES (1, 'Pete', PENDING_COMMIT_TIMESTAMP())"),
+            SqlStatement("INSERT INTO Users(ID, Name, CommitTS) "
+                         "VALUES (2, 'Zeke', PENDING_COMMIT_TIMESTAMP())")});
+  EXPECT_THAT(ToUtilStatus(result.value().status),
+              in_prod_env() ? StatusIs(absl::StatusCode::kOk)
+                            : StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+// TODO: This is a bug. Same as above.
+TEST_F(CommitTimestamps, BatchDmlFailsWithUpdateWithCommitTimestamp) {
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+
+  auto result = BatchDmlTransaction(
+      txn, {SqlStatement("INSERT INTO Users(ID, Name, CommitTS) "
+                         "VALUES (1, 'Pete', PENDING_COMMIT_TIMESTAMP())"),
+            SqlStatement("UPDATE Users SET Name = 'Zeke' WHERE ID = 1"),
+            SqlStatement("UPDATE Users SET CommitTS = "
+                         "PENDING_COMMIT_TIMESTAMP() WHERE ID = 1")});
+  EXPECT_THAT(ToUtilStatus(result.value().status),
+              in_prod_env() ? StatusIs(absl::StatusCode::kOk)
+                            : StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 // Test to verify that commit timestamps are propagated to index columns.
 class CommitTimestampIndexingTest : public DatabaseTest {
  public:

@@ -22,6 +22,7 @@
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
 #include "google/cloud/spanner/numeric.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -37,6 +38,9 @@ using zetasql_base::testing::StatusIs;
 class QueryTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
+    EmulatorFeatureFlags::Flags flags;
+    emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
     return SetSchema({
         R"(
           CREATE TABLE Users(
@@ -73,6 +77,12 @@ class QueryTest : public DatabaseTest {
             numericVal NUMERIC,
             timestampVal TIMESTAMP
           ) PRIMARY KEY(intVal)
+        )",
+        R"(
+          CREATE TABLE NumericTable(
+            key     NUMERIC,
+            val     INT64,
+          ) PRIMARY KEY (key)
         )",
     });
   }
@@ -111,6 +121,12 @@ class QueryTest : public DatabaseTest {
           Null<std::string>(), Null<Numeric>(), Null<Timestamp>()},
          {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
           cloud::spanner::MakeNumeric("123.456789").value(), Timestamp()}}));
+
+    ZETASQL_EXPECT_OK(MultiInsert("NumericTable", {"key", "val"},
+                          {{Null<Numeric>(), Null<std::int64_t>()},
+                           {cloud::spanner::MakeNumeric("-12.3").value(), -1},
+                           {cloud::spanner::MakeNumeric("0").value(), 0},
+                           {cloud::spanner::MakeNumeric("12.3").value(), 1}}));
   }
 };
 
@@ -261,9 +277,20 @@ TEST_F(QueryTest, DateTimestampArithmeticFunctions) {
               IsOkAndHoldsRow({Value(15)}));
 }
 
-TEST_F(QueryTest, DISABLED_NETFunctions) {
-  const std::string query = R"(SELECT NET.IPV4_TO_INT64(b"\x00\x00\x00\x00"))";
-  EXPECT_THAT(Query(query), StatusIs(absl::StatusCode::kInvalidArgument));
+TEST_F(QueryTest, NETFunctions) {
+  EXPECT_THAT(Query(R"(SELECT NET.IPV4_TO_INT64(b"\x00\x00\x00\x00"))"),
+              IsOkAndHoldsRow({0}));
+  EXPECT_THAT(Query(R"(SELECT NET.IP_FROM_STRING("0.0.0.0"),
+                              NET.SAFE_IP_FROM_STRING("0.0.0.0"),
+                              NET.IP_TO_STRING(b"0000"),
+                              NET.IP_NET_MASK(4, 0),
+                              NET.IP_TRUNC(b"0000", 4),
+                              NET.IPV4_FROM_INT64(0),
+                              NET.IPV4_TO_INT64(b"0000"),
+                              NET.HOST("A"),
+                              NET.PUBLIC_SUFFIX("B"),
+                              NET.REG_DOMAIN("C"))"),
+              zetasql_base::testing::IsOk());
 }
 
 TEST_F(QueryTest, CanReturnArrayOfStructTypedColumns) {
@@ -276,6 +303,23 @@ TEST_F(QueryTest, CanReturnArrayOfStructTypedColumns) {
   EXPECT_THAT(
       Query("SELECT ARRAY(SELECT STRUCT<INT64>(1))"),
       IsOkAndHoldsRow({Value(std::vector<SimpleStruct>{SimpleStruct{1}})}));
+}
+
+TEST_F(QueryTest, CannotQueryArrayOfEmptyStruct) {
+  EXPECT_THAT(
+      Query("SELECT ARRAY<STRUCT<int64_val INT64>>[]"),
+      StatusIs(
+          absl::StatusCode::kUnimplemented,
+          "Unsupported query shape: Spanner does not support array constructor "
+          "syntax for an empty array where array elements are Structs."));
+
+  EXPECT_THAT(Query("SELECT ARRAY<INT64>[]"),
+              IsOkAndHoldsRow({Value(std::vector<int64_t>{})}));
+}
+
+TEST_F(QueryTest, QueryColumnCannotBeStruct) {
+  EXPECT_THAT(Query("SELECT STRUCT<INT64>(1)"),
+              StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 TEST_F(QueryTest, FunctionAliasesAreAvailable) {
@@ -308,7 +352,7 @@ TEST_F(QueryTest, CheckQuerySizeLimitsAreEnforced) {
     }
     return join_query;
   };
-  EXPECT_THAT(Query(many_joins_query(/*num_joins=*/16)),
+  EXPECT_THAT(Query(many_joins_query(/*num_joins=*/21)),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        testing::HasSubstr("joins exceeds")));
 }
@@ -318,6 +362,57 @@ TEST_F(QueryTest, QueryStringSizeLimit) {
   EXPECT_THAT(Query(query),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        testing::HasSubstr("Query string length")));
+}
+
+TEST_F(QueryTest, NumericKey) {
+  PopulateDatabase();
+
+  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key < 0"),
+              IsOkAndHoldsRows({{-1}}));
+
+  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key = 0"),
+              IsOkAndHoldsRows({{0}}));
+
+  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key > 0"),
+              IsOkAndHoldsRows({{1}}));
+
+  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key IS NOT NULL "
+                    "ORDER BY t.key ASC"),
+              IsOkAndHoldsRows({{-1}, {0}, {1}}));
+
+  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key IS NULL"),
+              IsOkAndHoldsRows({{Null<std::int64_t>()}}));
+
+  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key < -12.1 OR "
+                    "t.key > 12.2 ORDER BY t.key ASC"),
+              IsOkAndHoldsRows({{-1}, {1}}));
+}
+
+TEST_F(QueryTest, SelectStarExcept) {
+  PopulateDatabase();
+  EXPECT_THAT(
+      Query("SELECT * EXCEPT (boolVal, bytesVal, dateVal, floatVal, stringVal, "
+            "                 numericVal, timestampVal)"
+            "FROM ScalarTypesTable ORDER BY intVal"),
+      IsOkAndHoldsRows({{0}, {1}}));
+}
+
+TEST_F(QueryTest, StddevAndVariance) {
+  PopulateDatabase();
+  EXPECT_THAT(Query(R"(SELECT stddev(intval) > .6 FROM ScalarTypesTable)"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query(R"(SELECT stddev_samp(intval) > .6 FROM ScalarTypesTable)"),
+              IsOkAndHoldsRows({{true}}));
+
+  EXPECT_THAT(Query(R"(SELECT var_samp(intval) > 0.4 FROM ScalarTypesTable)"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query(R"(SELECT variance(intval) > 0.4 FROM ScalarTypesTable)"),
+              IsOkAndHoldsRows({{true}}));
+}
+
+TEST_F(QueryTest, RegexString) {
+  EXPECT_THAT(Query(R"_(SELECT SAFE.REGEXP_CONTAINS("s", ")"))_"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
 }
 
 }  // namespace

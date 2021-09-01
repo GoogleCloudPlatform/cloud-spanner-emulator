@@ -169,13 +169,6 @@ absl::Status FilterResolvedFunction(
   if (name == "nullif" && function_call.argument_list(0)->type()->IsStruct()) {
     return error::NullifStructNotSupported();
   }
-  // TODO: Enable numeric signatures for math functions exp, sqrt,
-  // ln, log, and log10 after the feature has been released in spanner.
-  if ((name == "log" || name == "ln" || name == "log10" || name == "exp" ||
-       name == "sqrt") &&
-      function_call.signature().argument(0).type()->IsNumericType()) {
-    return error::UnsupportedFunction(name);
-  }
 
   return absl::OkStatus();
 }

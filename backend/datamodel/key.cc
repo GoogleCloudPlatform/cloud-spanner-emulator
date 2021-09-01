@@ -18,6 +18,8 @@
 
 #include <sstream>
 
+#include "zetasql/public/numeric_value.h"
+
 namespace google {
 namespace spanner {
 namespace emulator {
@@ -46,7 +48,9 @@ int64_t LogicalBytesInternal(const zetasql::Value& value) {
       return value.string_value().size();
     case zetasql::TYPE_BYTES:
       return value.bytes_value().size();
-    // TODO: Add support for NUMERIC in keys
+    case zetasql::TYPE_NUMERIC:
+      // Here we use the maximal bytes of a numeric value.
+      return 25;
     default:
       // Key columns should have already been validated, so invalid key columns
       // should not occur.

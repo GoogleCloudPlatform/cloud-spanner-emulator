@@ -60,8 +60,9 @@ constexpr absl::string_view kHintForceIndex = "force_index";
 // Joins
 constexpr absl::string_view kHintJoinForceOrder = "force_join_order";
 constexpr absl::string_view kHintJoinMethod = "join_method";
-constexpr absl::string_view kHintJoinTypeHash = "hash_join";
 constexpr absl::string_view kHintJoinTypeApply = "apply_join";
+constexpr absl::string_view kHintJoinTypeHash = "hash_join";
+constexpr absl::string_view kHintJoinTypeMerge = "merge_join";
 
 constexpr absl::string_view kHintJoinBatch = "batch_mode";
 
@@ -249,6 +250,7 @@ absl::Status QueryValidator::CheckHintValue(
     const std::string& string_value = value.string_value();
     if (!(absl::EqualsIgnoreCase(string_value, kHintJoinTypeApply) ||
           absl::EqualsIgnoreCase(string_value, kHintJoinTypeHash) ||
+          absl::EqualsIgnoreCase(string_value, kHintJoinTypeMerge) ||
           absl::EqualsIgnoreCase(string_value,
                                  kHintJoinTypeNestedLoopDeprecated))) {
       return error::InvalidHintValue(name, value.DebugString());
@@ -338,6 +340,32 @@ absl::Status CheckAllowedCasts(const zetasql::Type* from_type,
 
 }  // namespace
 
+absl::Status QueryValidator::DefaultVisit(const zetasql::ResolvedNode* node) {
+  ZETASQL_RETURN_IF_ERROR(ValidateHints(node));
+  return zetasql::ResolvedASTVisitor::DefaultVisit(node);
+}
+
+absl::Status QueryValidator::VisitResolvedQueryStmt(
+    const zetasql::ResolvedQueryStmt* node) {
+  for (const auto& column : node->output_column_list()) {
+    if (column->column().type()->IsStruct())
+      return error::UnsupportedReturnStructAsColumn();
+  }
+
+  return DefaultVisit(node);
+}
+
+absl::Status QueryValidator::VisitResolvedLiteral(
+    const zetasql::ResolvedLiteral* node) {
+  if (node->type()->IsArray() &&
+      node->type()->AsArray()->element_type()->IsStruct() &&
+      node->value().is_empty_array()) {
+    return error::UnsupportedArrayConstructorSyntaxForEmptyStructArray();
+  }
+
+  return DefaultVisit(node);
+}
+
 absl::Status QueryValidator::VisitResolvedFunctionCall(
     const zetasql::ResolvedFunctionCall* node) {
   // Check if function is part of supported subset of ZetaSQL
@@ -357,7 +385,7 @@ absl::Status QueryValidator::VisitResolvedFunctionCall(
         CheckAllowedCasts(node->argument_list(0)->type(), node->type()));
   }
 
-  return zetasql::ResolvedASTVisitor::DefaultVisit(node);
+  return DefaultVisit(node);
 }
 
 absl::Status QueryValidator::VisitResolvedAggregateFunctionCall(
@@ -372,13 +400,13 @@ absl::Status QueryValidator::VisitResolvedAggregateFunctionCall(
   // are unimplemented or may require additional validation of arguments.
   ZETASQL_RETURN_IF_ERROR(FilterSafeModeFunction(*node));
   ZETASQL_RETURN_IF_ERROR(FilterResolvedAggregateFunction(sql_features_, *node));
-  return zetasql::ResolvedASTVisitor::DefaultVisit(node);
+  return DefaultVisit(node);
 }
 
 absl::Status QueryValidator::VisitResolvedCast(
     const zetasql::ResolvedCast* node) {
   ZETASQL_RETURN_IF_ERROR(CheckAllowedCasts(node->expr()->type(), node->type()));
-  return zetasql::ResolvedASTVisitor::DefaultVisit(node);
+  return DefaultVisit(node);
 }
 
 absl::Status QueryValidator::VisitResolvedSampleScan(
@@ -391,7 +419,7 @@ absl::Status QueryValidator::VisitResolvedSampleScan(
     return error::UnsupportedTablesampleSystem();
   }
 
-  return zetasql::ResolvedASTVisitor::DefaultVisit(node);
+  return DefaultVisit(node);
 }
 
 }  // namespace backend

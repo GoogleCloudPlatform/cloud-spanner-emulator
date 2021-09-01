@@ -67,6 +67,7 @@ TEST_F(QueryHintsTest, QueryWithStatementHints) {
       StatusIs(absl::StatusCode::kInvalidArgument));
   ZETASQL_EXPECT_OK(
       Query("@{force_index=_BASE_TABLE} SELECT ID, Name, Age FROM Users"));
+  ZETASQL_EXPECT_OK(Query("@{join_method=merge_join} SELECT ID, Name, Age FROM Users"));
   ZETASQL_EXPECT_OK(Query("@{join_method=hash_join} SELECT ID, Name, Age FROM Users"));
   ZETASQL_EXPECT_OK(Query("@{join_method=apply_join} SELECT ID, Name, Age FROM Users"));
   ZETASQL_EXPECT_OK(Query("@{join_method=loop_join} SELECT ID, Name, Age FROM Users"));

@@ -19,6 +19,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -33,12 +34,21 @@ using zetasql_base::testing::StatusIs;
 class RangeReadsTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
+    EmulatorFeatureFlags::Flags flags;
+    emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
     ZETASQL_RETURN_IF_ERROR(SetSchema({R"(
       CREATE TABLE Users(
         ID   INT64,
         Name STRING(MAX),
         Age  INT64
       ) PRIMARY KEY (ID)
+    )",
+                               R"(
+      CREATE TABLE NumericTable(
+        key   NUMERIC,
+        val STRING(MAX)
+      ) PRIMARY KEY (key)
     )"}));
     return absl::OkStatus();
   }
@@ -52,6 +62,40 @@ class RangeReadsTest : public DatabaseTest {
                            {2, "Peter", 41},
                            {4, "Matthew", 33},
                            {5, Null<std::string>(), 18}}));
+  }
+
+  void PopulateNumericTable() {
+    ZETASQL_EXPECT_OK(MultiInsert("NumericTable", {"key", "val"},
+                          {
+                              {Null<Numeric>(), "null"},
+                              {minNumeric(), "min"},
+                              {negativeNumeric(), "neg"},
+                              {zeroNumeric(), "zero"},
+                              {positiveNumeric(), "pos"},
+                              {maxNumeric(), "max"},
+                          }));
+  }
+
+  Numeric minNumeric() {
+    return cloud::spanner::MakeNumeric(
+               "-99999999999999999999999999999.999999999")
+        .value();
+  }
+
+  Numeric negativeNumeric() {
+    return cloud::spanner::MakeNumeric("-1.23").value();
+  }
+
+  Numeric maxNumeric() {
+    return cloud::spanner::MakeNumeric(
+               "99999999999999999999999999999.999999999")
+        .value();
+  }
+
+  Numeric zeroNumeric() { return cloud::spanner::MakeNumeric("0").value(); }
+
+  Numeric positiveNumeric() {
+    return cloud::spanner::MakeNumeric("1.23").value();
   }
 };
 
@@ -134,6 +178,138 @@ TEST_F(RangeReadsTest, CanReadUsingEmptyKeyBounds) {
                                 {2, "Peter", 41},
                                 {4, "Matthew", 33},
                                 {5, Null<std::string>(), 18}}));
+}
+
+TEST_F(RangeReadsTest, CanReadNumericAllKeyrange) {
+  PopulateNumericTable();
+
+  EXPECT_THAT(Read("NumericTable", {"key", "val"}, KeySet::All()),
+              IsOkAndHoldsRows({
+                  {Null<Numeric>(), "null"},
+                  {minNumeric(), "min"},
+                  {negativeNumeric(), "neg"},
+                  {zeroNumeric(), "zero"},
+                  {positiveNumeric(), "pos"},
+                  {maxNumeric(), "max"},
+              }));
+}
+
+TEST_F(RangeReadsTest, CanReadNumericPointKey) {
+  PopulateNumericTable();
+
+  KeySet key_set;
+  key_set.AddKey(Key(positiveNumeric()));
+  EXPECT_THAT(Read("NumericTable", {"key", "val"}, key_set),
+              IsOkAndHoldsRows({{positiveNumeric(), "pos"}}));
+}
+
+TEST_F(RangeReadsTest, CanReadNumericUsingKeyBounds) {
+  PopulateNumericTable();
+
+  // Can read using a closed closed range.
+  EXPECT_THAT(Read("NumericTable", {"key", "val"},
+                   ClosedClosed(Key(Null<Numeric>()), Key(positiveNumeric()))),
+              IsOkAndHoldsRows({{Null<Numeric>(), "null"},
+                                {minNumeric(), "min"},
+                                {negativeNumeric(), "neg"},
+                                {zeroNumeric(), "zero"},
+                                {positiveNumeric(), "pos"}}));
+
+  // Can read using a closed open range.
+  EXPECT_THAT(Read("NumericTable", {"key", "val"},
+                   ClosedOpen(Key(Null<Numeric>()), Key(positiveNumeric()))),
+              IsOkAndHoldsRows({{Null<Numeric>(), "null"},
+                                {minNumeric(), "min"},
+                                {negativeNumeric(), "neg"},
+                                {zeroNumeric(), "zero"}}));
+
+  // Can read using an open closed range.
+  EXPECT_THAT(Read("NumericTable", {"key", "val"},
+                   OpenClosed(Key(Null<Numeric>()), Key(positiveNumeric()))),
+              IsOkAndHoldsRows({{minNumeric(), "min"},
+                                {negativeNumeric(), "neg"},
+                                {zeroNumeric(), "zero"},
+                                {positiveNumeric(), "pos"}}));
+
+  // Can read using an open open range.
+  EXPECT_THAT(Read("NumericTable", {"key", "val"},
+                   OpenOpen(Key(Null<Numeric>()), Key(positiveNumeric()))),
+              IsOkAndHoldsRows({{minNumeric(), "min"},
+                                {negativeNumeric(), "neg"},
+                                {zeroNumeric(), "zero"}}));
+
+  // Read using an closed closed range where the two endpoints are
+  // not-null/non-empty.
+  EXPECT_THAT(
+      Read("NumericTable", {"key", "val"},
+           ClosedClosed(Key(negativeNumeric()), Key(positiveNumeric()))),
+      IsOkAndHoldsRows({{negativeNumeric(), "neg"},
+                        {zeroNumeric(), "zero"},
+                        {positiveNumeric(), "pos"}}));
+
+  // Read using an closed open range where the two endpoints are
+  // not-null/non-empty.
+  EXPECT_THAT(
+      Read("NumericTable", {"key", "val"},
+           ClosedOpen(Key(negativeNumeric()), Key(positiveNumeric()))),
+      IsOkAndHoldsRows({{negativeNumeric(), "neg"}, {zeroNumeric(), "zero"}}));
+
+  // Read using an open closed range where the two endpoints are
+  // not-null/non-empty.
+  EXPECT_THAT(
+      Read("NumericTable", {"key", "val"},
+           OpenClosed(Key(negativeNumeric()), Key(positiveNumeric()))),
+      IsOkAndHoldsRows({{zeroNumeric(), "zero"}, {positiveNumeric(), "pos"}}));
+
+  // Read using an open open range where the two endpoints are
+  // not-null/non-empty.
+  EXPECT_THAT(Read("NumericTable", {"key", "val"},
+                   OpenOpen(Key(negativeNumeric()), Key(positiveNumeric()))),
+              IsOkAndHoldsRows({{zeroNumeric(), "zero"}}));
+}
+
+TEST_F(RangeReadsTest, CanReadNumericUsingEmptyKeyBounds) {
+  PopulateNumericTable();
+
+  // Can read using a closed closed range with empty start key.
+  EXPECT_THAT(Read("NumericTable", {"key", "val"},
+                   ClosedClosed(Key(), Key(zeroNumeric()))),
+              IsOkAndHoldsRows({{Null<Numeric>(), "null"},
+                                {minNumeric(), "min"},
+                                {negativeNumeric(), "neg"},
+                                {zeroNumeric(), "zero"}}));
+
+  EXPECT_THAT(Read("NumericTable", {"key", "val"},
+                   OpenClosed(Key(), Key(zeroNumeric()))),
+              IsOkAndHoldsRows({}));
+
+  // Can read using a open closed range with empty end key.
+  EXPECT_THAT(
+      Read("NumericTable", {"key", "val"},
+           OpenClosed(Key(zeroNumeric()), Key())),
+      IsOkAndHoldsRows({{positiveNumeric(), "pos"}, {maxNumeric(), "max"}}));
+
+  EXPECT_THAT(Read("NumericTable", {"key", "val"},
+                   ClosedOpen(Key(zeroNumeric()), Key())),
+              IsOkAndHoldsRows({}));
+
+  // Can read using a closed open range with empty start key.
+  EXPECT_THAT(Read("NumericTable", {"key", "val"},
+                   ClosedOpen(Key(), Key(zeroNumeric()))),
+              IsOkAndHoldsRows({{Null<Numeric>(), "null"},
+                                {minNumeric(), "min"},
+                                {negativeNumeric(), "neg"}}));
+
+  // Can read using an closed closed range with both ends being empty.
+  EXPECT_THAT(Read("NumericTable", {"key", "val"}, ClosedClosed(Key(), Key())),
+              IsOkAndHoldsRows({
+                  {Null<Numeric>(), "null"},
+                  {minNumeric(), "min"},
+                  {negativeNumeric(), "neg"},
+                  {zeroNumeric(), "zero"},
+                  {positiveNumeric(), "pos"},
+                  {maxNumeric(), "max"},
+              }));
 }
 
 }  // namespace

@@ -31,9 +31,7 @@ class EmulatorFeatureFlags {
  public:
   struct Flags {
     bool enable_stored_generated_columns = true;
-    // TODO: Remove flag in subsequent release
-    bool enable_numeric_type = true;
-    bool enable_check_constraint = false;
+    bool enable_check_constraint = true;
   };
 
   static const EmulatorFeatureFlags& instance() {

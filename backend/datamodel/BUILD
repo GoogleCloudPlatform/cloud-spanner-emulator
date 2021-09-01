@@ -31,6 +31,7 @@ cc_library(
     srcs = ["key.cc"],
     hdrs = ["key.h"],
     deps = [
+        "@com_google_zetasql//zetasql/public:numeric_value",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )
@@ -98,6 +99,7 @@ cc_library(
     srcs = ["types.cc"],
     hdrs = ["types.h"],
     deps = [
+        "//common:feature_flags",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:type_cc_proto",
     ],
@@ -109,6 +111,7 @@ cc_test(
     deps = [
         ":types",
         "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",

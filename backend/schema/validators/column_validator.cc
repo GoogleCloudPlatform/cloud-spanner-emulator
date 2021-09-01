@@ -22,6 +22,7 @@
 #include "absl/strings/substitute.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/backfills/column_value_backfill.h"
+#include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "backend/schema/verifiers/column_value_verifiers.h"

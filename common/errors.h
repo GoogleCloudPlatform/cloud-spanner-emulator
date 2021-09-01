@@ -142,6 +142,8 @@ absl::Status ReadTimestampPastVersionGCLimit(absl::Time timestamp);
 absl::Status ReadTimestampTooFarInFuture(absl::Time timestamp);
 absl::Status AbortDueToConcurrentSchemaChange(backend::TransactionID id);
 absl::Status AbortReadWriteTransactionOnFirstCommit(backend::TransactionID id);
+absl::Status UpdateDeletedRowInTransaction(absl::string_view table,
+                                           absl::string_view key);
 
 // DDL errors.
 absl::Status EmptyDDLStatement();
@@ -410,6 +412,13 @@ absl::Status CheckConstraintExpressionParseError(
 absl::Status CheckConstraintNotUsingAnyNonGeneratedColumn(
     absl::string_view table_name, absl::string_view check_constraint_name,
     absl::string_view expression);
+absl::Status CannotUseCommitTimestampColumnOnCheckConstraint(
+    absl::string_view column_name);
+absl::Status InvalidDropColumnReferencedByCheckConstraint(
+    absl::string_view table_name, absl::string_view check_constraint_name,
+    absl::string_view referencing_column_name);
+absl::Status CannotAlterColumnDataTypeWithDependentCheckConstraint(
+    absl::string_view column_name, absl::string_view check_constraint_name);
 
 // Generated column errors
 absl::Status GeneratedColumnsNotEnabled();
@@ -463,9 +472,11 @@ absl::Status InvalidBatchDmlRequest();
 absl::Status BatchDmlOnlySupportsReadWriteTransaction();
 absl::Status ExecuteBatchDmlOnlySupportsDmlStatements(int index,
                                                       absl::string_view query);
-// Unsupported query shape errors.
 absl::Status ReadOnlyTransactionDoesNotSupportDml(
     absl::string_view transaction_type);
+// Unsupported query shape errors.
+absl::Status UnsupportedReturnStructAsColumn();
+absl::Status UnsupportedArrayConstructorSyntaxForEmptyStructArray();
 absl::Status UnsupportedFeatureSafe(absl::string_view feature_type,
                                     absl::string_view info_message);
 absl::Status UnsupportedFunction(absl::string_view function_name);

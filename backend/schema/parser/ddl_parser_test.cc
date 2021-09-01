@@ -688,26 +688,7 @@ TEST(ParseCreateTable, CanParseAlterTableWithDropConstraint) {
                   )")));
 }
 
-TEST(ParseCreateTable, CannotParseNumericWhenDisabled) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_numeric_type = false;
-  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  EXPECT_THAT(ParseDDLStatement(
-                  R"(
-                    CREATE TABLE T (
-                      K INT64 NOT NULL,
-                      NumericVal NUMERIC,
-                      NumericArr ARRAY<NUMERIC>
-                    ) PRIMARY KEY (K)
-                  )"),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("NUMERIC type is not implemented.")));
-}
-
 TEST(ParseCreateTable, CanParseCreateTableWithNumeric) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_numeric_type = true;
-  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(
       ParseDDLStatement(
           R"(
@@ -1007,9 +988,6 @@ TEST(ParseAlterTable, CanParseAddColumnNamedColumnNoQuotes) {
 }
 
 TEST(ParseAlterTable, CanParseAddNumericColumn) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_numeric_type = true;
-  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(ParseDDLStatement(
                   R"(
                     ALTER TABLE T ADD COLUMN G NUMERIC
@@ -1884,7 +1862,6 @@ class CheckConstraint : public ::testing::Test {
  public:
   CheckConstraint()
       : feature_flags_({.enable_stored_generated_columns = true,
-                        .enable_numeric_type = true,
                         .enable_check_constraint = true}) {}
 
  private:

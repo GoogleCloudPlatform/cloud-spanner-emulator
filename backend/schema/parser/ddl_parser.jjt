@@ -302,11 +302,11 @@ void alter_table_statement() :
 {}
 {
   <TABLE> (identifier() #table_name)
-  (   LOOKAHEAD(3) <ADD> #add_column <COLUMN> column_def()
+  (   LOOKAHEAD(3) <ADD> #add_column [LOOKAHEAD(2) <COLUMN>] column_def()
     | LOOKAHEAD(3) <DROP> <CONSTRAINT> #drop_constraint
         identifier() #constraint_name
-    | <DROP> #drop_column <COLUMN> (identifier() #column_name)
-    | LOOKAHEAD(3) <ALTER> #alter_column <COLUMN>
+    | <DROP> #drop_column [LOOKAHEAD(2) <COLUMN>] (identifier() #column_name)
+    | LOOKAHEAD(3) <ALTER> #alter_column [LOOKAHEAD(2) <COLUMN>]
         (identifier() #name) column_def_alter()
     | <SET> #set_on_delete on_delete_clause()
     | LOOKAHEAD(4) <ADD> foreign_key()

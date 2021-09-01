@@ -54,6 +54,7 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   const Schema* default_schema_;
 
   void AddSchemataTable();
+  void AddSpannerStatisticsTable();
 
   zetasql::SimpleTable* AddTablesTable();
   void FillTablesTable(zetasql::SimpleTable* tables);

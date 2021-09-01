@@ -19,6 +19,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -39,6 +40,11 @@ class IndexBackfillTest : public DatabaseTest {
           Name     STRING(MAX),
           Age      INT64,
         ) PRIMARY KEY (UserId)
+      )",
+        R"(CREATE TABLE NumericTable(
+          key   INT64 NOT NULL,
+          val   NUMERIC,
+        ) PRIMARY KEY (key)
       )"});
   }
 };
@@ -175,6 +181,56 @@ TEST_F(IndexBackfillTest, CannotBackfillIndexWithLargeKey) {
 
   EXPECT_THAT(UpdateSchema({"CREATE INDEX UsersByName ON Users(Name)"}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(IndexBackfillTest, BackfillForUniqueNumericIndex) {
+  EmulatorFeatureFlags::Flags flags;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  Numeric val1 = cloud::spanner::MakeNumeric("123.456789").value();
+  Numeric val2 = cloud::spanner::MakeNumeric("0").value();
+  Numeric val3 = cloud::spanner::MakeNumeric("999999999.456789").value();
+
+  ZETASQL_EXPECT_OK(Insert("NumericTable", {"key", "val"}, {1, val1}));
+  ZETASQL_EXPECT_OK(Insert("NumericTable", {"key", "val"}, {2, val2}));
+  ZETASQL_EXPECT_OK(Insert("NumericTable", {"key", "val"}, {3, val3}));
+
+  ZETASQL_EXPECT_OK(UpdateSchema({"CREATE UNIQUE INDEX Idx ON NumericTable(val)"}));
+
+  EXPECT_THAT(
+      ReadWithIndex("NumericTable", "Idx", {"key", "val"}, KeySet::All()),
+      IsOkAndHoldsRows({{2, val2}, {1, val1}, {3, val3}}));
+}
+
+TEST_F(IndexBackfillTest,
+       BackfillForUniqueNumericIndexFailsWithUniquenessViolationFails) {
+  EmulatorFeatureFlags::Flags flags;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  Numeric val = cloud::spanner::MakeNumeric("123.456789").value();
+  ZETASQL_EXPECT_OK(Insert("NumericTable", {"key", "val"}, {1, val}));
+  ZETASQL_EXPECT_OK(Insert("NumericTable", {"key", "val"}, {2, val}));
+
+  EXPECT_THAT(UpdateSchema({"CREATE UNIQUE INDEX Idx ON NumericTable(val)"}),
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       testing::HasSubstr("Found uniqueness violation")));
+}
+
+TEST_F(IndexBackfillTest, BackfillNullFilteredNumericIndex) {
+  EmulatorFeatureFlags::Flags flags;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  Numeric val = cloud::spanner::MakeNumeric("123.456789").value();
+  ZETASQL_EXPECT_OK(Insert("NumericTable", {"key", "val"}, {1, Null<Numeric>()}));
+  ZETASQL_EXPECT_OK(Insert("NumericTable", {"key", "val"}, {2, val}));
+
+  // Ensure that null filtering does not apply to stored columns.
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"CREATE NULL_FILTERED INDEX Idx ON NumericTable(val)"}));
+
+  EXPECT_THAT(
+      ReadWithIndex("NumericTable", "Idx", {"key", "val"}, KeySet::All()),
+      IsOkAndHoldsRows({{2, val}}));
 }
 
 }  // namespace

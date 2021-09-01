@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -27,37 +28,55 @@ using zetasql_base::testing::StatusIs;
 class ForeignKeyTransactionsTest : public DatabaseTest {
  protected:
   absl::Status SetUpDatabase() override {
-    return SetSchema({R"(
+    EmulatorFeatureFlags::Flags flags;
+    emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+    return SetSchema({
+        R"(
         CREATE TABLE T (
           A INT64,
           B INT64,
         ) PRIMARY KEY(A, B)
       )",
-                      R"(
+        R"(
         CREATE TABLE U (
           X INT64,
           Y INT64,
           FOREIGN KEY (Y, X) REFERENCES T (A, B),
         ) PRIMARY KEY(X)
       )",
-                      R"(
+        R"(
         CREATE TABLE Parent (
           A INT64 NOT NULL,
         ) PRIMARY KEY(A)
       )",
-                      R"(
+        R"(
         CREATE TABLE Child (
           A INT64 NOT NULL,
           B INT64 NOT NULL,
         ) PRIMARY KEY(A, B),
           INTERLEAVE IN PARENT Parent ON DELETE CASCADE
       )",
-                      R"(
+        R"(
         CREATE TABLE Referencing (
           X INT64 NOT NULL,
           FOREIGN KEY (X) REFERENCES Child (B),
         ) PRIMARY KEY(X)
-      )"});
+      )",
+        R"(
+        CREATE TABLE NumericT1 (
+          A NUMERIC,
+          B NUMERIC,
+        ) PRIMARY KEY(A, B)
+      )",
+        R"(
+        CREATE TABLE NumericT2 (
+          X NUMERIC,
+          Y NUMERIC,
+          FOREIGN KEY (Y, X) REFERENCES NumericT1 (A, B),
+        ) PRIMARY KEY(X)
+      )",
+    });
   }
 };
 
@@ -287,6 +306,24 @@ TEST_F(ForeignKeyTransactionsTest, SwapReferencedKey) {
   // values.
   ZETASQL_EXPECT_OK(Commit({MakeDelete("Child", Singleton(1, 2)),
                     MakeInsert("Child", {"A", "B"}, 2, 2)}));
+}
+
+TEST_F(ForeignKeyTransactionsTest,
+       NumericInsertReferencingRowWithReferencedRow) {
+  Numeric v1 = cloud::spanner::MakeNumeric("-999999999.456789").value();
+  Numeric v2 = cloud::spanner::MakeNumeric("123.456789").value();
+  ZETASQL_EXPECT_OK(Commit({MakeInsert("NumericT2", {"X", "Y"}, v2, v1),
+                    MakeInsert("NumericT1", {"A", "B"}, v1, v2)}));
+}
+
+TEST_F(ForeignKeyTransactionsTest,
+       NumericInsertReferencedRowAndIncorrectReferencingRow) {
+  Numeric v1 = cloud::spanner::MakeNumeric("-999999999.456789").value();
+  Numeric v2 = cloud::spanner::MakeNumeric("123.456789").value();
+  // The referencing key [2,1] does not match the referenced key [1,2].
+  EXPECT_THAT(Commit({MakeInsert("NumericT2", {"X", "Y"}, v1, v2),
+                      MakeInsert("NumericT1", {"A", "B"}, v1, v2)}),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 }  // namespace

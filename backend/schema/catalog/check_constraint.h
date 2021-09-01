@@ -38,6 +38,7 @@ class CheckConstraint : public SchemaNode {
   // Returns the expression.
   const std::string& expression() const { return expression_; }
 
+  // Returns the list of directly dependent columns.
   absl::Span<const Column* const> dependent_columns() const {
     return dependent_columns_;
   }
@@ -94,7 +95,8 @@ class CheckConstraint : public SchemaNode {
 
   std::string expression_;
 
-  // This is the list of columns that are referenced in its expression.
+  // This is the list of columns that are directly referenced in its expression.
+  // Generated columns are not expanded.
   std::vector<const Column*> dependent_columns_;
 
   // The table containing the column.

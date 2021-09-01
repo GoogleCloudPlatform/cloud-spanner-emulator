@@ -158,7 +158,8 @@ class SchemaUpdaterImpl {
   absl::Status AnalyzeCheckConstraint(
       absl::string_view expression, const Table* table,
       const ddl::CreateTable* ddl_create_table,
-      absl::flat_hash_set<std::string>* dependent_column_names);
+      absl::flat_hash_set<std::string>* dependent_column_names,
+      CheckConstraint::Builder* builder);
 
   template <typename ColumnModifier>
   absl::Status SetColumnOptions(const ddl::Options& options,
@@ -563,13 +564,20 @@ absl::Status SchemaUpdaterImpl::AnalyzeGeneratedColumn(
 absl::Status SchemaUpdaterImpl::AnalyzeCheckConstraint(
     absl::string_view expression, const Table* table,
     const ddl::CreateTable* ddl_create_table,
-    absl::flat_hash_set<std::string>* dependent_column_names) {
+    absl::flat_hash_set<std::string>* dependent_column_names,
+    CheckConstraint::Builder* builder) {
   std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
   ZETASQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
                                                   &name_and_types));
-  return AnalyzeColumnExpression(expression, zetasql::types::BoolType(),
-                                 table, name_and_types, "check constraints",
-                                 dependent_column_names);
+
+  ZETASQL_RETURN_IF_ERROR(AnalyzeColumnExpression(
+      expression, zetasql::types::BoolType(), table, name_and_types,
+      "check constraints", dependent_column_names));
+
+  for (const std::string& column_name : *dependent_column_names) {
+    builder->add_dependent_column(table->FindColumn(column_name));
+  }
+  return absl::OkStatus();
 }
 
 template <typename ColumnDefModifer>
@@ -1057,18 +1065,16 @@ absl::Status SchemaUpdaterImpl::CreateCheckConstraint(
   builder.set_expression(ddl_check_constraint.sql_expression());
 
   absl::flat_hash_set<std::string> dependent_column_names;
-  absl::Status s =
-      AnalyzeCheckConstraint(ddl_check_constraint.sql_expression(), table,
-                             ddl_create_table, &dependent_column_names);
+  absl::Status s = AnalyzeCheckConstraint(ddl_check_constraint.sql_expression(),
+                                          table, ddl_create_table,
+                                          &dependent_column_names, &builder);
+
   if (!s.ok()) {
     const std::string display_name =
         is_generated_name ? "<unnamed>" : check_constraint_name;
     return error::CheckConstraintExpressionParseError(
         table->Name(), ddl_check_constraint.sql_expression(), display_name,
         s.message());
-  }
-  for (const std::string& column_name : dependent_column_names) {
-    builder.add_dependent_column(table->FindColumn(column_name));
   }
 
   const CheckConstraint* check_constraint = builder.get();

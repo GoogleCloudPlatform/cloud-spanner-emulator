@@ -63,13 +63,9 @@ buildifier_dependencies()
 # Google APIs protos                                                           #
 ################################################################################
 
-http_archive(
-    name = "com_google_googleapis",
-    url = "https://github.com/googleapis/googleapis/archive/59f97e6044a1275f83427ab7962a154c00d915b5.tar.gz",
-    strip_prefix = "googleapis-59f97e6044a1275f83427ab7962a154c00d915b5",
-    sha256 = "5e785c25b1d57973e7481b4da226d7c73056ea22c7545bf6d14dbebf6e99b073",
-    build_file = "@//build/bazel:googleapis.BUILD",
-)
+load("//build/bazel:googleapis_dep.bzl", "googleapis_dep")
+
+googleapis_dep()
 
 load("@com_google_googleapis//:repository_rules.bzl", "switched_rules_by_language")
 
@@ -102,19 +98,13 @@ load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
 protobuf_deps()
 
-http_archive(
-    name = "com_google_absl",
-    strip_prefix = "abseil-cpp-fbdff6f3ae0ba977a69f172e85ecaede535e70f6",
-    url = "https://github.com/abseil/abseil-cpp/archive/fbdff6f3ae0ba977a69f172e85ecaede535e70f6.tar.gz",
-    sha256 = "6e0299e74f5ce48b3321acc831020065918e8530a78d5d6231ebee45fc9f5f96",
-)
+load("//build/bazel:absl_dep.bzl", "absl_dep")
 
-http_archive(
-    name = "com_google_googletest",
-    strip_prefix = "googletest-release-1.10.0",
-    urls = ["https://github.com/google/googletest/archive/release-1.10.0.tar.gz"],
-    sha256 = "9dc9157a9a1551ec7a7e43daea9a694a0bb5fb8bec81235d8a1e6ef64c716dcb",
-)
+absl_dep()
+
+load("//build/bazel:googletest_dep.bzl", "googletest_dep")
+
+googletest_dep()
 
 http_archive(
     name = "com_github_grpc_grpc",
@@ -130,15 +120,9 @@ load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps")
 
 grpc_deps()
 
-http_archive(
-    name = "com_google_zetasql",
-    url = "https://github.com/google/zetasql/archive/6a4e35f2a18549c991476f6ca9504ac3a4ad21a7.zip",
-    strip_prefix = "zetasql-6a4e35f2a18549c991476f6ca9504ac3a4ad21a7",
-    # Patches applied:
-    # - Give visibility to ZetaSQL's base library to reuse some utilities
-    patches = ["//build/bazel:zetasql.patch"],
-    sha256 = "e7706c55c850accbc71f165560daad5465723eb2e0af959c0aaf03d1312ed8f2"
-)
+load("//build/bazel:zetasql_dep.bzl", "zetasql_dep")
+
+zetasql_dep()
 
 load("@com_google_zetasql//bazel:zetasql_deps_step_1.bzl", "zetasql_deps_step_1")
 
@@ -156,12 +140,9 @@ load("@com_google_zetasql//bazel:zetasql_deps_step_4.bzl", "zetasql_deps_step_4"
 
 zetasql_deps_step_4()
 
-http_archive(
-    name = "com_github_googleapis_google_cloud_cpp",
-    url = "https://github.com/googleapis/google-cloud-cpp/archive/v1.22.0.tar.gz",
-    strip_prefix = "google-cloud-cpp-1.22.0",
-    sha256 = "2f52dcc679a31e738c01fb68aa0fc966fe0be5322d1a4ec7e6337363281a4704",
-)
+load("//build/bazel:google_cloud_cpp_dep.bzl", "google_cloud_cpp_dep")
+
+google_cloud_cpp_dep()
 
 load("@com_github_googleapis_google_cloud_cpp//bazel:google_cloud_cpp_deps.bzl", "google_cloud_cpp_deps")
 

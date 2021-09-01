@@ -41,7 +41,6 @@ class CheckConstraintVerifiersTest : public ::testing::Test {
  public:
   CheckConstraintVerifiersTest()
       : feature_flags_({.enable_stored_generated_columns = true,
-                        .enable_numeric_type = true,
                         .enable_check_constraint = true}) {}
 
  protected:

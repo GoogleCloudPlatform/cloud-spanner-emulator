@@ -30,12 +30,12 @@ function emulator::stop() {
 }
 
 function emulator::copy_logs() {
-  # Check if we are running through Kokoro.
-  if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
-    find -L . -name "test.log" -exec rename 's/test.log/sponge_log.log/' {} \;
-    find -L . -name "sponge_log.log" -exec cp --parents {} "/logs" \;
-    find -L . -name "test.xml" -exec rename 's/test.xml/sponge_log.xml/' {} \;
-    find -L . -name "sponge_log.xml" -exec cp --parents {} "/logs" \;
+  if [[ -n "${COPY_LOGS_TO}" ]]; then
+    cd /root
+    find . -iname "test.log" -exec rename 's/test.log/sponge_log.log/' {} \;
+    find . -iname "sponge_log.log" -exec cp --parents {} "$COPY_LOGS_TO" \;
+    find . -iname "test.xml" -exec rename 's/test.xml/sponge_log.xml/' {} \;
+    find . -iname "sponge_log.xml" -exec cp --parents {} "$COPY_LOGS_TO" \;
   fi
 }
 
@@ -49,10 +49,11 @@ function emulator::build_and_test() {
     --google_default_credentials
   fi
   exit_code=$?
+
   set -e
 
-  emulator::copy_logs
   if [[ $exit_code != 0 ]]; then
+    emulator::copy_logs
     exit $exit_code
   fi
 }
@@ -75,13 +76,24 @@ function emulator::run_integration_tests() {
     mvn clean test-compile failsafe:integration-test -DskipITs=false \
     -Dspanner.testenv.instance=""
   elif [[ $client == "cpp" ]]; then
-    cd "cpp"
+    cd "cpp/google/cloud/spanner/"
     bazel test --test_env=SPANNER_EMULATOR_HOST=localhost:9010 \
       --test_env=GOOGLE_CLOUD_PROJECT=test-project \
-      --test_env=GOOGLE_CLOUD_CPP_SPANNER_INSTANCE=test-instance-a \
+      --test_env=GOOGLE_CLOUD_CPP_SPANNER_TEST_INSTANCE_ID=test-instance-a \
       --test_env=GOOGLE_CLOUD_CPP_AUTO_RUN_EXAMPLES=yes \
-      --test_env=RUN_SLOW_INTEGRATION_TESTS=yes \
-      --nocache_test_results --test_tag_filters=integration-tests ...
+      --test_env=GOOGLE_CLOUD_CPP_SPANNER_SLOW_INTEGRATION_TESTS=yes \
+      --nocache_test_results --test_tag_filters=integration-test ...
+  elif [[ $client == "py" ]]; then
+    cd "py"
+    export GCLOUD_PROJECT=emulator-test-project
+    export GOOGLE_CLOUD_TESTS_CREATE_SPANNER_INSTANCE=true
+    nox -s system
+  elif [[ $client == "nodejs" ]]; then
+    cd "nodejs"
+    export GCLOUD_PROJECT=emulator-project
+    export SPANNER_EMULATOR_HOST=localhost:9010
+    npm install
+    npm run system-test
   else
     echo "Unrecognized client: \"${client}\"."
   fi
@@ -91,6 +103,7 @@ function emulator::run_integration_tests() {
   emulator::stop
   if [[ $exit_code != 0 ]]; then
     echo "${client} integration tests failed..."
+    emulator::copy_logs
     exit $exit_code
   fi
 }
@@ -108,3 +121,6 @@ emulator::build_and_test
 
 # For continuous jobs run the client library integration tests.
 emulator::continuous_integration
+
+# Copy logs to kokoro artifacts directory
+emulator::copy_logs

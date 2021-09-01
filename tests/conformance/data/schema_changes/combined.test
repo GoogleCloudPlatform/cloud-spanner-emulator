@@ -1,3 +1,4 @@
+# Duplicate table name.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Users (
@@ -7,6 +8,7 @@ CREATE TABLE users (
 --
 ERROR: Duplicate name in schema: Users.
 ==
+# Index names are in the same namespace.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -19,6 +21,7 @@ CREATE TABLE usersbyname (
 --
 ERROR: Duplicate name in schema: UsersByName.
 ==
+# NOT NULL constraint cannot be dropped because it affects indexing of nulls
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -34,18 +37,21 @@ ALTER TABLE Albums ALTER COLUMN AlbumName STRING(MAX);
 --
 ERROR: Changing NOT NULL constraints on column AlbumName is not allowed because it affects index AlbumsByName.
 ==
+# Interleave within nonexistent table.
 CREATE TABLE Albums (
 ) PRIMARY KEY(),
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 --
 ERROR: Table not found: Users
 ==
+# Interleave within self, which counts as a nonexistent table.
 CREATE TABLE Albums (
 ) PRIMARY KEY(),
   INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
 --
 ERROR: Table not found: Albums
 ==
+# Duplicate column name.
 CREATE TABLE Users (
   UserName STRING(MAX),
   UserName STRING(MAX),
@@ -57,29 +63,37 @@ CREATE TABLE Users (
 --
 ERROR: Duplicate column name Users.UserName.
 ==
+# Primary key references a nonexistent column.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 --
-ERROR: Table Users references nonexistent key column UserId.
+ERROR: [Tt]able Users references nonexistent key column UserId.
 ==
+# Primary key references a column with incorrect case.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(userid);
 --
-ERROR: Table Users references nonexistent key column userid.
+ERROR: [Tt]able Users references nonexistent key column userid.
 ==
+# Primary key references a column twice.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId, UserId);
 --
-ERROR: Table Users references key column UserId more than once.
+ERROR: [Tt]able Users references key column UserId more than once.
 ==
+# Primary key references an ARRAY column.
 CREATE TABLE Users (
   UserIds ARRAY<INT64> NOT NULL,
 ) PRIMARY KEY(UserIds);
 --
 ERROR: Column Users.UserIds has type ARRAY, but is part of the primary key.
 ==
+# Interleaved table does not reference parent key column.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -89,6 +103,7 @@ CREATE TABLE Albums (
 --
 ERROR: Table Albums does not reference parent key column UserId.
 ==
+# Interleaved table references parent key column at incorrect position.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -100,6 +115,7 @@ CREATE TABLE Albums (
 --
 ERROR: Table Albums references parent key column UserId at incorrect position 1.
 ==
+# Interleaved table references parent key column with incorrect sort order.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -110,6 +126,7 @@ CREATE TABLE Albums (
 --
 ERROR: Table Albums references parent key column UserId with incorrect order ASC.
 ==
+# Interleaved table references parent key column with incorrect length.
 CREATE TABLE Users (
   UserName STRING(MAX) NOT NULL,
 ) PRIMARY KEY(UserName);
@@ -120,6 +137,7 @@ CREATE TABLE Albums (
 --
 ERROR: Table Albums references parent key column UserName with incorrect length 42 (should be MAX).
 ==
+# Column of type DOUBLE listed as key of a directory table.
 CREATE TABLE Users (
   UserId FLOAT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -128,18 +146,21 @@ CREATE TABLE Users (
   UserId FLOAT64 NOT NULL,
 ) PRIMARY KEY(UserId);
 ==
+# Column has invalid length.
 CREATE TABLE Users (
   UserName STRING(0),
 ) PRIMARY KEY();
 --
 ERROR: Bad length for column Users.UserName: 0 : Allowed length range: [1, 2621440].
 ==
+# ARRAY<STRING> column has invalid length.
 CREATE TABLE Users (
   UserName ARRAY<STRING(400000000)>,
 ) PRIMARY KEY();
 --
 ERROR: Bad length for column Users.UserName: 400000000 : Allowed length range: [1, 2621440].
 ==
+# Table has too many keys.
 CREATE TABLE Users (
   UserId1 INT64 NOT NULL,
   UserId2 INT64 NOT NULL,
@@ -186,6 +207,7 @@ CREATE TABLE Photos (
 --
 ERROR: Table Photos has too many keys (17); the limit is 16.
 ==
+# Third-level table has no columns.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -197,6 +219,7 @@ CREATE TABLE Photos (
 --
 ERROR: Table Albums adds no columns and is not a top level table.
 ==
+# Non-primary key column is NOT NULL for a directory table.
 CREATE TABLE Users (
   user_info STRING(MAX) NOT NULL,
 ) PRIMARY KEY();
@@ -205,6 +228,7 @@ CREATE TABLE Users (
   user_info STRING(MAX) NOT NULL,
 ) PRIMARY KEY();
 ==
+# Options invalid for the column type
 CREATE TABLE Users (
   UserName STRING(MAX) OPTIONS (
     allow_commit_timestamp = true
@@ -213,6 +237,7 @@ CREATE TABLE Users (
 --
 ERROR: Column Users.UserName has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
+# Options invalid for the column type if allowed on TIMESTAMP.
 CREATE TABLE Users (
   UserName STRING(MAX) OPTIONS (
     allow_commit_timestamp = true
@@ -221,6 +246,7 @@ CREATE TABLE Users (
 --
 ERROR: Column Users.UserName has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
+# Child table must match parent key commit timestamp settings #1
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = true
@@ -233,6 +259,7 @@ CREATE TABLE B (
 --
 ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
+# Child table must match parent key commit timestamp settings #2
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = true
@@ -247,6 +274,7 @@ CREATE TABLE B (
 --
 ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
+# Child table must match parent key commit timestamp settings #3
 CREATE TABLE A (
   Timestamp INT64 NOT NULL,
 ) PRIMARY KEY(Timestamp);
@@ -259,6 +287,7 @@ CREATE TABLE B (
 --
 ERROR: Column B.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
+# Child table must match parent key commit timestamp settings #4
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = false
@@ -273,6 +302,7 @@ CREATE TABLE B (
 --
 ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
+# Duplicate index name.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -283,6 +313,7 @@ CREATE NULL_FILTERED INDEX usersbyname ON Users(UserName);
 --
 ERROR: Duplicate name in schema: UsersByName.
 ==
+# Table names are in the same namespace.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -291,6 +322,7 @@ CREATE NULL_FILTERED INDEX Users ON Users(UserName);
 --
 ERROR: Duplicate name in schema: Users.
 ==
+# Index specifies nonexistent table for interleaving.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -304,6 +336,7 @@ CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(UserId, AlbumName), INTERLEAVE
 --
 ERROR: Cannot interleave index AlbumsByName within nonexistent table DoesNotExist.
 ==
+# Ordering of a parent key component for an interleaved index doesn't match.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -317,6 +350,7 @@ CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(UserId DESC, AlbumName), INTER
 --
 ERROR: Index AlbumsByName references parent key column UserId with incorrect order ASC.
 ==
+# Index does not specify any key columns.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -324,6 +358,8 @@ CREATE NULL_FILTERED INDEX UsersByNothing ON Users();
 --
 ERROR: Index UsersByNothing does not specify any key columns.
 ==
+# Index has too many keys. Note the total number of index keys includes the
+# keys of the table being indexed.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserId2 INT64 NOT NULL,
@@ -349,6 +385,7 @@ CREATE NULL_FILTERED INDEX UsersByData ON Users(Data1, Data2, UserId, Data3, Dat
 --
 ERROR: Index UsersByData has too many keys (17); the limit is 16.
 ==
+# Index specifies nonexistent key column.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -356,6 +393,7 @@ CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
 --
 ERROR: Index UsersByName specifies key column UserName which does not exist in the index's base table.
 ==
+# Index specifies key column twice.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -364,6 +402,7 @@ CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName, UserName);
 --
 ERROR: Index UsersByName specifies key column UserName twice.
 ==
+# Index specifies keys that are not a prefix of the interleaved table.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -377,6 +416,7 @@ CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(AlbumName), INTERLEAVE IN User
 --
 ERROR: Index AlbumsByName does not reference index parent key column UserId.
 ==
+# An index on an ARRAY without "DISTINCT_ARRAY_ELEMENT" is an error.
 CREATE TABLE Root (
   user_id INT64 NOT NULL,
   vals ARRAY<INT64>,
@@ -385,6 +425,7 @@ CREATE NULL_FILTERED INDEX Index1 ON Root(vals);
 --
 ERROR: Cannot reference ARRAY vals in the creation of index Index1.
 ==
+# Bad index name because index table collides with index directory name.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -393,6 +434,7 @@ CREATE NULL_FILTERED INDEX Dir_BadIndexName ON Users(UserName);
 --
 ERROR: Index name not valid: Dir_BadIndexName.
 ==
+# Can't drop a table with interleaved tables.
 DROP TABLE DoesNotExist;
 CREATE TABLE Users (
 ) PRIMARY KEY();
@@ -407,6 +449,7 @@ DROP TABLE Albums;
 --
 ERROR: Table not found: DoesNotExist
 ==
+# Can't drop a table with an index.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -436,6 +479,7 @@ DROP TABLE Albums;
 --
 ERROR: Cannot drop table Albums with interleaved tables: Photos.
 ==
+# Duplicate column name for new column.
 CREATE TABLE Users (
   UserName STRING(MAX),
 ) PRIMARY KEY();
@@ -444,6 +488,7 @@ ALTER TABLE Users ADD COLUMN username STRING(MAX);
 --
 ERROR: Duplicate column name Users.UserName.
 ==
+# Make sure two added columns also fail.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 ALTER TABLE Users ADD COLUMN UserName STRING(MAX);
@@ -451,6 +496,7 @@ ALTER TABLE Users ADD COLUMN UserName STRING(MAX);
 --
 ERROR: Duplicate column name Users.UserName.
 ==
+# Duplicate column name for new column (interleave alias version).
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -461,18 +507,21 @@ ALTER TABLE Users ADD COLUMN ALBums STRING(MAX);
 --
 ERROR: Table Albums adds no columns and is not a top level table.
 ==
+# New column is NOT NULL.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 ALTER TABLE Users ADD COLUMN UserName STRING(MAX) NOT NULL;
 --
 ERROR: Cannot add NOT NULL column Users.UserName to existing table Users.
 ==
+# New column has invalid length.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 ALTER TABLE Users ADD COLUMN UserName STRING(0);
 --
 ERROR: Bad length for column Users.UserName: 0 : Allowed length range: [1, 2621440].
 ==
+# Can't drop columns that don't exist.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -480,6 +529,7 @@ ALTER TABLE Users DROP COLUMN DoesNotExist;
 --
 ERROR: Column not found in table Users: DoesNotExist
 ==
+# Can't drop key columns.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -487,6 +537,7 @@ ALTER TABLE Users DROP COLUMN UserId;
 --
 ERROR: Cannot drop key column UserId from table Users.
 ==
+# Can't drop key columns from non-directory tables, either.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -497,6 +548,7 @@ ALTER TABLE Albums DROP COLUMN AlbumId;
 --
 ERROR: Cannot drop key column AlbumId from table Albums.
 ==
+# Can't drop columns used as index keys.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -506,6 +558,7 @@ ALTER TABLE Users DROP COLUMN UserName;
 --
 ERROR: Cannot drop column UserName from table Users because it is used by index UsersByName.
 ==
+# Can't alter columns that don't exist.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -513,6 +566,7 @@ ALTER TABLE Users ALTER COLUMN DoesNotExist STRING(MAX);
 --
 ERROR: Column not found in table Users: DoesNotExist
 ==
+# Altered primary key column is not NOT NULL.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -520,6 +574,7 @@ ALTER TABLE Users ALTER COLUMN UserId INT64;
 --
 ERROR: Cannot change key column Users.UserId.
 ==
+# Altered column has invalid length.
 CREATE TABLE Users (
   UserName STRING(40),
 ) PRIMARY KEY();
@@ -527,6 +582,7 @@ ALTER TABLE Users ALTER COLUMN UserName STRING(400000000);
 --
 ERROR: Bad length for column Users.UserName: 400000000 : Allowed length range: [1, 2621440].
 ==
+# Remove NOT NULL from key.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -534,6 +590,7 @@ ALTER TABLE Users ALTER COLUMN UserId INT64;
 --
 ERROR: Cannot change key column Users.UserId.
 ==
+# Arrays: decrease inner length of column.
 CREATE TABLE Users (
   UserNames ARRAY<STRING(40)>,
 ) PRIMARY KEY();
@@ -543,6 +600,7 @@ CREATE TABLE Users (
   UserNames ARRAY<STRING(20)>,
 ) PRIMARY KEY();
 ==
+# Arrays: add inner length to column.
 CREATE TABLE Users (
   UserNames ARRAY<STRING(MAX)>,
 ) PRIMARY KEY();
@@ -552,6 +610,7 @@ CREATE TABLE Users (
   UserNames ARRAY<STRING(40)>,
 ) PRIMARY KEY();
 ==
+# Arrays: change type of column other than STRING -> BYTES.
 CREATE TABLE Users (
   UserNames ARRAY<BYTES(MAX)>,
 ) PRIMARY KEY();
@@ -561,6 +620,8 @@ CREATE TABLE Users (
   UserNames ARRAY<STRING(MAX)>,
 ) PRIMARY KEY();
 ==
+# Arrays: change subtype of column STRING -> BYTES, but without length
+# adjustment.
 CREATE TABLE Users (
   UserNames ARRAY<STRING(20)>,
 ) PRIMARY KEY();
@@ -570,6 +631,7 @@ CREATE TABLE Users (
   UserNames ARRAY<BYTES(79)>,
 ) PRIMARY KEY();
 ==
+# SET ON DELETE requires an interleaved table.
 CREATE TABLE Users (
   UserId STRING(MAX) NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -577,6 +639,7 @@ ALTER TABLE Users SET ON DELETE CASCADE;
 --
 ERROR: Cannot SET ON DELETE on table Users that does not have an INTERLEAVE clause.
 ==
+# Even an implicitly-interleaved table is insufficient.
 CREATE TABLE Users (
   UserId STRING(MAX) NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -584,6 +647,8 @@ ALTER TABLE Users SET ON DELETE CASCADE;
 --
 ERROR: Cannot SET ON DELETE on table Users that does not have an INTERLEAVE clause.
 ==
+# Test that the long-running schema changes do not work for arrays.
+# Arrays: Cannot add NOT NULL.
 CREATE TABLE T (
   C ARRAY<STRING(MAX)>,
 ) PRIMARY KEY();
@@ -593,6 +658,7 @@ CREATE TABLE T (
   C ARRAY<STRING(MAX)> NOT NULL,
 ) PRIMARY KEY();
 ==
+# Arrays: Cannot decrease length.
 CREATE TABLE T (
   C ARRAY<STRING(40)>,
 ) PRIMARY KEY();
@@ -602,6 +668,7 @@ CREATE TABLE T (
   C ARRAY<STRING(20)>,
 ) PRIMARY KEY();
 ==
+# Arrays: Cannot go from BYTES to STRING.
 CREATE TABLE T (
   C ARRAY<BYTES(MAX)>,
 ) PRIMARY KEY();
@@ -611,6 +678,7 @@ CREATE TABLE T (
   C ARRAY<STRING(MAX)>,
 ) PRIMARY KEY();
 ==
+# Attempt to name a secondary index PRIMARY_KEY.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -619,6 +687,7 @@ CREATE INDEX PRIMARY_KEY ON Users(UserName);
 --
 ERROR: Cannot use reserved name PRIMARY_KEY for a secondary index
 ==
+# Attempt to name a secondary index Primary_Key.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -627,6 +696,7 @@ CREATE INDEX Primary_Key ON Users(UserName);
 --
 ERROR: Cannot use reserved name PRIMARY_KEY for a secondary index
 ==
+# Attempt to make a nullable primary key column not null.
 CREATE TABLE Users (
   UserId INT64,
   UserName STRING(MAX),
@@ -635,6 +705,7 @@ ALTER TABLE Users ALTER COLUMN UserId INT64 NOT NULL;
 --
 ERROR: Cannot change key column Users.UserId.
 ==
+# Attempt to make a nullable non-key column with an index not null.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -644,6 +715,7 @@ ALTER TABLE Users ALTER COLUMN UserName STRING(MAX) NOT NULL;
 --
 ERROR: Changing NOT NULL constraints on column UserName is not allowed because it affects index UsersByUserName.
 ==
+# Attempt to make a nullable primary key column not null.
 CREATE TABLE Users (
   UserId INT64,
   UserName STRING(MAX),
@@ -652,6 +724,7 @@ ALTER TABLE Users ALTER COLUMN UserId INT64 NOT NULL;
 --
 ERROR: Cannot change key column Users.UserId.
 ==
+# Attempt to make a nullable non-key column with an index not null.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -661,6 +734,7 @@ ALTER TABLE Users ALTER COLUMN UserName STRING(MAX) NOT NULL;
 --
 ERROR: Changing NOT NULL constraints on column UserName is not allowed because it affects index UsersByUserName.
 ==
+# Attempt to make reduce the size of an ARRAY subtype.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName ARRAY<STRING(MAX)>,
@@ -672,6 +746,7 @@ CREATE TABLE Users (
   UserName ARRAY<STRING(1)>,
 ) PRIMARY KEY(UserId);
 ==
+# Alter a directory table that is tentatively being dropped.
 CREATE TABLE dir1 (
   k INT64 NOT NULL,
   v STRING(1),
@@ -681,6 +756,7 @@ ALTER TABLE dir1 ADD COLUMN v2 STRING(MAX);
 --
 ERROR: Table not found: dir1
 ==
+# Alter a column of a directory table that is tentatively being dropped.
 CREATE TABLE dir1 (
   k INT64 NOT NULL,
   v STRING(1),
@@ -690,6 +766,7 @@ ALTER TABLE dir1 ALTER COLUMN v STRING(2);
 --
 ERROR: Table not found: dir1
 ==
+# Create an index on a directory table that is tentatively being dropped.
 CREATE TABLE dir1 (
   k INT64 NOT NULL,
   v STRING(1),
@@ -699,6 +776,7 @@ CREATE INDEX dir1IndexOnC ON dir1(v);
 --
 ERROR: Table not found: dir1
 ==
+# Create interleaved table in directory table that is tentatively being dropped.
 CREATE TABLE dir1 (
   k INT64 NOT NULL,
   v STRING(1),
@@ -712,6 +790,7 @@ CREATE TABLE tbl (
 --
 ERROR: Table not found: dir1
 ==
+# Directory table with two non-key columns.
 CREATE TABLE Users (
   UserId INT64,
   Name STRING(MAX),
@@ -722,6 +801,7 @@ CREATE TABLE Users (
   Name STRING(MAX),
 ) PRIMARY KEY();
 ==
+# Directory table with two key columns and a non-key column.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   Name STRING(MAX) NOT NULL,
@@ -734,6 +814,7 @@ CREATE TABLE Users (
   Notes STRING(MAX),
 ) PRIMARY KEY(UserId, Name);
 ==
+# Directory table with a key column and two non-key columns.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   Name STRING(MAX),
@@ -746,6 +827,8 @@ CREATE TABLE Users (
   Notes STRING(MAX),
 ) PRIMARY KEY(UserId);
 ==
+# Top-level tables are allowed to have DOUBLE key parts, as opposed to directory
+# tables.
 CREATE TABLE Users (
   UserId STRING(MAX) NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -764,6 +847,7 @@ CREATE TABLE Albums (
 ) PRIMARY KEY(UserId, AlbumId),
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 ==
+# Interleaved table with no columns.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -772,6 +856,7 @@ CREATE TABLE Albums (
 --
 ERROR: Table Albums adds no columns and is not a top level table.
 ==
+# Interleaved table with key and non-key columns.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -794,6 +879,7 @@ CREATE TABLE Albums (
 ) PRIMARY KEY(UserId, AlbumId),
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 ==
+# Third-level interleaved table.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -806,6 +892,7 @@ CREATE TABLE Photos (
 --
 ERROR: Table Albums adds no columns and is not a top level table.
 ==
+# Date columns.
 CREATE TABLE T (
   DKey DATE NOT NULL,
   DValue DATE,
@@ -816,6 +903,7 @@ CREATE TABLE T (
   DValue DATE,
 ) PRIMARY KEY(DKey);
 ==
+# Non-primary-key column is NOT NULL.
 CREATE TABLE Users (
   UserName STRING(MAX) NOT NULL,
 ) PRIMARY KEY();
@@ -824,6 +912,8 @@ CREATE TABLE Users (
   UserName STRING(MAX) NOT NULL,
 ) PRIMARY KEY();
 ==
+# Global index on top-level NULLable column. Corresponding key part is marked
+# as "nullable"
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -836,6 +926,8 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 CREATE INDEX UsersByName ON Users(UserName);
 ==
+# Local index on top-level NOT NULLable column. Corresponding key part is not
+# marked as "nullable"
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -860,6 +952,7 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 CREATE INDEX AlbumsByName ON Albums(UserId, AlbumName), INTERLEAVE IN Users;
 ==
+# Basic global index.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -872,6 +965,7 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
 ==
+# Basic interleaved index.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -894,6 +988,7 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 CREATE NULL_FILTERED INDEX LocalAlbumsByName ON Albums(UserId, AlbumName DESC), INTERLEAVE IN Users;
 ==
+# Indices using ASC and DESC.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -908,6 +1003,7 @@ CREATE TABLE Users (
 CREATE NULL_FILTERED INDEX UsersAsc ON Users(UserName);
 CREATE NULL_FILTERED INDEX UsersDesc ON Users(UserName DESC);
 ==
+# Create a unique index.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -920,6 +1016,7 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 CREATE UNIQUE NULL_FILTERED INDEX UsersByName ON Users(UserName);
 ==
+# Index specifies keys that are a prefix of the keys of the indexed table.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -940,6 +1037,7 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 CREATE NULL_FILTERED INDEX AlbumsByUser ON Albums(UserId);
 ==
+# Child table matches parent key commit timestamp settings #1
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = true
@@ -954,6 +1052,7 @@ CREATE TABLE B (
 --
 ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
+# Child table matches parent key commit timestamp settings #2
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = false
@@ -968,6 +1067,7 @@ CREATE TABLE B (
 --
 ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
+# Child table matches parent key commit timestamp settings #3
 CREATE TABLE A (
   Timestamp INT64 NOT NULL,
 ) PRIMARY KEY(Timestamp);
@@ -980,6 +1080,7 @@ CREATE TABLE B (
 --
 ERROR: Column B.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
+# Child table matches parent key commit timestamp settings #4
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = false
@@ -1005,6 +1106,7 @@ CREATE TABLE T (
   ),
 ) PRIMARY KEY(A);
 ==
+# Basic drop table.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -1014,6 +1116,7 @@ DROP TABLE Albums;
 --
 ERROR: Table Albums adds no columns and is not a top level table.
 ==
+# Basic drop index.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -1026,6 +1129,7 @@ CREATE TABLE Users (
   UserName STRING(MAX),
 ) PRIMARY KEY(UserId);
 ==
+# Basic add column.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 ALTER TABLE Users ADD COLUMN NewColumn INT64;
@@ -1034,6 +1138,7 @@ CREATE TABLE Users (
   NewColumn INT64,
 ) PRIMARY KEY();
 ==
+# Basic drop column.
 CREATE TABLE Users (
   OldColumn INT64,
 ) PRIMARY KEY();
@@ -1042,6 +1147,7 @@ ALTER TABLE Users DROP COLUMN OldColumn;
 CREATE TABLE Users (
 ) PRIMARY KEY();
 ==
+# Increase length to MAX.
 CREATE TABLE Users (
   UserName STRING(20),
 ) PRIMARY KEY();
@@ -1051,6 +1157,7 @@ CREATE TABLE Users (
   UserName STRING(MAX),
 ) PRIMARY KEY();
 ==
+# Arrays: increase length to MAX.
 CREATE TABLE Users (
   UserNames ARRAY<STRING(20)>,
 ) PRIMARY KEY();
@@ -1068,6 +1175,7 @@ CREATE TABLE Users (
   UserName ARRAY<STRING(400000)>,
 ) PRIMARY KEY();
 ==
+# Change STRING to BYTES.
 CREATE TABLE Users (
   UserName STRING(20),
 ) PRIMARY KEY();
@@ -1077,6 +1185,7 @@ CREATE TABLE Users (
   UserName BYTES(80),
 ) PRIMARY KEY();
 ==
+# Arrays: change STRING to BYTES.
 CREATE TABLE Users (
   UserNames ARRAY<STRING(20)>,
 ) PRIMARY KEY();
@@ -1086,6 +1195,7 @@ CREATE TABLE Users (
   UserNames ARRAY<BYTES(80)>,
 ) PRIMARY KEY();
 ==
+# Change STRING(MAX) to BYTES(MAX).
 CREATE TABLE Users (
   UserName STRING(MAX),
 ) PRIMARY KEY();
@@ -1095,6 +1205,7 @@ CREATE TABLE Users (
   UserName BYTES(MAX),
 ) PRIMARY KEY();
 ==
+# Arrays: change STRING(MAX) to BYTES(MAX).
 CREATE TABLE Users (
   UserNames ARRAY<STRING(MAX)>,
 ) PRIMARY KEY();
@@ -1104,6 +1215,7 @@ CREATE TABLE Users (
   UserNames ARRAY<BYTES(MAX)>,
 ) PRIMARY KEY();
 ==
+# Increase length of key column.
 CREATE TABLE Users (
   UserId STRING(20) NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -1113,6 +1225,7 @@ CREATE TABLE Users (
   UserId STRING(40) NOT NULL,
 ) PRIMARY KEY(UserId);
 ==
+# Change STRING key column to BYTES.
 CREATE TABLE Users (
   UserId STRING(MAX) NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -1122,6 +1235,7 @@ CREATE TABLE Users (
   UserId BYTES(MAX) NOT NULL,
 ) PRIMARY KEY(UserId);
 ==
+# Interleaved table with implicit ON DELETE NO ACTION.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -1130,6 +1244,7 @@ CREATE TABLE Albums (
 --
 ERROR: Table Albums adds no columns and is not a top level table.
 ==
+# Interleaved table with explicit ON DELETE NO ACTION.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -1138,6 +1253,7 @@ CREATE TABLE Albums (
 --
 ERROR: Table Albums adds no columns and is not a top level table.
 ==
+# Interleaved table with ON DELETE NO ACTION allowed outside strict mode.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -1146,6 +1262,7 @@ CREATE TABLE Albums (
 --
 ERROR: Table Albums adds no columns and is not a top level table.
 ==
+# Interleaved table altered to ON DELETE NO ACTION.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -1155,6 +1272,7 @@ ALTER TABLE Albums SET ON DELETE NO ACTION;
 --
 ERROR: Table Albums adds no columns and is not a top level table.
 ==
+# Attempt to make a nullable column not null.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -1166,6 +1284,7 @@ CREATE TABLE Users (
   UserName STRING(MAX) NOT NULL,
 ) PRIMARY KEY(UserId);
 ==
+# Attempt to make a nullable column not null.
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -1177,6 +1296,7 @@ CREATE TABLE Users (
   UserName STRING(MAX) NOT NULL,
 ) PRIMARY KEY(UserId);
 ==
+# Interleaved table altered to ON DELETE CASCADE.  No-op, but legal.
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -1186,6 +1306,8 @@ ALTER TABLE Albums SET ON DELETE CASCADE;
 --
 ERROR: Table Albums adds no columns and is not a top level table.
 ==
+# Check constraint tests for async replication
+# Create table without check constraint as reference.
 CREATE TABLE T (
   A INT64,
 ) PRIMARY KEY(A);

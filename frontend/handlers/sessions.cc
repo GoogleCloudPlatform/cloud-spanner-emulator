@@ -65,7 +65,7 @@ absl::Status CreateSession(RequestContext* ctx,
       ctx->env()->session_manager()->CreateSession(labels, database));
 
   // Return details about the newly created session.
-  return session->ToProto(response, /*include_labels=*/false);
+  return session->ToProto(response, /*include_labels=*/true);
 }
 REGISTER_GRPC_HANDLER(Spanner, CreateSession);
 
