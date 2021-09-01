@@ -24,6 +24,7 @@ CREATE TABLE u (
   CONSTRAINT c FOREIGN KEY(x) REFERENCES t(a),
 ) PRIMARY KEY(x);
 ==
+# Different shapes.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B STRING(MAX) NOT NULL,
@@ -36,6 +37,7 @@ CREATE TABLE U (
   FOREIGN KEY(Y) REFERENCES T(B),
 ) PRIMARY KEY(X);
 ==
+# Different string lengths.
 CREATE TABLE T (
   A STRING(MAX) NOT NULL,
 ) PRIMARY KEY(A);
@@ -44,6 +46,7 @@ CREATE TABLE U (
   FOREIGN KEY(X) REFERENCES T(A),
 ) PRIMARY KEY(X);
 ==
+# Alter constrained string length.
 CREATE TABLE T (
   A STRING(MAX) NOT NULL,
 ) PRIMARY KEY(A);
@@ -61,6 +64,7 @@ CREATE TABLE U (
   FOREIGN KEY(X) REFERENCES T(A),
 ) PRIMARY KEY(X);
 ==
+# Alter referenced string length.
 CREATE TABLE T (
   A STRING(MAX) NOT NULL,
 ) PRIMARY KEY(A);
@@ -78,6 +82,7 @@ CREATE TABLE U (
   FOREIGN KEY(X) REFERENCES T(A),
 ) PRIMARY KEY(X);
 ==
+# Enable enforcement using primary key prefixes.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64,
@@ -87,13 +92,20 @@ CREATE TABLE U (
   P INT64 NOT NULL,
   Q INT64 NOT NULL,
   R INT64 NOT NULL,
+# Mapped primary key order is the same (usable).
   FOREIGN KEY(P, R, Q) REFERENCES T(A, C, B),
+# Mapped primary key order is different (not usable).
   FOREIGN KEY(P, R, Q) REFERENCES T(A, B, C),
+# Prefix subset of primary keys (usable).
   FOREIGN KEY(P, Q) REFERENCES T(A, B),
+# Non-prefix subset of constrained primary keys (not usable).
   FOREIGN KEY(Q, R) REFERENCES T(A, B),
+# Non-prefix subset of referenced primary keys (not usable).
   FOREIGN KEY(P, Q) REFERENCES T(B, C),
 ) PRIMARY KEY(P, Q DESC, R);
 ==
+# Number of constrained columns exceeds the number of primary key columns.
+# Cannot use the constrained primary key.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -104,6 +116,8 @@ CREATE TABLE U (
   FOREIGN KEY(X, Y) REFERENCES T(A, B),
 ) PRIMARY KEY(X);
 ==
+# Number of referenced columns exceeds the number of primary key columns.
+# Cannot use the referenced primary key.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -114,6 +128,8 @@ CREATE TABLE U (
   FOREIGN KEY(X, Y) REFERENCES T(A, B),
 ) PRIMARY KEY(X, Y);
 ==
+# Nullable constrained primary key column.
+# Cannot use the constrained primary key.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -124,6 +140,7 @@ CREATE TABLE U (
   FOREIGN KEY(X, Y) REFERENCES T(A, B),
 ) PRIMARY KEY(X, Y);
 ==
+# Add foreign keys to existing tables.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -132,10 +149,15 @@ CREATE TABLE U (
   X INT64 NOT NULL,
   Y INT64 NOT NULL,
 ) PRIMARY KEY(X, Y);
+# Unique, unnamed, enforced implied.
 ALTER TABLE U ADD FOREIGN KEY(X) REFERENCES T(A);
+# Unique, unnamed, enforced explicit, circular.
 ALTER TABLE T ADD FOREIGN KEY(B) REFERENCES U(X);
+# Duplicate (only possible with unnamed since names must be unique).
 ALTER TABLE U ADD FOREIGN KEY(X) REFERENCES T(A);
+# Named, enforced implied (duplicate with unnamed except the name).
 ALTER TABLE U ADD CONSTRAINT C FOREIGN KEY(X) REFERENCES T(A);
+# Named, enforced explicit, circular (duplicate with unnamed except the name).
 ALTER TABLE T ADD CONSTRAINT D FOREIGN KEY(B) REFERENCES U(X);
 --
 CREATE TABLE T (
@@ -152,6 +174,7 @@ CREATE TABLE U (
   CONSTRAINT C FOREIGN KEY(X) REFERENCES T(A),
 ) PRIMARY KEY(X, Y);
 ==
+# Drop foreign keys from existing tables.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -165,9 +188,13 @@ CREATE TABLE U (
 ) PRIMARY KEY(X, Y);
 ALTER TABLE T ADD CONSTRAINT C FOREIGN KEY(A) REFERENCES T(B);
 ALTER TABLE T ADD CONSTRAINT E FOREIGN KEY(B) REFERENCES U(X);
+# Drop a duplicate unnamed foreign key.
 ALTER TABLE U DROP CONSTRAINT FK_U_T_FFADEDEE3430D435_2;
+# Drop a named foreign key.
 ALTER TABLE U DROP CONSTRAINT D;
+# Drop a circular named foreign key.
 ALTER TABLE T DROP CONSTRAINT E;
+# Drop a self-referencing named foreign key.
 ALTER TABLE T DROP CONSTRAINT C;
 --
 CREATE TABLE T (
@@ -180,6 +207,7 @@ CREATE TABLE U (
   FOREIGN KEY(X, Y) REFERENCES T(B, A),
 ) PRIMARY KEY(X, Y);
 ==
+# Drop table with foreign keys.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -198,6 +226,7 @@ CREATE TABLE T (
   B INT64 NOT NULL,
 ) PRIMARY KEY(A, B);
 ==
+# Referenced table not found.
 CREATE TABLE U (
   X INT64 NOT NULL,
   FOREIGN KEY(X) REFERENCES T(A)
@@ -205,6 +234,7 @@ CREATE TABLE U (
 --
 ERROR: Table not found: T
 ==
+# Duplicate schema name (CREATE TABLE).
 CREATE TABLE T (
   A INT64 NOT NULL
 ) PRIMARY KEY(A);
@@ -215,6 +245,7 @@ CREATE TABLE U (
 --
 ERROR: Duplicate name in schema: T.
 ==
+# Duplicate schema name (ALTER TABLE).
 CREATE TABLE T (
   A INT64 NOT NULL
 ) PRIMARY KEY(A);
@@ -225,6 +256,7 @@ ALTER TABLE U ADD CONSTRAINT T FOREIGN KEY(X) REFERENCES T(A);
 --
 ERROR: Duplicate name in schema: T.
 ==
+# System schema name (CREATE TABLE).
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL
@@ -236,6 +268,7 @@ CREATE TABLE U (
 --
 ERROR: [Ff]oreign [Kk]ey name not valid: _T.
 ==
+# System schema name (ALTER TABLE).
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL
@@ -247,6 +280,7 @@ ALTER TABLE U ADD CONSTRAINT _T FOREIGN KEY(X) REFERENCES T(A);
 --
 ERROR: [Ff]oreign [Kk]ey name not valid: _T.
 ==
+# Duplicate constrained column usage.
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
@@ -260,6 +294,7 @@ CREATE TABLE U (
 --
 ERROR: Column `X` used more than once for table `U` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
+# Duplicate referenced column usage.
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
@@ -273,6 +308,7 @@ CREATE TABLE U (
 --
 ERROR: Column `A` used more than once for table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
+# Mismatched number of constrained and referenced columns.
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
@@ -286,7 +322,7 @@ CREATE TABLE U (
 --
 ERROR: The number of columns are different for table `U` and table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
-# --normalize
+# No constrained columns.
 CREATE TABLE T (
   A INT64 NOT NULL
 ) PRIMARY KEY(A);
@@ -297,7 +333,7 @@ CREATE TABLE U (
 --
 ERROR: Error parsing Spanner DDL statement: CREATE TABLE U ( X INT64 NOT NULL, FOREIGN KEY() REFERENCES T(A) ) PRIMARY KEY(X) : Syntax error on line 4, column 15: Encountered ')' while parsing: identifier
 ==
-# --normalize
+# No referenced columns.
 CREATE TABLE T (
   A INT64 NOT NULL
 ) PRIMARY KEY(A);
@@ -308,6 +344,7 @@ CREATE TABLE U (
 --
 ERROR: Error parsing Spanner DDL statement: CREATE TABLE U ( X INT64 NOT NULL, FOREIGN KEY(X) REFERENCES T() ) PRIMARY KEY(X) : Syntax error on line 4, column 31: Encountered ')' while parsing: identifier
 ==
+# Constrained column not found.
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL
@@ -319,6 +356,7 @@ CREATE TABLE U (
 --
 ERROR: Column `Y` not found for table `U` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
+# Referenced column not found.
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL
@@ -330,6 +368,7 @@ CREATE TABLE U (
 --
 ERROR: Column `B` not found for table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
+# Different column types.
 # --regex
 CREATE TABLE T (
   A BOOL NOT NULL
@@ -341,6 +380,7 @@ CREATE TABLE U (
 --
 ERROR: The column types are different for column `X` of table `U` and column `A` of table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
+# Invalid constraint name.
 # --regex
 CREATE TABLE T (
   A BOOL NOT NULL,
@@ -352,6 +392,7 @@ CREATE TABLE U (
 --
 ERROR: Invalid [Ff]oreign [Kk]ey name: PK_FK. Prefix PK_ cannot be used.
 ==
+# Cannot drop referenced table.
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL
@@ -368,6 +409,7 @@ DROP TABLE T;
 --
 ERROR: Cannot drop table `T`. It is referenced by one or more foreign keys: `FK_U_T_[A-F0-9_]+`, `FK_V_T_[A-F0-9_]+`. You must drop the foreign keys before dropping the table.
 ==
+# Cannot alter constrained column's type.
 CREATE TABLE T (
   A INT64 NOT NULL
 ) PRIMARY KEY(A);
@@ -380,6 +422,7 @@ ALTER TABLE U ALTER COLUMN Y FLOAT64 NOT NULL;
 --
 ERROR: Cannot change type of column `Y` from `INT64` to `FLOAT64`
 ==
+# Cannot alter referenced column's type.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL
@@ -392,6 +435,7 @@ ALTER TABLE T ALTER COLUMN B FLOAT64 NOT NULL;
 --
 ERROR: Cannot change type of column `B` from `INT64` to `FLOAT64`
 ==
+# Cannot alter referenced column's nullability.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -404,6 +448,7 @@ ALTER TABLE T ALTER COLUMN B INT64;
 --
 ERROR: Cannot change the nullability for column `B` of table `T`. It is used by one or more foreign keys: `FK_U_T_FFADEDEE3430D435_1`.
 ==
+# Cannot alter constrained column's nullability.
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
@@ -417,6 +462,7 @@ ALTER TABLE U ALTER COLUMN Y INT64;
 --
 ERROR: Cannot change the nullability for column `Y` of table `U`. It is used by one or more foreign keys: `FK_U_T_[A-F0-9_]+`.
 ==
+# Cannot drop constrained column.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -431,6 +477,7 @@ ALTER TABLE U DROP COLUMN Y;
 --
 ERROR: Cannot drop column `Y` from table `U`. It is used by one or more foreign keys: `FK_U_T_FFADEDEE3430D435_1`, `FK_U_T_FFADEDEE3430D435_2`. You must drop the foreign keys before dropping the column.
 ==
+# Cannot drop referenced column.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -447,6 +494,7 @@ ALTER TABLE T DROP COLUMN B;
 --
 ERROR: Cannot drop column `B` from table `T`. It is used by one or more foreign keys: `FK_U_T_FFADEDEE3430D435_1`, `FK_V_T_A032F46D0AA7A2F1_1`. You must drop the foreign keys before dropping the column.
 ==
+# Invalid column type.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B ARRAY<INT64> NOT NULL
@@ -459,6 +507,7 @@ CREATE TABLE U (
 --
 ERROR: Column `Y` for foreign key `FK_U_T_FFADEDEE3430D435_1` on table `U` has an unsupported type.
 ==
+# Invalid referencing commit timestamp.
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
@@ -472,6 +521,7 @@ CREATE TABLE U (
 --
 ERROR: Commit timestamp column is not supported for column `Y` of table `U` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
+# Invalid referenced commit timestamp.
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
@@ -485,6 +535,7 @@ CREATE TABLE U (
 --
 ERROR: Commit timestamp column is not supported for column `B` of table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
+# Invalid set referencing commit timestamp.
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
@@ -499,6 +550,7 @@ ALTER TABLE U ALTER COLUMN Y SET OPTIONS (allow_commit_timestamp = true);
 --
 ERROR: Cannot set the commit_timestamp option for column `Y` of table `U`. It is used by one or more foreign keys: `FK_U_T_[A-F0-9_]+`.
 ==
+# Invalid set referenced commit timestamp.
 # --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
@@ -513,6 +565,7 @@ ALTER TABLE T ALTER COLUMN B SET OPTIONS (allow_commit_timestamp = true);
 --
 ERROR: Cannot set the commit_timestamp option for column `B` of table `T`. It is used by one or more foreign keys: `FK_U_T_[A-F0-9_]+`.
 ==
+# Constraint not found.
 CREATE TABLE T (
   A INT64 NOT NULL,
 ) PRIMARY KEY(A);
@@ -520,6 +573,7 @@ ALTER TABLE T DROP CONSTRAINT C;
 --
 ERROR: C is not a constraint in T
 ==
+# Create table with duplicate constraint names.
 CREATE TABLE T (
   A INT64 NOT NULL,
 ) PRIMARY KEY(A);
@@ -531,6 +585,7 @@ CREATE TABLE U (
 --
 ERROR: Duplicate name in schema: C.
 ==
+# Add duplicate constraint names.
 CREATE TABLE T (
   A INT64 NOT NULL,
 ) PRIMARY KEY(A);
@@ -542,6 +597,7 @@ ALTER TABLE T ADD CONSTRAINT C FOREIGN KEY(A) REFERENCES U(X);
 --
 ERROR: Duplicate name in schema: C.
 ==
+# Cannot drop constrained table's backing index.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -555,6 +611,7 @@ DROP INDEX IDX_U_Y_F59F82AF5FD70C80;
 --
 ERROR: Cannot drop index `IDX_U_Y_F59F82AF5FD70C80`. It is in use by foreign keys: `FK_U_T_FFADEDEE3430D435_1`.
 ==
+# Cannot drop referenced table's backing index.
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,

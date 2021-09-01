@@ -30,7 +30,7 @@ cc_test(
         "//tests/common:scoped_feature_flags_setter",
         "//tests/conformance/cases",
         "//tests/conformance/common:environment",
-        "@com_github_googleapis_google_cloud_cpp//google/cloud/spanner:spanner_client",
+        "@com_github_googleapis_google_cloud_cpp//:spanner",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base",

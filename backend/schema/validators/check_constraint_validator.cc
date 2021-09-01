@@ -16,7 +16,10 @@
 
 #include "backend/schema/validators/check_constraint_validator.h"
 
+#include "zetasql/public/type.pb.h"
+#include "zetasql/public/types/type.h"
 #include "absl/status/status.h"
+#include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
 
@@ -46,6 +49,28 @@ absl::Status ValidateDependsOnNonGenCol(
   }
   return absl::OkStatus();
 }
+
+absl::Status ValidateNotUsingCommitTimestampColumns(
+    const CheckConstraint* check_constraint) {
+  for (const Column* column : check_constraint->dependent_columns()) {
+    if (column->allows_commit_timestamp()) {
+      return error::CannotUseCommitTimestampColumnOnCheckConstraint(
+          column->Name());
+    }
+  }
+  return absl::OkStatus();
+}
+
+const Column* FindDepColumnInCheckConstraintByName(
+    std::string column_name, const CheckConstraint* check_constraint) {
+  for (const Column* dep : check_constraint->dependent_columns()) {
+    if (dep->Name() == column_name) {
+      return dep;
+    }
+  }
+  return nullptr;
+}
+
 }  // namespace
 
 absl::Status CheckConstraintValidator::Validate(
@@ -62,6 +87,8 @@ absl::Status CheckConstraintValidator::Validate(
   // non-generated column.
   ZETASQL_RETURN_IF_ERROR(ValidateDependsOnNonGenCol(check_constraint));
 
+  ZETASQL_RETURN_IF_ERROR(ValidateNotUsingCommitTimestampColumns(check_constraint));
+
   return absl::OkStatus();
 }
 
@@ -72,6 +99,27 @@ absl::Status CheckConstraintValidator::ValidateUpdate(
   if (check_constraint->is_deleted()) {
     context->global_names()->RemoveName(check_constraint->Name());
   }
+
+  if (check_constraint->table()->is_deleted()) {
+    return absl::OkStatus();
+  }
+
+  for (const Column* dep : check_constraint->dependent_columns()) {
+    if (dep->is_deleted()) {
+      return error::InvalidDropColumnReferencedByCheckConstraint(
+          check_constraint->table()->Name(), check_constraint->Name(),
+          dep->Name());
+    }
+
+    const Column* old_dep =
+        FindDepColumnInCheckConstraintByName(dep->Name(), old_check_constraint);
+    ZETASQL_RET_CHECK_NE(old_dep, nullptr);
+    if (old_dep->GetType() != dep->GetType()) {
+      return error::CannotAlterColumnDataTypeWithDependentCheckConstraint(
+          dep->Name(), check_constraint->Name());
+    }
+  }
+
   return absl::OkStatus();
 }
 

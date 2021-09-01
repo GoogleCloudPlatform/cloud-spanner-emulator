@@ -40,8 +40,6 @@ namespace {
 
 using cloud::spanner::Bytes;
 using cloud::spanner::InsertMutationBuilder;
-using testing::Eq;
-using testing::MatchesRegex;
 using zetasql_base::testing::StatusIs;
 
 template <class T>
@@ -89,13 +87,10 @@ class SchemaChangeTest
 
     // For the error case, we expect the error string to match.
     if (!status.ok()) {
-      // The C++ client library adds a prefix and suffix to the error message,
-      // strip them out.
+      // Strip out the prefix added by the C++ client library.
       absl::string_view message(status.message());
-      if (absl::ConsumePrefix(
-              &message, "Error in non-idempotent operation UpdateDatabase: ")) {
-        message.remove_suffix(message.length() - message.rfind('[') + 1);
-      }
+      absl::ConsumePrefix(&message,
+                          "Error in non-idempotent operation UpdateDatabase: ");
 
       // Return the expected error message.
       return FileBasedTestCaseOutput{"ERROR: " + std::string(message) + "\n"};
@@ -136,23 +131,21 @@ TEST_P(SchemaChangeTest, FileBasedTests) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto actual, RunSchemaChangeTestCase(input));
   std::string actual_text = actual.text;
   std::string expected_text = expected.text;
-  if (input.normalize) {
-    auto normalize = [](std::string* text) {
-      RE2::GlobalReplace(text, "\n", " ");
-      RE2::GlobalReplace(text, R"(\\n)", " ");
-      RE2::GlobalReplace(text, R"(\\')", "'");
-      RE2::GlobalReplace(text, R"(\\")", "\"");
-      absl::RemoveExtraAsciiWhitespace(text);
-    };
-    normalize(&actual_text);
-    normalize(&expected_text);
-  }
+  auto normalize = [](std::string* text) {
+    RE2::GlobalReplace(text, "\n", " ");
+    RE2::GlobalReplace(text, R"(\\n)", " ");
+    RE2::GlobalReplace(text, R"(\\')", "'");
+    RE2::GlobalReplace(text, R"(\\")", "\"");
+    absl::RemoveExtraAsciiWhitespace(text);
+  };
+  normalize(&actual_text);
+  normalize(&expected_text);
   std::string message = absl::StrCat("for input at line number ", input.line_no,
                                      ":\n", input.text);
   if (input.regex) {
-    EXPECT_THAT(actual_text, MatchesRegex(expected_text)) << message;
+    EXPECT_THAT(actual_text, testing::MatchesRegex(expected_text)) << message;
   } else {
-    EXPECT_THAT(actual_text, Eq(expected_text)) << message;
+    EXPECT_THAT(actual_text, testing::HasSubstr(expected_text)) << message;
   }
 }
 
@@ -235,6 +228,37 @@ TEST_F(SchemaChangeTest, AddColumns) {
                     "ADD COLUMN gen_int64_col INT64 AS (int64_col) STORED"}));
 }
 
+TEST_F(SchemaChangeTest, AddColumnsWithoutKeyword) {
+  ZETASQL_EXPECT_OK(SetSchema({R"(
+     CREATE TABLE test_table (
+       int64_col INT64 NOT NULL,
+     ) PRIMARY KEY(int64_col)
+  )"}));
+  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col"}, {Value(1)}));
+
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"ALTER TABLE test_table ADD string_col STRING(MAX)"}));
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"ALTER TABLE test_table "
+                    "ADD gen_int64_col INT64 AS (int64_col) STORED"}));
+}
+
+TEST_F(SchemaChangeTest, AddDropColumns) {
+  ZETASQL_EXPECT_OK(SetSchema({R"(
+     CREATE TABLE test_table (
+       int64_col INT64 NOT NULL,
+     ) PRIMARY KEY(int64_col)
+  )"}));
+  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col"}, {Value(1)}));
+
+  // Test with and without COLUMN keyword.
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"ALTER TABLE test_table ADD COLUMN col_A STRING(MAX)"}));
+  ZETASQL_EXPECT_OK(UpdateSchema({"ALTER TABLE test_table ADD col_B STRING(MAX)"}));
+  ZETASQL_EXPECT_OK(UpdateSchema({"ALTER TABLE test_table DROP COLUMN col_A"}));
+  ZETASQL_EXPECT_OK(UpdateSchema({"ALTER TABLE test_table DROP col_B"}));
+}
+
 TEST_F(SchemaChangeTest, AlterColumnTypeChange) {
   ZETASQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
@@ -249,6 +273,24 @@ TEST_F(SchemaChangeTest, AlterColumnTypeChange) {
   // Check for invalid size reduction when converting from STRING to BYTES.
   EXPECT_THAT(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN string_col BYTES(10)
+  )"}),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(SchemaChangeTest, AlterColumnTypeChangeWithoutKeyword) {
+  ZETASQL_EXPECT_OK(SetSchema({R"(
+     CREATE TABLE test_table (
+       int64_col INT64 NOT NULL,
+       string_col STRING(30)
+     ) PRIMARY KEY(int64_col)
+  )"}));
+
+  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
+                   {Value(1), Value("abcdefghijklmnopqrstuvwxyz")}));
+
+  // Check for invalid size reduction when converting from STRING to BYTES.
+  EXPECT_THAT(UpdateSchema({R"(
+     ALTER TABLE test_table ALTER string_col BYTES(10)
   )"}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
 }

@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -28,12 +29,21 @@ using zetasql_base::testing::StatusIs;
 class PrimaryKeysTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
+    EmulatorFeatureFlags::Flags flags;
+    emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
     return SetSchema({R"(
       CREATE TABLE TableWithNullableKey(
         key1 STRING(MAX) NOT NULL,
         key2 STRING(MAX),
         col1 STRING(MAX)
       ) PRIMARY KEY (key1, key2)
+    )",
+                      R"(
+      CREATE TABLE TableWithNumericKey(
+        key NUMERIC NOT NULL,
+        val STRING(MAX)
+      ) PRIMARY KEY (key DESC)
     )"});
   }
 };
@@ -88,6 +98,24 @@ TEST_F(PrimaryKeysTest, CannotInsertKeyTooLarge) {
   EXPECT_THAT(
       Insert("TableWithNullableKey", {"key1", "key2"}, {long_str, "abc"}),
       StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PrimaryKeysTest, NumericKey) {
+  Numeric key1 =
+      cloud::spanner::MakeNumeric("-9999999999999999123.456789").value();
+  Numeric key2 = cloud::spanner::MakeNumeric("123.456789").value();
+  Numeric key3 = cloud::spanner::MakeNumeric("0").value();
+
+  ZETASQL_ASSERT_OK(Insert("TableWithNumericKey", {"key", "val"}, {key1, "val1"}));
+
+  ZETASQL_ASSERT_OK(Insert("TableWithNumericKey", {"key", "val"}, {key2, "val2"}));
+
+  ZETASQL_ASSERT_OK(Insert("TableWithNumericKey", {"key", "val"}, {key3, "val3"}));
+
+  // Verify that it exists.
+  EXPECT_THAT(
+      ReadAll("TableWithNumericKey", {"key", "val"}),
+      IsOkAndHoldsRows({{key2, "val2"}, {key3, "val3"}, {key1, "val1"}}));
 }
 
 }  // namespace

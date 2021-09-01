@@ -44,12 +44,15 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
         sql_features_(SqlFeaturesView()),
         extracted_options_(extracted_options) {}
 
-  absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override {
-    ZETASQL_RETURN_IF_ERROR(ValidateHints(node));
-    return zetasql::ResolvedASTVisitor::DefaultVisit(node);
-  }
-
  protected:
+  absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override;
+
+  absl::Status VisitResolvedQueryStmt(
+      const zetasql::ResolvedQueryStmt* node) override;
+
+  absl::Status VisitResolvedLiteral(
+      const zetasql::ResolvedLiteral* node) override;
+
   absl::Status VisitResolvedFunctionCall(
       const zetasql::ResolvedFunctionCall* node) override;
 

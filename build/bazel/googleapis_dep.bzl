@@ -14,9 +14,15 @@
 # limitations under the License.
 #
 
-# Format: //devtools/kokoro/config/proto/build.proto
+"""Loads googleapis dependency needed to compile the OSS version of emulator."""
 
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-# Location of the bash script. Should have value <git_on_borg_scm.name>/<path_from_repository_root>.
-# git_on_borg_scm.name is specified in the job configuration (next section).
-build_file: "cloud-spanner-emulator/build/kokoro/gcp_windows/kokoro_build.bat"
+def googleapis_dep():
+    http_archive(
+        name = "com_google_googleapis",
+        url = "https://github.com/googleapis/googleapis/archive/299383230f69e9f2272adda8e0d93c4fdf231deb.tar.gz",
+        strip_prefix = "googleapis-299383230f69e9f2272adda8e0d93c4fdf231deb",
+        sha256 = "b31e408b7d50066ce4d50a8f974e37891c2b470da87f2310dc54ee41aee5c06a",
+        build_file = "@//build/bazel:googleapis.BUILD",
+    )

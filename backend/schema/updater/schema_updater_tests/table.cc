@@ -854,14 +854,21 @@ TEST_F(SchemaUpdaterTest, CreateTable_NumericColumns) {
   EXPECT_THAT(col3, ColumnIs("col3", types::NumericArrayType()));
 }
 
-// TODO: Modify this test once NUMERIC is supported in keys
 TEST_F(SchemaUpdaterTest, CreateTable_NumericAsPK) {
-  EXPECT_THAT(CreateSchema({R"(
+  EmulatorFeatureFlags::Flags flags;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 NUMERIC
       ) PRIMARY KEY (k1)
-    )"}),
-              StatusIs(error::InvalidPrimaryKeyColumnType("T.k1", "NUMERIC")));
+    )"}));
+
+  auto t = schema->FindTable("T");
+  EXPECT_NE(t, nullptr);
+  EXPECT_EQ(t->columns().size(), 1);
+  EXPECT_EQ(t->primary_key().size(), 1);
+  EXPECT_THAT(t->columns()[0], ColumnIs("k1", types::NumericType()));
 }
 
 }  // namespace

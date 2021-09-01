@@ -1,5 +1,24 @@
 # Changes
 
+## v1.3.0
+
+### New Features
+
+* ALTER TABLE ADD [COLUMN] statement no longer requires COLUMN keyword (#16).
+* Added support for check constraints (#11).
+* Added support for `SELECT * EXCEPT` (#26).
+* Added support for NUMERIC as a key/index in the emulator.
+* Added numeric math functions.
+* Added NET.* functions.
+
+### Bugs
+
+* Fixed crashes when evaluating DMLs on tables with generated columns (#23).
+* Do not error when a query has a MERGE_JOIN hint.
+* Return an error when a transaction updates a row already deleted in itself.
+* Return an error for returning structs as columns.
+* Return an error for `SELECT ARRAY<STRUCT<i INT64>>[]` expressions.
+
 ## v1.2.0
 
 ### New Features

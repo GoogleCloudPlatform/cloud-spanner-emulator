@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -28,6 +29,9 @@ using zetasql_base::testing::StatusIs;
 class DmlTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
+    EmulatorFeatureFlags::Flags flags;
+    emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
     return SetSchema({
         R"(
           CREATE TABLE Users(
@@ -52,6 +56,11 @@ class DmlTest : public DatabaseTest {
         R"(CREATE TABLE ArrayFields(
             Key      INT64,
             ArrayCol ARRAY<INT64>,
+          ) PRIMARY KEY(Key)
+        )",
+        R"(CREATE TABLE NumericTable(
+            Key    NUMERIC,
+            Val    INT64,
           ) PRIMARY KEY(Key)
         )",
         "CREATE INDEX NullableIndex ON Nullable(Value)",
@@ -323,6 +332,27 @@ TEST_F(DmlTest, CanUseIndexHintInUpdateStatement) {
 
   EXPECT_THAT(Query("SELECT ID, Name FROM Users ORDER BY ID"),
               IsOkAndHoldsRow({1, "Peter"}));
+}
+
+TEST_F(DmlTest, NumericKey) {
+  // Insert DML
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+      "INSERT NumericTable(Key, Val) Values (NUMERIC'-12.3', -1), "
+      "(NUMERIC'0', 0), (NUMERIC'12.3', 1)")}));
+
+  // Update DML
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("UPDATE NumericTable SET Val = 2 WHERE Key = 12.3")}));
+
+  EXPECT_THAT(Query("SELECT T.Val FROM NumericTable T ORDER BY T.Key"),
+              IsOkAndHoldsRows({{-1}, {0}, {2}}));
+
+  // Delete DML
+  ZETASQL_EXPECT_OK(
+      CommitDml({SqlStatement("DELETE FROM NumericTable T WHERE T.Key < 0")}));
+
+  EXPECT_THAT(Query("SELECT T.Val FROM NumericTable T ORDER BY T.Key"),
+              IsOkAndHoldsRows({{0}, {2}}));
 }
 
 }  // namespace

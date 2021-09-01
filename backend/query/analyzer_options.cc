@@ -51,14 +51,14 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
 
   options.set_name_resolution_mode(zetasql::NAME_RESOLUTION_DEFAULT);
   options.set_product_mode(zetasql::PRODUCT_EXTERNAL);
-  options.SetEnabledLanguageFeatures({
-      zetasql::FEATURE_TABLESAMPLE,
-      zetasql::FEATURE_TIMESTAMP_NANOS,
-      zetasql::FEATURE_V_1_1_HAVING_IN_AGGREGATE,
-      zetasql::FEATURE_V_1_1_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
-      zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL,
-      zetasql::FEATURE_V_1_1_ORDER_BY_COLLATE,
-  });
+  options.SetEnabledLanguageFeatures(
+      {zetasql::FEATURE_NUMERIC_TYPE, zetasql::FEATURE_TABLESAMPLE,
+       zetasql::FEATURE_TIMESTAMP_NANOS,
+       zetasql::FEATURE_V_1_1_HAVING_IN_AGGREGATE,
+       zetasql::FEATURE_V_1_1_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
+       zetasql::FEATURE_V_1_1_ORDER_BY_COLLATE,
+       zetasql::FEATURE_V_1_1_SELECT_STAR_EXCEPT_REPLACE,
+       zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL});
   options.SetSupportedStatementKinds({
       zetasql::RESOLVED_QUERY_STMT,
       zetasql::RESOLVED_INSERT_STMT,
@@ -66,17 +66,12 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::RESOLVED_DELETE_STMT,
   });
 
-  if (EmulatorFeatureFlags::instance().flags().enable_numeric_type) {
-    options.EnableLanguageFeature(zetasql::FEATURE_NUMERIC_TYPE);
-  }
-
   return options;
 }
 
 static void DisableOption(zetasql::LanguageFeature feature,
                           zetasql::LanguageOptions* options) {
-  std::set<zetasql::LanguageFeature> features(
-      options->GetEnabledLanguageFeatures());
+  auto features = options->GetEnabledLanguageFeatures();
   features.erase(feature);
   options->SetEnabledLanguageFeatures(features);
 }

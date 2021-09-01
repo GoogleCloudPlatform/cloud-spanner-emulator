@@ -17,6 +17,7 @@
 #include "backend/datamodel/types.h"
 
 #include "zetasql/public/type.pb.h"
+#include "common/feature_flags.h"
 
 namespace google {
 namespace spanner {
@@ -51,9 +52,7 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
 
 bool IsSupportedKeyColumnType(const zetasql::Type* type) {
   // According to https://cloud.google.com/spanner/docs/data-types
-  // TODO: Add support for NUMERIC in keys and remove the numeric
-  // in OR condition below
-  if (type->IsArray() || type->IsNumericType()) {
+  if (type->IsArray()) {
     return false;
   }
   return IsSupportedColumnType(type);

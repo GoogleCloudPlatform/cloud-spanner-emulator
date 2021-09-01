@@ -200,7 +200,7 @@ std::pair<Mutation, int64_t> BuildInsert(
       if (generated_columns.contains(i)) {
         continue;
       }
-      if (pending_ts_columns.find(column_names[i]) !=
+      if (pending_ts_columns.find(table->GetColumn(i)->Name()) !=
           pending_ts_columns.end()) {
         values.back().push_back(
             zetasql::Value::StringValue(kCommitTimestampIdentifier));
@@ -238,7 +238,7 @@ std::pair<Mutation, int64_t> BuildUpdate(
       if (generated_columns.contains(i)) {
         continue;
       }
-      if (pending_ts_columns.find(column_names[i]) !=
+      if (pending_ts_columns.find(table->GetColumn(i)->Name()) !=
           pending_ts_columns.end()) {
         values.back().push_back(
             zetasql::Value::StringValue(kCommitTimestampIdentifier));
@@ -534,10 +534,8 @@ ExtractValidatedResolvedStatementAndOptions(
   QueryEngineOptions options;
   std::unique_ptr<QueryValidator> query_validator =
       IsDMLStmt(analyzer_output->resolved_statement()->node_kind())
-          ? absl::WrapUnique<DMLQueryValidator>(
-                new DMLQueryValidator(schema, &options))
-          : absl::WrapUnique<QueryValidator>(
-                new QueryValidator(schema, &options));
+          ? absl::make_unique<DMLQueryValidator>(schema, &options)
+          : absl::make_unique<QueryValidator>(schema, &options);
   ZETASQL_RETURN_IF_ERROR(statement->Accept(query_validator.get()));
   if (query_engine_options != nullptr) {
     *query_engine_options = options;

@@ -21,6 +21,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -66,13 +67,7 @@ TEST_F(TypesTest, SupportedColumnType) {
 
 TEST_F(TypesTest, SupportedKeyColumnType) {
   for (const zetasql::Type* type : supported_types()) {
-    // TODO: Add support for NUMERIC in keys and remove the
-    // 'if-else' clause
-    if (type->IsNumericType()) {
-      EXPECT_FALSE(IsSupportedKeyColumnType(type));
-    } else {
-      EXPECT_TRUE(IsSupportedKeyColumnType(type));
-    }
+    EXPECT_TRUE(IsSupportedKeyColumnType(type));
     const zetasql::ArrayType* array_type;
     ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(type, &array_type));
     EXPECT_FALSE(IsSupportedKeyColumnType(array_type));

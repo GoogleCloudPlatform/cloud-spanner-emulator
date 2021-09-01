@@ -19,6 +19,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -222,11 +223,12 @@ TEST_F(IndexTest, ValidateKeyTooLargeFails) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-// TODO: Update NumericIndexTests once NUMERIC is supported in
-// keys/indexes.
 class NumericIndexTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
+    EmulatorFeatureFlags::Flags flags;
+    emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
     return SetSchema({
         R"(CREATE TABLE Accounts(
           ID   INT64 NOT NULL,
@@ -236,6 +238,7 @@ class NumericIndexTest : public DatabaseTest {
       )",
         "CREATE INDEX AccountsByNameStoringMoney ON Accounts(Name) STORING "
         "(Money)",
+        "CREATE INDEX AccountsByMoney ON Accounts(Money)",
     });
   }
 };
@@ -262,6 +265,10 @@ TEST_F(NumericIndexTest, BasicRead) {
                                 {"Bill", bill_money},
                                 {"John", john_money},
                                 {"Zack", zack_money}}));
+
+  EXPECT_THAT(ReadAllWithIndex("Accounts", "AccountsByMoney", {"Money"}),
+              IsOkAndHoldsRows(
+                  {{adam_money}, {john_money}, {bill_money}, {zack_money}}));
 }
 
 }  // namespace

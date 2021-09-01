@@ -23,6 +23,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/flags/flag.h"
 #include "absl/strings/match.h"
 #include "tools/cpp/runfiles/runfiles.h"
 
@@ -70,9 +71,7 @@ std::vector<FileBasedTestCase> ReadTestCasesFromFile(
           state = ParserState::kReadingOutput;
         } else if (absl::StartsWith(line, options.comment_prefix)) {
           // Skip lines with comments and evaluate flags.
-          if (absl::StrContains(line, options.normalize_flag)) {
-            test_case.input.normalize = true;
-          } else if (absl::StrContains(line, options.regex_flag)) {
+          if (absl::StrContains(line, options.regex_flag)) {
             test_case.input.regex = true;
           }
         } else {

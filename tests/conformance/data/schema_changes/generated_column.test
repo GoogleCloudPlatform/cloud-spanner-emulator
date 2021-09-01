@@ -16,6 +16,7 @@ CREATE TABLE Users (
   AgePlusTwo INT64 AS (Age+2) STORED,
 ) PRIMARY KEY(UserId);
 ==
+# Expression on duplicate column.
 CREATE TABLE t (
   id INT64 NOT NULL,
   a STRING(MAX) AS (CONCAT(b,b)) STORED,
@@ -23,6 +24,7 @@ CREATE TABLE t (
   c STRING(MAX),
 ) PRIMARY KEY(id);
 ==
+# Two dependencies from the same function
 CREATE TABLE t (
   id INT64 NOT NULL,
   c STRING(MAX) AS (CONCAT(b, d)) STORED,
@@ -32,6 +34,7 @@ CREATE TABLE t (
   e STRING(MAX),
 ) PRIMARY KEY(id);
 ==
+# Interesting graph without cycles
 CREATE TABLE t (
   id INT64 NOT NULL,
   a STRING(MAX) AS (b) STORED,
@@ -40,12 +43,14 @@ CREATE TABLE t (
   d STRING(MAX) AS (c) STORED,
 ) PRIMARY KEY(id);
 ==
+# Generated column definition has a soft type mismatch
 CREATE TABLE GeneratedColumnDataCoalescing (
   id STRING(MAX) NOT NULL,
   i64 INT64,
   gen_i64_to_f64 FLOAT64 AS (i64) STORED,
 ) PRIMARY KEY(id);
 ==
+# Dropping generated column before column that is used.
 CREATE TABLE T (
   id INT64,
   a INT64,
@@ -58,6 +63,7 @@ CREATE TABLE T (
   id INT64,
 ) PRIMARY KEY(id);
 ==
+# SAFE_DIVIDE function.
 CREATE TABLE Network (
   id INT64,
   int_field1 INT64,
@@ -65,12 +71,15 @@ CREATE TABLE Network (
   net_mask FLOAT64 AS (SAFE_DIVIDE(int_field1, int_field2)) STORED,
 ) PRIMARY KEY(id);
 ==
+# SAFE functions.
 CREATE TABLE T (
   id INT64,
   string_field STRING(MAX),
   gen BYTES(MAX) AS (SAFE.MD5(string_field)) STORED,
 ) PRIMARY KEY(id);
 ==
+# allow_commit_timestamp = false is allowed on stored generated columns and
+# their dependencies.
 CREATE TABLE T (
   id INT64,
   ts TIMESTAMP OPTIONS (
@@ -81,6 +90,9 @@ CREATE TABLE T (
   ),
 ) PRIMARY KEY(id);
 ==
+# Generate a column using any built-in GoogleSQL function which is not supported
+# by spanner. This test ensures query_validator runs on the column generation
+# expression.
 # --regex
 CREATE TABLE T (
   id INT64,
@@ -90,11 +102,13 @@ CREATE TABLE T (
 --
 ERROR: Error parsing the definition of generated column `T`.`gen`: Unsupported built-in function: (ascii|ASCII).*
 ==
+# NOT NULL.
 CREATE TABLE T (
   id INT64,
   expr INT64 NOT NULL AS (1) STORED,
 ) PRIMARY KEY(id);
 ==
+# ALTER to NOT NULL.
 CREATE TABLE T (
   id INT64,
   expr INT64 AS (1) STORED,
@@ -106,6 +120,7 @@ CREATE TABLE T (
   expr INT64 NOT NULL AS (1) STORED,
 ) PRIMARY KEY(id);
 ==
+# ADD generated column with NOT NULL.
 CREATE TABLE T (
   id INT64
 ) PRIMARY KEY(id);
@@ -116,6 +131,7 @@ CREATE TABLE T (
   expr INT64 NOT NULL AS (1) STORED,
 ) PRIMARY KEY(id);
 ==
+# ALTER to remove NOT NULL.
 CREATE TABLE T (
   id INT64,
   expr INT64 NOT NULL AS (1) STORED,
@@ -127,6 +143,7 @@ CREATE TABLE T (
   expr INT64 AS (1) STORED,
 ) PRIMARY KEY(id);
 ==
+# CREATE INDEX.
 CREATE TABLE T1 (
   Id INT64 NOT NULL,
   Value STRING(MAX),
@@ -137,12 +154,14 @@ CREATE NULL_FILTERED INDEX T1ByValueGenNotNull ON T1(ValueGen);
 CREATE INDEX T1ByValueStoringValueGen ON T1(Value) STORING (ValueGen);
 CREATE NULL_FILTERED INDEX T1ByValueStoringValueGenNotNull ON T1(Value) STORING (ValueGen);
 ==
+# Specifying string size on a stored generated column.
 CREATE TABLE T (
   id INT64,
   name STRING(64),
   expr STRING(64) AS (name) STORED,
 ) PRIMARY KEY(id);
 ==
+# Cannot change the expression of a STORED generated column.
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
@@ -152,6 +171,7 @@ ALTER TABLE Users ALTER COLUMN id_plus_one INT64 AS (id * 2) STORED;
 --
 ERROR: Cannot change the expression of a generated column `Users.id_plus_one` because it is stored or have other dependencies.
 ==
+# Cannot convert a regular column to a generated column
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
@@ -161,6 +181,7 @@ ALTER TABLE Users ALTER COLUMN id_plus_one INT64 AS (id + 1) STORED;
 --
 ERROR: Cannot convert column `Users.id_plus_one` to a generated column.
 ==
+# Cannot convert a generated column to a regular column
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
@@ -170,6 +191,7 @@ ALTER TABLE Users ALTER COLUMN id_plus_one INT64;
 --
 ERROR: Cannot convert generated column `Users.id_plus_one` to a regular column.
 ==
+# Cannot change the STOREDness of a generated column.
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
@@ -179,6 +201,7 @@ ALTER TABLE Users ALTER COLUMN id_plus_one INT64 AS (id + 1);
 --
 ERROR: Generated column `id_plus_one` without the STORED attribute is not supported.
 ==
+# Generated column definition uses an unknown column.
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
@@ -189,6 +212,7 @@ ERROR: Error parsing the definition of generated column `Users`.`id_plus_one`: U
 (id1 + 1)
  ^
 ==
+# Generated column definition uses an unknown column.
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX)
@@ -199,6 +223,7 @@ ERROR: Error parsing the definition of generated column `Users`.`new_column`: Un
 (unknown_column + 1)
  ^
 ==
+# Change the type of a stored generated column to a different one.
 CREATE TABLE T (
   id INT64 NOT NULL,
   expr STRING(MAX) AS (ERROR("")) STORED,
@@ -207,6 +232,7 @@ ALTER TABLE T ALTER COLUMN expr BYTES(MAX) AS (ERROR("")) STORED;
 --
 ERROR: Cannot change the data type of a stored generated column `T.expr`.
 ==
+# Change the type of a stored generated column to a different one (array).
 CREATE TABLE T (
   id INT64 NOT NULL,
   expr ARRAY<STRING(MAX)> AS ([]) STORED,
@@ -215,6 +241,7 @@ ALTER TABLE T ALTER COLUMN expr ARRAY<BYTES(MAX)> AS ([]) STORED;
 --
 ERROR: Cannot change the data type of a stored generated column `T.expr`.
 ==
+# Change the type of a column that is used by a stored generated column.
 CREATE TABLE T (
   id INT64 NOT NULL,
   a STRING(MAX),
@@ -224,6 +251,7 @@ ALTER TABLE T ALTER COLUMN a BYTES(MAX);
 --
 ERROR: Cannot change the data type of column `a`, which has a dependent stored generated column.
 ==
+# Change the subtype of an array column that is used by a stored generated column
 CREATE TABLE T (
   id INT64 NOT NULL,
   a ARRAY<STRING(MAX)>,
@@ -233,6 +261,7 @@ ALTER TABLE T ALTER COLUMN a ARRAY<BYTES(MAX)>;
 --
 ERROR: Cannot change the data type of column `a`, which has a dependent stored generated column.
 ==
+# Generated column definition has a type mismatch
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
@@ -243,6 +272,7 @@ ERROR: Error parsing the definition of generated column `Users`.`id_plus_one`: E
 (SUBSTR(UserName, 1))
  ^
 ==
+# Generated column definition has a type mismatch
 CREATE TABLE GeneratedColumnDataCoalescing (
   id STRING(MAX) NOT NULL,
   i64 INT64,
@@ -253,6 +283,7 @@ ERROR: Error parsing the definition of generated column `GeneratedColumnDataCoal
 (i64)
  ^
 ==
+# Generated column in primary key.
 CREATE TABLE Users (
   id INT64 NOT NULL,
   id_plus_one INT64 AS (id + 1) STORED
@@ -260,6 +291,7 @@ CREATE TABLE Users (
 --
 ERROR: Generated column `Users.id_plus_one` cannot be part of the primary key.
 ==
+# Generated column definition has a simple cycle
 CREATE TABLE T (
   id INT64 NOT NULL,
   a INT64 as (b) STORED,
@@ -268,6 +300,7 @@ CREATE TABLE T (
 --
 ERROR: Cycle detected while analysing generated column, which include objects (a,b)
 ==
+# Generated column definition has a self reference
 create table t (
   id INT64 NOT NULL,
   a INT64 as (a+1) STORED
@@ -275,6 +308,7 @@ create table t (
 --
 ERROR: Cycle detected while analysing generated column, which include objects (a)
 ==
+# Generated Columns: More elaborate cycle (c -> a -> b -> c)
 create table t (
   id INT64 NOT NULL,
   d INT64,
@@ -285,6 +319,7 @@ create table t (
 --
 ERROR: Cycle detected while analysing generated column, which include objects (c,a,b)
 ==
+# Generated Columns: Cycle a->b->c with start node being b.
 create table t (
   id INT64 NOT NULL,
   b INT64 as (c) STORED,
@@ -294,6 +329,9 @@ create table t (
 --
 ERROR: Cycle detected while analysing generated column, which include objects (b,c,a)
 ==
+# Interesting graph with cycles
+#   A -> B <- C<-|
+#         \-> D--|
 create table t (
   id INT64 NOT NULL,
   a INT64 as (b) STORED,
@@ -304,6 +342,7 @@ create table t (
 --
 ERROR: Cycle detected while analysing generated column, which include objects (a,b,d,c)
 ==
+# Cannot add a new column that introduces a cycle (self)
 CREATE TABLE Users (
   id INT64 NOT NULL,
   userName STRING(MAX)
@@ -312,6 +351,7 @@ ALTER TABLE Users ADD COLUMN col INT64 AS (col+1) STORED;
 --
 ERROR: Cycle detected while analysing generated column, which include objects (col)
 ==
+# Generated column with an expression that is too deep.
 CREATE TABLE Users (
   id INT64 NOT NULL,
   StrCol STRING(MAX),
@@ -320,6 +360,7 @@ CREATE TABLE Users (
 --
 ERROR: Error parsing the definition of generated column `Users`.`StrExpr`: Expression depth of 21 exceeds the maximum allowed depth of 20.
 ==
+# Generated column with an expression that is too deep.
 CREATE TABLE Users (
   id INT64 NOT NULL,
   StrCol STRING(MAX)
@@ -328,6 +369,7 @@ ALTER TABLE Users ADD COLUMN StrExpr STRING(MAX) AS (CONCAT(StrCol, CONCAT(StrCo
 --
 ERROR: Error parsing the definition of generated column `Users`.`StrExpr`: Expression depth of 21 exceeds the maximum allowed depth of 20.
 ==
+# Drop a column which is referenced by a generated column.
 CREATE TABLE T (
   id INT64,
   a INT64,
@@ -337,6 +379,7 @@ ALTER TABLE T DROP COLUMN a;
 --
 ERROR: Cannot drop column `a` from table `T` because it is referenced by generated column `expr`.
 ==
+# Dropping a generated column used by a generated column.
 CREATE TABLE T (
   id INT64,
   a INT64,
@@ -347,6 +390,7 @@ ALTER TABLE T DROP COLUMN expr1;
 --
 ERROR: Cannot drop column `expr1` from table `T` because it is referenced by generated column `expr2`.
 ==
+# Changing the type of a dependant column.
 CREATE TABLE T (
   id INT64,
   a   STRING(MAX),
@@ -356,24 +400,28 @@ ALTER TABLE T ALTER COLUMN a BYTES(MAX);
 --
 ERROR: Cannot change the data type of column `a`, which has a dependent stored generated column.
 ==
+# Using non-scalar function in generated column.
 CREATE TABLE T (
   expr BOOL AS ((SELECT true) INTERSECT ALL (SELECT true)) STORED,
 ) PRIMARY KEY();
 --
 ERROR: Error parsing the definition of generated column `T`.`expr`: Cannot use non-scalar expressions inside stored generated columns.
 ==
+# Subquery
 CREATE TABLE TableWithSelect1 (
   val INT64 AS (SELECT 1) STORED,
 ) PRIMARY KEY();
 --
 ERROR: Error parsing the definition of generated column `TableWithSelect1`.`val`: Cannot use non-scalar expressions inside stored generated columns.
 ==
+# Nested Subquery
 CREATE TABLE TableWithNestedSubquery (
   val ARRAY<INT64> AS (ARRAY_REVERSE(ARRAY(SELECT 1))) STORED,
 ) PRIMARY KEY();
 --
 ERROR: Error parsing the definition of generated column `TableWithNestedSubquery`.`val`: Cannot use non-scalar expressions inside stored generated columns.
 ==
+# Non-deterministic function.
 CREATE TABLE T (
   id INT64,
   expr TIMESTAMP AS (CURRENT_TIMESTAMP()) STORED,
@@ -381,6 +429,7 @@ CREATE TABLE T (
 --
 ERROR: Error parsing the definition of generated column `T`.`expr`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
 ==
+# allow_commit_timestamp not allowed on dependencies of generated columns.
 CREATE TABLE T(
   id INT64,
   ts TIMESTAMP OPTIONS (allow_commit_timestamp = true),
@@ -389,6 +438,8 @@ CREATE TABLE T(
 --
 ERROR: Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
 ==
+# Adding stored generated column that uses a commit timestamp column is
+# disallowed.
 CREATE TABLE T(
   id INT64,
   ts TIMESTAMP OPTIONS (allow_commit_timestamp = true)
@@ -397,6 +448,8 @@ ALTER TABLE T ADD COLUMN expr TIMESTAMP AS (ts) STORED;
 --
 ERROR: Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
 ==
+# Altering a column that is used by a stored generated column to be commit
+# timestamp is disallowed.
 CREATE TABLE T(
   id INT64,
   ts TIMESTAMP,
@@ -406,6 +459,7 @@ ALTER TABLE T ALTER COLUMN ts SET OPTIONS (allow_commit_timestamp = true);
 --
 ERROR: Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
 ==
+# Using PENDING_COMMIT_TIMESTAMP() in generated column at CREATE TABLE.
 CREATE TABLE T (
   id INT64,
   expr TIMESTAMP AS (PENDING_COMMIT_TIMESTAMP()) STORED,

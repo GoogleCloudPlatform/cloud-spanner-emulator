@@ -32,19 +32,18 @@ TEST(EmulatorFeatureFlags, Basic) {
   const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
 
   EXPECT_TRUE(features.flags().enable_stored_generated_columns);
-  EXPECT_TRUE(features.flags().enable_numeric_type);
+  EXPECT_TRUE(features.flags().enable_check_constraint);
 
   {
     EmulatorFeatureFlags::Flags flags;
     flags.enable_stored_generated_columns = false;
-    flags.enable_numeric_type = false;
+    flags.enable_check_constraint = false;
     test::ScopedEmulatorFeatureFlagsSetter setter(flags);
     EXPECT_FALSE(features.flags().enable_stored_generated_columns);
-    EXPECT_FALSE(features.flags().enable_numeric_type);
+    EXPECT_FALSE(features.flags().enable_check_constraint);
   }
-
   EXPECT_TRUE(features.flags().enable_stored_generated_columns);
-  EXPECT_TRUE(features.flags().enable_numeric_type);
+  EXPECT_TRUE(features.flags().enable_check_constraint);
 }
 
 }  // namespace

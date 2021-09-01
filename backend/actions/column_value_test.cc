@@ -85,8 +85,7 @@ struct Values {
 class ColumnValueTest : public test::ActionsTest {
  public:
   ColumnValueTest()
-      : scoped_flags_setter_({.enable_stored_generated_columns = false,
-                              .enable_numeric_type = true}),
+      : scoped_flags_setter_({.enable_stored_generated_columns = false}),
         schema_(emulator::test::CreateSchemaFromDDL(
                     {
                         R"(

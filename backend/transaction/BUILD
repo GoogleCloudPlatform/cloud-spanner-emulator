@@ -82,6 +82,7 @@ cc_test(
         "//backend/common:ids",
         "//backend/datamodel:key",
         "//backend/datamodel:key_range",
+        "//backend/datamodel:key_set",
         "//backend/datamodel:value",
         "//backend/schema/catalog:versioned_catalog",
         "//backend/storage:in_memory_storage",

@@ -600,6 +600,14 @@ absl::Status AbortReadWriteTransactionOnFirstCommit(backend::TransactionID id) {
           "tolerate aborts (which will happen in production occasionally)."));
 }
 
+absl::Status UpdateDeletedRowInTransaction(absl::string_view table,
+                                           absl::string_view key) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::StrCat("Row ", key, " in ", table,
+                                   " was deleted and then updated in the same "
+                                   "transaction."));
+}
+
 absl::Status ReadTimestampPastVersionGCLimit(absl::Time timestamp) {
   return absl::Status(
       absl::StatusCode::kFailedPrecondition,
@@ -1552,6 +1560,35 @@ absl::Status CheckConstraintExpressionParseError(
                        table_name, message));
 }
 
+absl::Status CannotUseCommitTimestampColumnOnCheckConstraint(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Column `$0` has option commit_timestamp, which is not "
+                       "supported in check constraint.",
+                       column_name));
+}
+
+absl::Status InvalidDropColumnReferencedByCheckConstraint(
+    absl::string_view table_name, absl::string_view check_constraint_name,
+    absl::string_view referencing_column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot drop column `$0` from table `$1` because it is "
+                       "referenced by check constraint `$2`.",
+                       referencing_column_name, table_name,
+                       check_constraint_name));
+}
+
+absl::Status CannotAlterColumnDataTypeWithDependentCheckConstraint(
+    absl::string_view column_name, absl::string_view check_constraint_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot change the data type of column `$0`, which is "
+                       "used by check constraint `$1`.",
+                       column_name, check_constraint_name));
+}
+
 // Generated column errors.
 absl::Status GeneratedColumnsNotEnabled() {
   return absl::Status(absl::StatusCode::kUnimplemented,
@@ -1799,6 +1836,20 @@ absl::Status ReadOnlyTransactionDoesNotSupportDml(
 }
 
 // Unsupported query shape errors.
+absl::Status UnsupportedReturnStructAsColumn() {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      "Unsupported query shape: A struct value cannot be returned as a column "
+      "value. Rewrite the query to flatten the struct fields in the result.");
+}
+
+absl::Status UnsupportedArrayConstructorSyntaxForEmptyStructArray() {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      "Unsupported query shape: Spanner does not support array constructor "
+      "syntax for an empty array where array elements are Structs.");
+}
+
 absl::Status UnsupportedFeatureSafe(absl::string_view feature_type,
                                     absl::string_view info_message) {
   return absl::Status(

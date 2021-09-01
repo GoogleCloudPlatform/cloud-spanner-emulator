@@ -1,5 +1,5 @@
 package(default_visibility = [":__subpackages__"])
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 exports_files(["LICENSE"])

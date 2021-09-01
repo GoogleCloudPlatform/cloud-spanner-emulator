@@ -162,7 +162,7 @@ TEST_F(SessionsTest, CreateSessionWithLabel) {
   EXPECT_THAT(session.name(), testing::HasSubstr(absl::StrCat(
                                   database()->FullName(), "/sessions/")));
   // Creating session doesn't return labels in response.
-  EXPECT_EQ(session.labels_size(), 0);
+  EXPECT_EQ(session.labels_size(), 1);
   EXPECT_TRUE(session.has_create_time());
   EXPECT_TRUE(session.has_approximate_last_use_time());
 }

@@ -49,7 +49,6 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
  public:
   EmulatorConformanceTestEnvironment()
       : feature_flags_({.enable_stored_generated_columns = true,
-                        .enable_numeric_type = true,
                         .enable_check_constraint = true}) {}
   void SetUp() override {
     // Setup emulator server.
