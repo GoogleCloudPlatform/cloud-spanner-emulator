@@ -149,9 +149,13 @@ Notable supported features:
 
 - Check constraint
 
+- Dataflow templates
+
 Features not currently available:
 
-- Cloud Spanner dataflow templates are not supported.
+- Views
+
+- JSON columns
 
 Notable limitations:
 
