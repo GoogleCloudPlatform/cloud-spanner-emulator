@@ -49,7 +49,8 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
  public:
   EmulatorConformanceTestEnvironment()
       : feature_flags_({.enable_stored_generated_columns = true,
-                        .enable_check_constraint = true}) {}
+                        .enable_check_constraint = true,
+                        .enable_json_type = true}) {}
   void SetUp() override {
     // Setup emulator server.
     frontend::Server::Options options;

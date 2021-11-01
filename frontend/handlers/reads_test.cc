@@ -21,7 +21,6 @@
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
-#include "grpcpp/server_context.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -34,6 +33,7 @@
 #include "frontend/entities/transaction.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
+#include "grpcpp/server_context.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 

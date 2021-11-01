@@ -271,6 +271,43 @@ TEST_F(NumericIndexTest, BasicRead) {
                   {{adam_money}, {john_money}, {bill_money}, {zack_money}}));
 }
 
+class JsonIndexTest : public DatabaseTest {
+ public:
+  absl::Status SetUpDatabase() override {
+    return SetSchema({
+        R"(CREATE TABLE Users(
+          ID     INT64 NOT NULL,
+          Name   STRING(MAX),
+          Config JSON
+        ) PRIMARY KEY (ID)
+      )",
+        "CREATE INDEX UsersByNameStoringConfig ON Users(Name) STORING "
+        "(Config)",
+    });
+  }
+};
+
+TEST_F(JsonIndexTest, BasicRead) {
+  Json adam_config = Json("{\"role\":\"accountant\"}");
+  Json bill_config = Json("{\"floor\":2}");
+  Json john_config = Json();
+
+  ZETASQL_EXPECT_OK(
+      Insert("Users", {"ID", "Name", "Config"}, {1, "Bill", bill_config}));
+  ZETASQL_EXPECT_OK(
+      Insert("Users", {"ID", "Name", "Config"}, {2, "John", john_config}));
+  ZETASQL_EXPECT_OK(
+      Insert("Users", {"ID", "Name", "Config"}, {0, "Adam", adam_config}));
+
+  EXPECT_THAT(
+      ReadAllWithIndex("Users", "UsersByNameStoringConfig", {"Name", "Config"}),
+      IsOkAndHoldsRows({
+          {"Adam", adam_config},
+          {"Bill", bill_config},
+          {"John", john_config},
+      }));
+}
+
 }  // namespace
 
 }  // namespace test

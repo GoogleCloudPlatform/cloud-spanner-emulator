@@ -142,6 +142,37 @@ RetryState MakeRetryState(const RetryState& retry_state, Clock* clock) {
   return state;
 }
 
+// Splits key_range into 2 parts by key with the key itself being removed. The
+// resulting key ranges are appended to range_list. Returns true if the key was
+// found within the given range, false otherwise.
+bool SplitKeyRangeAndAppend(const KeyRange& key_range, const Key& key,
+                            std::vector<KeyRange>* range_list) {
+  if (!key_range.Contains(key)) {
+    return false;
+  }
+
+  if (key == key_range.start_key() && key == key_range.limit_key()) {
+    // Range only contains the one key.
+    return true;
+  } else if (key == key_range.start_key()) {
+    range_list->push_back(KeyRange(EndpointType::kOpen, key,
+                                   key_range.limit_type(),
+                                   key_range.limit_key()));
+  } else if (key == key_range.limit_key()) {
+    range_list->push_back(KeyRange(key_range.start_type(),
+                                   key_range.start_key(), EndpointType::kOpen,
+                                   key));
+  } else {
+    range_list->push_back(KeyRange(key_range.start_type(),
+                                   key_range.start_key(), EndpointType::kOpen,
+                                   key));
+    range_list->push_back(KeyRange(EndpointType::kOpen, key,
+                                   key_range.limit_type(),
+                                   key_range.limit_key()));
+  }
+  return true;
+}
+
 }  // namespace
 
 ReadWriteTransaction::ReadWriteTransaction(
@@ -339,6 +370,27 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
       } else {
         // Process Insert, Update, Replace and InsertOrUpdate.
         for (int i = 0; i < resolved_mutation_op.rows.size(); i++) {
+          // Spanner allows deleted entries to be reinserted within the same
+          // transaction, so we must update the deleted ranges list in this
+          // case.
+          if (resolved_mutation_op.type == MutationOpType::kInsert ||
+              resolved_mutation_op.type == MutationOpType::kInsertOrUpdate) {
+            std::vector<KeyRange> split_key_ranges;
+            auto& deleted_key_ranges = deleted_key_ranges_by_table_[table_name];
+            for (auto it = deleted_key_ranges.begin();
+                 it != deleted_key_ranges.end();) {
+              if (SplitKeyRangeAndAppend(*it, resolved_mutation_op.keys[i],
+                                         &split_key_ranges)) {
+                it = deleted_key_ranges.erase(it);
+              } else {
+                ++it;
+              }
+            }
+            // Insert split key ranges back into the list of deleted key ranges.
+            for (const KeyRange& key_range : split_key_ranges) {
+              deleted_key_ranges.push_back(key_range);
+            }
+          }
           if (resolved_mutation_op.type == MutationOpType::kUpdate) {
             for (const KeyRange& key_range :
                  deleted_key_ranges_by_table_[table_name]) {

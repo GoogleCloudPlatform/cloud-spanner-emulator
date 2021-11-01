@@ -314,6 +314,15 @@ absl::Status CouldNotParseStringAsNumeric(absl::string_view str) {
           "https://cloud.google.com/spanner/docs/data-types for more details"));
 }
 
+absl::Status CouldNotParseStringAsJson(absl::string_view str) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::StrCat(
+          "Could not parse ", str,
+          " as a JSON. See https://cloud.google.com/spanner/docs/data-types "
+          "for more details"));
+}
+
 absl::Status CouldNotParseStringAsTimestamp(absl::string_view str,
                                             absl::string_view error) {
   return absl::Status(
@@ -1546,6 +1555,11 @@ absl::Status CheckConstraintNotUsingAnyNonGeneratedColumn(
 absl::Status NumericTypeNotEnabled() {
   return absl::Status(absl::StatusCode::kUnimplemented,
                       "NUMERIC type is not implemented.");
+}
+
+absl::Status JsonTypeNotEnabled() {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      "JSON type is not implemented.");
 }
 
 // Check constraint errors.

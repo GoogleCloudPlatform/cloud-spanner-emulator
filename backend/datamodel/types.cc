@@ -44,6 +44,7 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
     case zetasql::TypeKind::TYPE_TIMESTAMP:
     case zetasql::TypeKind::TYPE_DATE:
     case zetasql::TypeKind::TYPE_NUMERIC:
+    case zetasql::TypeKind::TYPE_JSON:
       return true;
     default:
       return false;
@@ -52,7 +53,7 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
 
 bool IsSupportedKeyColumnType(const zetasql::Type* type) {
   // According to https://cloud.google.com/spanner/docs/data-types
-  if (type->IsArray()) {
+  if (type->IsArray() || type->IsJson()) {
     return false;
   }
   return IsSupportedColumnType(type);

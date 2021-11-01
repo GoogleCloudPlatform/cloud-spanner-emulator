@@ -112,6 +112,7 @@ TEST_F(ParamsApiTest, Params) {
   expect_selected(Value(Bytes("bytes")));
   expect_selected(
       Value(cloud::spanner::MakeNumeric("-2353250901550135.12453024").value()));
+  expect_selected(Value(Json("{\"key\":123}")));
   expect_selected(
       Value(MakeTimestamp(absl::ToChronoTime(absl::FromUnixNanos(1)))));
   expect_selected(Value(MakeTimestamp(absl::ToChronoTime(
@@ -203,57 +204,63 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
 
   // Roundtrip values of all supported scalar types.
   params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "PDOUBLE"
-           value { number_value: 1.5 }
-         }
-         fields {
-           key: "pStRiNg"
-           value { string_value: "str" }
-         }
-         fields {
-           key: "pbool"
-           value { bool_value: true }
-         }
-         fields {
-           key: "pbytes"
-           value { string_value: "Ynl0ZXM=" }
-         }
-         fields {
-           key: "pint64"
-           value { string_value: "-1" }
-         }
-         fields {
-           key: "pnumeric"
-           value { string_value: "-99999900001412413135315315.3140124" }
-         }
-         fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         }
-      )");
+      R"pb(fields {
+             key: "PDOUBLE"
+             value { number_value: 1.5 }
+           }
+           fields {
+             key: "pStRiNg"
+             value { string_value: "str" }
+           }
+           fields {
+             key: "pbool"
+             value { bool_value: true }
+           }
+           fields {
+             key: "pbytes"
+             value { string_value: "Ynl0ZXM=" }
+           }
+           fields {
+             key: "pint64"
+             value { string_value: "-1" }
+           }
+           fields {
+             key: "pnumeric"
+             value { string_value: "-99999900001412413135315315.3140124" }
+           }
+           fields {
+             key: "pjson"
+             value { string_value: "{\"key\":123}" }
+           }
+           fields {
+             key: "ptimestamp"
+             value { string_value: "1970-01-01T00:00:00.000001Z" }
+           }
+      )pb");
   param_types = {};
   result = PARSE_TEXT_PROTO(
-      R"(metadata {
-           row_type {
-             fields { type { code: BOOL } }
-             fields { type { code: INT64 } }
-             fields { type { code: FLOAT64 } }
-             fields { type { code: STRING } }
-             fields { type { code: BYTES } }
-             fields { type { code: BOOL } }
-             fields { type { code: NUMERIC } }
+      R"pb(metadata {
+             row_type {
+               fields { type { code: BOOL } }
+               fields { type { code: INT64 } }
+               fields { type { code: FLOAT64 } }
+               fields { type { code: STRING } }
+               fields { type { code: BYTES } }
+               fields { type { code: BOOL } }
+               fields { type { code: NUMERIC } }
+               fields { type { code: JSON } }
+             }
            }
-         }
-         rows {
-           values { bool_value: true }
-           values { string_value: "-1" }
-           values { number_value: 1.5 }
-           values { string_value: "str" }
-           values { string_value: "Ynl0ZXM=" }
-           values { bool_value: true }
-           values { string_value: "-99999900001412413135315315.3140124" }
-         })");
+           rows {
+             values { bool_value: true }
+             values { string_value: "-1" }
+             values { number_value: 1.5 }
+             values { string_value: "str" }
+             values { string_value: "Ynl0ZXM=" }
+             values { bool_value: true }
+             values { string_value: "-99999900001412413135315315.3140124" }
+             values { string_value: "{\"key\":123}" }
+           })pb");
   EXPECT_THAT(Execute(R"(SELECT
                     CAST(@pBool AS BOOL),
                     CAST(@pInt64 AS INT64),
@@ -261,62 +268,69 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                     CAST(@pString AS STRING),
                     CAST(@pBytes AS BYTES),
                     CAST(@pBytes AS BYTES) = b"bytes",
-                    CAST(@pNumeric AS NUMERIC))",
+                    CAST(@pNumeric AS NUMERIC),
+                    CAST(@pJson AS JSON))",
                       params, param_types),
               IsOkAndHolds(test::EqualsProto(result)));
 
   // Roundtrip NULL values of all supported scalar types.
   params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "PDOUBLE"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "pStRiNg"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "pbool"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "pbytes"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "pint64"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "pnumeric"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         }
-      )");
+      R"pb(fields {
+             key: "PDOUBLE"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pStRiNg"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pbool"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pbytes"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pint64"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pnumeric"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pjson"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "ptimestamp"
+             value { string_value: "1970-01-01T00:00:00.000001Z" }
+           }
+      )pb");
   param_types = {};
-  result = PARSE_TEXT_PROTO(R"(metadata {
-                                 row_type {
-                                   fields { type { code: BOOL } }
-                                   fields { type { code: INT64 } }
-                                   fields { type { code: FLOAT64 } }
-                                   fields { type { code: STRING } }
-                                   fields { type { code: BYTES } }
-                                   fields { type { code: BOOL } }
-                                   fields { type { code: NUMERIC } }
+  result = PARSE_TEXT_PROTO(R"pb(metadata {
+                                   row_type {
+                                     fields { type { code: BOOL } }
+                                     fields { type { code: INT64 } }
+                                     fields { type { code: FLOAT64 } }
+                                     fields { type { code: STRING } }
+                                     fields { type { code: BYTES } }
+                                     fields { type { code: BOOL } }
+                                     fields { type { code: NUMERIC } }
+                                     fields { type { code: JSON } }
+                                   }
                                  }
-                               }
-                               rows {
-                                 values { null_value: NULL_VALUE }
-                                 values { null_value: NULL_VALUE }
-                                 values { null_value: NULL_VALUE }
-                                 values { null_value: NULL_VALUE }
-                                 values { null_value: NULL_VALUE }
-                                 values { null_value: NULL_VALUE }
-                                 values { null_value: NULL_VALUE }
-                               })");
+                                 rows {
+                                   values { null_value: NULL_VALUE }
+                                   values { null_value: NULL_VALUE }
+                                   values { null_value: NULL_VALUE }
+                                   values { null_value: NULL_VALUE }
+                                   values { null_value: NULL_VALUE }
+                                   values { null_value: NULL_VALUE }
+                                   values { null_value: NULL_VALUE }
+                                   values { null_value: NULL_VALUE }
+                                 })pb");
   EXPECT_THAT(Execute(R"(SELECT
                     CAST(@pBool AS BOOL),
                     CAST(@pInt64 AS INT64),
@@ -324,150 +338,172 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                     CAST(@pString AS STRING),
                     CAST(@pBytes AS BYTES),
                     CAST(@pBytes AS BYTES) = b"bytes",
-                    CAST(@pNumeric AS NUMERIC))",
+                    CAST(@pNumeric AS NUMERIC),
+                    CAST(@pJson AS JSON))",
                       params, param_types),
               IsOkAndHolds(test::EqualsProto(result)));
 
   // Roundtrip values of all supported array types.
   params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "pboolarray"
-           value {
-             list_value {
-               values { bool_value: true }
-               values { null_value: NULL_VALUE }
+      R"pb(fields {
+             key: "pboolarray"
+             value {
+               list_value {
+                 values { bool_value: true }
+                 values { null_value: NULL_VALUE }
+               }
              }
            }
-         }
-         fields {
-           key: "pbytesarray"
-           value {
-             list_value {
-               values { null_value: NULL_VALUE }
-               values { string_value: "Ynl0ZXM=" }
+           fields {
+             key: "pbytesarray"
+             value {
+               list_value {
+                 values { null_value: NULL_VALUE }
+                 values { string_value: "Ynl0ZXM=" }
+               }
              }
            }
-         }
-         fields {
-           key: "pdoublearray"
-           value {
-             list_value {
-               values { null_value: NULL_VALUE }
-               values { number_value: 1.5 }
+           fields {
+             key: "pdoublearray"
+             value {
+               list_value {
+                 values { null_value: NULL_VALUE }
+                 values { number_value: 1.5 }
+               }
              }
            }
-         }
-         fields {
-           key: "pint64array"
-           value {
-             list_value {
-               values { string_value: "-1" }
-               values { null_value: NULL_VALUE }
+           fields {
+             key: "pint64array"
+             value {
+               list_value {
+                 values { string_value: "-1" }
+                 values { null_value: NULL_VALUE }
+               }
              }
            }
-         }
-         fields {
-           key: "pstringarray"
-           value {
-             list_value {
-               values { null_value: NULL_VALUE }
-               values { string_value: "str" }
+           fields {
+             key: "pstringarray"
+             value {
+               list_value {
+                 values { null_value: NULL_VALUE }
+                 values { string_value: "str" }
+               }
              }
            }
-         }
-         fields {
-           key: "pnumericarray"
-           value {
-             list_value {
-               values { null_value: NULL_VALUE }
-               values { string_value: "123.456" }
+           fields {
+             key: "pnumericarray"
+             value {
+               list_value {
+                 values { null_value: NULL_VALUE }
+                 values { string_value: "123.456" }
+               }
              }
            }
-         }
-         fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         }
-      )");
+           fields {
+             key: "pjsonarray"
+             value {
+               list_value {
+                 values { null_value: NULL_VALUE }
+                 values { string_value: "{\"key\":123}" }
+               }
+             }
+           }
+           fields {
+             key: "ptimestamp"
+             value { string_value: "1970-01-01T00:00:00.000001Z" }
+           }
+      )pb");
   param_types = {};
-  result = PARSE_TEXT_PROTO(R"(metadata {
-                                 row_type {
-                                   fields {
-                                     type {
-                                       code: ARRAY
-                                       array_element_type { code: BOOL }
+  result = PARSE_TEXT_PROTO(R"pb(metadata {
+                                   row_type {
+                                     fields {
+                                       type {
+                                         code: ARRAY
+                                         array_element_type { code: BOOL }
+                                       }
+                                     }
+                                     fields {
+                                       type {
+                                         code: ARRAY
+                                         array_element_type { code: INT64 }
+                                       }
+                                     }
+                                     fields {
+                                       type {
+                                         code: ARRAY
+                                         array_element_type { code: FLOAT64 }
+                                       }
+                                     }
+                                     fields {
+                                       type {
+                                         code: ARRAY
+                                         array_element_type { code: STRING }
+                                       }
+                                     }
+                                     fields {
+                                       type {
+                                         code: ARRAY
+                                         array_element_type { code: BYTES }
+                                       }
+                                     }
+                                     fields {
+                                       type {
+                                         code: ARRAY
+                                         array_element_type { code: NUMERIC }
+                                       }
+                                     }
+                                     fields {
+                                       type {
+                                         code: ARRAY
+                                         array_element_type { code: JSON }
+                                       }
                                      }
                                    }
-                                   fields {
-                                     type {
-                                       code: ARRAY
-                                       array_element_type { code: INT64 }
+                                 }
+                                 rows {
+                                   values {
+                                     list_value {
+                                       values { bool_value: true }
+                                       values { null_value: NULL_VALUE }
                                      }
                                    }
-                                   fields {
-                                     type {
-                                       code: ARRAY
-                                       array_element_type { code: FLOAT64 }
+                                   values {
+                                     list_value {
+                                       values { string_value: "-1" }
+                                       values { null_value: NULL_VALUE }
                                      }
                                    }
-                                   fields {
-                                     type {
-                                       code: ARRAY
-                                       array_element_type { code: STRING }
+                                   values {
+                                     list_value {
+                                       values { null_value: NULL_VALUE }
+                                       values { number_value: 1.5 }
                                      }
                                    }
-                                   fields {
-                                     type {
-                                       code: ARRAY
-                                       array_element_type { code: BYTES }
+                                   values {
+                                     list_value {
+                                       values { null_value: NULL_VALUE }
+                                       values { string_value: "str" }
                                      }
                                    }
-                                   fields {
-                                     type {
-                                       code: ARRAY
-                                       array_element_type { code: NUMERIC }
+                                   values {
+                                     list_value {
+                                       values { null_value: NULL_VALUE }
+                                       values { string_value: "Ynl0ZXM=" }
                                      }
                                    }
-                                 }
-                               }
-                               rows {
-                                 values {
-                                   list_value {
-                                     values { bool_value: true }
-                                     values { null_value: NULL_VALUE }
+                                   values {
+                                     list_value {
+                                       values { null_value: NULL_VALUE }
+                                       values { string_value: "123.456" }
+                                     }
                                    }
-                                 }
-                                 values {
-                                   list_value {
-                                     values { string_value: "-1" }
-                                     values { null_value: NULL_VALUE }
+                                   values {
+                                     list_value {
+                                       values { null_value: NULL_VALUE }
+                                       values { string_value: "{\"key\":123}" }
+                                     }
                                    }
-                                 }
-                                 values {
-                                   list_value {
-                                     values { null_value: NULL_VALUE }
-                                     values { number_value: 1.5 }
-                                   }
-                                 }
-                                 values {
-                                   list_value {
-                                     values { null_value: NULL_VALUE }
-                                     values { string_value: "str" }
-                                   }
-                                 }
-                                 values {
-                                   list_value {
-                                     values { null_value: NULL_VALUE }
-                                     values { string_value: "Ynl0ZXM=" }
-                                   }
-                                 }
-                                 values {
-                                   list_value {
-                                     values { null_value: NULL_VALUE }
-                                     values { string_value: "123.456" }
-                                   }
-                                 }
-                               })");
+                                 })pb");
   EXPECT_THAT(Execute(
                   R"(SELECT
                 CAST(@pBoolArray AS ARRAY<BOOL>),
@@ -475,91 +511,103 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                 CAST(@pDoubleArray AS ARRAY<FLOAT64>),
                 CAST(@pStringArray AS ARRAY<STRING>),
                 CAST(@pBytesArray AS ARRAY<BYTES>),
-                CAST(@pNumericArray AS ARRAY<NUMERIC>))",
+                CAST(@pNumericArray AS ARRAY<NUMERIC>),
+                CAST(@pJsonArray AS ARRAY<JSON>))",
                   params, param_types),
               IsOkAndHolds(test::EqualsProto(result)));
 
   // Roundtrip NULL values of all supported array types.
   params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "pboolarray"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "pbytesarray"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "pdoublearray"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "pint64array"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "pstringarray"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "pnumericarray"
-           value { null_value: NULL_VALUE }
-         }
-         fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         }
-      )");
+      R"pb(fields {
+             key: "pboolarray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pbytesarray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pdoublearray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pint64array"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pstringarray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pnumericarray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pjsonarray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "ptimestamp"
+             value { string_value: "1970-01-01T00:00:00.000001Z" }
+           }
+      )pb");
   param_types = {};
   result = PARSE_TEXT_PROTO(
-      R"(metadata {
-           row_type {
-             fields {
-               type {
-                 code: ARRAY
-                 array_element_type { code: BOOL }
+      R"pb(metadata {
+             row_type {
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: BOOL }
+                 }
                }
-             }
-             fields {
-               type {
-                 code: ARRAY
-                 array_element_type { code: INT64 }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: INT64 }
+                 }
                }
-             }
-             fields {
-               type {
-                 code: ARRAY
-                 array_element_type { code: FLOAT64 }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: FLOAT64 }
+                 }
                }
-             }
-             fields {
-               type {
-                 code: ARRAY
-                 array_element_type { code: STRING }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: STRING }
+                 }
                }
-             }
-             fields {
-               type {
-                 code: ARRAY
-                 array_element_type { code: BYTES }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: BYTES }
+                 }
                }
-             }
-             fields {
-               type {
-                 code: ARRAY
-                 array_element_type { code: NUMERIC }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: NUMERIC }
+                 }
+               }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: JSON }
+                 }
                }
              }
            }
-         }
-         rows {
-           values { null_value: NULL_VALUE }
-           values { null_value: NULL_VALUE }
-           values { null_value: NULL_VALUE }
-           values { null_value: NULL_VALUE }
-           values { null_value: NULL_VALUE }
-           values { null_value: NULL_VALUE }
-         })");
+           rows {
+             values { null_value: NULL_VALUE }
+             values { null_value: NULL_VALUE }
+             values { null_value: NULL_VALUE }
+             values { null_value: NULL_VALUE }
+             values { null_value: NULL_VALUE }
+             values { null_value: NULL_VALUE }
+             values { null_value: NULL_VALUE }
+           })pb");
   EXPECT_THAT(Execute(
                   R"(SELECT
                 CAST(@pBoolArray AS ARRAY<BOOL>),
@@ -567,7 +615,8 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                 CAST(@pDoubleArray AS ARRAY<FLOAT64>),
                 CAST(@pStringArray AS ARRAY<STRING>),
                 CAST(@pBytesArray AS ARRAY<BYTES>),
-                CAST(@pNumericArray AS ARRAY<NUMERIC>))",
+                CAST(@pNumericArray AS ARRAY<NUMERIC>),
+                CAST(@pJsonArray AS ARRAY<JSON>))",
                   params, param_types),
               IsOkAndHolds(test::EqualsProto(result)));
 

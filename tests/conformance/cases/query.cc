@@ -21,6 +21,7 @@
 #include "absl/strings/str_format.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
+#include "google/cloud/spanner/json.h"
 #include "google/cloud/spanner/numeric.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -39,6 +40,7 @@ class QueryTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
     EmulatorFeatureFlags::Flags flags;
+    flags.enable_json_type = true;
     emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
     return SetSchema({
@@ -46,14 +48,14 @@ class QueryTest : public DatabaseTest {
           CREATE TABLE Users(
             UserId     INT64 NOT NULL,
             Name       STRING(MAX),
-            Age        INT64
+            Age        INT64,
           ) PRIMARY KEY (UserId)
         )",
         R"(
           CREATE TABLE Threads (
             UserId     INT64 NOT NULL,
             ThreadId   INT64 NOT NULL,
-            Starred    BOOL
+            Starred    BOOL,
           ) PRIMARY KEY (UserId, ThreadId),
           INTERLEAVE IN PARENT Users ON DELETE CASCADE
         )",
@@ -75,7 +77,8 @@ class QueryTest : public DatabaseTest {
             floatVal FLOAT64,
             stringVal STRING(MAX),
             numericVal NUMERIC,
-            timestampVal TIMESTAMP
+            timestampVal TIMESTAMP,
+            jsonVal JSON,
           ) PRIMARY KEY(intVal)
         )",
         R"(
@@ -116,11 +119,13 @@ class QueryTest : public DatabaseTest {
     ZETASQL_EXPECT_OK(MultiInsert(
         "ScalarTypesTable",
         {"intVal", "boolVal", "bytesVal", "dateVal", "floatVal", "stringVal",
-         "numericVal", "timestampVal"},
+         "numericVal", "timestampVal", "jsonVal"},
         {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
-          Null<std::string>(), Null<Numeric>(), Null<Timestamp>()},
+          Null<std::string>(), Null<Numeric>(), Null<Timestamp>(),
+          Null<Json>()},
          {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
-          cloud::spanner::MakeNumeric("123.456789").value(), Timestamp()}}));
+          cloud::spanner::MakeNumeric("123.456789").value(), Timestamp(),
+          Json("{\"key\":123}")}}));
 
     ZETASQL_EXPECT_OK(MultiInsert("NumericTable", {"key", "val"},
                           {{Null<Numeric>(), Null<std::int64_t>()},
@@ -136,9 +141,11 @@ TEST_F(QueryTest, CanReadScalarTypes) {
       Query("SELECT * FROM ScalarTypesTable ORDER BY intVal ASC"),
       IsOkAndHoldsRows(
           {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
-            Null<std::string>(), Null<Numeric>(), Null<Timestamp>()},
+            Null<std::string>(), Null<Numeric>(), Null<Timestamp>(),
+            Null<Json>()},
            {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
-            cloud::spanner::MakeNumeric("123.456789").value(), Timestamp()}}));
+            cloud::spanner::MakeNumeric("123.456789").value(), Timestamp(),
+            Json("{\"key\":123}")}}));
 }
 
 TEST_F(QueryTest, CanCastScalarTypes) {
@@ -392,7 +399,7 @@ TEST_F(QueryTest, SelectStarExcept) {
   PopulateDatabase();
   EXPECT_THAT(
       Query("SELECT * EXCEPT (boolVal, bytesVal, dateVal, floatVal, stringVal, "
-            "                 numericVal, timestampVal)"
+            "                 numericVal, timestampVal, jsonVal)"
             "FROM ScalarTypesTable ORDER BY intVal"),
       IsOkAndHoldsRows({{0}, {1}}));
 }

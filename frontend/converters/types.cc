@@ -69,6 +69,11 @@ absl::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
       return absl::OkStatus();
     }
 
+    case google::spanner::v1::TypeCode::JSON: {
+      *type = factory->get_json();
+      return absl::OkStatus();
+    }
+
     case google::spanner::v1::TypeCode::ARRAY: {
       const zetasql::Type* element_type;
       if (!type_pb.has_array_element_type()) {
@@ -143,6 +148,11 @@ absl::Status TypeToProto(const zetasql::Type* type,
 
     case zetasql::TYPE_NUMERIC: {
       type_pb->set_code(google::spanner::v1::TypeCode::NUMERIC);
+      return absl::OkStatus();
+    }
+
+    case zetasql::TYPE_JSON: {
+      type_pb->set_code(google::spanner::v1::TypeCode::JSON);
       return absl::OkStatus();
     }
 

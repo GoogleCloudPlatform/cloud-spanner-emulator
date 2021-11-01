@@ -24,13 +24,13 @@
 #include "google/spanner/admin/database/v1/spanner_database_admin.grpc.pb.h"
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.grpc.pb.h"
 #include "google/spanner/v1/spanner.grpc.pb.h"
-#include "grpcpp/channel.h"
-#include "grpcpp/create_channel.h"
-#include "grpcpp/security/credentials.h"
 #include "absl/flags/flag.h"
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "frontend/server/server.h"
+#include "grpcpp/channel.h"
+#include "grpcpp/create_channel.h"
+#include "grpcpp/security/credentials.h"
 #include "absl/status/status.h"
 
 namespace google {

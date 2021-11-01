@@ -66,6 +66,10 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::RESOLVED_DELETE_STMT,
   });
 
+  if (EmulatorFeatureFlags::instance().flags().enable_json_type) {
+    options.EnableLanguageFeature(zetasql::FEATURE_JSON_TYPE);
+  }
+
   return options;
 }
 

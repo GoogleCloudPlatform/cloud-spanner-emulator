@@ -146,6 +146,7 @@ void column_type() :
   | <TIMESTAMP>
   | <DATE>
   | <NUMERIC>
+  | <JSON>
   | <ARRAY> "<" column_type() ">"
 }
 

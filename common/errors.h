@@ -89,6 +89,7 @@ absl::Status ValueProtoTypeMismatch(absl::string_view proto,
 absl::Status CouldNotParseStringAsInteger(absl::string_view str);
 absl::Status CouldNotParseStringAsDouble(absl::string_view str);
 absl::Status CouldNotParseStringAsNumeric(absl::string_view str);
+absl::Status CouldNotParseStringAsJson(absl::string_view str);
 absl::Status CouldNotParseStringAsTimestamp(absl::string_view str,
                                             absl::string_view error);
 absl::Status TimestampMustBeInUTCTimeZone(absl::string_view str);
@@ -400,6 +401,7 @@ absl::Status ForeignKeyReferencingKeyFound(absl::string_view foreign_key,
                                            absl::string_view referencing_key);
 
 absl::Status NumericTypeNotEnabled();
+absl::Status JsonTypeNotEnabled();
 
 // Check constraint errors
 absl::Status CheckConstraintNotEnabled();

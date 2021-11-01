@@ -37,6 +37,8 @@ using zetasql::types::DoubleType;
 using zetasql::types::EmptyStructType;
 using zetasql::types::Int64ArrayType;
 using zetasql::types::Int64Type;
+using zetasql::types::JsonArrayType;
+using zetasql::types::JsonType;
 using zetasql::types::NumericArrayType;
 using zetasql::types::NumericType;
 using zetasql::types::StringType;
@@ -62,11 +64,13 @@ TEST(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
       {DoubleType(), "code: FLOAT64"},
       {TimestampType(), "code: TIMESTAMP"},
       {NumericType(), "code: NUMERIC"},
+      {JsonType(), "code: JSON"},
       {DateType(), "code: DATE"},
       {StringType(), "code: STRING"},
       {BytesType(), "code: BYTES"},
       {Int64ArrayType(), "code: ARRAY array_element_type { code: INT64 }"},
       {NumericArrayType(), "code: ARRAY array_element_type { code: NUMERIC }"},
+      {JsonArrayType(), "code: ARRAY array_element_type { code: JSON }"},
       {EmptyStructType(), "code: STRUCT struct_type: { }"},
       {str_int_pair_type,
        R"(code: STRUCT
