@@ -36,6 +36,7 @@ docker pull gcr.io/cloud-spanner-emulator/emulator
 docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator
 ```
 
+
 The first port is the gRPC port and the second port is the REST port. The docker
 images are also tagged with version numbers, so you can run a specific version
 with:
