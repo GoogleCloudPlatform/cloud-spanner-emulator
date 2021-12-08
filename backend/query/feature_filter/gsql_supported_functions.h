@@ -26,9 +26,18 @@ namespace google::spanner::emulator::backend {
 // Returns the list of ZetaSQL built-in functions that are supported in Cloud
 // Spanner.
 const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions();
+// Returns the list of JSON-related ZetaSQL built-in functions that are
+// supported in Cloud Spanner.
+const absl::flat_hash_set<absl::string_view>* SupportedJsonFunctions();
 
 // Returns true if the function is a supported ZetaSQL builtin function.
 bool IsSupportedZetaSQLFunction(const zetasql::Function& function);
+
+// Returns true if the function is a supported ZetaSQL JSON builtin function.
+// This will be merged with IsSupportedZetaSQLFunction above after JSON is
+// fully enabled.
+// TODO: Merge back into IsSupportedZetaSQLFunction.
+bool IsSupportedJsonFunction(const zetasql::Function& function);
 
 }  // namespace google::spanner::emulator::backend
 

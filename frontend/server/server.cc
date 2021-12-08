@@ -29,8 +29,6 @@
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.grpc.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
-#include "grpcpp/server_builder.h"
-#include "grpcpp/support/status.h"
 #include "absl/memory/memory.h"
 #include "common/constants.h"
 #include "common/errors.h"
@@ -38,6 +36,8 @@
 #include "frontend/common/status.h"
 #include "frontend/server/handler.h"
 #include "frontend/server/request_context.h"
+#include "grpcpp/server_builder.h"
+#include "grpcpp/support/status.h"
 
 namespace google {
 namespace spanner {

@@ -93,6 +93,7 @@ class InformationSchemaTest : public DatabaseTest {
                                 "CHANGE_STREAM_COLUMNS",
                                 "CHANGE_STREAM_OPTIONS",
                                 "CHANGE_STREAM_TABLES",
+                                "COLUMN_COLUMN_USAGE",
                                 "DATABASE_OPTIONS",
                                 "VIEWS",
                             })};
@@ -181,6 +182,7 @@ TEST_F(InformationSchemaTest, MetaTables) {
       select
         t.table_catalog,
         t.table_schema,
+        t.table_type,
         t.table_name,
         t.parent_table_name,
         t.on_delete_action,
@@ -197,19 +199,19 @@ TEST_F(InformationSchemaTest, MetaTables) {
   LogResults(results);
   // clang-format off
   auto expected = std::vector<ValueRow>({
-    {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEXES", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SCHEMATA", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SPANNER_STATISTICS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLES", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "CHECK_CONSTRAINTS", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMNS", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMN_OPTIONS", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "CONSTRAINT_COLUMN_USAGE", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "CONSTRAINT_TABLE_USAGE", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "INDEXES", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "INDEX_COLUMNS", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "KEY_COLUMN_USAGE", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "REFERENTIAL_CONSTRAINTS", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "SCHEMATA", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "SPANNER_STATISTICS", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "TABLES", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "TABLE_CONSTRAINTS", Ns(), Ns(), Ns()},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -627,6 +629,7 @@ TEST_F(InformationSchemaTest, MetaCheckConstraints) {
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_CHANGE_STREAM%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_DATABASE_OPTIONS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_VIEWS_TABLE%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE%'
       order by
         t.constraint_name
   )",
@@ -1114,6 +1117,7 @@ TEST_F(InformationSchemaTest, MetaConstraintColumnUsage) {
 TEST_F(InformationSchemaTest, DefaultTables) {
   auto results = Query(R"(
       select
+        t.table_type,
         t.table_name,
         t.parent_table_name,
         t.on_delete_action
@@ -1130,9 +1134,9 @@ TEST_F(InformationSchemaTest, DefaultTables) {
   LogResults(results);
   // clang-format off
   auto expected = std::vector<ValueRow>({
-    {"Base", Ns(), Ns()},
-    {"CascadeChild", "Base", "CASCADE"},
-    {"NoActionChild", "Base", "NO ACTION"}
+    {"BASE TABLE", "Base", Ns(), Ns()},
+    {"BASE TABLE", "CascadeChild", "Base", "CASCADE"},
+    {"BASE TABLE", "NoActionChild", "Base", "NO ACTION"}
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));

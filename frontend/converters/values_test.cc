@@ -37,6 +37,8 @@ using zetasql::types::DateType;
 using zetasql::types::EmptyStructType;
 using zetasql::types::Int64ArrayType;
 using zetasql::types::Int64Type;
+using zetasql::types::JsonArrayType;
+using zetasql::types::JsonType;
 using zetasql::types::NumericArrayType;
 using zetasql::types::NumericType;
 using zetasql::types::StringType;
@@ -48,6 +50,8 @@ using zetasql::values::Date;
 using zetasql::values::Double;
 using zetasql::values::Int64;
 using zetasql::values::Int64Array;
+using zetasql::values::Json;
+using zetasql::values::JsonArray;
 using zetasql::values::Null;
 using zetasql::values::Numeric;
 using zetasql::values::NumericArray;
@@ -84,6 +88,8 @@ TEST(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
       {Numeric(zetasql::NumericValue::FromStringStrict("-123456789.987654321")
                    .value()),
        "string_value: '-123456789.987654321'"},
+      {Json(zetasql::JSONValue::ParseJSONString("{\"key\":123}").value()),
+       "string_value: '{\"key\":123}'"},
       {Int64Array({}), "list_value: { values [] }"},
       {Int64Array({1, 2, 3}),
        "list_value: { values [{string_value: '1'}, {string_value: '2'}, "
@@ -94,6 +100,14 @@ TEST(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
             zetasql::NumericValue::FromStringStrict("987.234e-3").value()}),
        "list_value: { values [{string_value: '-23.923'}, {string_value: "
        "'987.234'}, {string_value: '0.987234' }] }"},
+      {JsonArray(
+           {zetasql::JSONValue::ParseJSONString("{\"intkey\":123}").value(),
+            zetasql::JSONValue::ParseJSONString("{\"boolkey\":true}").value(),
+            zetasql::JSONValue::ParseJSONString("{\"strkey\":\"strval\"}")
+                .value()}),
+       "list_value: { values [{string_value: '{\"intkey\":123}'}, "
+       "{string_value: '{\"boolkey\":true}'}, "
+       "{string_value: '{\"strkey\":\"strval\"}'}]}"},
       {Struct(EmptyStructType(), {}), "list_value: { values: [] }"},
       {Struct(str_int_pair, {String("One"), Int64(2)}),
        "list_value: { values[{string_value: 'One'}, {string_value: '2'}] }"},
@@ -131,8 +145,10 @@ TEST(ValueProtos, DoesNotParseProtosWithMismatchingTypes) {
       {StringType(), "number_value: 1.0"},
       {BytesType(), "number_value: -1"},
       {NumericType(), "number_value: 1"},
+      {JsonType(), "number_value: 1"},
       {Int64ArrayType(), "string_value: '1'"},
       {NumericArrayType(), "string_value: '1'"},
+      {JsonArrayType(), "string_value: '1'"},
       {EmptyStructType(), "bool_value: false"},
   };
   for (const auto& entry : test_cases) {
@@ -202,6 +218,17 @@ TEST(ValueProtos, DoesNotParseInvalidNumeric) {
       ValueFromProto(
           PARSE_TEXT_PROTO("string_value: '123456789123456789123456789000.1'"),
           NumericType()),
+      StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST(ValueProtos, DoesNotParseInvalidJson) {
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: 'invalid string'"),
+                             JsonType()),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+  // String value should be quoted
+  EXPECT_THAT(
+      ValueFromProto(PARSE_TEXT_PROTO("string_value: '{\"key\":invalid}'"),
+                     JsonType()),
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 

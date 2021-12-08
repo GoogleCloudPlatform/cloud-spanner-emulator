@@ -17,7 +17,6 @@
 #include "google/longrunning/operations.pb.h"
 #include "google/protobuf/empty.pb.h"
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
-#include "grpcpp/client_context.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -27,6 +26,7 @@
 #include "frontend/common/uris.h"
 #include "frontend/server/server.h"
 #include "tests/common/test_env.h"
+#include "grpcpp/client_context.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {

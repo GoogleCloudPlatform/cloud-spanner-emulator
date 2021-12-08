@@ -42,6 +42,7 @@ class ArraysTest : public DatabaseTest {
         MaxStringArray ARRAY<STRING(MAX)>,
         TimestampArray ARRAY<TIMESTAMP>,
         NumericArray   ARRAY<NUMERIC>,
+        JsonArray      ARRAY<JSON>,
         DateArray      ARRAY<DATE>,
       ) PRIMARY KEY (ID)
     )"});
@@ -59,6 +60,8 @@ TEST_F(ArraysTest, InsertBasicArraysSucceed) {
       cloud::spanner::MakeNumeric("0.000000001").value(),
       cloud::spanner::MakeNumeric("99999999999999999999999999999.999999999")
           .value()};
+  Array<Json> json_arr{Json("{\"intkey\":123}"), Json("{\"boolkey\":true}"),
+                       Json("{\"strkey\":\"strval\"}")};
 
   ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "StringArray"}, {1, string_arr}));
   ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "BytesArray"}, {2, bytes_arr}));
@@ -66,29 +69,34 @@ TEST_F(ArraysTest, InsertBasicArraysSucceed) {
   ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "TimestampArray"}, {4, timestamp_arr}));
   ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "DateArray"}, {5, date_arr}));
   ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "NumericArray"}, {6, numeric_arr}));
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"ID", "JsonArray"}, {7, json_arr}));
 
   EXPECT_THAT(
-      ReadAll("TestTable", {"ID", "StringArray", "BytesArray", "NumArray",
-                            "TimestampArray", "DateArray", "NumericArray"}),
+      ReadAll("TestTable",
+              {"ID", "StringArray", "BytesArray", "NumArray", "TimestampArray",
+               "DateArray", "NumericArray", "JsonArray"}),
       IsOkAndHoldsRows({
           {1, string_arr, Null<Array<Bytes>>(), Null<Array<std::int64_t>>(),
            Null<Array<Timestamp>>(), Null<Array<Date>>(),
-           Null<Array<Numeric>>()},
+           Null<Array<Numeric>>(), Null<Array<Json>>()},
           {2, Null<Array<std::string>>(), bytes_arr,
            Null<Array<std::int64_t>>(), Null<Array<Timestamp>>(),
-           Null<Array<Date>>(), Null<Array<Numeric>>()},
+           Null<Array<Date>>(), Null<Array<Numeric>>(), Null<Array<Json>>()},
           {3, Null<Array<std::string>>(), Null<Array<Bytes>>(), num_arr,
            Null<Array<Timestamp>>(), Null<Array<Date>>(),
-           Null<Array<Numeric>>()},
+           Null<Array<Numeric>>(), Null<Array<Json>>()},
           {4, Null<Array<std::string>>(), Null<Array<Bytes>>(),
            Null<Array<std::int64_t>>(), timestamp_arr, Null<Array<Date>>(),
-           Null<Array<Numeric>>()},
+           Null<Array<Numeric>>(), Null<Array<Json>>()},
           {5, Null<Array<std::string>>(), Null<Array<Bytes>>(),
            Null<Array<std::int64_t>>(), Null<Array<Timestamp>>(), date_arr,
-           Null<Array<Numeric>>()},
+           Null<Array<Numeric>>(), Null<Array<Json>>()},
           {6, Null<Array<std::string>>(), Null<Array<Bytes>>(),
            Null<Array<std::int64_t>>(), Null<Array<Timestamp>>(),
-           Null<Array<Date>>(), numeric_arr},
+           Null<Array<Date>>(), numeric_arr, Null<Array<Json>>()},
+          {7, Null<Array<std::string>>(), Null<Array<Bytes>>(),
+           Null<Array<std::int64_t>>(), Null<Array<Timestamp>>(),
+           Null<Array<Date>>(), Null<Array<Numeric>>(), json_arr},
       }));
 }
 

@@ -162,6 +162,7 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 ==
 # Cannot change the expression of a STORED generated column.
+# --regex
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
@@ -169,7 +170,7 @@ CREATE TABLE Users (
 ) PRIMARY KEY(id);
 ALTER TABLE Users ALTER COLUMN id_plus_one INT64 AS (id * 2) STORED;
 --
-ERROR: Cannot change the expression of a generated column `Users.id_plus_one` because it is stored or have other dependencies.
+ERROR: Cannot change the expression of a generated column `Users.id_plus_one` because it is stored or (has|have) other dependencies.?
 ==
 # Cannot convert a regular column to a generated column
 CREATE TABLE Users (

@@ -20,10 +20,10 @@
 #include <memory>
 #include <string>
 
+#include "frontend/server/environment.h"
 #include "grpcpp/impl/codegen/service_type.h"
 #include "grpcpp/server.h"
 #include "grpcpp/support/status.h"
-#include "frontend/server/environment.h"
 
 namespace google {
 namespace spanner {

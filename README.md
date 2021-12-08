@@ -41,7 +41,7 @@ images are also tagged with version numbers, so you can run a specific version
 with:
 
 ```shell
-VERSION=1.3.0
+VERSION=1.4.0
 docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator:$VERSION
 ```
 
@@ -52,7 +52,7 @@ binary is not fully static, but has been tested on Ubuntu 16.04/18.04, CentOS 8,
 RHEL 8, and Debian 9/10.
 
 ```shell
-VERSION=1.3.0
+VERSION=1.4.0
 wget https://storage.googleapis.com/cloud-spanner-emulator/releases/${VERSION}/cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 tar zxvf cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 chmod u+x gateway_main emulator_main
@@ -145,6 +145,8 @@ Notable supported features:
 
 - NUMERIC type
 
+- JSON type
+
 - Generated columns
 
 - Check constraint
@@ -154,8 +156,6 @@ Notable supported features:
 Features not currently available:
 
 - Views
-
-- JSON columns
 
 Notable limitations:
 
@@ -265,4 +265,3 @@ or using the existing Cloud Spanner [support channels](https://cloud.google.com/
 ## License
 
 [Apache License 2.0](LICENSE)
-

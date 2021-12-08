@@ -688,6 +688,62 @@ TEST(ParseCreateTable, CanParseAlterTableWithDropConstraint) {
                   )")));
 }
 
+TEST(ParseCreateTable, CannotParseJsonWhenDisabled) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_json_type = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(ParseDDLStatement(
+                  R"(
+                    CREATE TABLE T (
+                      K INT64 NOT NULL,
+                      JsonVal JSON,
+                      JsonArr ARRAY<JSON>
+                    ) PRIMARY KEY (K)
+                  )"),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("JSON type is not implemented.")));
+}
+
+TEST(ParseCreateTable, CanParseCreateTableWithJson) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_json_type = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"(
+                    CREATE TABLE T (
+                      K INT64 NOT NULL,
+                      JsonVal JSON,
+                      JsonArr ARRAY<JSON>
+                    ) PRIMARY KEY (K)
+                  )"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "T"
+              columns {
+                column_name: "K"
+                properties { column_type { type: INT64 } }
+                constraints { not_null { nullable: false } }
+              }
+              columns {
+                column_name: "JsonVal"
+                properties { column_type { type: JSON } }
+              }
+              columns {
+                column_name: "JsonArr"
+                properties {
+                  column_type {
+                    type: ARRAY
+                    array_subtype: { type: JSON }
+                  }
+                }
+              }
+              constraints { primary_key { key_part { key_column_name: "K" } } }
+            }
+          )pb")));
+}
+
 TEST(ParseCreateTable, CanParseCreateTableWithNumeric) {
   EXPECT_THAT(
       ParseDDLStatement(
@@ -1027,6 +1083,51 @@ TEST(ParseAlterTable, CanParseAddNumericColumn) {
                       }
                     }
                   )")));
+}
+
+TEST(ParseAlterTable, CanParseAddJsonColumn) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_json_type = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(ParseDDLStatement(
+                  R"(
+                    ALTER TABLE T ADD COLUMN G JSON
+                  )"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "T"
+                      alter_column {
+                        type: ADD
+                        column {
+                          column_name: "G"
+                          properties { column_type { type: JSON } }
+                        }
+                      }
+                    }
+                  )pb")));
+  EXPECT_THAT(ParseDDLStatement(
+                  R"(
+                    ALTER TABLE T ADD COLUMN H ARRAY<JSON>
+                  )"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "T"
+                      alter_column {
+                        type: ADD
+                        column {
+                          column_name: "H"
+                          properties {
+                            column_type {
+                              type: ARRAY
+                              array_subtype: { type: JSON }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAddColumnNoColumnName) {

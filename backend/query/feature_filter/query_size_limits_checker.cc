@@ -43,13 +43,13 @@ using zetasql::ResolvedSetOperationScan;
 
 namespace google::spanner::emulator::backend {
 
-const int QuerySizeLimitsChecker::kMaxJoins = 15;
+const int QuerySizeLimitsChecker::kMaxJoins = 20;
 const int QuerySizeLimitsChecker::kMaxNestedFunctionNodes = 75;
 const int QuerySizeLimitsChecker::kMaxNestedSubqueryExpressions = 25;
 const int QuerySizeLimitsChecker::kMaxNestedSubselects = 60;
 const int QuerySizeLimitsChecker::kMaxNestedGroupBy = 35;
 const int QuerySizeLimitsChecker::kMaxUnionsInQuery = 200;
-const int QuerySizeLimitsChecker::kMaxSubqueryExpressionChildren = 40;
+const int QuerySizeLimitsChecker::kMaxSubqueryExpressionChildren = 50;
 const int QuerySizeLimitsChecker::kMaxFunctionNodes = 1000;
 const int QuerySizeLimitsChecker::kMaxColumnsInGroupBy = 1000;
 const int QuerySizeLimitsChecker::kMaxParameters = 950;

@@ -22,6 +22,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/container/btree_map.h"
 #include "absl/status/status.h"
 #include "zetasql/base/statusor.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -54,7 +55,7 @@ class SessionsTest : public DatabaseTest {
   // Creates a new session with the given database URI.
   zetasql_base::StatusOr<spanner_api::Session> CreateSession(
       absl::string_view database_uri,
-      const std::map<std::string, std::string>& labels = {}) {
+      const absl::btree_map<std::string, std::string>& labels = {}) {
     grpc::ClientContext context;
     spanner_api::CreateSessionRequest request;
     request.set_database(std::string(database_uri));  // NOLINT
@@ -71,7 +72,7 @@ class SessionsTest : public DatabaseTest {
 
   // Creates a new session that belongs to the database for the test.
   zetasql_base::StatusOr<spanner_api::Session> CreateSession(
-      const std::map<std::string, std::string>& labels = {}) {
+      const absl::btree_map<std::string, std::string>& labels = {}) {
     return CreateSession(database()->FullName(), labels);
   }
 
