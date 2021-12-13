@@ -109,8 +109,8 @@ TEST_F(SnapshotReadsTest, CanReadWithExactTimestampInFuture) {
 
   // Read using an exact timestamp option set to 100 ms in the future. Able to
   // read all the rows, but will wait for ~100 ms to pass before returning. Use
-  // a larger time of 1000 ms for prod to reduce flakiness.
-  int64_t future_time_ms = in_prod_env() ? 1000 : 100;
+  // a larger time of 2000 ms for prod to reduce flakiness.
+  int64_t future_time_ms = in_prod_env() ? 2000 : 100;
   absl::Time start_time = absl::Now();
   EXPECT_THAT(
       Read(Transaction::SingleUseOptions(Transaction::ReadOnlyOptions(

@@ -75,6 +75,7 @@ cc_library(
         "//tests/conformance/common:database_test_base",
         "@com_github_googleapis_google_cloud_cpp//:spanner",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",

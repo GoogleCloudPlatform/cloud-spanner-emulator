@@ -871,6 +871,45 @@ TEST_F(SchemaUpdaterTest, CreateTable_NumericAsPK) {
   EXPECT_THAT(t->columns()[0], ColumnIs("k1", types::NumericType()));
 }
 
+TEST_F(SchemaUpdaterTest, CreateTable_JsonColumns) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_json_type = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    CREATE TABLE T(
+      col1 INT64,
+      col2 JSON,
+      col3 ARRAY<JSON>
+    ) PRIMARY KEY(col1))"}));
+
+  auto t = schema->FindTable("T");
+  EXPECT_NE(t, nullptr);
+  EXPECT_EQ(t->columns().size(), 3);
+  EXPECT_EQ(t->primary_key().size(), 1);
+
+  auto col1 = t->columns()[0];
+  EXPECT_THAT(col1, ColumnIs("col1", types::Int64Type()));
+  EXPECT_THAT(col1, IsKeyColumnOf(t, "ASC"));
+
+  auto col2 = t->columns()[1];
+  EXPECT_THAT(col2, ColumnIs("col2", types::JsonType()));
+
+  auto col3 = t->columns()[2];
+  EXPECT_THAT(col3, ColumnIs("col3", types::JsonArrayType()));
+}
+
+TEST_F(SchemaUpdaterTest, CreateTable_JsonAsPK) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_json_type = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(CreateSchema({R"(
+      CREATE TABLE T (
+        k1 JSON
+      ) PRIMARY KEY (k1)
+    )"}),
+              StatusIs(error::InvalidPrimaryKeyColumnType("T.k1", "JSON")));
+}
+
 }  // namespace
 
 }  // namespace test

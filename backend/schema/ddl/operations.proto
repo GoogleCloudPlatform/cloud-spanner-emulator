@@ -117,6 +117,7 @@ message ColumnType {
     DATE = 7;
     ARRAY = 8;
     NUMERIC = 9;
+    JSON = 10;
   }
   optional Type type = 1;
   optional ColumnType array_subtype = 2;

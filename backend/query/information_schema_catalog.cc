@@ -152,6 +152,7 @@ const std::vector<ColumnsMetaEntry>* ColumnsMetadata() {
     {"TABLES", "TABLE_CATALOG", "NO", "STRING(MAX)"},
     {"TABLES", "TABLE_NAME", "NO", "STRING(MAX)"},
     {"TABLES", "TABLE_SCHEMA", "NO", "STRING(MAX)"},
+    {"TABLES", "TABLE_TYPE", "NO", "STRING(32)"},
     {"TABLE_CONSTRAINTS", "CONSTRAINT_CATALOG", "NO", "STRING(MAX)"},
     {"TABLE_CONSTRAINTS", "CONSTRAINT_NAME", "NO", "STRING(MAX)"},
     {"TABLE_CONSTRAINTS", "CONSTRAINT_SCHEMA", "NO", "STRING(MAX)"},
@@ -398,6 +399,7 @@ zetasql::SimpleTable* InformationSchemaCatalog::AddTablesTable() {
   auto tables =
       new zetasql::SimpleTable("TABLES", {{"TABLE_CATALOG", StringType()},
                                             {"TABLE_SCHEMA", StringType()},
+                                            {"TABLE_TYPE", StringType()},
                                             {"TABLE_NAME", StringType()},
                                             {"PARENT_TABLE_NAME", StringType()},
                                             {"ON_DELETE_ACTION", StringType()},
@@ -416,6 +418,8 @@ void InformationSchemaCatalog::FillTablesTable(zetasql::SimpleTable* tables) {
         String(""),
         // table_schema
         String(""),
+        // table_type
+        String("BASE TABLE"),
         // table_name
         String(table->Name()),
         // parent_table_name
@@ -435,6 +439,8 @@ void InformationSchemaCatalog::FillTablesTable(zetasql::SimpleTable* tables) {
         String(""),
         // table_schema
         String(kInformationSchema),
+        // table_type
+        String("VIEW"),
         // table_name
         String(table->Name()),
         // parent_table_name

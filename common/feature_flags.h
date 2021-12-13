@@ -32,6 +32,7 @@ class EmulatorFeatureFlags {
   struct Flags {
     bool enable_stored_generated_columns = true;
     bool enable_check_constraint = true;
+    bool enable_json_type = true;
   };
 
   static const EmulatorFeatureFlags& instance() {

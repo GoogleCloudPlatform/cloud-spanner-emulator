@@ -21,6 +21,7 @@
 #include "absl/strings/str_format.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
+#include "google/cloud/spanner/json.h"
 #include "google/cloud/spanner/numeric.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -39,6 +40,7 @@ class QueryTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
     EmulatorFeatureFlags::Flags flags;
+    flags.enable_json_type = true;
     emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
     return SetSchema({
@@ -46,14 +48,14 @@ class QueryTest : public DatabaseTest {
           CREATE TABLE Users(
             UserId     INT64 NOT NULL,
             Name       STRING(MAX),
-            Age        INT64
+            Age        INT64,
           ) PRIMARY KEY (UserId)
         )",
         R"(
           CREATE TABLE Threads (
             UserId     INT64 NOT NULL,
             ThreadId   INT64 NOT NULL,
-            Starred    BOOL
+            Starred    BOOL,
           ) PRIMARY KEY (UserId, ThreadId),
           INTERLEAVE IN PARENT Users ON DELETE CASCADE
         )",
@@ -75,7 +77,8 @@ class QueryTest : public DatabaseTest {
             floatVal FLOAT64,
             stringVal STRING(MAX),
             numericVal NUMERIC,
-            timestampVal TIMESTAMP
+            timestampVal TIMESTAMP,
+            jsonVal JSON,
           ) PRIMARY KEY(intVal)
         )",
         R"(
@@ -116,11 +119,13 @@ class QueryTest : public DatabaseTest {
     ZETASQL_EXPECT_OK(MultiInsert(
         "ScalarTypesTable",
         {"intVal", "boolVal", "bytesVal", "dateVal", "floatVal", "stringVal",
-         "numericVal", "timestampVal"},
+         "numericVal", "timestampVal", "jsonVal"},
         {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
-          Null<std::string>(), Null<Numeric>(), Null<Timestamp>()},
+          Null<std::string>(), Null<Numeric>(), Null<Timestamp>(),
+          Null<Json>()},
          {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
-          cloud::spanner::MakeNumeric("123.456789").value(), Timestamp()}}));
+          cloud::spanner::MakeNumeric("123.456789").value(), Timestamp(),
+          Json("{\"key\":123}")}}));
 
     ZETASQL_EXPECT_OK(MultiInsert("NumericTable", {"key", "val"},
                           {{Null<Numeric>(), Null<std::int64_t>()},
@@ -136,9 +141,11 @@ TEST_F(QueryTest, CanReadScalarTypes) {
       Query("SELECT * FROM ScalarTypesTable ORDER BY intVal ASC"),
       IsOkAndHoldsRows(
           {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
-            Null<std::string>(), Null<Numeric>(), Null<Timestamp>()},
+            Null<std::string>(), Null<Numeric>(), Null<Timestamp>(),
+            Null<Json>()},
            {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
-            cloud::spanner::MakeNumeric("123.456789").value(), Timestamp()}}));
+            cloud::spanner::MakeNumeric("123.456789").value(), Timestamp(),
+            Json("{\"key\":123}")}}));
 }
 
 TEST_F(QueryTest, CanCastScalarTypes) {
@@ -209,8 +216,81 @@ TEST_F(QueryTest, HashFunctions) {
 }
 
 TEST_F(QueryTest, JSONFunctions) {
-  EXPECT_THAT(Query(R"(SELECT JSON_VALUE('{"a": {"b": "world"}}', '$.a.b'))"),
-              IsOkAndHoldsRow({Value("world")}));
+  EXPECT_THAT(Query(R"(SELECT JSON_QUERY(JSON '{"a":"str", "b":2}', '$.a'))"),
+              IsOkAndHoldsRow({Value(Json(R"("str")"))}));
+  EXPECT_THAT(Query(R"(SELECT JSON_QUERY('{"a":"str", "b":2}', '$.a'))"),
+              IsOkAndHoldsRow({Value(R"("str")")}));
+  EXPECT_THAT(Query(R"(SELECT JSON_QUERY(JSON '{"a":null}', "$.a"))"),
+              IsOkAndHoldsRow({Value(Json("null"))}));
+  EXPECT_THAT(Query(R"(SELECT JSON_QUERY(JSON '{"a":null}', "$.b"))"),
+              IsOkAndHoldsRow({Null<Json>()}));
+
+  EXPECT_THAT(Query(R"(SELECT JSON_VALUE(JSON '{"a":"str", "b":2}', '$.a'))"),
+              IsOkAndHoldsRow({Value("str")}));
+  EXPECT_THAT(Query(R"(SELECT JSON_VALUE(JSON '{"a":null}', "$.a"))"),
+              IsOkAndHoldsRow({Null<std::string>()}));
+  EXPECT_THAT(Query(R"(SELECT JSON_VALUE(JSON '{"a":null}', "$"))"),
+              IsOkAndHoldsRow({Null<std::string>()}));
+
+  EXPECT_THAT(Query(R"(SELECT PARSE_JSON('{"a":[1,2],"b":"str"}'))"),
+              IsOkAndHoldsRow({Value(Json(R"({"a":[1,2],"b":"str"})"))}));
+  EXPECT_THAT(Query(R"(SELECT PARSE_JSON('{"id":123456789012345678901}'))"),
+              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
+                                     : absl::StatusCode::kOutOfRange));
+  EXPECT_THAT(Query(R"(
+    SELECT PARSE_JSON('{"id":123456789012345678901}', wide_number_mode=>'exact')
+  )"),
+              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
+                                     : absl::StatusCode::kOutOfRange));
+  EXPECT_THAT(
+      Query(R"(
+    SELECT PARSE_JSON('{"id":123456789012345678901}', wide_number_mode=>'round')
+  )"),
+      IsOkAndHoldsRow({Value(Json(R"({"id":1.2345678901234568e+20})"))}));
+
+  EXPECT_THAT(Query(R"(SELECT TO_JSON(123))"),
+              IsOkAndHoldsRow({Value(Json("123"))}));
+  EXPECT_THAT(Query(R"(
+    SELECT TO_JSON(12345678901234567, stringify_wide_numbers=>FALSE)
+  )"),
+              IsOkAndHoldsRow({Value(Json("12345678901234567"))}));
+  EXPECT_THAT(Query(R"(
+    SELECT TO_JSON(12345678901234567, stringify_wide_numbers=>TRUE)
+  )"),
+              IsOkAndHoldsRow({Value(Json("\"12345678901234567\""))}));
+  EXPECT_THAT(Query(R"(
+    SELECT TO_JSON(NUMERIC "123456789.123456789", stringify_wide_numbers=>FALSE)
+  )"),
+              StatusIs(absl::StatusCode::kOutOfRange));
+
+  EXPECT_THAT(Query(R"(SELECT TO_JSON_STRING(JSON '{"a":"str", "b":2}'))"),
+              IsOkAndHoldsRow({R"({"a":"str","b":2})"}));
+
+  EXPECT_THAT(Query(R"(SELECT FORMAT("%'p", JSON '{"a":"str", "b":2}'))"),
+              IsOkAndHoldsRow({R"({"a":"str","b":2})"}));
+  EXPECT_THAT(Query(R"(SELECT FORMAT("%'P", JSON '{"a":"str", "b":2}'))"),
+              IsOkAndHoldsRow({"{\n"
+                               "  \"a\": \"str\",\n"
+                               "  \"b\": 2\n"
+                               "}"}));
+  EXPECT_THAT(Query(R"(SELECT FORMAT("%'t", JSON '{"a":"str", "b":2}'))"),
+              IsOkAndHoldsRow({R"({"a":"str","b":2})"}));
+  EXPECT_THAT(Query(R"(SELECT FORMAT("%'T", JSON '{"a":"str", "b":2}'))"),
+              IsOkAndHoldsRow({R"(JSON '{"a":"str","b":2}')"}));
+
+  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'["a"])"),
+              IsOkAndHoldsRow({Value(Json(R"("str")"))}));
+  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'["b"])"),
+              IsOkAndHoldsRow({Value(Json(R"([1,2,3])"))}));
+  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'["b"][1])"),
+              IsOkAndHoldsRow({Value(Json("2"))}));
+
+  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'.a)"),
+              IsOkAndHoldsRow({Value(Json(R"("str")"))}));
+  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'.b)"),
+              IsOkAndHoldsRow({Value(Json("[1,2,3]"))}));
+  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'.c)"),
+              IsOkAndHoldsRow({Value(Null<Json>())}));
 }
 
 TEST_F(QueryTest, FormatFunction) {
@@ -392,7 +472,7 @@ TEST_F(QueryTest, SelectStarExcept) {
   PopulateDatabase();
   EXPECT_THAT(
       Query("SELECT * EXCEPT (boolVal, bytesVal, dateVal, floatVal, stringVal, "
-            "                 numericVal, timestampVal)"
+            "                 numericVal, timestampVal, jsonVal)"
             "FROM ScalarTypesTable ORDER BY intVal"),
       IsOkAndHoldsRows({{0}, {1}}));
 }
@@ -413,6 +493,13 @@ TEST_F(QueryTest, StddevAndVariance) {
 TEST_F(QueryTest, RegexString) {
   EXPECT_THAT(Query(R"_(SELECT SAFE.REGEXP_CONTAINS("s", ")"))_"),
               IsOkAndHoldsRows({{Null<bool>()}}));
+}
+
+TEST_F(QueryTest, NamedArguments) {
+  EXPECT_THAT(
+      Query(
+          R"_(SELECT PARSE_JSON('{"id":123}', wide_number_mode => 'exact'))_"),
+      IsOkAndHoldsRows({{Json("{\"id\":123}")}}));
 }
 
 }  // namespace

@@ -369,9 +369,15 @@ absl::Status QueryValidator::VisitResolvedLiteral(
 absl::Status QueryValidator::VisitResolvedFunctionCall(
     const zetasql::ResolvedFunctionCall* node) {
   // Check if function is part of supported subset of ZetaSQL
-  if (node->function()->IsZetaSQLBuiltin() &&
-      !IsSupportedZetaSQLFunction(*node->function())) {
-    return error::UnsupportedFunction(node->function()->SQLName());
+  if (node->function()->IsZetaSQLBuiltin()) {
+    bool func_not_supported = !IsSupportedZetaSQLFunction(*node->function());
+    if (language_options_.LanguageFeatureEnabled(
+            zetasql::FEATURE_JSON_TYPE)) {
+      func_not_supported &= !IsSupportedJsonFunction(*node->function());
+    }
+    if (func_not_supported) {
+      return error::UnsupportedFunction(node->function()->SQLName());
+    }
   }
 
   // Out of the supported subset of ZetaSQL, filter out functions that
@@ -391,9 +397,15 @@ absl::Status QueryValidator::VisitResolvedFunctionCall(
 absl::Status QueryValidator::VisitResolvedAggregateFunctionCall(
     const zetasql::ResolvedAggregateFunctionCall* node) {
   // Check if function is part of supported subset of ZetaSQL
-  if (node->function()->IsZetaSQLBuiltin() &&
-      !IsSupportedZetaSQLFunction(*node->function())) {
-    return error::UnsupportedFunction(node->function()->SQLName());
+  if (node->function()->IsZetaSQLBuiltin()) {
+    bool func_not_supported = !IsSupportedZetaSQLFunction(*node->function());
+    if (language_options_.LanguageFeatureEnabled(
+            zetasql::FEATURE_JSON_TYPE)) {
+      func_not_supported &= !IsSupportedJsonFunction(*node->function());
+    }
+    if (func_not_supported) {
+      return error::UnsupportedFunction(node->function()->SQLName());
+    }
   }
 
   // Out of the supported subset of ZetaSQL, filter out functions that

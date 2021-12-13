@@ -38,7 +38,8 @@ class TypesTest : public ::testing::Test {
     return {type_factory_.get_int64(),     type_factory_.get_bool(),
             type_factory_.get_double(),    type_factory_.get_string(),
             type_factory_.get_bytes(),     type_factory_.get_date(),
-            type_factory_.get_timestamp(), type_factory_.get_numeric()};
+            type_factory_.get_timestamp(), type_factory_.get_numeric(),
+            type_factory_.get_json()};
   }
 
   std::vector<const zetasql::Type*> unsupported_types() {
@@ -67,7 +68,12 @@ TEST_F(TypesTest, SupportedColumnType) {
 
 TEST_F(TypesTest, SupportedKeyColumnType) {
   for (const zetasql::Type* type : supported_types()) {
-    EXPECT_TRUE(IsSupportedKeyColumnType(type));
+    if (type->IsJson()) {
+      EXPECT_FALSE(IsSupportedKeyColumnType(type));
+    } else {
+      EXPECT_TRUE(IsSupportedKeyColumnType(type));
+    }
+
     const zetasql::ArrayType* array_type;
     ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(type, &array_type));
     EXPECT_FALSE(IsSupportedKeyColumnType(array_type));

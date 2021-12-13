@@ -53,11 +53,13 @@ using zetasql::values::BytesArray;
 using zetasql::values::Date;
 using zetasql::values::Double;
 using zetasql::values::Int64;
+using zetasql::values::Json;
 using zetasql::values::NullBool;
 using zetasql::values::NullBytes;
 using zetasql::values::NullDate;
 using zetasql::values::NullDouble;
 using zetasql::values::NullInt64;
+using zetasql::values::NullJson;
 using zetasql::values::NullNumeric;
 using zetasql::values::NullString;
 using zetasql::values::NullTimestamp;
@@ -80,15 +82,21 @@ struct Values {
   zetasql::Value numeric_col =
       Numeric(zetasql::NumericValue::FromStringStrict("1234567890.123456789")
                   .value());
+  zetasql::Value json_col = Json(
+      zetasql::JSONValue::ParseJSONString("{\"key\":\"value\"}").value());
 };
 
 class ColumnValueTest : public test::ActionsTest {
  public:
-  ColumnValueTest()
-      : scoped_flags_setter_({.enable_stored_generated_columns = false}),
-        schema_(emulator::test::CreateSchemaFromDDL(
-                    {
-                        R"(
+  ColumnValueTest() {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_json_type = true;
+    flags.enable_stored_generated_columns = false;
+    emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+    schema_ = emulator::test::CreateSchemaFromDDL(
+                  {
+                      R"(
                             CREATE TABLE TestTable (
                               int64_col INT64 NOT NULL,
                               bool_col BOOL NOT NULL,
@@ -100,36 +108,40 @@ class ColumnValueTest : public test::ActionsTest {
                               array_string_col ARRAY<STRING(MAX)>,
                               array_bytes_col ARRAY<BYTES(MAX)>,
                               numeric_col NUMERIC NOT NULL,
+                              json_col JSON NOT NULL,
                             ) PRIMARY KEY (int64_col)
                           )",
-                    },
-                    &type_factory_)
-                    .value()),
-        table_(schema_->FindTable("TestTable")),
-        base_columns_(table_->columns()),
-        validator_(absl::make_unique<ColumnValueValidator>()) {}
+                  },
+                  &type_factory_)
+                  .value();
+
+    validator_ = absl::make_unique<ColumnValueValidator>();
+    table_ = schema_->FindTable("TestTable");
+    base_columns_ = table_->columns();
+  }
 
   absl::Status ValidateInsert(const Values& values) {
     return validator_->Validate(
-        ctx(), Insert(table_, Key({Int64(1)}), base_columns_,
-                      {values.int64_col, values.bool_col, values.date_col,
-                       values.float_col, values.string_col, values.bytes_col,
-                       values.timestamp_col, values.array_string_col,
-                       values.array_bytes_col, values.numeric_col}));
+        ctx(),
+        Insert(table_, Key({Int64(1)}), base_columns_,
+               {values.int64_col, values.bool_col, values.date_col,
+                values.float_col, values.string_col, values.bytes_col,
+                values.timestamp_col, values.array_string_col,
+                values.array_bytes_col, values.numeric_col, values.json_col}));
   }
 
   absl::Status ValidateUpdate(const Values& values) {
     return validator_->Validate(
-        ctx(), Update(table_, Key({Int64(1)}), base_columns_,
-                      {values.int64_col, values.bool_col, values.date_col,
-                       values.float_col, values.string_col, values.bytes_col,
-                       values.timestamp_col, values.array_string_col,
-                       values.array_bytes_col, values.numeric_col}));
+        ctx(),
+        Update(table_, Key({Int64(1)}), base_columns_,
+               {values.int64_col, values.bool_col, values.date_col,
+                values.float_col, values.string_col, values.bytes_col,
+                values.timestamp_col, values.array_string_col,
+                values.array_bytes_col, values.numeric_col, values.json_col}));
   }
 
  protected:
   // Test components.
-  ScopedEmulatorFeatureFlagsSetter scoped_flags_setter_;
   zetasql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
 
@@ -169,6 +181,14 @@ TEST_F(ColumnValueTest, ValidateNotNullColumns) {
   {
     Values values;
     values.float_col = NullDouble();
+    EXPECT_THAT(ValidateInsert(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+    EXPECT_THAT(ValidateUpdate(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+  {
+    Values values;
+    values.json_col = NullJson();
     EXPECT_THAT(ValidateInsert(values),
                 StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
@@ -238,6 +258,14 @@ TEST_F(ColumnValueTest, ValidateColumnsAreCorrectTypes) {
   {
     Values values;
     values.float_col = String("");
+    EXPECT_THAT(ValidateInsert(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+    EXPECT_THAT(ValidateUpdate(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+  {
+    Values values;
+    values.json_col = String("");
     EXPECT_THAT(ValidateInsert(values),
                 StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),

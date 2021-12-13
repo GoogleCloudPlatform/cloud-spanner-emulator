@@ -49,6 +49,8 @@ zetasql_base::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       return type_factory->get_date();
     case ddl::ColumnType::NUMERIC:
       return type_factory->get_numeric();
+    case ddl::ColumnType::JSON:
+      return type_factory->get_json();
     case ddl::ColumnType::ARRAY: {
       ZETASQL_RET_CHECK(ddl_type.has_array_subtype())
           << "Missing array_subtype field for ddl::ColumnType input: "
@@ -92,6 +94,7 @@ ddl::ColumnType GoogleSqlTypeToDDLColumnType(const zetasql::Type* type) {
   if (type->IsTimestamp()) ddl_type.set_type(ddl::ColumnType::TIMESTAMP);
   if (type->IsDate()) ddl_type.set_type(ddl::ColumnType::DATE);
   if (type->IsNumericType()) ddl_type.set_type(ddl::ColumnType::NUMERIC);
+  if (type->IsJson()) ddl_type.set_type(ddl::ColumnType::JSON);
   return ddl_type;
 }
 
