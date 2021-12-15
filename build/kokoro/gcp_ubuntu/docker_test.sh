@@ -70,8 +70,8 @@ echo "Placing results in: ${OUTPUT_DIR}"
 echo "Placing logs in: ${LOG_DIR}"
 echo "Using src directory: ${SRC_DIR}"
 
-readonly CONTINUOUS_INTEGRATION_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-integration:20210823
-readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base:20210704
+readonly CONTINUOUS_INTEGRATION_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-integration:20211027
+readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base:20211015
 if [[ -z "$CLIENT_INTEGRATION_TESTS" ]]; then
   DOCKER_IMAGE=${BASE_DOCKER_IMAGE}
 else
@@ -105,4 +105,3 @@ docker run $DOCKER_ARGS \
   --workdir "/src" \
   --entrypoint="/bin/bash" \
   ${DOCKER_IMAGE} ${DOCKER_CMD}
-

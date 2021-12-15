@@ -37,7 +37,9 @@ namespace test {
 
 namespace {
 
+using cloud::spanner::DeleteMutationBuilder;
 using cloud::spanner::InsertMutationBuilder;
+using cloud::spanner::UpdateMutationBuilder;
 // TODO: Replace all uses of internal C++ client library details.
 using google::cloud::spanner_internal::MakeSingleUseTransaction;
 using zetasql_base::testing::IsOk;
@@ -438,6 +440,88 @@ TEST_F(TransactionsTest, QueryWithBoundedStalenessDoesNotSeeOldValues) {
                   Transaction::SingleUseOptions(commit_result.commit_timestamp),
                   SqlStatement("SELECT col1 FROM TestTable")),
               IsOkAndHoldsRows({{"val2"}}));
+}
+
+TEST_F(TransactionsTest, DeleteInsertUpdateSuceeds) {
+  // Test when key is in middle of deleted range.
+  {
+    auto txn = Transaction(Transaction::ReadWriteOptions());
+    KeySet key_set;
+    key_set.AddRange(KeyBound(Key("val1", "val1"), KeyBound::Bound::kClosed),
+                     KeyBound(Key("val1", "val3"), KeyBound::Bound::kOpen));
+    auto mutation1 = DeleteMutationBuilder("TestTable", key_set).Build();
+    auto mutation2 =
+        InsertMutationBuilder("TestTable", {"key1", "key2", "col1"})
+            .AddRow({Value("val1"), Value("val2"), Value("old")})
+            .Build();
+    auto mutation3 =
+        UpdateMutationBuilder("TestTable", {"key1", "key2", "col1"})
+            .EmplaceRow(Value("val1"), Value("val2"), Value("new"))
+            .Build();
+    ZETASQL_EXPECT_OK(CommitTransaction(txn, {mutation1, mutation2, mutation3}));
+    EXPECT_THAT(Read(txn, "TestTable", {"key1", "key2", "col1"}, KeySet::All()),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+
+  // Test against start key of range.
+  {
+    auto txn = Transaction(Transaction::ReadWriteOptions());
+    KeySet key_set;
+    key_set.AddRange(KeyBound(Key("val1", "val1"), KeyBound::Bound::kClosed),
+                     KeyBound(Key("val1", "val3"), KeyBound::Bound::kOpen));
+    auto mutation1 = DeleteMutationBuilder("TestTable", key_set).Build();
+    auto mutation2 =
+        InsertMutationBuilder("TestTable", {"key1", "key2", "col1"})
+            .AddRow({Value("val1"), Value("val1"), Value("old")})
+            .Build();
+    auto mutation3 =
+        UpdateMutationBuilder("TestTable", {"key1", "key2", "col1"})
+            .EmplaceRow(Value("val1"), Value("val1"), Value("new"))
+            .Build();
+    ZETASQL_EXPECT_OK(CommitTransaction(txn, {mutation1, mutation2, mutation3}));
+    EXPECT_THAT(Read(txn, "TestTable", {"key1", "key2", "col1"}, KeySet::All()),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+
+  // Test against limit key of range.
+  {
+    auto txn = Transaction(Transaction::ReadWriteOptions());
+    KeySet key_set;
+    key_set.AddRange(KeyBound(Key("val1", "val1"), KeyBound::Bound::kClosed),
+                     KeyBound(Key("val1", "val3"), KeyBound::Bound::kClosed));
+    auto mutation1 = DeleteMutationBuilder("TestTable", key_set).Build();
+    auto mutation2 =
+        InsertMutationBuilder("TestTable", {"key1", "key2", "col1"})
+            .AddRow({Value("val1"), Value("val3"), Value("old")})
+            .Build();
+    auto mutation3 =
+        UpdateMutationBuilder("TestTable", {"key1", "key2", "col1"})
+            .EmplaceRow(Value("val1"), Value("val3"), Value("new"))
+            .Build();
+    ZETASQL_EXPECT_OK(CommitTransaction(txn, {mutation1, mutation2, mutation3}));
+    EXPECT_THAT(Read(txn, "TestTable", {"key1", "key2", "col1"}, KeySet::All()),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+
+  // Test when range is exactly 1 key.
+  {
+    auto txn = Transaction(Transaction::ReadWriteOptions());
+    KeySet key_set;
+    key_set.AddRange(KeyBound(Key("val1", "val1"), KeyBound::Bound::kClosed),
+                     KeyBound(Key("val1", "val1"), KeyBound::Bound::kClosed));
+    auto mutation1 = DeleteMutationBuilder("TestTable", key_set).Build();
+    auto mutation2 =
+        InsertMutationBuilder("TestTable", {"key1", "key2", "col1"})
+            .AddRow({Value("val1"), Value("val1"), Value("old")})
+            .Build();
+    auto mutation3 =
+        UpdateMutationBuilder("TestTable", {"key1", "key2", "col1"})
+            .EmplaceRow(Value("val1"), Value("val1"), Value("new"))
+            .Build();
+    ZETASQL_EXPECT_OK(CommitTransaction(txn, {mutation1, mutation2, mutation3}));
+    EXPECT_THAT(Read(txn, "TestTable", {"key1", "key2", "col1"}, KeySet::All()),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
 }
 
 }  // namespace

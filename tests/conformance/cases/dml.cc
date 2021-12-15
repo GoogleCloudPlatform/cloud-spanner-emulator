@@ -63,6 +63,11 @@ class DmlTest : public DatabaseTest {
             Val    INT64,
           ) PRIMARY KEY(Key)
         )",
+        R"(CREATE TABLE JsonTable(
+            ID     INT64 NOT NULL,
+            Val    JSON,
+          ) PRIMARY KEY(ID)
+        )",
         "CREATE INDEX NullableIndex ON Nullable(Value)",
     });
   }
@@ -353,6 +358,35 @@ TEST_F(DmlTest, NumericKey) {
 
   EXPECT_THAT(Query("SELECT T.Val FROM NumericTable T ORDER BY T.Key"),
               IsOkAndHoldsRows({{0}, {2}}));
+}
+
+TEST_F(DmlTest, JsonType) {
+  // Insert DML
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(R"(
+        INSERT INTO JsonTable(ID, Val) Values (3, JSON '{"a":"str"}')
+  )")}));
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(R"(
+        INSERT INTO JsonTable(ID, Val) Values (4, NULL)
+  )")}));
+
+  EXPECT_THAT(
+      Query("SELECT TO_JSON_STRING(T.Val) FROM JsonTable T WHERE ID = 3"),
+      IsOkAndHoldsRow({R"({"a":"str"})"}));
+  EXPECT_THAT(Query("SELECT ID FROM JsonTable T WHERE Val IS NULL"),
+              IsOkAndHoldsRow({Value(4)}));
+  EXPECT_THAT(Query("SELECT ID FROM JsonTable T WHERE Val IS NOT NULL"),
+              IsOkAndHoldsRow({Value(3)}));
+
+  // Update DML
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(R"(
+      UPDATE JsonTable
+        SET Val = JSON '{"a":"newstr", "b":123}'
+        WHERE ID = 3
+  )")}));
+
+  EXPECT_THAT(
+      Query("SELECT TO_JSON_STRING(T.Val) FROM JsonTable T WHERE ID = 3"),
+      IsOkAndHoldsRow({R"({"a":"newstr","b":123})"}));
 }
 
 }  // namespace

@@ -163,6 +163,19 @@ zetasql_base::StatusOr<zetasql::Value> ValueFromProto(
       return zetasql::values::Numeric(status_or_numeric.value());
     }
 
+    case zetasql::TypeKind::TYPE_JSON: {
+      if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
+        return error::ValueProtoTypeMismatch(value_pb.DebugString(),
+                                             type->DebugString());
+      }
+      auto status_or_json =
+          zetasql::JSONValue::ParseJSONString(value_pb.string_value());
+      if (!status_or_json.ok()) {
+        return error::CouldNotParseStringAsJson(value_pb.string_value());
+      }
+      return zetasql::values::Json(std::move(status_or_json.value()));
+    }
+
     case zetasql::TypeKind::TYPE_ARRAY: {
       if (value_pb.kind_case() != google::protobuf::Value::kListValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
@@ -278,6 +291,11 @@ zetasql_base::StatusOr<google::protobuf::Value> ValueToProto(
 
     case zetasql::TypeKind::TYPE_NUMERIC: {
       value_pb.set_string_value(value.numeric_value().ToString());
+      break;
+    }
+
+    case zetasql::TypeKind::TYPE_JSON: {
+      value_pb.set_string_value(value.json_string());
       break;
     }
 

@@ -314,6 +314,15 @@ absl::Status CouldNotParseStringAsNumeric(absl::string_view str) {
           "https://cloud.google.com/spanner/docs/data-types for more details"));
 }
 
+absl::Status CouldNotParseStringAsJson(absl::string_view str) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::StrCat(
+          "Could not parse ", str,
+          " as a JSON. See https://cloud.google.com/spanner/docs/data-types "
+          "for more details"));
+}
+
 absl::Status CouldNotParseStringAsTimestamp(absl::string_view str,
                                             absl::string_view error) {
   return absl::Status(
@@ -425,11 +434,7 @@ absl::Status AbortConcurrentTransaction(int64_t requestor_id, int64_t holder_id)
       absl::StatusCode::kAborted,
       absl::StrCat("Transaction ", requestor_id,
                    " aborted due to active transaction ", holder_id,
-                   ". The emulator only supports one transaction at a time. "
-                   "Some best practices to avoid ABORT errors in Cloud Spanner "
-                   "service are:\n1. Avoid use of nested transactions.\n2. "
-                   "Explicitly Rollback failed transactions.\n3. All "
-                   "transactions should be running inside of retry loops.\n"));
+                   ". The emulator only supports one transaction at a time."));
 }
 
 absl::Status TransactionNotFound(backend::TransactionID id) {
@@ -1548,6 +1553,11 @@ absl::Status NumericTypeNotEnabled() {
                       "NUMERIC type is not implemented.");
 }
 
+absl::Status JsonTypeNotEnabled() {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      "JSON type is not implemented.");
+}
+
 // Check constraint errors.
 absl::Status CheckConstraintExpressionParseError(
     absl::string_view table_name, absl::string_view check_constraint_expression,
@@ -1670,7 +1680,7 @@ absl::Status CannotAlterGeneratedColumnExpression(
       absl::StatusCode::kInvalidArgument,
       absl::Substitute(
           "Cannot change the expression of a generated column `$0.$1` because "
-          "it is stored or have other dependencies.",
+          "it is stored or has other dependencies.",
           table_name, column_name));
 }
 

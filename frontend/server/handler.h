@@ -18,11 +18,11 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_SERVER_HANDLER_H_
 
 #include "zetasql/base/logging.h"
-#include "grpcpp/grpcpp.h"
-#include "grpcpp/impl/codegen/sync_stream.h"
 #include "absl/status/status.h"
 #include "common/config.h"
 #include "frontend/server/request_context.h"
+#include "grpcpp/grpcpp.h"
+#include "grpcpp/impl/codegen/sync_stream.h"
 #include "absl/status/status.h"
 
 namespace google {

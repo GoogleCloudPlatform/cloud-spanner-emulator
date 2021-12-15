@@ -266,6 +266,10 @@ absl::Status VisitColumnTypeNode(const SimpleNode* column_type_node,
     return error::Internal(
         absl::StrCat("Unrecognized column type: ", type_name));
   }
+  if (type == ColumnType::JSON &&
+      !EmulatorFeatureFlags::instance().flags().enable_json_type) {
+    return error::JsonTypeNotEnabled();
+  }
   column_type->set_type(type);
 
   if (type == ColumnType::ARRAY) {

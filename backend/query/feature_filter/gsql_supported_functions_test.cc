@@ -27,6 +27,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/match.h"
 #include "backend/query/analyzer_options.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -43,6 +44,10 @@ class GsqlSupportedFunctionsTest : public testing::Test {
 };
 
 TEST_F(GsqlSupportedFunctionsTest, SupportedFunctionsAreOnlyGsqlBuiltins) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_json_type = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
   std::map<std::string, std::unique_ptr<zetasql::Function>>
       gsql_builtin_functions;
   zetasql::GetZetaSQLFunctions(
@@ -57,9 +62,14 @@ TEST_F(GsqlSupportedFunctionsTest, SupportedFunctionsAreOnlyGsqlBuiltins) {
     }
   }
 
-  // Check that the SupportedZetaSQLFunctions list contains only
+  // Check that the SupportedZetaSQLFunctions set contains only
   // ZetaSQL built-in functions and no Cloud Spanner specific ones.
   for (const auto& function_name : *SupportedZetaSQLFunctions()) {
+    SCOPED_TRACE(absl::StrCat("Function: ", function_name));
+    EXPECT_NE(gsql_functions.find(function_name), gsql_functions.end());
+  }
+  // Do the same check for JSON functions.
+  for (const auto& function_name : *SupportedJsonFunctions()) {
     SCOPED_TRACE(absl::StrCat("Function: ", function_name));
     EXPECT_NE(gsql_functions.find(function_name), gsql_functions.end());
   }

@@ -25,7 +25,6 @@
 #include "google/spanner/admin/database/v1/spanner_database_admin.grpc.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
-#include "grpcpp/client_context.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -52,6 +51,7 @@
 #include "google/cloud/spanner/value.h"
 #include "frontend/server/server.h"
 #include "tests/conformance/common/environment.h"
+#include "grpcpp/client_context.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
@@ -92,6 +92,7 @@ class DatabaseTest : public ::testing::Test {
   using Mutation = cloud::spanner::Mutation;
   using Mutations = cloud::spanner::Mutations;
   using Numeric = cloud::spanner::Numeric;
+  using Json = cloud::spanner::Json;
   using Transaction = cloud::spanner::Transaction;
   using SqlStatement = cloud::spanner::SqlStatement;
   using BatchDmlResult = cloud::spanner::BatchDmlResult;

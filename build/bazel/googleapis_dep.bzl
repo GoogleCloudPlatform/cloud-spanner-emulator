@@ -21,8 +21,8 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 def googleapis_dep():
     http_archive(
         name = "com_google_googleapis",
-        url = "https://github.com/googleapis/googleapis/archive/299383230f69e9f2272adda8e0d93c4fdf231deb.tar.gz",
-        strip_prefix = "googleapis-299383230f69e9f2272adda8e0d93c4fdf231deb",
-        sha256 = "b31e408b7d50066ce4d50a8f974e37891c2b470da87f2310dc54ee41aee5c06a",
+        url = "https://github.com/googleapis/googleapis/archive/4381242ee4d8c0694ae1188520e9ac1a72edf817.tar.gz",
+        strip_prefix = "googleapis-4381242ee4d8c0694ae1188520e9ac1a72edf817",
+        sha256 = "1bdcffd9cc6ebe9263beade2585a4875d2de515f97f6bb57bc6fe39ac5903984",
         build_file = "@//build/bazel:googleapis.BUILD",
     )

@@ -29,20 +29,25 @@ namespace types = zetasql::types;
 namespace {
 
 TEST_F(SchemaUpdaterTest, CreateIndex) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_json_type = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         k1 INT64 NOT NULL,
         c1 STRING(10),
         c2 STRING(MAX),
-        c3 NUMERIC
+        c3 NUMERIC,
+        c4 JSON
       ) PRIMARY KEY (k1)
     )",
                                         R"(
       CREATE INDEX Idx1 ON T(c1)
     )",
                                         R"(
-      CREATE INDEX Idx2 ON T(c1) STORING(c2, c3))",
+      CREATE INDEX Idx2 ON T(c1) STORING(c2, c3, c4))",
                                     }));
 
   auto idx = schema->FindIndex("Idx1");
@@ -81,7 +86,7 @@ TEST_F(SchemaUpdaterTest, CreateIndex) {
 
   auto idx2 = schema->FindIndex("Idx2");
   EXPECT_NE(idx2, nullptr);
-  EXPECT_EQ(idx2->stored_columns().size(), 2);
+  EXPECT_EQ(idx2->stored_columns().size(), 3);
   auto t_c2 = t->FindColumn("c2");
   auto idx2_c2 = idx2->stored_columns()[0];
   EXPECT_THAT(idx2_c2, ColumnIs("c2", type_factory_.get_string()));
@@ -90,6 +95,10 @@ TEST_F(SchemaUpdaterTest, CreateIndex) {
   auto idx2_c3 = idx2->stored_columns()[1];
   EXPECT_THAT(idx2_c3, ColumnIs("c3", type_factory_.get_numeric()));
   EXPECT_THAT(idx2_c3, SourceColumnIs(t_c3));
+  auto t_c4 = t->FindColumn("c4");
+  auto idx2_c4 = idx2->stored_columns()[2];
+  EXPECT_THAT(idx2_c4, ColumnIs("c4", type_factory_.get_json()));
+  EXPECT_THAT(idx2_c4, SourceColumnIs(t_c4));
 }
 
 TEST_F(SchemaUpdaterTest, CreateIndex_NoKeys) {
@@ -434,6 +443,24 @@ TEST_F(SchemaUpdaterTest, CreateIndex_NumericColumn) {
 
   auto idx_data = idx->index_data_table();
   EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col2));
+}
+
+TEST_F(SchemaUpdaterTest, CreateIndex_JsonColumn) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_json_type = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(
+      CreateSchema({
+          R"(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 JSON
+      ) PRIMARY KEY (col1)
+    )",
+          R"(
+      CREATE INDEX Idx ON T(col2)
+    )"}),
+      StatusIs(error::CannotCreateIndexOnColumn("Idx", "col2", "JSON")));
 }
 
 }  // namespace

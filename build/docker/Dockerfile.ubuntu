@@ -26,6 +26,7 @@ FROM marketplace.gcr.io/google/bazel:2.0.0 as build
 RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
     apt-get -qq update                                                      && \
     apt-get -qq install -y gcc-7 g++-7 make tzdata                          && \
+    apt-get -qq install -y ca-certificates libgnutls30                      && \
     update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 90           \
                         --slave   /usr/bin/g++ g++ /usr/bin/g++-7           && \
     update-alternatives --set gcc /usr/bin/gcc-7

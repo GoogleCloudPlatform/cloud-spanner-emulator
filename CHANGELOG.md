@@ -1,5 +1,14 @@
 # Changes
 
+## v1.4.0
+
+### New Features
+
+* Added support for named arguments.
+* The emulator now supports JSON columns and functions (#37).
+* Added support for INFORMATION_SCHEMA.TABLES TABLE_TYPE column (#43).
+* Query size limits updated to match production (#52).
+
 ## v1.3.0
 
 ### New Features
