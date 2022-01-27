@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "absl/memory/memory.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
 #include "common/errors.h"
 #include "zetasql/base/status_macros.h"
@@ -286,7 +286,7 @@ class ResultSetBuilder {
 
 }  // namespace
 
-zetasql_base::StatusOr<std::vector<google::spanner::v1::PartialResultSet>>
+absl::StatusOr<std::vector<google::spanner::v1::PartialResultSet>>
 ChunkResultSet(const google::spanner::v1::ResultSet& set,
                int64_t max_chunk_size) {
   std::vector<google::spanner::v1::PartialResultSet> results;

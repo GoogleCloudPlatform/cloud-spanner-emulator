@@ -41,7 +41,7 @@ cc_library(
         "//backend/storage:iterator",
         "//common:clock",
         "@com_google_absl//absl/status",
-        "@com_google_zetasql//zetasql/base:statusor",
+        "@com_google_absl//absl/status:statusor",
     ],
 )
 
@@ -201,7 +201,7 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//common:errors",
         "@com_google_absl//absl/status",
-        "@com_google_zetasql//zetasql/base:statusor",
+        "@com_google_absl//absl/status:statusor",
     ],
 )
 
@@ -330,6 +330,6 @@ cc_library(
         "@com_google_absl//absl/container:node_hash_map",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
-        "@com_google_zetasql//zetasql/base:statusor",
+        "@com_google_absl//absl/status:statusor",
     ],
 )

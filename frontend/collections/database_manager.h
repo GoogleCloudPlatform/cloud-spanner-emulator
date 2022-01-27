@@ -24,7 +24,7 @@
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "common/clock.h"
 #include "frontend/entities/database.h"
@@ -41,13 +41,13 @@ class DatabaseManager {
   explicit DatabaseManager(Clock* clock) : clock_(clock) {}
 
   // Creates a database with a schema initialized from `create_statements`.
-  zetasql_base::StatusOr<std::shared_ptr<Database>> CreateDatabase(
+  absl::StatusOr<std::shared_ptr<Database>> CreateDatabase(
       const std::string& database_uri,
       const std::vector<std::string>& create_statements)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Returns a database with the given URI.
-  zetasql_base::StatusOr<std::shared_ptr<Database>> GetDatabase(
+  absl::StatusOr<std::shared_ptr<Database>> GetDatabase(
       const std::string& database_uri) const ABSL_LOCKS_EXCLUDED(mu_);
 
   // Deletes a database with the given URI.
@@ -55,7 +55,7 @@ class DatabaseManager {
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Lists all databases associated with the given instance URI.
-  zetasql_base::StatusOr<std::vector<std::shared_ptr<Database>>> ListDatabases(
+  absl::StatusOr<std::vector<std::shared_ptr<Database>>> ListDatabases(
       const std::string& instance_uri) const ABSL_LOCKS_EXCLUDED(mu_);
 
  private:

@@ -17,6 +17,7 @@
 #include "backend/schema/backfills/column_value_backfill.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "zetasql/public/type.h"
@@ -25,7 +26,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "backend/database/database.h"
 #include "backend/datamodel/key_set.h"
@@ -103,11 +104,11 @@ class ColumnValueBackfillTest : public ::testing::Test {
   }
 
   std::vector<zetasql::Value> ColumnValues(const std::string& column_name) {
-    zetasql_base::StatusOr<std::unique_ptr<ReadOnlyTransaction>> status_or =
+    absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>> status_or =
         database_->CreateReadOnlyTransaction(ReadOnlyOptions());
     ZETASQL_EXPECT_OK(status_or.status());
 
-    auto txn = std::move(status_or).ValueOrDie();
+    auto txn = std::move(status_or.value());
     std::unique_ptr<backend::RowCursor> cursor;
     ReadArg args;
     args.table = "TestTable";

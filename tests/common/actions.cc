@@ -21,7 +21,7 @@
 
 #include "zetasql/public/value.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
@@ -40,7 +40,7 @@ absl::Status TestReadOnlyStore::Insert(
                       GetColumnIDs(columns), values);
 }
 
-zetasql_base::StatusOr<bool> TestReadOnlyStore::Exists(const Table* table,
+absl::StatusOr<bool> TestReadOnlyStore::Exists(const Table* table,
                                                const Key& key) const {
   absl::Status s =
       store_.Lookup(absl::InfiniteFuture(), table->id(), key, {}, {});
@@ -52,7 +52,7 @@ zetasql_base::StatusOr<bool> TestReadOnlyStore::Exists(const Table* table,
   return true;
 }
 
-zetasql_base::StatusOr<bool> TestReadOnlyStore::PrefixExists(
+absl::StatusOr<bool> TestReadOnlyStore::PrefixExists(
     const Table* table, const Key& prefix_key) const {
   std::unique_ptr<StorageIterator> itr;
   ZETASQL_RETURN_IF_ERROR(store_.Read(absl::InfiniteFuture(), table->id(),
@@ -64,7 +64,7 @@ zetasql_base::StatusOr<bool> TestReadOnlyStore::PrefixExists(
   return false;
 }
 
-zetasql_base::StatusOr<std::unique_ptr<StorageIterator>> TestReadOnlyStore::Read(
+absl::StatusOr<std::unique_ptr<StorageIterator>> TestReadOnlyStore::Read(
     const Table* table, const KeyRange& key_range,
     const absl::Span<const Column* const> columns) const {
   std::unique_ptr<StorageIterator> itr;

@@ -21,7 +21,7 @@
 #include <string>
 
 #include "absl/base/thread_annotations.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
@@ -57,7 +57,7 @@ std::vector<std::shared_ptr<Database>> GetDatabasesByInstance(
 
 }  // namespace
 
-zetasql_base::StatusOr<std::shared_ptr<Database>> DatabaseManager::CreateDatabase(
+absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::CreateDatabase(
     const std::string& database_uri,
     const std::vector<std::string>& create_statements) {
   // Perform bulk of the work outside the database manager lock to allow
@@ -98,7 +98,7 @@ zetasql_base::StatusOr<std::shared_ptr<Database>> DatabaseManager::CreateDatabas
   return database;
 }
 
-zetasql_base::StatusOr<std::shared_ptr<Database>> DatabaseManager::GetDatabase(
+absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::GetDatabase(
     const std::string& database_uri) const {
   absl::MutexLock lock(&mu_);
   auto itr = database_map_.find(database_uri);
@@ -120,7 +120,7 @@ absl::Status DatabaseManager::DeleteDatabase(const std::string& database_uri) {
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<std::vector<std::shared_ptr<Database>>>
+absl::StatusOr<std::vector<std::shared_ptr<Database>>>
 DatabaseManager::ListDatabases(const std::string& instance_uri) const {
   absl::MutexLock lock(&mu_);
   return GetDatabasesByInstance(database_map_, instance_uri);

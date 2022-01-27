@@ -18,7 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_COMMON_INDEXING_H_
 
 #include "zetasql/public/value.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/common/rows.h"
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/value.h"
@@ -32,7 +32,7 @@ namespace emulator {
 namespace backend {
 
 // Computes the index key from the given row.
-zetasql_base::StatusOr<Key> ComputeIndexKey(const Row& base_row, const Index* index);
+absl::StatusOr<Key> ComputeIndexKey(const Row& base_row, const Index* index);
 
 // Computes an the ordered list of index row values using the given base row.
 ValueList ComputeIndexValues(const Row& base_row, const Index* index);

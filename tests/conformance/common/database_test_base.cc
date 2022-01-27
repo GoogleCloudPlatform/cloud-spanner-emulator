@@ -21,7 +21,7 @@
 
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "google/cloud/spanner/backoff_policy.h"
@@ -112,7 +112,7 @@ absl::Status DatabaseTest::SetSchema(const std::vector<std::string>& schema) {
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<DatabaseTest::UpdateDatabaseDdlMetadata>
+absl::StatusOr<DatabaseTest::UpdateDatabaseDdlMetadata>
 DatabaseTest::UpdateSchema(const std::vector<std::string>& schema) {
   auto status_or = database_client_->UpdateDatabase(*database_, schema).get();
   if (!status_or.ok()) {
@@ -121,7 +121,7 @@ DatabaseTest::UpdateSchema(const std::vector<std::string>& schema) {
   return status_or.value();
 }
 
-zetasql_base::StatusOr<std::vector<std::string>> DatabaseTest::GetDatabaseDdl() const {
+absl::StatusOr<std::vector<std::string>> DatabaseTest::GetDatabaseDdl() const {
   auto status_or = database_client_->GetDatabaseDdl(*database_);
   if (!status_or.ok()) {
     return ToUtilStatus(status_or.status());
@@ -147,22 +147,22 @@ using Transaction = cloud::spanner::Transaction;
 using BatchDmlResult = cloud::spanner::BatchDmlResult;
 using PartitionedDmlResult = cloud::spanner::PartitionedDmlResult;
 
-zetasql_base::StatusOr<PartitionedDmlResult> DatabaseTest::ExecutePartitionedDml(
+absl::StatusOr<PartitionedDmlResult> DatabaseTest::ExecutePartitionedDml(
     const SqlStatement& sql_statement) {
   return ToUtilStatusOr(client().ExecutePartitionedDml(sql_statement));
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::Commit(Mutations mutations) {
+absl::StatusOr<CommitResult> DatabaseTest::Commit(Mutations mutations) {
   return ToUtilStatusOr(client().Commit(
       [&](Transaction) -> cloud::StatusOr<Mutations> { return mutations; }));
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitTransaction(
+absl::StatusOr<CommitResult> DatabaseTest::CommitTransaction(
     Transaction txn, Mutations mutations) {
   return ToUtilStatusOr(client().Commit(txn, mutations));
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitDml(
+absl::StatusOr<CommitResult> DatabaseTest::CommitDml(
     const std::vector<SqlStatement>& sql_statements) {
   return ToUtilStatusOr(client().Commit(
       [&](Transaction const& txn) -> cloud::StatusOr<Mutations> {
@@ -174,7 +174,7 @@ zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitDml(
       }));
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitDmlTransaction(
+absl::StatusOr<CommitResult> DatabaseTest::CommitDmlTransaction(
     Transaction txn, const std::vector<SqlStatement>& sql_statements) {
   for (const auto& sql_statement : sql_statements) {
     auto result = client().ExecuteDml(txn, sql_statement);
@@ -185,7 +185,7 @@ zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitDmlTransaction(
   return result.value();
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitBatchDml(
+absl::StatusOr<CommitResult> DatabaseTest::CommitBatchDml(
     const std::vector<SqlStatement>& sql_statements) {
   return ToUtilStatusOr(client().Commit(
       [&](Transaction const& txn) -> cloud::StatusOr<Mutations> {
@@ -196,7 +196,7 @@ zetasql_base::StatusOr<CommitResult> DatabaseTest::CommitBatchDml(
       }));
 }
 
-zetasql_base::StatusOr<BatchDmlResult> DatabaseTest::BatchDmlTransaction(
+absl::StatusOr<BatchDmlResult> DatabaseTest::BatchDmlTransaction(
     Transaction txn, const std::vector<SqlStatement>& sql_statements) {
   auto result = client().ExecuteBatchDml(txn, sql_statements);
   if (!result) return ToUtilStatus(result.status());
@@ -208,12 +208,12 @@ absl::Status DatabaseTest::Rollback(Transaction txn) {
   return absl::Status(absl::StatusCode(status.code()), status.message());
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::Insert(
+absl::StatusOr<CommitResult> DatabaseTest::Insert(
     std::string table, std::vector<std::string> columns, ValueRow row) {
   return Commit({InsertMutationBuilder(table, columns).AddRow(row).Build()});
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::MultiInsert(
+absl::StatusOr<CommitResult> DatabaseTest::MultiInsert(
     std::string table, std::vector<std::string> columns,
     std::vector<ValueRow> rows) {
   auto mutation_builder = InsertMutationBuilder(table, columns);
@@ -223,12 +223,12 @@ zetasql_base::StatusOr<CommitResult> DatabaseTest::MultiInsert(
   return Commit({mutation_builder.Build()});
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::Update(
+absl::StatusOr<CommitResult> DatabaseTest::Update(
     std::string table, std::vector<std::string> columns, ValueRow row) {
   return Commit({UpdateMutationBuilder(table, columns).AddRow(row).Build()});
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::MultiUpdate(
+absl::StatusOr<CommitResult> DatabaseTest::MultiUpdate(
     std::string table, std::vector<std::string> columns,
     std::vector<ValueRow> rows) {
   auto mutation_builder = UpdateMutationBuilder(table, columns);
@@ -238,14 +238,14 @@ zetasql_base::StatusOr<CommitResult> DatabaseTest::MultiUpdate(
   return Commit({mutation_builder.Build()});
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::Delete(std::string table,
+absl::StatusOr<CommitResult> DatabaseTest::Delete(std::string table,
                                                   cloud::spanner::Key key) {
   KeySet key_set;
   key_set.AddKey(key);
   return Commit({cloud::spanner::MakeDeleteMutation(table, key_set)});
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::Delete(
+absl::StatusOr<CommitResult> DatabaseTest::Delete(
     std::string table, std::vector<cloud::spanner::Key> keys) {
   KeySet key_set;
   for (const auto& key : keys) {
@@ -254,18 +254,18 @@ zetasql_base::StatusOr<CommitResult> DatabaseTest::Delete(
   return Commit({cloud::spanner::MakeDeleteMutation(table, key_set)});
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::Delete(
+absl::StatusOr<CommitResult> DatabaseTest::Delete(
     std::string table, cloud::spanner::KeySet key_set) {
   return Commit({cloud::spanner::MakeDeleteMutation(table, key_set)});
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::InsertOrUpdate(
+absl::StatusOr<CommitResult> DatabaseTest::InsertOrUpdate(
     std::string table, std::vector<std::string> columns, ValueRow row) {
   return Commit(
       {InsertOrUpdateMutationBuilder(table, columns).AddRow(row).Build()});
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::MultiInsertOrUpdate(
+absl::StatusOr<CommitResult> DatabaseTest::MultiInsertOrUpdate(
     std::string table, std::vector<std::string> columns,
     std::vector<ValueRow> rows) {
   auto mutation_builder = InsertOrUpdateMutationBuilder(table, columns);
@@ -275,12 +275,12 @@ zetasql_base::StatusOr<CommitResult> DatabaseTest::MultiInsertOrUpdate(
   return Commit({mutation_builder.Build()});
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::Replace(
+absl::StatusOr<CommitResult> DatabaseTest::Replace(
     std::string table, std::vector<std::string> columns, ValueRow row) {
   return Commit({ReplaceMutationBuilder(table, columns).AddRow(row).Build()});
 }
 
-zetasql_base::StatusOr<CommitResult> DatabaseTest::MultiReplace(
+absl::StatusOr<CommitResult> DatabaseTest::MultiReplace(
     std::string table, std::vector<std::string> columns,
     std::vector<ValueRow> rows) {
   auto mutation_builder = ReplaceMutationBuilder(table, columns);

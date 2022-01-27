@@ -19,7 +19,7 @@
 #include "google/protobuf/struct.pb.h"
 #include "absl/memory/memory.h"
 #include "absl/random/random.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
 #include "absl/types/optional.h"
 #include "common/errors.h"
@@ -103,7 +103,7 @@ constexpr int kMaxStackDepth = 9;
 
 }  // namespace
 
-zetasql_base::StatusOr<google::spanner::v1::ResultSet> MergePartialResultSets(
+absl::StatusOr<google::spanner::v1::ResultSet> MergePartialResultSets(
     const std::vector<google::spanner::v1::PartialResultSet>& results,
     int columns_per_row) {
   google::spanner::v1::ResultSet out;
@@ -161,7 +161,7 @@ zetasql_base::StatusOr<google::spanner::v1::ResultSet> MergePartialResultSets(
   return out;
 }
 
-zetasql_base::StatusOr<google::spanner::v1::ResultSet> GenerateRandomResultSet(
+absl::StatusOr<google::spanner::v1::ResultSet> GenerateRandomResultSet(
     absl::BitGen* gen, int num_values) {
   google::spanner::v1::ResultSet result;
   result.mutable_metadata();

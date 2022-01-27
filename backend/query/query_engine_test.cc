@@ -26,7 +26,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "backend/access/read.h"
@@ -86,7 +86,7 @@ std::vector<const zetasql::Type*> GetColumnTypes(
   return types;
 }
 
-zetasql_base::StatusOr<std::vector<std::vector<zetasql::Value>>> GetAllColumnValues(
+absl::StatusOr<std::vector<std::vector<zetasql::Value>>> GetAllColumnValues(
     std::unique_ptr<backend::RowCursor> cursor) {
   std::vector<std::vector<zetasql::Value>> all_values;
   while (cursor->Next()) {

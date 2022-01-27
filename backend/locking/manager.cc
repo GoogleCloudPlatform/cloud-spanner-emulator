@@ -16,7 +16,7 @@
 
 #include "backend/locking/manager.h"
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
@@ -70,7 +70,7 @@ void LockManager::UnlockAll(LockHandle* handle) {
   handle->Reset();
 }
 
-zetasql_base::StatusOr<absl::Time> LockManager::ReserveCommitTimestamp(
+absl::StatusOr<absl::Time> LockManager::ReserveCommitTimestamp(
     LockHandle* handle) {
   absl::MutexLock lock(&mu_);
 

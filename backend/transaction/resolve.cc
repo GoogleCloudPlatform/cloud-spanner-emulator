@@ -18,7 +18,7 @@
 
 #include <vector>
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "backend/common/case.h"
 #include "backend/common/rows.h"
@@ -119,7 +119,7 @@ absl::Status ValidateGeneratedColumnsNotPresent(
 // returned indices will be in the order specified by the primary key. Nullable
 // primary key columns do not need to be specified, in which the index entry
 // will be nullopt.
-zetasql_base::StatusOr<std::vector<absl::optional<int>>> ExtractPrimaryKeyIndices(
+absl::StatusOr<std::vector<absl::optional<int>>> ExtractPrimaryKeyIndices(
     absl::Span<const Column* const> columns,
     absl::Span<const KeyColumn* const> primary_key) {
   std::vector<absl::optional<int>> key_indices;
@@ -168,7 +168,7 @@ Key ComputeKey(const ValueList& row,
 
 }  // namespace
 
-zetasql_base::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
+absl::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
                                                const Schema* schema) {
   // Find the table to read from schema.
   auto read_table = schema->FindTable(read_arg.table);
@@ -222,7 +222,7 @@ zetasql_base::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
   return resolved_read_arg;
 }
 
-zetasql_base::StatusOr<ResolvedMutationOp> ResolveMutationOp(
+absl::StatusOr<ResolvedMutationOp> ResolveMutationOp(
     const MutationOp& mutation_op, const Schema* schema, absl::Time now) {
   const Table* table = schema->FindTable(mutation_op.table);
   if (table == nullptr) {

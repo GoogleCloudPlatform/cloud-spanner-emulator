@@ -24,7 +24,7 @@
 
 #include "zetasql/base/logging.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/match.h"
@@ -170,7 +170,7 @@ class DDLErrorHandler : public ErrorHandler {
   bool ignore_further_errors_;
 };
 
-zetasql_base::StatusOr<std::unique_ptr<SimpleNode>> ParseDDLStatementToNode(
+absl::StatusOr<std::unique_ptr<SimpleNode>> ParseDDLStatementToNode(
     absl::string_view statement) {
   // Empty DDL statements are not allowed in Cloud Spanner.
   if (statement.empty()) {
@@ -204,7 +204,7 @@ absl::Status CheckNodeType(const SimpleNode* node, int expected_type) {
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<const SimpleNode*> GetChildAtIndex(const SimpleNode* parent,
+absl::StatusOr<const SimpleNode*> GetChildAtIndex(const SimpleNode* parent,
                                                   int pos) {
   if (pos >= parent->jjtGetNumChildren()) {
     return error::Internal(absl::StrCat("Out of bounds children pos [", pos,
@@ -214,14 +214,14 @@ zetasql_base::StatusOr<const SimpleNode*> GetChildAtIndex(const SimpleNode* pare
   return dynamic_cast<SimpleNode*>(parent->jjtGetChild(pos));
 }
 
-zetasql_base::StatusOr<const SimpleNode*> GetChildAtIndexWithType(
+absl::StatusOr<const SimpleNode*> GetChildAtIndexWithType(
     const SimpleNode* parent, int pos, int expected_type) {
   ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(parent, pos));
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(child, expected_type));
   return child;
 }
 
-zetasql_base::StatusOr<const SimpleNode*> GetFirstChildWithType(
+absl::StatusOr<const SimpleNode*> GetFirstChildWithType(
     const SimpleNode* parent, int type) {
   for (int i = 0; i < parent->jjtGetNumChildren(); i++) {
     ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(parent, i));
@@ -265,10 +265,6 @@ absl::Status VisitColumnTypeNode(const SimpleNode* column_type_node,
   if (!ColumnType::Type_Parse(type_name, &type)) {
     return error::Internal(
         absl::StrCat("Unrecognized column type: ", type_name));
-  }
-  if (type == ColumnType::JSON &&
-      !EmulatorFeatureFlags::instance().flags().enable_json_type) {
-    return error::JsonTypeNotEnabled();
   }
   column_type->set_type(type);
 
@@ -331,7 +327,7 @@ absl::Status VisitGenerationClauseNode(const SimpleNode* node,
 
   return absl::OkStatus();
 }
-zetasql_base::StatusOr<std::string> GetOptionName(const SimpleNode* node) {
+absl::StatusOr<std::string> GetOptionName(const SimpleNode* node) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTOPTION_KEY_VAL));
   if (node->jjtGetNumChildren() < 2) {
     return error::Internal(absl::StrCat(
@@ -649,6 +645,8 @@ absl::Status VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
         ZETASQL_RETURN_IF_ERROR(VisitTableInterleaveNode(
             child, table->add_constraints()->mutable_interleave()));
         break;
+      case JJTROW_DELETION_POLICY_CLAUSE:
+        return absl::OkStatus();
       default:
         return error::Internal(
             absl::StrCat("Unexpected table info: ", child->toString()));
@@ -914,13 +912,17 @@ absl::Status VisitAlterTableNode(const SimpleNode* node,
       return VisitAlterTableAddCheckConstraint(node, alter_table, ddl_text);
     case JJTDROP_CONSTRAINT:
       return VisitAlterTableDropConstraint(node, alter_table);
+    case JJTADD_ROW_DELETION_POLICY:
+    case JJTREPLACE_ROW_DELETION_POLICY:
+    case JJTDROP_ROW_DELETION_POLICY:
+      return absl::OkStatus();
     default:
       return error::Internal(
           absl::StrCat("Unexpected alter table type: ", child->toString()));
   }
 }
 
-zetasql_base::StatusOr<DDLStatement> BuildDDLStatement(
+absl::StatusOr<DDLStatement> BuildDDLStatement(
     const SimpleNode* root, absl::string_view ddl_text,
     std::vector<std::string>* errors) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(root, JJTDDL_STATEMENT));
@@ -955,7 +957,7 @@ zetasql_base::StatusOr<DDLStatement> BuildDDLStatement(
   return statement;
 }
 
-zetasql_base::StatusOr<CreateDatabase> VisitCreateDatabaseNode(const SimpleNode* node) {
+absl::StatusOr<CreateDatabase> VisitCreateDatabaseNode(const SimpleNode* node) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCREATE_DATABASE_STATEMENT));
 
   CreateDatabase database;
@@ -973,7 +975,7 @@ zetasql_base::StatusOr<CreateDatabase> VisitCreateDatabaseNode(const SimpleNode*
   return database;
 }
 
-zetasql_base::StatusOr<CreateDatabase> BuildCreateDatabaseStatement(
+absl::StatusOr<CreateDatabase> BuildCreateDatabaseStatement(
     const SimpleNode* root) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(root, JJTDDL_STATEMENT));
 
@@ -990,7 +992,7 @@ zetasql_base::StatusOr<CreateDatabase> BuildCreateDatabaseStatement(
 
 }  // namespace
 
-zetasql_base::StatusOr<CreateDatabase> ParseCreateDatabase(
+absl::StatusOr<CreateDatabase> ParseCreateDatabase(
     absl::string_view create_statement) {
   // Parse input statement into the root node.
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<SimpleNode> node,
@@ -1000,7 +1002,7 @@ zetasql_base::StatusOr<CreateDatabase> ParseCreateDatabase(
   return BuildCreateDatabaseStatement(node.get());
 }
 
-zetasql_base::StatusOr<DDLStatement> ParseDDLStatement(absl::string_view input) {
+absl::StatusOr<DDLStatement> ParseDDLStatement(absl::string_view input) {
   // Parse input statement into the root node.
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<SimpleNode> node,
                    ParseDDLStatementToNode(input));
@@ -1015,7 +1017,7 @@ zetasql_base::StatusOr<DDLStatement> ParseDDLStatement(absl::string_view input) 
   return statement;
 }
 
-zetasql_base::StatusOr<Schema> ParseDDLStatements(
+absl::StatusOr<Schema> ParseDDLStatements(
     absl::Span<const absl::string_view> statements) {
   Schema schema;
   for (absl::string_view statement : statements) {

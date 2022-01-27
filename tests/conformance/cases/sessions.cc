@@ -24,7 +24,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/container/btree_map.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -53,7 +53,7 @@ class SessionsTest : public DatabaseTest {
   }
 
   // Creates a new session with the given database URI.
-  zetasql_base::StatusOr<spanner_api::Session> CreateSession(
+  absl::StatusOr<spanner_api::Session> CreateSession(
       absl::string_view database_uri,
       const absl::btree_map<std::string, std::string>& labels = {}) {
     grpc::ClientContext context;
@@ -71,13 +71,13 @@ class SessionsTest : public DatabaseTest {
   }
 
   // Creates a new session that belongs to the database for the test.
-  zetasql_base::StatusOr<spanner_api::Session> CreateSession(
+  absl::StatusOr<spanner_api::Session> CreateSession(
       const absl::btree_map<std::string, std::string>& labels = {}) {
     return CreateSession(database()->FullName(), labels);
   }
 
   // Gets the last use timestamp for the specified `session_name`.
-  zetasql_base::StatusOr<google::protobuf::Timestamp> GetSessionLastUseTimestamp(
+  absl::StatusOr<google::protobuf::Timestamp> GetSessionLastUseTimestamp(
       absl::string_view session_name) {
     grpc::ClientContext context;
     spanner_api::GetSessionRequest request;
@@ -89,7 +89,7 @@ class SessionsTest : public DatabaseTest {
 
   // Lists the active sessions up to the specified `page_size` limit and sets
   // `page_token` to the page token for the next page of results.
-  zetasql_base::StatusOr<std::vector<spanner_api::Session>> ListSessionsPage(
+  absl::StatusOr<std::vector<spanner_api::Session>> ListSessionsPage(
       const std::string& uri, int32_t page_size = 1,
       std::string* page_token = nullptr) {
     std::vector<spanner_api::Session> sessions;
@@ -112,7 +112,7 @@ class SessionsTest : public DatabaseTest {
   }
 
   // Gets a session.
-  zetasql_base::StatusOr<std::string> GetSession(absl::string_view session_name) {
+  absl::StatusOr<std::string> GetSession(absl::string_view session_name) {
     grpc::ClientContext context;
     spanner_api::GetSessionRequest request;
     request.set_name(std::string(session_name));  // NOLINT
@@ -132,7 +132,7 @@ class SessionsTest : public DatabaseTest {
   }
 
   // Batch-creates the specified number of sessions.
-  zetasql_base::StatusOr<std::vector<std::string>> BatchCreateSessions(
+  absl::StatusOr<std::vector<std::string>> BatchCreateSessions(
       const std::string& uri, int32_t num_sessions) {
     std::vector<std::string> sessions;
     grpc::ClientContext context;

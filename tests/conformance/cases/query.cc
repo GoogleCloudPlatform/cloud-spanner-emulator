@@ -40,7 +40,6 @@ class QueryTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
     EmulatorFeatureFlags::Flags flags;
-    flags.enable_json_type = true;
     emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
     return SetSchema({

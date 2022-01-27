@@ -22,7 +22,7 @@
 #include "zetasql/public/type.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/common/ids.h"
@@ -79,7 +79,7 @@ class SchemaUpdater {
   // data-dependent verification tasks resulting from the new schema such as
   // creation of a new index. However, since the database will not contain any
   // data at this point, none of the backfill tasks are expected to fail.
-  zetasql_base::StatusOr<std::unique_ptr<const Schema>> CreateSchemaFromDDL(
+  absl::StatusOr<std::unique_ptr<const Schema>> CreateSchemaFromDDL(
       absl::Span<const std::string> statements,
       const SchemaChangeContext& context);
 
@@ -93,14 +93,14 @@ class SchemaUpdater {
   // corresponding to the last succesfully applied statement and the number of
   // successfully applied statements returned in the `updated_schema` and
   // `num_successful_statements` members respectively.
-  zetasql_base::StatusOr<SchemaChangeResult> UpdateSchemaFromDDL(
+  absl::StatusOr<SchemaChangeResult> UpdateSchemaFromDDL(
       const Schema* existing_schema, absl::Span<const std::string> statements,
       const SchemaChangeContext& context);
 
   // Validates the given set DDL statements, producing a new schema with the
   // DDL statements applied. Does not run any backfill/verification tasks
   // entailed by `statements`.
-  zetasql_base::StatusOr<std::unique_ptr<const Schema>> ValidateSchemaFromDDL(
+  absl::StatusOr<std::unique_ptr<const Schema>> ValidateSchemaFromDDL(
       absl::Span<const std::string> statements,
       const SchemaChangeContext& context,
       const Schema* existing_schema = nullptr);

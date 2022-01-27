@@ -22,7 +22,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/common/ids.h"
@@ -35,7 +35,7 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
-zetasql_base::StatusOr<backend::ReadOnlyOptions> ReadOnlyOptionsFromProto(
+absl::StatusOr<backend::ReadOnlyOptions> ReadOnlyOptionsFromProto(
     const google::spanner::v1::TransactionOptions::ReadOnly& proto);
 
 // Populates a ReadArg from a ReadRequest proto.
@@ -59,7 +59,7 @@ absl::Status RowCursorToResultSetProto(
 // will only convert first limit numbers of rows. If the results exceed the max
 // streaming chunk size for a given partial result set, it will be chunked into
 // multiple partial result sets.
-zetasql_base::StatusOr<std::vector<google::spanner::v1::PartialResultSet>>
+absl::StatusOr<std::vector<google::spanner::v1::PartialResultSet>>
 RowCursorToPartialResultSetProtos(backend::RowCursor* cursor, int limit);
 
 }  // namespace frontend

@@ -21,10 +21,10 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 def zetasql_dep():
     http_archive(
         name = "com_google_zetasql",
-        url = "https://github.com/google/zetasql/archive/dd883180de6387ad80bcf7534b5aae8191e66621.tar.gz",
-        strip_prefix = "zetasql-dd883180de6387ad80bcf7534b5aae8191e66621",
+        url = "https://github.com/google/zetasql/archive/2021.09.1.tar.gz",
+        strip_prefix = "zetasql-2021.09.1",
         # Patches applied:
         # - Give visibility to ZetaSQL's base library to reuse some utilities
         patches = ["//build/bazel:zetasql.patch"],
-        sha256 = "9141d9755d1f91ff4d1c5a73087255bd9c5eb020e46109db92022906c77d760c",
+        sha256 = "30e1565cf654fca0dcb630cece67e5466fa572c457ecd5e3b2a7bc5530b94fda",
     )

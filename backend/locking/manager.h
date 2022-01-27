@@ -21,7 +21,7 @@
 
 #include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
@@ -62,7 +62,7 @@ class LockManager {
   void EnqueueLock(LockHandle* handle, const LockRequest& request)
       ABSL_LOCKS_EXCLUDED(mu_);
   void UnlockAll(LockHandle* handle) ABSL_LOCKS_EXCLUDED(mu_);
-  zetasql_base::StatusOr<absl::Time> ReserveCommitTimestamp(LockHandle* handle)
+  absl::StatusOr<absl::Time> ReserveCommitTimestamp(LockHandle* handle)
       ABSL_LOCKS_EXCLUDED(mu_);
   absl::Status MarkCommitted(LockHandle* handle) ABSL_LOCKS_EXCLUDED(mu_);
   void WaitForSafeRead(absl::Time read_time) ABSL_LOCKS_EXCLUDED(mu_);

@@ -23,7 +23,7 @@
 
 #include "zetasql/public/type.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
@@ -56,15 +56,15 @@ class Database {
   // Constructs a fully initialized database with schema created using
   // create_statements. Returns an error if create_statements are invalid, or if
   // failed to create the database.
-  static zetasql_base::StatusOr<std::unique_ptr<Database>> Create(
+  static absl::StatusOr<std::unique_ptr<Database>> Create(
       Clock* clock, const std::vector<std::string>& create_statements);
 
   // Creates a read only transaction attached to this database.
-  zetasql_base::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
+  absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
   CreateReadOnlyTransaction(const ReadOnlyOptions& options);
 
   // Creates a read write transaction attached to this database.
-  zetasql_base::StatusOr<std::unique_ptr<ReadWriteTransaction>>
+  absl::StatusOr<std::unique_ptr<ReadWriteTransaction>>
   CreateReadWriteTransaction(const ReadWriteOptions& options,
                              const RetryState& retry_state);
 

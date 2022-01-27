@@ -22,7 +22,7 @@
 #include "absl/container/node_hash_map.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/actions/action.h"
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
@@ -94,7 +94,7 @@ class ActionManager {
                            const FunctionCatalog* function_catalog);
 
   // Returns the action registry for given schema.
-  zetasql_base::StatusOr<ActionRegistry*> GetActionsForSchema(
+  absl::StatusOr<ActionRegistry*> GetActionsForSchema(
       const Schema* schema) const;
 
  private:

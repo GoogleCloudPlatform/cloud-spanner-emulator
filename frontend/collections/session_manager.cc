@@ -19,7 +19,7 @@
 #include <map>
 #include <string>
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
@@ -34,7 +34,7 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
-zetasql_base::StatusOr<std::shared_ptr<Session>> SessionManager::CreateSession(
+absl::StatusOr<std::shared_ptr<Session>> SessionManager::CreateSession(
     const Labels& labels, std::shared_ptr<Database> database) {
   absl::MutexLock lock(&mu_);
   const std::string session_id = absl::StrCat(next_session_id_++);
@@ -49,7 +49,7 @@ zetasql_base::StatusOr<std::shared_ptr<Session>> SessionManager::CreateSession(
   return session;
 }
 
-zetasql_base::StatusOr<std::shared_ptr<Session>> SessionManager::GetSession(
+absl::StatusOr<std::shared_ptr<Session>> SessionManager::GetSession(
     const std::string& session_uri) {
   absl::MutexLock lock(&mu_);
   auto itr = session_map_.find(session_uri);
@@ -66,7 +66,7 @@ zetasql_base::StatusOr<std::shared_ptr<Session>> SessionManager::GetSession(
   return session;
 }
 
-zetasql_base::StatusOr<std::vector<std::shared_ptr<Session>>>
+absl::StatusOr<std::vector<std::shared_ptr<Session>>>
 SessionManager::ListSessions(const std::string& database_uri) const {
   absl::MutexLock lock(&mu_);
   std::string session_uri_prefix = absl::StrCat(database_uri, "/");

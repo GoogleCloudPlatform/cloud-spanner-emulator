@@ -20,7 +20,7 @@
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "absl/random/random.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -30,12 +30,12 @@ namespace backend {
 namespace test {
 
 // Merges a set of PartialResultSets into a single ResultSet.
-zetasql_base::StatusOr<google::spanner::v1::ResultSet> MergePartialResultSets(
+absl::StatusOr<google::spanner::v1::ResultSet> MergePartialResultSets(
     const std::vector<google::spanner::v1::PartialResultSet>& results,
     int columns_per_row);
 
 // Generates a random result set.
-zetasql_base::StatusOr<google::spanner::v1::ResultSet> GenerateRandomResultSet(
+absl::StatusOr<google::spanner::v1::ResultSet> GenerateRandomResultSet(
     absl::BitGen* gen, int num_values);
 
 }  // namespace test

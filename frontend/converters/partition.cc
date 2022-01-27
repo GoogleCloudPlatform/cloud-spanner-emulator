@@ -16,7 +16,7 @@
 
 #include "frontend/converters/partition.h"
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
 #include "common/errors.h"
 #include "zetasql/base/ret_check.h"
@@ -26,7 +26,7 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
-zetasql_base::StatusOr<std::string> PartitionTokenToString(
+absl::StatusOr<std::string> PartitionTokenToString(
     const PartitionToken& partition_token) {
   std::string binary_string, token_string;
   ZETASQL_RET_CHECK(partition_token.SerializeToString(&binary_string))
@@ -35,7 +35,7 @@ zetasql_base::StatusOr<std::string> PartitionTokenToString(
   return token_string;
 }
 
-zetasql_base::StatusOr<PartitionToken> PartitionTokenFromString(
+absl::StatusOr<PartitionToken> PartitionTokenFromString(
     const std::string& token) {
   std::string binary_string;
   if (!absl::WebSafeBase64Unescape(token, &binary_string)) {

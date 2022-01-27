@@ -25,7 +25,7 @@
 #include "zetasql/public/value.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/query/function_catalog.h"
@@ -88,12 +88,12 @@ class QueryEngine {
       : type_factory_(type_factory), function_catalog_(type_factory) {}
 
   // Returns the name of the table that a given DML query modifies.
-  zetasql_base::StatusOr<std::string> GetDmlTargetTable(const Query& query,
+  absl::StatusOr<std::string> GetDmlTargetTable(const Query& query,
                                                 const Schema* schema) const;
 
   // Executes a SQL query (SELECT query or DML).
   // Skip execution if validate_only is true.
-  zetasql_base::StatusOr<QueryResult> ExecuteSql(const Query& query,
+  absl::StatusOr<QueryResult> ExecuteSql(const Query& query,
                                          const QueryContext& context) const;
 
   // Returns OK if query is partitionable.

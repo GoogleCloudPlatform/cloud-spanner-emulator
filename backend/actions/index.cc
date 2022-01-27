@@ -18,7 +18,7 @@
 
 #include <iterator>
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/common/indexing.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
@@ -35,7 +35,7 @@ namespace backend {
 namespace {
 
 // Returns the row from the indexed table for the given key.
-zetasql_base::StatusOr<Row> ReadBaseTableRow(
+absl::StatusOr<Row> ReadBaseTableRow(
     const ActionContext* ctx, const Table* table, const Key& key,
     const std::vector<const Column*>& base_columns) {
   ZETASQL_ASSIGN_OR_RETURN(

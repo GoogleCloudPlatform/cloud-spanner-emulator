@@ -20,7 +20,7 @@
 
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "backend/common/rows.h"
@@ -318,7 +318,7 @@ void TransactionStore::TrackTableForCommitTimestamp(const Table* table,
   }
 }
 
-zetasql_base::StatusOr<ValueList> TransactionStore::Lookup(
+absl::StatusOr<ValueList> TransactionStore::Lookup(
     const Table* table, const Key& key,
     absl::Span<const Column* const> columns) const {
   ValueList values;

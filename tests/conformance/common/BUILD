@@ -27,7 +27,7 @@ cc_library(
         "@com_github_googleapis_google_cloud_cpp//:spanner",
         "@com_github_googleapis_google_cloud_cpp//google/cloud:google_cloud_cpp_common",
         "@com_google_absl//absl/status",
-        "@com_google_zetasql//zetasql/base:statusor",
+        "@com_google_absl//absl/status:statusor",
     ],
 )
 
@@ -45,12 +45,12 @@ cc_library(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

@@ -28,7 +28,7 @@
 #include "zetasql/public/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "backend/query/analyzer_options.h"
 #include "common/constants.h"
@@ -44,7 +44,7 @@ namespace {
 constexpr char kCloudSpannerEmulatorFunctionCatalog[] =
     "CloudSpannerEmulatorCatalog";
 
-zetasql_base::StatusOr<zetasql::Value> EvalPendingCommitTimestamp(
+absl::StatusOr<zetasql::Value> EvalPendingCommitTimestamp(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.empty());
 

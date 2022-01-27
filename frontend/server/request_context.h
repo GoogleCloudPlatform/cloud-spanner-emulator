@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_SERVER_REQUEST_CONTEXT_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_SERVER_REQUEST_CONTEXT_H_
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "frontend/server/environment.h"
 #include "grpcpp/server_context.h"
 
@@ -46,20 +46,20 @@ class RequestContext {
 
 // Checks if an instance exists. Returns the Instance entity or an error:
 //   InstanceNotFound if the instance is not found.
-zetasql_base::StatusOr<std::shared_ptr<Instance>> GetInstance(
+absl::StatusOr<std::shared_ptr<Instance>> GetInstance(
     RequestContext* ctx, const std::string& instance_uri);
 
 // Checks if a database exists. Returns the Database entity or an error:
 //   InstanceNotFound if the instance is not found.
 //   DatabaseNotFound if the database is not found.
-zetasql_base::StatusOr<std::shared_ptr<Database>> GetDatabase(
+absl::StatusOr<std::shared_ptr<Database>> GetDatabase(
     RequestContext* ctx, const std::string& database_uri);
 
 // Checks if a session exists. Returns the Session entity or an error:
 //   InstanceNotFound if the instance is not found.
 //   DatabaseNotFound if the database is not found.
 //   SessionNotFound if the session is not found.
-zetasql_base::StatusOr<std::shared_ptr<Session>> GetSession(
+absl::StatusOr<std::shared_ptr<Session>> GetSession(
     RequestContext* ctx, const std::string& session_uri);
 
 }  // namespace frontend

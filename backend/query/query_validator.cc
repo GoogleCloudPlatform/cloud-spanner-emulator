@@ -85,6 +85,11 @@ constexpr absl::string_view kHintTableScanGroupByScanOptimization =
 constexpr absl::string_view kUseAdditionalParallelism =
     "use_additional_parallelism";
 
+// Lock scanned ranges
+constexpr absl::string_view kHintLockScannedRange = "lock_scanned_ranges";
+constexpr absl::string_view kHintLockScannedRangeShared = "shared";
+constexpr absl::string_view kHintLockScannedRangeExclusive = "exclusive";
+
 constexpr absl::string_view kHintGroupTypeDeprecated = "group_type";
 
 constexpr absl::string_view kHintJoinTypeDeprecated = "join_type";
@@ -173,7 +178,7 @@ absl::Status QueryValidator::CheckSpannerHintName(
        {kHintForceIndex, kHintJoinTypeDeprecated, kHintJoinMethod,
         kHashJoinBuildSide, kHintJoinForceOrder, kHintConstantFolding,
         kUseAdditionalParallelism, kHintEnableAdaptivePlans,
-        kHintParameterSensitive}},
+        kHintLockScannedRange, kHintParameterSensitive}},
       {zetasql::RESOLVED_SUBQUERY_EXPR,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
         kHintJoinBatch, kHintJoinForceOrder}},
@@ -224,6 +229,7 @@ absl::Status QueryValidator::CheckHintValue(
           {kHintGroupMethod, zetasql::types::StringType()},
           {kHintForceIndex, zetasql::types::StringType()},
           {kUseAdditionalParallelism, zetasql::types::BoolType()},
+          {kHintLockScannedRange, zetasql::types::StringType()},
           {kHintConstantFolding, zetasql::types::BoolType()},
           {kHintTableScanGroupByScanOptimization, zetasql::types::BoolType()},
           {kHintEnableAdaptivePlans, zetasql::types::BoolType()},
@@ -291,6 +297,13 @@ absl::Status QueryValidator::CheckHintValue(
     const std::string& string_value = value.string_value();
     if (!(absl::EqualsIgnoreCase(string_value, kHintGroupMethodHash) ||
           absl::EqualsIgnoreCase(string_value, kHintGroupMethodStream))) {
+      return error::InvalidHintValue(name, value.DebugString());
+    }
+  } else if (absl::EqualsIgnoreCase(name, kHintLockScannedRange)) {
+    const std::string& string_value = value.string_value();
+    if (!(absl::EqualsIgnoreCase(string_value,
+                                 kHintLockScannedRangeExclusive) ||
+          absl::EqualsIgnoreCase(string_value, kHintLockScannedRangeShared))) {
       return error::InvalidHintValue(name, value.DebugString());
     }
   }
@@ -370,12 +383,7 @@ absl::Status QueryValidator::VisitResolvedFunctionCall(
     const zetasql::ResolvedFunctionCall* node) {
   // Check if function is part of supported subset of ZetaSQL
   if (node->function()->IsZetaSQLBuiltin()) {
-    bool func_not_supported = !IsSupportedZetaSQLFunction(*node->function());
-    if (language_options_.LanguageFeatureEnabled(
-            zetasql::FEATURE_JSON_TYPE)) {
-      func_not_supported &= !IsSupportedJsonFunction(*node->function());
-    }
-    if (func_not_supported) {
+    if (!IsSupportedZetaSQLFunction(*node->function())) {
       return error::UnsupportedFunction(node->function()->SQLName());
     }
   }
@@ -398,12 +406,7 @@ absl::Status QueryValidator::VisitResolvedAggregateFunctionCall(
     const zetasql::ResolvedAggregateFunctionCall* node) {
   // Check if function is part of supported subset of ZetaSQL
   if (node->function()->IsZetaSQLBuiltin()) {
-    bool func_not_supported = !IsSupportedZetaSQLFunction(*node->function());
-    if (language_options_.LanguageFeatureEnabled(
-            zetasql::FEATURE_JSON_TYPE)) {
-      func_not_supported &= !IsSupportedJsonFunction(*node->function());
-    }
-    if (func_not_supported) {
+    if (!IsSupportedZetaSQLFunction(*node->function())) {
       return error::UnsupportedFunction(node->function()->SQLName());
     }
   }

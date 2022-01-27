@@ -22,7 +22,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
@@ -144,7 +144,7 @@ void AddQueryStatsFromQueryResult(const backend::QueryResult& result,
       absl::FormatDuration(result.elapsed_time));
 }
 
-zetasql_base::StatusOr<backend::QueryResult> ExecuteQuery(
+absl::StatusOr<backend::QueryResult> ExecuteQuery(
     const spanner_api::ExecuteBatchDmlRequest_Statement& statement,
     std::shared_ptr<Transaction> txn) {
   ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,

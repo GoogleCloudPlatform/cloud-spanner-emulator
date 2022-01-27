@@ -18,10 +18,11 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_TESTS_COMMON_SCHEMA_CONSTRUCTOR_H_
 
 #include <memory>
+#include <utility>
 
 #include "zetasql/public/type.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "absl/status/status.h"
@@ -37,7 +38,7 @@ namespace test {
 // Note:Does not perform any backfill/verification tasks.
 //
 // TODO : Deprecate this method and fix all tests.
-inline zetasql_base::StatusOr<std::unique_ptr<const backend::Schema>>
+inline absl::StatusOr<std::unique_ptr<const backend::Schema>>
 CreateSchemaFromDDL(absl::Span<const std::string> statements,
                     zetasql::TypeFactory* type_factory) {
   backend::TableIDGenerator table_id_gen;
@@ -67,7 +68,8 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
             )",
       },
       type_factory);
-  return std::move(maybe_schema.ValueOrDie());
+  ZETASQL_CHECK_OK(maybe_schema.status());
+  return std::move(maybe_schema.value());
 }
 
 // Creates a schema with two child tables interleaved in a parent table.
@@ -99,7 +101,8 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
             )",
       },
       type_factory);
-  return std::move(maybe_schema.ValueOrDie());
+  ZETASQL_CHECK_OK(maybe_schema.status());
+  return std::move(maybe_schema.value());
 }
 
 // Creates a schema with two top level tables and one child table.
@@ -128,7 +131,8 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithMultiTables(
             )",
       },
       type_factory);
-  return std::move(maybe_schema.ValueOrDie());
+  ZETASQL_CHECK_OK(maybe_schema.status());
+  return std::move(maybe_schema.value());
 }
 
 }  // namespace test

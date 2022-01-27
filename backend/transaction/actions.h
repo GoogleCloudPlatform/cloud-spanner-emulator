@@ -24,7 +24,7 @@
 #include "zetasql/public/value.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/actions/context.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/schema/catalog/table.h"
@@ -48,13 +48,13 @@ class TransactionReadOnlyStore : public ReadOnlyStore {
   explicit TransactionReadOnlyStore(const TransactionStore* txn_store)
       : read_only_store_(txn_store) {}
 
-  zetasql_base::StatusOr<bool> Exists(const Table* table,
+  absl::StatusOr<bool> Exists(const Table* table,
                               const Key& key) const override;
 
-  zetasql_base::StatusOr<bool> PrefixExists(const Table* table,
+  absl::StatusOr<bool> PrefixExists(const Table* table,
                                     const Key& prefix_key) const override;
 
-  zetasql_base::StatusOr<std::unique_ptr<StorageIterator>> Read(
+  absl::StatusOr<std::unique_ptr<StorageIterator>> Read(
       const Table* table, const KeyRange& key_range,
       absl::Span<const Column* const> columns) const override;
 

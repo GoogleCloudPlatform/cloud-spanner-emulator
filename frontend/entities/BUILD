@@ -41,11 +41,11 @@ cc_library(
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
-        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
 
@@ -142,6 +142,7 @@ cc_library(
         "//frontend/converters:types",
         "//frontend/converters:values",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:optional",
@@ -149,7 +150,6 @@ cc_library(
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/base:time_proto_util",
         "@com_google_zetasql//zetasql/public:value",
     ],

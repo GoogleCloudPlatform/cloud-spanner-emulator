@@ -18,7 +18,7 @@
 
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/actions/generated_column.h"
 #include "backend/datamodel/types.h"
 #include "backend/query/catalog.h"
@@ -34,7 +34,7 @@ namespace backend {
 
 namespace {
 
-zetasql_base::StatusOr<zetasql::Value> RewriteColumnValue(
+absl::StatusOr<zetasql::Value> RewriteColumnValue(
     const zetasql::Type* old_column_type,
     const zetasql::Type* new_column_type, const zetasql::Value& value) {
   ZETASQL_RET_CHECK(old_column_type != nullptr && new_column_type != nullptr);

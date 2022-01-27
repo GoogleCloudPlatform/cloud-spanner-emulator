@@ -70,8 +70,8 @@ echo "Placing results in: ${OUTPUT_DIR}"
 echo "Placing logs in: ${LOG_DIR}"
 echo "Using src directory: ${SRC_DIR}"
 
-readonly CONTINUOUS_INTEGRATION_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-integration:20211027
-readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base:20211015
+readonly CONTINUOUS_INTEGRATION_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-integration:20220112
+readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base:20220112
 if [[ -z "$CLIENT_INTEGRATION_TESTS" ]]; then
   DOCKER_IMAGE=${BASE_DOCKER_IMAGE}
 else
@@ -92,7 +92,6 @@ docker run $DOCKER_ARGS \
   --env CC="/usr/bin/gcc" \
   --env CXX="/usr/bin/g++" \
   --env GCLOUD_DIR="/usr/local/gcloud/google-cloud-sdk/bin" \
-  --env GO_BINARY_DIR="linux_amd64_stripped" \
   --env CLIENT_LIB_DIR="/root/clients" \
   --env COPY_LOGS_TO="/logs" \
   --env REMOTE_CACHE="${REMOTE_CACHE}" \

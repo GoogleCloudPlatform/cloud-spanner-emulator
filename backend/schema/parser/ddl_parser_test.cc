@@ -32,6 +32,7 @@ namespace ddl {
 namespace {
 
 using ::testing::HasSubstr;
+using ::zetasql_base::testing::IsOk;
 using ::zetasql_base::testing::IsOkAndHolds;
 using ::zetasql_base::testing::StatusIs;
 
@@ -688,25 +689,8 @@ TEST(ParseCreateTable, CanParseAlterTableWithDropConstraint) {
                   )")));
 }
 
-TEST(ParseCreateTable, CannotParseJsonWhenDisabled) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_json_type = false;
-  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  EXPECT_THAT(ParseDDLStatement(
-                  R"(
-                    CREATE TABLE T (
-                      K INT64 NOT NULL,
-                      JsonVal JSON,
-                      JsonArr ARRAY<JSON>
-                    ) PRIMARY KEY (K)
-                  )"),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("JSON type is not implemented.")));
-}
-
 TEST(ParseCreateTable, CanParseCreateTableWithJson) {
   EmulatorFeatureFlags::Flags flags;
-  flags.enable_json_type = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(
       ParseDDLStatement(
@@ -779,6 +763,24 @@ TEST(ParseCreateTable, CanParseCreateTableWithNumeric) {
               constraints { primary_key { key_part { key_column_name: "K" } } }
             }
           )")));
+}
+
+TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
+  EXPECT_THAT(ParseDDLStatement(R"(
+    CREATE TABLE T(
+      Key INT64,
+      CreatedAt TIMESTAMP,
+    ) PRIMARY KEY (Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
+  )"),
+              IsOk());
+
+  EXPECT_THAT(ParseDDLStatement(R"(
+        CREATE TABLE T(
+          Key INT64,
+          CreatedAt TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+        ) PRIMARY KEY (Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
+      )"),
+              IsOk());
 }
 
 // CREATE INDEX
@@ -1087,7 +1089,6 @@ TEST(ParseAlterTable, CanParseAddNumericColumn) {
 
 TEST(ParseAlterTable, CanParseAddJsonColumn) {
   EmulatorFeatureFlags::Flags flags;
-  flags.enable_json_type = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(ParseDDLStatement(
                   R"(
@@ -1373,6 +1374,23 @@ TEST(ParseAlterTable, CanParseSetOnDeleteNoAction) {
               }
             }
           )")));
+}
+
+TEST(ParseAlterTable, CanParseAlterTableWithRowDeletionPolicy) {
+  EXPECT_THAT(ParseDDLStatement(R"(
+    ALTER TABLE MyTable ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 1 DAY))
+  )"),
+              IsOk());
+
+  EXPECT_THAT(ParseDDLStatement(R"(
+    ALTER TABLE MyTable REPLACE ROW DELETION POLICY (OLDER_THAN(ModifiedAt, INTERVAL 7 DAY))
+  )"),
+              IsOk());
+
+  EXPECT_THAT(ParseDDLStatement(R"(
+    ALTER TABLE MyTable DROP ROW DELETION POLICY
+  )"),
+              IsOk());
 }
 
 // MISCELLANEOUS

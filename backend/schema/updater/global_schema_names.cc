@@ -16,7 +16,7 @@
 
 #include "backend/schema/updater/global_schema_names.h"
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
@@ -65,7 +65,7 @@ absl::Status GlobalSchemaNames::AddName(absl::string_view type,
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateForeignKeyName(
+absl::StatusOr<std::string> GlobalSchemaNames::GenerateForeignKeyName(
     absl::string_view referencing_table_name,
     absl::string_view referenced_table_name) {
   ZETASQL_RET_CHECK(!referencing_table_name.empty());
@@ -76,7 +76,7 @@ zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateForeignKeyName(
   return GenerateSequencedName("Foreign Key", base, MakeFingerprint(base));
 }
 
-zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateCheckConstraintName(
+absl::StatusOr<std::string> GlobalSchemaNames::GenerateCheckConstraintName(
     absl::string_view table_name) {
   ZETASQL_RET_CHECK(!table_name.empty());
   std::string base =
@@ -97,7 +97,7 @@ std::string GlobalSchemaNames::GenerateSequencedName(
   }
 }
 
-zetasql_base::StatusOr<std::string> GlobalSchemaNames::GenerateManagedIndexName(
+absl::StatusOr<std::string> GlobalSchemaNames::GenerateManagedIndexName(
     absl::string_view table_name, const std::vector<std::string>& column_names,
     bool null_filtered, bool unique) {
   ZETASQL_RET_CHECK(!table_name.empty());

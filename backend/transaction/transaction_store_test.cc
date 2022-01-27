@@ -22,7 +22,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "backend/actions/ops.h"
 #include "backend/common/rows.h"
@@ -64,7 +64,7 @@ class TransactionStoreTest : public testing::Test {
                           ) PRIMARY KEY (Int64Col)
                         )"},
                     type_factory_.get())
-                    .ValueOrDie()),
+                    .value()),
         table_(schema_->FindTable("TestTable")),
         int64_col_(table_->FindColumn("Int64Col")),
         string_col_(table_->FindColumn("StringCol")) {}
@@ -109,15 +109,15 @@ class TransactionStoreTest : public testing::Test {
     return transaction_store_.BufferWriteOp(DeleteOp{table_, key});
   }
 
-  zetasql_base::StatusOr<ValueList> Lookup(const Key& key) {
+  absl::StatusOr<ValueList> Lookup(const Key& key) {
     return transaction_store_.Lookup(table_, key, {int64_col_, string_col_});
   }
 
-  zetasql_base::StatusOr<std::vector<ValueList>> ReadAll() {
+  absl::StatusOr<std::vector<ValueList>> ReadAll() {
     return Read(KeyRange::All());
   }
 
-  zetasql_base::StatusOr<std::vector<ValueList>> Read(const KeyRange& key_range) {
+  absl::StatusOr<std::vector<ValueList>> Read(const KeyRange& key_range) {
     std::unique_ptr<StorageIterator> itr;
     ZETASQL_RETURN_IF_ERROR(transaction_store_.Read(table_, key_range,
                                             {int64_col_, string_col_}, &itr));

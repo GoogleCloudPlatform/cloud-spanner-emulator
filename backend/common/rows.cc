@@ -16,7 +16,7 @@
 
 #include "backend/common/rows.h"
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "common/errors.h"
 
 namespace google {
@@ -47,7 +47,7 @@ std::vector<ColumnID> GetColumnIDs(absl::Span<const Column* const> columns) {
   return column_ids;
 }
 
-zetasql_base::StatusOr<std::vector<const Column*>> GetColumnsByName(
+absl::StatusOr<std::vector<const Column*>> GetColumnsByName(
     const Table* table, const std::vector<std::string>& column_names) {
   std::vector<const Column*> columns;
   for (const std::string& column_name : column_names) {

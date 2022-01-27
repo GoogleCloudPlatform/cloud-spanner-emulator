@@ -90,7 +90,6 @@ class ColumnValueTest : public test::ActionsTest {
  public:
   ColumnValueTest() {
     EmulatorFeatureFlags::Flags flags;
-    flags.enable_json_type = true;
     flags.enable_stored_generated_columns = false;
     emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 

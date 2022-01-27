@@ -35,7 +35,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/time.h"
@@ -121,7 +121,7 @@ zetasql::EvaluatorOptions CommonEvaluatorOptions(
   return options;
 }
 
-zetasql_base::StatusOr<zetasql::AnalyzerOptions> MakeAnalyzerOptionsWithParameters(
+absl::StatusOr<zetasql::AnalyzerOptions> MakeAnalyzerOptionsWithParameters(
     const zetasql::ParameterValueMap& params) {
   zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
   for (const auto& [name, value] : params) {
@@ -133,7 +133,7 @@ zetasql_base::StatusOr<zetasql::AnalyzerOptions> MakeAnalyzerOptionsWithParamete
 // Uses googlesql/public/analyzer to build an AnalyzerOutput for an query.
 // We need to analyze the SQL before executing it in order to determine what
 // kind of statement (query or DML) it is.
-zetasql_base::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> Analyze(
+absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> Analyze(
     const std::string& sql, const zetasql::ParameterValueMap& params,
     zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
     bool prune_unused_columns) {
@@ -293,7 +293,7 @@ bool IsPendingCommitTimestamp(const zetasql::ResolvedDMLValue& dml_value) {
   return false;
 }
 
-zetasql_base::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsInInsert(
+absl::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsInInsert(
     const std::vector<zetasql::ResolvedColumn>& insert_columns,
     const std::vector<std::unique_ptr<const zetasql::ResolvedInsertRow>>&
         insert_rows) {
@@ -320,7 +320,7 @@ zetasql_base::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsIn
   return pending_ts_columns;
 }
 
-zetasql_base::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsInUpdate(
+absl::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsInUpdate(
     const std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>&
         update_item_list) {
   CaseInsensitiveStringSet pending_ts_columns;
@@ -337,7 +337,7 @@ zetasql_base::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsIn
   return pending_ts_columns;
 }
 
-zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedInsert(
+absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedInsert(
     const zetasql::ResolvedInsertStmt* insert_statement,
     const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory) {
@@ -356,12 +356,12 @@ zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedInsert(
   if (!status_or.ok()) {
     return MaybeTransformZetaSQLDMLError(status_or.status());
   }
-  auto iterator = std::move(status_or).ValueOrDie();
+  auto iterator = std::move(status_or).value();
   return BuildInsert(std::move(iterator), MutationOpType::kInsert,
                      pending_ts_columns);
 }
 
-zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedUpdate(
+absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedUpdate(
     const zetasql::ResolvedUpdateStmt* update_statement,
     const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory) {
@@ -379,12 +379,12 @@ zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedUpdate(
   if (!status_or.ok()) {
     return MaybeTransformZetaSQLDMLError(status_or.status());
   }
-  auto iterator = std::move(status_or).ValueOrDie();
+  auto iterator = std::move(status_or).value();
   return BuildUpdate(std::move(iterator), MutationOpType::kUpdate,
                      pending_ts_columns);
 }
 
-zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedDelete(
+absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedDelete(
     const zetasql::ResolvedDeleteStmt* delete_statement,
     const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory) {
@@ -400,7 +400,7 @@ zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedDelete(
 
 // Uses googlesql/public/evaluator to evaluate a DML statement represented by a
 // resolved AST and returns a pair of mutation and count of modified rows.
-zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateUpdate(
+absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateUpdate(
     const zetasql::ResolvedStatement* resolved_statement,
     const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory) {
@@ -427,7 +427,7 @@ zetasql_base::StatusOr<std::pair<Mutation, int64_t>> EvaluateUpdate(
 
 // Uses googlesql/public/evaluator to evaluate a query statement represented by
 // a resolved AST and returns a row cursor.
-zetasql_base::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
+absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
     const zetasql::ResolvedStatement* resolved_statement,
     const zetasql::ParameterValueMap& params,
     zetasql::TypeFactory* type_factory, int64_t* num_output_rows) {
@@ -464,7 +464,7 @@ zetasql_base::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
   return absl::make_unique<VectorsRowCursor>(names, types, values);
 }
 
-zetasql_base::StatusOr<std::map<std::string, zetasql::Value>> ExtractParameters(
+absl::StatusOr<std::map<std::string, zetasql::Value>> ExtractParameters(
     const Query& query, const zetasql::AnalyzerOutput* analyzer_output) {
   // Allow the loop below to look up undeclared parameters without worrying
   // about case. ZetaSQL will return the undeclared parameters using the
@@ -517,7 +517,7 @@ bool IsDMLStmt(const zetasql::ResolvedNodeKind& query_kind) {
          query_kind == zetasql::RESOLVED_DELETE_STMT;
 }
 
-zetasql_base::StatusOr<std::unique_ptr<zetasql::ResolvedStatement>>
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedStatement>>
 ExtractValidatedResolvedStatementAndOptions(
     const zetasql::AnalyzerOutput* analyzer_output, const Schema* schema,
     QueryEngineOptions* query_engine_options = nullptr) {
@@ -582,7 +582,7 @@ class ExtractDmlTargetTableVisitor : public zetasql::ResolvedASTVisitor {
 
 }  // namespace
 
-zetasql_base::StatusOr<std::string> QueryEngine::GetDmlTargetTable(
+absl::StatusOr<std::string> QueryEngine::GetDmlTargetTable(
     const Query& query, const Schema* schema) const {
   Catalog catalog(schema, &function_catalog_, nullptr);
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_output,
@@ -602,7 +602,7 @@ zetasql_base::StatusOr<std::string> QueryEngine::GetDmlTargetTable(
   return *visitor.target_table();
 }
 
-zetasql_base::StatusOr<QueryResult> QueryEngine::ExecuteSql(
+absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
     const Query& query, const QueryContext& context) const {
   absl::Time start_time = absl::Now();
   Catalog catalog{context.schema, &function_catalog_, context.reader};

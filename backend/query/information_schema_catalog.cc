@@ -75,6 +75,11 @@ const std::vector<ColumnsMetaEntry>* ColumnsMetadata() {
     {"COLUMNS", "TABLE_CATALOG", "NO", "STRING(MAX)"},
     {"COLUMNS", "TABLE_NAME", "NO", "STRING(MAX)"},
     {"COLUMNS", "TABLE_SCHEMA", "NO", "STRING(MAX)"},
+    {"COLUMN_COLUMN_USAGE", "COLUMN_NAME", "NO", "STRING(MAX)"},
+    {"COLUMN_COLUMN_USAGE", "DEPENDENT_COLUMN", "NO", "STRING(MAX)"},
+    {"COLUMN_COLUMN_USAGE", "TABLE_CATALOG", "NO", "STRING(MAX)"},
+    {"COLUMN_COLUMN_USAGE", "TABLE_NAME", "NO", "STRING(MAX)"},
+    {"COLUMN_COLUMN_USAGE", "TABLE_SCHEMA", "NO", "STRING(MAX)"},
     {"COLUMN_OPTIONS", "COLUMN_NAME", "NO", "STRING(MAX)"},
     {"COLUMN_OPTIONS", "OPTION_NAME", "NO", "STRING(MAX)"},
     {"COLUMN_OPTIONS", "OPTION_TYPE", "NO", "STRING(MAX)"},
@@ -221,6 +226,11 @@ const std::vector<IndexColumnsMetaEntry>* IndexColumnsMetadata() {
     {"COLUMNS", "TABLE_CATALOG", "NO", "ASC", "STRING(MAX)"},
     {"COLUMNS", "TABLE_NAME", "NO", "ASC", "STRING(MAX)"},
     {"COLUMNS", "TABLE_SCHEMA", "NO", "ASC", "STRING(MAX)"},
+    {"COLUMN_COLUMN_USAGE", "COLUMN_NAME", "NO", "ASC", "STRING(MAX)"},
+    {"COLUMN_COLUMN_USAGE", "DEPENDENT_COLUMN", "NO", "ASC", "STRING(MAX)"},
+    {"COLUMN_COLUMN_USAGE", "TABLE_CATALOG", "NO", "ASC", "STRING(MAX)"},
+    {"COLUMN_COLUMN_USAGE", "TABLE_NAME", "NO", "ASC", "STRING(MAX)"},
+    {"COLUMN_COLUMN_USAGE", "TABLE_SCHEMA", "NO", "ASC", "STRING(MAX)"},
     {"COLUMN_OPTIONS", "COLUMN_NAME", "NO", "ASC", "STRING(MAX)"},
     {"COLUMN_OPTIONS", "OPTION_NAME", "NO", "ASC", "STRING(MAX)"},
     {"COLUMN_OPTIONS", "TABLE_CATALOG", "NO", "ASC", "STRING(MAX)"},
@@ -339,6 +349,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
   AddSpannerStatisticsTable();
   auto* tables = AddTablesTable();
   auto* columns = AddColumnsTable();
+  auto* column_column_usage = AddColumnColumnUsageTable();
   auto* indexes = AddIndexesTable();
   auto* index_columns = AddIndexColumnsTable();
   AddColumnOptionsTable();
@@ -354,6 +365,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
   // in the catalog.
   FillTablesTable(tables);
   FillColumnsTable(columns);
+  FillColumnColumnUsageTable(column_column_usage);
   FillIndexesTable(indexes);
   FillIndexColumnsTable(index_columns);
   FillCheckConstraintsTable(check_constraints);
@@ -559,6 +571,47 @@ void InformationSchemaCatalog::FillColumnsTable(
 
   // Add table to catalog.
   columns->SetContents(rows);
+}
+
+zetasql::SimpleTable* InformationSchemaCatalog::AddColumnColumnUsageTable() {
+  // Setup table schema.
+  auto column_column_usage = new zetasql::SimpleTable(
+      "COLUMN_COLUMN_USAGE", {{"TABLE_CATALOG", StringType()},
+                              {"TABLE_SCHEMA", StringType()},
+                              {"TABLE_NAME", StringType()},
+                              {"COLUMN_NAME", StringType()},
+                              {"DEPENDENT_COLUMN", StringType()}});
+  AddOwnedTable(column_column_usage);
+  return column_column_usage;
+}
+
+void InformationSchemaCatalog::FillColumnColumnUsageTable(
+    zetasql::SimpleTable* column_column_usage) {
+  // Add table rows.
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const Table* table : default_schema_->tables()) {
+    for (const Column* column : table->columns()) {
+      if (column->is_generated()) {
+        for (const Column* used_column : column->dependent_columns()) {
+          rows.push_back({
+              // table_catalog
+              String(""),
+              // table_schema
+              String(""),
+              // table_name
+              String(table->Name()),
+              // column_name
+              String(used_column->Name()),
+              // dependent_column
+              String(column->Name()),
+          });
+        }
+      }
+    }
+  }
+
+  // Add table to catalog.
+  column_column_usage->SetContents(rows);
 }
 
 zetasql::SimpleTable* InformationSchemaCatalog::AddIndexesTable() {

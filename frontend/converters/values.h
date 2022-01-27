@@ -20,7 +20,7 @@
 #include "google/protobuf/struct.pb.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -37,14 +37,14 @@ namespace frontend {
 //
 // Unexpected types, and mismatches between expected type and proto type will
 // return errors.
-zetasql_base::StatusOr<zetasql::Value> ValueFromProto(
+absl::StatusOr<zetasql::Value> ValueFromProto(
     const google::protobuf::Value& value_pb, const zetasql::Type* type);
 
 // Converts a ZetaSQL value to a Cloud Spanner value proto.
 //
 // Only handles the value types supported by Cloud Spanner. Invalid values, and
 // value types not supported by Cloud Spanner will return errors.
-zetasql_base::StatusOr<google::protobuf::Value> ValueToProto(
+absl::StatusOr<google::protobuf::Value> ValueToProto(
     const zetasql::Value& value);
 
 }  // namespace frontend

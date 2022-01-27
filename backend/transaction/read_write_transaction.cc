@@ -27,7 +27,7 @@
 #include "absl/memory/memory.h"
 #include "absl/random/random.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
@@ -68,7 +68,7 @@ namespace backend {
 namespace {
 
 // Flattens delete mutation to one write op for each key being deleted.
-zetasql_base::StatusOr<std::vector<WriteOp>> FlattenDeleteOp(
+absl::StatusOr<std::vector<WriteOp>> FlattenDeleteOp(
     const Table* table, const std::vector<KeyRange>& key_ranges,
     const TransactionStore* transaction_store) {
   std::vector<WriteOp> write_ops;
@@ -89,7 +89,7 @@ zetasql_base::StatusOr<std::vector<WriteOp>> FlattenDeleteOp(
 //   to UpdateOp. Otherwise converts to InsertOp.
 // - MutationOpType::kInsert | kDelete | kUpdate: converts to
 //   corresponding WriteOp of the same type.
-zetasql_base::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
+absl::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
     MutationOpType type, const Table* table,
     const std::vector<const Column*>& columns, const Key& key,
     const ValueList& row, const TransactionStore* transaction_store) {
@@ -104,7 +104,7 @@ zetasql_base::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
       break;
     }
     case MutationOpType::kInsertOrUpdate: {
-      zetasql_base::StatusOr<ValueList> maybe_row =
+      absl::StatusOr<ValueList> maybe_row =
           transaction_store->Lookup(table, key,
                                     /*columns= */ {});
       if (maybe_row.ok()) {
@@ -197,7 +197,7 @@ ReadWriteTransaction::ReadWriteTransaction(
           clock)),
       schema_(versioned_catalog_->GetLatestSchema()) {}
 
-zetasql_base::StatusOr<absl::Time> ReadWriteTransaction::GetCommitTimestamp() {
+absl::StatusOr<absl::Time> ReadWriteTransaction::GetCommitTimestamp() {
   absl::MutexLock lock(&mu_);
   if (state_ != State::kCommitted) {
     return error::Internal(
@@ -291,7 +291,7 @@ absl::Status ReadWriteTransaction::GuardedCall(
         Reset();
         return maybe_action_registry.status();
       }
-      action_registry_ = maybe_action_registry.ValueOrDie();
+      action_registry_ = maybe_action_registry.value();
       state_ = State::kActive;
       break;
     }

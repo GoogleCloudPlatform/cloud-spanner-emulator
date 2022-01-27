@@ -62,6 +62,9 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   zetasql::SimpleTable* AddColumnsTable();
   void FillColumnsTable(zetasql::SimpleTable* columns);
 
+  zetasql::SimpleTable* AddColumnColumnUsageTable();
+  void FillColumnColumnUsageTable(zetasql::SimpleTable* column_column_usage);
+
   zetasql::SimpleTable* AddIndexesTable();
   void FillIndexesTable(zetasql::SimpleTable* indexes);
 

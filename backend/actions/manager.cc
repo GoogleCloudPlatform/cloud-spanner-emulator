@@ -18,7 +18,7 @@
 
 #include <memory>
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/actions/check_constraint.h"
 #include "backend/actions/column_value.h"
 #include "backend/actions/existence.h"
@@ -145,7 +145,7 @@ void ActionManager::AddActionsForSchema(
       absl::make_unique<ActionRegistry>(schema, function_catalog);
 }
 
-zetasql_base::StatusOr<ActionRegistry*> ActionManager::GetActionsForSchema(
+absl::StatusOr<ActionRegistry*> ActionManager::GetActionsForSchema(
     const Schema* schema) const {
   auto itr = registry_.find(schema);
   if (itr == registry_.end()) {

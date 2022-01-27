@@ -59,7 +59,7 @@ class ResolveTest : public testing::Test {
                           CREATE UNIQUE INDEX TestIndex ON TestTable(StringCol DESC)
                         )"},
                     type_factory_.get())
-                    .ValueOrDie()),
+                    .value()),
         test_table_(schema_->FindTable("TestTable")),
         index_(schema_->FindIndex("TestIndex")),
         index_data_table_(index_->index_data_table()),

@@ -47,7 +47,7 @@ class GeneratedColumnEffector : public Effector {
 
   // Computes the value of the given 'generated_column' based on the given
   // 'row_column_values'.
-  zetasql_base::StatusOr<zetasql::Value> ComputeGeneratedColumnValue(
+  absl::StatusOr<zetasql::Value> ComputeGeneratedColumnValue(
       const Column* generated_column,
       const zetasql::ParameterValueMap& row_column_values) const;
 

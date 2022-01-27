@@ -32,14 +32,9 @@ set -e
 #                  found on PATH as we run the subprocess from inside python
 #                  without shell=True.
 #
-# ${GO_BINARY_DIR} Contains the directory where bazel places go binaries.
-#                  This is required because unlike C++ binaries, bazel places go
-#                  binaries inside a platform-specific dir. The gcloud python
-#                  test runner uses this variable to find the go gateway binary.
-#
 # Normally, this script is not invoked directly. Use the platform-specific
 # scripts instead, e.g. ./kokoro/gcp_ubuntu/build.sh for linux.
-if [[ -z "${GCLOUD_DIR}" ]] || [[ -z "${GO_BINARY_DIR}" ]]; then
+if [[ -z "${GCLOUD_DIR}" ]]; then
   echo "One or more required environment variables have not been set."
   echo "Perhaps you intended to invoke one of the platform specific scripts."
   echo "e.g. ./kokoro/gcp_ubuntu/build.sh"

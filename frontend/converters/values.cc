@@ -18,7 +18,7 @@
 
 #include "zetasql/public/functions/date_time_util.h"
 #include "zetasql/public/options.pb.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
@@ -39,7 +39,7 @@ constexpr char kRFC3339TimeFormatNoOffset[] = "%E4Y-%m-%dT%H:%M:%E*S";
 
 }  // namespace
 
-zetasql_base::StatusOr<zetasql::Value> ValueFromProto(
+absl::StatusOr<zetasql::Value> ValueFromProto(
     const google::protobuf::Value& value_pb, const zetasql::Type* type) {
   if (value_pb.kind_case() == google::protobuf::Value::kNullValue) {
     return zetasql::values::Null(type);
@@ -220,7 +220,7 @@ zetasql_base::StatusOr<zetasql::Value> ValueFromProto(
   }
 }
 
-zetasql_base::StatusOr<google::protobuf::Value> ValueToProto(
+absl::StatusOr<google::protobuf::Value> ValueToProto(
     const zetasql::Value& value) {
   if (!value.is_valid()) {
     return error::Internal(

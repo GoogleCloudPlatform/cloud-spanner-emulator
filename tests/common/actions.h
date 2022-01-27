@@ -23,7 +23,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
 #include "backend/storage/in_memory_storage.h"
@@ -39,14 +39,14 @@ namespace test {
 // actions.
 class TestReadOnlyStore : public ReadOnlyStore {
  public:
-  zetasql_base::StatusOr<bool> Exists(const Table* table,
+  absl::StatusOr<bool> Exists(const Table* table,
                               const Key& key) const override;
 
-  zetasql_base::StatusOr<std::unique_ptr<StorageIterator>> Read(
+  absl::StatusOr<std::unique_ptr<StorageIterator>> Read(
       const Table* table, const KeyRange& key_range,
       const absl::Span<const Column* const> columns) const override;
 
-  zetasql_base::StatusOr<bool> PrefixExists(const Table* table,
+  absl::StatusOr<bool> PrefixExists(const Table* table,
                                     const Key& prefix_key) const override;
 
   absl::Status Insert(const Table* table, const Key& key,

@@ -16,7 +16,7 @@
 
 #include "backend/schema/updater/schema_updater_tests/base.h"
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 
 namespace google {
 namespace spanner {
@@ -24,12 +24,12 @@ namespace emulator {
 namespace backend {
 namespace test {
 
-zetasql_base::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::CreateSchema(
+absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::CreateSchema(
     absl::Span<const std::string> statements) {
   return UpdateSchema(/*base_schema=*/nullptr, statements);
 }
 
-zetasql_base::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::UpdateSchema(
+absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::UpdateSchema(
     const Schema* base_schema, absl::Span<const std::string> statements) {
   SchemaUpdater updater;
   SchemaChangeContext context{.type_factory = &type_factory_,

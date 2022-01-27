@@ -28,7 +28,7 @@
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/types/optional.h"
 #include "backend/datamodel/types.h"
@@ -92,7 +92,7 @@ class SchemaUpdaterImpl {
   // Assignment move is not supported by absl::Time.
   SchemaUpdaterImpl& operator=(SchemaUpdaterImpl&&) = delete;
 
-  zetasql_base::StatusOr<SchemaUpdaterImpl> static Build(
+  absl::StatusOr<SchemaUpdaterImpl> static Build(
       zetasql::TypeFactory* type_factory,
       TableIDGenerator* table_id_generator,
       ColumnIDGenerator* column_id_generator, Storage* storage,
@@ -106,7 +106,7 @@ class SchemaUpdaterImpl {
 
   // Apply DDL statements returning the SchemaValidationContext containing
   // the schema change actions resulting from each statement.
-  zetasql_base::StatusOr<std::vector<SchemaValidationContext>> ApplyDDLStatements(
+  absl::StatusOr<std::vector<SchemaValidationContext>> ApplyDDLStatements(
       absl::Span<const std::string> statements);
 
   std::vector<std::unique_ptr<const Schema>> GetIntermediateSchemas() {
@@ -130,7 +130,7 @@ class SchemaUpdaterImpl {
   absl::Status Init();
 
   // Applies the given `statement` on to `latest_schema_`.
-  zetasql_base::StatusOr<std::unique_ptr<const Schema>> ApplyDDLStatement(
+  absl::StatusOr<std::unique_ptr<const Schema>> ApplyDDLStatement(
       absl::string_view statement);
 
   // Run any pending schema actions resulting from the schema change statements.
@@ -175,11 +175,11 @@ class SchemaUpdaterImpl {
                                      const Table* table,
                                      Column::Editor* editor);
 
-  zetasql_base::StatusOr<const Column*> CreateColumn(
+  absl::StatusOr<const Column*> CreateColumn(
       const ddl::ColumnDefinition& ddl_column, const Table* table,
       const ddl::CreateTable* ddl_table);
 
-  zetasql_base::StatusOr<const KeyColumn*> CreatePrimaryKeyColumn(
+  absl::StatusOr<const KeyColumn*> CreatePrimaryKeyColumn(
       const ddl::PrimaryKeyConstraint::KeyPart& ddl_key_part,
       const Table* table);
 
@@ -192,7 +192,7 @@ class SchemaUpdaterImpl {
   absl::Status CreateInterleaveConstraint(const Table* parent,
                                           Table::OnDeleteAction on_delete,
                                           Table::Builder* builder);
-  zetasql_base::StatusOr<const Table*> GetInterleaveConstraintTable(
+  absl::StatusOr<const Table*> GetInterleaveConstraintTable(
       const ddl::InterleaveConstraint& interleave,
       const Table::Builder& builder) const;
   static Table::OnDeleteAction GetInterleaveConstraintOnDelete(
@@ -201,7 +201,7 @@ class SchemaUpdaterImpl {
   absl::Status CreateForeignKeyConstraint(
       const ddl::ForeignKeyConstraint& ddl_foreign_key,
       const Table* referencing_table);
-  zetasql_base::StatusOr<const ForeignKey*> BuildForeignKeyConstraint(
+  absl::StatusOr<const ForeignKey*> BuildForeignKeyConstraint(
       const ddl::ForeignKeyConstraint& ddl_foreign_key,
       const Table* referencing_table);
   absl::Status EvaluateForeignKeyReferencedPrimaryKey(
@@ -212,7 +212,7 @@ class SchemaUpdaterImpl {
       const Table* table,
       const google::protobuf::RepeatedPtrField<std::string>& column_names,
       const std::vector<int>& column_order, bool* index_required) const;
-  zetasql_base::StatusOr<const Index*> CreateForeignKeyIndex(
+  absl::StatusOr<const Index*> CreateForeignKeyIndex(
       const ForeignKey* foreign_key, const Table* table,
       const std::vector<std::string>& column_names, bool unique);
   bool CanInterleaveForeignKeyIndex(
@@ -223,17 +223,17 @@ class SchemaUpdaterImpl {
       const ddl::CreateTable* ddl_create_table);
   absl::Status CreateTable(const ddl::CreateTable& ddl_table);
 
-  zetasql_base::StatusOr<const Column*> CreateIndexDataTableColumn(
+  absl::StatusOr<const Column*> CreateIndexDataTableColumn(
       const Table* indexed_table, const std::string& source_column_name,
       const Table* index_data_table, bool null_filtered_key_column);
 
-  zetasql_base::StatusOr<std::unique_ptr<const Table>> CreateIndexDataTable(
+  absl::StatusOr<std::unique_ptr<const Table>> CreateIndexDataTable(
       const ddl::CreateIndex& ddl_index, const Index* index,
       const Table* indexed_table,
       std::vector<const KeyColumn*>* index_key_columns,
       std::vector<const Column*>* stored_columns);
 
-  zetasql_base::StatusOr<const Index*> CreateIndex(
+  absl::StatusOr<const Index*> CreateIndex(
       const ddl::CreateIndex& ddl_index, const Table* indexed_table = nullptr);
 
   absl::Status AlterTable(const ddl::AlterTable& alter_table);
@@ -328,7 +328,7 @@ absl::Status SchemaUpdaterImpl::DropNode(const SchemaNode* node) {
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<std::unique_ptr<const Schema>>
+absl::StatusOr<std::unique_ptr<const Schema>>
 SchemaUpdaterImpl::ApplyDDLStatement(absl::string_view statement) {
   if (statement.empty()) {
     return error::EmptyDDLStatement();
@@ -368,7 +368,7 @@ SchemaUpdaterImpl::ApplyDDLStatement(absl::string_view statement) {
   return absl::make_unique<const Schema>(std::move(new_schema_graph));
 }
 
-zetasql_base::StatusOr<std::vector<SchemaValidationContext>>
+absl::StatusOr<std::vector<SchemaValidationContext>>
 SchemaUpdaterImpl::ApplyDDLStatements(
     absl::Span<const std::string> statements) {
   std::vector<SchemaValidationContext> pending_work;
@@ -645,7 +645,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
+absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
     const ddl::ColumnDefinition& ddl_column, const Table* table,
     const ddl::CreateTable* ddl_table) {
   const std::string& column_name = ddl_column.column_name();
@@ -691,7 +691,7 @@ absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<const Table*> SchemaUpdaterImpl::GetInterleaveConstraintTable(
+absl::StatusOr<const Table*> SchemaUpdaterImpl::GetInterleaveConstraintTable(
     const ddl::InterleaveConstraint& interleave,
     const Table::Builder& builder) const {
   const auto* parent = latest_schema_->FindTable(interleave.parent());
@@ -725,7 +725,7 @@ absl::Status SchemaUpdaterImpl::CreatePrimaryKeyConstraint(
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
+absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
     const ddl::PrimaryKeyConstraint::KeyPart& ddl_key_part,
     const Table* table) {
   KeyColumn::Builder builder;
@@ -817,7 +817,7 @@ absl::Status SchemaUpdaterImpl::CreateForeignKeyConstraint(
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
+absl::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
     const ddl::ForeignKeyConstraint& ddl_foreign_key,
     const Table* referencing_table) {
   ForeignKey::Builder builder;
@@ -977,7 +977,7 @@ absl::Status SchemaUpdaterImpl::EvaluateForeignKeyReferencingPrimaryKey(
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<const Index*> SchemaUpdaterImpl::CreateForeignKeyIndex(
+absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateForeignKeyIndex(
     const ForeignKey* foreign_key, const Table* table,
     const std::vector<std::string>& column_names, bool unique) {
   bool null_filtered =
@@ -1147,7 +1147,7 @@ absl::Status SchemaUpdaterImpl::CreateTable(const ddl::CreateTable& ddl_table) {
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
+absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
     const Table* indexed_table, const std::string& source_column_name,
     const Table* index_data_table, bool null_filtered_key_column) {
   const Column* source_column = indexed_table->FindColumn(source_column_name);
@@ -1174,7 +1174,7 @@ zetasql_base::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableCol
   return column;
 }
 
-zetasql_base::StatusOr<std::unique_ptr<const Table>>
+absl::StatusOr<std::unique_ptr<const Table>>
 SchemaUpdaterImpl::CreateIndexDataTable(
     const ddl::CreateIndex& ddl_index, const Index* index,
     const Table* indexed_table,
@@ -1274,7 +1274,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
   return builder.build();
 }
 
-zetasql_base::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
+absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
     const ddl::CreateIndex& ddl_index, const Table* indexed_table) {
   if (indexed_table == nullptr) {
     indexed_table = latest_schema_->FindTable(ddl_index.table_name());
@@ -1482,7 +1482,7 @@ const Schema* SchemaUpdater::EmptySchema() {
   return empty_schema;
 }
 
-zetasql_base::StatusOr<std::unique_ptr<const Schema>>
+absl::StatusOr<std::unique_ptr<const Schema>>
 SchemaUpdater::ValidateSchemaFromDDL(absl::Span<const std::string> statements,
                                      const SchemaChangeContext& context,
                                      const Schema* existing_schema) {
@@ -1516,7 +1516,7 @@ absl::Status SchemaUpdater::RunPendingActions(int* num_succesful) {
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
+absl::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
     const Schema* existing_schema, absl::Span<const std::string> statements,
     const SchemaChangeContext& context) {
   ZETASQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
@@ -1543,7 +1543,7 @@ zetasql_base::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
   };
 }
 
-zetasql_base::StatusOr<std::unique_ptr<const Schema>>
+absl::StatusOr<std::unique_ptr<const Schema>>
 SchemaUpdater::CreateSchemaFromDDL(absl::Span<const std::string> statements,
                                    const SchemaChangeContext& context) {
   ZETASQL_ASSIGN_OR_RETURN(SchemaChangeResult result,

@@ -24,7 +24,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
@@ -117,7 +117,7 @@ class Transaction {
   void Close() ABSL_LOCKS_EXCLUDED(mu_);
 
   // Converts this transaction to its proto representation.
-  zetasql_base::StatusOr<google::spanner::v1::Transaction> ToProto();
+  absl::StatusOr<google::spanner::v1::Transaction> ToProto();
 
   // Returns the schema from the backend transaction.
   const backend::Schema* schema() const;
@@ -133,7 +133,7 @@ class Transaction {
                     std::unique_ptr<backend::RowCursor>* cursor);
 
   // Calls ExecuteSql using the backend transaction and query engine.
-  zetasql_base::StatusOr<backend::QueryResult> ExecuteSql(const backend::Query& query);
+  absl::StatusOr<backend::QueryResult> ExecuteSql(const backend::Query& query);
 
   // Calls Write using the backend transaction.
   absl::Status Write(const backend::Mutation& mutation);
@@ -145,10 +145,10 @@ class Transaction {
   absl::Status Rollback();
 
   // Returns the read timestamp from the backend transaction.
-  zetasql_base::StatusOr<absl::Time> GetReadTimestamp() const;
+  absl::StatusOr<absl::Time> GetReadTimestamp() const;
 
   // Returns the commit timestamp from the backend transaction.
-  zetasql_base::StatusOr<absl::Time> GetCommitTimestamp() const;
+  absl::StatusOr<absl::Time> GetCommitTimestamp() const;
 
   bool IsClosed() const ABSL_LOCKS_EXCLUDED(mu_);
 

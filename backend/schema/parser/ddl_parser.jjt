@@ -100,6 +100,7 @@ void create_table_statement() :
   "(" [ table_element() ( LOOKAHEAD(2) "," table_element() )* [ "," ] ] ")"
   primary_key()
   [ LOOKAHEAD(2) "," table_interleave_clause() ]
+  [ LOOKAHEAD(2) "," row_deletion_policy_clause() ]
 }
 
 void table_element() #void :
@@ -197,6 +198,25 @@ void table_interleave_clause() :
 {
   <INTERLEAVE> <IN> <PARENT> identifier() #interleave_in
     [ on_delete_clause() ]
+}
+
+void row_deletion_policy_clause():
+{}
+{
+  <ROW> <DELETION> <POLICY> "(" row_deletion_policy_expression() ")"
+}
+
+void row_deletion_policy_expression():
+{}
+{
+  identifier() #row_deletion_policy_function
+  "(" identifier() #row_deletion_policy_column "," interval_expression() ")"
+}
+
+void interval_expression():
+{}
+{
+  <INTERVAL> int_value() <DAY>
 }
 
 void on_delete_clause() :
@@ -306,12 +326,16 @@ void alter_table_statement() :
   (   LOOKAHEAD(3) <ADD> #add_column [LOOKAHEAD(2) <COLUMN>] column_def()
     | LOOKAHEAD(3) <DROP> <CONSTRAINT> #drop_constraint
         identifier() #constraint_name
-    | <DROP> #drop_column [LOOKAHEAD(2) <COLUMN>] (identifier() #column_name)
+    | LOOKAHEAD(3) <DROP> <ROW> <DELETION> <POLICY> #drop_row_deletion_policy
+    | LOOKAHEAD(3) <DROP> #drop_column [LOOKAHEAD(2) <COLUMN>] (identifier() #column_name)
+    | LOOKAHEAD(3) <DROP> <ROW> <DELETION> <POLICY> #drop_row_deletion_policy
     | LOOKAHEAD(3) <ALTER> #alter_column [LOOKAHEAD(2) <COLUMN>]
         (identifier() #name) column_def_alter()
     | <SET> #set_on_delete on_delete_clause()
     | LOOKAHEAD(4) <ADD> foreign_key()
-    | <ADD> check_constraint()
+    | LOOKAHEAD(2) <ADD> check_constraint()
+    | LOOKAHEAD(2) <ADD> row_deletion_policy_clause() #add_row_deletion_policy
+    | <REPLACE> row_deletion_policy_clause() #replace_row_deletion_policy
   )
 }
 

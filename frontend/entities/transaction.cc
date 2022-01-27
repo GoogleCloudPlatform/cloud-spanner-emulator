@@ -23,7 +23,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "zetasql/public/value.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "absl/types/variant.h"
@@ -102,7 +102,7 @@ void Transaction::Close() {
   }
 }
 
-zetasql_base::StatusOr<spanner_api::Transaction> Transaction::ToProto() {
+absl::StatusOr<spanner_api::Transaction> Transaction::ToProto() {
   spanner_api::Transaction txn;
   if (usage_type_ != kSingleUse) {
     *txn.mutable_id() = std::to_string(id());
@@ -194,7 +194,7 @@ absl::Status Transaction::Read(const backend::ReadArg& read_arg,
   }
 }
 
-zetasql_base::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
+absl::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
     const backend::Query& query) {
   mu_.AssertHeld();
   switch (type_) {
@@ -255,14 +255,14 @@ absl::Status Transaction::Rollback() {
   return error::CannotCommitRollbackReadOnlyOrPartitionedDmlTransaction();
 }
 
-zetasql_base::StatusOr<absl::Time> Transaction::GetReadTimestamp() const {
+absl::StatusOr<absl::Time> Transaction::GetReadTimestamp() const {
   if (type_ == kReadOnly) {
     return read_only()->read_timestamp();
   }
   return error::CannotReturnReadTimestampForReadWriteTransaction();
 }
 
-zetasql_base::StatusOr<absl::Time> Transaction::GetCommitTimestamp() const {
+absl::StatusOr<absl::Time> Transaction::GetCommitTimestamp() const {
   mu_.AssertHeld();
   if (type_ == kReadWrite) {
     return read_write()->GetCommitTimestamp();

@@ -18,7 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_COMMIT_TIMESTAMP_H_
 
 #include "zetasql/public/type.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
 #include "backend/schema/catalog/column.h"
@@ -41,10 +41,10 @@ absl::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table,
 // Helper methods to set commit timestamp sentinel, if user requested to store
 // or read commit timestamp atomically in a timestamp column or timestamp key
 // column with allow_commit_timestamp set to true.
-zetasql_base::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
+absl::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
     absl::Span<const Column* const> columns, const ValueList& row);
 
-zetasql_base::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
+absl::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
     absl::Span<const KeyColumn* const> primary_key, const KeyRange& key_range);
 
 // Returns true if one of the values for a given column contains timestamp

@@ -20,7 +20,7 @@
 #include "google/protobuf/any.pb.h"
 #include "google/protobuf/duration.pb.h"
 #include "google/protobuf/timestamp.pb.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "absl/status/status.h"
 
@@ -31,15 +31,15 @@ namespace emulator {
 // Convert unix time into proto format. Returns an error if it does not meet the
 // requirements of [RFC
 // 3339](https://www.ietf.org/rfc/rfc3339.txt) format.
-zetasql_base::StatusOr<google::protobuf::Timestamp> TimestampToProto(absl::Time time);
+absl::StatusOr<google::protobuf::Timestamp> TimestampToProto(absl::Time time);
 
 // TODO: Add tests for TimestampFromProto and DurationFromProto.
-zetasql_base::StatusOr<absl::Time> TimestampFromProto(
+absl::StatusOr<absl::Time> TimestampFromProto(
     const google::protobuf::Timestamp& proto);
 
 // Parse "duration" in seconds and nanoseconds. Returns an error if it does not
 // meet the requirements of a staleness bound.
-zetasql_base::StatusOr<absl::Duration> DurationFromProto(
+absl::StatusOr<absl::Duration> DurationFromProto(
     const google::protobuf::Duration& proto);
 
 }  // namespace emulator

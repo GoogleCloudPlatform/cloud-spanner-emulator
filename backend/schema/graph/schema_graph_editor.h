@@ -23,7 +23,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/graph/schema_objects_pool.h"
@@ -114,7 +114,7 @@ class SchemaGraphEditor {
 
   // Makes a new clone of the schema graph, fixing up node-relationships
   // after edits and calling validation on the node graph being edited.
-  zetasql_base::StatusOr<std::unique_ptr<SchemaGraph>> CanonicalizeGraph();
+  absl::StatusOr<std::unique_ptr<SchemaGraph>> CanonicalizeGraph();
 
   // Deep-clones starting from the SchemaNode 'node' in schema graph. Any
   // nodes reachable from 'node' in the schema graph will also be cloned and
@@ -122,7 +122,7 @@ class SchemaGraphEditor {
   // clone the entire schema graph, only the sub-graph reachable from 'node' and
   // ownership of the cloned sub-graph cannot be released from this class.
   // Callers should not directly call this method.
-  zetasql_base::StatusOr<const SchemaNode*> Clone(const SchemaNode* node);
+  absl::StatusOr<const SchemaNode*> Clone(const SchemaNode* node);
 
   // Clones an iterable container of nodes in-place. Erases deleted nodes.
   template <typename T, typename C>

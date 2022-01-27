@@ -17,7 +17,7 @@
 #include <string>
 
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -93,7 +93,6 @@ class InformationSchemaTest : public DatabaseTest {
                                 "CHANGE_STREAM_COLUMNS",
                                 "CHANGE_STREAM_OPTIONS",
                                 "CHANGE_STREAM_TABLES",
-                                "COLUMN_COLUMN_USAGE",
                                 "DATABASE_OPTIONS",
                                 "VIEWS",
                             })};
@@ -110,7 +109,7 @@ class InformationSchemaTest : public DatabaseTest {
   // Returns the given rows, replacing matching string patterns with their
   // actual values from the given results.
   static std::vector<ValueRow> ExpectedRows(
-      const zetasql_base::StatusOr<std::vector<ValueRow>>& results,
+      const absl::StatusOr<std::vector<ValueRow>>& results,
       const std::vector<ValueRow> rows) {
     if (!results.ok()) {
       return rows;
@@ -135,7 +134,7 @@ class InformationSchemaTest : public DatabaseTest {
   // if none match. One use case is to match generated names that have
   // different signatures between production and emulator.
   static std::string FindString(
-      const zetasql_base::StatusOr<std::vector<ValueRow>>& results, int field_index,
+      const absl::StatusOr<std::vector<ValueRow>>& results, int field_index,
       const std::string& pattern) {
     for (const auto& row : results.value()) {
       auto value = row.values()[field_index].get<std::string>().value();
@@ -146,7 +145,7 @@ class InformationSchemaTest : public DatabaseTest {
     return pattern;
   }
 
-  static void LogResults(const zetasql_base::StatusOr<std::vector<ValueRow>>& results) {
+  static void LogResults(const absl::StatusOr<std::vector<ValueRow>>& results) {
   }
 
   // Aliases so test expectations read more clearly.
@@ -201,6 +200,7 @@ TEST_F(InformationSchemaTest, MetaTables) {
   auto expected = std::vector<ValueRow>({
     {"", "INFORMATION_SCHEMA", "VIEW", "CHECK_CONSTRAINTS", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "VIEW", "COLUMNS", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMN_COLUMN_USAGE", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "VIEW", "COLUMN_OPTIONS", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "VIEW", "CONSTRAINT_COLUMN_USAGE", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "VIEW", "CONSTRAINT_TABLE_USAGE", Ns(), Ns(), Ns()},  // NOLINT
@@ -275,6 +275,11 @@ TEST_F(InformationSchemaTest, MetaColumns) {
     {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_CATALOG", Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_NAME", Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_SCHEMA", Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "COLUMN_NAME", Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "DEPENDENT_COLUMN", Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_CATALOG", Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_NAME", Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_SCHEMA", Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "COLUMN_NAME", Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "OPTION_NAME", Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "OPTION_TYPE", Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
@@ -388,6 +393,7 @@ TEST_F(InformationSchemaTest, MetaIndexes) {
   auto expected = std::vector<ValueRow>({
     {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
@@ -437,6 +443,11 @@ TEST_F(InformationSchemaTest, MetaIndexColumns) {
     {"INFORMATION_SCHEMA", "COLUMNS", "PRIMARY_KEY", "PRIMARY_KEY", "TABLE_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
     {"INFORMATION_SCHEMA", "COLUMNS", "PRIMARY_KEY", "PRIMARY_KEY", "TABLE_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
     {"INFORMATION_SCHEMA", "COLUMNS", "PRIMARY_KEY", "PRIMARY_KEY", "COLUMN_NAME", 4, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+    {"INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "TABLE_CATALOG", 1, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+    {"INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "TABLE_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+    {"INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "TABLE_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+    {"INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "COLUMN_NAME", 4, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+    {"INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "DEPENDENT_COLUMN", 5, "ASC", "NO", "STRING(MAX)"},  // NOLINT
     {"INFORMATION_SCHEMA", "COLUMN_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "TABLE_CATALOG", 1, "ASC", "NO", "STRING(MAX)"},  // NOLINT
     {"INFORMATION_SCHEMA", "COLUMN_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "TABLE_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
     {"INFORMATION_SCHEMA", "COLUMN_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "TABLE_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
@@ -524,6 +535,11 @@ TEST_F(InformationSchemaTest, MetaTableConstraints) {
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMNS_TABLE_CATALOG", "", "INFORMATION_SCHEMA", "COLUMNS", "CHECK", "NO", "NO", "YES"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMNS_TABLE_NAME", "", "INFORMATION_SCHEMA", "COLUMNS", "CHECK", "NO", "NO", "YES"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMNS_TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "COLUMNS", "CHECK", "NO", "NO", "YES"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_COLUMN_NAME", "", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "CHECK", "NO", "NO", "YES"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_DEPENDENT_COLUMN", "", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "CHECK", "NO", "NO", "YES"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_CATALOG", "", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "CHECK", "NO", "NO", "YES"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_NAME", "", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "CHECK", "NO", "NO", "YES"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "CHECK", "NO", "NO", "YES"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_OPTIONS_COLUMN_NAME", "", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_OPTIONS_OPTION_NAME", "", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_OPTIONS_OPTION_TYPE", "", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
@@ -596,6 +612,7 @@ TEST_F(InformationSchemaTest, MetaTableConstraints) {
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CHECK", "NO", "NO", "YES"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PK_CHECK_CONSTRAINTS", "", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PK_COLUMNS", "", "INFORMATION_SCHEMA", "COLUMNS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PK_COLUMN_OPTIONS", "", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PK_CONSTRAINT_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PK_CONSTRAINT_TABLE_USAGE", "", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
@@ -629,7 +646,6 @@ TEST_F(InformationSchemaTest, MetaCheckConstraints) {
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_CHANGE_STREAM%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_DATABASE_OPTIONS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_VIEWS_TABLE%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE%'
       order by
         t.constraint_name
   )",
@@ -648,6 +664,11 @@ TEST_F(InformationSchemaTest, MetaCheckConstraints) {
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMNS_TABLE_CATALOG", "TABLE_CATALOG IS NOT NULL", "COMMITTED"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMNS_TABLE_NAME", "TABLE_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMNS_TABLE_SCHEMA", "TABLE_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_COLUMN_NAME", "COLUMN_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_DEPENDENT_COLUMN", "DEPENDENT_COLUMN IS NOT NULL", "COMMITTED"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_CATALOG", "TABLE_CATALOG IS NOT NULL", "COMMITTED"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_NAME", "TABLE_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_SCHEMA", "TABLE_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_OPTIONS_COLUMN_NAME", "COLUMN_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_OPTIONS_OPTION_NAME", "OPTION_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_OPTIONS_OPTION_TYPE", "OPTION_TYPE IS NOT NULL", "COMMITTED"},  // NOLINT
@@ -760,6 +781,12 @@ TEST_F(InformationSchemaTest, MetaConstraintTableUsage) {
     {"", "INFORMATION_SCHEMA", "COLUMNS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMNS_TABLE_NAME"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMNS_TABLE_SCHEMA"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "", "INFORMATION_SCHEMA", "PK_COLUMNS"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_COLUMN_NAME"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_DEPENDENT_COLUMN"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_CATALOG"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_NAME"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_SCHEMA"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_OPTIONS_COLUMN_NAME"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_OPTIONS_OPTION_NAME"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_OPTIONS_OPTION_TYPE"},  // NOLINT
@@ -902,6 +929,11 @@ TEST_F(InformationSchemaTest, MetaKeyColumnUsage) {
     {"", "INFORMATION_SCHEMA", "PK_COLUMNS", "", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_SCHEMA", 2, Ni()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PK_COLUMNS", "", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_NAME", 3, Ni()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PK_COLUMNS", "", "INFORMATION_SCHEMA", "COLUMNS", "COLUMN_NAME", 4, Ni()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_CATALOG", 1, Ni()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_SCHEMA", 2, Ni()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_NAME", 3, Ni()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "COLUMN_NAME", 4, Ni()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "DEPENDENT_COLUMN", 5, Ni()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PK_COLUMN_OPTIONS", "", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "TABLE_CATALOG", 1, Ni()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PK_COLUMN_OPTIONS", "", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "TABLE_SCHEMA", 2, Ni()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PK_COLUMN_OPTIONS", "", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "TABLE_NAME", 3, Ni()},  // NOLINT
@@ -995,6 +1027,16 @@ TEST_F(InformationSchemaTest, MetaConstraintColumnUsage) {
     {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_NAME", "", "INFORMATION_SCHEMA", "PK_COLUMNS"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMNS_TABLE_SCHEMA"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "PK_COLUMNS"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "COLUMN_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_COLUMN_NAME"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "COLUMN_NAME", "", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "DEPENDENT_COLUMN", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_DEPENDENT_COLUMN"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "DEPENDENT_COLUMN", "", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_CATALOG", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_CATALOG"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_CATALOG", "", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_NAME"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_NAME", "", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_COLUMN_USAGE_TABLE_SCHEMA"},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "PK_COLUMN_COLUMN_USAGE"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "COLUMN_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_OPTIONS_COLUMN_NAME"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "COLUMN_NAME", "", "INFORMATION_SCHEMA", "PK_COLUMN_OPTIONS"},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "OPTION_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_COLUMN_OPTIONS_OPTION_NAME"},  // NOLINT
@@ -1503,6 +1545,47 @@ TEST_F(InformationSchemaTest, DefaultConstraintColumnUsage) {
     {"", "", "NoActionChild", "ChildKey", "", "", "PK_NoActionChild"},  // NOLINT
     {"", "", "NoActionChild", "Key1", "", "", "PK_NoActionChild"},  // NOLINT
     {"", "", "NoActionChild", "Key2", "", "", "PK_NoActionChild"},  // NOLINT
+  });
+  // clang-format on
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+}
+
+// Tests information schema behavior in the presence of generated columns.
+class ColumnColumnUsageInformationSchemaTest : public InformationSchemaTest {
+ public:
+  absl::Status SetUpDatabase() override {
+    return SetSchema({R"(
+      CREATE TABLE GeneratedColumns (
+        UserId INT64,
+        FirstName STRING(100),
+        LastName STRING(100),
+        FullName STRING(200) AS (CONCAT(FirstName, ", ", LastName)) STORED,
+        UppercaseName STRING(MAX) AS (UPPER(FullName)) STORED,
+      ) PRIMARY KEY(UserId)
+    )"});
+  }
+};
+
+TEST_F(ColumnColumnUsageInformationSchemaTest, DefaultColumnColumnUsage) {
+  auto results = Query(R"(
+      select
+        t.table_name,
+        t.dependent_column,
+        t.column_name
+      from
+        information_schema.column_column_usage as t
+      where
+            t.table_catalog = ''
+        and t.table_schema = ''
+      order by
+        t.table_name, t.dependent_column, t.column_name
+  )");
+  LogResults(results);
+  // clang-format off
+  auto expected = ExpectedRows(results, {
+    {"GeneratedColumns",  "FullName",       "FirstName"},
+    {"GeneratedColumns",  "FullName",       "LastName"},
+    {"GeneratedColumns",  "UppercaseName",  "FullName"},
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));

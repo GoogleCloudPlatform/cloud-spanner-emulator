@@ -18,7 +18,7 @@
 
 #include <queue>
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "common/constants.h"
@@ -96,7 +96,7 @@ absl::Status ValidateCommitTimestampEnabledInHeirarchy(const Column* column) {
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<zetasql::Value> MaybeSetCommitTimestampSentinel(
+absl::StatusOr<zetasql::Value> MaybeSetCommitTimestampSentinel(
     const Column* column, zetasql::Value column_value) {
   if (!column->GetType()->IsTimestamp()) return column_value;
 
@@ -113,7 +113,7 @@ zetasql_base::StatusOr<zetasql::Value> MaybeSetCommitTimestampSentinel(
   return column_value;
 }
 
-zetasql_base::StatusOr<Key> MaybeSetCommitTimestampSentinel(
+absl::StatusOr<Key> MaybeSetCommitTimestampSentinel(
     absl::Span<const KeyColumn* const> primary_key, Key key) {
   for (int i = 0; i < key.NumColumns(); i++) {
     ZETASQL_ASSIGN_OR_RETURN(zetasql::Value value,
@@ -156,7 +156,7 @@ absl::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table,
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
+absl::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
     absl::Span<const Column* const> columns, const ValueList& row) {
   if (row.empty()) return row;
   ValueList ret_val;
@@ -167,7 +167,7 @@ zetasql_base::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
   return ret_val;
 }
 
-zetasql_base::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
+absl::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
     absl::Span<const KeyColumn* const> primary_key, const KeyRange& key_range) {
   ZETASQL_RET_CHECK(key_range.IsClosedOpen());
   if (key_range.start_key() >= key_range.limit_key()) {

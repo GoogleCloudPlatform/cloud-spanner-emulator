@@ -1806,10 +1806,12 @@ absl::Status NonPartitionableQuery(absl::string_view reason) {
       absl::StatusCode::kInvalidArgument,
       absl::StrCat(
           "The emulator is not able to determine whether this query is "
-          "partitionable. Please test this query against Cloud Spanner to "
-          "confirm it is partitionable. If you confirm it is partitionable, "
-          "set the hint @{spanner_emulator."
-          "disable_query_partitionability_check=false} on the query statement "
+          "partitionable. Please test this query against Cloud Spanner and "
+          "obtain a query execution plan to confirm it is partitionable. A "
+          "query is partitionable only if the first operator in the query "
+          "execution plan is a Distributed Union. If you confirm it is "
+          "partitionable, set the hint @{spanner_emulator."
+          "disable_query_partitionability_check=true} on the query statement "
           "to bypass this check in the emulator. This hint will be ignored by "
           "the production Cloud Spanner service and the emulator will accept "
           "the query and return a valid result when it is run with the check "

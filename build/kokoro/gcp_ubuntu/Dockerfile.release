@@ -59,7 +59,7 @@ FROM gcr.io/distroless/cc
 
 # Copy binaries.
 COPY --from=build /src/bazel-bin/binaries/emulator_main .
-COPY --from=build /src/bazel-bin/binaries/linux_amd64_stripped/gateway_main .
+COPY --from=build /src/bazel-bin/binaries/gateway_main_/gateway_main .
 
 # Copy licenses
 COPY --from=build /licenses.txt.gz .
