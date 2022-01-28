@@ -1,5 +1,18 @@
 # Changes
 
+## v1.4.1
+
+### New Features
+
+* Addded INFORMATION_SCHEMA.COLUMN_COLUMN_USAGE to spanner emulator.
+* Addded syntax-only support for LOCK_SCANNED_RANGES hint to avoid syntax errors.
+* Updated zetasql version to 2021.09.1.
+* Added support for row deletion policy syntax. The syntax will be treated as no op.
+
+### Bugs
+
+* Fixed grpc metadata error: gRPC error (INTERNAL_ERROR) which happens when metadata is set.
+
 ## v1.4.0
 
 ### New Features
