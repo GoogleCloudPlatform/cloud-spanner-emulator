@@ -16,7 +16,7 @@
 
 #include "backend/common/indexing.h"
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "zetasql/base/status_macros.h"
@@ -39,7 +39,7 @@ absl::Status ValidateKeySizeForIndex(const Index* index, const Key& key) {
 
 }  // namespace
 
-zetasql_base::StatusOr<Key> ComputeIndexKey(const Row& base_row, const Index* index) {
+absl::StatusOr<Key> ComputeIndexKey(const Row& base_row, const Index* index) {
   // Columns must be added to the key for each column in index data table
   // primary key.
   Key key;

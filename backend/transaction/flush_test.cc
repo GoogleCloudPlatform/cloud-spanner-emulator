@@ -20,7 +20,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "backend/actions/ops.h"
 #include "backend/storage/in_memory_storage.h"
@@ -49,7 +49,7 @@ class FlushTest : public testing::Test {
                           ) PRIMARY KEY (Int64Col)
                         )"},
                     type_factory_.get())
-                    .ValueOrDie()),
+                    .value()),
         table_(schema_->FindTable("TestTable")),
         int64_col_(table_->FindColumn("Int64Col")),
         string_col_(table_->FindColumn("StringCol")) {}
@@ -73,7 +73,7 @@ class FlushTest : public testing::Test {
                            {int64_col_->id(), string_col_->id()}, values);
   }
 
-  zetasql_base::StatusOr<std::vector<ValueList>> ReadAll(absl::Time timestamp) {
+  absl::StatusOr<std::vector<ValueList>> ReadAll(absl::Time timestamp) {
     std::unique_ptr<StorageIterator> itr;
     ZETASQL_RETURN_IF_ERROR(storage_->Read(timestamp, table_->id(), KeyRange::All(),
                                    {int64_col_->id(), string_col_->id()},

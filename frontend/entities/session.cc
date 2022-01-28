@@ -20,7 +20,7 @@
 
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
@@ -123,7 +123,7 @@ backend::RetryState Session::MakeRetryState(
   return retry_state;
 }
 
-zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTransaction(
+absl::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTransaction(
     const spanner_api::TransactionOptions& options,
     const TransactionActivation& activation) {
   ZETASQL_RETURN_IF_ERROR(ValidateMultiUseTransactionOptions(options));
@@ -160,7 +160,7 @@ zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTran
   return txn;
 }
 
-zetasql_base::StatusOr<std::unique_ptr<Transaction>>
+absl::StatusOr<std::unique_ptr<Transaction>>
 Session::CreateSingleUseTransaction(
     const spanner_api::TransactionOptions& options) {
   ZETASQL_RETURN_IF_ERROR(ValidateSingleUseTransactionOptions(options));
@@ -170,7 +170,7 @@ Session::CreateSingleUseTransaction(
                            MakeRetryState(options, /*is_single_use_txn=*/true));
 }
 
-zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateTransaction(
+absl::StatusOr<std::unique_ptr<Transaction>> Session::CreateTransaction(
     const spanner_api::TransactionOptions& options,
     const Transaction::Usage& usage, const backend::RetryState& retry_state) {
   switch (options.mode_case()) {
@@ -185,7 +185,7 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateTransaction(
   }
 }
 
-zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadOnly(
+absl::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadOnly(
     const spanner_api::TransactionOptions& options,
     const Transaction::Usage& usage) {
   // Populate read options.
@@ -201,7 +201,7 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadOnly(
                                        options, usage);
 }
 
-zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadWrite(
+absl::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadWrite(
     const spanner_api::TransactionOptions& options,
     const Transaction::Usage& usage, const backend::RetryState& retry_state) {
   // Create a new backend read write transaction.
@@ -215,7 +215,7 @@ zetasql_base::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadWrite(
                                        options, usage);
 }
 
-zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::FindAndUseTransaction(
+absl::StatusOr<std::shared_ptr<Transaction>> Session::FindAndUseTransaction(
     const std::string& bytes) {
   const backend::TransactionID& id = TransactionIDFromProto(bytes);
   absl::MutexLock lock(&mu_);
@@ -245,7 +245,7 @@ zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::FindAndUseTransact
   return active_transaction_;
 }
 
-zetasql_base::StatusOr<std::shared_ptr<Transaction>> Session::FindOrInitTransaction(
+absl::StatusOr<std::shared_ptr<Transaction>> Session::FindOrInitTransaction(
     const spanner_api::TransactionSelector& selector) {
   std::shared_ptr<Transaction> txn;
   switch (selector.selector_case()) {

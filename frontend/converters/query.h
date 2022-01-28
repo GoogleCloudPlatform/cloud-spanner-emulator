@@ -21,7 +21,7 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/query/query_engine.h"
 #include "common/errors.h"
 
@@ -31,7 +31,7 @@ namespace emulator {
 namespace frontend {
 
 // Converts the sql, params into backend query using given type factory.
-zetasql_base::StatusOr<backend::Query> QueryFromProto(
+absl::StatusOr<backend::Query> QueryFromProto(
     std::string sql, const google::protobuf::Struct& params,
     google::protobuf::Map<std::string, google::spanner::v1::Type> param_types,
     zetasql::TypeFactory* type_factory);

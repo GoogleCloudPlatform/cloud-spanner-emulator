@@ -18,7 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_ACTIONS_CONTEXT_H_
 
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/actions/ops.h"
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
@@ -75,16 +75,16 @@ class ReadOnlyStore {
   virtual ~ReadOnlyStore() {}
 
   // Returns true if the given key exist, false if it does not.
-  virtual zetasql_base::StatusOr<bool> Exists(const Table* table,
+  virtual absl::StatusOr<bool> Exists(const Table* table,
                                       const Key& key) const = 0;
 
   // Returns true if a row with the given key prefix exist, false if it does
   // not.
-  virtual zetasql_base::StatusOr<bool> PrefixExists(const Table* table,
+  virtual absl::StatusOr<bool> PrefixExists(const Table* table,
                                             const Key& prefix_key) const = 0;
 
   // Reads the given key range from the store.
-  virtual zetasql_base::StatusOr<std::unique_ptr<StorageIterator>> Read(
+  virtual absl::StatusOr<std::unique_ptr<StorageIterator>> Read(
       const Table* table, const KeyRange& key_range,
       absl::Span<const Column* const> columns) const = 0;
 };

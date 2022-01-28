@@ -20,7 +20,7 @@
 #include "google/spanner/v1/transaction.pb.h"
 #include "google/spanner/v1/type.pb.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/query/query_engine.h"
 #include "common/config.h"
 #include "common/errors.h"
@@ -76,7 +76,7 @@ absl::Status ValidatePartitionOptions(
 
 // Create a partition token for the given partition read request and partitioned
 // key set.
-zetasql_base::StatusOr<PartitionToken> CreatePartitionTokenForRead(
+absl::StatusOr<PartitionToken> CreatePartitionTokenForRead(
     const google::spanner::v1::PartitionReadRequest& request,
     const backend::TransactionID& txn_id,
     const google::spanner::v1::KeySet& partitioned_key_set) {
@@ -95,7 +95,7 @@ zetasql_base::StatusOr<PartitionToken> CreatePartitionTokenForRead(
 }
 
 // Create a partition token for the given partition query request.
-zetasql_base::StatusOr<PartitionToken> CreatePartitionTokenForQuery(
+absl::StatusOr<PartitionToken> CreatePartitionTokenForQuery(
     const google::spanner::v1::PartitionQueryRequest& request,
     const backend::TransactionID& txn_id, bool empty_partition) {
   if (request.sql().empty()) {

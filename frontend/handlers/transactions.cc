@@ -19,7 +19,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_only_transaction.h"
 #include "backend/transaction/read_write_transaction.h"
@@ -72,7 +72,7 @@ absl::Status Commit(RequestContext* ctx,
                    GetSession(ctx, request->session()));
 
   // Get transaction object to commit.
-  zetasql_base::StatusOr<std::shared_ptr<Transaction>> maybe_txn;
+  absl::StatusOr<std::shared_ptr<Transaction>> maybe_txn;
   switch (request->transaction_case()) {
     case spanner_api::CommitRequest::kSingleUseTransaction:
       maybe_txn = session->CreateSingleUseTransaction(

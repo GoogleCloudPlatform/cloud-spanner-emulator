@@ -20,7 +20,7 @@ set -e
 EMULATOR_PID=""
 
 function emulator::start() {
-  ${EMULATOR_SRC_DIR}/bazel-bin/binaries/${GO_BINARY_DIR}/gateway_main &
+  ${EMULATOR_SRC_DIR}/bazel-bin/binaries/gateway_main_/gateway_main &
   EMULATOR_PID=$!
 }
 

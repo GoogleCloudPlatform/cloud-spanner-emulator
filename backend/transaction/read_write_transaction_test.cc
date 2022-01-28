@@ -25,7 +25,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "backend/access/write.h"
 #include "backend/actions/manager.h"
@@ -73,7 +73,7 @@ class ReadWriteTransactionTest : public testing::Test {
                   CREATE UNIQUE INDEX test_index ON test_table(string_col DESC)
                 )"},
                           type_factory_.get())
-                          .ValueOrDie()))),
+                          .value()))),
         action_manager_(absl::make_unique<ActionManager>()) {
     action_manager_->AddActionsForSchema(
         versioned_catalog_->GetSchema(absl::InfiniteFuture()),
@@ -102,18 +102,18 @@ class ReadWriteTransactionTest : public testing::Test {
         action_manager_.get());
   }
 
-  zetasql_base::StatusOr<std::vector<ValueList>> ReadAll(
+  absl::StatusOr<std::vector<ValueList>> ReadAll(
       ReadWriteTransaction* txn, std::vector<std::string> columns) {
     return ReadAllUsingIndex(txn, /*index =*/"", columns);
   }
 
-  zetasql_base::StatusOr<std::vector<ValueList>> ReadAllUsingIndex(
+  absl::StatusOr<std::vector<ValueList>> ReadAllUsingIndex(
       ReadWriteTransaction* txn, std::string index,
       std::vector<std::string> columns) {
     return ReadUsingIndex(txn, KeySet(KeyRange::All()), index, columns);
   }
 
-  zetasql_base::StatusOr<std::vector<ValueList>> ReadUsingIndex(
+  absl::StatusOr<std::vector<ValueList>> ReadUsingIndex(
       ReadWriteTransaction* txn, KeySet key_set, std::string index,
       std::vector<std::string> columns) {
     backend::ReadArg read_arg{.table = "test_table",
@@ -404,7 +404,7 @@ TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {
                         )",
                     },
                     type_factory_.get())
-                    .ValueOrDie();
+                    .value();
   ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
   action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
                                        /*function_catalog=*/nullptr);
@@ -428,7 +428,7 @@ TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {
                   )",
                },
                type_factory_.get())
-               .ValueOrDie();
+               .value();
   ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
   action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
                                        /*function_catalog=*/nullptr);

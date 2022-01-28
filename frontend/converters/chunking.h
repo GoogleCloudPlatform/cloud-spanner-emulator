@@ -21,7 +21,7 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/status/status.h"
 
@@ -33,7 +33,7 @@ namespace frontend {
 // Takes a ResultSet and chunks it into smaller pieces as necessary. Each
 // resulting piece will have a size <= max_chunk_size. Returns an ordered list
 // of PartialResultSets or an error.
-zetasql_base::StatusOr<std::vector<google::spanner::v1::PartialResultSet>>
+absl::StatusOr<std::vector<google::spanner::v1::PartialResultSet>>
 ChunkResultSet(const google::spanner::v1::ResultSet& set, int64_t max_chunk_size);
 
 }  // namespace frontend

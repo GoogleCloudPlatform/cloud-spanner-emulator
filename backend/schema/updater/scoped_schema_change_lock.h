@@ -19,7 +19,7 @@
 
 #include <memory>
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/locking/handle.h"
@@ -60,7 +60,7 @@ class ScopedSchemaChangeLock {
   }
 
   // Reserves a commit timestamp for the shcema change.
-  zetasql_base::StatusOr<absl::Time> ReserveCommitTimestamp() {
+  absl::StatusOr<absl::Time> ReserveCommitTimestamp() {
     auto status_or = lock_handle_->ReserveCommitTimestamp();
     has_commit_timestamp_ = status_or.status().ok();
     return status_or;

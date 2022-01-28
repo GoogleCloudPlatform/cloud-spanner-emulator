@@ -19,7 +19,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -59,7 +59,7 @@ class PartitionQueryTest : public DatabaseTest {
 
  protected:
   // Creates a new session for tests using raw grpc client.
-  zetasql_base::StatusOr<spanner_api::Session> CreateSession() {
+  absl::StatusOr<spanner_api::Session> CreateSession() {
     grpc::ClientContext context;
     spanner_api::CreateSessionRequest request;
     request.set_database(std::string(database()->FullName()));  // NOLINT

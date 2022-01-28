@@ -29,8 +29,8 @@ cc_library(
     deps = [
         "//backend/schema/ddl:operations_cc_proto",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )
@@ -63,10 +63,10 @@ cc_library(
         "//common:errors",
         "//common:limits",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_farmhash//:farmhash_fingerprint",
-        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
 
@@ -122,11 +122,11 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
         "@com_google_protobuf//:protobuf_headers",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:analyzer",
         "@com_google_zetasql//zetasql/public:simple_catalog",
         "@com_google_zetasql//zetasql/public:type",
@@ -168,7 +168,7 @@ cc_library(
         "//backend/locking:manager",
         "//common:errors",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )

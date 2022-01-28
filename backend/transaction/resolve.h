@@ -19,7 +19,7 @@
 
 #include <vector>
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
@@ -69,14 +69,14 @@ struct ResolvedMutationOp {
 
 // Converts input ReadArg into ResolveReadArg after validating that input table,
 // index and columns are valid schema objects.
-zetasql_base::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
+absl::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
                                                const Schema* schema);
 
 // Converts input MutationOp into ResolvedMutationOp after validating that input
 // table, columns and rows are valid schema objects. Validates that user
 // supplied values for commit timestamp are not in future by comparing against
 // now.
-zetasql_base::StatusOr<ResolvedMutationOp> ResolveMutationOp(
+absl::StatusOr<ResolvedMutationOp> ResolveMutationOp(
     const MutationOp& mutation_op, const Schema* schema, absl::Time now);
 
 }  // namespace backend

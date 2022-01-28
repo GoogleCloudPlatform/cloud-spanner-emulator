@@ -21,7 +21,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/algorithm/container.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "google/cloud/spanner/bytes.h"
 #include "google/cloud/spanner/mutations.h"
@@ -68,7 +68,7 @@ class SchemaChangeTest
   absl::Status SetUpDatabase() override { return absl::OkStatus(); }
 
   // Runs a file-based schema change test case.
-  zetasql_base::StatusOr<FileBasedTestCaseOutput> RunSchemaChangeTestCase(
+  absl::StatusOr<FileBasedTestCaseOutput> RunSchemaChangeTestCase(
       const FileBasedTestCaseInput& input) {
     // Check that we were not mistakenly passed an empty test case.
     ZETASQL_RET_CHECK(!input.text.empty()) << "Found empty schema change test case.";

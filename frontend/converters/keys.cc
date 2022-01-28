@@ -17,7 +17,7 @@
 #include "frontend/converters/keys.h"
 
 #include "zetasql/public/value.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
@@ -33,7 +33,7 @@ namespace {
 
 namespace spanner_api = ::google::spanner::v1;
 
-zetasql_base::StatusOr<backend::Key> KeyFromProtoInternal(
+absl::StatusOr<backend::Key> KeyFromProtoInternal(
     const google::protobuf::ListValue& list_pb, const backend::Table& table,
     bool allow_prefix_key) {
   // Check that the user did not specify more than the required number of key
@@ -72,13 +72,13 @@ zetasql_base::StatusOr<backend::Key> KeyFromProtoInternal(
 
 }  // namespace
 
-zetasql_base::StatusOr<backend::Key> KeyFromProto(
+absl::StatusOr<backend::Key> KeyFromProto(
     const google::protobuf::ListValue& list_pb, const backend::Table& table) {
   // Prefix key parts are only allowed in key ranges.
   return KeyFromProtoInternal(list_pb, table, /*allow_prefix_key=*/false);
 }
 
-zetasql_base::StatusOr<backend::KeyRange> KeyRangeFromProto(
+absl::StatusOr<backend::KeyRange> KeyRangeFromProto(
     const spanner_api::KeyRange& range_pb, const backend::Table& table) {
   // Parse the start endpoint.
   backend::EndpointType start_type;
@@ -117,7 +117,7 @@ zetasql_base::StatusOr<backend::KeyRange> KeyRangeFromProto(
   return backend::KeyRange(start_type, start_key, limit_type, limit_key);
 }
 
-zetasql_base::StatusOr<backend::KeySet> KeySetFromProto(
+absl::StatusOr<backend::KeySet> KeySetFromProto(
     const spanner_api::KeySet& key_set_pb, const backend::Table& table) {
   backend::KeySet key_set;
 

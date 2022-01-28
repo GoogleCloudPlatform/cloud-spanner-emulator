@@ -16,7 +16,7 @@
 
 #include "frontend/converters/time.h"
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "common/errors.h"
@@ -62,7 +62,7 @@ absl::Status Validate(const google::protobuf::Duration& d) {
 
 }  // namespace
 
-zetasql_base::StatusOr<google::protobuf::Timestamp> TimestampToProto(absl::Time time) {
+absl::StatusOr<google::protobuf::Timestamp> TimestampToProto(absl::Time time) {
   const int64_t s = absl::ToUnixSeconds(time);
   google::protobuf::Timestamp proto;
   proto.set_seconds(s);
@@ -71,14 +71,14 @@ zetasql_base::StatusOr<google::protobuf::Timestamp> TimestampToProto(absl::Time 
   return proto;
 }
 
-zetasql_base::StatusOr<absl::Time> TimestampFromProto(
+absl::StatusOr<absl::Time> TimestampFromProto(
     const google::protobuf::Timestamp& proto) {
   ZETASQL_RETURN_IF_ERROR(Validate(proto));
   return absl::FromUnixSeconds(proto.seconds()) +
          absl::Nanoseconds(proto.nanos());
 }
 
-zetasql_base::StatusOr<absl::Duration> DurationFromProto(
+absl::StatusOr<absl::Duration> DurationFromProto(
     const google::protobuf::Duration& proto) {
   ZETASQL_RETURN_IF_ERROR(Validate(proto));
   return absl::Seconds(proto.seconds()) + absl::Nanoseconds(proto.nanos());

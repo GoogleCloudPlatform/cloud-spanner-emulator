@@ -15,7 +15,7 @@
 //
 
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -64,7 +64,7 @@ class PartitionedDmlTest : public DatabaseTest {
     return absl::OkStatus();
   }
 
-  zetasql_base::StatusOr<std::string> CreatePartitionedDmlTransaction() {
+  absl::StatusOr<std::string> CreatePartitionedDmlTransaction() {
     grpc::ClientContext context;
     spanner_api::Transaction response;
     spanner_api::BeginTransactionRequest request;
@@ -76,7 +76,7 @@ class PartitionedDmlTest : public DatabaseTest {
   }
 
   // Note: Does not work with parameterized statements.
-  zetasql_base::StatusOr<spanner_api::ResultSet> ExecutePartitionedDmlInTransaction(
+  absl::StatusOr<spanner_api::ResultSet> ExecutePartitionedDmlInTransaction(
       std::string transaction_id, int seqno, const SqlStatement& statement) {
     grpc::ClientContext context;
     spanner_api::ResultSet response;

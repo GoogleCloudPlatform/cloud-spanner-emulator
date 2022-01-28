@@ -873,7 +873,6 @@ TEST_F(SchemaUpdaterTest, CreateTable_NumericAsPK) {
 
 TEST_F(SchemaUpdaterTest, CreateTable_JsonColumns) {
   EmulatorFeatureFlags::Flags flags;
-  flags.enable_json_type = true;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
@@ -900,7 +899,6 @@ TEST_F(SchemaUpdaterTest, CreateTable_JsonColumns) {
 
 TEST_F(SchemaUpdaterTest, CreateTable_JsonAsPK) {
   EmulatorFeatureFlags::Flags flags;
-  flags.enable_json_type = true;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(CreateSchema({R"(
       CREATE TABLE T (

@@ -19,7 +19,7 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/keys.pb.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/datamodel/key_set.h"
@@ -31,15 +31,15 @@ namespace emulator {
 namespace frontend {
 
 // Converts a CloudSpanner key proto (encoded as a list) to a backend Key.
-zetasql_base::StatusOr<backend::Key> KeyFromProto(
+absl::StatusOr<backend::Key> KeyFromProto(
     const google::protobuf::ListValue& list_pb, const backend::Table& table);
 
 // Converts a CloudSpanner key range proto to a backend KeyRange.
-zetasql_base::StatusOr<backend::KeyRange> KeyRangeFromProto(
+absl::StatusOr<backend::KeyRange> KeyRangeFromProto(
     const google::spanner::v1::KeyRange& range_pb, const backend::Table& table);
 
 // Converts a Cloud Spanner key set proto to a backend KeySet.
-zetasql_base::StatusOr<backend::KeySet> KeySetFromProto(
+absl::StatusOr<backend::KeySet> KeySetFromProto(
     const google::spanner::v1::KeySet& key_set_pb, const backend::Table& table);
 
 }  // namespace frontend

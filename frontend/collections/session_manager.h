@@ -18,7 +18,7 @@
 #define STORAGE_CLOUD_SPANNER_EMULATOR_FRONTEND_SESSION_MANAGER_H_
 
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "common/clock.h"
 #include "frontend/entities/database.h"
@@ -36,12 +36,12 @@ class SessionManager {
   explicit SessionManager(Clock* clock) : clock_(clock) {}
 
   // Creates a session attached to the given database.
-  zetasql_base::StatusOr<std::shared_ptr<Session>> CreateSession(
+  absl::StatusOr<std::shared_ptr<Session>> CreateSession(
       const Labels& labels, std::shared_ptr<Database> database)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Returns a session with the given URI.
-  zetasql_base::StatusOr<std::shared_ptr<Session>> GetSession(
+  absl::StatusOr<std::shared_ptr<Session>> GetSession(
       const std::string& session_uri) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Deletes a session with the given URI.
@@ -49,7 +49,7 @@ class SessionManager {
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Lists sessions attached to the given database URI.
-  zetasql_base::StatusOr<std::vector<std::shared_ptr<Session>>> ListSessions(
+  absl::StatusOr<std::vector<std::shared_ptr<Session>>> ListSessions(
       const std::string& database_uri) const ABSL_LOCKS_EXCLUDED(mu_);
 
  private:

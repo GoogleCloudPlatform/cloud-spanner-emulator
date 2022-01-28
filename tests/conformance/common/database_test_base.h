@@ -30,7 +30,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "google/cloud/spanner/client.h"
@@ -163,7 +163,7 @@ class DatabaseTest : public ::testing::Test {
     return google::cloud::spanner::MakeTimestamp(tp).value();
   }
 
-  static zetasql_base::StatusOr<Timestamp> ParseRFC3339TimeSeconds(std::string input) {
+  static absl::StatusOr<Timestamp> ParseRFC3339TimeSeconds(std::string input) {
     absl::Time result;
     if (!absl::ParseTime(absl::RFC3339_sec, input, &result, nullptr)) {
       return absl::Status(absl::StatusCode::kInvalidArgument,
@@ -196,11 +196,11 @@ class DatabaseTest : public ::testing::Test {
 
   // Updates the schema of the database created for this test. Returning the
   // result in an `UpdateDatabaseDdlMetadata` message.
-  zetasql_base::StatusOr<UpdateDatabaseDdlMetadata> UpdateSchema(
+  absl::StatusOr<UpdateDatabaseDdlMetadata> UpdateSchema(
       const std::vector<std::string>& schema);
 
   // Returns the DDL for the database.
-  zetasql_base::StatusOr<std::vector<std::string>> GetDatabaseDdl() const;
+  absl::StatusOr<std::vector<std::string>> GetDatabaseDdl() const;
 
   // Provides read-only access to the database object for the test.
   const cloud::spanner::Database* database() { return database_.get(); }
@@ -342,7 +342,7 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Read using a given transaction.
-  zetasql_base::StatusOr<ReadResult> Read(Transaction txn, std::string table,
+  absl::StatusOr<ReadResult> Read(Transaction txn, std::string table,
                                   std::vector<std::string> columns,
                                   KeySet key_set) {
     auto result = client().Read(std::move(txn), std::move(table),
@@ -350,7 +350,7 @@ class DatabaseTest : public ::testing::Test {
     return ProcessRowStreamForReadResult(result);
   }
 
-  zetasql_base::StatusOr<std::vector<ValueRow>> Read(std::string table,
+  absl::StatusOr<std::vector<ValueRow>> Read(std::string table,
                                              std::vector<std::string> columns,
                                              KeySet key_set, Transaction txn) {
     auto result = client().Read(std::move(txn), std::move(table),
@@ -360,7 +360,7 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Sinlge-use strong read returning ReadResult.
-  zetasql_base::StatusOr<ReadResult> Read(
+  absl::StatusOr<ReadResult> Read(
       std::string table, std::vector<std::string> columns, KeySet key_set,
       Transaction::SingleUseOptions transaction_options) {
     auto result =
@@ -370,7 +370,7 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Read using a single-use transaction read options.
-  zetasql_base::StatusOr<std::vector<ValueRow>> Read(
+  absl::StatusOr<std::vector<ValueRow>> Read(
       Transaction::SingleUseOptions transaction_options, std::string table,
       std::vector<std::string> columns, KeySet key_set) {
     ZETASQL_ASSIGN_OR_RETURN(auto read_result,
@@ -380,14 +380,14 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Collects all rows from a read operation into a single vector.
-  zetasql_base::StatusOr<std::vector<ValueRow>> Read(std::string table,
+  absl::StatusOr<std::vector<ValueRow>> Read(std::string table,
                                              std::vector<std::string> columns,
                                              KeySet key_set) {
     return ReadWithIndex(std::move(table), "", std::move(columns),
                          std::move(key_set));
   }
 
-  zetasql_base::StatusOr<std::vector<ValueRow>> Read(std::string table,
+  absl::StatusOr<std::vector<ValueRow>> Read(std::string table,
                                              std::vector<std::string> columns,
                                              cloud::spanner::Key key) {
     KeySet key_set;
@@ -396,7 +396,7 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Same as version above except reads with a specified index.
-  zetasql_base::StatusOr<std::vector<ValueRow>> ReadWithIndex(
+  absl::StatusOr<std::vector<ValueRow>> ReadWithIndex(
       std::string table, std::string index, std::vector<std::string> columns,
       KeySet key_set) {
     ReadOptions options;
@@ -408,7 +408,7 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Same as version above except reads using a specified transaction.
-  zetasql_base::StatusOr<std::vector<ValueRow>> ReadWithIndex(
+  absl::StatusOr<std::vector<ValueRow>> ReadWithIndex(
       Transaction txn, std::string table, std::string index,
       std::vector<std::string> columns, KeySet key_set) {
     ReadOptions options;
@@ -421,20 +421,20 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Collects all rows from a table into a single vector.
-  zetasql_base::StatusOr<std::vector<ValueRow>> ReadAll(
+  absl::StatusOr<std::vector<ValueRow>> ReadAll(
       std::string table, std::vector<std::string> columns) {
     return ReadAllWithIndex(std::move(table), "", std::move(columns));
   }
 
   // Same as version above except reads with a specified index.
-  zetasql_base::StatusOr<std::vector<ValueRow>> ReadAllWithIndex(
+  absl::StatusOr<std::vector<ValueRow>> ReadAllWithIndex(
       std::string table, std::string index, std::vector<std::string> columns) {
     return ReadWithIndex(std::move(table), std::move(index), std::move(columns),
                          KeySet::All());
   }
 
   // Same as version above except reads using a specified transaction.
-  zetasql_base::StatusOr<std::vector<ValueRow>> ReadAllWithIndex(
+  absl::StatusOr<std::vector<ValueRow>> ReadAllWithIndex(
       Transaction txn, std::string table, std::string index,
       std::vector<std::string> columns) {
     return ReadWithIndex(std::move(txn), std::move(table), std::move(index),
@@ -442,7 +442,7 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // PartitionRead using a specified transaction.
-  zetasql_base::StatusOr<std::vector<ReadPartition>> PartitionRead(
+  absl::StatusOr<std::vector<ReadPartition>> PartitionRead(
       Transaction txn, std::string table, KeySet key_set,
       std::vector<std::string> columns, ReadOptions read_options = {},
       PartitionOptions partition_options = {}) {
@@ -452,7 +452,7 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Read all the partitions returned by PartitionRead.
-  zetasql_base::StatusOr<std::vector<ValueRow>> Read(
+  absl::StatusOr<std::vector<ValueRow>> Read(
       std::vector<ReadPartition> partitions) {
     std::vector<ValueRow> rows;
     for (const auto& partition : partitions) {
@@ -466,7 +466,7 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Run a SQL query with the given bound parameters and return the results.
-  zetasql_base::StatusOr<std::vector<ValueRow>> QueryWithParams(
+  absl::StatusOr<std::vector<ValueRow>> QueryWithParams(
       const std::string& query,
       cloud::spanner::SqlStatement::ParamType params) {
     auto result = client().ExecuteQuery(
@@ -482,12 +482,12 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Same as version above, but with no bound parameters.
-  zetasql_base::StatusOr<std::vector<ValueRow>> Query(const std::string& query) {
+  absl::StatusOr<std::vector<ValueRow>> Query(const std::string& query) {
     return QueryWithParams(query, /*params=*/{});
   }
 
   // Execute query using an existing transaction.
-  zetasql_base::StatusOr<std::vector<ValueRow>> QueryTransaction(
+  absl::StatusOr<std::vector<ValueRow>> QueryTransaction(
       Transaction txn, const std::string& query) {
     auto result = client().ExecuteQuery(txn, SqlStatement(query));
     std::vector<ValueRow> retval;
@@ -500,7 +500,7 @@ class DatabaseTest : public ::testing::Test {
     return retval;
   }
 
-  zetasql_base::StatusOr<std::vector<ValueRow>> QuerySingleUseTransaction(
+  absl::StatusOr<std::vector<ValueRow>> QuerySingleUseTransaction(
       Transaction::SingleUseOptions txn_opts,
       const SqlStatement sql_statement) {
     auto result = client().ExecuteQuery(txn_opts, sql_statement);
@@ -515,7 +515,7 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // PartitionQuery using a specified transaction.
-  zetasql_base::StatusOr<std::vector<QueryPartition>> PartitionQuery(
+  absl::StatusOr<std::vector<QueryPartition>> PartitionQuery(
       Transaction txn, const std::string& query,
       PartitionOptions partition_options = {}) {
     return ToUtilStatusOr(
@@ -523,7 +523,7 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Query all the partitions returned by PartitionQuery.
-  zetasql_base::StatusOr<std::vector<ValueRow>> Query(
+  absl::StatusOr<std::vector<ValueRow>> Query(
       std::vector<QueryPartition> partitions) {
     std::vector<ValueRow> rows;
     for (const auto& partition : partitions) {
@@ -536,16 +536,16 @@ class DatabaseTest : public ::testing::Test {
     return rows;
   }
 
-  zetasql_base::StatusOr<DmlResult> ExecuteDml(const std::string& statement) {
+  absl::StatusOr<DmlResult> ExecuteDml(const std::string& statement) {
     return ExecuteDml(SqlStatement(statement));
   }
 
-  zetasql_base::StatusOr<DmlResult> ExecuteDml(const SqlStatement sql_statement) {
+  absl::StatusOr<DmlResult> ExecuteDml(const SqlStatement sql_statement) {
     return ExecuteDmlTransaction(Transaction(Transaction::ReadWriteOptions()),
                                  sql_statement);
   }
 
-  zetasql_base::StatusOr<DmlResult> ExecuteDmlTransaction(
+  absl::StatusOr<DmlResult> ExecuteDmlTransaction(
       Transaction txn, const SqlStatement sql_statement) {
     auto dml_result = client().ExecuteDml(txn, sql_statement);
     if (!dml_result.ok()) {
@@ -597,18 +597,18 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Executes the Partition DML statement.
-  zetasql_base::StatusOr<PartitionedDmlResult> ExecutePartitionedDml(
+  absl::StatusOr<PartitionedDmlResult> ExecutePartitionedDml(
       const SqlStatement& sql_statement);
 
   // Commits the given mutations inside a transaction runner.
-  zetasql_base::StatusOr<CommitResult> Commit(Mutations mutations);
+  absl::StatusOr<CommitResult> Commit(Mutations mutations);
 
   // Commits the given transaction with the set of mutations provided.
-  zetasql_base::StatusOr<CommitResult> CommitTransaction(Transaction txn,
+  absl::StatusOr<CommitResult> CommitTransaction(Transaction txn,
                                                  Mutations mutations);
 
   // Commits the given transaction with the set of sql statements provided.
-  zetasql_base::StatusOr<CommitResult> CommitDml(
+  absl::StatusOr<CommitResult> CommitDml(
       const std::vector<std::string>& statements) {
     std::vector<SqlStatement> sql_statements;
     sql_statements.reserve(statements.size());
@@ -619,58 +619,58 @@ class DatabaseTest : public ::testing::Test {
   }
 
   // Commits a set of sql statements.
-  zetasql_base::StatusOr<CommitResult> CommitDml(
+  absl::StatusOr<CommitResult> CommitDml(
       const std::vector<SqlStatement>& sql_statements);
 
   // Commits the given transaction with the set of sql statements provided.
-  zetasql_base::StatusOr<CommitResult> CommitDmlTransaction(
+  absl::StatusOr<CommitResult> CommitDmlTransaction(
       Transaction txn, const std::vector<SqlStatement>& sql_statements);
 
   // Commits a set of sql statements executed by BatchDML.
-  zetasql_base::StatusOr<CommitResult> CommitBatchDml(
+  absl::StatusOr<CommitResult> CommitBatchDml(
       const std::vector<SqlStatement>& sql_statements);
 
   // Executes BatchDml within the given transaction.
-  zetasql_base::StatusOr<BatchDmlResult> BatchDmlTransaction(
+  absl::StatusOr<BatchDmlResult> BatchDmlTransaction(
       Transaction txn, const std::vector<SqlStatement>& sql_statements);
 
   // Rollback the given transaction.
   absl::Status Rollback(Transaction txn);
 
   // Group of helpers for committing single-row operations of various kinds.
-  zetasql_base::StatusOr<CommitResult> Insert(std::string table,
+  absl::StatusOr<CommitResult> Insert(std::string table,
                                       std::vector<std::string> columns,
                                       ValueRow row);
-  zetasql_base::StatusOr<CommitResult> MultiInsert(std::string table,
+  absl::StatusOr<CommitResult> MultiInsert(std::string table,
                                            std::vector<std::string> columns,
                                            std::vector<ValueRow> rows);
-  zetasql_base::StatusOr<CommitResult> Update(std::string table,
+  absl::StatusOr<CommitResult> Update(std::string table,
                                       std::vector<std::string> columns,
                                       ValueRow row);
-  zetasql_base::StatusOr<CommitResult> MultiUpdate(std::string table,
+  absl::StatusOr<CommitResult> MultiUpdate(std::string table,
                                            std::vector<std::string> columns,
                                            std::vector<ValueRow> rows);
-  zetasql_base::StatusOr<CommitResult> Delete(std::string table,
+  absl::StatusOr<CommitResult> Delete(std::string table,
                                       cloud::spanner::Key key);
-  zetasql_base::StatusOr<CommitResult> Delete(std::string table,
+  absl::StatusOr<CommitResult> Delete(std::string table,
                                       std::vector<cloud::spanner::Key> keys);
-  zetasql_base::StatusOr<CommitResult> Delete(std::string table, KeySet key_set);
-  zetasql_base::StatusOr<CommitResult> InsertOrUpdate(std::string table,
+  absl::StatusOr<CommitResult> Delete(std::string table, KeySet key_set);
+  absl::StatusOr<CommitResult> InsertOrUpdate(std::string table,
                                               std::vector<std::string> columns,
                                               ValueRow row);
-  zetasql_base::StatusOr<CommitResult> MultiInsertOrUpdate(
+  absl::StatusOr<CommitResult> MultiInsertOrUpdate(
       std::string table, std::vector<std::string> columns,
       std::vector<ValueRow> rows);
-  zetasql_base::StatusOr<CommitResult> Replace(std::string table,
+  absl::StatusOr<CommitResult> Replace(std::string table,
                                        std::vector<std::string> columns,
                                        ValueRow row);
-  zetasql_base::StatusOr<CommitResult> MultiReplace(std::string table,
+  absl::StatusOr<CommitResult> MultiReplace(std::string table,
                                             std::vector<std::string> columns,
                                             std::vector<ValueRow> rows);
 
   bool in_prod_env() const { return GetConformanceTestGlobals().in_prod_env; }
 
-  zetasql_base::StatusOr<ReadResult> ProcessRowStreamForReadResult(
+  absl::StatusOr<ReadResult> ProcessRowStreamForReadResult(
       cloud::spanner::RowStream& result) {
     ReadResult read_result;
     auto time = result.ReadTimestamp();

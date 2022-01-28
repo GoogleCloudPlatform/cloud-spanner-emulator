@@ -19,17 +19,17 @@
 ################################################################################
 
 # We use the bazel base image which comes with all bazel dependencies.
-FROM marketplace.gcr.io/google/bazel:2.0.0 as build
+FROM marketplace.gcr.io/google/bazel:3.4.1 as build
 
 # Unfortunately ZetaSQL has issues with clang (default bazel compiler), so
 # we install GCC. Also install make for rules_foreign_cc bazel rules.
 RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
     apt-get -qq update                                                      && \
-    apt-get -qq install -y gcc-7 g++-7 make tzdata                          && \
+    apt-get -qq install -y gcc-9 g++-9 make tzdata                          && \
     apt-get -qq install -y ca-certificates libgnutls30                      && \
-    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 90           \
-                        --slave   /usr/bin/g++ g++ /usr/bin/g++-7           && \
-    update-alternatives --set gcc /usr/bin/gcc-7
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90           \
+                        --slave   /usr/bin/g++ g++ /usr/bin/g++-9           && \
+    update-alternatives --set gcc /usr/bin/gcc-9
 
 # Copy over the emulator code base into the container. We explicitly copy only
 # the required files to maximize chances that the layer will be cached. There
@@ -69,7 +69,7 @@ FROM gcr.io/distroless/cc
 
 # Copy binaries.
 COPY --from=build /src/bazel-bin/binaries/emulator_main .
-COPY --from=build /src/bazel-bin/binaries/linux_amd64_stripped/gateway_main .
+COPY --from=build /src/bazel-bin/binaries/gateway_main_/gateway_main .
 
 # Copy licenses
 COPY --from=build /licenses.txt.gz .

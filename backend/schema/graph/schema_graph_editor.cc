@@ -22,7 +22,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
 #include "backend/schema/graph/schema_node.h"
 #include "zetasql/base/ret_check.h"
@@ -75,7 +75,7 @@ absl::Status SchemaGraphEditor::FixupInternal(const SchemaNode* original,
 // -  At some point every node has had Clone() called on itself and therefore
 //    added itself to the clone map. After that point, no recursive calls to
 //    Clone() are made, guaranteeing termination of the cloning procedure.
-zetasql_base::StatusOr<const SchemaNode*> SchemaGraphEditor::Clone(
+absl::StatusOr<const SchemaNode*> SchemaGraphEditor::Clone(
     const SchemaNode* node) {
   ZETASQL_RET_CHECK_NE(node, nullptr);
 
@@ -139,7 +139,7 @@ bool SchemaGraphEditor::IsOriginalNode(const SchemaNode* node) const {
   return false;
 }
 
-zetasql_base::StatusOr<std::unique_ptr<SchemaGraph>>
+absl::StatusOr<std::unique_ptr<SchemaGraph>>
 SchemaGraphEditor::CanonicalizeGraph() {
   std::unique_ptr<SchemaGraph> cloned_graph = nullptr;
   // Set the edited nodes in the context so that nodes can check

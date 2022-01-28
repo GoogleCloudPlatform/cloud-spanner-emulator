@@ -42,8 +42,5 @@ export PATH=/usr/local/opt/gnu-sed/libexec/gnubin:$PATH
 # this to work).
 export GCLOUD_DIR=$(dirname $(which gcloud))
 
-# Directory in which the go compiler places binaries in bazel.
-export GO_BINARY_DIR=darwin_amd64_stripped
-
 # Run the build script.
 ./kokoro/build.sh

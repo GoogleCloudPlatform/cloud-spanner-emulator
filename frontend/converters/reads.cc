@@ -22,7 +22,7 @@
 #include "google/spanner/v1/transaction.pb.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "backend/access/write.h"
 #include "backend/datamodel/key.h"
@@ -129,7 +129,7 @@ absl::Status ValidatePartitionToken(
 
 }  // namespace
 
-zetasql_base::StatusOr<backend::ReadOnlyOptions> ReadOnlyOptionsFromProto(
+absl::StatusOr<backend::ReadOnlyOptions> ReadOnlyOptionsFromProto(
     const spanner_api::TransactionOptions::ReadOnly& proto) {
   using ReadOnly = spanner_api::TransactionOptions::ReadOnly;
   backend::ReadOnlyOptions options;
@@ -240,7 +240,7 @@ absl::Status RowCursorToResultSetProto(backend::RowCursor* cursor, int limit,
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<std::vector<spanner_api::PartialResultSet>>
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
 RowCursorToPartialResultSetProtos(backend::RowCursor* cursor, int limit) {
   spanner_api::ResultSet result_set;
   ZETASQL_RETURN_IF_ERROR(RowCursorToResultSetProto(cursor, limit, &result_set));

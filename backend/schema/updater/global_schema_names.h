@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_GLOBAL_SCHEMA_NAMES_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_GLOBAL_SCHEMA_NAMES_H_
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "backend/common/case.h"
 #include "backend/schema/catalog/schema.h"
@@ -51,19 +51,19 @@ class GlobalSchemaNames {
   // Generates and adds a unique check constraint name. If a gererated name
   // already exists, its sequence number is increased until a unique name is
   // found.
-  zetasql_base::StatusOr<std::string> GenerateCheckConstraintName(
+  absl::StatusOr<std::string> GenerateCheckConstraintName(
       absl::string_view table_name);
 
   // Generates and adds a unique foreign key name. If a gererated name already
   // exists, its sequence number is increased until a unique name is found.
-  zetasql_base::StatusOr<std::string> GenerateForeignKeyName(
+  absl::StatusOr<std::string> GenerateForeignKeyName(
       absl::string_view referencing_table_name,
       absl::string_view referenced_table_name);
 
   // Generates a unique name for a managed index. The same name is always
   // generated for the same arguments. Callers can then reuse an existing index
   // with the same name, if any, or create a new index.
-  static zetasql_base::StatusOr<std::string> GenerateManagedIndexName(
+  static absl::StatusOr<std::string> GenerateManagedIndexName(
       absl::string_view table_name,
       const std::vector<std::string>& column_names, bool null_filtered,
       bool unique);

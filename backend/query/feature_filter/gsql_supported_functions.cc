@@ -168,6 +168,14 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "to_code_points",
         "json_query",
         "json_value",
+        "parse_json",
+        "to_json",
+        "to_json_string",
+        "json_query",
+        "json_value",
+        "json_query_array",
+        "json_value_array",
+        "$subscript",
         "$bitwise_right_shift",
         "round",
         "rtrim",
@@ -212,30 +220,8 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
   return supported_functions;
 }
 
-const absl::flat_hash_set<absl::string_view>* SupportedJsonFunctions() {
-  static const auto* supported_functions =
-      new absl::flat_hash_set<absl::string_view>{
-          // clang-format off
-          "parse_json",
-          "to_json",
-          "to_json_string",
-          "json_query",
-          "json_value",
-          "json_query_array",
-          "json_value_array",
-          "$subscript"
-          // clang-format on
-      };
-  return supported_functions;
-}
-
 bool IsSupportedZetaSQLFunction(const zetasql::Function& function) {
   return SupportedZetaSQLFunctions()->contains(
-      function.FullName(/*include_group=*/false));
-}
-
-bool IsSupportedJsonFunction(const zetasql::Function& function) {
-  return SupportedJsonFunctions()->contains(
       function.FullName(/*include_group=*/false));
 }
 

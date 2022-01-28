@@ -30,7 +30,6 @@ namespace {
 
 TEST_F(SchemaUpdaterTest, CreateIndex) {
   EmulatorFeatureFlags::Flags flags;
-  flags.enable_json_type = true;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
@@ -447,7 +446,6 @@ TEST_F(SchemaUpdaterTest, CreateIndex_NumericColumn) {
 
 TEST_F(SchemaUpdaterTest, CreateIndex_JsonColumn) {
   EmulatorFeatureFlags::Flags flags;
-  flags.enable_json_type = true;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(
       CreateSchema({

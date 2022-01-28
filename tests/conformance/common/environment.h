@@ -21,7 +21,7 @@
 #include <string>
 
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "google/cloud/spanner/connection_options.h"
 #include "google/cloud/status.h"
 #include "google/cloud/status_or.h"
@@ -59,9 +59,9 @@ inline absl::Status ToUtilStatus(const google::cloud::Status& status) {
 
 // Helper to convert the client library's StatusOr to the emulator's StatusOr.
 template <typename T>
-zetasql_base::StatusOr<T> ToUtilStatusOr(const google::cloud::StatusOr<T>& status_or) {
+absl::StatusOr<T> ToUtilStatusOr(const google::cloud::StatusOr<T>& status_or) {
   if (status_or.ok()) {
-    return zetasql_base::StatusOr<T>(status_or.value());
+    return absl::StatusOr<T>(status_or.value());
   } else {
     return ToUtilStatus(status_or.status());
   }

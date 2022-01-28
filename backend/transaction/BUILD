@@ -60,10 +60,10 @@ cc_library(
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )
@@ -91,9 +91,9 @@ cc_test(
         "//tests/common:test_schema_constructor",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
@@ -112,9 +112,9 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//common:errors",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:statusor",
     ],
 )
 
@@ -247,9 +247,9 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )
@@ -271,9 +271,9 @@ cc_test(
         "//tests/common:proto_matchers",
         "//tests/common:test_schema_constructor",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
@@ -292,7 +292,7 @@ cc_library(
         "//backend/storage:iterator",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
-        "@com_google_zetasql//zetasql/base:statusor",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )
@@ -308,7 +308,7 @@ cc_library(
         "//backend/storage:in_memory_iterator",
         "//common:constants",
         "//common:errors",
-        "@com_google_zetasql//zetasql/base:statusor",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )
@@ -346,9 +346,9 @@ cc_test(
         "//tests/common:proto_matchers",
         "//tests/common:test_schema_constructor",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

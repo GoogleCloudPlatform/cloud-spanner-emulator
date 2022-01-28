@@ -23,7 +23,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/actions/ops.h"
 #include "backend/common/ids.h"
 #include "backend/datamodel/key.h"
@@ -73,7 +73,7 @@ class TransactionStore {
   // Returns the column values for 'key' by merging information from the
   // buffered mutations and the base storage. Returns NOT_FOUND if 'key'
   // does not exist in the merged view. Acquires read locks.
-  zetasql_base::StatusOr<ValueList> Lookup(
+  absl::StatusOr<ValueList> Lookup(
       const Table* table, const Key& key,
       absl::Span<const Column* const> columns) const;
 

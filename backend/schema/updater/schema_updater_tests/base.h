@@ -27,7 +27,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
@@ -48,7 +48,7 @@ namespace emulator {
 namespace backend {
 namespace test {
 
-// Matcher for matching an zetasql_base::StatusOr with an expected status.
+// Matcher for matching an absl::StatusOr with an expected status.
 MATCHER_P(StatusIs, status, "") { return arg.status() == status; }
 
 MATCHER_P(NameIs, name, "") {
@@ -147,10 +147,10 @@ const T* AssertNotNull(const T* value, const char* file, int line) {
 
 class SchemaUpdaterTest : public testing::Test {
  public:
-  zetasql_base::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
+  absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
       absl::Span<const std::string> statements);
 
-  zetasql_base::StatusOr<std::unique_ptr<const Schema>> UpdateSchema(
+  absl::StatusOr<std::unique_ptr<const Schema>> UpdateSchema(
       const Schema* base_schema, absl::Span<const std::string> statements);
 
  protected:

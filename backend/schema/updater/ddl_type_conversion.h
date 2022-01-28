@@ -18,7 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_DDL_TYPE_CONVERSION_H_
 
 #include "zetasql/public/type.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "absl/status/status.h"
 
@@ -28,7 +28,7 @@ namespace emulator {
 namespace backend {
 
 // Converts the ColumnType in DDL statements to zetasql::Type.
-zetasql_base::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
+absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     const ddl::ColumnType& ddl_type, zetasql::TypeFactory* type_factory);
 
 // Converts zetasql::Type to its equivalent DDL ColumnType. Returns a

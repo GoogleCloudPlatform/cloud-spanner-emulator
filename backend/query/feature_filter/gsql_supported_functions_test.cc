@@ -45,7 +45,6 @@ class GsqlSupportedFunctionsTest : public testing::Test {
 
 TEST_F(GsqlSupportedFunctionsTest, SupportedFunctionsAreOnlyGsqlBuiltins) {
   EmulatorFeatureFlags::Flags flags;
-  flags.enable_json_type = true;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
   std::map<std::string, std::unique_ptr<zetasql::Function>>
@@ -65,11 +64,6 @@ TEST_F(GsqlSupportedFunctionsTest, SupportedFunctionsAreOnlyGsqlBuiltins) {
   // Check that the SupportedZetaSQLFunctions set contains only
   // ZetaSQL built-in functions and no Cloud Spanner specific ones.
   for (const auto& function_name : *SupportedZetaSQLFunctions()) {
-    SCOPED_TRACE(absl::StrCat("Function: ", function_name));
-    EXPECT_NE(gsql_functions.find(function_name), gsql_functions.end());
-  }
-  // Do the same check for JSON functions.
-  for (const auto& function_name : *SupportedJsonFunctions()) {
     SCOPED_TRACE(absl::StrCat("Function: ", function_name));
     EXPECT_NE(gsql_functions.find(function_name), gsql_functions.end());
   }

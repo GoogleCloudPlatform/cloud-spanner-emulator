@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_PARSER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_PARSER_H_
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/schema/ddl/operations.pb.h"
@@ -33,14 +33,14 @@ namespace ddl {
 extern const char kCommitTimestampOptionName[];
 
 // Parses a create database statement.
-zetasql_base::StatusOr<CreateDatabase> ParseCreateDatabase(
+absl::StatusOr<CreateDatabase> ParseCreateDatabase(
     absl::string_view create_statement);
 
 // Parses a single DDL statement.
-zetasql_base::StatusOr<DDLStatement> ParseDDLStatement(absl::string_view input);
+absl::StatusOr<DDLStatement> ParseDDLStatement(absl::string_view input);
 
 // Parses a list of DDL statements.
-zetasql_base::StatusOr<Schema> ParseDDLStatements(
+absl::StatusOr<Schema> ParseDDLStatements(
     absl::Span<const absl::string_view> statements);
 
 }  // namespace ddl

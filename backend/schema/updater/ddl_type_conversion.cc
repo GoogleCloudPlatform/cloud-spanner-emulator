@@ -16,7 +16,7 @@
 
 #include "backend/schema/updater/ddl_type_conversion.h"
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
@@ -26,7 +26,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-zetasql_base::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
+absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     const ddl::ColumnType& ddl_type, zetasql::TypeFactory* type_factory) {
   ZETASQL_RET_CHECK(ddl_type.has_type())
       << "No type field specification in "

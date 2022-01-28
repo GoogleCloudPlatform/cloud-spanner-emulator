@@ -59,7 +59,7 @@ absl::Status GetGeneratedColumnsInTopologicalOrder(
   return sorter.TopologicalOrder(generated_columns);
 }
 
-zetasql_base::StatusOr<std::unique_ptr<zetasql::PreparedExpression>>
+absl::StatusOr<std::unique_ptr<zetasql::PreparedExpression>>
 PrepareExpression(const Column* generated_column,
                   zetasql::Catalog* function_catalog) {
   constexpr char kExpression[] = "CAST (($0) AS $1)";
@@ -98,7 +98,7 @@ absl::Status GeneratedColumnEffector::Initialize(
   return absl::OkStatus();
 }
 
-zetasql_base::StatusOr<zetasql::Value>
+absl::StatusOr<zetasql::Value>
 GeneratedColumnEffector::ComputeGeneratedColumnValue(
     const Column* generated_column,
     const zetasql::ParameterValueMap& row_column_values) const {

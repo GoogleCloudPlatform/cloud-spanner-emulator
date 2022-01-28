@@ -15,7 +15,7 @@
 //
 
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -32,7 +32,7 @@ using zetasql_base::testing::StatusIs;
 class ParamsApiTest : public test::DatabaseTest {
  protected:
   // Creates a new session for tests using raw grpc client.
-  zetasql_base::StatusOr<std::string> CreateTestSession() {
+  absl::StatusOr<std::string> CreateTestSession() {
     grpc::ClientContext context;
     spanner_api::CreateSessionRequest request;
     spanner_api::Session response;
@@ -67,7 +67,7 @@ class ParamsApiTest : public test::DatabaseTest {
   }
 
  protected:
-  zetasql_base::StatusOr<spanner_api::ResultSet> Execute(
+  absl::StatusOr<spanner_api::ResultSet> Execute(
       std::string sql, google::protobuf::Struct params,
       google::protobuf::Map<std::string, google::spanner::v1::Type> param_types) {
     // Build the request that will be executed.

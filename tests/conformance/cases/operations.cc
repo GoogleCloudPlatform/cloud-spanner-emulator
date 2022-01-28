@@ -19,7 +19,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "tests/conformance/common/database_test_base.h"
 #include "absl/status/status.h"
 
@@ -45,7 +45,7 @@ class OperationsTest : public DatabaseTest {
   // Updates the schema (using a specified `operation_id`, if provided)
   // and populates `*op` with the long-running operation that can be used to
   // check the status of the schema update.
-  zetasql_base::StatusOr<UpdateDatabaseDdlMetadata> UpdateSchemaOp(
+  absl::StatusOr<UpdateDatabaseDdlMetadata> UpdateSchemaOp(
       const std::vector<std::string>& schema,
       const std::string& operation_id = "",
       operations_api::Operation* op = nullptr) {
@@ -104,7 +104,7 @@ class OperationsTest : public DatabaseTest {
 
   // Lists all long-running operations whose status may be currently maintained
   // by the database.
-  zetasql_base::StatusOr<std::vector<operations_api::Operation>>
+  absl::StatusOr<std::vector<operations_api::Operation>>
   ListDatabaseOperations() {
     std::vector<operations_api::Operation> operations;
     operations_api::ListOperationsRequest request;

@@ -61,6 +61,9 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_V_1_1_ORDER_BY_COLLATE,
       zetasql::FEATURE_V_1_1_SELECT_STAR_EXCEPT_REPLACE,
       zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL,
+      zetasql::FEATURE_JSON_TYPE,
+      zetasql::FEATURE_JSON_ARRAY_FUNCTIONS,
+      zetasql::FEATURE_JSON_STRICT_NUMBER_PARSING,
   });
   options.SetSupportedStatementKinds({
       zetasql::RESOLVED_QUERY_STMT,
@@ -68,13 +71,6 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::RESOLVED_UPDATE_STMT,
       zetasql::RESOLVED_DELETE_STMT,
   });
-
-  if (EmulatorFeatureFlags::instance().flags().enable_json_type) {
-    options.EnableLanguageFeature(zetasql::FEATURE_JSON_TYPE);
-    options.EnableLanguageFeature(zetasql::FEATURE_JSON_ARRAY_FUNCTIONS);
-    options.EnableLanguageFeature(
-        zetasql::FEATURE_JSON_STRICT_NUMBER_PARSING);
-  }
 
   return options;
 }

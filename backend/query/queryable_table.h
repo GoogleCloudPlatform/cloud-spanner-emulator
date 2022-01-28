@@ -23,7 +23,7 @@
 
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/evaluator_table_iterator.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "backend/access/read.h"
 #include "backend/query/queryable_column.h"
@@ -65,7 +65,7 @@ class QueryableTable : public zetasql::Table {
   const backend::Table* wrapped_table() const { return wrapped_table_; }
 
   // Override CreateEvaluatorTableIterator.
-  zetasql_base::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
+  absl::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
   CreateEvaluatorTableIterator(
       absl::Span<const int> column_idxs) const override;
 

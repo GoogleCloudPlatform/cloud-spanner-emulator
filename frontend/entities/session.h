@@ -25,7 +25,7 @@
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
@@ -100,36 +100,36 @@ class Session {
                        bool include_labels = true);
 
   // Creates a new multi-use transaction.
-  zetasql_base::StatusOr<std::shared_ptr<Transaction>> CreateMultiUseTransaction(
+  absl::StatusOr<std::shared_ptr<Transaction>> CreateMultiUseTransaction(
       const google::spanner::v1::TransactionOptions& options,
       const TransactionActivation& activation) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Creates a new single-use transaction.
-  zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateSingleUseTransaction(
+  absl::StatusOr<std::unique_ptr<Transaction>> CreateSingleUseTransaction(
       const google::spanner::v1::TransactionOptions& options)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Finds a transaction by id and sets it as the active transaction.
-  zetasql_base::StatusOr<std::shared_ptr<Transaction>> FindAndUseTransaction(
+  absl::StatusOr<std::shared_ptr<Transaction>> FindAndUseTransaction(
       const std::string& bytes) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Finds or creates a new transaction and sets it as the active transaction.
-  zetasql_base::StatusOr<std::shared_ptr<Transaction>> FindOrInitTransaction(
+  absl::StatusOr<std::shared_ptr<Transaction>> FindOrInitTransaction(
       const google::spanner::v1::TransactionSelector& selector);
 
  private:
   // Create a transaction based on the provided options.
-  zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateTransaction(
+  absl::StatusOr<std::unique_ptr<Transaction>> CreateTransaction(
       const spanner_api::TransactionOptions& options,
       const Transaction::Usage& usage, const backend::RetryState& retry_state);
 
   // Create a read-only transaction.
-  zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateReadOnly(
+  absl::StatusOr<std::unique_ptr<Transaction>> CreateReadOnly(
       const spanner_api::TransactionOptions& options,
       const Transaction::Usage& usage);
 
   // Create a read-write transaction.
-  zetasql_base::StatusOr<std::unique_ptr<Transaction>> CreateReadWrite(
+  absl::StatusOr<std::unique_ptr<Transaction>> CreateReadWrite(
       const spanner_api::TransactionOptions& options,
       const Transaction::Usage& usage, const backend::RetryState& retry_state);
 

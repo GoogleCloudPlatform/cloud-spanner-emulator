@@ -16,7 +16,7 @@
 
 #include "gmock/gmock.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -61,20 +61,20 @@ class TransactionErrorTest : public DatabaseTest {
   }
 
  protected:
-  zetasql_base::StatusOr<DmlResult> ExecuteDml(Transaction txn,
+  absl::StatusOr<DmlResult> ExecuteDml(Transaction txn,
                                        const std::string& statement) {
     return ExecuteDmlTransaction(txn, SqlStatement(statement));
   }
 
-  zetasql_base::StatusOr<CommitResult> Commit(Transaction txn, Mutations mutations) {
+  absl::StatusOr<CommitResult> Commit(Transaction txn, Mutations mutations) {
     return CommitTransaction(txn, mutations);
   }
 
-  zetasql_base::StatusOr<std::vector<ValueRow>> Query(const std::string& query) {
+  absl::StatusOr<std::vector<ValueRow>> Query(const std::string& query) {
     return DatabaseTest::Query(query);
   }
 
-  zetasql_base::StatusOr<std::vector<ValueRow>> Query(Transaction txn,
+  absl::StatusOr<std::vector<ValueRow>> Query(Transaction txn,
                                               const std::string& query) {
     return QueryTransaction(txn, query);
   }

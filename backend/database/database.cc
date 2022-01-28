@@ -19,7 +19,7 @@
 #include <memory>
 
 #include "absl/memory/memory.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
@@ -49,7 +49,7 @@ namespace backend {
 // value for an invalid transaction.
 Database::Database() : transaction_id_generator_(1) {}
 
-zetasql_base::StatusOr<std::unique_ptr<Database>> Database::Create(
+absl::StatusOr<std::unique_ptr<Database>> Database::Create(
     Clock* clock, const std::vector<std::string>& create_statements) {
   auto database = absl::WrapUnique(new Database());
   database->clock_ = clock;
@@ -79,14 +79,14 @@ zetasql_base::StatusOr<std::unique_ptr<Database>> Database::Create(
   return database;
 }
 
-zetasql_base::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
+absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
 Database::CreateReadOnlyTransaction(const ReadOnlyOptions& options) {
   return absl::make_unique<ReadOnlyTransaction>(
       options, transaction_id_generator_.NextId(), clock_, storage_.get(),
       lock_manager_.get(), versioned_catalog_.get());
 }
 
-zetasql_base::StatusOr<std::unique_ptr<ReadWriteTransaction>>
+absl::StatusOr<std::unique_ptr<ReadWriteTransaction>>
 Database::CreateReadWriteTransaction(const ReadWriteOptions& options,
                                      const RetryState& retry_state) {
   return absl::make_unique<ReadWriteTransaction>(

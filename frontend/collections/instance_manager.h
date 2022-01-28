@@ -19,7 +19,7 @@
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "frontend/entities/instance.h"
 #include "absl/status/status.h"
@@ -33,20 +33,20 @@ namespace frontend {
 class InstanceManager {
  public:
   // Creates a new instance with the given URI.
-  zetasql_base::StatusOr<std::shared_ptr<Instance>> CreateInstance(
+  absl::StatusOr<std::shared_ptr<Instance>> CreateInstance(
       const std::string& instance_uri,
       const admin::instance::v1::Instance& instance_proto)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Returns an instance with the given URI.
-  zetasql_base::StatusOr<std::shared_ptr<Instance>> GetInstance(
+  absl::StatusOr<std::shared_ptr<Instance>> GetInstance(
       const std::string& instance_uri) const ABSL_LOCKS_EXCLUDED(mu_);
 
   // Deletes an instance with the given URI.
   void DeleteInstance(const std::string& instance_uri) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Lists all instances associated with the given project URI.
-  zetasql_base::StatusOr<std::vector<std::shared_ptr<Instance>>> ListInstances(
+  absl::StatusOr<std::vector<std::shared_ptr<Instance>>> ListInstances(
       const std::string& project_uri) const ABSL_LOCKS_EXCLUDED(mu_);
 
  private:

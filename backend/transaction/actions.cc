@@ -20,7 +20,7 @@
 
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/actions/context.h"
 #include "backend/actions/existence.h"
 #include "backend/actions/interleave.h"
@@ -36,9 +36,9 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-zetasql_base::StatusOr<bool> TransactionReadOnlyStore::Exists(const Table* table,
+absl::StatusOr<bool> TransactionReadOnlyStore::Exists(const Table* table,
                                                       const Key& key) const {
-  zetasql_base::StatusOr<ValueList> maybe_row =
+  absl::StatusOr<ValueList> maybe_row =
       read_only_store_->Lookup(table, key, {});
   if (maybe_row.status().code() == absl::StatusCode::kNotFound) {
     return false;
@@ -48,7 +48,7 @@ zetasql_base::StatusOr<bool> TransactionReadOnlyStore::Exists(const Table* table
   return true;
 }
 
-zetasql_base::StatusOr<bool> TransactionReadOnlyStore::PrefixExists(
+absl::StatusOr<bool> TransactionReadOnlyStore::PrefixExists(
     const Table* table, const Key& prefix_key) const {
   std::unique_ptr<StorageIterator> itr;
   ZETASQL_RETURN_IF_ERROR(
@@ -60,7 +60,7 @@ zetasql_base::StatusOr<bool> TransactionReadOnlyStore::PrefixExists(
   return false;
 }
 
-zetasql_base::StatusOr<std::unique_ptr<StorageIterator>> TransactionReadOnlyStore::Read(
+absl::StatusOr<std::unique_ptr<StorageIterator>> TransactionReadOnlyStore::Read(
     const Table* table, const KeyRange& key_range,
     absl::Span<const Column* const> columns) const {
   std::unique_ptr<StorageIterator> itr;

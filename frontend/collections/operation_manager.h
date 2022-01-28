@@ -23,7 +23,7 @@
 
 #include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "frontend/entities/operation.h"
 #include "absl/status/status.h"
@@ -67,13 +67,13 @@ class OperationManager {
   // user to specify the operation id. If the user specifies an operation id,
   // it is used as-is, otherwise a system generated operation id is used.
   // System generated ids always start with "_auto".
-  zetasql_base::StatusOr<std::shared_ptr<Operation>> CreateOperation(
+  absl::StatusOr<std::shared_ptr<Operation>> CreateOperation(
       const std::string& resource_uri, const std::string& operation_id)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Gets the operation with the specified URI, or returns NOT_FOUND if no such
   // operation is registered with the manager.
-  zetasql_base::StatusOr<std::shared_ptr<Operation>> GetOperation(
+  absl::StatusOr<std::shared_ptr<Operation>> GetOperation(
       const std::string& operation_uri) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Deletes the operation with the specified URI. Delete is idempotent - OK is
@@ -82,7 +82,7 @@ class OperationManager {
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Lists all the operations registered with the operation manager.
-  zetasql_base::StatusOr<std::vector<std::shared_ptr<Operation>>> ListOperations(
+  absl::StatusOr<std::vector<std::shared_ptr<Operation>>> ListOperations(
       const std::string& resource_uri) ABSL_LOCKS_EXCLUDED(mu_);
 
  private:

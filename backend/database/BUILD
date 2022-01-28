@@ -43,11 +43,11 @@ cc_library(
         "//common:clock",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
         "@com_google_absl//absl/types:variant",
-        "@com_google_zetasql//zetasql/base:statusor",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )

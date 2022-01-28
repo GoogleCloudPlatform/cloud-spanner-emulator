@@ -31,7 +31,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/notification.h"
 #include "absl/time/clock.h"
@@ -137,7 +137,7 @@ class ServerTest : public testing::Test {
     return WaitForOperation(operation.name(), &operation);
   }
 
-  zetasql_base::StatusOr<std::string> CreateTestSession() {
+  absl::StatusOr<std::string> CreateTestSession() {
     // Create a session that belongs to the database created above.
     grpc::ClientContext context;
     spanner_api::CreateSessionRequest request;

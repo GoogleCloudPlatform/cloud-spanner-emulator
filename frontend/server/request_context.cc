@@ -16,7 +16,7 @@
 
 #include "frontend/server/request_context.h"
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "frontend/common/uris.h"
 #include "frontend/entities/instance.h"
 #include "zetasql/base/status_macros.h"
@@ -26,14 +26,14 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
-zetasql_base::StatusOr<std::shared_ptr<Instance>> GetInstance(
+absl::StatusOr<std::shared_ptr<Instance>> GetInstance(
     RequestContext* ctx, const std::string& instance_uri) {
   absl::string_view project_id, instance_id;
   ZETASQL_RETURN_IF_ERROR(ParseInstanceUri(instance_uri, &project_id, &instance_id));
   return ctx->env()->instance_manager()->GetInstance(instance_uri);
 }
 
-zetasql_base::StatusOr<std::shared_ptr<Database>> GetDatabase(
+absl::StatusOr<std::shared_ptr<Database>> GetDatabase(
     RequestContext* ctx, const std::string& database_uri) {
   absl::string_view project_id, instance_id, database_id;
   ZETASQL_RETURN_IF_ERROR(
@@ -46,7 +46,7 @@ zetasql_base::StatusOr<std::shared_ptr<Database>> GetDatabase(
   return ctx->env()->database_manager()->GetDatabase(database_uri);
 }
 
-zetasql_base::StatusOr<std::shared_ptr<Session>> GetSession(
+absl::StatusOr<std::shared_ptr<Session>> GetSession(
     RequestContext* ctx, const std::string& session_uri) {
   // The ParseSessionUri and GetDatabase calls are needed for verification that
   // the session URI and the database for this session is valid, even though

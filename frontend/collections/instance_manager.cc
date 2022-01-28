@@ -20,7 +20,7 @@
 
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
@@ -36,7 +36,7 @@ namespace frontend {
 
 namespace instance_api = ::google::spanner::admin::instance::v1;
 
-zetasql_base::StatusOr<std::vector<std::shared_ptr<Instance>>>
+absl::StatusOr<std::vector<std::shared_ptr<Instance>>>
 InstanceManager::ListInstances(const std::string& project_uri) const {
   absl::MutexLock lock(&mu_);
   std::vector<std::shared_ptr<Instance>> instances;
@@ -53,7 +53,7 @@ InstanceManager::ListInstances(const std::string& project_uri) const {
   return instances;
 }
 
-zetasql_base::StatusOr<std::shared_ptr<Instance>> InstanceManager::GetInstance(
+absl::StatusOr<std::shared_ptr<Instance>> InstanceManager::GetInstance(
     const std::string& instance_uri) const {
   absl::MutexLock lock(&mu_);
   auto itr = instances_.find(instance_uri);
@@ -63,7 +63,7 @@ zetasql_base::StatusOr<std::shared_ptr<Instance>> InstanceManager::GetInstance(
   return itr->second;
 }
 
-zetasql_base::StatusOr<std::shared_ptr<Instance>> InstanceManager::CreateInstance(
+absl::StatusOr<std::shared_ptr<Instance>> InstanceManager::CreateInstance(
     const std::string& instance_uri,
     const instance_api::Instance& instance_proto) {
   absl::MutexLock lock(&mu_);

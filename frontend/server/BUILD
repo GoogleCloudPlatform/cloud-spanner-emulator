@@ -28,7 +28,7 @@ cc_library(
         "//frontend/entities:instance",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
-        "@com_google_zetasql//zetasql/base:statusor",
+        "@com_google_absl//absl/status:statusor",
     ],
 )
 

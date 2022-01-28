@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_COMMON_ROWS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_COMMON_ROWS_H_
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "backend/datamodel/value.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
@@ -42,7 +42,7 @@ Row MakeRow(absl::Span<const Column* const> columns, const ValueList& values);
 std::vector<ColumnID> GetColumnIDs(absl::Span<const Column* const> columns);
 
 // Returns the Column* from the given set of column names.
-zetasql_base::StatusOr<std::vector<const Column*>> GetColumnsByName(
+absl::StatusOr<std::vector<const Column*>> GetColumnsByName(
     const Table* table, const std::vector<std::string>& column_names);
 
 }  // namespace backend

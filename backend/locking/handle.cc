@@ -16,7 +16,7 @@
 
 #include "backend/locking/handle.h"
 
-#include "zetasql/base/statusor.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "backend/locking/manager.h"
 
@@ -64,7 +64,7 @@ void LockHandle::Reset() {
   status_ = absl::OkStatus();
 }
 
-zetasql_base::StatusOr<absl::Time> LockHandle::ReserveCommitTimestamp() {
+absl::StatusOr<absl::Time> LockHandle::ReserveCommitTimestamp() {
   return manager_->ReserveCommitTimestamp(this);
 }
 

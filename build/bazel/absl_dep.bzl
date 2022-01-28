@@ -21,7 +21,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 def absl_dep():
     http_archive(
         name = "com_google_absl",
-        strip_prefix = "abseil-cpp-a50ae369a30f99f79d7559002aba3413dac1bd48",
-        url = "https://github.com/abseil/abseil-cpp/archive/a50ae369a30f99f79d7559002aba3413dac1bd48.tar.gz",
-        sha256 = "be2a9d7ea7ee15f9317b57beff37e8ffb67418fb0df64592366b04c8618c2584",
+        strip_prefix = "abseil-cpp-20211102.0",
+        url = "https://github.com/abseil/abseil-cpp/archive/refs/tags/20211102.0.zip",
+        sha256 = "a4567ff02faca671b95e31d315bab18b42b6c6f1a60e91c6ea84e5a2142112c2",
     )

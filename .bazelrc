@@ -8,9 +8,6 @@ build --copt -DGRPC_BAZEL_BUILD
 # Required for python test runner to find gcloud binary.
 test --test_env GCLOUD_DIR
 
-# Required for python test runner to find gateway binary.
-test --test_env GO_BINARY_DIR
-
 # Most of these warnings are triggered from ZetaSQL, disable for now. Ideally,
 # we would disable these only for projects we don't control, but there does not
 # seem to be an easy way to do that yet.
