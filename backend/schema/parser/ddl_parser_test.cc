@@ -766,21 +766,86 @@ TEST(ParseCreateTable, CanParseCreateTableWithNumeric) {
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(
+      ParseDDLStatement(R"(
     CREATE TABLE T(
       Key INT64,
       CreatedAt TIMESTAMP,
     ) PRIMARY KEY (Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
   )"),
-              IsOk());
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_table {
+          table_name: "T"
+          columns {
+            column_name: "Key"
+            properties { column_type { type: INT64 } }
+          }
+          columns {
+            column_name: "CreatedAt"
+            properties { column_type { type: TIMESTAMP } }
+          }
+          constraints { primary_key { key_part { key_column_name: "Key" } } }
+          row_deletion_policy { column_name: "CreatedAt" older_than: 7 }
+        }
+      )pb")));
 
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(
+      ParseDDLStatement(R"(
+    CREATE TABLE T(
+      Key INT64,
+      CreatedAt TIMESTAMP,
+    ) PRIMARY KEY (Key), ROW DELETION POLICY (Older_thaN(CreatedAt, INTERVAL 7 DAY))
+  )"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_table {
+          table_name: "T"
+          columns {
+            column_name: "Key"
+            properties { column_type { type: INT64 } }
+          }
+          columns {
+            column_name: "CreatedAt"
+            properties { column_type { type: TIMESTAMP } }
+          }
+          constraints { primary_key { key_part { key_column_name: "Key" } } }
+          row_deletion_policy { column_name: "CreatedAt" older_than: 7 }
+        }
+      )pb")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"(
         CREATE TABLE T(
           Key INT64,
           CreatedAt TIMESTAMP OPTIONS (allow_commit_timestamp = true),
         ) PRIMARY KEY (Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
       )"),
-              IsOk());
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_table {
+          table_name: "T"
+          columns {
+            column_name: "Key"
+            properties { column_type { type: INT64 } }
+          }
+          columns {
+            column_name: "CreatedAt"
+            properties { column_type { type: TIMESTAMP } }
+            options {
+              option_val { name: "allow_commit_timestamp" bool_value: true }
+            }
+          }
+          constraints { primary_key { key_part { key_column_name: "Key" } } }
+          row_deletion_policy { column_name: "CreatedAt" older_than: 7 }
+        }
+      )pb")));
+
+  EXPECT_THAT(ParseDDLStatement(R"(
+    CREATE TABLE T(
+      Key INT64,
+      CreatedAt TIMESTAMP,
+    ) PRIMARY KEY (Key), ROW DELETION POLICY (YOUNGER_THAN(CreatedAt, INTERVAL 7 DAY))
+  )"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Only OLDER_THAN is supported."));
 }
 
 // CREATE INDEX
@@ -1377,20 +1442,51 @@ TEST(ParseAlterTable, CanParseSetOnDeleteNoAction) {
 }
 
 TEST(ParseAlterTable, CanParseAlterTableWithRowDeletionPolicy) {
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(
+      ParseDDLStatement(R"(
     ALTER TABLE MyTable ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 1 DAY))
   )"),
-              IsOk());
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_table {
+          table_name: "MyTable"
+          alter_row_deletion_policy {
+            type: ADD
+            row_deletion_policy { column_name: "CreatedAt" older_than: 1 }
+          }
+        }
+      )pb")));
 
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(
+      ParseDDLStatement(R"(
     ALTER TABLE MyTable REPLACE ROW DELETION POLICY (OLDER_THAN(ModifiedAt, INTERVAL 7 DAY))
   )"),
-              IsOk());
+
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_table {
+          table_name: "MyTable"
+          alter_row_deletion_policy {
+            type: REPLACE
+            row_deletion_policy { column_name: "ModifiedAt" older_than: 7 }
+          }
+        }
+      )pb")));
 
   EXPECT_THAT(ParseDDLStatement(R"(
     ALTER TABLE MyTable DROP ROW DELETION POLICY
   )"),
-              IsOk());
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "MyTable"
+                  alter_row_deletion_policy { type: DROP }
+                }
+              )pb")));
+
+  EXPECT_THAT(ParseDDLStatement(R"(
+    ALTER TABLE MyTable DROP ROW DELETION POLICY (OLDER_THAN(ModifiedAt, INTERVAL 7 DAY))
+  )"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Syntax error on line 2, column 50: Expecting "
+                                 "'EOF' but found '('")));
 }
 
 // MISCELLANEOUS

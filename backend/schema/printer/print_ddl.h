@@ -52,6 +52,9 @@ std::string PrintForeignKey(const ForeignKey* foreign_key);
 // Converts an OnDeleteAction to its string representation.
 std::string OnDeleteActionToString(Table::OnDeleteAction action);
 
+// Converts a RowDeletionPolicy to its string representation.
+std::string RowDeletionPolicyToString(const ddl::RowDeletionPolicy& policy);
+
 // Converts a Cloud Spanner column type to its string representation.
 std::string ColumnTypeToString(const zetasql::Type* type,
                                absl::optional<int64_t> max_length);

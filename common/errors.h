@@ -452,7 +452,8 @@ absl::Status CannotWriteToGeneratedColumn(absl::string_view table_name,
 absl::Status NonDeterministicFunctionInColumnExpression(
     absl::string_view function_name, absl::string_view expression_use);
 // Query errors.
-absl::Status UnableToInferUndeclaredParameter(absl::string_view parameter_name);
+absl::Status UnableToInferUndeclaredParameter(absl::string_view parameter_name,
+                                              absl::string_view type);
 absl::Status InvalidHint(absl::string_view hint_string);
 absl::Status InvalidEmulatorHint(absl::string_view hint_string);
 absl::Status InvalidHintValue(absl::string_view hint_string,
@@ -517,6 +518,23 @@ absl::Status ReadFromDifferentSession();
 absl::Status ReadFromDifferentTransaction();
 absl::Status ReadFromDifferentParameters();
 absl::Status InvalidPartitionedQueryMode();
+
+// Row Deletion Policy errors.
+absl::Status RowDeletionPolicyDoesNotExist(absl::string_view table_name);
+absl::Status RowDeletionPolicyAlreadyExists(absl::string_view column_name,
+                                            absl::string_view table_name);
+absl::Status RowDeletionPolicyOnColumnDoesNotExist(
+    absl::string_view column_name, absl::string_view table_name);
+absl::Status RowDeletionPolicyOnNonTimestampColumn(
+    absl::string_view column_name, absl::string_view table_name);
+absl::Status RowDeletionPolicyWillBreak(absl::string_view column_name,
+                                        absl::string_view table_name);
+absl::Status RowDeletionPolicyHasChildWithOnDeleteNoAction(
+    absl::string_view table_name, absl::string_view child_table_name);
+absl::Status RowDeletionPolicyOnAncestors(
+    absl::string_view table_name, absl::string_view ancestor_table_name);
+absl::Status ForeignKeyRowDeletionPolicyAddNotAllowed(
+    absl::string_view table_name, absl::string_view foreign_keys);
 
 }  // namespace error
 }  // namespace emulator

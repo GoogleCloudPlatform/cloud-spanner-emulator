@@ -153,6 +153,7 @@ const std::vector<ColumnsMetaEntry>* ColumnsMetadata() {
     {"SPANNER_STATISTICS", "SCHEMA_NAME", "NO", "STRING(MAX)"},
     {"TABLES", "ON_DELETE_ACTION", "YES", "STRING(MAX)"},
     {"TABLES", "PARENT_TABLE_NAME", "YES", "STRING(MAX)"},
+    {"TABLES", "ROW_DELETION_POLICY_EXPRESSION", "YES", "STRING(MAX)"},
     {"TABLES", "SPANNER_STATE", "YES", "STRING(MAX)"},
     {"TABLES", "TABLE_CATALOG", "NO", "STRING(MAX)"},
     {"TABLES", "TABLE_NAME", "NO", "STRING(MAX)"},
@@ -408,14 +409,15 @@ void InformationSchemaCatalog::AddSpannerStatisticsTable() {
 
 zetasql::SimpleTable* InformationSchemaCatalog::AddTablesTable() {
   // Setup table schema.
-  auto tables =
-      new zetasql::SimpleTable("TABLES", {{"TABLE_CATALOG", StringType()},
-                                            {"TABLE_SCHEMA", StringType()},
-                                            {"TABLE_TYPE", StringType()},
-                                            {"TABLE_NAME", StringType()},
-                                            {"PARENT_TABLE_NAME", StringType()},
-                                            {"ON_DELETE_ACTION", StringType()},
-                                            {"SPANNER_STATE", StringType()}});
+  auto tables = new zetasql::SimpleTable(
+      "TABLES", {{"TABLE_CATALOG", StringType()},
+                 {"TABLE_SCHEMA", StringType()},
+                 {"TABLE_TYPE", StringType()},
+                 {"TABLE_NAME", StringType()},
+                 {"PARENT_TABLE_NAME", StringType()},
+                 {"ON_DELETE_ACTION", StringType()},
+                 {"SPANNER_STATE", StringType()},
+                 {"ROW_DELETION_POLICY_EXPRESSION", StringType()}});
   // Add table to catalog so it is included in rows.
   AddOwnedTable(tables);
   return tables;
@@ -442,6 +444,11 @@ void InformationSchemaCatalog::FillTablesTable(zetasql::SimpleTable* tables) {
             : NullString(),
         // spanner_state,
         String("COMMITTED"),
+        // row_deletion_policy_expression
+        table->row_deletion_policy().has_value()
+            ? String(RowDeletionPolicyToString(
+                  table->row_deletion_policy().value()))
+            : NullString(),
     });
   }
 
@@ -460,6 +467,8 @@ void InformationSchemaCatalog::FillTablesTable(zetasql::SimpleTable* tables) {
         // on_delete_action
         NullString(),
         // spanner_state,
+        NullString(),
+        // row_deletion_policy_expression
         NullString(),
     });
   }

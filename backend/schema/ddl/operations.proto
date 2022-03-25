@@ -152,12 +152,18 @@ message CreateDatabase {
   optional string database_name = 1;
 }
 
+message RowDeletionPolicy {
+  optional string column_name = 1;
+  optional int64 older_than = 2;
+}
+
 message CreateTable {
   optional string table_name = 1;
   repeated ColumnDefinition columns = 2;
 
   optional Options options = 4;
   repeated Constraint constraints = 5;
+  optional RowDeletionPolicy row_deletion_policy = 6;
 }
 
 message CreateIndex {
@@ -195,12 +201,24 @@ message AlterColumn {
   optional ColumnDefinition column = 3;
 }
 
+message AlterRowDeletionPolicy {
+  enum Type {
+    UNKNOWN_TYPE = 0;
+    ADD = 1;
+    REPLACE = 2;
+    DROP = 3;
+  }
+  optional Type type = 1;
+  optional RowDeletionPolicy row_deletion_policy = 2;
+}
+
 message AlterTable {
   optional string table_name = 1;
   optional AlterColumn alter_column = 2;
 
   optional Options options = 3;
   optional AlterConstraint alter_constraint = 4;
+  optional AlterRowDeletionPolicy alter_row_deletion_policy = 5;
 }
 
 message AlterIndex {

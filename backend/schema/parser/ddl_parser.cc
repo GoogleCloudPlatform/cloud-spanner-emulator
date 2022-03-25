@@ -32,6 +32,7 @@
 #include "absl/strings/str_join.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/DDLParserTree.h"
+#include "backend/schema/parser/DDLParserTreeConstants.h"
 #include "backend/schema/parser/ddl_includes.h"
 #include "backend/schema/parser/ddl_token_validation_utils.h"
 #include "common/errors.h"
@@ -613,6 +614,38 @@ absl::Status VisitCheckConstraintNode(const SimpleNode* node,
   return absl::OkStatus();
 }
 
+absl::Status VisitRowDeletionPolicyExpression(const SimpleNode* node,
+                                              RowDeletionPolicy* policy) {
+  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTROW_DELETION_POLICY_EXPRESSION));
+  ZETASQL_ASSIGN_OR_RETURN(
+      const SimpleNode* function,
+      GetChildAtIndexWithType(node, 0, JJTROW_DELETION_POLICY_FUNCTION));
+  if (absl::AsciiStrToUpper(function->image()) != "OLDER_THAN") {
+    return absl::Status(absl::StatusCode::kInvalidArgument,
+                        "Only OLDER_THAN is supported.");
+  }
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      const SimpleNode* column,
+      GetChildAtIndexWithType(node, 1, JJTROW_DELETION_POLICY_COLUMN));
+  policy->set_column_name(column->image());
+
+  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* interval_expr,
+                   GetChildAtIndexWithType(node, 2, JJTINTERVAL_EXPRESSION));
+
+  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* days,
+                   GetChildAtIndexWithType(interval_expr, 0, JJTINT_VALUE));
+  policy->set_older_than(days->image_as_int64());
+  return absl::OkStatus();
+}
+
+absl::Status VisitRowDeletionPolicyNode(const SimpleNode* node,
+                                        RowDeletionPolicy* policy) {
+  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTROW_DELETION_POLICY_CLAUSE));
+  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, 0));
+  return VisitRowDeletionPolicyExpression(child, policy);
+}
+
 absl::Status VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
                                   absl::string_view ddl_text,
                                   std::vector<std::string>* errors) {
@@ -646,7 +679,9 @@ absl::Status VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
             child, table->add_constraints()->mutable_interleave()));
         break;
       case JJTROW_DELETION_POLICY_CLAUSE:
-        return absl::OkStatus();
+        ZETASQL_RETURN_IF_ERROR(VisitRowDeletionPolicyNode(
+            child, table->mutable_row_deletion_policy()));
+        break;
       default:
         return error::Internal(
             absl::StrCat("Unexpected table info: ", child->toString()));
@@ -882,6 +917,17 @@ absl::Status VisitAlterTableAddCheckConstraint(const SimpleNode* node,
   return absl::OkStatus();
 }
 
+absl::Status VisitAlterRowDeletionPolicy(
+    const SimpleNode* node, AlterRowDeletionPolicy* alter_row_deletion_policy,
+    AlterRowDeletionPolicy::Type type) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      const SimpleNode* policy_node,
+      GetChildAtIndexWithType(node, 0, JJTROW_DELETION_POLICY_CLAUSE));
+  alter_row_deletion_policy->set_type(type);
+  return VisitRowDeletionPolicyNode(
+      policy_node, alter_row_deletion_policy->mutable_row_deletion_policy());
+}
+
 absl::Status VisitAlterTableNode(const SimpleNode* node,
                                  DDLStatement* statement,
                                  absl::string_view ddl_text,
@@ -913,8 +959,16 @@ absl::Status VisitAlterTableNode(const SimpleNode* node,
     case JJTDROP_CONSTRAINT:
       return VisitAlterTableDropConstraint(node, alter_table);
     case JJTADD_ROW_DELETION_POLICY:
+      return VisitAlterRowDeletionPolicy(
+          child, alter_table->mutable_alter_row_deletion_policy(),
+          AlterRowDeletionPolicy::ADD);
     case JJTREPLACE_ROW_DELETION_POLICY:
+      return VisitAlterRowDeletionPolicy(
+          child, alter_table->mutable_alter_row_deletion_policy(),
+          AlterRowDeletionPolicy::REPLACE);
     case JJTDROP_ROW_DELETION_POLICY:
+      alter_table->mutable_alter_row_deletion_policy()->set_type(
+          AlterRowDeletionPolicy::DROP);
       return absl::OkStatus();
     default:
       return error::Internal(

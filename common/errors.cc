@@ -1732,11 +1732,13 @@ absl::Status NonDeterministicFunctionInColumnExpression(
 }
 
 // Query errors.
-absl::Status UnableToInferUndeclaredParameter(
-    absl::string_view parameter_name) {
-  return absl::Status(absl::StatusCode::kInvalidArgument,
-                      absl::Substitute("Unable to infer type for parameter $0.",
-                                       parameter_name));
+absl::Status UnableToInferUndeclaredParameter(absl::string_view parameter_name,
+                                              absl::string_view type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Unable to infer type for parameter $0. Provide the "
+                       "type binding $1",
+                       parameter_name, type));
 }
 absl::Status InvalidHint(absl::string_view hint_string) {
   return absl::Status(absl::StatusCode::kInvalidArgument,
@@ -2104,6 +2106,80 @@ absl::Status InvalidPartitionedQueryMode() {
       absl::StatusCode::kInvalidArgument,
       "Query modes returning query plan and profile information cannot be used "
       "with partitioned queries.");
+}
+
+absl::Status RowDeletionPolicyDoesNotExist(absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("ROW DELETION POLICY does not exist on table $0.",
+                       table_name));
+}
+
+absl::Status RowDeletionPolicyAlreadyExists(absl::string_view column_name,
+                                            absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Cannot create ROW DELETION POLICY because there is already one "
+          "on column named $0 in table $1.",
+          column_name, table_name));
+}
+
+absl::Status RowDeletionPolicyOnColumnDoesNotExist(
+    absl::string_view column_name, absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot create ROW DELETION POLICY because there is no "
+                       "column named $0 in table $1.",
+                       column_name, table_name));
+}
+
+absl::Status RowDeletionPolicyOnNonTimestampColumn(
+    absl::string_view column_name, absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot create ROW DELETION POLICY because column $0 in "
+                       "table $1 is not of type TIMESTAMP.",
+                       column_name, table_name));
+}
+
+absl::Status RowDeletionPolicyWillBreak(absl::string_view column_name,
+                                        absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "ROW DELETION POLICY will break if drop/alter column named "
+          "$0 in table $1. Row Deletion Policy "
+          "must be set on column of type TIMESTAMP.",
+          column_name, table_name));
+}
+
+absl::Status RowDeletionPolicyHasChildWithOnDeleteNoAction(
+    absl::string_view table_name, absl::string_view child_table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot create row deletion policy on $0 because there "
+                       "is a descendant Table $1 with ON DELETE NO ACTION.",
+                       table_name, child_table_name));
+}
+
+absl::Status RowDeletionPolicyOnAncestors(
+    absl::string_view table_name, absl::string_view ancestor_table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Cannot create or alter table $0 with ON DELETE NO ACTION because "
+          "there is a row deletion policy on ancestor table $1.",
+          table_name, ancestor_table_name));
+}
+
+absl::Status ForeignKeyRowDeletionPolicyAddNotAllowed(
+    absl::string_view table_name, absl::string_view foreign_keys) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot add a row deletion policy to table `$0`. It is "
+                       "referenced by one or more foreign keys: `$1`.",
+                       table_name, foreign_keys));
 }
 
 }  // namespace error

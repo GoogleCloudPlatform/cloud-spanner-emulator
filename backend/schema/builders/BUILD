@@ -30,6 +30,7 @@ cc_library(
     deps = [
         "//backend/common:ids",
         "//backend/schema/catalog:schema",
+        "//backend/schema/ddl:operations_cc_proto",
         "//backend/schema/graph:schema_node",
         "//backend/schema/updater:schema_validation_context",
         "//backend/schema/validators:schema_validators",

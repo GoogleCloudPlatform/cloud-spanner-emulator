@@ -40,6 +40,7 @@ cc_library(
         "//backend/common:case",
         "//backend/common:ids",
         "//backend/datamodel:types",
+        "//backend/schema/ddl:operations_cc_proto",
         "//backend/schema/graph:schema_graph",
         "//backend/schema/graph:schema_graph_editor",
         "//backend/schema/graph:schema_node",

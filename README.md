@@ -41,7 +41,7 @@ images are also tagged with version numbers, so you can run a specific version
 with:
 
 ```shell
-VERSION=1.4.1
+VERSION=1.4.0
 docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator:$VERSION
 ```
 
@@ -52,7 +52,7 @@ binary is not fully static, but has been tested on Ubuntu 16.04/18.04, CentOS 8,
 RHEL 8, and Debian 9/10.
 
 ```shell
-VERSION=1.4.1
+VERSION=1.4.0
 wget https://storage.googleapis.com/cloud-spanner-emulator/releases/${VERSION}/cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 tar zxvf cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 chmod u+x gateway_main emulator_main
@@ -76,8 +76,8 @@ emulator:
 
 ### Via bazel
 
-Production releases of the emulator are built on Ubuntu 16.04 with bazel 2.0.0
-and gcc 7.4. You may be able to compile on compatible systems with compatible
+Production releases of the emulator are built on Ubuntu 16.04 with bazel 3.4.1
+and gcc 8.4. You may be able to compile on compatible systems with compatible
 toolchains. From the emulator source directory, you can build and run the
 emulator via bazel from the source root with:
 
