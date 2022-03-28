@@ -25,11 +25,11 @@ FROM marketplace.gcr.io/google/bazel:3.4.1 as build
 # we install GCC. Also install make for rules_foreign_cc bazel rules.
 RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
     apt-get -qq update                                                      && \
-    apt-get -qq install -y gcc-9 g++-9 make tzdata                          && \
+    apt-get -qq install -y gcc-8 g++-8 make tzdata                          && \
     apt-get -qq install -y ca-certificates libgnutls30                      && \
-    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90           \
-                        --slave   /usr/bin/g++ g++ /usr/bin/g++-9           && \
-    update-alternatives --set gcc /usr/bin/gcc-9
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 90           \
+                        --slave   /usr/bin/g++ g++ /usr/bin/g++-8           && \
+    update-alternatives --set gcc /usr/bin/gcc-8
 
 # Copy over the emulator code base into the container. We explicitly copy only
 # the required files to maximize chances that the layer will be cached. There

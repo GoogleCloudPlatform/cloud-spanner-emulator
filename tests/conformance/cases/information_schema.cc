@@ -30,8 +30,9 @@ namespace {
 class InformationSchemaTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
-    return SetSchema(
-        {"CREATE TABLE Base ("
+    // clang-format off
+    return SetSchema({
+      "CREATE TABLE Base ("
          "  Key1 INT64,"
          "  Key2 STRING(256),"
          "  BoolValue BOOL,"
@@ -52,17 +53,17 @@ class InformationSchemaTest : public DatabaseTest {
          "  CONSTRAINT CheckConstraintName CHECK(IntValue > 0),"
          "  CHECK(IntValue > 0),"
          ") PRIMARY KEY (Key1, Key2 DESC)",
-         R"(
+    R"(
       CREATE TABLE CascadeChild (
         Key1 INT64,
         Key2 STRING(256),
         ChildKey BOOL,
         Value1 STRING(MAX) NOT NULL,
-        Value2 BOOL
+        Value2 BOOL,
+        CreatedAt TIMESTAMP,
       ) PRIMARY KEY (Key1, Key2 DESC, ChildKey ASC),
         INTERLEAVE IN PARENT Base ON DELETE CASCADE
-    )",
-         R"(
+    )", R"(
       CREATE TABLE NoActionChild (
         Key1 INT64,
         Key2 STRING(256),
@@ -70,20 +71,23 @@ class InformationSchemaTest : public DatabaseTest {
         Value  STRING(MAX)
       ) PRIMARY KEY (Key1, Key2 DESC, ChildKey ASC),
         INTERLEAVE IN PARENT Base ON DELETE NO ACTION
-    )",
-         R"(
+    )", R"(
       CREATE UNIQUE NULL_FILTERED INDEX CascadeChildByValue
       ON CascadeChild(Key1, Key2 DESC, Value2 ASC)
       STORING(Value1), INTERLEAVE IN Base
-    )",
-         R"(
+    )", R"(
       CREATE INDEX NoActionChildByValue ON NoActionChild(Value ASC)
-    )",
-         R"(
+    )", R"(
       ALTER TABLE Base ADD CONSTRAINT FKBaseCascadeChild
           FOREIGN KEY(BoolValue, Key2)
           REFERENCES CascadeChild(ChildKey, Value1)
+    )", R"(
+      CREATE TABLE RowDeletionPolicy (
+        Key INT64,
+        CreatedAt TIMESTAMP,
+      ) PRIMARY KEY (Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
     )"});
+    // clang-format on
   }
 
   // Information schema tables not yet supported.
@@ -185,7 +189,8 @@ TEST_F(InformationSchemaTest, MetaTables) {
         t.table_name,
         t.parent_table_name,
         t.on_delete_action,
-        t.spanner_state
+        t.spanner_state,
+        t.row_deletion_policy_expression
       from
         information_schema.tables AS t
       where
@@ -198,20 +203,20 @@ TEST_F(InformationSchemaTest, MetaTables) {
   LogResults(results);
   // clang-format off
   auto expected = std::vector<ValueRow>({
-    {"", "INFORMATION_SCHEMA", "VIEW", "CHECK_CONSTRAINTS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMNS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMN_COLUMN_USAGE", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMN_OPTIONS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "CONSTRAINT_COLUMN_USAGE", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "CONSTRAINT_TABLE_USAGE", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "INDEXES", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "INDEX_COLUMNS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "KEY_COLUMN_USAGE", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "REFERENTIAL_CONSTRAINTS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "SCHEMATA", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "SPANNER_STATISTICS", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "TABLES", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "TABLE_CONSTRAINTS", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "CHECK_CONSTRAINTS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMNS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMN_COLUMN_USAGE", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMN_OPTIONS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "CONSTRAINT_COLUMN_USAGE", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "CONSTRAINT_TABLE_USAGE", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "INDEXES", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "INDEX_COLUMNS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "KEY_COLUMN_USAGE", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "REFERENTIAL_CONSTRAINTS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "SCHEMATA", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "SPANNER_STATISTICS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "TABLES", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "VIEW", "TABLE_CONSTRAINTS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -1162,7 +1167,8 @@ TEST_F(InformationSchemaTest, DefaultTables) {
         t.table_type,
         t.table_name,
         t.parent_table_name,
-        t.on_delete_action
+        t.on_delete_action,
+        t.row_deletion_policy_expression
       from
         information_schema.tables AS t
       where
@@ -1176,9 +1182,10 @@ TEST_F(InformationSchemaTest, DefaultTables) {
   LogResults(results);
   // clang-format off
   auto expected = std::vector<ValueRow>({
-    {"BASE TABLE", "Base", Ns(), Ns()},
-    {"BASE TABLE", "CascadeChild", "Base", "CASCADE"},
-    {"BASE TABLE", "NoActionChild", "Base", "NO ACTION"}
+    {"BASE TABLE", "Base", Ns(), Ns(), Ns()},
+    {"BASE TABLE", "CascadeChild", "Base", "CASCADE", Ns()}, // NOLINT
+    {"BASE TABLE", "NoActionChild", "Base", "NO ACTION", Ns()},
+    {"BASE TABLE", "RowDeletionPolicy", Ns(), Ns(), "OLDER_THAN(CreatedAt, INTERVAL 7 DAY)"}, // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -1234,10 +1241,13 @@ TEST_F(InformationSchemaTest, DefaultColumns) {
     {"", "", "CascadeChild", "ChildKey", 3, Nb(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "CascadeChild", "Value1", 4, Nb(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "CascadeChild", "Value2", 5, Nb(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "CascadeChild", "CreatedAt", 6, Nb(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"}, // NOLINT
     {"", "", "NoActionChild", "Key1", 1, Nb(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "NoActionChild", "Key2", 2, Nb(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "NoActionChild", "ChildKey", 3, Nb(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "NoActionChild", "Value", 4, Nb(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "RowDeletionPolicy", "Key", 1, Nb(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "RowDeletionPolicy", "CreatedAt", 2, Nb(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -1275,6 +1285,7 @@ TEST_F(InformationSchemaTest, DefaultIndexes) {
     {"", "", "CascadeChild", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
     {"", "", "NoActionChild", "NoActionChildByValue", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
     {"", "", "NoActionChild", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+    {"", "", "RowDeletionPolicy", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -1322,6 +1333,7 @@ TEST_F(InformationSchemaTest, DefaultIndexColumns) {
     {"", "", "NoActionChild", "PRIMARY_KEY", "Key1", 1, "ASC", "YES", "INT64"},  // NOLINT
     {"", "", "NoActionChild", "PRIMARY_KEY", "Key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
     {"", "", "NoActionChild", "PRIMARY_KEY", "ChildKey", 3, "ASC", "YES", "BOOL"},  // NOLINT
+    {"", "", "RowDeletionPolicy", "PRIMARY_KEY", "Key", 1, "ASC", "YES", "INT64"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -1390,6 +1402,7 @@ TEST_F(InformationSchemaTest, DefaultTableConstraints) {
     {"", "", "PK_Base", "", "", "Base", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
     {"", "", "PK_CascadeChild", "", "", "CascadeChild", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
     {"", "", "PK_NoActionChild", "", "", "NoActionChild", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "PK_RowDeletionPolicy", "", "", "RowDeletionPolicy", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -1426,6 +1439,7 @@ TEST_F(InformationSchemaTest, DefaultConstraintTableUsage) {
     {"", "", "CascadeChild", "", "", "IDX_CascadeChild_ChildKey_Value1_U_\\w{16}"},  // NOLINT
     {"", "", "CascadeChild", "", "", "PK_CascadeChild"},  // NOLINT
     {"", "", "NoActionChild", "", "", "PK_NoActionChild"},  // NOLINT
+    {"", "", "RowDeletionPolicy", "", "", "PK_RowDeletionPolicy"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -1500,6 +1514,7 @@ TEST_F(InformationSchemaTest, DefaultKeyColumnUsage) {
     {"", "", "PK_NoActionChild", "", "", "NoActionChild", "Key1", 1, Ni()},  // NOLINT
     {"", "", "PK_NoActionChild", "", "", "NoActionChild", "Key2", 2, Ni()},  // NOLINT
     {"", "", "PK_NoActionChild", "", "", "NoActionChild", "ChildKey", 3, Ni()},  // NOLINT
+    {"", "", "PK_RowDeletionPolicy", "", "", "RowDeletionPolicy", "Key", 1, Ni()},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -1545,6 +1560,7 @@ TEST_F(InformationSchemaTest, DefaultConstraintColumnUsage) {
     {"", "", "NoActionChild", "ChildKey", "", "", "PK_NoActionChild"},  // NOLINT
     {"", "", "NoActionChild", "Key1", "", "", "PK_NoActionChild"},  // NOLINT
     {"", "", "NoActionChild", "Key2", "", "", "PK_NoActionChild"},  // NOLINT
+    {"", "", "RowDeletionPolicy", "Key", "", "", "PK_RowDeletionPolicy"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));

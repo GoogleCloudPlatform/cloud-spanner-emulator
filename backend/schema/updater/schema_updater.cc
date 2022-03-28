@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 
 #include "google/protobuf/repeated_field.h"
 #include "zetasql/public/analyzer.h"
@@ -221,6 +222,9 @@ class SchemaUpdaterImpl {
   absl::Status CreateCheckConstraint(
       const ddl::CheckConstraint& ddl_check_constraint, const Table* table,
       const ddl::CreateTable* ddl_create_table);
+  absl::Status CreateRowDeletionPolicy(
+      const ddl::RowDeletionPolicy& row_deletion_policy,
+      Table::Builder* builder);
   absl::Status CreateTable(const ddl::CreateTable& ddl_table);
 
   absl::StatusOr<const Column*> CreateIndexDataTableColumn(
@@ -236,6 +240,9 @@ class SchemaUpdaterImpl {
   absl::StatusOr<const Index*> CreateIndex(
       const ddl::CreateIndex& ddl_index, const Table* indexed_table = nullptr);
 
+  absl::Status AlterRowDeletionPolicy(
+      absl::optional<ddl::RowDeletionPolicy> row_deletion_policy,
+      const Table* table);
   absl::Status AlterTable(const ddl::AlterTable& alter_table);
   absl::Status AlterInterleave(const ddl::InterleaveConstraint& ddl_interleave,
                                const Table* table);
@@ -680,6 +687,12 @@ absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
     Table::Builder* builder) {
   ZETASQL_RET_CHECK_EQ(builder->get()->parent(), nullptr);
 
+  if (parent->row_deletion_policy().has_value() &&
+      on_delete != Table::OnDeleteAction::kCascade) {
+    return error::RowDeletionPolicyOnAncestors(builder->get()->Name(),
+                                               parent->Name());
+  }
+
   ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
       parent, [builder](Table::Editor* parent_editor) -> absl::Status {
         parent_editor->add_child_table(builder->get());
@@ -1086,6 +1099,13 @@ absl::Status SchemaUpdaterImpl::CreateCheckConstraint(
   return absl::OkStatus();
 }
 
+absl::Status SchemaUpdaterImpl::CreateRowDeletionPolicy(
+    const ddl::RowDeletionPolicy& row_deletion_policy,
+    Table::Builder* builder) {
+  builder->set_row_deletion_policy(row_deletion_policy);
+  return absl::OkStatus();
+}
+
 absl::Status SchemaUpdaterImpl::CreateTable(const ddl::CreateTable& ddl_table) {
   if (latest_schema_->tables().size() >= limits::kMaxTablesPerDatabase) {
     return error::TooManyTablesPerDatabase(ddl_table.table_name(),
@@ -1141,6 +1161,11 @@ absl::Status SchemaUpdaterImpl::CreateTable(const ddl::CreateTable& ddl_table) {
         ZETASQL_RET_CHECK(false) << "Unsupported constraint type: "
                          << ddl_constraint.DebugString();
     }
+  }
+
+  if (ddl_table.has_row_deletion_policy()) {
+    ZETASQL_RETURN_IF_ERROR(
+        CreateRowDeletionPolicy(ddl_table.row_deletion_policy(), &builder));
   }
 
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
@@ -1331,6 +1356,15 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
   return index;
 }
 
+absl::Status SchemaUpdaterImpl::AlterRowDeletionPolicy(
+    absl::optional<ddl::RowDeletionPolicy> row_deletion_policy,
+    const Table* table) {
+  return AlterNode(table, [&](Table::Editor* editor) {
+    editor->set_row_deletion_policy(row_deletion_policy);
+    return absl::OkStatus();
+  });
+}
+
 absl::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_table) {
   const Table* table = latest_schema_->FindTable(alter_table.table_name());
   if (table == nullptr) {
@@ -1338,7 +1372,8 @@ absl::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_table) {
   }
 
   ZETASQL_RET_CHECK(alter_table.has_alter_column() ||
-            alter_table.has_alter_constraint());
+            alter_table.has_alter_constraint() ||
+            alter_table.has_alter_row_deletion_policy());
 
   if (alter_table.has_alter_constraint()) {
     const auto& alter_constraint = alter_table.alter_constraint();
@@ -1412,6 +1447,37 @@ absl::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_table) {
                          << alter_column.DebugString();
     }
     return absl::OkStatus();
+  }
+
+  if (alter_table.has_alter_row_deletion_policy()) {
+    const auto& policy = alter_table.alter_row_deletion_policy();
+    switch (policy.type()) {
+      case ddl::AlterRowDeletionPolicy::ADD: {
+        if (!table->row_deletion_policy().has_value()) {
+          return AlterRowDeletionPolicy(policy.row_deletion_policy(), table);
+        } else {
+          return error::RowDeletionPolicyAlreadyExists(
+              policy.row_deletion_policy().column_name(), table->Name());
+        }
+      }
+      case ddl::AlterRowDeletionPolicy::REPLACE: {
+        if (table->row_deletion_policy().has_value()) {
+          return AlterRowDeletionPolicy(policy.row_deletion_policy(), table);
+        } else {
+          return error::RowDeletionPolicyDoesNotExist(table->Name());
+        }
+      }
+      case ddl::AlterRowDeletionPolicy::DROP: {
+        if (table->row_deletion_policy().has_value()) {
+          return AlterRowDeletionPolicy(absl::nullopt, table);
+        } else {
+          return error::RowDeletionPolicyDoesNotExist(table->Name());
+        }
+      }
+      default:
+        return error::Internal(absl::StrCat(
+            "Invalid alter row deletion policy: ", policy.DebugString()));
+    }
   }
 
   return absl::OkStatus();

@@ -487,7 +487,7 @@ absl::StatusOr<std::map<std::string, zetasql::Value>> ExtractParameters(
   auto params = query.declared_params;
   for (const auto& [name, type] : analyzer_output->undeclared_parameters()) {
     if (type->IsTimestamp() || type->IsDate()) {
-      return error::UnableToInferUndeclaredParameter(name);
+      return error::UnableToInferUndeclaredParameter(name, type->DebugString());
     }
 
     auto it = undeclared_params.find(name);

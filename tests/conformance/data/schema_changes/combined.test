@@ -1315,3 +1315,231 @@ CREATE TABLE T (
 CREATE TABLE T (
   A INT64,
 ) PRIMARY KEY(A);
+==
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+--
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+==
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+ALTER TABLE T ALTER COLUMN CreatedAt INT64;
+--
+ERROR: ROW DELETION POLICY will break if drop/alter column named CreatedAt in table T. Row Deletion Policy must be set on column of type TIMESTAMP.
+==
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 0 DAY));
+--
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 0 DAY));
+==
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+ALTER TABLE T ALTER COLUMN CreatedAt SET OPTIONS (allow_commit_timestamp = false);
+--
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP OPTIONS ( allow_commit_timestamp = false ),
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+==
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+ALTER TABLE T ALTER COLUMN CreatedAt SET OPTIONS (allow_commit_timestamp = true)
+--
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+==
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+--
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+==
+# Column is not timestamp
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt INT64,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+--
+ERROR: Cannot create ROW DELETION POLICY because column CreatedAt in table T is not of type TIMESTAMP.
+==
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key);
+ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+--
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+==
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+ALTER TABLE T DROP ROW DELETION POLICY;
+--
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key);
+==
+# Policy already exist
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+--
+ERROR: Cannot create ROW DELETION POLICY because there is already one on column named CreatedAt in table T.
+==
+# Column does not exist
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(ModifiedAt, INTERVAL 7 DAY));
+--
+ERROR: Cannot create ROW DELETION POLICY because there is no column named ModifiedAt in table T.
+==
+# Column does not exist
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key);
+ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(ModifiedAt, INTERVAL 7 DAY));
+--
+ERROR: Cannot create ROW DELETION POLICY because there is no column named ModifiedAt in table T.
+==
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 1 DAY));
+ALTER TABLE T REPLACE ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+--
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+==
+# Policy does not exist for replace
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key);
+ALTER TABLE T REPLACE ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+--
+ERROR: ROW DELETION POLICY does not exist on table T.
+==
+# Policy does not exist for drop
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key);
+ALTER TABLE T DROP ROW DELETION POLICY;
+--
+ERROR: ROW DELETION POLICY does not exist on table T.
+==
+# Policy will break
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 1 DAY));
+ALTER TABLE T DROP COLUMN CreatedAt
+--
+ERROR: ROW DELETION POLICY will break if drop/alter column named CreatedAt in table T. Row Deletion Policy must be set on column of type TIMESTAMP.
+==
+# Child must have delete cascade
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key);
+CREATE TABLE U (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+  Data INT64,
+) PRIMARY KEY(Key), INTERLEAVE IN PARENT T ON DELETE NO ACTION;
+ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+--
+ERROR: Cannot create row deletion policy on T because there is a descendant Table U with ON DELETE NO ACTION.
+==
+# Grandchild must have delete cascade
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key);
+CREATE TABLE U (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+  Data INT64,
+) PRIMARY KEY(Key), INTERLEAVE IN PARENT T ON DELETE CASCADE;
+CREATE TABLE V (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+  Data INT64,
+) PRIMARY KEY(Key), INTERLEAVE IN PARENT U ON DELETE NO ACTION;
+ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+--
+ERROR: Cannot create row deletion policy on T because there is a descendant Table V with ON DELETE NO ACTION.
+==
+# Policy on ancestor
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+CREATE TABLE U (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+  Data INT64,
+) PRIMARY KEY(Key), INTERLEAVE IN PARENT T ON DELETE NO ACTION;
+--
+ERROR: Cannot create or alter table U with ON DELETE NO ACTION because there is a row deletion policy on ancestor table T.
+==
+# Policy on ancestor
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+CREATE TABLE U (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+  Data INT64,
+) PRIMARY KEY(Key), INTERLEAVE IN PARENT T ON DELETE CASCADE;
+ALTER TABLE U SET ON DELETE NO ACTION;
+--
+ERROR: Cannot create or alter table U with ON DELETE NO ACTION because there is a row deletion policy on ancestor table T.
+==
+# Policy on foreign key
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key);
+CREATE TABLE U (
+  MyKey INT64,
+  Key INT64,
+  CONSTRAINT FK_Key FOREIGN KEY(Key) REFERENCES T(Key),
+) PRIMARY KEY(MyKey);
+ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+--
+ERROR: Cannot add a row deletion policy to table `T`. It is referenced by one or more foreign keys: `FK_Key`.

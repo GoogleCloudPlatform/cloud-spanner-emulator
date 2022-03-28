@@ -16,14 +16,19 @@
 
 #include "backend/schema/validators/table_validator.h"
 
+#include <optional>
+#include <vector>
+
 #include "zetasql/public/type.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/functional/function_ref.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/substitute.h"
+#include "absl/synchronization/mutex.h"
 #include "backend/common/case.h"
 #include "backend/common/graph_dependency_helper.h"
 #include "backend/datamodel/types.h"
@@ -133,6 +138,91 @@ absl::Status CheckInterleaveDepthLimit(const Table* table) {
 
 absl::string_view GetColumnName(const Column* const& column) {
   return column->Name();
+}
+
+// Validate descedants of table using level-order traversal.
+absl::Status ValidateDescendantTables(
+    const Table* table,
+    absl::FunctionRef<absl::Status(const Table*)> validateFn) {
+  ZETASQL_RET_CHECK(table != nullptr);
+
+  std::vector<const Table*> queue;
+  for (auto* children : table->children()) {
+    queue.push_back(children);
+  }
+
+  while (!queue.empty()) {
+    const Table* child = queue.back();
+    queue.pop_back();
+
+    absl::Status s = validateFn(child);
+    if (!s.ok()) {
+      return s;
+    }
+
+    for (auto* grandchildren : child->children()) {
+      queue.push_back(grandchildren);
+    }
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status ValidateRowDeletionPolicy(
+    absl::optional<ddl::RowDeletionPolicy> row_deletion_policy,
+    const Table* table) {
+  if (!row_deletion_policy.has_value()) {
+    return absl::OkStatus();
+  }
+
+  auto table_name = table->Name();
+  auto column_name = row_deletion_policy->column_name();
+  auto* column = table->FindColumn(column_name);
+  if (column == nullptr) {
+    return error::RowDeletionPolicyOnColumnDoesNotExist(column_name,
+                                                        table_name);
+  }
+
+  if (!column->GetType()->IsTimestamp()) {
+    return error::RowDeletionPolicyOnNonTimestampColumn(column_name,
+                                                        table_name);
+  }
+
+  ZETASQL_RETURN_IF_ERROR(ValidateDescendantTables(table, [&](const Table* children) {
+    if (children->on_delete_action() == Table::OnDeleteAction::kNoAction) {
+      return error::RowDeletionPolicyHasChildWithOnDeleteNoAction(
+          table_name, children->Name());
+    } else {
+      return absl::OkStatus();
+    }
+  }));
+
+  if (auto foreign_keys = table->referencing_foreign_keys();
+      !foreign_keys.empty()) {
+    return error::ForeignKeyRowDeletionPolicyAddNotAllowed(
+        table_name,
+        absl::StrJoin(foreign_keys, ",", [](std::string* out, auto fk) {
+          absl::StrAppend(out, fk->Name());
+        }));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status ValidateUpdateRowDeletionPolicy(const Table* table,
+                                             const Table* old_table) {
+  ZETASQL_RETURN_IF_ERROR(
+      ValidateRowDeletionPolicy(table->row_deletion_policy(), old_table));
+
+  // This handles the case when an alter only affects the child tables.
+  if (table->on_delete_action() != Table::OnDeleteAction::kCascade &&
+      table->parent() != nullptr &&
+      table->parent()->row_deletion_policy().has_value()) {
+    return error::RowDeletionPolicyOnAncestors(table->Name(),
+                                               table->parent()->Name());
+  }
+
+  return absl::OkStatus();
 }
 
 }  // namespace
@@ -272,6 +362,8 @@ absl::Status TableValidator::Validate(const Table* table,
     }
   }
   ZETASQL_RETURN_IF_ERROR(cycle_detector.DetectCycle());
+  ZETASQL_RETURN_IF_ERROR(
+      ValidateRowDeletionPolicy(table->row_deletion_policy(), table));
 
   return absl::OkStatus();
 }
@@ -361,6 +453,7 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
     }
   }
 
+  ZETASQL_RETURN_IF_ERROR(ValidateUpdateRowDeletionPolicy(table, old_table));
   return absl::OkStatus();
 }
 

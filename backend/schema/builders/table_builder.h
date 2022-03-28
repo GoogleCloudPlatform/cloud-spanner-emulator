@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_TABLE_BUILDER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,7 @@
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "backend/schema/validators/table_validator.h"
 
@@ -92,6 +94,12 @@ class Table::Builder {
     return *this;
   }
 
+  Builder& set_row_deletion_policy(
+      absl::optional<ddl::RowDeletionPolicy> policy) {
+    instance_->row_deletion_policy_ = policy;
+    return *this;
+  }
+
  private:
   std::unique_ptr<Table> instance_;
 };
@@ -135,6 +143,12 @@ class Table::Editor {
 
   Editor& add_referencing_foreign_key(const ForeignKey* foreign_key) {
     instance_->referencing_foreign_keys_.push_back(foreign_key);
+    return *this;
+  }
+
+  Editor& set_row_deletion_policy(
+      absl::optional<ddl::RowDeletionPolicy> policy) {
+    instance_->row_deletion_policy_ = policy;
     return *this;
   }
 

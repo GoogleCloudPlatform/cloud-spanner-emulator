@@ -17,7 +17,9 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_TABLE_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_TABLE_H_
 
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -32,6 +34,7 @@
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
@@ -78,6 +81,11 @@ class Table : public SchemaNode {
   // Returns the on delete action of this table.
   OnDeleteAction on_delete_action() const {
     return on_delete_action_.value_or(OnDeleteAction::kNoAction);
+  }
+
+  // Returns the row deletion policy of this table.
+  absl::optional<ddl::RowDeletionPolicy> row_deletion_policy() const {
+    return row_deletion_policy_;
   }
 
   // Returns the list of all columns of this table.
@@ -240,6 +248,9 @@ class Table : public SchemaNode {
   // table is deleted. Set to nullopt if no action was specified by the user
   // in the CREATE TABLE statement.
   absl::optional<OnDeleteAction> on_delete_action_ = absl::nullopt;
+
+  // Row deletion policy of this table. Set to nullopt if not specified.
+  absl::optional<ddl::RowDeletionPolicy> row_deletion_policy_ = absl::nullopt;
 };
 
 // Returns the name of the schema declared owning object (index or table) of

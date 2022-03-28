@@ -165,6 +165,17 @@ absl::Status ColumnValidator::Validate(const Column* column,
 absl::Status ColumnValidator::ValidateUpdate(const Column* column,
                                              const Column* old_column,
                                              SchemaValidationContext* context) {
+  // if column has row deletion policy, then can't delete the column or change
+  // type.
+  bool has_row_deletion_policy =
+      column->table()->row_deletion_policy().has_value() &&
+      column->table()->row_deletion_policy()->column_name() == column->Name();
+  if (has_row_deletion_policy &&
+      (column->is_deleted() || !column->GetType()->IsTimestamp())) {
+    return error::RowDeletionPolicyWillBreak(column->Name(),
+                                             column->table()->Name());
+  }
+
   if (column->is_deleted()) {
     return absl::OkStatus();
   }

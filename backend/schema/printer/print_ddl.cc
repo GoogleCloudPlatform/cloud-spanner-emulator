@@ -75,6 +75,17 @@ std::string OnDeleteActionToString(Table::OnDeleteAction action) {
   }
 }
 
+std::string RowDeletionPolicyToString(const ddl::RowDeletionPolicy& policy) {
+  std::string str;
+  absl::StrAppend(&str, "OLDER_THAN(");
+  absl::StrAppend(&str, policy.column_name());
+  absl::StrAppend(&str, ", ");
+  absl::StrAppend(&str, "INTERVAL ");
+  absl::StrAppend(&str, policy.older_than());
+  absl::StrAppend(&str, " DAY)");
+  return str;
+}
+
 std::string ColumnTypeToString(const zetasql::Type* type,
                                absl::optional<int64_t> max_length) {
   if (type->IsArray()) {
@@ -170,6 +181,13 @@ std::string PrintTable(const Table* table) {
                     PrintName(table->parent()->Name()), " ON DELETE ",
                     OnDeleteActionToString(table->on_delete_action()));
   } else {
+    absl::StrAppend(&table_string, ")");
+  }
+
+  if (table->row_deletion_policy().has_value()) {
+    absl::StrAppend(&table_string, ", ROW DELETION POLICY (");
+    absl::StrAppend(&table_string, RowDeletionPolicyToString(
+                                       table->row_deletion_policy().value()));
     absl::StrAppend(&table_string, ")");
   }
   return table_string;

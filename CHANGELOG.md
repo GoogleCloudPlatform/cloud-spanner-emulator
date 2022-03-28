@@ -1,5 +1,15 @@
 # Changes
 
+## v1.4.2
+
+### New Features
+
+*   Add support for INFORMATION_SCHEMA.TABLES ROW_DELETION_POLICY_EXPRESSION column.
+
+### Bugs
+
+*   Fixed compatibility issue due to reliance on libstdc++.so.6 version `GLIBCXX_3.4.26'.
+
 ## v1.4.1
 
 ### New Features
