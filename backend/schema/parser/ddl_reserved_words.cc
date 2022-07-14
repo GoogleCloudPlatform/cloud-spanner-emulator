@@ -31,6 +31,7 @@ namespace {
 static const CaseInsensitiveStringSet* const reserved_words =
     new CaseInsensitiveStringSet {
     "ALL",
+    "ANALYZE",
     "AND",
     "ANY",
     "ARRAY",

@@ -47,7 +47,7 @@ class SchemaTest : public testing::Test {
       : context_(/*storage =*/nullptr, /*global_names =*/nullptr,
                  /*type_factory =*/nullptr,
                  /*pending_commit_timestamp =*/absl::Now()),
-        type_factory_(absl::make_unique<zetasql::TypeFactory>()),
+        type_factory_(std::make_unique<zetasql::TypeFactory>()),
         base_schema_(test::CreateSchemaWithOneTable(type_factory_.get())) {}
 
  protected:

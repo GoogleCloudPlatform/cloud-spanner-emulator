@@ -150,7 +150,7 @@ class HandlerRegisterer {
                     absl::Status (*fn)(RequestContext*, const RequestT*,
                                        ResponseT*))
       : HandlerRegisterer(
-            absl::make_unique<UnaryGRPCHandler<RequestT, ResponseT>>(
+            std::make_unique<UnaryGRPCHandler<RequestT, ResponseT>>(
                 service_name, method_name, fn)) {}
 
   // Constructor for server streaming handler registration.
@@ -160,7 +160,7 @@ class HandlerRegisterer {
                     absl::Status (*fn)(RequestContext*, const RequestT*,
                                        ServerStream<ResponseT>*))
       : HandlerRegisterer(
-            absl::make_unique<ServerStreamingGRPCHandler<RequestT, ResponseT>>(
+            std::make_unique<ServerStreamingGRPCHandler<RequestT, ResponseT>>(
                 service_name, method_name, fn)) {}
 };
 

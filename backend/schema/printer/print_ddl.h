@@ -17,6 +17,8 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_PRINT_DDL_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_PRINT_DDL_H_
 
+#include <optional>
+
 #include "absl/memory/memory.h"
 #include "absl/types/optional.h"
 #include "absl/types/span.h"
@@ -57,7 +59,7 @@ std::string RowDeletionPolicyToString(const ddl::RowDeletionPolicy& policy);
 
 // Converts a Cloud Spanner column type to its string representation.
 std::string ColumnTypeToString(const zetasql::Type* type,
-                               absl::optional<int64_t> max_length);
+                               std::optional<int64_t> max_length);
 
 // Prints the DDL statements for all tables and indexes within the given schema.
 std::vector<std::string> PrintDDLStatements(const Schema* schema);

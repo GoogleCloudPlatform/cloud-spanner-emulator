@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_ACTIONS_OPS_H_
 
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "zetasql/public/value.h"
@@ -70,7 +71,7 @@ struct DeleteOp {
 
 // A variant over all possible row operations defined above.
 // WriteOp represents an operation performed on a single row in the database.
-using WriteOp = absl::variant<InsertOp, UpdateOp, DeleteOp>;
+using WriteOp = std::variant<InsertOp, UpdateOp, DeleteOp>;
 
 // Returns the table of the row operation.
 const Table* TableOf(const WriteOp& op);

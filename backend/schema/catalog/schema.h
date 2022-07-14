@@ -39,7 +39,7 @@ namespace backend {
 // relationships.
 class Schema {
  public:
-  Schema() : graph_(absl::make_unique<SchemaGraph>()) {}
+  Schema() : graph_(std::make_unique<SchemaGraph>()) {}
 
   explicit Schema(std::unique_ptr<const SchemaGraph> graph);
 

@@ -188,12 +188,12 @@ ReadWriteTransaction::ReadWriteTransaction(
       versioned_catalog_(versioned_catalog),
       lock_handle_(
           lock_manager->CreateHandle(transaction_id, retry_state_.priority)),
-      transaction_store_(absl::make_unique<TransactionStore>(
+      transaction_store_(std::make_unique<TransactionStore>(
           base_storage_, lock_handle_.get())),
       action_manager_(action_manager),
-      action_context_(absl::make_unique<ActionContext>(
-          absl::make_unique<TransactionReadOnlyStore>(transaction_store_.get()),
-          absl::make_unique<TransactionEffectsBuffer>(&write_ops_queue_),
+      action_context_(std::make_unique<ActionContext>(
+          std::make_unique<TransactionReadOnlyStore>(transaction_store_.get()),
+          std::make_unique<TransactionEffectsBuffer>(&write_ops_queue_),
           clock)),
       schema_(versioned_catalog_->GetLatestSchema()) {}
 
@@ -224,7 +224,7 @@ absl::Status ReadWriteTransaction::Read(const ReadArg& read_arg,
           false /*allow_pending_commit_timestamps_in_read*/));
       iterators.push_back(std::move(itr));
     }
-    *cursor = absl::make_unique<StorageIteratorRowCursor>(
+    *cursor = std::make_unique<StorageIteratorRowCursor>(
         std::move(iterators), resolved_read_arg.columns);
     return absl::OkStatus();
   });

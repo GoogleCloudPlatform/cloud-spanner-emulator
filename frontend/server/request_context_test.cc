@@ -39,9 +39,9 @@ namespace instance_api = ::google::spanner::admin::instance::v1;
 class SessionExistenceTest : public testing::Test {
  protected:
   void SetUp() override {
-    env_ = absl::make_unique<ServerEnv>();
+    env_ = std::make_unique<ServerEnv>();
     request_context_ =
-        absl::make_unique<RequestContext>(env_.get(), /*grpc=*/nullptr);
+        std::make_unique<RequestContext>(env_.get(), /*grpc=*/nullptr);
 
     const std::string instance_uri =
         "projects/test-project/instances/test-instance";

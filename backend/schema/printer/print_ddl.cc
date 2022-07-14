@@ -17,6 +17,7 @@
 #include "backend/schema/printer/print_ddl.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -53,7 +54,7 @@ std::string PrintColumnNameList(absl::Span<const Column* const> columns) {
 // Converts a column type and it's length (if applicable) to the corresponding
 // DDL type string.
 std::string TypeToString(const zetasql::Type* type,
-                         absl::optional<int64_t> max_length) {
+                         std::optional<int64_t> max_length) {
   std::string type_name = type->TypeName(zetasql::PRODUCT_EXTERNAL);
   if (type->IsString() || type->IsBytes()) {
     absl::StrAppend(
@@ -87,7 +88,7 @@ std::string RowDeletionPolicyToString(const ddl::RowDeletionPolicy& policy) {
 }
 
 std::string ColumnTypeToString(const zetasql::Type* type,
-                               absl::optional<int64_t> max_length) {
+                               std::optional<int64_t> max_length) {
   if (type->IsArray()) {
     return "ARRAY<" +
            TypeToString(type->AsArray()->element_type(), max_length) + ">";

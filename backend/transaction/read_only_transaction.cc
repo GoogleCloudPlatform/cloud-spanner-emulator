@@ -80,7 +80,7 @@ absl::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
         GetColumnIDs(resolved_read_arg.columns), &itr));
     iterators.push_back(std::move(itr));
   }
-  *cursor = absl::make_unique<StorageIteratorRowCursor>(
+  *cursor = std::make_unique<StorageIteratorRowCursor>(
       std::move(iterators), resolved_read_arg.columns);
   return absl::OkStatus();
 }

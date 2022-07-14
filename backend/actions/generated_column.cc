@@ -66,7 +66,7 @@ PrepareExpression(const Column* generated_column,
   std::string sql = absl::Substitute(
       kExpression, generated_column->expression().value(),
       generated_column->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL));
-  auto expr = absl::make_unique<zetasql::PreparedExpression>(sql);
+  auto expr = std::make_unique<zetasql::PreparedExpression>(sql);
   zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
   for (const Column* dep : generated_column->dependent_columns()) {
     ZETASQL_RETURN_IF_ERROR(options.AddExpressionColumn(dep->Name(), dep->GetType()));

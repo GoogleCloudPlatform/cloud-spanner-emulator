@@ -114,7 +114,7 @@ class ColumnValueTest : public test::ActionsTest {
                   &type_factory_)
                   .value();
 
-    validator_ = absl::make_unique<ColumnValueValidator>();
+    validator_ = std::make_unique<ColumnValueValidator>();
     table_ = schema_->FindTable("TestTable");
     base_columns_ = table_->columns();
   }
@@ -404,7 +404,7 @@ TEST_F(ColumnValueTest, ValidateArrayBytesLength) {
 }
 
 TEST_F(ColumnValueTest, ValidateUTF8StringEncoding) {
-  auto buf = absl::make_unique<char[]>(limits::kMaxStringColumnLength * 4);
+  auto buf = std::make_unique<char[]>(limits::kMaxStringColumnLength * 4);
   std::vector<int64_t> code_points(limits::kMaxStringColumnLength);
   absl::BitGen gen;
   for (int i = 0; i < limits::kMaxStringColumnLength; ++i) {

@@ -16,6 +16,9 @@
 
 #include "frontend/converters/reads.h"
 
+#include <memory>
+#include <vector>
+
 #include "google/spanner/v1/mutation.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
@@ -26,7 +29,6 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
-#include "backend/access/write.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/schema/catalog/schema.h"
@@ -55,7 +57,6 @@ using zetasql::types::DoubleType;
 using zetasql::types::GeographyType;
 using zetasql::types::Int64ArrayType;
 using zetasql::types::Int64Type;
-using zetasql::types::NumericType;
 using zetasql::types::StringType;
 using zetasql::types::TimestampType;
 using zetasql::values::Bool;
@@ -69,7 +70,7 @@ using zetasql_base::testing::StatusIs;
 class AccessProtosTest : public testing::Test {
  public:
   AccessProtosTest()
-      : type_factory_(absl::make_unique<zetasql::TypeFactory>()),
+      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
         schema_(test::CreateSchemaWithOneTable(type_factory_.get())) {}
 
  protected:

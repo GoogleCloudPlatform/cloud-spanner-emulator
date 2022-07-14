@@ -84,10 +84,9 @@ class TestEffectsBuffer : public EffectsBuffer {
 class ActionsTest : public testing::Test {
  public:
   ActionsTest()
-      : ctx_(absl::make_unique<ActionContext>(
-            absl::make_unique<test::TestReadOnlyStore>(),
-            absl::make_unique<test::TestEffectsBuffer>(&ops_queue_), &clock_)) {
-  }
+      : ctx_(std::make_unique<ActionContext>(
+            std::make_unique<test::TestReadOnlyStore>(),
+            std::make_unique<test::TestEffectsBuffer>(&ops_queue_), &clock_)) {}
 
   // Accessors
   test::TestEffectsBuffer* effects_buffer() {

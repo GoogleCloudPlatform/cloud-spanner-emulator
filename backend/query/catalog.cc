@@ -16,6 +16,8 @@
 
 #include "backend/query/catalog.h"
 
+#include <memory>
+
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
 #include "absl/memory/memory.h"
@@ -71,7 +73,7 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
                  RowReader* reader)
     : schema_(schema), function_catalog_(function_catalog) {
   for (const auto* table : schema->tables()) {
-    tables_[table->Name()] = absl::make_unique<QueryableTable>(table, reader);
+    tables_[table->Name()] = std::make_unique<QueryableTable>(table, reader);
   }
 }
 
@@ -135,7 +137,7 @@ zetasql::Catalog* Catalog::GetInformationSchemaCatalog() const {
   absl::MutexLock lock(&mu_);
   if (!information_schema_catalog_) {
     information_schema_catalog_ =
-        absl::make_unique<InformationSchemaCatalog>(schema_);
+        std::make_unique<InformationSchemaCatalog>(schema_);
   }
   return information_schema_catalog_.get();
 }
@@ -143,7 +145,7 @@ zetasql::Catalog* Catalog::GetInformationSchemaCatalog() const {
 zetasql::Catalog* Catalog::GetNetFunctionsCatalog() const {
   absl::MutexLock lock(&mu_);
   if (!net_catalog_) {
-    net_catalog_ = absl::make_unique<NetCatalog>(const_cast<Catalog*>(this));
+    net_catalog_ = std::make_unique<NetCatalog>(const_cast<Catalog*>(this));
   }
   return net_catalog_.get();
 }

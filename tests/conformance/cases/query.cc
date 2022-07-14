@@ -90,6 +90,19 @@ class QueryTest : public DatabaseTest {
   }
 
  protected:
+  void PopulateScalarTypesTable() {
+    ZETASQL_EXPECT_OK(MultiInsert(
+        "ScalarTypesTable",
+        {"intVal", "boolVal", "bytesVal", "dateVal", "floatVal", "stringVal",
+         "numericVal", "timestampVal", "jsonVal"},
+        {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
+          Null<std::string>(), Null<Numeric>(), Null<Timestamp>(),
+          Null<Json>()},
+         {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
+          cloud::spanner::MakeNumeric("123.456789").value(), Timestamp(),
+          Json("{\"key\":123}")}}));
+  }
+
   void PopulateDatabase() {
     ZETASQL_EXPECT_OK(MultiInsert(
         "Users", {"UserId", "Name"},
@@ -115,16 +128,7 @@ class QueryTest : public DatabaseTest {
                            {2, 2, 1, "Suzanne Collins will be absent"},
                            {3, 1, 1, "Interview Notification"}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert(
-        "ScalarTypesTable",
-        {"intVal", "boolVal", "bytesVal", "dateVal", "floatVal", "stringVal",
-         "numericVal", "timestampVal", "jsonVal"},
-        {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
-          Null<std::string>(), Null<Numeric>(), Null<Timestamp>(),
-          Null<Json>()},
-         {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
-          cloud::spanner::MakeNumeric("123.456789").value(), Timestamp(),
-          Json("{\"key\":123}")}}));
+    PopulateScalarTypesTable();
 
     ZETASQL_EXPECT_OK(MultiInsert("NumericTable", {"key", "val"},
                           {{Null<Numeric>(), Null<std::int64_t>()},

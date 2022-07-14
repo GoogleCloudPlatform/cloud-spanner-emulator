@@ -17,6 +17,7 @@
 #include "backend/database/database.h"
 
 #include <memory>
+#include <utility>
 
 #include "absl/memory/memory.h"
 #include "absl/status/statusor.h"
@@ -53,15 +54,15 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
     Clock* clock, const std::vector<std::string>& create_statements) {
   auto database = absl::WrapUnique(new Database());
   database->clock_ = clock;
-  database->storage_ = absl::make_unique<InMemoryStorage>();
-  database->lock_manager_ = absl::make_unique<LockManager>(clock);
-  database->type_factory_ = absl::make_unique<zetasql::TypeFactory>();
+  database->storage_ = std::make_unique<InMemoryStorage>();
+  database->lock_manager_ = std::make_unique<LockManager>(clock);
+  database->type_factory_ = std::make_unique<zetasql::TypeFactory>();
   database->query_engine_ =
-      absl::make_unique<QueryEngine>(database->type_factory_.get());
-  database->action_manager_ = absl::make_unique<ActionManager>();
+      std::make_unique<QueryEngine>(database->type_factory_.get());
+  database->action_manager_ = std::make_unique<ActionManager>();
 
   if (create_statements.empty()) {
-    database->versioned_catalog_ = absl::make_unique<VersionedCatalog>();
+    database->versioned_catalog_ = std::make_unique<VersionedCatalog>();
   } else {
     SchemaUpdater updater;
     ZETASQL_ASSIGN_OR_RETURN(
@@ -69,7 +70,7 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
         updater.CreateSchemaFromDDL(create_statements,
                                     database->GetSchemaChangeContext()));
     database->versioned_catalog_ =
-        absl::make_unique<VersionedCatalog>(std::move(schema));
+        std::make_unique<VersionedCatalog>(std::move(schema));
   }
 
   database->action_manager_->AddActionsForSchema(
@@ -81,7 +82,7 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
 
 absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
 Database::CreateReadOnlyTransaction(const ReadOnlyOptions& options) {
-  return absl::make_unique<ReadOnlyTransaction>(
+  return std::make_unique<ReadOnlyTransaction>(
       options, transaction_id_generator_.NextId(), clock_, storage_.get(),
       lock_manager_.get(), versioned_catalog_.get());
 }
@@ -89,7 +90,7 @@ Database::CreateReadOnlyTransaction(const ReadOnlyOptions& options) {
 absl::StatusOr<std::unique_ptr<ReadWriteTransaction>>
 Database::CreateReadWriteTransaction(const ReadWriteOptions& options,
                                      const RetryState& retry_state) {
-  return absl::make_unique<ReadWriteTransaction>(
+  return std::make_unique<ReadWriteTransaction>(
       options, retry_state, transaction_id_generator_.NextId(), clock_,
       storage_.get(), lock_manager_.get(), versioned_catalog_.get(),
       action_manager_.get());

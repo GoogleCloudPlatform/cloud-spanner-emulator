@@ -16,6 +16,8 @@
 
 #include "backend/query/index_hint_validator.h"
 
+#include <memory>
+
 #include "zetasql/public/analyzer.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -70,8 +72,8 @@ class IndexHintValidatorTest : public testing::Test {
       ALTER TABLE T2 ADD FOREIGN KEY(col2) REFERENCES T1(col1))"},
                                       &type_factory_));
 
-    catalog_ = absl::make_unique<Catalog>(schema_.get(), &fn_catalog_,
-                                          /*reader=*/nullptr);
+    catalog_ = std::make_unique<Catalog>(schema_.get(), &fn_catalog_,
+                                         /*reader=*/nullptr);
   }
 
   std::unique_ptr<const zetasql::AnalyzerOutput> AnalyzeQuery(

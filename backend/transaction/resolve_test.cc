@@ -16,6 +16,8 @@
 
 #include "backend/transaction/resolve.h"
 
+#include <memory>
+
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
@@ -45,7 +47,7 @@ using zetasql_base::testing::StatusIs;
 class ResolveTest : public testing::Test {
  public:
   ResolveTest()
-      : type_factory_(absl::make_unique<zetasql::TypeFactory>()),
+      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
         schema_(test::CreateSchemaFromDDL(
                     {
                         R"(

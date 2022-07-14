@@ -17,6 +17,7 @@
 #include "backend/transaction/read_write_transaction.h"
 
 #include <functional>
+#include <memory>
 #include <thread>  // NOLINT
 #include <vector>
 
@@ -56,10 +57,10 @@ using zetasql_base::testing::StatusIs;
 class ReadWriteTransactionTest : public testing::Test {
  public:
   ReadWriteTransactionTest()
-      : type_factory_(absl::make_unique<zetasql::TypeFactory>()),
-        lock_manager_(absl::make_unique<LockManager>(&clock_)),
-        storage_(absl::make_unique<InMemoryStorage>()),
-        versioned_catalog_(absl::make_unique<VersionedCatalog>(
+      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
+        lock_manager_(std::make_unique<LockManager>(&clock_)),
+        storage_(std::make_unique<InMemoryStorage>()),
+        versioned_catalog_(std::make_unique<VersionedCatalog>(
             std::move(test::CreateSchemaFromDDL(
                           {
                               R"(
@@ -74,7 +75,7 @@ class ReadWriteTransactionTest : public testing::Test {
                 )"},
                           type_factory_.get())
                           .value()))),
-        action_manager_(absl::make_unique<ActionManager>()) {
+        action_manager_(std::make_unique<ActionManager>()) {
     action_manager_->AddActionsForSchema(
         versioned_catalog_->GetSchema(absl::InfiniteFuture()),
         /*function_catalog=*/nullptr);
@@ -96,7 +97,7 @@ class ReadWriteTransactionTest : public testing::Test {
   std::atomic<int> id_counter_ = 0;
 
   std::unique_ptr<ReadWriteTransaction> CreateReadWriteTransaction() {
-    return absl::make_unique<ReadWriteTransaction>(
+    return std::make_unique<ReadWriteTransaction>(
         ReadWriteOptions(), RetryState(), ++id_counter_, &clock_,
         storage_.get(), lock_manager_.get(), versioned_catalog_.get(),
         action_manager_.get());

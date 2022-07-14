@@ -52,9 +52,9 @@ class TransactionStoreTest : public testing::Test {
       : lock_manager_(LockManager(&clock_)),
         lock_handle_(lock_manager_.CreateHandle(TransactionID(1),
                                                 TransactionPriority(1))),
-        base_storage_(absl::make_unique<InMemoryStorage>()),
+        base_storage_(std::make_unique<InMemoryStorage>()),
         transaction_store_(base_storage_.get(), lock_handle_.get()),
-        type_factory_(absl::make_unique<zetasql::TypeFactory>()),
+        type_factory_(std::make_unique<zetasql::TypeFactory>()),
         schema_(test::CreateSchemaFromDDL(
                     {
                         R"(

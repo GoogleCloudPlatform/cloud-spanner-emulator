@@ -16,6 +16,8 @@
 
 #include "backend/actions/unique_index.h"
 
+#include <memory>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -50,7 +52,7 @@ class UniqueIndexTest : public test::ActionsTest {
                     &type_factory_)
                     .value()),
         index_(schema_->FindIndex("TestIndex")),
-        verifier_(absl::make_unique<UniqueIndexVerifier>(index_)) {}
+        verifier_(std::make_unique<UniqueIndexVerifier>(index_)) {}
 
  protected:
   // Test components.

@@ -18,6 +18,8 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_ENTITIES_TRANSACTIONS_H_
 
 #include <memory>
+#include <optional>
+#include <variant>
 
 #include "google/protobuf/empty.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
@@ -100,12 +102,12 @@ class Transaction {
     // "outcome" can be one of two types:
     //   a) ResultSet - Used by ExecuteSql and ExecuteStreamingSql handler.
     //   b) ExecuteBatchDmlResponse - Used by ExecuteBatchDml handler.
-    absl::variant<spanner_api::ResultSet, spanner_api::ExecuteBatchDmlResponse>
+    std::variant<spanner_api::ResultSet, spanner_api::ExecuteBatchDmlResponse>
         outcome;
   };
 
-  Transaction(absl::variant<std::unique_ptr<backend::ReadWriteTransaction>,
-                            std::unique_ptr<backend::ReadOnlyTransaction>>
+  Transaction(std::variant<std::unique_ptr<backend::ReadWriteTransaction>,
+                           std::unique_ptr<backend::ReadOnlyTransaction>>
                   backend_transaction,
               const backend::QueryEngine* query_engine,
               const spanner_api::TransactionOptions& options,
@@ -202,14 +204,14 @@ class Transaction {
   // If a state already exists for a given sequence number with a matching
   // request hash, the replay state will be returned. If this is a new sequence
   // number, a new replay state will be registered and nullopt will be returned.
-  absl::optional<RequestReplayState> LookupOrRegisterDmlRequest(
+  std::optional<RequestReplayState> LookupOrRegisterDmlRequest(
       int64_t seqno, int64_t request_hash, const std::string& sql_statement);
 
   // Sets the replay outcome for the current DML request if it completed
   // successfully.
-  void SetDmlReplayOutcome(absl::variant<spanner_api::ResultSet,
-                                         spanner_api::ExecuteBatchDmlResponse>
-                               outcome);
+  void SetDmlReplayOutcome(
+      std::variant<spanner_api::ResultSet, spanner_api::ExecuteBatchDmlResponse>
+          outcome);
 
   // Returns the DML request type.
   DMLErrorHandlingMode DMLErrorType() const;
@@ -234,8 +236,8 @@ class Transaction {
   bool HasState(const backend::ReadWriteTransaction::State& state) const;
 
   // The underlying backend transaction.
-  absl::variant<std::unique_ptr<backend::ReadWriteTransaction>,
-                std::unique_ptr<backend::ReadOnlyTransaction>>
+  std::variant<std::unique_ptr<backend::ReadWriteTransaction>,
+               std::unique_ptr<backend::ReadOnlyTransaction>>
       transaction_;
 
   // The query engine for executing queries.

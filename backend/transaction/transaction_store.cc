@@ -276,7 +276,7 @@ absl::Status TransactionStore::Read(
   // Note: this can be optimized by iterating the base_store_iterator and
   // transaction_store_ietrator in parallel and comparing the keys.
   sort(rows.begin(), rows.end(), SortByKey);
-  *storage_itr = absl::make_unique<FixedRowStorageIterator>(std::move(rows));
+  *storage_itr = std::make_unique<FixedRowStorageIterator>(std::move(rows));
   return absl::OkStatus();
 }
 

@@ -64,7 +64,7 @@ class IndexTest : public test::ActionsTest {
         base_columns_(table_->columns()),
         index_(schema_->FindIndex("TestIndex")),
         index_columns_(index_->index_data_table()->columns()),
-        effector_(absl::make_unique<IndexEffector>(index_)) {}
+        effector_(std::make_unique<IndexEffector>(index_)) {}
 
  protected:
   // Test components.

@@ -2372,6 +2372,9 @@ TEST_F(CheckConstraint, ParseSyntaxErrorsInCheckConstraint) {
                        HasSubstr("Expecting ')' but found 'EOF'")));
 }
 
+TEST(ParseAnalyze, CanParseAnalyze) {
+  EXPECT_THAT(ParseDDLStatement("ANALYZE"), IsOk());
+}
 }  // namespace
 
 }  // namespace ddl

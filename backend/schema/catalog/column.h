@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_COLUMN_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "zetasql/public/type.h"
@@ -72,7 +73,7 @@ class Column : public SchemaNode {
   // The length of a STRING or BYTES column, as declared in the schema. A
   // nullopt value represents the max allowed length for the column according to
   // https://cloud.google.com/spanner/docs/data-definition-language#scalars/
-  absl::optional<int64_t> declared_max_length() const {
+  std::optional<int64_t> declared_max_length() const {
     return declared_max_length_;
   }
 
@@ -94,7 +95,7 @@ class Column : public SchemaNode {
   bool is_generated() const { return expression_.has_value(); }
 
   // Returns the expression if the column is a generated column.
-  const absl::optional<std::string>& expression() const { return expression_; }
+  const std::optional<std::string>& expression() const { return expression_; }
 
   absl::Span<const Column* const> dependent_columns() const {
     return dependent_columns_;
@@ -174,13 +175,13 @@ class Column : public SchemaNode {
   // A tri state boolean indicating whether commit timestamp can be stored.
   // If allows_commit_timestamp is not set, it represents that the option isn't
   // set for the columns in the schema serialized back to the user.
-  absl::optional<bool> allows_commit_timestamp_ = absl::nullopt;
+  std::optional<bool> allows_commit_timestamp_ = std::nullopt;
 
   // Length for STRING and BYTES. If unset, indicates the max allowed length.
-  absl::optional<int64_t> declared_max_length_ = absl::nullopt;
+  std::optional<int64_t> declared_max_length_ = std::nullopt;
 
   // For a generated column, this is the generation expression.
-  absl::optional<std::string> expression_ = absl::nullopt;
+  std::optional<std::string> expression_ = std::nullopt;
 
   // For a generated column, this is the list of columns that this column
   // references in its expression.

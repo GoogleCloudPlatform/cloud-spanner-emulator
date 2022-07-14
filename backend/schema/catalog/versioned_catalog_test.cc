@@ -16,6 +16,8 @@
 
 #include "backend/schema/catalog/versioned_catalog.h"
 
+#include <memory>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -35,8 +37,8 @@ TEST(VersionedCatalogTest, FindSchemaAtTimeStamp) {
   absl::Time t1 = absl::Now();
   absl::Time t2 = t1 + absl::Seconds(1);
   absl::Time t3 = t2 + absl::Seconds(1);
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t1, absl::make_unique<const Schema>()));
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t3, absl::make_unique<const Schema>()));
+  ZETASQL_EXPECT_OK(catalog.AddSchema(t1, std::make_unique<const Schema>()));
+  ZETASQL_EXPECT_OK(catalog.AddSchema(t3, std::make_unique<const Schema>()));
 
   // Find schemas created at t1 and t3.
   const Schema* schema_t1 = catalog.GetSchema(t1);
@@ -54,7 +56,7 @@ TEST(VersionedCatalogTest, FindSchemaAtTimeStamp) {
 TEST(VersionedCatalog, FirstAndLastSchema) {
   VersionedCatalog catalog;
   absl::Time t1 = absl::Now();
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t1, absl::make_unique<const Schema>()));
+  ZETASQL_EXPECT_OK(catalog.AddSchema(t1, std::make_unique<const Schema>()));
 
   // Find the default initial schema using absl::InfinitePast(). Expect it to be
   // different from the schema created at t1.
@@ -67,7 +69,7 @@ TEST(VersionedCatalog, FirstAndLastSchema) {
 
 TEST(VersionedCatalogTest, InitialSchema) {
   absl::Time t1 = absl::Now();
-  VersionedCatalog catalog(absl::make_unique<const Schema>());
+  VersionedCatalog catalog(std::make_unique<const Schema>());
   absl::Time t0 = t1 - absl::Seconds(10);
 
   // Verify that the initial schema can be read with a timestamp in the past.
@@ -79,7 +81,7 @@ TEST(VersionedCatalogTest, FindFirstSchemaBeforeCreation) {
 
   absl::Time t1 = absl::Now();
   absl::Time t2 = t1 + absl::Seconds(1);
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t2, absl::make_unique<const Schema>()));
+  ZETASQL_EXPECT_OK(catalog.AddSchema(t2, std::make_unique<const Schema>()));
 
   // Confirm that the schema created at t2 is not visible at t1.
   EXPECT_NE(catalog.GetSchema(t1), catalog.GetSchema(t2));
@@ -90,12 +92,12 @@ TEST(VersionedCatalogTest, AddSchemaWithSameOrEarlierCreationTime) {
   absl::Time t1 = absl::Now();
   absl::Time t2 = t1 + absl::Seconds(1);
 
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t2, absl::make_unique<const Schema>()));
-  EXPECT_THAT(catalog.AddSchema(t2, absl::make_unique<const Schema>()),
+  ZETASQL_EXPECT_OK(catalog.AddSchema(t2, std::make_unique<const Schema>()));
+  EXPECT_THAT(catalog.AddSchema(t2, std::make_unique<const Schema>()),
               zetasql_base::testing::StatusIs(
                   absl::StatusCode::kInternal,
                   testing::MatchesRegex(".*Failed to insert schema.*")));
-  EXPECT_THAT(catalog.AddSchema(t1, absl::make_unique<const Schema>()),
+  EXPECT_THAT(catalog.AddSchema(t1, std::make_unique<const Schema>()),
               zetasql_base::testing::StatusIs(
                   absl::StatusCode::kInternal,
                   testing::MatchesRegex(".*Failed to insert schema.*")));

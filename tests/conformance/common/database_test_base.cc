@@ -17,6 +17,7 @@
 #include "tests/conformance/common/database_test_base.h"
 
 #include <chrono>  // NOLINT(build/c++11)
+#include <memory>
 #include <vector>
 
 #include "absl/memory/memory.h"
@@ -53,29 +54,29 @@ void DatabaseTest::SetUp() {
   // faster than that, so we set the policies on the order of milliseconds. By
   // default TestEnv conformance tests wait quite a while for admin operations
   // like create instance/database/schema.
-  auto retry_policy = absl::make_unique<cloud::spanner::LimitedTimeRetryPolicy>(
+  auto retry_policy = std::make_unique<cloud::spanner::LimitedTimeRetryPolicy>(
       std::chrono::seconds(120));
   auto backoff_policy =
-      absl::make_unique<cloud::spanner::ExponentialBackoffPolicy>(
+      std::make_unique<cloud::spanner::ExponentialBackoffPolicy>(
           std::chrono::milliseconds(1), std::chrono::milliseconds(2), 1.01);
   auto polling_policy =
-      absl::make_unique<cloud::spanner::GenericPollingPolicy<>>(
-          *retry_policy, *backoff_policy);
+      std::make_unique<cloud::spanner::GenericPollingPolicy<>>(*retry_policy,
+                                                               *backoff_policy);
 
   // Pick a unique database name for every test (reuse the instance).
-  database_ = absl::make_unique<google::cloud::spanner::Database>(
+  database_ = std::make_unique<google::cloud::spanner::Database>(
       google::cloud::spanner::Instance(globals.project_id, globals.instance_id),
       absl::StrCat("test-database-", absl::ToUnixMicros(absl::Now())));
 
   // Setup the database client.
-  database_client_ = absl::make_unique<cloud::spanner::DatabaseAdminClient>(
+  database_client_ = std::make_unique<cloud::spanner::DatabaseAdminClient>(
       cloud::spanner::MakeDatabaseAdminConnection(
           *globals.connection_options, retry_policy->clone(),
           backoff_policy->clone(), polling_policy->clone()));
   ZETASQL_ASSERT_OK(ToUtilStatusOr(database_client_->CreateDatabase(*database_).get()));
 
   // Setup a client to interact with the database.
-  client_ = absl::make_unique<cloud::spanner::Client>(
+  client_ = std::make_unique<cloud::spanner::Client>(
       google::cloud::spanner::MakeConnection(*database_,
                                              *globals.connection_options));
 
@@ -97,7 +98,7 @@ void DatabaseTest::TearDown() { database_client_->DropDatabase(*database_); }
 absl::Status DatabaseTest::ResetDatabase() {
   const ConformanceTestGlobals& globals = GetConformanceTestGlobals();
   ZETASQL_RETURN_IF_ERROR(ToUtilStatus(database_client_->DropDatabase(*database_)));
-  database_ = absl::make_unique<google::cloud::spanner::Database>(
+  database_ = std::make_unique<google::cloud::spanner::Database>(
       google::cloud::spanner::Instance(globals.project_id, globals.instance_id),
       absl::StrCat("test-database-", absl::ToUnixMicros(absl::Now())));
   return ToUtilStatus(

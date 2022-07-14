@@ -129,7 +129,7 @@ class GraphDependencyHelper {
 template <class TData, absl::string_view (*TGetId)(const TData&)>
 absl::Status GraphDependencyHelper<TData, TGetId>::AddNodeIfNotExists(
     const TData& data) {
-  nodes_.emplace_back(absl::make_unique<NodeInfo>(data));
+  nodes_.emplace_back(std::make_unique<NodeInfo>(data));
   absl::string_view id = TGetId(nodes_.back()->value);
   nodes_by_name_.insert({std::string(id), nodes_.back().get()});
   return absl::OkStatus();
