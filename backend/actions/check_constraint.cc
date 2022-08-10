@@ -38,7 +38,7 @@ absl::Status CheckConstraintVerifier::PrepareExpression(
     const CheckConstraint* check_constraint,
     zetasql::Catalog* function_catalog) {
   // Prepare an execuatable expression given a check constraint expression.
-  auto expr = absl::make_unique<zetasql::PreparedExpression>(
+  auto expr = std::make_unique<zetasql::PreparedExpression>(
       check_constraint->expression());
   zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
   for (const Column* dep : check_constraint->dependent_columns()) {

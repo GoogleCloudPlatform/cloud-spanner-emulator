@@ -44,8 +44,8 @@ class PartitionedDMLValidatorTest : public testing::Test {
   PartitionedDMLValidatorTest()
       : fn_catalog_(&type_factory_),
         schema_(test::CreateSchemaWithMultiTables(&type_factory_)),
-        catalog_(absl::make_unique<Catalog>(schema_.get(), &fn_catalog_,
-                                            /*reader=*/nullptr)) {}
+        catalog_(std::make_unique<Catalog>(schema_.get(), &fn_catalog_,
+                                           /*reader=*/nullptr)) {}
 
  protected:
   std::unique_ptr<const zetasql::AnalyzerOutput> AnalyzeQuery(

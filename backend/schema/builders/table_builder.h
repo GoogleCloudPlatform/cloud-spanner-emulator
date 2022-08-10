@@ -95,7 +95,7 @@ class Table::Builder {
   }
 
   Builder& set_row_deletion_policy(
-      absl::optional<ddl::RowDeletionPolicy> policy) {
+      std::optional<ddl::RowDeletionPolicy> policy) {
     instance_->row_deletion_policy_ = policy;
     return *this;
   }
@@ -147,7 +147,7 @@ class Table::Editor {
   }
 
   Editor& set_row_deletion_policy(
-      absl::optional<ddl::RowDeletionPolicy> policy) {
+      std::optional<ddl::RowDeletionPolicy> policy) {
     instance_->row_deletion_policy_ = policy;
     return *this;
   }

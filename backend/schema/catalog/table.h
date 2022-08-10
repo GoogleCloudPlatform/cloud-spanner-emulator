@@ -84,7 +84,7 @@ class Table : public SchemaNode {
   }
 
   // Returns the row deletion policy of this table.
-  absl::optional<ddl::RowDeletionPolicy> row_deletion_policy() const {
+  std::optional<ddl::RowDeletionPolicy> row_deletion_policy() const {
     return row_deletion_policy_;
   }
 
@@ -247,10 +247,10 @@ class Table : public SchemaNode {
   // Action to take for a child row in 'this' table if a row from the parent
   // table is deleted. Set to nullopt if no action was specified by the user
   // in the CREATE TABLE statement.
-  absl::optional<OnDeleteAction> on_delete_action_ = absl::nullopt;
+  std::optional<OnDeleteAction> on_delete_action_ = std::nullopt;
 
   // Row deletion policy of this table. Set to nullopt if not specified.
-  absl::optional<ddl::RowDeletionPolicy> row_deletion_policy_ = absl::nullopt;
+  std::optional<ddl::RowDeletionPolicy> row_deletion_policy_ = std::nullopt;
 };
 
 // Returns the name of the schema declared owning object (index or table) of

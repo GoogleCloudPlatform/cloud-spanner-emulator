@@ -16,6 +16,8 @@
 
 #include "backend/transaction/flush.h"
 
+#include <memory>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -38,8 +40,8 @@ using zetasql::values::String;
 class FlushTest : public testing::Test {
  public:
   FlushTest()
-      : storage_(absl::make_unique<InMemoryStorage>()),
-        type_factory_(absl::make_unique<zetasql::TypeFactory>()),
+      : storage_(std::make_unique<InMemoryStorage>()),
+        type_factory_(std::make_unique<zetasql::TypeFactory>()),
         schema_(test::CreateSchemaFromDDL(
                     {
                         R"(

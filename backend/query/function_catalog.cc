@@ -60,7 +60,7 @@ std::unique_ptr<zetasql::Function> PendingCommitTimestampFunction() {
   function_options.set_evaluator(
       zetasql::FunctionEvaluator(EvalPendingCommitTimestamp));
 
-  return absl::make_unique<zetasql::Function>(
+  return std::make_unique<zetasql::Function>(
       kPendingCommitTimestampFunctionName, kCloudSpannerEmulatorFunctionCatalog,
       zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
@@ -125,7 +125,7 @@ void FunctionCatalog::AddFunctionAliases() {
           original_function->function_options();
       std::string alias_name = function_options.alias_name;
       function_options.set_alias_name("");
-      auto alias_function = absl::make_unique<zetasql::Function>(
+      auto alias_function = std::make_unique<zetasql::Function>(
           original_function->Name(), original_function->GetGroup(),
           original_function->mode(), original_function->signatures(),
           function_options);

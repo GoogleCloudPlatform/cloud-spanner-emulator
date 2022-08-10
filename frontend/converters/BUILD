@@ -130,7 +130,6 @@ cc_test(
     srcs = ["reads_test.cc"],
     deps = [
         ":reads",
-        "//backend/access:write",
         "//backend/datamodel:key_range",
         "//backend/datamodel:key_set",
         "//backend/schema/catalog:schema",

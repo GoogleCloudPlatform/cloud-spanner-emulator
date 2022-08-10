@@ -16,6 +16,8 @@
 
 #include "frontend/converters/mutations.h"
 
+#include <memory>
+
 #include "google/spanner/v1/mutation.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
@@ -69,7 +71,7 @@ using zetasql_base::testing::StatusIs;
 class AccessProtosTest : public testing::Test {
  public:
   AccessProtosTest()
-      : type_factory_(absl::make_unique<zetasql::TypeFactory>()),
+      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
         schema_(test::CreateSchemaWithOneTable(type_factory_.get())) {}
 
  protected:

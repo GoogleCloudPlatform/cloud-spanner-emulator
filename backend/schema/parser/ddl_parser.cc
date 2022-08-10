@@ -1004,6 +1004,10 @@ absl::StatusOr<DDLStatement> BuildDDLStatement(
     case JJTALTER_TABLE_STATEMENT:
       ZETASQL_RETURN_IF_ERROR(VisitAlterTableNode(child, &statement, ddl_text, errors));
       break;
+    case JJTANALYZE_STATEMENT:
+      // Intentionally no-op
+      statement.mutable_analyze();
+      break;
     default:
       return error::Internal(
           absl::StrCat("Unexpected statement: ", child->toString()));

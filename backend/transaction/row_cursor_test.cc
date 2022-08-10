@@ -16,6 +16,8 @@
 
 #include "backend/transaction/row_cursor.h"
 
+#include <memory>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -36,7 +38,7 @@ using zetasql::values::String;
 class StorageIteratorRowCursorTest : public testing::Test {
  public:
   StorageIteratorRowCursorTest()
-      : type_factory_(absl::make_unique<zetasql::TypeFactory>()),
+      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
         schema_(test::CreateSchemaWithOneTable(type_factory_.get())) {
     std::vector<std::string> columns = {"int64_col", "string_col"};
     auto table = schema_->FindTable("test_table");
@@ -68,7 +70,7 @@ TEST_F(StorageIteratorRowCursorTest, CreateWithNoIterators) {
 }
 
 TEST_F(StorageIteratorRowCursorTest, CreateWithEmptyIterator) {
-  iterators_.push_back(absl::make_unique<FixedRowStorageIterator>());
+  iterators_.push_back(std::make_unique<FixedRowStorageIterator>());
 
   StorageIteratorRowCursor rowc(std::move(iterators_), std::move(columns_));
 
@@ -86,7 +88,7 @@ TEST_F(StorageIteratorRowCursorTest, CreateWithUnaryLengthIterator) {
   std::vector<std::pair<Key, std::vector<Value>>> row_values = {
       {Key({Int64(2)}), {Int64(20), String("test_string1")}}};
   iterators_.push_back(
-      absl::make_unique<FixedRowStorageIterator>(std::move(row_values)));
+      std::make_unique<FixedRowStorageIterator>(std::move(row_values)));
 
   StorageIteratorRowCursor rowc(std::move(iterators_), std::move(columns_));
 
@@ -108,7 +110,7 @@ TEST_F(StorageIteratorRowCursorTest, ConvertsInvalidValuesToNulls) {
   std::vector<std::pair<Key, std::vector<Value>>> row_values = {
       {Key({Int64(2)}), {Int64(20), zetasql::Value()}}};
   iterators_.push_back(
-      absl::make_unique<FixedRowStorageIterator>(std::move(row_values)));
+      std::make_unique<FixedRowStorageIterator>(std::move(row_values)));
 
   StorageIteratorRowCursor rowc(std::move(iterators_), std::move(columns_));
 
@@ -127,11 +129,11 @@ TEST_F(StorageIteratorRowCursorTest, ConvertsInvalidValuesToNulls) {
 }
 
 TEST_F(StorageIteratorRowCursorTest, CreateWithEmptyAndNonEmptyIterators) {
-  iterators_.push_back(absl::make_unique<FixedRowStorageIterator>());
+  iterators_.push_back(std::make_unique<FixedRowStorageIterator>());
   std::vector<std::pair<Key, std::vector<Value>>> row_values = {
       {Key({Int64(2)}), {Int64(20), String("test_string1")}}};
   iterators_.push_back(
-      absl::make_unique<FixedRowStorageIterator>(std::move(row_values)));
+      std::make_unique<FixedRowStorageIterator>(std::move(row_values)));
 
   StorageIteratorRowCursor rowc(std::move(iterators_), std::move(columns_));
 
@@ -155,7 +157,7 @@ TEST_F(StorageIteratorRowCursorTest, CreateWithMultiRowIterators) {
       {Key({Int64(2)}), {Int64(20), String("test_string2")}},
       {Key({Int64(3)}), {Int64(30), String("test_string3")}}};
   iterators_.push_back(
-      absl::make_unique<FixedRowStorageIterator>(std::move(row_values)));
+      std::make_unique<FixedRowStorageIterator>(std::move(row_values)));
 
   StorageIteratorRowCursor rowc(std::move(iterators_), std::move(columns_));
 
@@ -183,15 +185,15 @@ TEST_F(StorageIteratorRowCursorTest, CreateRowCursorMultipleMultiRowIterators) {
       {Key({Int64(2)}), {Int64(20), String("test_string2")}},
       {Key({Int64(3)}), {Int64(30), String("test_string3")}}};
   iterators_.push_back(
-      absl::make_unique<FixedRowStorageIterator>(std::move(row_values)));
+      std::make_unique<FixedRowStorageIterator>(std::move(row_values)));
   // insert empty iterator in middle.
-  iterators_.push_back(absl::make_unique<FixedRowStorageIterator>());
+  iterators_.push_back(std::make_unique<FixedRowStorageIterator>());
   row_values = {{Key({Int64(4)}), {Int64(40), String("test_string4")}},
                 {Key({Int64(5)}), {Int64(50), String("test_string5")}}},
   iterators_.push_back(
-      absl::make_unique<FixedRowStorageIterator>(std::move(row_values)));
+      std::make_unique<FixedRowStorageIterator>(std::move(row_values)));
   // insert empty iterator at end.
-  iterators_.push_back(absl::make_unique<FixedRowStorageIterator>());
+  iterators_.push_back(std::make_unique<FixedRowStorageIterator>());
 
   StorageIteratorRowCursor rowc(std::move(iterators_), std::move(columns_));
 

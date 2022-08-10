@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_GRAPH_EDITOR_H_
 
 #include <algorithm>
+#include <memory>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -55,7 +56,7 @@ class SchemaGraphEditor {
                     SchemaValidationContext* context)
       : original_graph_(original_graph),
         context_(context),
-        cloned_pool_(absl::make_unique<SchemaObjectsPool>()) {
+        cloned_pool_(std::make_unique<SchemaObjectsPool>()) {
     context_->set_added_nodes(&added_nodes_);
   }
 

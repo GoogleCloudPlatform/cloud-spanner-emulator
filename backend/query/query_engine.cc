@@ -17,6 +17,7 @@
 #include "backend/query/query_engine.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -346,7 +347,7 @@ absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedInsert(
                        insert_statement->insert_column_list(),
                        insert_statement->row_list()));
 
-  auto prepared_insert = absl::make_unique<zetasql::PreparedModify>(
+  auto prepared_insert = std::make_unique<zetasql::PreparedModify>(
       insert_statement, CommonEvaluatorOptions(type_factory));
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(parameters));
@@ -369,7 +370,7 @@ absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedUpdate(
                    PendingCommitTimestampColumnsInUpdate(
                        update_statement->update_item_list()));
 
-  auto prepared_update = absl::make_unique<zetasql::PreparedModify>(
+  auto prepared_update = std::make_unique<zetasql::PreparedModify>(
       update_statement, CommonEvaluatorOptions(type_factory));
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(parameters));
@@ -388,7 +389,7 @@ absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedDelete(
     const zetasql::ResolvedDeleteStmt* delete_statement,
     const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory) {
-  auto prepared_delete = absl::make_unique<zetasql::PreparedModify>(
+  auto prepared_delete = std::make_unique<zetasql::PreparedModify>(
       delete_statement, CommonEvaluatorOptions(type_factory));
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(parameters));
@@ -434,7 +435,7 @@ absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
   ZETASQL_RET_CHECK_EQ(resolved_statement->node_kind(), zetasql::RESOLVED_QUERY_STMT)
       << "input is not a query statement";
 
-  auto prepared_query = absl::make_unique<zetasql::PreparedQuery>(
+  auto prepared_query = std::make_unique<zetasql::PreparedQuery>(
       resolved_statement->GetAs<zetasql::ResolvedQueryStmt>(),
       CommonEvaluatorOptions(type_factory));
   // Call PrepareQuery to set the AnalyzerOptions that we used to Analyze the
@@ -461,7 +462,7 @@ absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
     names.push_back(iterator->GetColumnName(i));
     types.push_back(iterator->GetColumnType(i));
   }
-  return absl::make_unique<VectorsRowCursor>(names, types, values);
+  return std::make_unique<VectorsRowCursor>(names, types, values);
 }
 
 absl::StatusOr<std::map<std::string, zetasql::Value>> ExtractParameters(
@@ -534,8 +535,8 @@ ExtractValidatedResolvedStatementAndOptions(
   QueryEngineOptions options;
   std::unique_ptr<QueryValidator> query_validator =
       IsDMLStmt(analyzer_output->resolved_statement()->node_kind())
-          ? absl::make_unique<DMLQueryValidator>(schema, &options)
-          : absl::make_unique<QueryValidator>(schema, &options);
+          ? std::make_unique<DMLQueryValidator>(schema, &options)
+          : std::make_unique<QueryValidator>(schema, &options);
   ZETASQL_RETURN_IF_ERROR(statement->Accept(query_validator.get()));
   if (query_engine_options != nullptr) {
     *query_engine_options = options;
@@ -558,7 +559,7 @@ ExtractValidatedResolvedStatementAndOptions(
 // statements modify.
 class ExtractDmlTargetTableVisitor : public zetasql::ResolvedASTVisitor {
  public:
-  absl::optional<std::string> target_table() const { return target_table_; }
+  std::optional<std::string> target_table() const { return target_table_; }
 
  private:
   absl::Status VisitResolvedInsertStmt(
@@ -577,7 +578,7 @@ class ExtractDmlTargetTableVisitor : public zetasql::ResolvedASTVisitor {
     return absl::OkStatus();
   }
 
-  absl::optional<std::string> target_table_;
+  std::optional<std::string> target_table_;
 };
 
 }  // namespace

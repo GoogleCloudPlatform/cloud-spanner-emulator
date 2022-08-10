@@ -154,8 +154,8 @@ SchemaGraphEditor::CanonicalizeGraph() {
   }
   ZETASQL_RETURN_IF_ERROR(CheckInvariants());
   ZETASQL_RETURN_IF_ERROR(CheckValid());
-  cloned_graph = absl::make_unique<SchemaGraph>(std::move(new_nodes_),
-                                                std::move(cloned_pool_));
+  cloned_graph = std::make_unique<SchemaGraph>(std::move(new_nodes_),
+                                               std::move(cloned_pool_));
   return cloned_graph;
 }
 

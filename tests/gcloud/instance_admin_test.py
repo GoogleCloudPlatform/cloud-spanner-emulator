@@ -55,8 +55,9 @@ class GCloudInstanceAdminTest(emulator.TestCase):
     self.assertEqual(
         self.RunGCloud('spanner', 'instances', 'list'),
         self.JoinLines(
-            'NAME           DISPLAY_NAME   CONFIG           NODE_COUNT  STATE',
-            'test-instance  Test Instance  emulator-config  3           READY'))
+            'NAME           DISPLAY_NAME   CONFIG           NODE_COUNT  PROCESSING_UNITS  STATE',
+            'test-instance  Test Instance  emulator-config  3                             READY'
+        ))
 
   def testDescribeInstance(self):
     self.RunGCloud('spanner', 'instances', 'create', 'test-instance',

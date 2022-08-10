@@ -18,7 +18,9 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
+#include <variant>
 
 #include "google/spanner/v1/spanner.pb.h"
 #include "zetasql/public/value.h"
@@ -83,8 +85,8 @@ using ReadWriteTransactionPtr = std::unique_ptr<backend::ReadWriteTransaction>;
 using ReadOnlyTransactionPtr = std::unique_ptr<backend::ReadOnlyTransaction>;
 
 Transaction::Transaction(
-    absl::variant<std::unique_ptr<backend::ReadWriteTransaction>,
-                  std::unique_ptr<backend::ReadOnlyTransaction>>
+    std::variant<std::unique_ptr<backend::ReadWriteTransaction>,
+                 std::unique_ptr<backend::ReadOnlyTransaction>>
         backend_transaction,
     const backend::QueryEngine* query_engine,
     const spanner_api::TransactionOptions& options, const Usage& usage)
@@ -285,7 +287,7 @@ void Transaction::MaybeInvalidate(const absl::Status& status) {
   }
 }
 
-absl::optional<Transaction::RequestReplayState>
+std::optional<Transaction::RequestReplayState>
 Transaction::LookupOrRegisterDmlRequest(int64_t seqno, int64_t request_hash,
                                         const std::string& sql_statement) {
   mu_.AssertHeld();
@@ -310,7 +312,7 @@ Transaction::LookupOrRegisterDmlRequest(int64_t seqno, int64_t request_hash,
         seqno, Transaction::RequestReplayState{.status = absl::OkStatus(),
                                                .request_hash = request_hash});
     dml_error_mode_ = DMLErrorHandlingMode::kDmlRequest;
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // Request was found, check to see that the request hash matches.
@@ -342,7 +344,7 @@ void Transaction::SetDmlRequestReplayStatus(const absl::Status& status) {
 }
 
 void Transaction::SetDmlReplayOutcome(
-    absl::variant<spanner_api::ResultSet, spanner_api::ExecuteBatchDmlResponse>
+    std::variant<spanner_api::ResultSet, spanner_api::ExecuteBatchDmlResponse>
         outcome) {
   mu_.AssertHeld();
 

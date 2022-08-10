@@ -287,7 +287,7 @@ Server::Server(std::unique_ptr<ServerEnv> env)
 
 // Server lifecycle methods.
 std::unique_ptr<Server> Server::Create(const Server::Options& options) {
-  auto env = absl::make_unique<ServerEnv>();
+  auto env = std::make_unique<ServerEnv>();
   std::unique_ptr<Server> server = absl::WrapUnique(new Server(std::move(env)));
   ::grpc::ServerBuilder builder;
 

@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <utility>
+#include <variant>
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
@@ -218,12 +219,12 @@ absl::Status ExecuteSql(RequestContext* ctx,
             if (!state->status.ok()) {
               return state->status;
             }
-            if (!absl::holds_alternative<spanner_api::ResultSet>(
+            if (!std::holds_alternative<spanner_api::ResultSet>(
                     state->outcome)) {
               return error::ReplayRequestMismatch(request->seqno(),
                                                   request->sql());
             }
-            *response = absl::get<spanner_api::ResultSet>(state->outcome);
+            *response = std::get<spanner_api::ResultSet>(state->outcome);
             return state->status;
           }
 
@@ -356,14 +357,14 @@ absl::Status ExecuteStreamingSql(
             if (!state->status.ok()) {
               return state->status;
             }
-            if (!absl::holds_alternative<spanner_api::ResultSet>(
+            if (!std::holds_alternative<spanner_api::ResultSet>(
                     state->outcome)) {
               return error::ReplayRequestMismatch(request->seqno(),
                                                   request->sql());
             }
             spanner_api::PartialResultSet response;
             spanner_api::ResultSet replay_result =
-                absl::get<spanner_api::ResultSet>(state->outcome);
+                std::get<spanner_api::ResultSet>(state->outcome);
             *response.mutable_stats() = replay_result.stats();
             *response.mutable_metadata() = replay_result.metadata();
             stream->Send(response);
@@ -520,13 +521,13 @@ absl::Status ExecuteBatchDml(RequestContext* ctx,
               Transaction::DMLErrorHandlingMode::kDmlRegistrationError) {
         return state->status;
       }
-      if (!absl::holds_alternative<spanner_api::ExecuteBatchDmlResponse>(
+      if (!std::holds_alternative<spanner_api::ExecuteBatchDmlResponse>(
               state->outcome)) {
         return error::ReplayRequestMismatch(request->seqno(),
                                             request->statements(0).sql());
       }
       *response =
-          absl::get<spanner_api::ExecuteBatchDmlResponse>(state->outcome);
+          std::get<spanner_api::ExecuteBatchDmlResponse>(state->outcome);
 
       // BatchDml always returns OK status with the error being populated in the
       // response.

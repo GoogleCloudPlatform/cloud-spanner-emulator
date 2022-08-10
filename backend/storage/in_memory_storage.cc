@@ -138,14 +138,14 @@ absl::Status InMemoryStorage::Read(
   std::vector<FixedRowStorageIterator::Row> rows;
   // Return an empty iterator for empty key_range.
   if (key_range.start_key() >= key_range.limit_key()) {
-    *itr = absl::make_unique<FixedRowStorageIterator>();
+    *itr = std::make_unique<FixedRowStorageIterator>();
     return absl::OkStatus();
   }
 
   // Lookup for given table.
   auto table_itr = tables_.find(table_id);
   if (table_itr == tables_.end()) {
-    *itr = absl::make_unique<FixedRowStorageIterator>();
+    *itr = std::make_unique<FixedRowStorageIterator>();
     return absl::OkStatus();
   }
   const Table& table = table_itr->second;
@@ -166,7 +166,7 @@ absl::Status InMemoryStorage::Read(
     }
     rows.emplace_back(std::make_pair(itr->first, values));
   }
-  *itr = absl::make_unique<FixedRowStorageIterator>(std::move(rows));
+  *itr = std::make_unique<FixedRowStorageIterator>(std::move(rows));
   return absl::OkStatus();
 }
 

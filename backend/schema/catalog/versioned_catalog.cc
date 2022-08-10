@@ -30,7 +30,7 @@ namespace emulator {
 namespace backend {
 
 VersionedCatalog::VersionedCatalog() {
-  schemas_[absl::InfinitePast()] = absl::make_unique<const Schema>();
+  schemas_[absl::InfinitePast()] = std::make_unique<const Schema>();
 }
 
 VersionedCatalog::VersionedCatalog(

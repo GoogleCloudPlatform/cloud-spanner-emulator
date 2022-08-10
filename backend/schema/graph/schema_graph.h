@@ -29,7 +29,7 @@ namespace backend {
 
 class SchemaGraph {
  public:
-  SchemaGraph() : pool_(absl::make_unique<SchemaObjectsPool>()) {}
+  SchemaGraph() : pool_(std::make_unique<SchemaObjectsPool>()) {}
 
   // Constructor for creating a graph from an externally-maintained list of
   // nodes.

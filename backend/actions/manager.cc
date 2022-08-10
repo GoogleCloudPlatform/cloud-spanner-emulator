@@ -77,62 +77,62 @@ void ActionRegistry::BuildActionRegistry() {
   for (const Table* table : schema_->tables()) {
     // Column value checks for all tables.
     table_validators_[table].emplace_back(
-        absl::make_unique<ColumnValueValidator>());
+        std::make_unique<ColumnValueValidator>());
 
     // Row existence checks for all tables.
     table_validators_[table].emplace_back(
-        absl::make_unique<RowExistenceValidator>());
+        std::make_unique<RowExistenceValidator>());
 
     // Interleave actions for child tables.
     for (const Table* child : table->children()) {
       table_validators_[table].emplace_back(
-          absl::make_unique<InterleaveParentValidator>(table, child));
+          std::make_unique<InterleaveParentValidator>(table, child));
 
       table_effectors_[table].emplace_back(
-          absl::make_unique<InterleaveParentEffector>(table, child));
+          std::make_unique<InterleaveParentEffector>(table, child));
     }
 
     // Interleave actions for parent table.
     if (table->parent() != nullptr) {
       table_validators_[table].emplace_back(
-          absl::make_unique<InterleaveChildValidator>(table->parent(), table));
+          std::make_unique<InterleaveChildValidator>(table->parent(), table));
     }
 
     // Actions for Index.
     for (const Index* index : table->indexes()) {
       // Index effects.
       table_effectors_[table].emplace_back(
-          absl::make_unique<IndexEffector>(index));
+          std::make_unique<IndexEffector>(index));
 
       // Index uniqueness checks.
       if (index->is_unique()) {
         table_verifiers_[index->index_data_table()].emplace_back(
-            absl::make_unique<UniqueIndexVerifier>(index));
+            std::make_unique<UniqueIndexVerifier>(index));
       }
     }
 
     // Actions for foreign keys.
     for (const ForeignKey* foreign_key : table->foreign_keys()) {
       table_verifiers_[foreign_key->referencing_data_table()].emplace_back(
-          absl::make_unique<ForeignKeyReferencingVerifier>(foreign_key));
+          std::make_unique<ForeignKeyReferencingVerifier>(foreign_key));
     }
     for (const ForeignKey* foreign_key : table->referencing_foreign_keys()) {
       table_verifiers_[foreign_key->referenced_data_table()].emplace_back(
-          absl::make_unique<ForeignKeyReferencedVerifier>(foreign_key));
+          std::make_unique<ForeignKeyReferencedVerifier>(foreign_key));
     }
 
     // Actions for check constraints.
     for (const CheckConstraint* check_constraint : table->check_constraints()) {
       table_verifiers_[table].emplace_back(
-          absl::make_unique<CheckConstraintVerifier>(check_constraint,
-                                                     &catalog_));
+          std::make_unique<CheckConstraintVerifier>(check_constraint,
+                                                    &catalog_));
     }
 
     // Effector for generated columns.
     for (const Column* column : table->columns()) {
       if (column->is_generated()) {
         table_effectors_[table].emplace_back(
-            absl::make_unique<GeneratedColumnEffector>(table, &catalog_));
+            std::make_unique<GeneratedColumnEffector>(table, &catalog_));
         break;
       }
     }
@@ -142,7 +142,7 @@ void ActionRegistry::BuildActionRegistry() {
 void ActionManager::AddActionsForSchema(
     const Schema* schema, const FunctionCatalog* function_catalog) {
   registry_[schema] =
-      absl::make_unique<ActionRegistry>(schema, function_catalog);
+      std::make_unique<ActionRegistry>(schema, function_catalog);
 }
 
 absl::StatusOr<ActionRegistry*> ActionManager::GetActionsForSchema(

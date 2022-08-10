@@ -65,6 +65,7 @@ void ddl_statement() :
   (   alter_statement()
     | create_statement()
     | drop_statement()
+    | analyze_statement()
   )
   <EOF>
 }
@@ -337,6 +338,12 @@ void alter_table_statement() :
     | LOOKAHEAD(2) <ADD> row_deletion_policy_clause() #add_row_deletion_policy
     | <REPLACE> row_deletion_policy_clause() #replace_row_deletion_policy
   )
+}
+
+void analyze_statement() :
+{}
+{
+  <ANALYZE>
 }
 
 TOKEN:

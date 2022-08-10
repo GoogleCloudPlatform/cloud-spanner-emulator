@@ -95,10 +95,10 @@ class TestRowReader : public backend::RowReader {
     if (!tables_.contains(table_name)) {
       return google::spanner::emulator::error::TableNotFound(table_name);
     }
-    *cursor = absl::make_unique<ColumnRemappedRowCursor>(
-        absl::make_unique<TestRowCursor>(tables_[table_name].column_names,
-                                         tables_[table_name].column_types,
-                                         tables_[table_name].column_values),
+    *cursor = std::make_unique<ColumnRemappedRowCursor>(
+        std::make_unique<TestRowCursor>(tables_[table_name].column_names,
+                                        tables_[table_name].column_types,
+                                        tables_[table_name].column_values),
         read_arg.columns);
     return absl::OkStatus();
   }

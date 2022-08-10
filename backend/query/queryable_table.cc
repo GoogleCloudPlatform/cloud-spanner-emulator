@@ -89,7 +89,7 @@ class RowCursorEvaluatorTableIterator
 QueryableTable::QueryableTable(const backend::Table* table, RowReader* reader)
     : wrapped_table_(table), reader_(reader) {
   for (const auto* column : table->columns()) {
-    columns_.push_back(absl::make_unique<const QueryableColumn>(column));
+    columns_.push_back(std::make_unique<const QueryableColumn>(column));
   }
 
   // Populate primary_key_column_indexes_.
@@ -119,7 +119,7 @@ QueryableTable::CreateEvaluatorTableIterator(
   read_arg.columns = column_names;
   std::unique_ptr<RowCursor> cursor;
   ZETASQL_RETURN_IF_ERROR(reader_->Read(read_arg, &cursor));
-  return absl::make_unique<RowCursorEvaluatorTableIterator>(std::move(cursor));
+  return std::make_unique<RowCursorEvaluatorTableIterator>(std::move(cursor));
 }
 
 const zetasql::Column* QueryableTable::FindColumnByName(

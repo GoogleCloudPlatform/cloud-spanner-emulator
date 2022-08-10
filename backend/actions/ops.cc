@@ -129,7 +129,7 @@ struct TableVisitor {
 };
 
 const Table* TableOf(const WriteOp& op) {
-  return absl::visit(TableVisitor(), op);
+  return std::visit(TableVisitor(), op);
 }
 
 }  // namespace backend

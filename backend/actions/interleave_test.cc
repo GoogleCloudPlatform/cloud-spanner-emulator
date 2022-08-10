@@ -88,8 +88,8 @@ class InterleaveTest : public test::ActionsTest {
 TEST_F(InterleaveTest,
        ParentRowDeleteWithNoActionCascadeSucceedsWithNoChildRows) {
   std::unique_ptr<Validator> validator =
-      absl::make_unique<InterleaveParentValidator>(parent_table_,
-                                                   no_action_delete_child_);
+      std::make_unique<InterleaveParentValidator>(parent_table_,
+                                                  no_action_delete_child_);
 
   // Action should succeed for no child rows.
   ZETASQL_EXPECT_OK(validator->Validate(ctx(), Delete(parent_table_, Key({Int64(1)}))));
@@ -97,8 +97,8 @@ TEST_F(InterleaveTest,
 
 TEST_F(InterleaveTest, ParentRowDeleteWithNoActionCascadeFailsWithChildRows) {
   std::unique_ptr<Validator> validator =
-      absl::make_unique<InterleaveParentValidator>(parent_table_,
-                                                   no_action_delete_child_);
+      std::make_unique<InterleaveParentValidator>(parent_table_,
+                                                  no_action_delete_child_);
 
   // Action should fail if child rows exist.
   ZETASQL_EXPECT_OK(store()->Insert(no_action_delete_child_, Key({Int64(1), Int64(1)}),
@@ -111,8 +111,8 @@ TEST_F(InterleaveTest, ParentRowDeleteWithNoActionCascadeFailsWithChildRows) {
 TEST_F(InterleaveTest,
        ParentRowDeleteWithDeleteCascadeSucceedsWithAndWithoutChildRows) {
   std::unique_ptr<Validator> validator =
-      absl::make_unique<InterleaveParentValidator>(parent_table_,
-                                                   cascade_delete_child_);
+      std::make_unique<InterleaveParentValidator>(parent_table_,
+                                                  cascade_delete_child_);
 
   // Action should succeed if child row does not exist.
   ZETASQL_EXPECT_OK(validator->Validate(ctx(), Delete(parent_table_, Key({Int64(1)}))));
@@ -125,8 +125,8 @@ TEST_F(InterleaveTest,
 
 TEST_F(InterleaveTest, ParentRowDeleteWithNoActionDeleteCascadeHasNoEffects) {
   std::unique_ptr<Effector> effector =
-      absl::make_unique<InterleaveParentEffector>(parent_table_,
-                                                  no_action_delete_child_);
+      std::make_unique<InterleaveParentEffector>(parent_table_,
+                                                 no_action_delete_child_);
 
   // Action should not take any effects even if child row exist.
   ZETASQL_EXPECT_OK(effector->Effect(ctx(), Delete(parent_table_, Key({Int64(1)}))));
@@ -135,8 +135,8 @@ TEST_F(InterleaveTest, ParentRowDeleteWithNoActionDeleteCascadeHasNoEffects) {
 
 TEST_F(InterleaveTest, ParentRowDeleteWithOnDeleteCascadeAddsEffects) {
   std::unique_ptr<Effector> effector =
-      absl::make_unique<InterleaveParentEffector>(parent_table_,
-                                                  cascade_delete_child_);
+      std::make_unique<InterleaveParentEffector>(parent_table_,
+                                                 cascade_delete_child_);
 
   // Effector should add delete ops for child rows.
   ZETASQL_EXPECT_OK(store()->Insert(cascade_delete_child_, Key({Int64(1), Int64(1)}),
@@ -150,8 +150,8 @@ TEST_F(InterleaveTest, ParentRowDeleteWithOnDeleteCascadeAddsEffects) {
 
 TEST_F(InterleaveTest, ChildRowInsertFailsWithoutParentRow) {
   std::unique_ptr<Validator> validator =
-      absl::make_unique<InterleaveChildValidator>(parent_table_,
-                                                  cascade_delete_child_);
+      std::make_unique<InterleaveChildValidator>(parent_table_,
+                                                 cascade_delete_child_);
 
   // Action should fail since there is no parent row.
   EXPECT_THAT(validator->Validate(ctx(), Insert(cascade_delete_child_,
@@ -161,8 +161,8 @@ TEST_F(InterleaveTest, ChildRowInsertFailsWithoutParentRow) {
 
 TEST_F(InterleaveTest, ChildRowInsertSucceedsWithParentRow) {
   std::unique_ptr<Validator> validator =
-      absl::make_unique<InterleaveChildValidator>(parent_table_,
-                                                  cascade_delete_child_);
+      std::make_unique<InterleaveChildValidator>(parent_table_,
+                                                 cascade_delete_child_);
 
   // Add parent row.
   ZETASQL_EXPECT_OK(store()->Insert(parent_table_, Key({Int64(1)}), {}, {}));

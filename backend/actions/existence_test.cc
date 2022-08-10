@@ -49,7 +49,7 @@ class RowExistenceTest : public test::ActionsTest {
   RowExistenceTest()
       : schema_(emulator::test::CreateSchemaWithOneTable(&type_factory_)),
         table_(schema_->FindTable("test_table")),
-        validator_(absl::make_unique<RowExistenceValidator>()) {}
+        validator_(std::make_unique<RowExistenceValidator>()) {}
 
  protected:
   // Test components.

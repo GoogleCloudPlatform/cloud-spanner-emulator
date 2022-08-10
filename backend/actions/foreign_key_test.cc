@@ -66,9 +66,9 @@ class ForeignKeyTest : public test::ActionsTest {
         referenced_data_(foreign_key_->referenced_index()->index_data_table()),
         referenced_columns_(referenced_data_->columns()),
         referencing_verifier_(
-            absl::make_unique<ForeignKeyReferencingVerifier>(foreign_key_)),
+            std::make_unique<ForeignKeyReferencingVerifier>(foreign_key_)),
         referenced_verifier_(
-            absl::make_unique<ForeignKeyReferencedVerifier>(foreign_key_)) {}
+            std::make_unique<ForeignKeyReferencedVerifier>(foreign_key_)) {}
 
  protected:
   // Test components.

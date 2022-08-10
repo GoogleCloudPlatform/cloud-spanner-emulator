@@ -241,7 +241,7 @@ class SchemaUpdaterImpl {
       const ddl::CreateIndex& ddl_index, const Table* indexed_table = nullptr);
 
   absl::Status AlterRowDeletionPolicy(
-      absl::optional<ddl::RowDeletionPolicy> row_deletion_policy,
+      std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
       const Table* table);
   absl::Status AlterTable(const ddl::AlterTable& alter_table);
   absl::Status AlterInterleave(const ddl::InterleaveConstraint& ddl_interleave,
@@ -367,12 +367,15 @@ SchemaUpdaterImpl::ApplyDDLStatement(absl::string_view statement) {
       ZETASQL_RETURN_IF_ERROR(DropIndex(ddl_statement.drop_index()));
       break;
     }
+    case ddl::DDLStatement::kAnalyze:
+      // Intentionally no=op.
+      break;
     default:
       ZETASQL_RET_CHECK(false) << "Unsupported ddl statement: "
                        << ddl_statement.kind_case();
   }
   ZETASQL_ASSIGN_OR_RETURN(auto new_schema_graph, editor_->CanonicalizeGraph());
-  return absl::make_unique<const Schema>(std::move(new_schema_graph));
+  return std::make_unique<const Schema>(std::move(new_schema_graph));
 }
 
 absl::StatusOr<std::vector<SchemaValidationContext>>
@@ -385,7 +388,7 @@ SchemaUpdaterImpl::ApplyDDLStatements(
     SchemaValidationContext statement_context{
         storage_, &global_names_, type_factory_, schema_change_timestamp_};
     statement_context_ = &statement_context;
-    editor_ = absl::make_unique<SchemaGraphEditor>(
+    editor_ = std::make_unique<SchemaGraphEditor>(
         latest_schema_->GetSchemaGraph(), statement_context_);
 
     // If there is a semantic validation error, then we return right away.
@@ -411,7 +414,7 @@ SchemaUpdaterImpl::ApplyDDLStatements(
 template <typename ColumnModifier>
 absl::Status SchemaUpdaterImpl::SetColumnOptions(const ddl::Options& options,
                                                  ColumnModifier* modifier) {
-  absl::optional<bool> allows_commit_timestamp = absl::nullopt;
+  std::optional<bool> allows_commit_timestamp = std::nullopt;
   for (const ddl::Options::Option& option : options.option_val()) {
     ZETASQL_RET_CHECK_EQ(option.name(), ddl::kCommitTimestampOptionName)
         << "Invalid column option: " << option.name();
@@ -420,7 +423,7 @@ absl::Status SchemaUpdaterImpl::SetColumnOptions(const ddl::Options& options,
         allows_commit_timestamp = option.bool_value();
         break;
       case ddl::Options_Option::kNullValue:
-        allows_commit_timestamp = absl::nullopt;
+        allows_commit_timestamp = std::nullopt;
         break;
       default:
         ZETASQL_RET_CHECK(false) << "Option " << ddl::kCommitTimestampOptionName
@@ -626,7 +629,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
 
   // Set the default values for nullability and length.
   modifier->set_nullable(true);
-  modifier->set_declared_max_length(absl::nullopt);
+  modifier->set_declared_max_length(std::nullopt);
   for (const ddl::Constraint& ddl_constraint : ddl_column.constraints()) {
     switch (ddl_constraint.kind_case()) {
       case ddl::Constraint::kNotNull: {
@@ -1357,7 +1360,7 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
 }
 
 absl::Status SchemaUpdaterImpl::AlterRowDeletionPolicy(
-    absl::optional<ddl::RowDeletionPolicy> row_deletion_policy,
+    std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
     const Table* table) {
   return AlterNode(table, [&](Table::Editor* editor) {
     editor->set_row_deletion_policy(row_deletion_policy);
@@ -1469,7 +1472,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_table) {
       }
       case ddl::AlterRowDeletionPolicy::DROP: {
         if (table->row_deletion_policy().has_value()) {
-          return AlterRowDeletionPolicy(absl::nullopt, table);
+          return AlterRowDeletionPolicy(std::nullopt, table);
         } else {
           return error::RowDeletionPolicyDoesNotExist(table->Name());
         }

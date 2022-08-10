@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include <memory>
+
 #include "zetasql/base/logging.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -59,7 +61,7 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
 
     // Initialize connection options required by the client library.
     auto connection_options =
-        absl::make_unique<google::cloud::spanner::ConnectionOptions>(
+        std::make_unique<google::cloud::spanner::ConnectionOptions>(
             grpc::InsecureChannelCredentials());
     connection_options->set_endpoint(
         absl::StrCat(server_->host(), ":", server_->port()));
@@ -67,7 +69,7 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
     // Setup an instance which will be reused for all tests.
     google::cloud::spanner::Instance instance(kProjectName, kInstanceName);
     auto instance_client =
-        absl::make_unique<google::cloud::spanner::InstanceAdminClient>(
+        std::make_unique<google::cloud::spanner::InstanceAdminClient>(
             google::cloud::spanner::MakeInstanceAdminConnection(
                 *connection_options));
     ZETASQL_ASSERT_OK(google::spanner::emulator::test::ToUtilStatusOr(
@@ -81,7 +83,7 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
             .get()));
 
     // Set globals for the test.
-    globals_ = absl::make_unique<ConformanceTestGlobals>();
+    globals_ = std::make_unique<ConformanceTestGlobals>();
     globals_->project_id = instance.project_id();
     globals_->instance_id = instance.instance_id();
     globals_->connection_options = std::move(connection_options);

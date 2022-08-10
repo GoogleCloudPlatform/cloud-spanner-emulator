@@ -169,7 +169,7 @@ absl::Status ValidateDescendantTables(
 }
 
 absl::Status ValidateRowDeletionPolicy(
-    absl::optional<ddl::RowDeletionPolicy> row_deletion_policy,
+    std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
     const Table* table) {
   if (!row_deletion_policy.has_value()) {
     return absl::OkStatus();

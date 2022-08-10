@@ -16,6 +16,7 @@
 
 #include "backend/transaction/resolve.h"
 
+#include <optional>
 #include <vector>
 
 #include "absl/status/statusor.h"
@@ -119,10 +120,10 @@ absl::Status ValidateGeneratedColumnsNotPresent(
 // returned indices will be in the order specified by the primary key. Nullable
 // primary key columns do not need to be specified, in which the index entry
 // will be nullopt.
-absl::StatusOr<std::vector<absl::optional<int>>> ExtractPrimaryKeyIndices(
+absl::StatusOr<std::vector<std::optional<int>>> ExtractPrimaryKeyIndices(
     absl::Span<const Column* const> columns,
     absl::Span<const KeyColumn* const> primary_key) {
-  std::vector<absl::optional<int>> key_indices;
+  std::vector<std::optional<int>> key_indices;
   // Number of columns should be relatively small, so we just iterate over them
   // to find matches.
   std::vector<std::string> missing_columns;
@@ -139,7 +140,7 @@ absl::StatusOr<std::vector<absl::optional<int>>> ExtractPrimaryKeyIndices(
     // Reached end of columns list, so this key_column was not found.
     if (i == columns.size()) {
       if (key_column->column()->is_nullable()) {
-        key_indices.push_back(absl::nullopt);
+        key_indices.push_back(std::nullopt);
       } else {
         return error::NullValueForNotNullColumn(
             key_column->column()->table()->Name(),
@@ -154,7 +155,7 @@ absl::StatusOr<std::vector<absl::optional<int>>> ExtractPrimaryKeyIndices(
 // Computes the PrimaryKey from the given row using the key indices provided.
 Key ComputeKey(const ValueList& row,
                absl::Span<const KeyColumn* const> primary_key,
-               const std::vector<absl::optional<int>>& key_indices) {
+               const std::vector<std::optional<int>>& key_indices) {
   Key key;
   for (int i = 0; i < primary_key.size(); i++) {
     key.AddColumn(
@@ -256,7 +257,7 @@ absl::StatusOr<ResolvedMutationOp> ResolveMutationOp(
     ZETASQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
                      GetColumnsByName(table, mutation_op.columns));
 
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<absl::optional<int>> key_indices,
+    ZETASQL_ASSIGN_OR_RETURN(std::vector<std::optional<int>> key_indices,
                      ExtractPrimaryKeyIndices(columns, table->primary_key()));
 
     for (const ValueList& row : mutation_op.rows) {

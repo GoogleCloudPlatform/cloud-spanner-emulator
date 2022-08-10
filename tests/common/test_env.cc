@@ -55,7 +55,7 @@ absl::Status ReadFromClientReader(
 
 TestEnv::TestEnv() {
   // Set up gRPC server in a detached thread.
-  server_thread_ = absl::make_unique<std::thread>(&TestEnv::SetupServer, this);
+  server_thread_ = std::make_unique<std::thread>(&TestEnv::SetupServer, this);
   WaitForServerReady();
   SetupClientStubs();
 }

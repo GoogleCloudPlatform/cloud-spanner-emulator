@@ -451,6 +451,8 @@ TEST_F(SchemaChangeTest, AlterColumnArrayType) {
               IsOkAndHoldsRow({Value(bytes_arr)}));
 }
 
+TEST_F(SchemaChangeTest, Analyze) { ZETASQL_EXPECT_OK(UpdateSchema({"ANALYZE"})); }
+
 }  // namespace
 
 }  // namespace test

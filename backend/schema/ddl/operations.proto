@@ -18,6 +18,10 @@ syntax = "proto2";
 
 package google.spanner.emulator.backend.ddl;
 
+//
+// ANALYZE is a special DDL operation that doesn't trigger a schema change in
+// emulator. The emulator will accept it but perform no-op. This allows the same
+// script to run in both emulator and production.
 
 // Table/Index-only constraints.
 message OnDeleteAction {
@@ -240,6 +244,8 @@ message DropDatabase {
   optional string database_name = 1;
 }
 
+message Analyze {}
+
 message DDLStatement {
   oneof kind {
     CreateTable create_table = 1;
@@ -248,6 +254,7 @@ message DDLStatement {
     AlterIndex alter_index = 5;
     DropTable drop_table = 6;
     DropIndex drop_index = 8;
+    Analyze analyze = 10;
   }
 }
 

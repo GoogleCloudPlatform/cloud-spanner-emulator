@@ -101,10 +101,10 @@ const std::vector<ColumnsMetaEntry>* ColumnsMetadata() {
     {"CONSTRAINT_TABLE_USAGE", "TABLE_NAME", "NO", "STRING(MAX)"},
     {"CONSTRAINT_TABLE_USAGE", "TABLE_SCHEMA", "NO", "STRING(MAX)"},
     {"DATABASE_OPTIONS", "CATALOG_NAME", "NO", "STRING(MAX)"},
+    {"DATABASE_OPTIONS", "SCHEMA_NAME", "NO", "STRING(MAX)"},
     {"DATABASE_OPTIONS", "OPTION_NAME", "NO", "STRING(MAX)"},
     {"DATABASE_OPTIONS", "OPTION_TYPE", "NO", "STRING(MAX)"},
     {"DATABASE_OPTIONS", "OPTION_VALUE", "NO", "STRING(MAX)"},
-    {"DATABASE_OPTIONS", "SCHEMA_NAME", "NO", "STRING(MAX)"},
     {"INDEXES", "INDEX_NAME", "NO", "STRING(MAX)"},
     {"INDEXES", "INDEX_STATE", "NO", "STRING(100)"},
     {"INDEXES", "INDEX_TYPE", "NO", "STRING(MAX)"},
@@ -248,8 +248,8 @@ const std::vector<IndexColumnsMetaEntry>* IndexColumnsMetadata() {
     {"CONSTRAINT_TABLE_USAGE", "TABLE_NAME", "NO", "ASC", "STRING(MAX)"},
     {"CONSTRAINT_TABLE_USAGE", "TABLE_SCHEMA", "NO", "ASC", "STRING(MAX)"},
     {"DATABASE_OPTIONS", "CATALOG_NAME", "NO", "ASC", "STRING(MAX)"},
-    {"DATABASE_OPTIONS", "OPTION_NAME", "NO", "ASC", "STRING(MAX)"},
     {"DATABASE_OPTIONS", "SCHEMA_NAME", "NO", "ASC", "STRING(MAX)"},
+    {"DATABASE_OPTIONS", "OPTION_NAME", "NO", "ASC", "STRING(MAX)"},
     {"INDEXES", "INDEX_NAME", "NO", "ASC", "STRING(MAX)"},
     {"INDEXES", "INDEX_TYPE", "NO", "ASC", "STRING(MAX)"},
     {"INDEXES", "TABLE_CATALOG", "NO", "ASC", "STRING(MAX)"},
@@ -348,6 +348,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
     : zetasql::SimpleCatalog(kName), default_schema_(default_schema) {
   AddSchemataTable();
   AddSpannerStatisticsTable();
+  AddDatabaseOptionsTable();
   auto* tables = AddTablesTable();
   auto* columns = AddColumnsTable();
   auto* column_column_usage = AddColumnColumnUsageTable();
@@ -405,6 +406,25 @@ void InformationSchemaCatalog::AddSpannerStatisticsTable() {
 
   // Add table to catalog.
   AddOwnedTable(spanner_statistics);
+}
+
+void InformationSchemaCatalog::AddDatabaseOptionsTable() {
+  // Setup table schema.
+  auto database_options = new zetasql::SimpleTable(
+      "DATABASE_OPTIONS", {{"CATALOG_NAME", StringType()},
+                           {"SCHEMA_NAME", StringType()},
+                           {"OPTION_NAME", StringType()},
+                           {"OPTION_TYPE", StringType()},
+                           {"OPTION_VALUE", StringType()}});
+
+  // Add table to catalog.
+  AddOwnedTable(database_options);
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  rows.push_back({String(""), String(""), String("database_dialect"),
+                  String("STRING"), String("GOOGLE_STANDARD_SQL")});
+
+  database_options->SetContents(rows);
 }
 
 zetasql::SimpleTable* InformationSchemaCatalog::AddTablesTable() {

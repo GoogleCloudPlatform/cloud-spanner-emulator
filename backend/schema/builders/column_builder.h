@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_COLUMN_BUILDER_H
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "zetasql/public/type.h"
@@ -78,7 +79,7 @@ class Column::Builder {
     return *this;
   }
 
-  Builder& set_declared_max_length(absl::optional<int64_t> length) {
+  Builder& set_declared_max_length(std::optional<int64_t> length) {
     instance_->declared_max_length_ = length;
     return *this;
   }
@@ -88,7 +89,7 @@ class Column::Builder {
     return *this;
   }
 
-  Builder& set_allow_commit_timestamp(absl::optional<bool> allow) {
+  Builder& set_allow_commit_timestamp(std::optional<bool> allow) {
     instance_->allows_commit_timestamp_ = allow;
     return *this;
   }
@@ -135,12 +136,12 @@ class Column::Editor {
     return *this;
   }
 
-  Editor& set_declared_max_length(absl::optional<int64_t> length) {
+  Editor& set_declared_max_length(std::optional<int64_t> length) {
     instance_->declared_max_length_ = length;
     return *this;
   }
 
-  Editor& set_allow_commit_timestamp(absl::optional<bool> allow) {
+  Editor& set_allow_commit_timestamp(std::optional<bool> allow) {
     instance_->allows_commit_timestamp_ = allow;
     return *this;
   }
