@@ -14,6 +14,9 @@
 // limitations under the License.
 //
 
+#include <string>
+#include <vector>
+
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 

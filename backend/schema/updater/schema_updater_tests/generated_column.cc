@@ -14,6 +14,9 @@
 // limitations under the License.
 //
 
+#include <string>
+#include <vector>
+
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 
@@ -60,6 +63,7 @@ TEST_F(GeneratedColumnSchemaUpdaterTest, Basic) {
   EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_INT64);
   EXPECT_FALSE(col->is_nullable());
   EXPECT_TRUE(col->is_generated());
+  EXPECT_FALSE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
   EXPECT_EQ(col->expression().value(), "(k + LENGTH(v))");
 
@@ -81,6 +85,7 @@ TEST_F(GeneratedColumnSchemaUpdaterTest, Basic) {
   EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_INT64);
   EXPECT_TRUE(col->is_nullable());
   EXPECT_TRUE(col->is_generated());
+  EXPECT_FALSE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
   EXPECT_EQ(col->expression().value(), "(G1 + G1)");
   get_column_names(col->dependent_columns(), &dependent_column_names);

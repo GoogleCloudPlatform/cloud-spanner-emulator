@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include <string>
+
 #include "google/longrunning/operations.pb.h"
 #include "google/protobuf/empty.pb.h"
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"

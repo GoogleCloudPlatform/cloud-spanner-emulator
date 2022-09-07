@@ -14,6 +14,12 @@
 // limitations under the License.
 //
 
+#include <algorithm>
+#include <iterator>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"

@@ -14,6 +14,9 @@
 // limitations under the License.
 //
 
+#include <memory>
+#include <vector>
+
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "gmock/gmock.h"
@@ -439,10 +442,10 @@ TEST_F(DmlReplayTest, DMLSequenceReplaySucceeds) {
     spanner_api::ResultSet response;
     grpc::ClientContext context;
     ZETASQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
-    EXPECT_THAT(response, EqualsProto(R"(
+    EXPECT_THAT(response, Partially(EqualsProto(R"pb(
                   metadata { row_type {} }
                   stats { row_count_exact: 1 }
-                )"));
+                )pb")));
   }
 
   {
@@ -474,10 +477,10 @@ TEST_F(DmlReplayTest, DMLSequenceReplaySucceeds) {
     spanner_api::ResultSet response;
     grpc::ClientContext context;
     ZETASQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
-    EXPECT_THAT(response, EqualsProto(R"(
+    EXPECT_THAT(response, Partially(EqualsProto(R"pb(
                   metadata { row_type {} }
                   stats { row_count_exact: 1 }
-                )"));
+                )pb")));
   }
 
   {
@@ -515,10 +518,10 @@ TEST_F(DmlReplayTest, StreamingDMLSequenceReplaySucceeds) {
     auto client_reader =
         raw_client()->ExecuteStreamingSql(&context, dml_request);
     ZETASQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
-    EXPECT_THAT(response[0], EqualsProto(R"(
+    EXPECT_THAT(response[0], Partially(EqualsProto(R"pb(
                   metadata { row_type {} }
                   stats { row_count_exact: 1 }
-                )"));
+                )pb")));
   }
 
   {
@@ -554,10 +557,10 @@ TEST_F(DmlReplayTest, StreamingDMLSequenceReplaySucceeds) {
     auto client_reader =
         raw_client()->ExecuteStreamingSql(&context, dml_request);
     ZETASQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
-    EXPECT_THAT(response[0], EqualsProto(R"(
+    EXPECT_THAT(response[0], Partially(EqualsProto(R"pb(
                   metadata { row_type {} }
                   stats { row_count_exact: 1 }
-                )"));
+                )pb")));
   }
 
   {

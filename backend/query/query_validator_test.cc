@@ -16,6 +16,9 @@
 
 #include "backend/query/query_validator.h"
 
+#include <memory>
+#include <utility>
+
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

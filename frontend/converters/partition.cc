@@ -16,6 +16,8 @@
 
 #include "frontend/converters/partition.h"
 
+#include <string>
+
 #include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
 #include "common/errors.h"

@@ -34,7 +34,6 @@ generate_grpc_gateway(
     src = "@com_google_googleapis//google/spanner/admin/database/v1:database_proto",
     out_filename = "spanner_database_admin.pb.gw.go",
     proto_imports = ["google.golang.org/genproto/googleapis/spanner/admin/database/v1"],
-    yaml_config = "spanner_database_admin.yaml",
     deps = [
         "@com_google_googleapis//google/iam/v1:iam_go_proto",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_go_proto",
@@ -46,7 +45,6 @@ generate_grpc_gateway(
     src = "@com_google_googleapis//google/spanner/admin/instance/v1:instance_proto",
     out_filename = "spanner_instance_admin.pb.gw.go",
     proto_imports = ["google.golang.org/genproto/googleapis/spanner/admin/instance/v1"],
-    yaml_config = "spanner_instance_admin.yaml",
     deps = [
         "@com_google_googleapis//google/iam/v1:iam_go_proto",
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_go_proto",

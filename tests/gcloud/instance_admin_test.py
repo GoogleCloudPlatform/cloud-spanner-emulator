@@ -23,7 +23,9 @@ class GCloudInstanceAdminTest(emulator.TestCase):
 
   def testListsInstanceConfigs(self):
     self.assertEqual(
-        self.RunGCloud('spanner', 'instance-configs', 'list'),
+        # TODO: Consider adding column freeInstanceAvailability.
+        self.RunGCloud('spanner', 'instance-configs', 'list', '--format',
+                       'table(name, displayName)'),
         self.JoinLines('NAME             DISPLAY_NAME',
                        'emulator-config  Emulator Instance Config'))
 
@@ -53,7 +55,11 @@ class GCloudInstanceAdminTest(emulator.TestCase):
                    '--nodes', '3')
 
     self.assertEqual(
-        self.RunGCloud('spanner', 'instances', 'list'),
+        self.RunGCloud(
+            # TODO: Consider adding column instanceType.
+            'spanner', 'instances', 'list', '--format',
+            'table(name, displayName, config, nodeCount, processingUnits, state)'
+        ),
         self.JoinLines(
             'NAME           DISPLAY_NAME   CONFIG           NODE_COUNT  PROCESSING_UNITS  STATE',
             'test-instance  Test Instance  emulator-config  3                             READY'
@@ -63,15 +69,15 @@ class GCloudInstanceAdminTest(emulator.TestCase):
     self.RunGCloud('spanner', 'instances', 'create', 'test-instance',
                    '--config=emulator-config', '--description=Test Instance',
                    '--nodes', '3')
-
-    self.assertEqual(
+    time_format = r"'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{9}Z'"
+    self.assertRegex(
         self.RunGCloud('spanner', 'instances', 'describe', 'test-instance'),
         self.JoinLines(
             'config: projects/test-project/instanceConfigs/emulator-config',
-            'displayName: Test Instance',
+            r'createTime: {}'.format(time_format), 'displayName: Test Instance',
             'name: projects/test-project/instances/test-instance',
-            'nodeCount: 3',
-            'state: READY'))
+            'nodeCount: 3', 'state: READY',
+            r'updateTime: {}'.format(time_format)))
 
   def testDeleteInstance(self):
     self.RunGCloud('spanner', 'instances', 'create', 'test-instance',

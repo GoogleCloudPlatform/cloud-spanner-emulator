@@ -16,7 +16,9 @@
 
 #include "backend/schema/validators/foreign_key_validator.h"
 
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/algorithm/container.h"
 #include "backend/common/case.h"

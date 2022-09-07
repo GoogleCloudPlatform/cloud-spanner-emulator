@@ -17,7 +17,10 @@
 #include "backend/locking/manager.h"
 
 #include <atomic>
+#include <map>
+#include <memory>
 #include <thread>  // NOLINT
+#include <vector>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

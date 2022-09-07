@@ -16,6 +16,8 @@
 
 #include "frontend/common/status.h"
 
+#include <string>
+
 #include "google/protobuf/any.pb.h"
 #include "google/rpc/status.pb.h"
 #include "absl/strings/cord.h"

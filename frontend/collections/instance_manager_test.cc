@@ -21,6 +21,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "frontend/entities/instance.h"
+#include "tests/common/proto_matchers.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -31,6 +32,9 @@ namespace frontend {
 namespace {
 
 namespace instance_api = ::google::spanner::admin::instance::v1;
+
+using ::google::spanner::emulator::test::EqualsProto;
+using ::google::spanner::emulator::test::proto::Partially;
 
 TEST(InstanceManagerTest, CreateInstance) {
   InstanceManager instance_manager;
@@ -45,13 +49,15 @@ TEST(InstanceManagerTest, CreateInstance) {
 
   instance_api::Instance instance_proto;
   instance->ToProto(&instance_proto);
-  EXPECT_THAT(instance_proto, test::EqualsProto(R"(
+  EXPECT_TRUE(instance_proto.has_create_time());
+  EXPECT_TRUE(instance_proto.has_update_time());
+  EXPECT_THAT(instance_proto, Partially(EqualsProto(R"pb(
                 name: 'projects/123/instances/456'
                 config: 'projects/123/instanceConfigs/emulator-config'
                 display_name: 'Test Instance'
                 node_count: 3
                 state: READY
-              )"));
+              )pb")));
 }
 
 TEST(InstanceManagerTest, GetInstance) {
@@ -69,13 +75,15 @@ TEST(InstanceManagerTest, GetInstance) {
 
   instance_api::Instance instance_proto;
   instance->ToProto(&instance_proto);
-  EXPECT_THAT(instance_proto, test::EqualsProto(R"(
+  EXPECT_TRUE(instance_proto.has_create_time());
+  EXPECT_TRUE(instance_proto.has_update_time());
+  EXPECT_THAT(instance_proto, Partially(EqualsProto(R"pb(
                 name: 'projects/123/instances/456'
                 config: 'projects/123/instanceConfigs/emulator-config'
                 display_name: 'Test Instance'
                 node_count: 3
                 state: READY
-              )"));
+              )pb")));
 }
 
 TEST(InstanceManagerTest, ListInstances) {
@@ -98,21 +106,26 @@ TEST(InstanceManagerTest, ListInstances) {
 
   instance_api::Instance instance_proto;
   instances[0]->ToProto(&instance_proto);
-  EXPECT_THAT(instance_proto, test::EqualsProto(R"(
+  EXPECT_TRUE(instance_proto.has_create_time());
+  EXPECT_TRUE(instance_proto.has_update_time());
+  EXPECT_THAT(instance_proto, Partially(EqualsProto(R"pb(
                 name: 'projects/123/instances/456'
                 config: 'projects/123/instanceConfigs/emulator-config'
-                display_name: "Test Instance"
+                display_name: 'Test Instance'
                 node_count: 3
                 state: READY
-              )"));
+              )pb")));
   instances[1]->ToProto(&instance_proto);
-  EXPECT_THAT(instance_proto, test::EqualsProto(R"(
+  EXPECT_TRUE(instance_proto.has_create_time());
+  EXPECT_TRUE(instance_proto.has_update_time());
+
+  EXPECT_THAT(instance_proto, Partially(EqualsProto(R"pb(
                 name: 'projects/123/instances/789'
                 config: 'projects/123/instanceConfigs/emulator-config'
-                display_name: "Test Instance"
+                display_name: 'Test Instance'
                 node_count: 6
                 state: READY
-              )"));
+              )pb")));
 }
 
 TEST(InstanceManagerTest, DeleteInstance) {

@@ -16,6 +16,12 @@
 
 #include "backend/datamodel/key_set.h"
 
+#include <algorithm>
+#include <ostream>
+#include <sstream>
+#include <string>
+#include <vector>
+
 namespace google {
 namespace spanner {
 namespace emulator {

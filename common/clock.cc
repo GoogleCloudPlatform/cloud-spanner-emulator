@@ -16,6 +16,8 @@
 
 #include "common/clock.h"
 
+#include <algorithm>
+
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 

@@ -17,6 +17,7 @@
 #include "backend/actions/index.h"
 
 #include <iterator>
+#include <vector>
 
 #include "absl/status/statusor.h"
 #include "backend/common/indexing.h"

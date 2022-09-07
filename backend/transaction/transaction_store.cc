@@ -16,6 +16,10 @@
 
 #include "backend/transaction/transaction_store.h"
 
+#include <algorithm>
+#include <memory>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include "zetasql/public/value.h"
@@ -275,7 +279,7 @@ absl::Status TransactionStore::Read(
   // Sort the keys to provide iterating in order.
   // Note: this can be optimized by iterating the base_store_iterator and
   // transaction_store_ietrator in parallel and comparing the keys.
-  sort(rows.begin(), rows.end(), SortByKey);
+  std::sort(rows.begin(), rows.end(), SortByKey);
   *storage_itr = std::make_unique<FixedRowStorageIterator>(std::move(rows));
   return absl::OkStatus();
 }

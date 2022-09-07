@@ -17,6 +17,7 @@
 #include "backend/query/partitioned_dml_validator.h"
 
 #include <memory>
+#include <string>
 
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/type.pb.h"

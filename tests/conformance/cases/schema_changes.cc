@@ -14,6 +14,10 @@
 // limitations under the License.
 //
 
+#include <array>
+#include <string>
+#include <vector>
+
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -50,9 +54,9 @@ const char kSchemaChangeTestDataDir[] = "tests/conformance/data/schema_changes";
 
 // List of schema change test files within the directory above.
 const char* kSchemaChangeTestFiles[] = {
-    "check_constraint.test",      "combined.test",
-    "foreign_key.test",           "generated_column.test",
-    "key_column_alteration.test",
+    "check_constraint.test", "column_default_values.test",
+    "combined.test",         "foreign_key.test",
+    "generated_column.test", "key_column_alteration.test",
 };
 
 constexpr std::array<char, 10> kBytesLiteral = {'\xd0', '\xb0', '\xd0', '\xb1',
@@ -226,6 +230,9 @@ TEST_F(SchemaChangeTest, AddColumns) {
   ZETASQL_EXPECT_OK(
       UpdateSchema({"ALTER TABLE test_table "
                     "ADD COLUMN gen_int64_col INT64 AS (int64_col) STORED"}));
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"ALTER TABLE test_table "
+                    "ADD COLUMN default_int64_col INT64 DEFAULT (1)"}));
 }
 
 TEST_F(SchemaChangeTest, AddColumnsWithoutKeyword) {
@@ -241,6 +248,9 @@ TEST_F(SchemaChangeTest, AddColumnsWithoutKeyword) {
   ZETASQL_EXPECT_OK(
       UpdateSchema({"ALTER TABLE test_table "
                     "ADD gen_int64_col INT64 AS (int64_col) STORED"}));
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"ALTER TABLE test_table "
+                    "ADD default_int64_col INT64 DEFAULT (1)"}));
 }
 
 TEST_F(SchemaChangeTest, AddDropColumns) {

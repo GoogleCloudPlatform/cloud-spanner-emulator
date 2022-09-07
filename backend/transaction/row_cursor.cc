@@ -16,6 +16,8 @@
 
 #include "backend/transaction/row_cursor.h"
 
+#include <string>
+
 #include "backend/storage/iterator.h"
 
 namespace google {

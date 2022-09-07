@@ -16,6 +16,10 @@
 
 #include "backend/actions/ops.h"
 
+#include <ostream>
+#include <string>
+#include <variant>
+
 #include "zetasql/public/value.h"
 #include "absl/strings/str_cat.h"
 

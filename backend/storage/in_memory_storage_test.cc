@@ -16,6 +16,9 @@
 
 #include "backend/storage/in_memory_storage.h"
 
+#include <memory>
+#include <vector>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"

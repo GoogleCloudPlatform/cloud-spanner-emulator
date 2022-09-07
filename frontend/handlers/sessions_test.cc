@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include <string>
+
 #include "google/protobuf/empty.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
@@ -35,7 +37,6 @@ namespace {
 
 using ::zetasql_base::testing::StatusIs;
 
-namespace protobuf_api = ::google::protobuf;
 namespace spanner_api = google::spanner::v1;
 
 class SessionApiTest : public test::ServerTest {

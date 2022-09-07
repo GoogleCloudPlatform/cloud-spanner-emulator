@@ -55,6 +55,7 @@ cc_library(
     testonly = 1,
     srcs = [
         "check_constraint.cc",
+        "column_default_values.cc",
         "common.cc",
         "foreign_key.cc",
         "generated_column.cc",

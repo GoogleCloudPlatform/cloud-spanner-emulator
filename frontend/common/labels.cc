@@ -16,6 +16,8 @@
 
 #include "frontend/common/labels.h"
 
+#include <string>
+
 #include "common/errors.h"
 #include "common/limits.h"
 

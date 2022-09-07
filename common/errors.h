@@ -451,6 +451,21 @@ absl::Status CannotWriteToGeneratedColumn(absl::string_view table_name,
                                           absl::string_view column_name);
 absl::Status NonDeterministicFunctionInColumnExpression(
     absl::string_view function_name, absl::string_view expression_use);
+
+// Column default values errors.
+absl::Status ColumnDefaultValuesNotEnabled();
+absl::Status DefaultExpressionWithColumnDependency(
+    absl::string_view column_name);
+absl::Status ColumnDefaultValueParseError(absl::string_view table_name,
+                                          absl::string_view column_name,
+                                          absl::string_view message);
+absl::Status CannotUseCommitTimestampWithColumnDefaultValue(
+    absl::string_view column_name);
+absl::Status DefaultPKNeedsExplicitValue(absl::string_view column_name,
+                                         absl::string_view op_name);
+absl::Status CannotSetDefaultValueOnGeneratedColumn(
+    absl::string_view column_name);
+
 // Query errors.
 absl::Status UnableToInferUndeclaredParameter(absl::string_view parameter_name,
                                               absl::string_view type);
@@ -503,6 +518,7 @@ absl::Status TooManyNestedSubqueries(int max_nested_subquery_expressions);
 absl::Status TooManyNestedSubselects(int max_nested_subselects);
 absl::Status TooManyNestedAggregates(int max_nested_group_by);
 absl::Status TooManyParameters(int max_parameters);
+absl::Status TooManyElementsInInList(int max_elements_in_in_list);
 absl::Status TooManyAggregates(int max_columns_in_group_by);
 absl::Status TooManyUnions(int max_unions_in_query);
 absl::Status TooManySubqueryChildren(int max_subquery_expression_children);

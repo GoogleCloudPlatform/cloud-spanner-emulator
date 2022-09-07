@@ -16,6 +16,12 @@
 
 #include "backend/schema/verifiers/foreign_key_verifiers.h"
 
+#include <algorithm>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"

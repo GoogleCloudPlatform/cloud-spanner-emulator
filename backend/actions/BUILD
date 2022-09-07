@@ -212,6 +212,7 @@ cc_library(
     deps = [
         ":action",
         ":ops",
+        "//backend/access:write",
         "//backend/common:graph_dependency_helper",
         "//backend/query:analyzer_options",
         "//backend/schema/catalog:schema",
@@ -323,6 +324,7 @@ cc_library(
         ":interleave",
         ":ops",
         ":unique_index",
+        "//backend/access:write",
         "//backend/query:catalog",
         "//backend/query:function_catalog",
         "//backend/schema/catalog:schema",

@@ -17,6 +17,7 @@
 #include "backend/query/hint_rewriter.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "zetasql/public/simple_catalog.h"

@@ -17,6 +17,7 @@
 #include "backend/schema/verifiers/column_value_verifiers.h"
 
 #include <memory>
+#include <string>
 
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"

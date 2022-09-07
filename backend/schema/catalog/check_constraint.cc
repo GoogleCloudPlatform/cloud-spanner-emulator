@@ -16,6 +16,8 @@
 
 #include "backend/schema/catalog/check_constraint.h"
 
+#include <string>
+
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 

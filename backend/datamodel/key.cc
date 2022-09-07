@@ -16,7 +16,11 @@
 
 #include "backend/datamodel/key.h"
 
+#include <ostream>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "zetasql/public/numeric_value.h"
 

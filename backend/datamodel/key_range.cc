@@ -16,6 +16,10 @@
 
 #include "backend/datamodel/key_range.h"
 
+#include <ostream>
+#include <sstream>
+#include <string>
+
 namespace google {
 namespace spanner {
 namespace emulator {

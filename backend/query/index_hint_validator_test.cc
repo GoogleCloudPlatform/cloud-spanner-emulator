@@ -17,6 +17,7 @@
 #include "backend/query/index_hint_validator.h"
 
 #include <memory>
+#include <string>
 
 #include "zetasql/public/analyzer.h"
 #include "gmock/gmock.h"

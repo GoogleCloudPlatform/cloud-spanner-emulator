@@ -17,6 +17,9 @@
 #include "tests/common/file_based_test_runner.h"
 
 #include <fstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "zetasql/base/logging.h"
 #include "gmock/gmock.h"

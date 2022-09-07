@@ -17,6 +17,7 @@
 #include "backend/schema/backfills/column_value_backfill.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -53,7 +54,8 @@ using zetasql::values::String;
 class ColumnValueBackfillTest : public ::testing::Test {
  public:
   ColumnValueBackfillTest()
-      : emulator_feature_flags_({.enable_stored_generated_columns = true}) {}
+      : emulator_feature_flags_({.enable_stored_generated_columns = true,
+                                 .enable_column_default_values = true}) {}
 
  protected:
   void SetUp() override {
@@ -193,6 +195,37 @@ TEST_F(ColumnValueBackfillTest, BackfillGeneratedColumnNotNullFail) {
       UpdateSchema({R"(
     ALTER TABLE TestTable
       ADD COLUMN gen_col STRING(MAX) NOT NULL AS (string_col) STORED
+    )"}),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          testing::HasSubstr("Cannot specify a null value for column")));
+}
+
+TEST_F(ColumnValueBackfillTest, BackfillDefaultColumn) {
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    ALTER TABLE TestTable
+      ADD COLUMN default_col INT64 DEFAULT (1+1)
+    )"}));
+
+  EXPECT_THAT(ColumnValues("default_col"), testing::ElementsAreArray({
+                                               Int64(2),
+                                               Int64(2),
+                                           }));
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    ALTER TABLE TestTable
+      ADD COLUMN default_col_2 STRING(MAX) DEFAULT ("Hello")
+    )"}));
+  EXPECT_THAT(ColumnValues("default_col_2"), testing::ElementsAreArray({
+                                                 String("Hello"),
+                                                 String("Hello"),
+                                             }));
+}
+
+TEST_F(ColumnValueBackfillTest, BackfillDefaultColumnNotNullFail) {
+  EXPECT_THAT(
+      UpdateSchema({R"(
+    ALTER TABLE TestTable
+      ADD COLUMN default_col STRING(MAX) NOT NULL DEFAULT (NULL)
     )"}),
       zetasql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,

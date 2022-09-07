@@ -16,6 +16,8 @@
 
 #include "frontend/collections/operation_manager.h"
 
+#include <string>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"

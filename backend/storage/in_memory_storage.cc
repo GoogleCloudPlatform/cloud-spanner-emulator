@@ -17,6 +17,8 @@
 #include "backend/storage/in_memory_storage.h"
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "zetasql/public/value.h"
 #include "absl/status/status.h"

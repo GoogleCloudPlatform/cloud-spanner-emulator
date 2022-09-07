@@ -16,6 +16,8 @@
 
 #include "backend/schema/validators/column_validator.h"
 
+#include <string>
+
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.pb.h"
 #include "absl/strings/str_cat.h"
@@ -144,6 +146,11 @@ absl::Status ColumnValidator::Validate(const Column* column,
 
   if (column->has_allows_commit_timestamp() && !column->type_->IsTimestamp()) {
     return error::UnallowedCommitTimestampOption(column->FullName());
+  }
+
+  if (column->has_default_value() && column->allows_commit_timestamp()) {
+    return error::CannotUseCommitTimestampWithColumnDefaultValue(
+        column->Name());
   }
 
   if (column->is_generated()) {

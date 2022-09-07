@@ -17,6 +17,8 @@
 #include "frontend/collections/instance_manager.h"
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
 #include "absl/memory/memory.h"
@@ -70,9 +72,9 @@ absl::StatusOr<std::shared_ptr<Instance>> InstanceManager::CreateInstance(
   Labels labels(instance_proto.labels().begin(), instance_proto.labels().end());
   auto inserted = instances_.insert(
       {instance_uri,
-       std::make_shared<Instance>(instance_uri, instance_proto.config(),
-                                  instance_proto.display_name(),
-                                  instance_proto.node_count(), labels)});
+       std::make_shared<Instance>(
+           instance_uri, instance_proto.config(), instance_proto.display_name(),
+           instance_proto.node_count(), labels, zetasql_base::Clock::RealClock())});
   if (!inserted.second) {
     return error::InstanceAlreadyExists(instance_uri);
   }

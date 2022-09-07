@@ -147,70 +147,24 @@ TEST_F(ResolveTest, CannotResolveReadArgWithInvalidIndex) {
               StatusIs(absl::StatusCode::kNotFound));
 }
 
-TEST_F(ResolveTest, CanResolveInsertMutationOp) {
+TEST_F(ResolveTest, CanResolveDeleteMutationOp) {
   backend::MutationOp mutation_op;
-  mutation_op.type = MutationOpType::kInsert;
+  mutation_op.type = MutationOpType::kDelete;
   mutation_op.table = "TestTable";
-  mutation_op.columns = {"StringCol", "Int64Col"};
-  mutation_op.rows = {{String("val1"), Int64(1)}, {String("val2"), Int64(2)}};
+  Key k1({Int64(1)});
+  KeySet ks;
+  ks.AddKey(k1);
+
+  mutation_op.key_set = ks;
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       const ResolvedMutationOp& resolved_mutation_op,
-      ResolveMutationOp(mutation_op, schema_.get(), clock_.Now()));
+      ResolveDeleteMutationOp(mutation_op, schema_.get(), clock_.Now()));
 
   EXPECT_EQ(resolved_mutation_op.table, test_table_);
-  EXPECT_THAT(resolved_mutation_op.columns,
-              testing::ElementsAre(string_col_, int_col_));
-  EXPECT_THAT(resolved_mutation_op.keys,
-              testing::ElementsAre(Key({Int64(1)}), Key({Int64(2)})));
-}
-
-TEST_F(ResolveTest, CannotResolveInsertMutationOpWithEmptyColumns) {
-  backend::MutationOp mutation_op;
-  mutation_op.type = MutationOpType::kInsert;
-  mutation_op.table = "TestTable";
-  mutation_op.columns = {};
-
-  EXPECT_EQ(
-      ResolveMutationOp(mutation_op, schema_.get(), clock_.Now()).status(),
-      error::NullValueForNotNullColumn("TestTable", "Int64Col"));
-}
-
-TEST_F(ResolveTest, CannotResolveInsertMutationOpWithMissingKeyColumn) {
-  backend::MutationOp mutation_op;
-  mutation_op.type = MutationOpType::kInsert;
-  mutation_op.table = "TestTable";
-  mutation_op.columns = {"StringCol"};
-
-  EXPECT_EQ(
-      ResolveMutationOp(mutation_op, schema_.get(), clock_.Now()).status(),
-      error::NullValueForNotNullColumn("TestTable", "Int64Col"));
-}
-
-TEST_F(ResolveTest, CanResolveInsertMutationOpCaseInsensitiveColumns) {
-  backend::MutationOp mutation_op;
-  mutation_op.type = MutationOpType::kInsert;
-  mutation_op.table = "TestTable";
-  mutation_op.columns = {"sTRINGCol", "iNT64cOL"};
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      const ResolvedMutationOp& resolved_mutation_op,
-      ResolveMutationOp(mutation_op, schema_.get(), clock_.Now()));
-
-  EXPECT_EQ(resolved_mutation_op.table, test_table_);
-  EXPECT_THAT(resolved_mutation_op.columns,
-              testing::ElementsAre(string_col_, int_col_));
-}
-
-TEST_F(ResolveTest, CannotResolveInsertMutationOpWithDuplicateColumns) {
-  backend::MutationOp mutation_op;
-  mutation_op.type = MutationOpType::kInsert;
-  mutation_op.table = "TestTable";
-  mutation_op.columns = {"Int64Col", "StringCol", "iNT64cOL"};
-
-  EXPECT_EQ(
-      ResolveMutationOp(mutation_op, schema_.get(), clock_.Now()).status(),
-      error::MultipleValuesForColumn("iNT64cOL"));
+  EXPECT_EQ(resolved_mutation_op.type, MutationOpType::kDelete);
+  EXPECT_THAT(resolved_mutation_op.key_ranges,
+              testing::ElementsAre(KeyRange::Point(k1)));
 }
 
 }  // namespace

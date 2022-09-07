@@ -16,6 +16,8 @@
 
 #include "backend/access/read.h"
 
+#include <ostream>
+
 namespace google {
 namespace spanner {
 namespace emulator {

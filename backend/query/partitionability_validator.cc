@@ -16,6 +16,8 @@
 
 #include "backend/query/partitionability_validator.h"
 
+#include <vector>
+
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_node.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"

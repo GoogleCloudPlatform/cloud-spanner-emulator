@@ -27,6 +27,7 @@ cc_library(
         "case_sensitivity.cc",
         "check_constraint_read_write.cc",
         "column_constraints.cc",
+        "column_default_value_read_write.cc",
         "commit_timestamps.cc",
         "delete_range.cc",
         "dml.cc",

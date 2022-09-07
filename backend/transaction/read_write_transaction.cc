@@ -16,7 +16,9 @@
 
 #include "backend/transaction/read_write_transaction.h"
 
+#include <functional>
 #include <memory>
+#include <queue>
 #include <string>
 #include <utility>
 #include <vector>
@@ -49,6 +51,7 @@
 #include "backend/storage/iterator.h"
 #include "backend/storage/storage.h"
 #include "backend/transaction/actions.h"
+#include "backend/transaction/commit_timestamp.h"
 #include "backend/transaction/flush.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/resolve.h"
@@ -346,16 +349,75 @@ absl::Status ReadWriteTransaction::ProcessWriteOps(
   return absl::OkStatus();
 }
 
+absl::StatusOr<ResolvedMutationOp>
+ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
+                                                 const Schema* schema) {
+  ZETASQL_RET_CHECK(mutation_op.type != MutationOpType::kDelete);
+
+  const Table* table = schema->FindTable(mutation_op.table);
+  if (table == nullptr) {
+    return error::TableNotFound(mutation_op.table);
+  }
+
+  ResolvedMutationOp resolved_mutation_op;
+  resolved_mutation_op.table = table;
+  resolved_mutation_op.type = mutation_op.type;
+
+  std::vector<zetasql::Value> generated_values;
+  std::vector<const Column*> columns_with_generated_values;
+  // Compute values for default primary keys that don't appear in this
+  // mutation op:
+  ZETASQL_RETURN_IF_ERROR(action_registry_->ExecuteGeneratedKeyEffectors(
+      mutation_op, &generated_values, &columns_with_generated_values));
+
+  ZETASQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
+                   GetColumnsByName(table, mutation_op.columns));
+  // If we have key columns with generated default values, append them here:
+  if (!columns_with_generated_values.empty()) {
+    columns.insert(columns.end(), columns_with_generated_values.begin(),
+                   columns_with_generated_values.end());
+  }
+
+  ZETASQL_ASSIGN_OR_RETURN(std::vector<std::optional<int>> key_indices,
+                   ExtractPrimaryKeyIndices(columns, table->primary_key()));
+
+  for (const ValueList& row : mutation_op.rows) {
+    ValueList new_row = row;
+    // If we have key columns with generated default values, append them here:
+    if (!generated_values.empty()) {
+      new_row.insert(new_row.end(), generated_values.begin(),
+                     generated_values.end());
+    }
+
+    ZETASQL_RET_CHECK_EQ(new_row.size(), columns.size())
+        << "MutationOp has difference in size of column and value vectors, "
+           "mutation op: "
+        << mutation_op.DebugString();
+
+    ZETASQL_ASSIGN_OR_RETURN(resolved_mutation_op.rows.emplace_back(),
+                     MaybeSetCommitTimestampSentinel(columns, new_row));
+
+    resolved_mutation_op.keys.push_back(ComputeKey(
+        resolved_mutation_op.rows.back(), table->primary_key(), key_indices));
+  }
+
+  resolved_mutation_op.columns = std::move(columns);
+
+  return resolved_mutation_op;
+}
+
 absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
   return GuardedCall(OpType::kWrite, [&]() -> absl::Status {
     mu_.AssertHeld();
 
     for (const MutationOp& mutation_op : mutation.ops()) {
-      ZETASQL_ASSIGN_OR_RETURN(ResolvedMutationOp resolved_mutation_op,
-                       ResolveMutationOp(mutation_op, schema_, clock_->Now()));
-      const std::string& table_name = resolved_mutation_op.table->Name();
-      // Process Delete.
-      if (resolved_mutation_op.type == MutationOpType::kDelete) {
+      if (mutation_op.type == MutationOpType::kDelete) {
+        // Process Delete.
+        ZETASQL_ASSIGN_OR_RETURN(
+            ResolvedMutationOp resolved_mutation_op,
+            ResolveDeleteMutationOp(mutation_op, schema_, clock_->Now()));
+        const std::string& table_name = resolved_mutation_op.table->Name();
+
         std::vector<KeyRange>& key_ranges =
             deleted_key_ranges_by_table_[table_name];
         key_ranges.insert(key_ranges.end(),
@@ -368,6 +430,12 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
 
         ZETASQL_RETURN_IF_ERROR(ProcessWriteOps(write_ops));
       } else {
+        // Process non-delete Mutation ops.
+        ZETASQL_RETURN_IF_ERROR(ValidateNonDeleteMutationOp(mutation_op, schema_));
+        ZETASQL_ASSIGN_OR_RETURN(ResolvedMutationOp resolved_mutation_op,
+                         ResolveNonDeleteMutationOp(mutation_op, schema_));
+        const std::string& table_name = resolved_mutation_op.table->Name();
+
         // Process Insert, Update, Replace and InsertOrUpdate.
         for (int i = 0; i < resolved_mutation_op.rows.size(); i++) {
           // Spanner allows deleted entries to be reinserted within the same

@@ -16,6 +16,9 @@
 
 #include "backend/schema/verifiers/check_constraint_verifiers.h"
 
+#include <memory>
+#include <string>
+
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

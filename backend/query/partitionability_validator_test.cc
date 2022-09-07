@@ -17,6 +17,8 @@
 #include "backend/query/partitionability_validator.h"
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "zetasql/public/type.pb.h"
 #include "zetasql/public/types/type_factory.h"
@@ -36,8 +38,6 @@ namespace emulator {
 namespace backend {
 
 namespace {
-
-using zetasql_base::testing::StatusIs;
 
 class PartitionabilityValidatorTest : public testing::Test {
  public:

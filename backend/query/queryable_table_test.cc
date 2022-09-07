@@ -16,6 +16,8 @@
 
 #include "backend/query/queryable_table.h"
 
+#include <memory>
+
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"

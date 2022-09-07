@@ -16,6 +16,11 @@
 
 #include "frontend/converters/mutations.h"
 
+#include <algorithm>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/keys.pb.h"
 #include "google/spanner/v1/result_set.pb.h"

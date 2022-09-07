@@ -14,7 +14,10 @@
 // limitations under the License.
 //
 
+#include <string>
 #include <tuple>
+#include <utility>
+#include <vector>
 
 #include "gmock/gmock.h"
 #include "absl/status/status.h"

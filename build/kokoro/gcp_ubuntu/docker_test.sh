@@ -70,8 +70,8 @@ echo "Placing results in: ${OUTPUT_DIR}"
 echo "Placing logs in: ${LOG_DIR}"
 echo "Using src directory: ${SRC_DIR}"
 
-readonly CONTINUOUS_INTEGRATION_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-integration:20220504
-readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base:20220504
+readonly CONTINUOUS_INTEGRATION_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-integration@sha256:e94765178f8f1e6f58c8781066fa483a3e706eeee9285ad8796ccc79c8eaa368
+readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base@sha256:5972cd216c2c3c071f9f7f620b790fe338645a01870271758d110b54a0c6bfc5
 if [[ -z "$CLIENT_INTEGRATION_TESTS" ]]; then
   DOCKER_IMAGE=${BASE_DOCKER_IMAGE}
 else

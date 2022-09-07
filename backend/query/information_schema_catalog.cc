@@ -17,6 +17,7 @@
 #include "backend/query/information_schema_catalog.h"
 
 #include <string>
+#include <vector>
 
 #include "backend/schema/printer/print_ddl.h"
 
@@ -28,12 +29,10 @@ namespace backend {
 namespace {
 
 using zetasql::types::BoolType;
-using zetasql::types::BytesType;
 using zetasql::types::Int64Type;
 using zetasql::types::StringType;
 using zetasql::values::Bool;
 using zetasql::values::Int64;
-using zetasql::values::NullBytes;
 using zetasql::values::NullInt64;
 using zetasql::values::NullString;
 using zetasql::values::String;
@@ -62,7 +61,7 @@ const std::vector<ColumnsMetaEntry>* ColumnsMetadata() {
     {"CHECK_CONSTRAINTS", "CONSTRAINT_NAME", "NO", "STRING(MAX)"},
     {"CHECK_CONSTRAINTS", "CONSTRAINT_SCHEMA", "NO", "STRING(MAX)"},
     {"CHECK_CONSTRAINTS", "SPANNER_STATE", "NO", "STRING(MAX)"},
-    {"COLUMNS", "COLUMN_DEFAULT", "YES", "BYTES(MAX)"},
+    {"COLUMNS", "COLUMN_DEFAULT", "YES", "STRING(MAX)"},
     {"COLUMNS", "COLUMN_NAME", "NO", "STRING(MAX)"},
     {"COLUMNS", "DATA_TYPE", "YES", "STRING(MAX)"},
     {"COLUMNS", "GENERATION_EXPRESSION", "YES", "STRING(MAX)"},
@@ -504,7 +503,7 @@ zetasql::SimpleTable* InformationSchemaCatalog::AddColumnsTable() {
                   {"TABLE_NAME", StringType()},
                   {"COLUMN_NAME", StringType()},
                   {"ORDINAL_POSITION", Int64Type()},
-                  {"COLUMN_DEFAULT", BytesType()},
+                  {"COLUMN_DEFAULT", StringType()},
                   {"DATA_TYPE", StringType()},
                   {"IS_NULLABLE", StringType()},
                   {"SPANNER_TYPE", StringType()},
@@ -524,7 +523,7 @@ void InformationSchemaCatalog::FillColumnsTable(
     int pos = 1;
     for (const Column* column : table->columns()) {
       absl::string_view expression;
-      if (column->is_generated()) {
+      if (column->is_generated() || column->has_default_value()) {
         expression = column->expression().value();
         absl::ConsumePrefix(&expression, "(");
         absl::ConsumeSuffix(&expression, ")");
@@ -541,7 +540,7 @@ void InformationSchemaCatalog::FillColumnsTable(
           // ordinal_position
           Int64(pos++),
           // column_default,
-          NullBytes(),
+          column->has_default_value() ? String(expression) : NullString(),
           // data_type,
           NullString(),
           // is_nullable
@@ -579,7 +578,7 @@ void InformationSchemaCatalog::FillColumnsTable(
           // ordinal_position
           Int64(pos++),
           // column_default,
-          NullBytes(),
+          NullString(),
           // data_type,
           NullString(),
           // is_nullable

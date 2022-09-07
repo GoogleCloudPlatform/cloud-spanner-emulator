@@ -15,6 +15,7 @@
 //
 
 #include <string>
+#include <vector>
 
 #include "google/spanner/v1/spanner.pb.h"
 #include "gmock/gmock.h"

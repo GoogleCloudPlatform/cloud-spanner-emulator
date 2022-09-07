@@ -15,6 +15,8 @@
 //
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 #include "google/protobuf/empty.pb.h"
 #include "google/protobuf/timestamp.pb.h"
@@ -34,7 +36,6 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::IsOk;
 using zetasql_base::testing::IsOkAndHolds;
 using zetasql_base::testing::StatusIs;
 
@@ -263,20 +264,21 @@ TEST_F(SessionsTest, ListSessionsWithPageSize) {
   }
 
   std::vector<std::string> actual;
-  actual.reserve(10);
   std::string page_token;
-  for (int page_size : {4, 3, 2, 1}) {
+  for (int page_size = 1;; ++page_size) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         auto sessions_list,
         ListSessionsPage(database()->FullName(), page_size, &page_token));
-    EXPECT_EQ(sessions_list.size(), page_size);
     for (auto& session : sessions_list) {
       actual.emplace_back(session.name());
     }
+    if (sessions_list.size() < page_size) break;
+    EXPECT_EQ(sessions_list.size(), page_size);
   }
+
   // After paginating through all the sessions, the page token should be empty.
   EXPECT_TRUE(page_token.empty());
-  EXPECT_THAT(actual, testing::UnorderedElementsAreArray(expected));
+  EXPECT_THAT(actual, testing::IsSupersetOf(expected));
 }
 
 TEST_F(SessionsTest, ListAllSessions) {
@@ -293,13 +295,13 @@ TEST_F(SessionsTest, ListAllSessions) {
       auto sessions_list,
       ListSessionsPage(database()->FullName(), /*page_size=*/-1, &page_token));
   std::vector<std::string> actual;
-  actual.reserve(5);
+  actual.reserve(sessions_list.size());
   for (auto& session : sessions_list) {
     actual.emplace_back(session.name());
   }
 
   EXPECT_TRUE(page_token.empty());
-  EXPECT_THAT(actual, testing::UnorderedElementsAreArray(expected));
+  EXPECT_THAT(actual, testing::IsSupersetOf(expected));
 }
 
 TEST_F(SessionsTest, ListSessionsWithLabels) {
@@ -309,8 +311,10 @@ TEST_F(SessionsTest, ListSessionsWithLabels) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       auto sessions_list,
       ListSessionsPage(database()->FullName(), /*page_size=*/-1, &page_token));
-  EXPECT_EQ(sessions_list[0].labels_size(), 1);
-  EXPECT_EQ(sessions_list[0].labels().find("abc")->second, "def");
+  EXPECT_THAT(sessions_list,
+              testing::Contains(testing::Property(
+                  "labels", &spanner_api::Session::labels,
+                  testing::UnorderedElementsAre(testing::Pair("abc", "def")))));
 }
 
 TEST_F(SessionsTest, BatchCreateSessionReturnsMultipleSessions) {

@@ -16,6 +16,9 @@
 
 #include "backend/storage/in_memory_iterator.h"
 
+#include <utility>
+#include <vector>
+
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

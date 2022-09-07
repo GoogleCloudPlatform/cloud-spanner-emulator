@@ -16,6 +16,8 @@
 
 #include "frontend/converters/types.h"
 
+#include <vector>
+
 #include "absl/strings/str_cat.h"
 #include "common/errors.h"
 #include "zetasql/base/status_macros.h"

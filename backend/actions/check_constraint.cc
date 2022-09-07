@@ -17,6 +17,8 @@
 #include "backend/actions/check_constraint.h"
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "zetasql/public/evaluator.h"
 #include "zetasql/public/value.h"

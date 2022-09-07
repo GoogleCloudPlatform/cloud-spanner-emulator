@@ -17,6 +17,7 @@
 #include "backend/schema/backfills/index_backfill.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "gmock/gmock.h"

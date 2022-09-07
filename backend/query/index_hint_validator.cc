@@ -17,6 +17,9 @@
 #include "backend/query/index_hint_validator.h"
 
 #include <algorithm>
+#include <iterator>
+#include <string>
+#include <vector>
 
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"

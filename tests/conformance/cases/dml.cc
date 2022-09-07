@@ -14,6 +14,9 @@
 // limitations under the License.
 //
 
+#include <string>
+#include <tuple>
+
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 

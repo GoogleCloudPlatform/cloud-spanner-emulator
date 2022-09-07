@@ -16,6 +16,9 @@
 
 #include "backend/schema/updater/schema_updater_tests/base.h"
 
+#include <memory>
+#include <string>
+
 #include "absl/status/statusor.h"
 
 namespace google {

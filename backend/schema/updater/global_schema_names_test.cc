@@ -16,6 +16,8 @@
 
 #include "backend/schema/updater/global_schema_names.h"
 
+#include <string>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"

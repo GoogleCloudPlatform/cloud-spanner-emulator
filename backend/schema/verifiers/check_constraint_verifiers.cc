@@ -16,6 +16,7 @@
 
 #include "backend/schema/verifiers/check_constraint_verifiers.h"
 
+#include <memory>
 #include <vector>
 
 #include "absl/status/status.h"

@@ -29,7 +29,6 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::IsOk;
 using zetasql_base::testing::StatusIs;
 
 class SnapshotReadsTest : public DatabaseTest {

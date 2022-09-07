@@ -16,6 +16,8 @@
 
 #include "backend/locking/request.h"
 
+#include <vector>
+
 namespace google {
 namespace spanner {
 namespace emulator {

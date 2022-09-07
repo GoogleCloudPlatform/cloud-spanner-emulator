@@ -16,6 +16,12 @@
 
 #include "frontend/converters/values.h"
 
+#include <cmath>
+#include <limits>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "zetasql/public/functions/date_time_util.h"
 #include "zetasql/public/options.pb.h"
 #include "absl/status/statusor.h"
@@ -102,8 +108,8 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
       }
       absl::Time time;
       std::string error;
-      if (!absl::ParseTime(kRFC3339TimeFormatNoOffset, std::string(time_str),
-                           &time, &error)) {
+      if (!absl::ParseTime(kRFC3339TimeFormatNoOffset, time_str, &time,
+                           &error)) {
         return error::CouldNotParseStringAsTimestamp(value_pb.string_value(),
                                                      error);
       }

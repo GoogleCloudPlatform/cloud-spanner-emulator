@@ -17,6 +17,8 @@
 #include "frontend/server/request_context.h"
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
 #include "gmock/gmock.h"

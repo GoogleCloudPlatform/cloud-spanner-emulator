@@ -16,6 +16,9 @@
 
 #include "backend/datamodel/key.h"
 
+#include <algorithm>
+#include <vector>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"

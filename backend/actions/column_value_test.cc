@@ -16,8 +16,10 @@
 
 #include "backend/actions/column_value.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "zetasql/public/functions/string.h"
 #include "zetasql/public/value.h"
@@ -46,7 +48,6 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using emulator::test::ScopedEmulatorFeatureFlagsSetter;
 using zetasql::values::Bool;
 using zetasql::values::Bytes;
 using zetasql::values::BytesArray;

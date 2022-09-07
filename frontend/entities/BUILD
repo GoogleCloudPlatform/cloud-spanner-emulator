@@ -73,8 +73,10 @@ cc_library(
     ],
     deps = [
         "//frontend/common:labels",
+        "//frontend/converters:time",
         "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_cc_grpc",
+        "@com_google_zetasql//zetasql/base:clock",
     ],
 )
 
@@ -85,9 +87,13 @@ cc_test(
     ],
     deps = [
         ":instance",
+        "//frontend/converters:time",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_zetasql//zetasql/base:clock",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

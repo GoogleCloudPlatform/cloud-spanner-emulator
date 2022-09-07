@@ -16,6 +16,9 @@
 
 #include "backend/schema/catalog/foreign_key.h"
 
+#include <string>
+#include <vector>
+
 #include "absl/strings/substitute.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"

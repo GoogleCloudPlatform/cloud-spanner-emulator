@@ -24,16 +24,17 @@ cc_test(
     srcs = ["emulator_conformance_test.cc"],
     shard_count = 20,
     deps = [
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_zetasql//zetasql/base",
+        # disabling the heap checker as recommended by go/spanner-heapcheck
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "//tests/common:proto_matchers",
+        "@com_github_googleapis_google_cloud_cpp//:spanner",
         "//common:feature_flags",
         "//frontend/server",
-        "//tests/common:proto_matchers",
         "//tests/common:scoped_feature_flags_setter",
         "//tests/conformance/cases",
         "//tests/conformance/common:environment",
-        "@com_github_googleapis_google_cloud_cpp//:spanner",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

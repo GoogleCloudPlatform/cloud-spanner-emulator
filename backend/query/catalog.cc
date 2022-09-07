@@ -17,6 +17,7 @@
 #include "backend/query/catalog.h"
 
 #include <memory>
+#include <string>
 
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"

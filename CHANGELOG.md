@@ -1,5 +1,30 @@
 # Changes
 
+## v1.4.4
+
+### New Feature
+
+* Add creation time to instance API
+* Add update time to instance API
+* Change type of COLUMN\_DEFAULT in INFORMATION\_SCHEMA from BYTES to STRING
+* The Spanner emulator will enforce a maximum number of elements
+in an IN list, to match that enforced by Spanner\.
+* upgrade bazel and almost all of the external dependencies
+* Add support for Default Primary Key Columns\.
+* update to ubuntu 1804 and reuse existing ubuntu docker file for release
+
+
+
+## v1.4.3
+
+### New Features
+
+*   Add support for INFORMATION\_SCHEMA\.TABLES ROW\_DELETION\_POLICY\_EXPRESSION column
+
+*   Support ANALYZE parsing in emulator and ignore the schema change
+
+*   Add INFORMATION\_SCHEMA\.DATABASE\_OPTIONS to spanner emulator\.
+
 ## v1.4.2
 
 ### New Features

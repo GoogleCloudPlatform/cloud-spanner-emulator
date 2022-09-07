@@ -18,8 +18,10 @@
 #include "backend/schema/parser/ddl_parser.h"
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "zetasql/base/logging.h"
@@ -328,6 +330,32 @@ absl::Status VisitGenerationClauseNode(const SimpleNode* node,
 
   return absl::OkStatus();
 }
+
+absl::Status VisitColumnDefaultClauseNode(const SimpleNode* node,
+                                          ColumnDefinition* column_definition,
+                                          absl::string_view ddl_text) {
+  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCOLUMN_DEFAULT_CLAUSE));
+
+  if (!EmulatorFeatureFlags::instance().flags().enable_column_default_values) {
+    return error::ColumnDefaultValuesNotEnabled();
+  }
+
+  if (node->jjtGetNumChildren() != 1) {
+    return absl::Status(
+        absl::StatusCode::kInvalidArgument,
+        "A column default value has to contain exactly one valid expression");
+  }
+  ZETASQL_ASSIGN_OR_RETURN(
+      const SimpleNode* child,
+      GetChildAtIndexWithType(node, 0, JJTCOLUMN_DEFAULT_EXPRESSION));
+
+  column_definition->mutable_properties()->set_expression(
+      absl::StrCat("(", GetExpressionStr(*child, ddl_text), ")"));
+  column_definition->mutable_properties()->set_has_default_value(true);
+
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::string> GetOptionName(const SimpleNode* node) {
   ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTOPTION_KEY_VAL));
   if (node->jjtGetNumChildren() < 2) {
@@ -411,6 +439,10 @@ absl::Status VisitColumnNode(const SimpleNode* node,
       case JJTGENERATION_CLAUSE:
         ZETASQL_RETURN_IF_ERROR(
             VisitGenerationClauseNode(child, column_definition, ddl_text));
+        break;
+      case JJTCOLUMN_DEFAULT_CLAUSE:
+        ZETASQL_RETURN_IF_ERROR(
+            VisitColumnDefaultClauseNode(child, column_definition, ddl_text));
         break;
       case JJTOPTIONS_CLAUSE:
         ZETASQL_RETURN_IF_ERROR(VisitColumnOptionListNode(
@@ -795,6 +827,10 @@ absl::Status VisitAlterColumnAttrsNode(const SimpleNode* node,
         ZETASQL_RETURN_IF_ERROR(
             VisitGenerationClauseNode(child, column_definition, ddl_text));
         break;
+      case JJTCOLUMN_DEFAULT_CLAUSE:
+        ZETASQL_RETURN_IF_ERROR(
+            VisitColumnDefaultClauseNode(child, column_definition, ddl_text));
+        break;
       default:
         return error::Internal(
             absl::StrCat("Unexpected alter column info: ", child->toString()));
@@ -812,12 +848,19 @@ absl::Status VisitAlterColumnNode(const SimpleNode* node,
   // Check the type of alter column and set corresponding properties.
   ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, 0));
   switch (child->getId()) {
-    case JJTSET_OPTIONS_CLAUSE: {
-      ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* column_option_list_node,
-                       GetChildAtIndexWithType(node, 1, JJTOPTIONS_CLAUSE));
+    case JJTOPTIONS_CLAUSE: {
       ZETASQL_RETURN_IF_ERROR(VisitColumnOptionListNode(
-          column_option_list_node,
-          alter_column->mutable_column()->mutable_options()));
+          child, alter_column->mutable_column()->mutable_options()));
+      break;
+    }
+    case JJTCOLUMN_DEFAULT_CLAUSE: {
+      alter_column->set_type(AlterColumn::SET_DEFAULT);
+      ZETASQL_RETURN_IF_ERROR(VisitColumnDefaultClauseNode(
+          child, alter_column->mutable_column(), ddl_text));
+      break;
+    }
+    case JJTDROP_DEFAULT_CLAUSE: {
+      alter_column->set_type(AlterColumn::DROP_DEFAULT);
       break;
     }
     case JJTCOLUMN_DEF_ALTER_ATTRS:

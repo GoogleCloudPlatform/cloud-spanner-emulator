@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include <string>
+
 #include "google/longrunning/operations.pb.h"
 #include "google/protobuf/empty.pb.h"
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
@@ -24,7 +26,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/types/optional.h"
 #include "frontend/common/uris.h"
-#include "frontend/server/server.h"
+#include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
 #include "grpcpp/client_context.h"
 #include "zetasql/base/status_macros.h"
@@ -38,11 +40,11 @@ namespace {
 
 namespace instance_api = ::google::spanner::admin::instance::v1;
 
+using ::google::spanner::emulator::test::EqualsProto;
+using ::google::spanner::emulator::test::proto::Partially;
 using grpc::Status;
-using test::EqualsProto;
 using testing::MatchesRegex;
 using test::proto::IgnoringRepeatedFieldOrdering;
-using test::proto::Partially;
 using zetasql_base::testing::StatusIs;
 
 class InstanceApiTest : public test::ServerTest {
@@ -147,7 +149,7 @@ TEST_F(InstanceApiTest, CreateInstance) {
   ZETASQL_EXPECT_OK(CreateInstance(test_instance_name_, &operation));
   ZETASQL_EXPECT_OK(WaitForOperation(operation.name(), &operation));
   EXPECT_THAT(
-      operation, Partially(EqualsProto(R"(
+      operation, Partially(EqualsProto(R"pb(
         name: "projects/test-project/instances/test-instance/operations/_auto0"
         metadata {
           [type.googleapis.com/
@@ -162,7 +164,7 @@ TEST_F(InstanceApiTest, CreateInstance) {
             }
           }
         }
-      )")));
+      )pb")));
 }
 
 TEST_F(InstanceApiTest, InstanceAlreadyExists) {
@@ -176,14 +178,16 @@ TEST_F(InstanceApiTest, GetInstance) {
   ZETASQL_EXPECT_OK(CreateInstance(test_instance_name_));
   instance_api::Instance instance;
   ZETASQL_EXPECT_OK(GetInstance(test_instance_name_, &instance));
-  EXPECT_THAT(instance, EqualsProto(R"(
-                name: "projects/test-project/instances/test-instance"
-                config: "projects/test-project/instanceConfigs/emulator-config"
-                display_name: "test-instance-display"
+  EXPECT_TRUE(instance.has_create_time());
+  EXPECT_TRUE(instance.has_update_time());
+  EXPECT_THAT(instance, Partially(EqualsProto(R"pb(
+                name: 'projects/test-project/instances/test-instance'
+                config: 'projects/test-project/instanceConfigs/emulator-config'
+                display_name: 'test-instance-display'
                 node_count: 5
                 state: READY
                 labels { key: "a" value: "b" }
-              )"));
+              )pb")));
   EXPECT_THAT(GetInstance("nonexist-instance", &instance),
               StatusIs(absl::StatusCode::kNotFound,
                        MatchesRegex(".*Instance not found.*")));
@@ -195,25 +199,30 @@ TEST_F(InstanceApiTest, ListInstances) {
   instance_api::ListInstancesResponse response;
   ZETASQL_EXPECT_OK(ListInstances(test_project_uri_, 0 /*page_size*/, "" /*page_token*/,
                           &response));
+  EXPECT_EQ(response.instances_size(), 2);
+  EXPECT_TRUE(response.instances().at(0).has_create_time());
+  EXPECT_TRUE(response.instances().at(1).has_create_time());
+  EXPECT_TRUE(response.instances().at(0).has_update_time());
+  EXPECT_TRUE(response.instances().at(1).has_update_time());
   EXPECT_THAT(
-      response, IgnoringRepeatedFieldOrdering(EqualsProto(R"(
+      response, IgnoringRepeatedFieldOrdering(Partially(EqualsProto(R"pb(
         instances {
-          name: "projects/test-project/instances/test-instance-1"
-          config: "projects/test-project/instanceConfigs/emulator-config"
-          display_name: "test-instance-1-display"
+          name: 'projects/test-project/instances/test-instance-1'
+          config: 'projects/test-project/instanceConfigs/emulator-config'
+          display_name: 'test-instance-1-display'
           node_count: 5
           state: READY
           labels { key: "a" value: "b" }
         }
         instances {
-          name: "projects/test-project/instances/test-instance-2"
-          config: "projects/test-project/instanceConfigs/emulator-config"
-          display_name: "test-instance-2-display"
+          name: 'projects/test-project/instances/test-instance-2'
+          config: 'projects/test-project/instanceConfigs/emulator-config'
+          display_name: 'test-instance-2-display'
           node_count: 5
           state: READY
           labels { key: "a" value: "b" }
         }
-      )")));
+      )pb"))));
 }
 
 TEST_F(InstanceApiTest, ListsPaginatedInstances) {
