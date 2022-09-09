@@ -16,6 +16,8 @@
 
 #include "backend/datamodel/key_range.h"
 
+#include <vector>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"

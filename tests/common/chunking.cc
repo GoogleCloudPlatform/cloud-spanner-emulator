@@ -16,6 +16,9 @@
 
 #include "tests/common/chunking.h"
 
+#include <string>
+#include <vector>
+
 #include "google/protobuf/struct.pb.h"
 #include "absl/memory/memory.h"
 #include "absl/random/random.h"

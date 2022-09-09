@@ -17,6 +17,8 @@
 #include "frontend/server/server.h"
 
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "zetasql/base/logging.h"
 #include "google/iam/v1/iam_policy.pb.h"

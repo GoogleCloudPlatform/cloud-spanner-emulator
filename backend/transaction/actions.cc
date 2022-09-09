@@ -17,6 +17,7 @@
 #include "backend/transaction/actions.h"
 
 #include <memory>
+#include <vector>
 
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"

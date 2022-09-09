@@ -17,6 +17,8 @@
 #include "backend/transaction/read_only_transaction.h"
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "absl/random/random.h"
 #include "absl/status/status.h"

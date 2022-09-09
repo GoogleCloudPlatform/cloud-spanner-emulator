@@ -17,6 +17,9 @@
 #include "frontend/server/handler.h"
 
 #include <map>
+#include <memory>
+#include <string>
+#include <utility>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/synchronization/mutex.h"

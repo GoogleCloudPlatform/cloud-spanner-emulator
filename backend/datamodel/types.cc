@@ -16,6 +16,8 @@
 
 #include "backend/datamodel/types.h"
 
+#include <string>
+
 #include "zetasql/public/type.pb.h"
 #include "common/feature_flags.h"
 

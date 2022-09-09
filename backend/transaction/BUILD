@@ -29,6 +29,7 @@ cc_library(
     ],
     deps = [
         ":actions",
+        ":commit_timestamp",
         ":flush",
         ":resolve",
         ":row_cursor",

@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include <string>
+
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/keys.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
@@ -32,8 +34,6 @@
 #include "frontend/server/handler.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
-
-namespace spanner_api = ::google::spanner::v1;
 
 namespace google {
 namespace spanner {

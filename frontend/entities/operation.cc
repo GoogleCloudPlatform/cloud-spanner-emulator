@@ -16,6 +16,8 @@
 
 #include "frontend/entities/operation.h"
 
+#include <string>
+
 #include "google/rpc/status.pb.h"
 #include "absl/strings/str_cat.h"
 #include "frontend/common/protos.h"

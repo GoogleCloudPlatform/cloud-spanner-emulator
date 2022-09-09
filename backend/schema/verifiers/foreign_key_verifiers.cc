@@ -17,6 +17,9 @@
 #include "backend/schema/verifiers/foreign_key_verifiers.h"
 
 #include <algorithm>
+#include <iterator>
+#include <memory>
+#include <vector>
 
 #include "zetasql/public/value.h"
 #include "absl/status/status.h"

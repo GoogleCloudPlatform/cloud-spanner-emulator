@@ -16,12 +16,18 @@
 
 #include "backend/actions/generated_column.h"
 
+#include <algorithm>
+#include <map>
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/substitute.h"
+#include "backend/access/write.h"
 #include "backend/actions/ops.h"
 #include "backend/common/graph_dependency_helper.h"
 #include "backend/query/analyzer_options.h"
@@ -42,14 +48,14 @@ absl::Status GetGeneratedColumnsInTopologicalOrder(
   GraphDependencyHelper<const Column*, GetColumnName> sorter(
       /*object_type=*/"generated column");
   for (const Column* column : table->columns()) {
-    if (column->is_generated()) {
+    if (column->is_generated() || column->has_default_value()) {
       ZETASQL_RETURN_IF_ERROR(sorter.AddNodeIfNotExists(column));
     }
   }
   for (const Column* column : table->columns()) {
     if (column->is_generated()) {
       for (const Column* dep : column->dependent_columns()) {
-        if (dep->is_generated()) {
+        if (dep->is_generated() || dep->has_default_value()) {
           ZETASQL_RETURN_IF_ERROR(
               sorter.AddEdgeIfNotExists(column->Name(), dep->Name()));
         }
@@ -79,8 +85,8 @@ PrepareExpression(const Column* generated_column,
 }  // namespace
 
 GeneratedColumnEffector::GeneratedColumnEffector(
-    const Table* table, zetasql::Catalog* function_catalog)
-    : table_(table) {
+    const Table* table, zetasql::Catalog* function_catalog, bool for_keys)
+    : table_(table), for_keys_(for_keys) {
   absl::Status s = Initialize(function_catalog);
   ZETASQL_DCHECK(s.ok()) << "Failed to initialize GeneratedColumnEffector: " << s;
 }
@@ -102,7 +108,9 @@ absl::StatusOr<zetasql::Value>
 GeneratedColumnEffector::ComputeGeneratedColumnValue(
     const Column* generated_column,
     const zetasql::ParameterValueMap& row_column_values) const {
-  ZETASQL_RET_CHECK(generated_column != nullptr && generated_column->is_generated());
+  ZETASQL_RET_CHECK(generated_column != nullptr &&
+            (generated_column->is_generated() ||
+             generated_column->has_default_value()));
   ZETASQL_ASSIGN_OR_RETURN(
       zetasql::Value value,
       expressions_.at(generated_column)->Execute(row_column_values));
@@ -114,16 +122,66 @@ GeneratedColumnEffector::ComputeGeneratedColumnValue(
   return value;
 }
 
+absl::Status GeneratedColumnEffector::Effect(
+    const MutationOp& op, std::vector<zetasql::Value>* generated_values,
+    std::vector<const Column*>* columns_with_generated_values) const {
+  ZETASQL_RET_CHECK(for_keys_ == true);
+
+  columns_with_generated_values->reserve(generated_columns_.size());
+
+  // Evaluate generated columns in topological order.
+  for (int i = 0; i < generated_columns_.size(); ++i) {
+    const Column* generated_column = generated_columns_[i];
+    if (table_->FindKeyColumn(generated_column->Name()) == nullptr) {
+      // skip non-key columns.
+      continue;
+    }
+
+    // If this column has a default value and the user is supplying a value
+    // for it, then we don't need to compute its default value.
+    if (std::find(op.columns.begin(), op.columns.end(),
+                  generated_column->Name()) != op.columns.end()) {
+      continue;
+    }
+    if (generated_column->has_default_value() &&
+        (op.type == MutationOpType::kUpdate ||
+         op.type == MutationOpType::kDelete)) {
+      return error::DefaultPKNeedsExplicitValue(generated_column->FullName(),
+                                                "Update/Delete");
+    }
+
+    zetasql::ParameterValueMap row_column_values;
+    ZETASQL_ASSIGN_OR_RETURN(
+        zetasql::Value value,
+        ComputeGeneratedColumnValue(generated_column, row_column_values));
+
+    generated_values->push_back(value);
+    columns_with_generated_values->push_back(generated_column);
+  }
+  return absl::OkStatus();
+}
+
 absl::Status GeneratedColumnEffector::Effect(const ActionContext* ctx,
                                              const InsertOp& op) const {
   zetasql::ParameterValueMap column_values;
   ZETASQL_RET_CHECK_EQ(op.columns.size(), op.values.size());
-  for (const Column* column : table_->columns()) {
-    column_values[column->Name()] = zetasql::Value::Null(column->GetType());
-  }
+
   for (int i = 0; i < op.columns.size(); ++i) {
     column_values[op.columns[i]->Name()] = op.values[i];
   }
+
+  for (const Column* column : table_->columns()) {
+    // If the column doesn't appear in the list and doesn't have a default
+    // value, we fill in Null value for it, so it can be used to compute
+    // generated column values.
+    // Columns with default values will be computed the same way as generated
+    // columns.
+    if (column_values.find(column->Name()) == column_values.end() &&
+        !column->has_default_value()) {
+      column_values[column->Name()] = zetasql::Value::Null(column->GetType());
+    }
+  }
+
   return Effect(ctx, op.key, &column_values);
 }
 
@@ -156,9 +214,19 @@ absl::Status GeneratedColumnEffector::Effect(
   std::vector<zetasql::Value> generated_values;
   generated_values.reserve(generated_columns_.size());
 
+  std::vector<const Column*> columns_with_generated_values;
+  columns_with_generated_values.reserve(generated_columns_.size());
+
   // Evaluate generated columns in topological order.
   for (int i = 0; i < generated_columns_.size(); ++i) {
     const Column* generated_column = generated_columns_[i];
+    // If this column has a default value and the user is supplying a value
+    // for it, then we don't need to compute its default value.
+    if (generated_column->has_default_value() &&
+        column_values->find(generated_column->Name()) != column_values->end()) {
+      continue;
+    }
+
     ZETASQL_ASSIGN_OR_RETURN(
         zetasql::Value value,
         ComputeGeneratedColumnValue(generated_column, *column_values));
@@ -167,9 +235,13 @@ absl::Status GeneratedColumnEffector::Effect(
     // generated columns that depend on it.
     (*column_values)[generated_column->Name()] = value;
     generated_values.push_back(value);
+    columns_with_generated_values.push_back(generated_column);
   }
 
-  ctx->effects()->Update(table_, key, generated_columns_, generated_values);
+  if (!columns_with_generated_values.empty()) {
+    ctx->effects()->Update(table_, key, columns_with_generated_values,
+                           generated_values);
+  }
   return absl::OkStatus();
 }
 

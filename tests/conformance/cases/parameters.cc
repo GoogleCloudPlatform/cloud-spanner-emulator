@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include <string>
+
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -25,6 +27,7 @@ namespace test {
 
 namespace {
 
+using test::proto::Partially;
 using zetasql_base::testing::IsOk;
 using zetasql_base::testing::IsOkAndHolds;
 using zetasql_base::testing::StatusIs;
@@ -168,7 +171,7 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
       R"(metadata { row_type { fields { type { code: INT64 } } } }
          rows { values { string_value: "1" } })");
   EXPECT_THAT(Execute("SELECT 1", params, param_types),
-              IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(Partially(test::EqualsProto(result))));
 
   // Parameter used but value not provided.
   params = PARSE_TEXT_PROTO(
@@ -200,7 +203,7 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
       R"(metadata { row_type { fields { type { code: BOOL } } } }
          rows { values { bool_value: true } })");
   EXPECT_THAT(Execute("SELECT @p = @q", params, param_types),
-              IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(Partially(test::EqualsProto(result))));
 
   // Roundtrip values of all supported scalar types.
   params = PARSE_TEXT_PROTO(
@@ -271,7 +274,7 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                     CAST(@pNumeric AS NUMERIC),
                     CAST(@pJson AS JSON))",
                       params, param_types),
-              IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(Partially(test::EqualsProto(result))));
 
   // Roundtrip NULL values of all supported scalar types.
   params = PARSE_TEXT_PROTO(
@@ -341,7 +344,7 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                     CAST(@pNumeric AS NUMERIC),
                     CAST(@pJson AS JSON))",
                       params, param_types),
-              IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(Partially(test::EqualsProto(result))));
 
   // Roundtrip values of all supported array types.
   params = PARSE_TEXT_PROTO(
@@ -514,7 +517,7 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                 CAST(@pNumericArray AS ARRAY<NUMERIC>),
                 CAST(@pJsonArray AS ARRAY<JSON>))",
                   params, param_types),
-              IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(Partially(test::EqualsProto(result))));
 
   // Roundtrip NULL values of all supported array types.
   params = PARSE_TEXT_PROTO(
@@ -618,7 +621,7 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                 CAST(@pNumericArray AS ARRAY<NUMERIC>),
                 CAST(@pJsonArray AS ARRAY<JSON>))",
                   params, param_types),
-              IsOkAndHolds(test::EqualsProto(result)));
+              IsOkAndHolds(Partially(test::EqualsProto(result))));
 
   // Error message for unsupported undeclared parameter types.
   params = PARSE_TEXT_PROTO(

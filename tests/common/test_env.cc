@@ -18,6 +18,8 @@
 
 #include <memory>
 #include <thread>  // NOLINT(build/c++11)
+#include <utility>
+#include <vector>
 
 #include "zetasql/base/logging.h"
 #include "google/longrunning/operations.grpc.pb.h"

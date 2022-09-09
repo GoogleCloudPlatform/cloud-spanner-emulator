@@ -46,6 +46,21 @@ TEST(EmulatorFeatureFlags, Basic) {
   EXPECT_TRUE(features.flags().enable_check_constraint);
 }
 
+TEST(EmulatorFeatureFlags, DefaultValuesFlag) {
+  const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
+
+  EXPECT_FALSE(features.flags().enable_column_default_values);
+
+  {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_column_default_values = true;
+    test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+    EXPECT_TRUE(features.flags().enable_column_default_values);
+  }
+
+  EXPECT_FALSE(features.flags().enable_column_default_values);
+}
+
 }  // namespace
 }  // namespace emulator
 }  // namespace spanner

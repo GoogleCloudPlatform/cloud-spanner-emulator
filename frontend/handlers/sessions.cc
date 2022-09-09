@@ -14,7 +14,9 @@
 // limitations under the License.
 //
 
+#include <algorithm>
 #include <memory>
+#include <vector>
 
 #include "google/protobuf/empty.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
@@ -30,7 +32,6 @@
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
-namespace spanner_api = ::google::spanner::v1;
 namespace protobuf_api = ::google::protobuf;
 
 namespace google {

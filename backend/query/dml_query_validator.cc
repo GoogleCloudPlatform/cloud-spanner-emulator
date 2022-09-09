@@ -16,6 +16,8 @@
 
 #include "backend/query/dml_query_validator.h"
 
+#include <string>
+
 #include "common/constants.h"
 #include "zetasql/base/status_macros.h"
 

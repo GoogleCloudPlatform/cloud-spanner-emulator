@@ -16,6 +16,8 @@
 
 #include "frontend/converters/chunking.h"
 
+#include <random>
+#include <string>
 #include <vector>
 
 #include "google/protobuf/struct.pb.h"

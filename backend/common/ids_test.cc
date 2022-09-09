@@ -16,6 +16,7 @@
 
 #include "backend/common/ids.h"
 
+#include <string>
 #include <thread>  // NOLINT
 #include <unordered_set>
 #include <vector>

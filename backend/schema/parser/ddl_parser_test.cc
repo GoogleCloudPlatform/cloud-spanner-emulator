@@ -856,7 +856,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasicImplicitlyGlobal) {
                     CREATE NULL_FILTERED INDEX UsersByUserId ON Users(UserId)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_index {
                       index_name: "UsersByUserId"
                       table_name: "Users"
@@ -865,7 +865,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasicImplicitlyGlobal) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateIndex, CanParseCreateIndexBasic) {
@@ -875,7 +875,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasic) {
                         ON Albums(Name)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_index {
                       index_name: "GlobalAlbumsByName"
                       table_name: "Albums"
@@ -884,7 +884,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasic) {
                         primary_key { key_part { key_column_name: "Name" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateIndex, CanParseCreateIndexBasicInterleaved) {
@@ -894,7 +894,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasicInterleaved) {
                         ON Albums(UserId, Name DESC), INTERLEAVE IN Users
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_index {
                       index_name: "LocalAlbumsByName"
                       table_name: "Albums"
@@ -907,7 +907,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasicInterleaved) {
                       }
                       constraints { interleave { parent: "Users" } }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateIndex, CanParseCreateIndexStoringAColumn) {
@@ -917,7 +917,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexStoringAColumn) {
                         STORING (Description)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_index {
                       index_name: "GlobalAlbumsByName"
                       table_name: "Albums"
@@ -930,7 +930,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexStoringAColumn) {
                         primary_key { key_part { key_column_name: "Name" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateIndex, CanParseCreateIndexASCColumn) {
@@ -940,7 +940,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexASCColumn) {
                     CREATE NULL_FILTERED INDEX UsersAsc ON Users(UserId ASC)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_index {
                       index_name: "UsersAsc"
                       table_name: "Users"
@@ -949,7 +949,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexASCColumn) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateIndex, CanParseCreateIndexDESCColumn) {
@@ -958,7 +958,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexDESCColumn) {
                     CREATE NULL_FILTERED INDEX UsersAsc ON Users(UserId DESC)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_index {
                       index_name: "UsersAsc"
                       table_name: "Users"
@@ -969,7 +969,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexDESCColumn) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateIndex, CanParseCreateIndexNotNullFiltered) {
@@ -978,7 +978,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexNotNullFiltered) {
                     CREATE INDEX UsersByUserId ON Users(UserId)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_index {
                       index_name: "UsersByUserId"
                       table_name: "Users"
@@ -986,7 +986,7 @@ TEST(ParseCreateIndex, CanParseCreateIndexNotNullFiltered) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateIndex, CanParseCreateUniqueIndex) {
@@ -995,7 +995,7 @@ TEST(ParseCreateIndex, CanParseCreateUniqueIndex) {
                     CREATE UNIQUE INDEX UsersByUserId ON Users(UserId)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_index {
                       index_name: "UsersByUserId"
                       table_name: "Users"
@@ -1004,7 +1004,7 @@ TEST(ParseCreateIndex, CanParseCreateUniqueIndex) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 // DROP TABLE
@@ -1056,7 +1056,7 @@ TEST(ParseAlterTable, CanParseAddColumn) {
                     ALTER TABLE Users ADD COLUMN Notes STRING(MAX)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "Users"
                       alter_column {
@@ -1067,7 +1067,7 @@ TEST(ParseAlterTable, CanParseAddColumn) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAddColumnNamedColumn) {
@@ -1076,7 +1076,7 @@ TEST(ParseAlterTable, CanParseAddColumnNamedColumn) {
                     ALTER TABLE Users ADD COLUMN `COLUMN` STRING(MAX)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "Users"
                       alter_column {
@@ -1087,7 +1087,7 @@ TEST(ParseAlterTable, CanParseAddColumnNamedColumn) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAddColumnNamedColumnNoQuotes) {
@@ -1096,7 +1096,7 @@ TEST(ParseAlterTable, CanParseAddColumnNamedColumnNoQuotes) {
                     ALTER TABLE Users ADD COLUMN COLUMN STRING(MAX)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "Users"
                       alter_column {
@@ -1107,7 +1107,7 @@ TEST(ParseAlterTable, CanParseAddColumnNamedColumnNoQuotes) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAddNumericColumn) {
@@ -1116,7 +1116,7 @@ TEST(ParseAlterTable, CanParseAddNumericColumn) {
                     ALTER TABLE T ADD COLUMN G NUMERIC
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "T"
                       alter_column {
@@ -1127,13 +1127,13 @@ TEST(ParseAlterTable, CanParseAddNumericColumn) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
   EXPECT_THAT(ParseDDLStatement(
                   R"(
                     ALTER TABLE T ADD COLUMN H ARRAY<NUMERIC>
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "T"
                       alter_column {
@@ -1149,7 +1149,7 @@ TEST(ParseAlterTable, CanParseAddNumericColumn) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAddJsonColumn) {
@@ -1235,32 +1235,32 @@ TEST(ParseAlterTable, CannotParseAddColumnMissingTableName) {
 TEST(ParseAlterTable, CanParseDropColumn) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP COLUMN Notes"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "Users"
                       alter_column { type: DROP column_name: "Notes" }
                     }
-                  )")));
+                  )pb")));
 
   // We can even drop columns named "COLUMN" with quotes.
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP COLUMN `COLUMN`"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "Users"
                       alter_column { type: DROP column_name: "COLUMN" }
                     }
-                  )")));
+                  )pb")));
 
   // And then we can omit the quotes if we want.
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP COLUMN COLUMN"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "Users"
                       alter_column { type: DROP column_name: "COLUMN" }
                     }
-                  )")));
+                  )pb")));
 
   // But this one fails, since it doesn't mention column name.
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP COLUMN"),
@@ -2071,6 +2071,277 @@ TEST_F(GeneratedColumns, CannotCreateStoredGeneratedColumnWhenDisabled) {
     )"),
               StatusIs(absl::StatusCode::kUnimplemented,
                        HasSubstr("Generated columns are not enabled.")));
+}
+
+class ColumnDefaultValues : public ::testing::Test {
+ public:
+  ColumnDefaultValues()
+      : feature_flags_({.enable_column_default_values = true}) {}
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
+};
+
+TEST_F(ColumnDefaultValues, CreateTableWithDefaultNonKeyColumn) {
+  EXPECT_THAT(ParseDDLStatement(R"(
+                CREATE TABLE T (
+                  K INT64 NOT NULL,
+                  D INT64 DEFAULT (10),
+                ) PRIMARY KEY (K))"),
+              IsOkAndHolds(test::EqualsProto(R"d(
+                create_table {
+                  table_name: "T"
+                  columns {
+                    column_name: "K"
+                    properties {
+                      column_type {
+                        type: INT64
+                      }
+                    }
+                    constraints {
+                      not_null {
+                        nullable: false
+                      }
+                    }
+                  }
+                  columns {
+                    column_name: "D"
+                    properties {
+                      column_type {
+                        type: INT64
+                      }
+                      expression: "(10)"
+                      has_default_value: true
+                    }
+                  }
+                  constraints {
+                    primary_key {
+                      key_part {
+                        key_column_name: "K"
+                      }
+                    }
+                  }
+                })d")));
+}
+
+TEST_F(ColumnDefaultValues, CreateTableWithDefaultPrimaryKeyColumn) {
+  EXPECT_THAT(ParseDDLStatement(R"(
+                CREATE TABLE T (
+                  K INT64 NOT NULL DEFAULT (1),
+                  V INT64,
+                ) PRIMARY KEY (K))"),
+              IsOkAndHolds(test::EqualsProto(R"d(
+                create_table {
+                  table_name: "T"
+                  columns {
+                    column_name: "K"
+                    properties {
+                      column_type {
+                        type: INT64
+                      }
+                      expression: "(1)"
+                      has_default_value: true
+                    }
+                    constraints {
+                      not_null {
+                        nullable: false
+                      }
+                    }
+                  }
+                  columns {
+                    column_name: "V"
+                    properties {
+                      column_type {
+                        type: INT64
+                      }
+                    }
+                  }
+                  constraints {
+                    primary_key {
+                      key_part {
+                        key_column_name: "K"
+                      }
+                    }
+                  }
+                })d")));
+}
+
+TEST_F(ColumnDefaultValues, CannotParseDefaultColumnWhenDisabled) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_column_default_values = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(ParseDDLStatement(R"(
+      CREATE TABLE T (
+        K INT64 NOT NULL DEFAULT (1),
+        V INT64,
+        G INT64 DEFAULT (10)
+       ) PRIMARY KEY (K)
+    )"),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("Column DEFAULT values are not enabled.")));
+}
+
+TEST_F(ColumnDefaultValues, CannotParseDefaultAndGeneratedColumn) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_column_default_values = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(
+      ParseDDLStatement(R"(
+      CREATE TABLE T (
+        K INT64,
+        V INT64,
+        G INT64 DEFAULT (1) AS (1) STORED,
+       ) PRIMARY KEY (K)
+    )"),
+      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST_F(ColumnDefaultValues, CannotParseGeneratedAndDefaultColumn) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_column_default_values = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(
+      ParseDDLStatement(R"(
+      CREATE TABLE T (
+        K INT64,
+        V INT64,
+        G INT64 AS (1) STORED DEFAULT (1),
+       ) PRIMARY KEY (K)
+    )"),
+      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST_F(ColumnDefaultValues, AlterTableAddDefaultColumn) {
+  EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ADD COLUMN D INT64 DEFAULT (1)"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"d(
+            alter_table {
+              table_name: "T"
+              alter_column {
+                type: ADD
+                column {
+                  column_name: "D"
+                  properties {
+                    column_type {
+                      type: INT64
+                    }
+                    expression: "(1)"
+                    has_default_value: true
+                  }
+                }
+              }
+            }
+          )d")));
+}
+
+TEST_F(ColumnDefaultValues, AlterTableAlterDefaultColumn) {
+  EXPECT_THAT(ParseDDLStatement(
+                  "ALTER TABLE T ALTER COLUMN D INT64 NOT NULL DEFAULT (1)"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"d(
+            alter_table {
+              table_name: "T"
+              alter_column {
+                column_name: "D"
+                type: ALTER
+                column {
+                  column_name: "D"
+                  properties {
+                    column_type {
+                      type: INT64
+                    }
+                    expression: "(1)"
+                    has_default_value: true
+                  }
+                  constraints {
+                    not_null {
+                      nullable: false
+                    }
+                  }
+                }
+              }
+            }
+          )d")));
+}
+
+TEST_F(ColumnDefaultValues, AlterTableAlterDefaultColumnToNull) {
+  EXPECT_THAT(ParseDDLStatement(
+                  "ALTER TABLE T ALTER COLUMN D INT64 NOT NULL DEFAULT (NULL)"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"d(
+            alter_table {
+              table_name: "T"
+              alter_column {
+                column_name: "D"
+                type: ALTER
+                column {
+                  column_name: "D"
+                  properties {
+                    column_type {
+                      type: INT64
+                    }
+                    expression: "(NULL)"
+                    has_default_value: true
+                  }
+                  constraints {
+                    not_null {
+                      nullable: false
+                    }
+                  }
+                }
+              }
+            }
+          )d")));
+}
+
+TEST_F(ColumnDefaultValues, AlterTableSetDefaultToColumn) {
+  EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ALTER COLUMN D SET DEFAULT (1)"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"d(
+            alter_table {
+              table_name: "T"
+              alter_column {
+                column_name: "D"
+                type: SET_DEFAULT
+                column {
+                  column_name: "D"
+                  properties {
+                    expression: "(1)"
+                    has_default_value: true
+                  }
+                }
+              }
+            }
+          )d")));
+}
+
+TEST_F(ColumnDefaultValues, AlterTableDropDefaultToColumn) {
+  EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ALTER COLUMN D DROP DEFAULT"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"d(
+            alter_table {
+              table_name: "T"
+              alter_column {
+                column_name: "D"
+                type: DROP_DEFAULT
+                column {
+                  column_name: "D"
+                }
+              }
+            }
+          )d")));
+}
+
+TEST_F(ColumnDefaultValues, InvalidDropDefault) {
+  EXPECT_THAT(
+      ParseDDLStatement("ALTER TABLE T ALTER COLUMN D DROP DEFAULT (1)"),
+      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST_F(ColumnDefaultValues, InvalidSetDefault) {
+  EXPECT_THAT(
+      ParseDDLStatement("ALTER TABLE T ALTER COLUMN D SET DEFAULT"),
+      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
 }
 
 class CheckConstraint : public ::testing::Test {

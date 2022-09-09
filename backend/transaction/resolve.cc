@@ -16,7 +16,10 @@
 
 #include "backend/transaction/resolve.h"
 
+#include <algorithm>
 #include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/status/statusor.h"
@@ -93,11 +96,11 @@ absl::Status ValidateNotNullColumnsPresent(
     }
   }
   for (const auto column : table->columns()) {
-    // Writing null to non-nullable generated columns is temporarily fine,
-    // since the violation may be fixed later by a generated operation to update
-    // the column.
+    // Writing null to non-nullable generated and default columns is temporarily
+    // fine, since the violation may be fixed later by a generated operation to
+    // update the column.
     if (!column->is_nullable() && !column->is_generated() &&
-        !inserted_columns.contains(column)) {
+        !column->has_default_value() && !inserted_columns.contains(column)) {
       return error::NonNullValueNotSpecifiedForInsert(table->Name(),
                                                       column->Name());
     }
@@ -115,6 +118,22 @@ absl::Status ValidateGeneratedColumnsNotPresent(
   }
   return absl::OkStatus();
 }
+
+// Validate that all default primary keys are present in an UPDATE op.
+absl::Status ValidateDefaultKeysInUpdateOp(
+    const Table* table, const std::vector<const Column*>& columns) {
+  for (const KeyColumn* key_column : table->primary_key()) {
+    const Column* column = key_column->column();
+    if (column->has_default_value() &&
+        std::find(columns.begin(), columns.end(), column) == columns.end()) {
+      // This key column has to be present in the column list of the op:
+      return error::DefaultPKNeedsExplicitValue(column->FullName(), "UPDATE");
+    }
+  }
+  return absl::OkStatus();
+}
+
+}  // namespace
 
 // Extracts the primary key column indices from the given list of columns. The
 // returned indices will be in the order specified by the primary key. Nullable
@@ -166,8 +185,6 @@ Key ComputeKey(const ValueList& row,
   }
   return key;
 }
-
-}  // namespace
 
 absl::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
                                                const Schema* schema) {
@@ -223,8 +240,37 @@ absl::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
   return resolved_read_arg;
 }
 
-absl::StatusOr<ResolvedMutationOp> ResolveMutationOp(
+absl::Status ValidateNonDeleteMutationOp(const MutationOp& mutation_op,
+                                         const Schema* schema) {
+  ZETASQL_RET_CHECK(mutation_op.type != MutationOpType::kDelete);
+
+  const Table* table = schema->FindTable(mutation_op.table);
+  if (table == nullptr) {
+    return error::TableNotFound(mutation_op.table);
+  }
+
+  ZETASQL_RETURN_IF_ERROR(ValidateColumnsAreNotDuplicate(mutation_op.columns));
+
+  ZETASQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
+                   GetColumnsByName(table, mutation_op.columns));
+
+  if (mutation_op.type == MutationOpType::kUpdate) {
+    ZETASQL_RETURN_IF_ERROR(ValidateDefaultKeysInUpdateOp(table, columns));
+  } else {
+    // Insert, InsertOrUpdate and Replace mutation ops require that all
+    // not-null columns be present in the mutation. Note: this check is
+    // specifically done before InsertOrUpdate & Replace mutation ops are
+    // flattened.
+    ZETASQL_RETURN_IF_ERROR(ValidateNotNullColumnsPresent(table, columns));
+  }
+  ZETASQL_RETURN_IF_ERROR(ValidateGeneratedColumnsNotPresent(table, columns));
+
+  return absl::OkStatus();
+}
+
+absl::StatusOr<ResolvedMutationOp> ResolveDeleteMutationOp(
     const MutationOp& mutation_op, const Schema* schema, absl::Time now) {
+  ZETASQL_RET_CHECK(mutation_op.type == MutationOpType::kDelete);
   const Table* table = schema->FindTable(mutation_op.table);
   if (table == nullptr) {
     return error::TableNotFound(mutation_op.table);
@@ -234,58 +280,21 @@ absl::StatusOr<ResolvedMutationOp> ResolveMutationOp(
   resolved_mutation_op.table = table;
   resolved_mutation_op.type = mutation_op.type;
 
-  if (mutation_op.type == MutationOpType::kDelete) {
-    // Invalid commit timestamp key ranges for delete ops need to be caught
-    // before CanonicalizeKeySetForTable filters out invalid key ranges with
-    // future timestamp(s).
-    ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampKeySetForDeleteOp(
-        table, mutation_op.key_set, now));
-    std::vector<KeyRange> key_ranges;
-    CanonicalizeKeySetForTable(mutation_op.key_set, table, &key_ranges);
+  // Invalid commit timestamp key ranges for delete ops need to be caught
+  // before CanonicalizeKeySetForTable filters out invalid key ranges with
+  // future timestamp(s).
+  ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampKeySetForDeleteOp(
+      table, mutation_op.key_set, now));
+  std::vector<KeyRange> key_ranges;
+  CanonicalizeKeySetForTable(mutation_op.key_set, table, &key_ranges);
 
-    for (const KeyRange& key_range : key_ranges) {
-      // Transaction store may contain commit timestamp sentinel value until
-      // flush, if requested so in a previous mutation. Hence, convert key
-      // values to timestamp sentinel value to delete such buffered rows.
-      ZETASQL_ASSIGN_OR_RETURN(
-          resolved_mutation_op.key_ranges.emplace_back(),
-          MaybeSetCommitTimestampSentinel(table->primary_key(), key_range));
-    }
-  } else {
-    ZETASQL_RETURN_IF_ERROR(ValidateColumnsAreNotDuplicate(mutation_op.columns));
-
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
-                     GetColumnsByName(table, mutation_op.columns));
-
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<std::optional<int>> key_indices,
-                     ExtractPrimaryKeyIndices(columns, table->primary_key()));
-
-    for (const ValueList& row : mutation_op.rows) {
-      ZETASQL_RET_CHECK_EQ(row.size(), columns.size())
-          << "MutationOp has difference in size of column and value vectors, "
-             "mutation op: "
-          << mutation_op.DebugString();
-
-      // Insert, InsertOrUpdate and Replace mutation ops require that all
-      // not-null columns be present in the mutation. Note: this check is
-      // specifically done before InsertOrUpdate & Replace mutation ops are
-      // flattened.
-      if (mutation_op.type == MutationOpType::kInsert ||
-          mutation_op.type == MutationOpType::kInsertOrUpdate ||
-          mutation_op.type == MutationOpType::kReplace) {
-        ZETASQL_RETURN_IF_ERROR(ValidateNotNullColumnsPresent(table, columns));
-      }
-
-      ZETASQL_RETURN_IF_ERROR(ValidateGeneratedColumnsNotPresent(table, columns));
-
-      ZETASQL_ASSIGN_OR_RETURN(resolved_mutation_op.rows.emplace_back(),
-                       MaybeSetCommitTimestampSentinel(columns, row));
-
-      resolved_mutation_op.keys.push_back(ComputeKey(
-          resolved_mutation_op.rows.back(), table->primary_key(), key_indices));
-    }
-
-    resolved_mutation_op.columns = std::move(columns);
+  for (const KeyRange& key_range : key_ranges) {
+    // Transaction store may contain commit timestamp sentinel value until
+    // flush, if requested so in a previous mutation. Hence, convert key
+    // values to timestamp sentinel value to delete such buffered rows.
+    ZETASQL_ASSIGN_OR_RETURN(
+        resolved_mutation_op.key_ranges.emplace_back(),
+        MaybeSetCommitTimestampSentinel(table->primary_key(), key_range));
   }
 
   return resolved_mutation_op;

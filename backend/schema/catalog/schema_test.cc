@@ -17,6 +17,8 @@
 #include "backend/schema/catalog/schema.h"
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "zetasql/public/type.h"
 #include "gmock/gmock.h"

@@ -16,8 +16,11 @@
 
 #include "frontend/entities/instance.h"
 
+#include <memory>
+
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
 #include "absl/strings/string_view.h"
+#include "frontend/converters/time.h"
 
 namespace google {
 namespace spanner {
@@ -33,6 +36,8 @@ void Instance::ToProto(admin::instance::v1::Instance* instance) const {
   instance->mutable_labels()->insert(labels_.begin(), labels_.end());
   // Instances are always in ready state.
   instance->set_state(admin::instance::v1::Instance::READY);
+  *instance->mutable_create_time() = TimestampToProto(create_time_).value();
+  *instance->mutable_update_time() = TimestampToProto(update_time_).value();
 }
 
 }  // namespace frontend

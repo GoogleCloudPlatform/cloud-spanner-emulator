@@ -29,8 +29,6 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
-
 class RangeReadsTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {

@@ -246,18 +246,6 @@ class DatabaseTest : public ::testing::Test {
     bool operator==(const ValueRow& other) const { return row_ == other.row_; }
     bool operator!=(const ValueRow& other) const { return row_ != other.row_; }
 
-    // Serialization operator for use in gUnit expectations.
-    friend std::ostream& operator<<(std::ostream& os, const ValueRow& r) {
-      char const* sep = "{";
-      for (auto const& v : r.row_) {
-        os << sep;
-        os << ::testing::PrintToString(v);
-        sep = ", ";
-      }
-      os << "}";
-      return os;
-    }
-
     // Returns the list of values;
     absl::Span<const Value> values() const { return row_; }
 

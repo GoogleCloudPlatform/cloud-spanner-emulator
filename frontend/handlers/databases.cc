@@ -15,6 +15,8 @@
 //
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "google/longrunning/operations.pb.h"
 #include "google/protobuf/empty.pb.h"
@@ -233,7 +235,7 @@ absl::Status DropDatabase(RequestContext* ctx,
     ZETASQL_ASSIGN_OR_RETURN(
         std::vector<std::shared_ptr<Session>> sessions,
         ctx->env()->session_manager()->ListSessions(request->database()));
-    for (auto session : sessions) {
+    for (const auto& session : sessions) {
       ZETASQL_RETURN_IF_ERROR(
           ctx->env()->session_manager()->DeleteSession(session->session_uri()));
     }

@@ -17,8 +17,12 @@
 #include "backend/schema/updater/schema_updater.h"
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "google/protobuf/repeated_field.h"
 #include "zetasql/public/analyzer.h"
@@ -148,13 +152,19 @@ class SchemaUpdaterImpl {
       const Table* table,
       const std::vector<zetasql::SimpleTable::NameAndType>& name_and_types,
       absl::string_view expression_use,
-      absl::flat_hash_set<std::string>* dependent_column_names);
+      absl::flat_hash_set<std::string>* dependent_column_names,
+      bool allow_volatile_expression);
 
   absl::Status AnalyzeGeneratedColumn(
       absl::string_view expression, const std::string& column_name,
       const zetasql::Type* column_type, const Table* table,
       const ddl::CreateTable* ddl_create_table,
       absl::flat_hash_set<std::string>* dependent_column_names);
+
+  absl::Status AnalyzeColumnDefaultValue(
+      absl::string_view expression, const std::string& column_name,
+      const zetasql::Type* column_type, const Table* table,
+      const ddl::CreateTable* ddl_create_table);
 
   absl::Status AnalyzeCheckConstraint(
       absl::string_view expression, const Table* table,
@@ -175,6 +185,11 @@ class SchemaUpdaterImpl {
   absl::Status AlterColumnDefinition(const ddl::ColumnDefinition& ddl_column,
                                      const Table* table,
                                      Column::Editor* editor);
+
+  absl::Status AlterColumnSetDropDefault(const ddl::AlterColumn& alter_column,
+                                         const Table* table,
+                                         const Column* column,
+                                         Column::Editor* editor);
 
   absl::StatusOr<const Column*> CreateColumn(
       const ddl::ColumnDefinition& ddl_column, const Table* table,
@@ -446,16 +461,53 @@ absl::Status SchemaUpdaterImpl::AlterColumnDefinition(
   return SetColumnDefinition(ddl_column, table, /*ddl_table=*/nullptr, editor);
 }
 
+absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
+    const ddl::AlterColumn& alter_column, const Table* table,
+    const Column* column, Column::Editor* editor) {
+  const ddl::AlterColumn::Type type = alter_column.type();
+  ZETASQL_RET_CHECK(type == ddl::AlterColumn::SET_DEFAULT ||
+            type == ddl::AlterColumn::DROP_DEFAULT);
+
+  const ddl::ColumnDefinition& new_column_def = alter_column.column();
+  if (type == ddl::AlterColumn::SET_DEFAULT) {
+    if (column->is_generated()) {
+      return error::CannotSetDefaultValueOnGeneratedColumn(column->FullName());
+    }
+    ZETASQL_RET_CHECK(new_column_def.properties().has_expression() &&
+              new_column_def.properties().has_default_value());
+
+    absl::Status s = AnalyzeColumnDefaultValue(
+        new_column_def.properties().expression(), column->Name(),
+        column->GetType(), table, /*ddl_create_table=*/nullptr);
+    if (!s.ok()) {
+      return error::ColumnDefaultValueParseError(table->Name(), column->Name(),
+                                                 s.message());
+    }
+    editor->set_expression(new_column_def.properties().expression());
+    editor->set_has_default_value(true);
+  } else {
+    if (!column->has_default_value()) {
+      return absl::OkStatus();
+    }
+    editor->clear_expression();
+    editor->set_has_default_value(false);
+  }
+
+  return absl::OkStatus();
+}
+
 class ColumnExpressionValidator : public QueryValidator {
  public:
   ColumnExpressionValidator(
       const Schema* schema, const zetasql::Table* table,
       QueryEngineOptions* options, absl::string_view expression_use,
-      absl::flat_hash_set<std::string>* dependent_column_names)
+      absl::flat_hash_set<std::string>* dependent_column_names,
+      bool allow_volatile_expression)
       : QueryValidator(schema, options),
         table_(table),
         expression_use_(expression_use),
-        dependent_column_names_(dependent_column_names) {}
+        dependent_column_names_(dependent_column_names),
+        allow_volatile_expression_(allow_volatile_expression) {}
 
   absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override {
     if (node->IsScan() ||
@@ -482,8 +534,9 @@ class ColumnExpressionValidator : public QueryValidator {
     // should return error due to that function only being allowed in INSERT or
     // UPDATE.
     ZETASQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedFunctionCall(node));
-    if (node->function()->function_options().volatility !=
-        zetasql::FunctionEnums::IMMUTABLE) {
+    if (!allow_volatile_expression_ &&
+        node->function()->function_options().volatility !=
+            zetasql::FunctionEnums::IMMUTABLE) {
       return error::NonDeterministicFunctionInColumnExpression(
           node->function()->SQLName(), expression_use_);
     }
@@ -494,6 +547,7 @@ class ColumnExpressionValidator : public QueryValidator {
   const zetasql::Table* table_;
   absl::string_view expression_use_;
   absl::flat_hash_set<std::string>* dependent_column_names_;
+  bool allow_volatile_expression_;
 };
 
 absl::Status SchemaUpdaterImpl::InitColumnNameAndTypesFromTable(
@@ -523,7 +577,8 @@ absl::Status SchemaUpdaterImpl::AnalyzeColumnExpression(
     const Table* table,
     const std::vector<zetasql::SimpleTable::NameAndType>& name_and_types,
     absl::string_view expression_use,
-    absl::flat_hash_set<std::string>* dependent_column_names) {
+    absl::flat_hash_set<std::string>* dependent_column_names,
+    bool allow_volatile_expression) {
   zetasql::SimpleTable simple_table(table->Name(), name_and_types);
   zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
   for (const auto& name_and_type : name_and_types) {
@@ -538,9 +593,9 @@ absl::Status SchemaUpdaterImpl::AnalyzeColumnExpression(
       expression, options, &catalog, type_factory_, target_type, &output));
 
   QueryEngineOptions query_engine_options;
-  ColumnExpressionValidator validator(latest_schema_, &simple_table,
-                                      &query_engine_options, expression_use,
-                                      dependent_column_names);
+  ColumnExpressionValidator validator(
+      latest_schema_, &simple_table, &query_engine_options, expression_use,
+      dependent_column_names, allow_volatile_expression);
   ZETASQL_RETURN_IF_ERROR(output->resolved_expr()->Accept(&validator));
   if (output->resolved_expr()->GetTreeDepth() >
       limits::kColumnExpressionMaxDepth) {
@@ -568,7 +623,32 @@ absl::Status SchemaUpdaterImpl::AnalyzeGeneratedColumn(
 
   return AnalyzeColumnExpression(expression, column_type, table, name_and_types,
                                  "stored generated columns",
-                                 dependent_column_names);
+                                 dependent_column_names,
+                                 /*allow_volatile_expression=*/false);
+}
+
+absl::Status SchemaUpdaterImpl::AnalyzeColumnDefaultValue(
+    absl::string_view expression, const std::string& column_name,
+    const zetasql::Type* column_type, const Table* table,
+    const ddl::CreateTable* ddl_create_table) {
+  std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
+  ZETASQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
+                                                  &name_and_types));
+
+  // For the case of adding a default column in ALTER TABLE.
+  if (ddl_create_table == nullptr &&
+      table->FindColumn(column_name) == nullptr) {
+    name_and_types.emplace_back(column_name, column_type);
+  }
+  absl::flat_hash_set<std::string> dependent_column_names;
+  ZETASQL_RETURN_IF_ERROR(AnalyzeColumnExpression(expression, column_type, table,
+                                          name_and_types, "column default",
+                                          &dependent_column_names,
+                                          /*allow_volatile_expression=*/true));
+  if (!dependent_column_names.empty()) {
+    return error::DefaultExpressionWithColumnDependency(column_name);
+  }
+  return absl::OkStatus();
 }
 
 absl::Status SchemaUpdaterImpl::AnalyzeCheckConstraint(
@@ -582,7 +662,8 @@ absl::Status SchemaUpdaterImpl::AnalyzeCheckConstraint(
 
   ZETASQL_RETURN_IF_ERROR(AnalyzeColumnExpression(
       expression, zetasql::types::BoolType(), table, name_and_types,
-      "check constraints", dependent_column_names));
+      "check constraints", dependent_column_names,
+      /*allow_volatile_expression=*/false));
 
   for (const std::string& column_name : *dependent_column_names) {
     builder->add_dependent_column(table->FindColumn(column_name));
@@ -595,6 +676,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     const ddl::ColumnDefinition& ddl_column, const Table* table,
     const ddl::CreateTable* ddl_create_table, ColumnDefModifer* modifier) {
   bool is_generated = false;
+  bool has_default_value = false;
   // Process any changes in column definition.
   if (ddl_column.has_properties() &&
       ddl_column.properties().has_column_type()) {
@@ -603,30 +685,49 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
                          ddl_column.properties().column_type(), type_factory_));
     modifier->set_type(column_type);
 
-    if (ddl_column.properties().has_expression()) {
-      is_generated = true;
+    ddl::ColumnProperties properties = ddl_column.properties();
+    if (properties.has_expression()) {
       modifier->set_expression(ddl_column.properties().expression());
-      absl::flat_hash_set<std::string> dependent_column_names;
-      absl::Status s = AnalyzeGeneratedColumn(
-          ddl_column.properties().expression(), ddl_column.column_name(),
-          column_type, table, ddl_create_table, &dependent_column_names);
-      if (!s.ok()) {
-        return error::GeneratedColumnDefinitionParseError(
-            table->Name(), ddl_column.column_name(), s.message());
-      }
-      for (const std::string& column_name : dependent_column_names) {
-        modifier->add_dependent_column_name(column_name);
+
+      if (properties.has_has_default_value() &&
+          properties.has_default_value()) {
+        // This column has a default value.
+        has_default_value = true;
+        absl::Status s = AnalyzeColumnDefaultValue(
+            ddl_column.properties().expression(), ddl_column.column_name(),
+            column_type, table, ddl_create_table);
+        if (!s.ok()) {
+          return error::ColumnDefaultValueParseError(
+              table->Name(), ddl_column.column_name(), s.message());
+        }
+      } else {
+        // This is a generated column.
+        is_generated = true;
+        absl::flat_hash_set<std::string> dependent_column_names;
+        absl::Status s = AnalyzeGeneratedColumn(
+            ddl_column.properties().expression(), ddl_column.column_name(),
+            column_type, table, ddl_create_table, &dependent_column_names);
+        if (!s.ok()) {
+          return error::GeneratedColumnDefinitionParseError(
+              table->Name(), ddl_column.column_name(), s.message());
+        }
+        for (const std::string& column_name : dependent_column_names) {
+          modifier->add_dependent_column_name(column_name);
+        }
       }
     }
   }
 
-  if (!is_generated) {
+  if (!is_generated && !has_default_value) {
     // Altering a generated column to a non-generated column is disallowed. In
     // that case, the expression is cleared here and later validation at
     // column_validator.cc will block it.
     modifier->clear_expression();
+  } else {
+    ZETASQL_RET_CHECK(is_generated != has_default_value);
   }
 
+  modifier->set_has_default_value(has_default_value);
   // Set the default values for nullability and length.
   modifier->set_nullable(true);
   modifier->set_declared_max_length(std::nullopt);
@@ -667,7 +768,7 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
   ZETASQL_RETURN_IF_ERROR(SetColumnDefinition(ddl_column, table, ddl_table, &builder));
   const Column* column = builder.get();
   builder.set_table(table);
-  if (column->is_generated()) {
+  if (column->is_generated() || column->has_default_value()) {
     statement_context_->AddAction(
         [column](const SchemaValidationContext* context) {
           return BackfillGeneratedColumnValue(column, context);
@@ -1419,6 +1520,22 @@ absl::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_table) {
               editor->add_column(new_column);
               return absl::OkStatus();
             }));
+        break;
+      }
+      case ddl::AlterColumn::SET_DEFAULT:
+      case ddl::AlterColumn::DROP_DEFAULT: {
+        const Column* column = table->FindColumn(alter_column.column_name());
+        if (column == nullptr) {
+          return error::ColumnNotFound(table->Name(),
+                                       alter_column.column_name());
+        }
+        ZETASQL_RETURN_IF_ERROR(
+            AlterNode<Column>(column,
+                              [this, &alter_column, &column,
+                               &table](Column::Editor* editor) -> absl::Status {
+                                return AlterColumnSetDropDefault(
+                                    alter_column, table, column, editor);
+                              }));
         break;
       }
       case ddl::AlterColumn::ALTER: {

@@ -17,6 +17,7 @@
 #include "backend/transaction/flush.h"
 
 #include <memory>
+#include <vector>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

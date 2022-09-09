@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include <vector>
+
 #include "backend/schema/updater/schema_updater_tests/base.h"
 
 namespace google {

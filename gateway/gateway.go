@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 
 	instancepb "google.golang.org/genproto/googleapis/spanner/admin/instance/v1"
 	lrgw "cloud_spanner_emulator/gateway/longrunning_operations_gateway"
@@ -117,7 +117,7 @@ func (gw *Gateway) Run() {
 
 	// Setup the gateway services.
 	mux := runtime.NewServeMux(
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{OrigName: false}))
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{}))
 	opts := []grpc.DialOption{grpc.WithInsecure()}
 	err = spgw.RegisterSpannerHandlerFromEndpoint(ctx, mux, addr, opts)
 	if err != nil {

@@ -16,6 +16,10 @@
 
 #include "frontend/converters/types.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "zetasql/public/type.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

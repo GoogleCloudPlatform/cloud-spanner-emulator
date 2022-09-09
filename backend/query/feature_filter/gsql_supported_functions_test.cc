@@ -16,6 +16,8 @@
 
 #include "backend/query/feature_filter/gsql_supported_functions.h"
 
+#include <map>
+#include <memory>
 #include <string>
 
 #include "zetasql/public/builtin_function.h"

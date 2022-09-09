@@ -15,4 +15,3 @@ build --copt   -Wno-sign-compare
 build --copt   -Wno-deprecated-declarations
 build --copt   -Wno-return-type
 build --copt   -Wno-unused-but-set-parameter
-build --cxxopt -Wno-pessimizing-move

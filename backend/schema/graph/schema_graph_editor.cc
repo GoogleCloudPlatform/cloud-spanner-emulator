@@ -17,6 +17,7 @@
 #include "backend/schema/graph/schema_graph_editor.h"
 
 #include <memory>
+#include <utility>
 
 #include "zetasql/base/logging.h"
 #include "absl/container/flat_hash_map.h"

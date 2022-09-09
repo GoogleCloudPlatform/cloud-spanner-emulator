@@ -17,6 +17,9 @@
 #include "backend/transaction/row_cursor.h"
 
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

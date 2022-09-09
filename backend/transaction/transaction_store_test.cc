@@ -17,6 +17,7 @@
 #include "backend/transaction/transaction_store.h"
 
 #include <memory>
+#include <vector>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -37,7 +38,6 @@ using zetasql::types::StringType;
 using zetasql::values::Int64;
 using zetasql::values::Null;
 using zetasql::values::String;
-using testing::ElementsAre;
 using zetasql_base::testing::StatusIs;
 
 namespace google {

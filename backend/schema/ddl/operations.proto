@@ -122,6 +122,7 @@ message ColumnType {
     ARRAY = 8;
     NUMERIC = 9;
     JSON = 10;
+
   }
   optional Type type = 1;
   optional ColumnType array_subtype = 2;
@@ -134,8 +135,12 @@ message ColumnProperties {
 
   // Stored columns are used by index definitions.
   optional string stored = 2;
-  // If present, refers to the generation expression of a generated column.
+  // If present, refers to the expression of a generated column or a default
+  // value.
   optional string expression = 5;
+  // If present and true, indicates that this column has a default value, and
+  // the `expression` property above contains the default expression.
+  optional bool has_default_value = 6;
 }
 
 message IndexProperties {
@@ -200,6 +205,8 @@ message AlterColumn {
     ADD = 1;
     ALTER = 2;
     DROP = 3;
+    SET_DEFAULT = 4;
+    DROP_DEFAULT = 5;
   }
   optional Type type = 2;
   optional ColumnDefinition column = 3;

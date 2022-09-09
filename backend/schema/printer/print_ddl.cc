@@ -16,6 +16,7 @@
 
 #include "backend/schema/printer/print_ddl.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -109,6 +110,10 @@ std::string PrintColumn(const Column* column) {
     absl::StrAppend(
         &ddl_string,
         absl::Substitute(" AS $0 STORED", column->expression().value()));
+  } else if (column->has_default_value()) {
+    absl::StrAppend(
+        &ddl_string,
+        absl::Substitute(" DEFAULT $0", column->expression().value()));
   }
   if (column->GetType()->IsTimestamp() &&
       column->has_allows_commit_timestamp()) {

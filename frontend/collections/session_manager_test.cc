@@ -16,6 +16,8 @@
 
 #include "frontend/collections/session_manager.h"
 
+#include <memory>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"

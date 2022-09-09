@@ -16,6 +16,9 @@
 
 #include "backend/storage/in_memory_iterator.h"
 
+#include <utility>
+#include <vector>
+
 #include "absl/status/status.h"
 
 namespace google {

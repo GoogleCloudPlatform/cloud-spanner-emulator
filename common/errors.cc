@@ -17,6 +17,7 @@
 #include "common/errors.h"
 
 #include <string>
+#include <vector>
 
 #include "google/rpc/error_details.pb.h"
 #include "absl/status/status.h"
@@ -1731,6 +1732,61 @@ absl::Status NonDeterministicFunctionInColumnExpression(
           function_name, expression_use));
 }
 
+// Column default values errors.
+absl::Status ColumnDefaultValuesNotEnabled() {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      "Column DEFAULT values are not enabled.");
+}
+
+absl::Status DefaultExpressionWithColumnDependency(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Default value expression of column `$0` has a reference to another "
+          "column. Default expressions referencing other columns are not "
+          "supported.",
+          column_name));
+}
+
+absl::Status ColumnDefaultValueParseError(absl::string_view table_name,
+                                          absl::string_view column_name,
+                                          absl::string_view message) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Error parsing the default value of column `$0`.`$1`: $2", table_name,
+          column_name, message));
+}
+
+absl::Status CannotUseCommitTimestampWithColumnDefaultValue(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot use commit timestamp column `$0` as a column "
+                       "with default value.",
+                       column_name));
+}
+
+absl::Status DefaultPKNeedsExplicitValue(absl::string_view column_name,
+                                         absl::string_view op_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Implicit use of primary key default value for column `$0` is not "
+          "allowed in $1 mutations. The column must have a specific value.",
+          column_name, op_name));
+}
+
+absl::Status CannotSetDefaultValueOnGeneratedColumn(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Column $0 with a DEFAULT value cannot be a "
+                       "generated column and vice versa.",
+                       column_name));
+}
+
 // Query errors.
 absl::Status UnableToInferUndeclaredParameter(absl::string_view parameter_name,
                                               absl::string_view type) {
@@ -1990,6 +2046,13 @@ absl::Status TooManyParameters(int max_parameters) {
                       absl::Substitute("Number of parameters in query exceeds "
                                        "the maximum allowed limit of $0.",
                                        max_parameters));
+}
+
+absl::Status TooManyElementsInInList(int max_elements_in_in_list) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("An IN list exceeds the maximum allowed length of $0.",
+                       max_elements_in_in_list));
 }
 
 absl::Status TooManyAggregates(int max_columns_in_group_by) {

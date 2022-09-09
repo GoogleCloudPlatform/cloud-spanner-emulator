@@ -1,0 +1,351 @@
+CREATE TABLE Users (
+  UserId STRING(MAX) NOT NULL,
+  Name STRING(MAX),
+  NameAlias STRING(MAX),
+  Age INT64 DEFAULT (0),
+) PRIMARY KEY(UserId);
+ALTER TABLE Users ADD COLUMN Country STRING(3) DEFAULT ('US');
+--
+CREATE TABLE Users (
+  UserId STRING(MAX) NOT NULL,
+  Name STRING(MAX),
+  NameAlias STRING(MAX),
+  Age INT64 DEFAULT (0),
+  Country STRING(3) DEFAULT ('US'),
+) PRIMARY KEY(UserId);
+==
+# Volatile expression as a column default value.
+CREATE TABLE t (
+  id INT64 NOT NULL,
+  a INT64 DEFAULT (UNIX_MICROS(CURRENT_TIMESTAMP())),
+) PRIMARY KEY(id);
+==
+# Volatile expression as a primary key column default value.
+CREATE TABLE t (
+  id INT64 NOT NULL,
+  a INT64 DEFAULT (UNIX_MICROS(CURRENT_TIMESTAMP())),
+) PRIMARY KEY(id, a);
+==
+# Column default value has a soft type mismatch.
+CREATE TABLE GeneratedColumnDataCoalescing (
+  id STRING(MAX) NOT NULL,
+  f64 FLOAT64 DEFAULT (CAST(10 AS INT64)),
+) PRIMARY KEY(id);
+==
+# Dropping default value.
+CREATE TABLE T (
+  id INT64,
+  a INT64 DEFAULT (1),
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN a INT64;
+--
+CREATE TABLE T (
+  id INT64,
+  a INT64,
+) PRIMARY KEY(id);
+==
+# SAFE_DIVIDE function as column default value.
+CREATE TABLE Network (
+  id INT64,
+  net_mask FLOAT64 DEFAULT (SAFE_DIVIDE(10, 5)),
+) PRIMARY KEY(id);
+==
+# allow_commit_timestamp = false is allowed when the column has a default
+# value.
+CREATE TABLE T (
+  id INT64,
+  expr TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()) OPTIONS (
+    allow_commit_timestamp = false ),
+) PRIMARY KEY(id);
+==
+# Use a built-in GoogleSQL function not supported by Spanner as a default
+# value. This test ensures query_validator runs on the column expression.
+CREATE TABLE T (
+  id INT64,
+  gen INT64 DEFAULT (ASCII('abc')),
+) PRIMARY KEY(id);
+--
+Unsupported built-in function
+==
+# NOT NULL.
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL DEFAULT (1),
+) PRIMARY KEY(id);
+==
+# ALTER to NOT NULL.
+CREATE TABLE T (
+  id INT64,
+  expr INT64 DEFAULT (1),
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr INT64 NOT NULL DEFAULT (1);
+--
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL DEFAULT (1),
+) PRIMARY KEY(id);
+==
+# ADD default column with NOT NULL.
+CREATE TABLE T (
+  id INT64
+) PRIMARY KEY(id);
+ALTER TABLE T ADD COLUMN expr INT64 NOT NULL DEFAULT (1);
+--
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL DEFAULT (1),
+) PRIMARY KEY(id);
+==
+# ALTER to remove NOT NULL.
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL DEFAULT (1),
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr INT64 DEFAULT (1);
+--
+CREATE TABLE T (
+  id INT64,
+  expr INT64 DEFAULT (1),
+) PRIMARY KEY(id);
+==
+# SET DEFAULT
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL,
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr SET DEFAULT (1);
+--
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL DEFAULT (1),
+) PRIMARY KEY(id);
+==
+# DROP DEFAULT
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL DEFAULT (1),
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr DROP DEFAULT;
+--
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL,
+) PRIMARY KEY(id);
+==
+# Change a default value via SET DEFAULT
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL DEFAULT (1),
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr SET DEFAULT (20);
+--
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL DEFAULT (20),
+) PRIMARY KEY(id);
+==
+# Cannot SET DEFAULT on a generated column
+CREATE TABLE T (
+  id INT64,
+  expr INT64 AS (1) STORED,
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr SET DEFAULT (1);
+--
+Column T.expr with a DEFAULT value cannot be a generated column and vice versa.
+==
+# Cannot SET DEFAULT to an invalid expression
+CREATE TABLE T (
+  id INT64,
+  expr INT64 DEFAULT (1),
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr SET DEFAULT (id+1);
+--
+Default expressions referencing other columns are not supported
+==
+# CREATE INDEX.
+CREATE TABLE T1 (
+  Id INT64 NOT NULL,
+  Value STRING(MAX),
+  ValueGen STRING(MAX) DEFAULT ('[US]'),
+) PRIMARY KEY(Id);
+CREATE INDEX T1ByValueGen ON T1(ValueGen);
+CREATE NULL_FILTERED INDEX T1ByValueGenNotNull ON T1(ValueGen);
+CREATE INDEX T1ByValueStoringValueGen ON T1(Value) STORING (ValueGen);
+CREATE NULL_FILTERED INDEX T1ByValueStoringValueGenNotNull ON T1(Value) STORING (ValueGen);
+==
+# Specifying string size.
+CREATE TABLE T (
+  id INT64,
+  name STRING(64),
+  expr STRING(64) DEFAULT ('Hello'),
+) PRIMARY KEY(id);
+==
+# Change the default expression of a column is allowed.
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  a INT64 DEFAULT (1),
+) PRIMARY KEY(id);
+ALTER TABLE Users ALTER COLUMN a INT64 DEFAULT (2);
+--
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  a INT64 DEFAULT (2),
+) PRIMARY KEY(id);
+==
+# Set default value for a column:
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  a INT64
+) PRIMARY KEY(id);
+ALTER TABLE Users ALTER COLUMN a INT64 DEFAULT (2);
+--
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  a INT64 DEFAULT (2),
+) PRIMARY KEY(id);
+==
+# Drop default value for a column:
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  a INT64 DEFAULT (1),
+) PRIMARY KEY(id);
+ALTER TABLE Users ALTER COLUMN a INT64;
+--
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  a INT64,
+) PRIMARY KEY(id);
+==
+# Default value depends on another column is disallowed
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  a INT64,
+  b INT64 DEFAULT (a+1),
+) PRIMARY KEY(id);
+--
+Default value expression of column `b` has a reference to another column. Default expressions referencing other columns are not supported.
+==
+# Change the type of a default column:
+CREATE TABLE T (
+  id INT64 NOT NULL,
+  expr STRING(MAX) DEFAULT (ERROR("")),
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr BYTES(MAX) DEFAULT (ERROR(""));
+--
+CREATE TABLE T (
+  id INT64 NOT NULL,
+  expr BYTES(MAX) DEFAULT (ERROR("")),
+) PRIMARY KEY(id);
+==
+# Change the type of a default column to a different one (array).
+CREATE TABLE T (
+  id INT64 NOT NULL,
+  expr ARRAY<STRING(MAX)> DEFAULT ([]),
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER COLUMN expr ARRAY<BYTES(MAX)> DEFAULT ([]);
+--
+CREATE TABLE T (
+  id INT64 NOT NULL,
+  expr ARRAY<BYTES(MAX)> DEFAULT ([]),
+) PRIMARY KEY(id);
+==
+# Column default value has a type mismatch
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  h INT64 DEFAULT (SUBSTR("Hello", 1)),
+) PRIMARY KEY(id);
+--
+Expected type INT64; found STRING
+==
+# Column default value has a self reference
+create table t (
+  id INT64 NOT NULL,
+  a INT64 DEFAULT (a+1),
+) PRIMARY KEY(id);
+--
+Default value expression of column `a` has a reference to another column. Default expressions referencing other columns are not supported.
+==
+# Cannot add a new column with invalid default value
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  userName STRING(MAX),
+) PRIMARY KEY(id);
+ALTER TABLE Users ADD COLUMN col INT64 DEFAULT (col+1);
+--
+Default value expression of column `col` has a reference to another column. Default expressions referencing other columns are not supported.
+==
+# Using non-scalar function in column default value.
+CREATE TABLE TableWithIntersect (
+  id INT64,
+  expr BOOL DEFAULT (((SELECT true) INTERSECT ALL (SELECT true))),
+) PRIMARY KEY(id);
+--
+Cannot use non-scalar expressions inside column default.
+==
+# Using multiple parentheses
+CREATE TABLE TableWithIntersect (
+  id INT64,
+  expr INT64 DEFAULT ((1+1)*(2+2)),
+) PRIMARY KEY(id);
+--
+CREATE TABLE TableWithIntersect (
+  id INT64,
+  expr INT64 DEFAULT ((1+1)*(2+2)),
+) PRIMARY KEY(id);
+==
+# Subquery
+CREATE TABLE TableWithSelect1 (
+  id INT64,
+  val INT64 DEFAULT ((SELECT 1)),
+) PRIMARY KEY(id);
+--
+Cannot use non-scalar expressions inside column default.
+==
+# Cannot change from a generated column to a default column
+CREATE TABLE T (
+  id INT64,
+  val INT64 AS (1) STORED,
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER val INT64 DEFAULT (1);
+--
+Cannot convert generated column `T.val` to a regular column.
+==
+# Nested Subquery
+CREATE TABLE T (
+  id INT64,
+  val ARRAY<INT64> DEFAULT (ARRAY_REVERSE(ARRAY(SELECT 1))),
+) PRIMARY KEY(id);
+--
+Cannot use non-scalar expressions inside column default
+==
+# allow_commit_timestamp not allowed on column with default value.
+CREATE TABLE T(
+  id INT64,
+  ts TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true)
+) PRIMARY KEY(id);
+--
+ERROR: Cannot use commit timestamp column `ts` as a column with default value.
+==
+# SET DEFAULT: allow_commit_timestamp not allowed on column with default value.
+CREATE TABLE T(
+  id INT64,
+  ts TIMESTAMP OPTIONS (allow_commit_timestamp = true)
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER ts SET DEFAULT (CURRENT_TIMESTAMP());
+--
+ERROR: Cannot use commit timestamp column `ts` as a column with default value.
+==
+# PENDING_COMMIT_TIMESTAMP not allowed on column with default value.
+CREATE TABLE T (
+  id INT64,
+  ts TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP()),
+) PRIMARY KEY(id);
+--
+The PENDING_COMMIT_TIMESTAMP() function may only be used as a value for INSERT or UPDATE of an appropriately typed column. It cannot be used in SELECT, or as the input to any other scalar expression.

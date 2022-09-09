@@ -16,6 +16,11 @@
 
 #include "backend/access/write.h"
 
+#include <ostream>
+#include <sstream>
+#include <string>
+#include <vector>
+
 namespace google {
 namespace spanner {
 namespace emulator {

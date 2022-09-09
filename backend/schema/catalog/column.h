@@ -92,9 +92,17 @@ class Column : public SchemaNode {
   }
 
   // Returns whether the column is a generated column.
-  bool is_generated() const { return expression_.has_value(); }
+  bool is_generated() const {
+    return expression_.has_value() && !has_default_value_;
+  }
 
-  // Returns the expression if the column is a generated column.
+  // Returns whether the column has a default value.
+  bool has_default_value() const {
+    return expression_.has_value() && has_default_value_;
+  }
+
+  // Returns the expression if the column is a generated column or if it has
+  // a default value.
   const std::optional<std::string>& expression() const { return expression_; }
 
   absl::Span<const Column* const> dependent_columns() const {
@@ -180,8 +188,11 @@ class Column : public SchemaNode {
   // Length for STRING and BYTES. If unset, indicates the max allowed length.
   std::optional<int64_t> declared_max_length_ = std::nullopt;
 
-  // For a generated column, this is the generation expression.
+  // Expression for generated column or default value.
   std::optional<std::string> expression_ = std::nullopt;
+
+  // Whether the column has a default value.
+  bool has_default_value_ = false;
 
   // For a generated column, this is the list of columns that this column
   // references in its expression.

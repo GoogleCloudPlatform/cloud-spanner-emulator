@@ -69,6 +69,11 @@ class Column::Builder {
     return *this;
   }
 
+  Builder& set_has_default_value(bool has_default_value) {
+    instance_->has_default_value_ = has_default_value;
+    return *this;
+  }
+
   Builder& clear_expression() {
     instance_->expression_.reset();
     return *this;
@@ -123,6 +128,11 @@ class Column::Editor {
 
   Editor& set_expression(const std::string& expression) {
     instance_->expression_ = expression;
+    return *this;
+  }
+
+  Editor& set_has_default_value(bool has_default_value) {
+    instance_->has_default_value_ = has_default_value;
     return *this;
   }
 

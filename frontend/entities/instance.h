@@ -17,9 +17,12 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_ENTITIES_INSTANCE_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_ENTITIES_INSTANCE_H_
 
+#include <string>
+
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
 #include "absl/strings/string_view.h"
 #include "frontend/common/labels.h"
+#include "zetasql/base/clock.h"
 
 namespace google {
 namespace spanner {
@@ -33,12 +36,17 @@ namespace frontend {
 class Instance {
  public:
   Instance(const std::string& name, const std::string config,
-           const std::string& display_name, int32_t node_count, Labels labels)
+           const std::string& display_name, int32_t node_count, Labels labels,
+           zetasql_base::Clock* clock)
       : name_(name),
         config_(config),
         display_name_(display_name),
         node_count_(node_count),
-        labels_(labels) {}
+        labels_(labels) {
+    auto current_time = clock->TimeNow();
+    create_time_ = current_time;
+    update_time_ = current_time;
+  }
 
   // Returns the URI for this instance
   const std::string& instance_uri() const { return name_; }
@@ -61,6 +69,12 @@ class Instance {
 
   // The labels for this instance.
   Labels labels_;
+
+  // Instance creation time.
+  absl::Time create_time_;
+
+  // Instance update time.
+  absl::Time update_time_;
 };
 
 }  // namespace frontend

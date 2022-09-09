@@ -17,6 +17,8 @@
 #include "backend/schema/catalog/foreign_key.h"
 
 #include <initializer_list>
+#include <string>
+#include <vector>
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"

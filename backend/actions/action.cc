@@ -16,6 +16,8 @@
 
 #include "backend/actions/action.h"
 
+#include <variant>
+
 #include "absl/status/status.h"
 #include "backend/actions/ops.h"
 #include "absl/status/status.h"

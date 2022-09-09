@@ -17,9 +17,11 @@
 #include "frontend/entities/transaction.h"
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <variant>
 
 #include "google/spanner/v1/spanner.pb.h"

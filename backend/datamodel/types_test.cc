@@ -16,6 +16,8 @@
 
 #include "backend/datamodel/types.h"
 
+#include <vector>
+
 #include "zetasql/public/type.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -79,7 +81,6 @@ TEST_F(TypesTest, SupportedKeyColumnType) {
     EXPECT_FALSE(IsSupportedKeyColumnType(array_type));
   }
 }
-
 }  // namespace
 
 }  // namespace backend

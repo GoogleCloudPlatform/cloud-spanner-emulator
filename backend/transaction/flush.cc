@@ -16,6 +16,8 @@
 
 #include "backend/transaction/flush.h"
 
+#include <vector>
+
 #include "backend/common/variant.h"
 #include "backend/transaction/commit_timestamp.h"
 

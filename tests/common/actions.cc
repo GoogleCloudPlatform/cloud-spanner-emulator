@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <queue>
+#include <vector>
 
 #include "zetasql/public/value.h"
 #include "absl/status/status.h"

@@ -18,7 +18,9 @@
 
 #include <functional>
 #include <memory>
+#include <string>
 #include <thread>  // NOLINT
+#include <utility>
 #include <vector>
 
 #include "gmock/gmock.h"
@@ -640,6 +642,65 @@ TEST_F(ReadWriteTransactionTest, UpdateAfterDeleteFails) {
 
   auto txn = CreateReadWriteTransaction();
   EXPECT_THAT(txn->Write(m), StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(ReadWriteTransactionTest, InsertSucceeds) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table",
+               {"int64_col", "string_col"}, {{Int64(1), String("val1")}});
+
+  // Commit the transaction.
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
+
+  // Verify the values.
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"int64_col", "string_col"}),
+              IsOkAndHoldsRows({{Int64(1), String("val1")}}));
+}
+
+TEST_F(ReadWriteTransactionTest, CannotInsertWithEmptyColumns) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table", {}, {});
+
+  auto txn1 = CreateReadWriteTransaction();
+  EXPECT_THAT(txn1->Write(m), StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(ReadWriteTransactionTest, CannotInsertWithMissingKeyColumn) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table", {"string_col"},
+               {{String("val1")}});
+
+  auto txn1 = CreateReadWriteTransaction();
+  EXPECT_THAT(txn1->Write(m), StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(ReadWriteTransactionTest, CanInsertWithCaseInsensitiveColumns) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table",
+               {"InT64_cOl", "sTriNg_CoL"}, {{Int64(1), String("val1")}});
+
+  // Commit the transaction.
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
+
+  // Verify the values.
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"int64_col", "string_col"}),
+              IsOkAndHoldsRows({{Int64(1), String("val1")}}));
+}
+
+TEST_F(ReadWriteTransactionTest, CannotInsertWithDuplicateColumns) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table",
+               {"string_col", "string_col"},
+               {{String("val1"), String("val2")}});
+
+  auto txn1 = CreateReadWriteTransaction();
+  EXPECT_THAT(txn1->Write(m), StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "zetasql/public/builtin_function.h"
 #include "zetasql/public/builtin_function_options.h"

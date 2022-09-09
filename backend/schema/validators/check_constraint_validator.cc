@@ -16,6 +16,8 @@
 
 #include "backend/schema/validators/check_constraint_validator.h"
 
+#include <string>
+
 #include "zetasql/public/type.pb.h"
 #include "zetasql/public/types/type.h"
 #include "absl/status/status.h"

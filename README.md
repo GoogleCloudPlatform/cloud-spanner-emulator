@@ -48,8 +48,8 @@ docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator:$VER
 ### Via pre-built linux binaries
 
 The emulator is also distributed as a standalone linux binary. Note that this
-binary is not fully static, but has been tested on Ubuntu 16.04/18.04, CentOS 8,
-RHEL 8, and Debian 9/10.
+binary is not fully static, but has been tested on Ubuntu 18.04+, CentOS
+7+, RHEL 8+ and Debian 10+.
 
 ```shell
 VERSION=1.4.2

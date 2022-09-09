@@ -16,6 +16,9 @@
 
 #include "frontend/server/request_context.h"
 
+#include <memory>
+#include <string>
+
 #include "absl/status/statusor.h"
 #include "frontend/common/uris.h"
 #include "frontend/entities/instance.h"

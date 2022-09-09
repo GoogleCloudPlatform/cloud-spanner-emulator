@@ -16,6 +16,8 @@
 
 #include "backend/locking/manager.h"
 
+#include <memory>
+
 #include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
 #include "absl/synchronization/mutex.h"

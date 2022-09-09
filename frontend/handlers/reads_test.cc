@@ -17,6 +17,7 @@
 #include "frontend/converters/reads.h"
 
 #include <string>
+#include <vector>
 
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"

@@ -16,6 +16,9 @@
 
 #include "backend/schema/backfills/column_value_backfill.h"
 
+#include <memory>
+#include <vector>
+
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
 #include "absl/status/statusor.h"
@@ -101,7 +104,9 @@ absl::Status BackfillColumnValue(const Column* old_column,
 
 absl::Status BackfillGeneratedColumnValue(
     const Column* generated_column, const SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(generated_column != nullptr && generated_column->is_generated());
+  ZETASQL_RET_CHECK(generated_column != nullptr &&
+            (generated_column->is_generated() ||
+             generated_column->has_default_value()));
   ZETASQL_RET_CHECK_NE(context, nullptr);
   FunctionCatalog function_catalog(context->type_factory());
   Catalog catalog(context->new_schema(), &function_catalog);

@@ -18,6 +18,8 @@
 
 #include <memory>
 #include <queue>
+#include <set>
+#include <vector>
 
 #include "zetasql/public/functions/string.h"
 #include "zetasql/public/type.pb.h"

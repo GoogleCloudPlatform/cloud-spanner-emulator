@@ -16,7 +16,9 @@
 
 #include "backend/schema/validators/table_validator.h"
 
+#include <algorithm>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "zetasql/public/type.h"
@@ -423,8 +425,10 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
       continue;
     }
 
-    // New columns cannot be nullable unless it is a generated column.
-    if (!column->is_nullable() && !column->is_generated()) {
+    // New columns cannot be nullable unless it is a generated column or
+    // it has a default value.
+    if (!column->is_nullable() && !column->is_generated() &&
+        !column->has_default_value()) {
       return error::AddingNotNullColumn(table->name_, column->Name());
     }
   }

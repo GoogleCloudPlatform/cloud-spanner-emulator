@@ -17,6 +17,8 @@
 #include "frontend/converters/query.h"
 
 #include <map>
+#include <string>
+#include <utility>
 
 #include "zetasql/public/type.h"
 #include "absl/status/statusor.h"

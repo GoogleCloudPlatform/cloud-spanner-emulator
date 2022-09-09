@@ -16,6 +16,9 @@
 
 #include "backend/schema/catalog/column.h"
 
+#include <algorithm>
+#include <string>
+
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.pb.h"
 #include "absl/memory/memory.h"

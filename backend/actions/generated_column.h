@@ -18,12 +18,14 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_ACTIONS_GENERATED_COLUMN_H_
 
 #include <memory>
+#include <vector>
 
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/evaluator.h"
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
+#include "backend/access/write.h"
 #include "backend/actions/action.h"
 #include "backend/actions/ops.h"
 #include "backend/schema/catalog/table.h"
@@ -35,21 +37,33 @@ namespace emulator {
 namespace backend {
 
 // GeneratedColumnEffector generates and adds operations required to maintain
-// generated columns to the transaction. It runs after all mutations are
-// processed and buffered to the transaction. For each generated column in the
-// table in topological order, it sends a query to compute the generated value
-// and immediately adds an update operation to the transaction, such that the
-// next generated column in topological order will see its effect.
+// generated and default columns to the transaction. It runs after all mutations
+// are processed and buffered to the transaction. For each generated column in
+// the table in topological order, it sends a query to compute the generated
+// value and immediately adds an update operation to the transaction, such that
+// the next generated column in topological order will see its effect.
+// Note that generated columns and columns with default value are modeled as
+// generated columns in the code base.
 class GeneratedColumnEffector : public Effector {
  public:
   explicit GeneratedColumnEffector(const Table* table,
-                                   zetasql::Catalog* function_catalog);
+                                   zetasql::Catalog* function_catalog,
+                                   bool for_keys = false);
 
   // Computes the value of the given 'generated_column' based on the given
   // 'row_column_values'.
   absl::StatusOr<zetasql::Value> ComputeGeneratedColumnValue(
       const Column* generated_column,
       const zetasql::ParameterValueMap& row_column_values) const;
+
+  // Computed the default values of primary key columns (if any) based on
+  // the given `mutation_op`. Those columns are returned via
+  // `columns_with_generated_values`, and their values are returned via
+  // `generated_values`.
+  absl::Status Effect(
+      const MutationOp& mutation_op,
+      std::vector<zetasql::Value>* generated_values,
+      std::vector<const Column*>* columns_with_generated_values) const;
 
  private:
   absl::Status Initialize(zetasql::Catalog* function_catalog);
@@ -67,10 +81,13 @@ class GeneratedColumnEffector : public Effector {
 
   const Table* table_;
 
-  // List of generated columns in topological order.
+  // A flag to indicate whether this is an effector for key columns or not.
+  bool for_keys_;
+
+  // List of generated and default columns in topological order.
   std::vector<const Column*> generated_columns_;
 
-  // Map of generated columns to their corresponding expressions.
+  // Map of generated and default columns to their corresponding expressions.
   absl::flat_hash_map<const Column*,
                       std::unique_ptr<zetasql::PreparedExpression>>
       expressions_;

@@ -16,6 +16,7 @@
 
 #include "frontend/converters/chunking.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "absl/memory/memory.h"

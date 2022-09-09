@@ -57,7 +57,7 @@ EOF
 else
   # Activate our GCloud credentials with docker to allow GCR access.
   yes | gcloud auth configure-docker
-  docker build . -t "${IMAGE_LOCAL_TAG}" -f build/kokoro/gcp_ubuntu/Dockerfile.release
+  docker build . -t "${IMAGE_LOCAL_TAG}" -f build/docker/Dockerfile.ubuntu
 fi
 
 # We need the image tar file to be in a directory of its own.

@@ -16,6 +16,9 @@
 
 #include "backend/schema/validators/index_validator.h"
 
+#include <string>
+#include <vector>
+
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"

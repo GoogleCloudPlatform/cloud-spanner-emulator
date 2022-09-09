@@ -15,6 +15,8 @@
 //
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "google/protobuf/any.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"

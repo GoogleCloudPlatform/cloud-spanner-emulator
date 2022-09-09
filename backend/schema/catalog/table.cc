@@ -16,6 +16,10 @@
 
 #include "backend/schema/catalog/table.h"
 
+#include <algorithm>
+#include <iterator>
+#include <string>
+
 #include "zetasql/public/type.h"
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"

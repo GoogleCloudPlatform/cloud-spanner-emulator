@@ -118,7 +118,7 @@ void column_def() :
   identifier() #name
   column_type()
   [ <NOT> <NULLL> #not_null ]
-  [ generation_clause() ]
+  [ generation_clause() | column_default_clause() ]
   [ options_clause() ]
 }
 
@@ -127,13 +127,16 @@ void column_def_alter_attrs() :
 {
   column_type()
   [ <NOT> <NULLL> #not_null ]
-  [ generation_clause() ]
+  [ generation_clause() | column_default_clause() ]
 }
 
 void column_def_alter() :
 {}
 {
-    <SET> #set_options_clause options_clause()
+    LOOKAHEAD(2) <SET> ( options_clause()
+                         | column_default_clause()
+                       )
+  | <DROP> <DEFAULTT> #drop_default_clause
   | column_def_alter_attrs()
 }
 
@@ -150,6 +153,7 @@ void column_type() :
   | <NUMERIC>
   | <JSON>
   | <ARRAY> "<" column_type() ">"
+
 }
 
 void column_length() :
@@ -163,6 +167,12 @@ void generation_clause() :
 {
   <AS> "(" expression() #expression ")"
   [<STORED> #stored]
+}
+
+void column_default_clause() :
+{}
+{
+  <DEFAULTT> "(" expression() #column_default_expression ")"
 }
 
 void primary_key() #void :

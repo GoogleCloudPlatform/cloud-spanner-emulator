@@ -43,29 +43,7 @@ namespace frontend {
 
 namespace {
 
-using ::google::spanner::emulator::test::TestRowCursor;
-using ::google::spanner::v1::PartialResultSet;
-using ::google::spanner::v1::ReadRequest;
-using ::google::spanner::v1::ResultSet;
-using zetasql::StructField;
 using zetasql::Value;
-using zetasql::types::BoolType;
-using zetasql::types::BytesType;
-using zetasql::types::DatetimeType;
-using zetasql::types::DateType;
-using zetasql::types::DoubleType;
-using zetasql::types::GeographyType;
-using zetasql::types::Int64ArrayType;
-using zetasql::types::Int64Type;
-using zetasql::types::NumericType;
-using zetasql::types::StringType;
-using zetasql::types::TimestampType;
-using zetasql::values::Bool;
-using zetasql::values::Datetime;
-using zetasql::values::Double;
-using zetasql::values::Int64;
-using zetasql::values::NullString;
-using zetasql::values::String;
 using zetasql_base::testing::StatusIs;
 
 class AccessProtosTest : public testing::Test {

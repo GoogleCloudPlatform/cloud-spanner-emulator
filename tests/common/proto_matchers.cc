@@ -16,6 +16,9 @@
 
 #include "tests/common/proto_matchers.h"
 
+#include <ostream>
+#include <string>
+
 #include "google/protobuf/io/tokenizer.h"
 #include "google/protobuf/text_format.h"
 #include "absl/strings/substitute.h"

@@ -91,7 +91,6 @@ cc_test(
     ],
     deps = [
         "//frontend/common:uris",
-        "//frontend/server",
         "//tests/common:proto_matchers",
         "//tests/common:test_env",
         "@com_github_grpc_grpc//:grpc++",

@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_RESOLVE_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_RESOLVE_H_
 
+#include <optional>
 #include <vector>
 
 #include "absl/status/statusor.h"
@@ -67,16 +68,33 @@ struct ResolvedMutationOp {
   std::vector<KeyRange> key_ranges;
 };
 
+// Computes the PrimaryKey from the given row using the key indices provided.
+Key ComputeKey(const ValueList& row,
+               absl::Span<const KeyColumn* const> primary_key,
+               const std::vector<std::optional<int>>& key_indices);
+
 // Converts input ReadArg into ResolveReadArg after validating that input table,
 // index and columns are valid schema objects.
 absl::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
                                                const Schema* schema);
 
-// Converts input MutationOp into ResolvedMutationOp after validating that input
-// table, columns and rows are valid schema objects. Validates that user
-// supplied values for commit timestamp are not in future by comparing against
-// now.
-absl::StatusOr<ResolvedMutationOp> ResolveMutationOp(
+// Extracts the primary key column indices from the given list of columns. The
+// returned indices will be in the order specified by the primary key. Nullable
+// primary key columns do not need to be specified, in which the index entry
+// will be nullopt.
+absl::StatusOr<std::vector<std::optional<int>>> ExtractPrimaryKeyIndices(
+    absl::Span<const Column* const> columns,
+    absl::Span<const KeyColumn* const> primary_key);
+
+// Validates that input table, columns and rows are valid schema objects.
+absl::Status ValidateNonDeleteMutationOp(const MutationOp& mutation_op,
+                                         const Schema* schema);
+
+// Converts input Delete MutationOp into ResolvedMutationOp after validating
+// that input table, columns and rows are valid schema objects. Validates that
+// user supplied values for commit timestamp are not in future by comparing
+// against now.
+absl::StatusOr<ResolvedMutationOp> ResolveDeleteMutationOp(
     const MutationOp& mutation_op, const Schema* schema, absl::Time now);
 
 }  // namespace backend

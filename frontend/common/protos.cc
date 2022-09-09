@@ -16,6 +16,8 @@
 
 #include "frontend/common/protos.h"
 
+#include <string>
+
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "common/errors.h"

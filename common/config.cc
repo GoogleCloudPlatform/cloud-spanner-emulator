@@ -16,6 +16,8 @@
 
 #include "common/config.h"
 
+#include <string>
+
 #include "absl/flags/flag.h"
 
 ABSL_FLAG(std::string, host_port, "localhost:10007",

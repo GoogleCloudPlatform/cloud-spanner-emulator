@@ -41,6 +41,7 @@
 #include "backend/storage/storage.h"
 #include "backend/transaction/actions.h"
 #include "backend/transaction/options.h"
+#include "backend/transaction/resolve.h"
 #include "backend/transaction/transaction_store.h"
 #include "common/clock.h"
 #include "absl/status/status.h"
@@ -139,6 +140,11 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
   absl::Status ApplyValidators(const WriteOp& op);
   absl::Status ApplyEffectors(const WriteOp& op);
   absl::Status ApplyStatementVerifiers();
+
+  // Converts input non-delete MutationOp into ResolvedMutationOp after
+  // validating that input table, columns and rows are valid schema objects.
+  absl::StatusOr<ResolvedMutationOp> ResolveNonDeleteMutationOp(
+      const MutationOp& mutation_op, const Schema* schema);
 
   // Returns true if the given key exists within the table.
   bool KeyExists(const Table* table, const Key& key) const;

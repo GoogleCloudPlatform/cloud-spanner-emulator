@@ -16,6 +16,9 @@
 
 #include "backend/common/rows.h"
 
+#include <string>
+#include <vector>
+
 #include "absl/status/statusor.h"
 #include "common/errors.h"
 

@@ -16,6 +16,9 @@
 
 #include "backend/schema/updater/global_schema_names.h"
 
+#include <string>
+#include <vector>
+
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "backend/schema/catalog/index.h"

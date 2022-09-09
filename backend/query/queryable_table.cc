@@ -18,6 +18,8 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "zetasql/public/evaluator_table_iterator.h"
