@@ -83,6 +83,7 @@ cc_library(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
         "@com_google_googletest//:gtest",
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_zetasql//zetasql/public:value",

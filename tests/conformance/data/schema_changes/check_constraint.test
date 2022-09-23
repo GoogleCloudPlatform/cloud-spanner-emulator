@@ -493,12 +493,3 @@ CREATE TABLE a (
 ) PRIMARY KEY ();
 --
 ERROR: Duplicate name in schema: a.
-==
-# Alter check constraint expression.
-CREATE TABLE T (
-  A INT64,
-  CONSTRAINT col_a_gt_zero CHECK(A > 0),
-) PRIMARY KEY(A);
-ALTER TABLE T ALTER CONSTRAINT col_a_gt_zero CHECK(A < 0);
---
-ERROR: Error parsing Spanner DDL statement:\nALTER TABLE T ALTER CONSTRAINT col_a_gt_zero CHECK(A < 0) : Syntax error on line 2, column 15: Encountered 'ALTER' while parsing: alter_table_statement

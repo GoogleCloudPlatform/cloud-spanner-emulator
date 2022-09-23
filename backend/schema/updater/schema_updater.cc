@@ -458,7 +458,8 @@ absl::Status SchemaUpdaterImpl::AlterColumnDefinition(
     // return from here.
     return SetColumnOptions(ddl_column.options(), editor);
   }
-  return SetColumnDefinition(ddl_column, table, /*ddl_table=*/nullptr, editor);
+  return SetColumnDefinition(ddl_column, table, /*ddl_create_table=*/nullptr,
+                             editor);
 }
 
 absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(

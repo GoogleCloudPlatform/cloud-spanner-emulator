@@ -20,6 +20,7 @@
 
 #include "google/protobuf/any.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
+#include "google/spanner/v1/commit_response.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -229,8 +230,6 @@ TEST_F(DatabaseApiTest, CreateDatabaseWithoutInstanceReturnsNotFound) {
 }
 
 // Tests for ListDatabases.
-static const int32_t kMaxPageSize = 1000;
-
 TEST_F(DatabaseApiTest, DoesNotListDatabasesForUnknownInstance) {
   database_api::ListDatabasesResponse response;
   EXPECT_THAT(ListDatabases(

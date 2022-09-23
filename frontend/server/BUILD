@@ -104,6 +104,7 @@ cc_library(
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_grpc",
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_zetasql//zetasql/base",
     ],

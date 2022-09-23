@@ -57,7 +57,11 @@ EOF
 else
   # Activate our GCloud credentials with docker to allow GCR access.
   yes | gcloud auth configure-docker
-  docker build . -t "${IMAGE_LOCAL_TAG}" -f build/docker/Dockerfile.ubuntu
+  docker run --privileged linuxkit/binfmt:v0.8
+  builder_name=$(docker buildx create)
+  docker buildx use "$builder_name"
+  docker buildx inspect --bootstrap
+  docker buildx build . -t "${IMAGE_LOCAL_TAG}" -f build/docker/Dockerfile.ubuntu --platform=linux/amd64 --load
 fi
 
 # We need the image tar file to be in a directory of its own.

@@ -82,7 +82,7 @@ class OperationsTest : public DatabaseTest {
   // finish.
   absl::Status WaitForOperation(absl::string_view operation_uri,
                                 operations_api::Operation* op) {
-    absl::Duration deadline = absl::Seconds(25);
+    absl::Duration deadline = absl::Seconds(50);
     absl::Time start = absl::Now();
     while (true) {
       ZETASQL_RETURN_IF_ERROR(GetOperation(operation_uri, op));

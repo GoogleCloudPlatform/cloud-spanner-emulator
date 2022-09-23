@@ -18,30 +18,17 @@
 #                                     BUILD                                    #
 ################################################################################
 
-FROM gcr.io/cloud-marketplace-containers/google/ubuntu1804:latest as build
+FROM gcr.io/cloud-spanner-emulator/bazel-ubuntu:5.2.0-18.04 as build
 
-# Setup bazel
-RUN apt-get update && apt-get -qq install -y apt-transport-https curl gnupg && \
-    curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor       \
-    > bazel.gpg                                                             && \
-    mv bazel.gpg /etc/apt/trusted.gpg.d/                                    && \
-    echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable     \
-    jdk1.8" | tee /etc/apt/sources.list.d/bazel.list                        && \
-    apt-get update                                                          && \
-    apt-get -qq install -y bazel-5.2.0 software-properties-common  patch    && \
-    apt-get -qq -y full-upgrade                                             && \
-    ln -s /usr/bin/bazel-5.2.0 /usr/bin/bazel
-
-ENV PATH=$PATH:/usr/bin
-
-# Setup java
-RUN apt-get update && apt-get -qq install -y default-jre default-jdk
+RUN apt-get update && DEBIAN_FRONTEND="noninteractive"                         \
+    TZ="America/Los_Angeles" apt-get install -y tzdata
 
 # Unfortunately ZetaSQL has issues with clang (default bazel compiler), so
 # we install GCC. Also install make for rules_foreign_cc bazel rules.
+RUN apt-get -qq install -y software-properties-common
 RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
     apt-get -qq update                                                      && \
-    apt-get -qq install -y gcc-8 g++-8 make tzdata  rename  git             && \
+    apt-get -qq install -y gcc-8 g++-8 make rename  git                     && \
     apt-get -qq install -y ca-certificates libgnutls30                      && \
     update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 90           \
                         --slave   /usr/bin/g++ g++ /usr/bin/g++-8           && \

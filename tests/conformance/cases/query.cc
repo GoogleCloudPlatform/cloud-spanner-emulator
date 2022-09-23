@@ -241,13 +241,11 @@ TEST_F(QueryTest, JSONFunctions) {
   EXPECT_THAT(Query(R"(SELECT PARSE_JSON('{"a":[1,2],"b":"str"}'))"),
               IsOkAndHoldsRow({Value(Json(R"({"a":[1,2],"b":"str"})"))}));
   EXPECT_THAT(Query(R"(SELECT PARSE_JSON('{"id":123456789012345678901}'))"),
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kOutOfRange));
+              StatusIs(absl::StatusCode::kOutOfRange));
   EXPECT_THAT(Query(R"(
     SELECT PARSE_JSON('{"id":123456789012345678901}', wide_number_mode=>'exact')
   )"),
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kOutOfRange));
+              StatusIs(absl::StatusCode::kOutOfRange));
   EXPECT_THAT(
       Query(R"(
     SELECT PARSE_JSON('{"id":123456789012345678901}', wide_number_mode=>'round')
