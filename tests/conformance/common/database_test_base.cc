@@ -56,10 +56,10 @@ void DatabaseTest::SetUp() {
   // default TestEnv conformance tests wait quite a while for admin operations
   // like create instance/database/schema.
   auto retry_policy = std::make_unique<cloud::spanner::LimitedTimeRetryPolicy>(
-      std::chrono::seconds(120));
+      std::chrono::seconds(300));
   auto backoff_policy =
       std::make_unique<cloud::spanner::ExponentialBackoffPolicy>(
-          std::chrono::milliseconds(1), std::chrono::milliseconds(2), 1.01);
+          std::chrono::milliseconds(1), std::chrono::milliseconds(4), 1.01);
   auto polling_policy =
       std::make_unique<cloud::spanner::GenericPollingPolicy<>>(*retry_policy,
                                                                *backoff_policy);

@@ -19,7 +19,8 @@
 if [[ "$#" -eq 0 ]]; then
   echo "Running client library integration tests."
   DOCKER_ARGS="";
-  DOCKER_CMD="build/kokoro/gcp_ubuntu/build.sh"
+  DOCKER_CMD_INTEGRATION_TESTS="build/kokoro/gcp_ubuntu/integration_tests.sh"
+  DOCKER_CMD_BUILD_AND_TEST="build/kokoro/gcp_ubuntu/build_and_test.sh"
 elif [[ "$#" -eq 1 ]] && [[ "$1" = "--debug" ]]; then
   echo "Launching in integration test debug environment."
   # If '--debug' is specified, the script launches an interactive shell in the
@@ -27,7 +28,8 @@ elif [[ "$#" -eq 1 ]] && [[ "$1" = "--debug" ]]; then
   # failures. Tests can be run by setting the CLIENT_INTEGRATION_TESTS
   # environment variable and running the build.sh
   DOCKER_ARGS="-it"
-  DOCKER_CMD=""
+  DOCKER_CMD_INTEGRATION_TESTS=""
+  DOCKER_CMD_BUILD_AND_TEST=""
 else
   echo "Invalid arguments to script: $@"
   echo "Usage: docker_test.sh [--debug]"
@@ -70,37 +72,74 @@ echo "Placing results in: ${OUTPUT_DIR}"
 echo "Placing logs in: ${LOG_DIR}"
 echo "Using src directory: ${SRC_DIR}"
 
-readonly CONTINUOUS_INTEGRATION_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-integration@sha256:e94765178f8f1e6f58c8781066fa483a3e706eeee9285ad8796ccc79c8eaa368
-readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base@sha256:5972cd216c2c3c071f9f7f620b790fe338645a01870271758d110b54a0c6bfc5
-if [[ -z "$CLIENT_INTEGRATION_TESTS" ]]; then
-  DOCKER_IMAGE=${BASE_DOCKER_IMAGE}
-else
-  # Use custom docker image for continuous integration tests.
-  DOCKER_IMAGE=${CONTINUOUS_INTEGRATION_DOCKER_IMAGE}
-fi
+readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base@sha256:ac3ff899ccd5de7d546e7fc0b2d78d25d81222afa67f48a3b70058248ed2d830
 readonly CACHE_BUCKET="cloud-spanner-emulator-builder-bazel-cache"
-readonly REMOTE_CACHE="https://storage.googleapis.com/${CACHE_BUCKET}/${DOCKER_IMAGE}"
-echo "Using docker image: ${DOCKER_IMAGE}"
-echo "Using bazel remote cache: ${REMOTE_CACHE}"
 echo "Client integration tests to run: ${CLIENT_INTEGRATION_TESTS}"
 
 # Activate our GCloud credentials with docker to allow GCR access.
 yes | gcloud auth configure-docker
 
 echo "--------------------------------------------------------------------"
-docker run $DOCKER_ARGS \
-  --env CC="/usr/bin/gcc" \
-  --env CXX="/usr/bin/g++" \
-  --env GCLOUD_DIR="/usr/local/gcloud/google-cloud-sdk/bin" \
-  --env CLIENT_LIB_DIR="/root/clients" \
-  --env COPY_LOGS_TO="/logs" \
-  --env REMOTE_CACHE="${REMOTE_CACHE}" \
-  --env KOKORO_ARTIFACTS_DIR="${KOKORO_ARTIFACTS_DIR}" \
-  --env CLIENT_INTEGRATION_TESTS="${CLIENT_INTEGRATION_TESTS}" \
-  --env EMULATOR_SRC_DIR="/src" \
-  --volume "${GCLOUD_CONFIG_DIR}:/root/.config/gcloud" \
-  --volume "${SRC_DIR}:/src" \
-  --volume "${LOG_DIR}:/logs" \
-  --workdir "/src" \
-  --entrypoint="/bin/bash" \
-  ${DOCKER_IMAGE} ${DOCKER_CMD}
+if [[ "$#" -eq 0 ]]; then
+REMOTE_CACHE="https://storage.googleapis.com/${CACHE_BUCKET}/${BASE_DOCKER_IMAGE}"
+container_id=$(docker create $DOCKER_ARGS \
+    --env CC="/usr/bin/gcc" \
+    --env CXX="/usr/bin/g++" \
+    --env GCLOUD_DIR="/usr/local/gcloud/google-cloud-sdk/bin" \
+    --env CLIENT_LIB_DIR="/root/clients" \
+    --env COPY_LOGS_TO="/logs" \
+    --env REMOTE_CACHE="${REMOTE_CACHE}" \
+    --env KOKORO_ARTIFACTS_DIR="${KOKORO_ARTIFACTS_DIR}" \
+    --env EMULATOR_SRC_DIR="/src" \
+    --volume "${GCLOUD_CONFIG_DIR}:/root/.config/gcloud" \
+    --volume "${SRC_DIR}:/src" \
+    --volume "${LOG_DIR}:/logs" \
+    --workdir "/src" \
+    --entrypoint="/bin/bash" \
+    ${BASE_DOCKER_IMAGE} ${DOCKER_CMD_BUILD_AND_TEST})
+docker start -a "$container_id"
+docker wait "$container_id"
+docker cp "$container_id":/src/bazel-bin/binaries/gateway_main_/gateway_main ${SRC_DIR}
+docker cp "$container_id":/src/bazel-bin/binaries/emulator_main ${SRC_DIR}
+docker rm "$container_id"
+fi
+
+IFS=','
+for client in $CLIENT_INTEGRATION_TESTS
+ do
+    if [[ $client == "go" ]]; then
+      SHA=734a22d5f6ecb1b1ec86302c7e38c461efd2260c3de29b6ad9e29df79632bed7
+    elif [[ $client == "java" ]]; then
+      SHA=b0049515bf933ed93b9956f781a0126070b5690ef7f3800e048f063ee4ab02c7
+    elif [[ $client == "cpp" ]]; then
+      SHA=e5cfa3fb7720722858e45d03a78caf6a6657d0a779602515c8ce622369b4cfec
+    elif [[ $client == "php" ]]; then
+      SHA=d1e2584f6e1f6dc0576fa360e45d614e3f9e2ec0747c978225dd23a4f2510000
+    elif [[ $client == "csharp" ]]; then
+      SHA=c1ba6b827bd554cb9a077036027fb3d4add38832de0351b52120d9d51234f697
+    elif [[ $client == "ruby" ]]; then
+      SHA=1e9d19d0d7af46106d97b8723e6546fab0b219acf4f9953d56823b07ca3ba926
+    elif [[ $client == "nodejs" ]]; then
+      SHA=ed340d133d1ba40af158207907597aa0366d4011c95a2370914c6a4269c0da27
+    elif [[ $client == "py" ]]; then
+      SHA=c5ba7cfef87b035c907ebdac4ea7f2808664145adaef6bcc55d55a3e424dea60
+    else
+    echo "Unrecognized client: \"${client}\"."
+    fi
+    DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-integration-${client}@sha256:${SHA}
+    docker run $DOCKER_ARGS \
+      --env CC="/usr/bin/gcc" \
+      --env CXX="/usr/bin/g++" \
+      --env GCLOUD_DIR="/usr/local/gcloud/google-cloud-sdk/bin" \
+      --env CLIENT_LIB_DIR="/root/clients" \
+      --env COPY_LOGS_TO="/logs" \
+      --env KOKORO_ARTIFACTS_DIR="${KOKORO_ARTIFACTS_DIR}" \
+      --env CLIENT_INTEGRATION_TESTS="${client}" \
+      --env EMULATOR_SRC_DIR="/src" \
+      --volume "${GCLOUD_CONFIG_DIR}:/root/.config/gcloud" \
+      --volume "${SRC_DIR}:/src" \
+      --volume "${LOG_DIR}:/logs" \
+      --workdir "/src" \
+      --entrypoint="/bin/bash" \
+      ${DOCKER_IMAGE} ${DOCKER_CMD_INTEGRATION_TESTS}
+ done

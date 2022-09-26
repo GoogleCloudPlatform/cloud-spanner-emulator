@@ -28,6 +28,7 @@
 #include "google/rpc/error_details.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.grpc.pb.h"
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.grpc.pb.h"
+#include "google/spanner/v1/commit_response.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.grpc.pb.h"
 #include "google/spanner/v1/transaction.pb.h"

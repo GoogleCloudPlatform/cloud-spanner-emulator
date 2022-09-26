@@ -73,14 +73,14 @@ TEST_F(SnapshotReadsTest, CanReadWithExactTimestamp) {
   // Insert a row.
   ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
 
-  // Sleep for 200 ms, and then insert another row.
-  absl::SleepFor(absl::Milliseconds(200));
+  // Sleep for 2s, and then insert another row.
+  absl::SleepFor(absl::Seconds(2));
   ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
-  // Read using an exact timestamp option set at 100 ms in the past. Only row 1
+  // Read using an exact timestamp option set at 1s in the past. Only row 1
   // is visible at that timestamp.
   EXPECT_THAT(Read(Transaction::SingleUseOptions(Transaction::ReadOnlyOptions(
-                       MakePastTimestamp(std::chrono::milliseconds(100)))),
+                       MakePastTimestamp(std::chrono::seconds(1)))),
                    "Users", {"ID", "Name", "Age"}, KeySet::All()),
               IsOkAndHoldsRows({ValueRow{1, "John", 23}}));
 }
@@ -89,14 +89,14 @@ TEST_F(SnapshotReadsTest, CanReadWithExactStaleness) {
   // Insert a row.
   ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
 
-  // Sleep for 200 ms, and then insert another row.
-  absl::SleepFor(absl::Milliseconds(200));
+  // Sleep for 2s, and then insert another row.
+  absl::SleepFor(absl::Seconds(2));
   ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
-  // Read using an exact staleness option set to 100 ms in the past. Only
+  // Read using an exact staleness option set to 1s in the past. Only
   // row 1 is visible at that timestamp.
-  EXPECT_THAT(Read(Transaction::SingleUseOptions(Transaction::ReadOnlyOptions(
-                       std::chrono::milliseconds(100))),
+  EXPECT_THAT(Read(Transaction::SingleUseOptions(
+                       Transaction::ReadOnlyOptions(std::chrono::seconds(1))),
                    "Users", {"ID", "Name", "Age"}, KeySet::All()),
               IsOkAndHoldsRows({ValueRow{1, "John", 23}}));
 }

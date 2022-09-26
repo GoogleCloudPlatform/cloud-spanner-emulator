@@ -17,16 +17,13 @@
 #include <memory>
 
 #include "google/protobuf/empty.pb.h"
+#include "google/spanner/v1/commit_response.pb.h"
 #include "google/spanner/v1/mutation.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "backend/transaction/options.h"
-#include "backend/transaction/read_only_transaction.h"
-#include "backend/transaction/read_write_transaction.h"
 #include "common/errors.h"
-#include "frontend/common/protos.h"
 #include "frontend/converters/mutations.h"
 #include "frontend/converters/time.h"
 #include "frontend/entities/session.h"

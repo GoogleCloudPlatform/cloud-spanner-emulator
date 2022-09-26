@@ -14,11 +14,11 @@
 // limitations under the License.
 //
 
-#include "frontend/converters/reads.h"
 
 #include <string>
 #include <vector>
 
+#include "google/spanner/v1/commit_response.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
@@ -28,10 +28,6 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "frontend/common/protos.h"
-#include "frontend/common/uris.h"
-#include "frontend/entities/database.h"
-#include "frontend/entities/session.h"
-#include "frontend/entities/transaction.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
 #include "grpcpp/server_context.h"

@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/v1/commit_response.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

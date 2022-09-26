@@ -2641,6 +2641,11 @@ TEST_F(CheckConstraint, ParseSyntaxErrorsInCheckConstraint) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ADD CHECK(()"),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Expecting ')' but found 'EOF'")));
+
+  EXPECT_THAT(ParseDDLStatement(
+                  "ALTER TABLE T ALTER CONSTRAINT col_a_gt_zero CHECK(A < 0);"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
 }
 
 TEST(ParseAnalyze, CanParseAnalyze) {

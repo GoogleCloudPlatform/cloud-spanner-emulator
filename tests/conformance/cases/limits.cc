@@ -125,7 +125,9 @@ TEST_F(LimitsTest, DISABLED_MaxIndexesPerDatabase) {
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
-TEST_F(LimitsTest, MaxIndexPerTable) {
+// TODO: re-enable this test once Spanner 27.6 is official
+// and the number of indexes allowed per table is stable.
+TEST_F(LimitsTest, DISABLED_MaxIndexPerTable) {
   std::vector<std::string> statements = {R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,

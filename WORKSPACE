@@ -100,7 +100,7 @@ http_archive(
 
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 
-go_register_toolchains(version = "1.18.4")
+go_register_toolchains(version = "1.19.1")
 
 http_archive(
     name = "bazel_gazelle",

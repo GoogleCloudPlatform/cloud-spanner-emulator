@@ -20,8 +20,13 @@ set -e
 EMULATOR_PID=""
 
 function emulator::start() {
-  ${EMULATOR_SRC_DIR}/bazel-bin/binaries/gateway_main_/gateway_main &
+  ${EMULATOR_SRC_DIR}/gateway_main &
   EMULATOR_PID=$!
+  local wait_time_in_s=10
+  while ! nc -z localhost 9010 && [ "$wait_time_in_s" -ne 0 ]; do
+    sleep 1
+    wait_time_in_s=`expr $wait_time_in_s - 1`
+  done
 }
 
 function emulator::stop() {
@@ -38,25 +43,6 @@ function emulator::copy_logs() {
     # logs directory doesn't always have correct permissions for Kokoro to be
     # able to copy the logs, so we set it to 755.
     chmod -R 755 "$COPY_LOGS_TO"
-  fi
-}
-
-function emulator::build_and_test() {
-  set +e
-  if [[ -z "${REMOTE_CACHE}" ]]; then
-     bazel test -c opt ...
-  else
-    bazel test -c opt ... \
-    --remote_cache=${REMOTE_CACHE} \
-    --google_default_credentials
-  fi
-  exit_code=$?
-
-  set -e
-
-  if [[ $exit_code != 0 ]]; then
-    emulator::copy_logs
-    exit $exit_code
   fi
 }
 
@@ -149,19 +135,12 @@ emulator::continuous_integration() {
   gcloud config set project emulator-project
   gcloud config set api_endpoint_overrides/spanner http://localhost:9020/
 
-  IFS=','
-  for client in $CLIENT_INTEGRATION_TESTS
-  do
-    emulator::run_integration_tests $client
-  done
+  emulator::run_integration_tests $CLIENT_INTEGRATION_TESTS
 
   # Restore gcloud configuration.
   gcloud config configurations activate $GCLOUD_CONFIG_TO_RESTORE
   gcloud config configurations delete $GCLOUD_TEMP_CONFIG --quiet
 }
-
-# By default build the emulator and run unit/conformance tests.
-emulator::build_and_test
 
 # For continuous jobs run the client library integration tests.
 emulator::continuous_integration
