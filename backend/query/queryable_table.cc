@@ -22,6 +22,9 @@
 #include <utility>
 #include <vector>
 
+#include "zetasql/public/analyzer.h"
+#include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/analyzer_output.h"
 #include "zetasql/public/evaluator_table_iterator.h"
 #include "zetasql/public/value.h"
 #include "absl/memory/memory.h"
@@ -92,6 +95,35 @@ QueryableTable::QueryableTable(const backend::Table* table, RowReader* reader)
     : wrapped_table_(table), reader_(reader) {
   for (const auto* column : table->columns()) {
     columns_.push_back(std::make_unique<const QueryableColumn>(column));
+  }
+
+  // Populate primary_key_column_indexes_.
+  for (const auto& key_column : table->primary_key()) {
+    for (int i = 0; i < wrapped_table_->columns().size(); ++i) {
+      if (key_column->column() == wrapped_table_->columns()[i]) {
+        primary_key_column_indexes_.push_back(i);
+        break;
+      }
+    }
+  }
+}
+
+QueryableTable::QueryableTable(const backend::Table* table, RowReader* reader,
+                               const zetasql::AnalyzerOptions& options,
+                               zetasql::Catalog* catalog,
+                               zetasql::TypeFactory* type_factory)
+    : wrapped_table_(table), reader_(reader) {
+  for (const auto* column : table->columns()) {
+    std::unique_ptr<const zetasql::AnalyzerOutput> output = nullptr;
+    if (type_factory != nullptr && column->has_default_value()) {
+      absl::Status s =
+          zetasql::AnalyzeExpression(column->expression().value(), options,
+                                       catalog, type_factory, &output);
+      ZETASQL_DCHECK(s.ok()) << "Failed to analyze default expression for column "
+                     << column->FullName() << "\n";
+    }
+    columns_.push_back(
+        std::make_unique<const QueryableColumn>(column, std::move(output)));
   }
 
   // Populate primary_key_column_indexes_.

@@ -45,7 +45,7 @@ TEST(InstanceTest, Basic) {
   Instance instance(/*name=*/"projects/test-project/instances/test-instance",
                     /*config=*/"emulator-config",
                     /*display_name=*/"Test Instance",
-                    /*node_count=*/5,
+                    /*processing_units=*/5000,
                     /*labels*/ labels, &clock);
   instance_api::Instance instance_pb;
   instance.ToProto(&instance_pb);

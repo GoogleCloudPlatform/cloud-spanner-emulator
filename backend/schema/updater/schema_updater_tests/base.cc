@@ -20,6 +20,7 @@
 #include <string>
 
 #include "absl/status/statusor.h"
+#include "backend/schema/updater/schema_updater.h"
 
 namespace google {
 namespace spanner {
@@ -38,7 +39,8 @@ absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::UpdateSchema(
   SchemaChangeContext context{.type_factory = &type_factory_,
                               .table_id_generator = &table_id_generator_,
                               .column_id_generator = &column_id_generator_};
-  return updater.ValidateSchemaFromDDL(statements, context, base_schema);
+  return updater.ValidateSchemaFromDDL(
+      SchemaChangeOperation{.statements = statements}, context, base_schema);
 }
 
 }  // namespace test

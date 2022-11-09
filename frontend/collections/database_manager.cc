@@ -61,7 +61,7 @@ std::vector<std::shared_ptr<Database>> GetDatabasesByInstance(
 
 absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::CreateDatabase(
     const std::string& database_uri,
-    const std::vector<std::string>& create_statements) {
+    const backend::SchemaChangeOperation& schema_change_operation) {
   // Perform bulk of the work outside the database manager lock to allow
   // CreateDatabase calls to execute in parallel. A common test pattern is to
   // Create/Drop a database per unit test, and run unit tests in parallel. So
@@ -72,7 +72,7 @@ absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::CreateDatabase(
   std::string instance_uri = MakeInstanceUri(project_id, instance_id);
 
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<backend::Database> backend_db,
-                   backend::Database::Create(clock_, create_statements));
+                   backend::Database::Create(clock_, schema_change_operation));
   auto database = std::make_shared<Database>(
       database_uri, std::move(backend_db), clock_->Now());
 

@@ -27,8 +27,8 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "backend/access/read.h"
-#include "backend/common/ids.h"
 #include "backend/datamodel/key_set.h"
+#include "backend/schema/updater/schema_updater.h"
 #include "backend/transaction/options.h"
 #include "common/clock.h"
 #include "common/errors.h"
@@ -43,7 +43,7 @@ using zetasql::values::Int64;
 
 class DatabaseTest : public ::testing::Test {
  public:
-  DatabaseTest() {}
+  DatabaseTest() = default;
 
   ReadArg read_column(std::string table_name, std::string column_name) {
     ReadArg args;
@@ -58,21 +58,24 @@ class DatabaseTest : public ::testing::Test {
 };
 
 TEST_F(DatabaseTest, CreateSuccessful) {
-  ZETASQL_EXPECT_OK(Database::Create(&clock_, /*create_statements=*/{}));
+  ZETASQL_EXPECT_OK(Database::Create(&clock_, SchemaChangeOperation{}));
 
-  ZETASQL_EXPECT_OK(Database::Create(&clock_, {R"(
+  std::vector<std::string> create_statements = {R"(
     CREATE TABLE T(
       k1 INT64,
       k2 INT64,
     ) PRIMARY KEY(k1)
   )",
-                                       R"(
-    CREATE INDEX I on T(k1))"}));
+                                                R"(
+    CREATE INDEX I on T(k1))"};
+
+  ZETASQL_EXPECT_OK(Database::Create(
+      &clock_, SchemaChangeOperation{.statements = create_statements}));
 }
 
 TEST_F(DatabaseTest, UpdateSchemaSuccessful) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto db,
-                       Database::Create(&clock_, /*create_statements=*/{}));
+                       Database::Create(&clock_, SchemaChangeOperation{}));
 
   std::vector<std::string> update_statements = {R"(
     CREATE TABLE T(
@@ -87,18 +90,22 @@ TEST_F(DatabaseTest, UpdateSchemaSuccessful) {
   absl::Status backfill_status;
   int completed_statements;
   absl::Time commit_ts;
-  ZETASQL_EXPECT_OK(db->UpdateSchema(update_statements, &completed_statements,
-                             &commit_ts, &backfill_status));
+  ZETASQL_EXPECT_OK(
+      db->UpdateSchema(SchemaChangeOperation{.statements = update_statements},
+                       &completed_statements, &commit_ts, &backfill_status));
   ZETASQL_EXPECT_OK(backfill_status);
 }
 
 TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto db, Database::Create(&clock_, {R"(
+  std::vector<std::string> create_statements = {R"(
     CREATE TABLE T(
       k1 INT64,
       k2 INT64,
     ) PRIMARY KEY(k1)
-  )"}));
+  )"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto db, Database::Create(&clock_, SchemaChangeOperation{
+                                             .statements = create_statements}));
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<ReadWriteTransaction> txn,
@@ -133,8 +140,9 @@ TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
   absl::Time commit_ts;
 
   // The statements are semantically valid, indicated by an OK return status.
-  ZETASQL_EXPECT_OK(db->UpdateSchema(update_statements, &completed_statements,
-                             &commit_ts, &backfill_status));
+  ZETASQL_EXPECT_OK(
+      db->UpdateSchema(SchemaChangeOperation{.statements = update_statements},
+                       &completed_statements, &commit_ts, &backfill_status));
 
   // But the backfill statements fail.
   EXPECT_EQ(backfill_status,
@@ -145,13 +153,15 @@ TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
 }
 
 TEST_F(DatabaseTest, ConcurrentSchemaChangeIsAborted) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto db, Database::Create(&clock_, {
-                                                              R"(
+  std::vector<std::string> create_statements = {R"(
     CREATE TABLE T(
       k1 INT64,
       k2 INT64,
-    ) PRIMARY KEY(k1))",
-                                                          }));
+    ) PRIMARY KEY(k1)
+  )"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto db, Database::Create(&clock_, SchemaChangeOperation{
+                                             .statements = create_statements}));
 
   // Initiate a Read inside a read-write transaction to acquire locks.
   std::unique_ptr<RowCursor> row_cursor;
@@ -160,40 +170,46 @@ TEST_F(DatabaseTest, ConcurrentSchemaChangeIsAborted) {
       db->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
   ZETASQL_EXPECT_OK(txn->Read(read_column("T", "k1"), &row_cursor));
 
-  absl::Status backfill_status;
-  int completed_statements;
-  absl::Time commit_ts;
-  EXPECT_EQ(
-      db->UpdateSchema({R"(
+  std::vector<std::string> update_statements = {R"(
     CREATE TABLE T(
       k1 INT64,
       k2 INT64,
     ) PRIMARY KEY(k1)
-  )"},
+  )"};
+  absl::Status backfill_status;
+  int completed_statements;
+  absl::Time commit_ts;
+  EXPECT_EQ(
+      db->UpdateSchema(SchemaChangeOperation{.statements = update_statements},
                        &completed_statements, &commit_ts, &backfill_status),
       error::ConcurrentSchemaChangeOrReadWriteTxnInProgress());
 }
 
 TEST_F(DatabaseTest, SchemaChangeLocksSuccesfullyReleased) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto db, Database::Create(&clock_, {R"(
-    CREATE TABLE T(
-      k1 INT64,
-      k2 INT64,
-    ) PRIMARY KEY(k1))"}));
-
-  // Schema update will fail.
-  absl::Status backfill_status;
-  int completed_statements;
-  absl::Time commit_ts;
-  EXPECT_FALSE(db->UpdateSchema({R"(
+  std::vector<std::string> create_statements = {R"(
     CREATE TABLE T(
       k1 INT64,
       k2 INT64,
     ) PRIMARY KEY(k1)
-  )"},
-                                &completed_statements, &commit_ts,
-                                &backfill_status)
-                   .ok());
+  )"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto db, Database::Create(&clock_, SchemaChangeOperation{
+                                             .statements = create_statements}));
+
+  // Schema update will fail.
+  std::vector<std::string> update_statements = {R"(
+    CREATE TABLE T(
+      k1 INT64,
+      k2 INT64,
+    ) PRIMARY KEY(k1)
+  )"};
+  absl::Status backfill_status;
+  int completed_statements;
+  absl::Time commit_ts;
+  EXPECT_FALSE(
+      db->UpdateSchema(SchemaChangeOperation{.statements = update_statements},
+                       &completed_statements, &commit_ts, &backfill_status)
+          .ok());
 
   // Can still run transactions as locks would have been released.
   std::unique_ptr<RowCursor> row_cursor;

@@ -57,12 +57,15 @@ class GCloudInstanceAdminTest(emulator.TestCase):
     self.assertEqual(
         self.RunGCloud(
             # TODO: Consider adding column instanceType.
-            'spanner', 'instances', 'list', '--format',
+            'spanner',
+            'instances',
+            'list',
+            '--format',
             'table(name, displayName, config, nodeCount, processingUnits, state)'
         ),
         self.JoinLines(
             'NAME           DISPLAY_NAME   CONFIG           NODE_COUNT  PROCESSING_UNITS  STATE',
-            'test-instance  Test Instance  emulator-config  3                             READY'
+            'test-instance  Test Instance  emulator-config  3           3000              READY'
         ))
 
   def testDescribeInstance(self):
@@ -76,7 +79,7 @@ class GCloudInstanceAdminTest(emulator.TestCase):
             'config: projects/test-project/instanceConfigs/emulator-config',
             r'createTime: {}'.format(time_format), 'displayName: Test Instance',
             'name: projects/test-project/instances/test-instance',
-            'nodeCount: 3', 'state: READY',
+            'nodeCount: 3', 'processingUnits: 3000', 'state: READY',
             r'updateTime: {}'.format(time_format)))
 
   def testDeleteInstance(self):

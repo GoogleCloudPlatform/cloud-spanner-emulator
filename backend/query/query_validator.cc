@@ -70,6 +70,9 @@ constexpr absl::string_view kHintJoinBatch = "batch_mode";
 constexpr absl::string_view kHashJoinBuildSide = "hash_join_build_side";
 constexpr absl::string_view kHashJoinBuildSideLeft = "build_left";
 constexpr absl::string_view kHashJoinBuildSideRight = "build_right";
+constexpr absl::string_view kHashJoinExecution = "hash_join_execution";
+constexpr absl::string_view kHashJoinExecutionOnePass = "one_pass";
+constexpr absl::string_view kHashJoinExecutionMultiPass = "multi_pass";
 
 // Group by
 constexpr absl::string_view kHintGroupMethod = "group_method";
@@ -103,6 +106,8 @@ constexpr absl::string_view kHintDisableQueryPartitionabilityCheck =
 
 constexpr absl::string_view kHintDisableQueryNullFilteredIndexCheck =
     "disable_query_null_filtered_index_check";
+
+constexpr absl::string_view kHintDisableInline = "disable_inline";
 
 absl::Status CollectHintsForNode(
     const zetasql::ResolvedOption* hint,
@@ -168,7 +173,7 @@ absl::Status QueryValidator::CheckSpannerHintName(
        {kHintForceIndex, kHintTableScanGroupByScanOptimization}},
       {zetasql::RESOLVED_JOIN_SCAN,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
-        kHintJoinForceOrder}},
+        kHintJoinForceOrder, kHashJoinExecution}},
       {zetasql::RESOLVED_AGGREGATE_SCAN,
        {kHintGroupTypeDeprecated, kHintGroupMethod}},
       {zetasql::RESOLVED_ARRAY_SCAN,
@@ -178,12 +183,13 @@ absl::Status QueryValidator::CheckSpannerHintName(
        {kHintForceIndex, kHintJoinTypeDeprecated, kHintJoinMethod,
         kHashJoinBuildSide, kHintJoinForceOrder, kHintConstantFolding,
         kUseAdditionalParallelism, kHintEnableAdaptivePlans,
-        kHintLockScannedRange, kHintParameterSensitive}},
+        kHintLockScannedRange, kHintParameterSensitive, kHashJoinExecution}},
       {zetasql::RESOLVED_SUBQUERY_EXPR,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
-        kHintJoinBatch, kHintJoinForceOrder}},
+        kHintJoinBatch, kHintJoinForceOrder, kHashJoinExecution}},
       {zetasql::RESOLVED_SET_OPERATION_SCAN,
-       {kHintJoinMethod, kHintJoinForceOrder}}};
+       {kHintJoinMethod, kHintJoinForceOrder}},
+      {zetasql::RESOLVED_FUNCTION_CALL, {kHintDisableInline}}};
 
   const auto& iter = supported_hints->find(node_kind);
   if (iter == supported_hints->end() || !iter->second.contains(name)) {
@@ -223,6 +229,7 @@ absl::Status QueryValidator::CheckHintValue(
           {kHintParameterSensitive, zetasql::types::StringType()},
           {kHintJoinMethod, zetasql::types::StringType()},
           {kHashJoinBuildSide, zetasql::types::StringType()},
+          {kHashJoinExecution, zetasql::types::StringType()},
           {kHintJoinBatch, zetasql::types::BoolType()},
           {kHintJoinForceOrder, zetasql::types::BoolType()},
           {kHintGroupTypeDeprecated, zetasql::types::StringType()},
@@ -233,6 +240,7 @@ absl::Status QueryValidator::CheckHintValue(
           {kHintConstantFolding, zetasql::types::BoolType()},
           {kHintTableScanGroupByScanOptimization, zetasql::types::BoolType()},
           {kHintEnableAdaptivePlans, zetasql::types::BoolType()},
+          {kHintDisableInline, zetasql::types::BoolType()},
       }};
 
   const auto& iter = supported_hint_types->find(name);
@@ -290,6 +298,12 @@ absl::Status QueryValidator::CheckHintValue(
     const std::string& string_value = value.string_value();
     if (!(absl::EqualsIgnoreCase(string_value, kHashJoinBuildSideLeft) ||
           absl::EqualsIgnoreCase(string_value, kHashJoinBuildSideRight))) {
+      return error::InvalidHintValue(name, value.DebugString());
+    }
+  } else if (absl::EqualsIgnoreCase(name, kHashJoinExecution)) {
+    const std::string& string_value = value.string_value();
+    if (!(absl::EqualsIgnoreCase(string_value, kHashJoinExecutionOnePass) ||
+          absl::EqualsIgnoreCase(string_value, kHashJoinExecutionMultiPass))) {
       return error::InvalidHintValue(name, value.DebugString());
     }
   } else if (absl::EqualsIgnoreCase(name, kHintGroupMethod) ||

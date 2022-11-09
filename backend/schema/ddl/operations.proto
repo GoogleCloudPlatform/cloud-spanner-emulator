@@ -253,14 +253,18 @@ message DropDatabase {
 
 message Analyze {}
 
+
 message DDLStatement {
   oneof kind {
     CreateTable create_table = 1;
     CreateIndex create_index = 2;
+
     AlterTable alter_table = 3;
     AlterIndex alter_index = 5;
+
     DropTable drop_table = 6;
     DropIndex drop_index = 8;
+
     Analyze analyze = 10;
   }
 }

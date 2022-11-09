@@ -32,9 +32,9 @@
 #include "backend/database/database.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/schema/updater/schema_updater.h"
 #include "backend/transaction/options.h"
 #include "common/errors.h"
-#include "tests/common/actions.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
@@ -59,15 +59,18 @@ class ColumnValueBackfillTest : public ::testing::Test {
 
  protected:
   void SetUp() override {
-    std::vector<std::string> create_statements;
-    ZETASQL_ASSERT_OK_AND_ASSIGN(database_, Database::Create(&clock_, {R"(
+    std::vector<std::string> create_statements = {R"(
                             CREATE TABLE TestTable (
                               int64_col INT64,
                               string_col STRING(10),
                               string_array_col ARRAY<STRING(MAX)>,
                               bytes_array_col ARRAY<BYTES(MAX)>
                             ) PRIMARY KEY (int64_col)
-                         )"}));
+                         )"};
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        database_,
+        Database::Create(
+            &clock_, SchemaChangeOperation{.statements = create_statements}));
 
     ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
@@ -100,8 +103,9 @@ class ColumnValueBackfillTest : public ::testing::Test {
     int num_succesful;
     absl::Status backfill_status;
     absl::Time update_time;
-    ZETASQL_RETURN_IF_ERROR(database_->UpdateSchema(update_statements, &num_succesful,
-                                            &update_time, &backfill_status));
+    ZETASQL_RETURN_IF_ERROR(database_->UpdateSchema(
+        SchemaChangeOperation{.statements = update_statements}, &num_succesful,
+        &update_time, &backfill_status));
     return backfill_status;
   }
 

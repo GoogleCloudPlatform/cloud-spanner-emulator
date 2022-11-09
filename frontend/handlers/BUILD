@@ -26,8 +26,8 @@ cc_library(
         "//backend/schema/ddl:operations_cc_proto",
         "//backend/schema/parser:ddl_parser",
         "//backend/schema/printer:print_ddl",
+        "//backend/schema/updater:schema_updater",
         "//common:errors",
-        "//common:limits",
         "//frontend/common:uris",
         "//frontend/converters:time",
         "//frontend/entities:database",
@@ -36,7 +36,6 @@ cc_library(
         "@com_google_googleapis//google/longrunning:longrunning_cc_grpc",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",
-        "@com_googlesource_code_re2//:re2",
     ],
     alwayslink = 1,
 )

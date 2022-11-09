@@ -21,14 +21,15 @@
 
 #include "google/rpc/error_details.pb.h"
 #include "absl/status/status.h"
+#include "absl/strings/cord.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
+#include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "common/constants.h"
 #include "common/limits.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -110,6 +111,20 @@ absl::Status InvalidInstanceName(absl::string_view instance_id) {
                    "letters, numbers, or hyphens, and not end with a "
                    "hyphen. Got: ",
                    instance_id));
+}
+
+absl::Status InvalidCreateInstanceRequestUnitsNotBoth() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Invalid CreateInstance request. Only one of nodes or "
+                      "processing units should be specified.");
+}
+
+absl::Status InvalidCreateInstanceRequestUnitsMultiple() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "Invalid CreateInstance request. Processing units should be "
+      "multiple of 100 for values below 1000 and multiples of "
+      "1000 for values above 1000.");
 }
 
 // Database errors.
@@ -2244,7 +2259,6 @@ absl::Status ForeignKeyRowDeletionPolicyAddNotAllowed(
                        "referenced by one or more foreign keys: `$1`.",
                        table_name, foreign_keys));
 }
-
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

@@ -108,7 +108,7 @@ IFS=','
 for client in $CLIENT_INTEGRATION_TESTS
  do
     if [[ $client == "go" ]]; then
-      SHA=734a22d5f6ecb1b1ec86302c7e38c461efd2260c3de29b6ad9e29df79632bed7
+      SHA=4f813b29e595e0069502abc59d7528c2a6f96d35c4e864ccbad1897e7e22261e
     elif [[ $client == "java" ]]; then
       SHA=b0049515bf933ed93b9956f781a0126070b5690ef7f3800e048f063ee4ab02c7
     elif [[ $client == "cpp" ]]; then

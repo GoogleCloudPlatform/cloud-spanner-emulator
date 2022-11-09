@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
@@ -29,6 +30,7 @@
 #include "backend/transaction/read_write_transaction.h"
 #include "common/clock.h"
 #include "tests/common/scoped_feature_flags_setter.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -48,12 +50,15 @@ class CheckConstraintVerifiersTest : public ::testing::Test {
 
  protected:
   void SetUp() override {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(database_, Database::Create(&clock_, {R"(
+    std::vector<std::string> statements = {R"(
           CREATE TABLE T (
           A INT64,
           B INT64,
           C INT64 AS (A + B) STORED,
-        ) PRIMARY KEY(A))"}));
+        ) PRIMARY KEY(A))"};
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        database_, Database::Create(&clock_, SchemaChangeOperation{
+                                                 .statements = statements}));
 
     ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
@@ -81,7 +86,8 @@ class CheckConstraintVerifiersTest : public ::testing::Test {
     absl::Status status;
     absl::Time timestamp;
     ZETASQL_RETURN_IF_ERROR(
-        database_->UpdateSchema(statements, &succesful, &timestamp, &status));
+        database_->UpdateSchema(SchemaChangeOperation{.statements = statements},
+                                &succesful, &timestamp, &status));
     return status;
   }
 

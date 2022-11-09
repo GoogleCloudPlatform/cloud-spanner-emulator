@@ -15,7 +15,7 @@
 #
 
 load(
-    "//backend/schema/parser:javacc_parser.bzl",
+    "//backend/common:javacc_parser.bzl",
     "generate_javacc_parser",
 )
 

@@ -42,28 +42,29 @@ class DatabaseManagerTest : public testing::Test {
   Clock clock_;
   DatabaseManager database_manager_;
   const std::string database_uri_;
-  const std::vector<std::string> empty_schema_;
+  const backend::SchemaChangeOperation empty_schema_operation_;
 };
 
 TEST_F(DatabaseManagerTest, CreateNewDatabase) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database,
-      database_manager_.CreateDatabase(database_uri_, empty_schema_));
+      database_manager_.CreateDatabase(database_uri_, empty_schema_operation_));
   EXPECT_EQ(database->database_uri(), database_uri_);
 }
 
 TEST_F(DatabaseManagerTest, CreateExistingDatabaseUriFailsWithAlreadyExists) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database,
-      database_manager_.CreateDatabase(database_uri_, empty_schema_));
-  EXPECT_THAT(database_manager_.CreateDatabase(database_uri_, empty_schema_),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
+      database_manager_.CreateDatabase(database_uri_, empty_schema_operation_));
+  EXPECT_THAT(
+      database_manager_.CreateDatabase(database_uri_, empty_schema_operation_),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(DatabaseManagerTest, GetExistingDatabase) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database,
-      database_manager_.CreateDatabase(database_uri_, empty_schema_));
+      database_manager_.CreateDatabase(database_uri_, empty_schema_operation_));
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> actual_database,
                        database_manager_.GetDatabase(database_uri_));
   EXPECT_EQ(actual_database->database_uri(), database_uri_);
@@ -77,7 +78,7 @@ TEST_F(DatabaseManagerTest, GetNonExistingDatabaseReturnsNotFound) {
 TEST_F(DatabaseManagerTest, DeleteExistingDatabase) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database,
-      database_manager_.CreateDatabase(database_uri_, empty_schema_));
+      database_manager_.CreateDatabase(database_uri_, empty_schema_operation_));
   ZETASQL_EXPECT_OK(database_manager_.DeleteDatabase(database_uri_));
   EXPECT_THAT(database_manager_.GetDatabase(database_uri_),
               zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
@@ -90,9 +91,9 @@ TEST_F(DatabaseManagerTest, ListDatabase) {
   for (int i = 0; i < num_databases; i++) {
     std::string database_uri =
         absl::StrCat(instance_uri, "/databases/database-", i);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::shared_ptr<Database> database,
-        database_manager_.CreateDatabase(database_uri, empty_schema_));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> database,
+                         database_manager_.CreateDatabase(
+                             database_uri, empty_schema_operation_));
   }
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Database>> databases,
                        database_manager_.ListDatabases(instance_uri));
@@ -109,9 +110,10 @@ TEST_F(DatabaseManagerTest, ListDatabaseWithSimilarInstanceUri) {
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database,
-      database_manager_.CreateDatabase(database_uri_, empty_schema_));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(database, database_manager_.CreateDatabase(
-                                     similar_database_uri, empty_schema_));
+      database_manager_.CreateDatabase(database_uri_, empty_schema_operation_));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      database, database_manager_.CreateDatabase(similar_database_uri,
+                                                 empty_schema_operation_));
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Database>> databases,
                        database_manager_.ListDatabases(
                            "projects/test-p/instances/test-instance"));
@@ -126,28 +128,29 @@ TEST_F(DatabaseManagerTest, DatabaseQuotaIsEnforced) {
   // Create 100 databases.
   for (int i = 1; i <= 100; ++i) {
     std::string database_uri = absl::StrCat(database_uri_prefix, i);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::shared_ptr<Database> database,
-        database_manager_.CreateDatabase(database_uri, empty_schema_));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> database,
+                         database_manager_.CreateDatabase(
+                             database_uri, empty_schema_operation_));
   }
 
   // The next database creation should fail.
-  EXPECT_THAT(database_manager_.CreateDatabase(
-                  absl::StrCat(database_uri_prefix, 101), empty_schema_),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kResourceExhausted));
+  EXPECT_THAT(
+      database_manager_.CreateDatabase(absl::StrCat(database_uri_prefix, 101),
+                                       empty_schema_operation_),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kResourceExhausted));
 
   // But creating a database in another instance should not fail.
   ZETASQL_EXPECT_OK(database_manager_.CreateDatabase(
       absl::StrCat("projects/test-project/instances/test-instance-2/databases/"
                    "test-database-",
                    101),
-      empty_schema_));
+      empty_schema_operation_));
 
   // If we clear some quota, we can create a database again.
   ZETASQL_EXPECT_OK(
       database_manager_.DeleteDatabase(absl::StrCat(database_uri_prefix, 100)));
   ZETASQL_EXPECT_OK(database_manager_.CreateDatabase(
-      absl::StrCat(database_uri_prefix, 101), empty_schema_));
+      absl::StrCat(database_uri_prefix, 101), empty_schema_operation_));
 }
 
 }  // namespace frontend

@@ -148,6 +148,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "FLOAT64",
     "FOREIGN",
     "INDEX",
+    "INSERT",
     "INT64",
     "INTERLEAVE",
     "JSON",
@@ -168,6 +169,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "TABLE",
     "TIMESTAMP",
     "UNIQUE",
+    "UPDATE",
 };
 
 }  // namespace

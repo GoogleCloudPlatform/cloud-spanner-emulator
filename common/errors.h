@@ -17,10 +17,13 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_ERRORS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_ERRORS_H_
 
+#include <string>
+#include <vector>
+
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "backend/common/ids.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -46,6 +49,8 @@ absl::Status InstanceAlreadyExists(absl::string_view uri);
 absl::Status InstanceNameMismatch(absl::string_view uri);
 absl::Status InstanceUpdatesNotSupported();
 absl::Status InvalidInstanceName(absl::string_view instance_id);
+absl::Status InvalidCreateInstanceRequestUnitsNotBoth();
+absl::Status InvalidCreateInstanceRequestUnitsMultiple();
 
 // Database errors.
 absl::Status InvalidDatabaseURI(absl::string_view uri);

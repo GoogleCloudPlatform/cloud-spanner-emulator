@@ -19,9 +19,9 @@
 #include <ostream>
 #include <string>
 
-#include "google/protobuf/io/tokenizer.h"
 #include "google/protobuf/text_format.h"
 #include "absl/strings/substitute.h"
+#include "google/protobuf/io/tokenizer.h"
 
 namespace google {
 namespace spanner {

@@ -340,6 +340,63 @@ TEST_F(ColumnDefaultValueReadWriteTest, ForeignKey) {
                        testing::HasSubstr("Foreign key")));
 }
 
+TEST_F(ColumnDefaultValueReadWriteTest, DMLsUsingDefaultValues) {
+  ZETASQL_ASSERT_OK(
+      CommitDml({SqlStatement("INSERT T (K, D2) VALUES (1, 1000), (2, 2000)"),
+                 SqlStatement("UPDATE T SET D1 = 100 WHERE K = 2")}));
+  EXPECT_THAT(Query("SELECT K, D1, G1, D2 FROM T ORDER BY K ASC"),
+              IsOkAndHoldsRows({{1, 1, 2, 1000}, {2, 100, 101, 2000}}));
+
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("UPDATE T SET D1 = DEFAULT WHERE K = 2")}));
+  EXPECT_THAT(Query("SELECT K, D1, G1, D2 FROM T ORDER BY K ASC"),
+              IsOkAndHoldsRows({{1, 1, 2, 1000}, {2, 1, 2, 2000}}));
+}
+
+TEST_F(ColumnDefaultValueReadWriteTest, DMLsInsertWithDefaultKeyword) {
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(
+      "INSERT T (K, D1, D2) VALUES (3, 300, DEFAULT), (4, DEFAULT, 400)")}));
+  EXPECT_THAT(Query("SELECT K, D1, G1, D2 FROM T ORDER BY K ASC"),
+              IsOkAndHoldsRows({{3, 300, 301, 2}, {4, 1, 2, 400}}));
+
+  // Try delete:
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM T WHERE D1=1")}));
+  EXPECT_THAT(Query("SELECT K, D1, G1, D2 FROM T ORDER BY K ASC"),
+              IsOkAndHoldsRows({{3, 300, 301, 2}}));
+}
+
+TEST_F(ColumnDefaultValueReadWriteTest, InvalidUsesOfDefaultKeyword) {
+  ZETASQL_ASSERT_OK(
+      CommitDml({SqlStatement("INSERT T (K, D2) VALUES (1, 1000), (2, 2000)"),
+                 SqlStatement("UPDATE T SET D1 = 100 WHERE K = 2")}));
+  EXPECT_THAT(Query("SELECT K, D1, G1, D2 FROM T ORDER BY K ASC"),
+              IsOkAndHoldsRows({{1, 1, 2, 1000}, {2, 100, 101, 2000}}));
+
+  ASSERT_THAT(CommitDml({SqlStatement("DELETE FROM T WHERE D1=DEFAULT")}),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("Unexpected keyword DEFAULT")));
+
+  ASSERT_THAT(CommitDml({SqlStatement("UPDATE T SET D2 = 4 WHERE D1=DEFAULT")}),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("Unexpected keyword DEFAULT")));
+
+  EXPECT_THAT(Query("SELECT K, D1, G1, D2 FROM T ORDER BY K ASC"),
+              IsOkAndHoldsRows({{1, 1, 2, 1000}, {2, 100, 101, 2000}}));
+}
+
+TEST_F(ColumnDefaultValueReadWriteTest, DMLsInsertWithUserInput) {
+  ZETASQL_ASSERT_OK(CommitDml(
+      {SqlStatement("INSERT T2 (K, D1, D2) VALUES (5, 5, 5), (6, 6, 6)")}));
+  EXPECT_THAT(Query("SELECT K, D1, D2 FROM T2 ORDER BY K ASC"),
+              IsOkAndHoldsRows({{5, 5, 5}, {6, 6, 6}}));
+
+  // Insert .. select, D1 doesn't appear in the column list so it gets
+  // its default value = 1,  G1 is computed from D1
+  ZETASQL_ASSERT_OK(
+      CommitDml({SqlStatement("INSERT T (K, D2) SELECT K,  D2 FROM T2")}));
+  EXPECT_THAT(Query("SELECT K, D1, G1, D2 FROM T ORDER BY K ASC"),
+              IsOkAndHoldsRows({{5, 1, 2, 5}, {6, 1, 2, 6}}));
+}
+
 class DefaultPrimaryKeyReadWriteTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
@@ -509,6 +566,20 @@ TEST_F(DefaultPrimaryKeyReadWriteTest, WithDependentGeneratedColumn) {
                                 {100, 1, 200, 1},
                                 {100, 3, 200, 300}}));
 }
+
+TEST_F(DefaultPrimaryKeyReadWriteTest, DMLs) {
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT T2 (id2, a) VALUES (1, 1)")}));
+  EXPECT_THAT(Query("SELECT id1, id2, g1, a FROM T2 ORDER BY id2 ASC"),
+              IsOkAndHoldsRows({{100, 1, 200, 1}}));
+
+  ZETASQL_ASSERT_OK(
+      CommitDml({SqlStatement("INSERT T2 (id1, id2, a) VALUES "
+                              "(DEFAULT, 2, 2), (3, 3, 3)")}));
+  EXPECT_THAT(
+      Query("SELECT id1, id2, g1, a FROM T2 ORDER BY id2 ASC"),
+      IsOkAndHoldsRows({{100, 1, 200, 1}, {100, 2, 200, 2}, {3, 3, 6, 3}}));
+}
+
 }  // namespace
 
 }  // namespace test

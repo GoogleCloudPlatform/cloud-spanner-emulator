@@ -29,10 +29,11 @@
 #include "zetasql/public/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/ascii.h"
 #include "backend/query/analyzer_options.h"
 #include "common/constants.h"
+#include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -68,7 +69,6 @@ std::unique_ptr<zetasql::Function> PendingCommitTimestampFunction() {
           zetasql::types::TimestampType(), {}, nullptr}},
       function_options);
 }
-
 }  // namespace
 
 FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory) {

@@ -25,13 +25,12 @@
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/printer/print_ddl.h"
+#include "backend/schema/updater/schema_updater.h"
 #include "common/errors.h"
-#include "common/limits.h"
 #include "frontend/common/uris.h"
 #include "frontend/converters/time.h"
 #include "frontend/entities/database.h"
 #include "frontend/server/handler.h"
-#include "re2/re2.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -115,7 +114,9 @@ absl::Status CreateDatabase(RequestContext* ctx,
   }
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Database> database,
                    ctx->env()->database_manager()->CreateDatabase(
-                       database_uri, create_statements));
+                       database_uri, backend::SchemaChangeOperation{
+                                         .statements = create_statements,
+                                     }));
 
   // Create an operation tracking the database creation.
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Operation> operation,
@@ -180,9 +181,11 @@ absl::Status UpdateDatabaseDdl(
   int num_succesful_statements;
   absl::Time commit_timestamp;
   absl::Status backfill_status;
-  ZETASQL_RETURN_IF_ERROR(
-      backend_database->UpdateSchema(statements, &num_succesful_statements,
-                                     &commit_timestamp, &backfill_status));
+  ZETASQL_RETURN_IF_ERROR(backend_database->UpdateSchema(
+      backend::SchemaChangeOperation{
+          .statements = statements,
+      },
+      &num_succesful_statements, &commit_timestamp, &backfill_status));
 
   // Populate ResultSet metadata.
   // For simplicity in emulator, we have implemented the schema updates in such

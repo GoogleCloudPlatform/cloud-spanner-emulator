@@ -341,7 +341,7 @@ absl::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsInUpdate(
 
 absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedInsert(
     const zetasql::ResolvedInsertStmt* insert_statement,
-    const zetasql::ParameterValueMap& parameters,
+    zetasql::Catalog* catalog, const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory) {
   ZETASQL_ASSIGN_OR_RETURN(auto pending_ts_columns,
                    PendingCommitTimestampColumnsInInsert(
@@ -352,7 +352,7 @@ absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedInsert(
       insert_statement, CommonEvaluatorOptions(type_factory));
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(parameters));
-  ZETASQL_RETURN_IF_ERROR(prepared_insert->Prepare(analyzer_options));
+  ZETASQL_RETURN_IF_ERROR(prepared_insert->Prepare(analyzer_options, catalog));
 
   auto status_or = prepared_insert->Execute(parameters);
   if (!status_or.ok()) {
@@ -365,7 +365,7 @@ absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedInsert(
 
 absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedUpdate(
     const zetasql::ResolvedUpdateStmt* update_statement,
-    const zetasql::ParameterValueMap& parameters,
+    zetasql::Catalog* catalog, const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory) {
   ZETASQL_ASSIGN_OR_RETURN(auto pending_ts_columns,
                    PendingCommitTimestampColumnsInUpdate(
@@ -375,7 +375,7 @@ absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedUpdate(
       update_statement, CommonEvaluatorOptions(type_factory));
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(parameters));
-  ZETASQL_RETURN_IF_ERROR(prepared_update->Prepare(analyzer_options));
+  ZETASQL_RETURN_IF_ERROR(prepared_update->Prepare(analyzer_options, catalog));
 
   auto status_or = prepared_update->Execute(parameters);
   if (!status_or.ok()) {
@@ -388,13 +388,13 @@ absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedUpdate(
 
 absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedDelete(
     const zetasql::ResolvedDeleteStmt* delete_statement,
-    const zetasql::ParameterValueMap& parameters,
+    zetasql::Catalog* catalog, const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory) {
   auto prepared_delete = std::make_unique<zetasql::PreparedModify>(
       delete_statement, CommonEvaluatorOptions(type_factory));
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(parameters));
-  ZETASQL_RETURN_IF_ERROR(prepared_delete->Prepare(analyzer_options));
+  ZETASQL_RETURN_IF_ERROR(prepared_delete->Prepare(analyzer_options, catalog));
 
   ZETASQL_ASSIGN_OR_RETURN(auto iterator, prepared_delete->Execute(parameters));
   return BuildDelete(std::move(iterator));
@@ -404,20 +404,20 @@ absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateResolvedDelete(
 // resolved AST and returns a pair of mutation and count of modified rows.
 absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateUpdate(
     const zetasql::ResolvedStatement* resolved_statement,
-    const zetasql::ParameterValueMap& parameters,
+    zetasql::Catalog* catalog, const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory) {
   switch (resolved_statement->node_kind()) {
     case zetasql::RESOLVED_INSERT_STMT:
       return EvaluateResolvedInsert(
-          resolved_statement->GetAs<zetasql::ResolvedInsertStmt>(),
+          resolved_statement->GetAs<zetasql::ResolvedInsertStmt>(), catalog,
           parameters, type_factory);
     case zetasql::RESOLVED_UPDATE_STMT:
       return EvaluateResolvedUpdate(
-          resolved_statement->GetAs<zetasql::ResolvedUpdateStmt>(),
+          resolved_statement->GetAs<zetasql::ResolvedUpdateStmt>(), catalog,
           parameters, type_factory);
     case zetasql::RESOLVED_DELETE_STMT:
       return EvaluateResolvedDelete(
-          resolved_statement->GetAs<zetasql::ResolvedDeleteStmt>(),
+          resolved_statement->GetAs<zetasql::ResolvedDeleteStmt>(), catalog,
           parameters, type_factory);
     default:
       ZETASQL_RET_CHECK_FAIL() << "Unsupported support node kind "
@@ -607,7 +607,13 @@ absl::StatusOr<std::string> QueryEngine::GetDmlTargetTable(
 absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
     const Query& query, const QueryContext& context) const {
   absl::Time start_time = absl::Now();
-  Catalog catalog{context.schema, &function_catalog_, context.reader};
+
+  ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
+                   MakeAnalyzerOptionsWithParameters(query.declared_params));
+
+  Catalog catalog{context.schema, &function_catalog_, context.reader,
+                  analyzer_options, type_factory_};
+
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_output,
                    Analyze(query.sql, query.declared_params, &catalog,
                            type_factory_, /*prune_unused_columns=*/true));
@@ -634,9 +640,9 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
                      ExtractValidatedResolvedStatementAndOptions(
                          analyzer_output.get(), context.schema));
 
-    ZETASQL_ASSIGN_OR_RETURN(
-        const auto& mutation_and_count,
-        EvaluateUpdate(resolved_statement.get(), params, type_factory_));
+    ZETASQL_ASSIGN_OR_RETURN(const auto& mutation_and_count,
+                     EvaluateUpdate(resolved_statement.get(), &catalog, params,
+                                    type_factory_));
     ZETASQL_RETURN_IF_ERROR(context.writer->Write(mutation_and_count.first));
     result.modified_row_count = static_cast<int64_t>(mutation_and_count.second);
   }

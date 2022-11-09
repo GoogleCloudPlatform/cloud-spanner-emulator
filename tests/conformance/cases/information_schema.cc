@@ -100,6 +100,7 @@ class InformationSchemaTest : public DatabaseTest {
                                 "CHANGE_STREAMS",
                                 "CHANGE_STREAM_COLUMNS",
                                 "CHANGE_STREAM_OPTIONS",
+                                "CHANGE_STREAM_PRIVILEGES",
                                 "CHANGE_STREAM_TABLES",
                                 "VIEWS",
                                 "ROLES",

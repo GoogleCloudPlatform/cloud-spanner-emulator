@@ -17,8 +17,12 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERYABLE_COLUMN_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERYABLE_COLUMN_H_
 
+#include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 
+#include "zetasql/public/analyzer_output.h"
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/type.h"
 #include "absl/strings/str_cat.h"
@@ -37,6 +41,10 @@ class QueryableColumn : public zetasql::Column {
  public:
   QueryableColumn(const backend::Column* column) : wrapped_column_(column) {}
 
+  QueryableColumn(const backend::Column* column,
+                  std::unique_ptr<const zetasql::AnalyzerOutput> output)
+      : wrapped_column_(column), output_(std::move(output)) {}
+
   std::string Name() const override { return wrapped_column_->Name(); }
 
   std::string FullName() const override { return wrapped_column_->FullName(); }
@@ -49,11 +57,27 @@ class QueryableColumn : public zetasql::Column {
     return !wrapped_column_->is_generated();
   }
 
+  bool HasDefaultValue() const override {
+    return wrapped_column_->has_default_value();
+  }
+
+  std::optional<std::string> ExpressionString() const override {
+    return wrapped_column_->expression();
+  }
+
+  const zetasql::ResolvedExpr* Expression() const override {
+    if (!HasDefaultValue() || output_ == nullptr) return nullptr;
+    return output_->resolved_expr();
+  }
+
   const backend::Column* wrapped_column() const { return wrapped_column_; }
 
  private:
   // The underlying schema column.
   const backend::Column* wrapped_column_;
+  // The AnalyzerOutput that holds the column's ResolvedExpr, representing
+  // default value expression.
+  const std::unique_ptr<const zetasql::AnalyzerOutput> output_ = nullptr;
 };
 
 }  // namespace backend
