@@ -49,7 +49,8 @@ CreateSchemaFromDDL(absl::Span<const std::string> statements,
       .column_id_generator = &column_id_gen,
   };
   backend::SchemaUpdater updater;
-  return updater.ValidateSchemaFromDDL(statements, context);
+  return updater.ValidateSchemaFromDDL(
+      backend::SchemaChangeOperation{.statements = statements}, context);
 }
 
 // Creates a schema with a single table and an index on the table.

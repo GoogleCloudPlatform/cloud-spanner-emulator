@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 
+#include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
 #include "zetasql/public/simple_catalog.h"
@@ -49,6 +50,10 @@ class Catalog : public zetasql::EnumerableCatalog {
           RowReader* reader);
   Catalog(const Schema* schema, const FunctionCatalog* function_catalog)
       : Catalog(schema, function_catalog, /*reader=*/nullptr) {}
+
+  Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
+          RowReader* reader, const zetasql::AnalyzerOptions& options,
+          zetasql::TypeFactory* type_factory);
 
   std::string FullName() const final {
     // The name of the root catalog is "".

@@ -25,10 +25,8 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "frontend/common/uris.h"
-#include "tests/common/test_env.h"
 
 namespace google {
 namespace spanner {
@@ -51,18 +49,18 @@ class SessionExistenceTest : public testing::Test {
         absl::StrCat(instance_uri, "/databases/test-database");
 
     // Create an instance.
-    instance_api::Instance instance_pb = PARSE_TEXT_PROTO(R"(
+    instance_api::Instance instance_pb = PARSE_TEXT_PROTO(R"pb(
       name: "projects/test-project/instances/test-instance"
       display_name: ""
       node_count: 3
-    )");
+    )pb");
     ZETASQL_ASSERT_OK(
         env_->instance_manager()->CreateInstance(instance_uri, instance_pb));
     // Create a database that belongs to the instance created above.
-    std::vector<std::string> empty_schema;
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::shared_ptr<Database> database,
-        env_->database_manager()->CreateDatabase(database_uri, empty_schema));
+    backend::SchemaChangeOperation empty_schema_operation;
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> database,
+                         env_->database_manager()->CreateDatabase(
+                             database_uri, empty_schema_operation));
 
     // Create a session that belongs to the database created above.
     ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> session,

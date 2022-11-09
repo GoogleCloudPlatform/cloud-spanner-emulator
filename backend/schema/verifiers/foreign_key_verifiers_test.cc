@@ -70,7 +70,9 @@ class ForeignKeyVerifiersTest : public ::testing::Test {
   }
 
   absl::Status CreateDatabase(const std::vector<std::string>& statements) {
-    ZETASQL_ASSIGN_OR_RETURN(database_, Database::Create(&clock_, statements));
+    ZETASQL_ASSIGN_OR_RETURN(database_,
+                     Database::Create(&clock_, SchemaChangeOperation{
+                                                   .statements = statements}));
     return absl::OkStatus();
   }
 
@@ -79,7 +81,8 @@ class ForeignKeyVerifiersTest : public ::testing::Test {
     absl::Status status;
     absl::Time timestamp;
     ZETASQL_RETURN_IF_ERROR(
-        database_->UpdateSchema(statements, &succesful, &timestamp, &status));
+        database_->UpdateSchema(SchemaChangeOperation{.statements = statements},
+                                &succesful, &timestamp, &status));
     return status;
   }
 

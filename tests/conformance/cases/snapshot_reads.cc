@@ -46,36 +46,60 @@ class SnapshotReadsTest : public DatabaseTest {
 
 TEST_F(SnapshotReadsTest, CanReadWithMinTimestampBound) {
   // Insert a few rows.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", "23"}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   // Read using a min_timestamp bounded staleness.
-  EXPECT_THAT(
-      Read(Transaction::SingleUseOptions(
-               MakePastTimestamp(std::chrono::minutes(10))),
-           "Users", {"ID", "Name", "Age"}, KeySet::All()),
-      IsOkAndHoldsRows({ValueRow{1, "John", 23}, ValueRow{2, "Peter", 41}}));
+  auto result = Read(Transaction::SingleUseOptions(
+                         MakePastTimestamp(std::chrono::minutes(10))),
+                     "Users", {"ID", "Name", "Age"}, KeySet::All());
+  EXPECT_THAT(result, zetasql_base::testing::IsOk());
+  // Bounded staleness reads can return an empty set or a subset of the rows in
+  // their committed order. With a bounded staleness of 10 mins, the reads can
+  // return an empty set. When a non-empty set is returned, we want to ensure
+  // that the commit order is still respected, and the first row always exists
+  // in the results.
+  if (!result.value().empty()) {
+    EXPECT_THAT(result.value(),
+                testing::IsSupersetOf({ValueRow{1, "John", 23}}));
+  }
+  // Ensures that the bounded staleness does not return any other data, and only
+  // returns these two rows.
+  EXPECT_THAT(result.value(), testing::IsSubsetOf({ValueRow{1, "John", 23},
+                                                   ValueRow{2, "Peter", 41}}));
 }
 
 TEST_F(SnapshotReadsTest, CanReadWithMaxStalenessBound) {
   // Insert a few rows.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
-  // Read using a max statleness bound.
-  EXPECT_THAT(
-      Read(Transaction::SingleUseOptions(std::chrono::minutes(10)),
-           "Users", {"ID", "Name", "Age"}, KeySet::All()),
-      IsOkAndHoldsRows({ValueRow{1, "John", 23}, ValueRow{2, "Peter", 41}}));
+  // Read using a max staleness bound.
+  auto result = Read(Transaction::SingleUseOptions(std::chrono::minutes(10)),
+                     "Users", {"ID", "Name", "Age"}, KeySet::All());
+  EXPECT_THAT(result, zetasql_base::testing::IsOk());
+  // Bounded staleness reads can return an empty set or a subset of the rows in
+  // their committed order. With a bounded staleness of 10 mins, the reads can
+  // return an empty set. When a non-empty set is returned, we want to ensure
+  // that the commit order is still respected, and the first row always exists
+  // in the results.
+  if (!result.value().empty()) {
+    EXPECT_THAT(result.value(),
+                testing::IsSupersetOf({ValueRow{1, "John", 23}}));
+  }
+  // Ensures that the bounded staleness does not return any other data, and only
+  // returns these two rows.
+  EXPECT_THAT(result.value(), testing::IsSubsetOf({ValueRow{1, "John", 23},
+                                                   ValueRow{2, "Peter", 41}}));
 }
 
 TEST_F(SnapshotReadsTest, CanReadWithExactTimestamp) {
   // Insert a row.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
 
   // Sleep for 2s, and then insert another row.
   absl::SleepFor(absl::Seconds(2));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   // Read using an exact timestamp option set at 1s in the past. Only row 1
   // is visible at that timestamp.
@@ -87,11 +111,11 @@ TEST_F(SnapshotReadsTest, CanReadWithExactTimestamp) {
 
 TEST_F(SnapshotReadsTest, CanReadWithExactStaleness) {
   // Insert a row.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
 
   // Sleep for 2s, and then insert another row.
   absl::SleepFor(absl::Seconds(2));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   // Read using an exact staleness option set to 1s in the past. Only
   // row 1 is visible at that timestamp.
@@ -103,8 +127,8 @@ TEST_F(SnapshotReadsTest, CanReadWithExactStaleness) {
 
 TEST_F(SnapshotReadsTest, CanReadWithExactTimestampInFuture) {
   // Insert a row.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   // Read using an exact timestamp option set to 100 ms in the future. Able to
   // read all the rows, but will wait for ~100 ms to pass before returning. Use
@@ -122,8 +146,8 @@ TEST_F(SnapshotReadsTest, CanReadWithExactTimestampInFuture) {
 
 TEST_F(SnapshotReadsTest, CanReadWithMinTimestampBoundInFuture) {
   // Insert a few rows.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", "23"}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", "23"}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   // Read using a min_timestamp bound set to 100 ms in future. Able to read all
   // rows, but will wait for ~100 ms to pass before returning. Use a larger time
@@ -141,8 +165,8 @@ TEST_F(SnapshotReadsTest, CanReadWithMinTimestampBoundInFuture) {
 
 TEST_F(SnapshotReadsTest, CannnotReadWithExactTimestampTooFarInFuture) {
   // Insert a row.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   if (!in_prod_env()) {
     EXPECT_THAT(Read(Transaction::SingleUseOptions(Transaction::ReadOnlyOptions(
@@ -154,8 +178,8 @@ TEST_F(SnapshotReadsTest, CannnotReadWithExactTimestampTooFarInFuture) {
 
 TEST_F(SnapshotReadsTest, CannnotQueryWithExactTimestampTooFarInFuture) {
   // Insert a row.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   if (!in_prod_env()) {
     EXPECT_THAT(QuerySingleUseTransaction(
@@ -168,8 +192,8 @@ TEST_F(SnapshotReadsTest, CannnotQueryWithExactTimestampTooFarInFuture) {
 
 TEST_F(SnapshotReadsTest, CannnotReadWithMinTimestampBoundTooFarInFuture) {
   // Insert a row.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   if (!in_prod_env()) {
     EXPECT_THAT(Read(Transaction::SingleUseOptions(
@@ -181,8 +205,8 @@ TEST_F(SnapshotReadsTest, CannnotReadWithMinTimestampBoundTooFarInFuture) {
 
 TEST_F(SnapshotReadsTest, CannnotQueryWithMinTimestampBoundTooFarInFuture) {
   // Insert a row.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   if (!in_prod_env()) {
     EXPECT_THAT(QuerySingleUseTransaction(

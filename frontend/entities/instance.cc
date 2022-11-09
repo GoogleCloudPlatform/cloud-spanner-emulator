@@ -33,6 +33,7 @@ void Instance::ToProto(admin::instance::v1::Instance* instance) const {
   instance->set_config(config_);
   instance->set_display_name(display_name_);
   instance->set_node_count(node_count_);
+  instance->set_processing_units(processing_units_);
   instance->mutable_labels()->insert(labels_.begin(), labels_.end());
   // Instances are always in ready state.
   instance->set_state(admin::instance::v1::Instance::READY);

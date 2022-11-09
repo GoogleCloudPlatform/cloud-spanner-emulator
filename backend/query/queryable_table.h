@@ -42,6 +42,11 @@ class QueryableTable : public zetasql::Table {
  public:
   QueryableTable(const backend::Table* table, RowReader* reader);
 
+  QueryableTable(const backend::Table* table, RowReader* reader,
+                 const zetasql::AnalyzerOptions& options,
+                 zetasql::Catalog* catalog,
+                 zetasql::TypeFactory* type_factory);
+
   std::string Name() const override { return wrapped_table_->Name(); }
 
   // FullName is used in debugging so it's OK to not include full path here.

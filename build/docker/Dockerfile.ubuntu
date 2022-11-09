@@ -34,18 +34,8 @@ RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
                         --slave   /usr/bin/g++ g++ /usr/bin/g++-8           && \
     update-alternatives --set gcc /usr/bin/gcc-8
 
-# Copy over the emulator code base into the container. We explicitly copy only
-# the required files to maximize chances that the layer will be cached. There
-# does not seem to be a nicer way to do this than multiple COPY commands as
-# COPY copies the contents of the source, not the directory itself.
-COPY BUILD.bazel WORKSPACE maven_install.json .bazelrc src/
-COPY common      src/common/
-COPY gateway     src/gateway/
-COPY frontend    src/frontend/
-COPY backend     src/backend/
-COPY binaries    src/binaries/
-COPY tests       src/tests/
-COPY build/bazel src/build/bazel/
+# Copy over the emulator code base into the container.
+COPY . src/
 
 # Build the emulator.
 RUN cd src                                                                  && \

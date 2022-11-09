@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
@@ -25,15 +26,8 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "absl/memory/memory.h"
-#include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "backend/database/database.h"
-#include "backend/schema/builders/column_builder.h"
-#include "backend/schema/catalog/column.h"
-#include "backend/schema/catalog/table.h"
-#include "backend/schema/updater/schema_validation_context.h"
-#include "backend/storage/in_memory_storage.h"
 #include "common/clock.h"
 #include "common/errors.h"
 
@@ -52,19 +46,20 @@ using zetasql::values::Timestamp;
 
 class ColumnValueVerifiersTest : public ::testing::Test {
  public:
-  ColumnValueVerifiersTest() {}
+  ColumnValueVerifiersTest() = default;
 
   absl::Status UpdateSchema(absl::Span<const std::string> update_statements) {
     int num_succesful;
     absl::Status backfill_status;
     absl::Time update_time;
-    ZETASQL_RETURN_IF_ERROR(database_->UpdateSchema(update_statements, &num_succesful,
-                                            &update_time, &backfill_status));
+    ZETASQL_RETURN_IF_ERROR(database_->UpdateSchema(
+        SchemaChangeOperation{.statements = update_statements}, &num_succesful,
+        &update_time, &backfill_status));
     return backfill_status;
   }
 
   void SetUp() override {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(database_, Database::Create(&clock_, {R"(
+    std::vector<std::string> statements = {R"(
                             CREATE TABLE TestTable (
                               int64_col INT64,
                               string_col STRING(30),
@@ -72,7 +67,10 @@ class ColumnValueVerifiersTest : public ::testing::Test {
                               bytes_array_col ARRAY<BYTES(30)>,
                               timestamp_col TIMESTAMP
                             ) PRIMARY KEY (int64_col)
-                          )"}));
+                          )"};
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        database_, Database::Create(&clock_, SchemaChangeOperation{
+                                                 .statements = statements}));
 
     ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(

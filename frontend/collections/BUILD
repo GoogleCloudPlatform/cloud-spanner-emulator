@@ -24,6 +24,7 @@ cc_library(
     hdrs = ["database_manager.h"],
     deps = [
         "//backend/database",
+        "//backend/schema/updater:schema_updater",
         "//common:clock",
         "//common:errors",
         "//common:limits",

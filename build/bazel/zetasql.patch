@@ -22,13 +22,3 @@
  import operator
  import re
  
---- zetasql/resolved_ast/BUILD
-+++ zetasql/resolved_ast/BUILD
-@@ -33,6 +33,7 @@ py_binary(
-         "@markupsafe//:markupsafe",
-         "//zetasql/parser:generator_utils",
-     ],
-+    python_version = "PY3",
- )
- 
- gen_resolved_ast_files(

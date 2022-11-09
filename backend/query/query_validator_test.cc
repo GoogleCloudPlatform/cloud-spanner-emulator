@@ -16,9 +16,14 @@
 
 #include "backend/query/query_validator.h"
 
+#include <map>
 #include <memory>
+#include <string>
 #include <utility>
 
+#include "zetasql/public/builtin_function.h"
+#include "zetasql/public/types/type_factory.h"
+#include "zetasql/resolved_ast/make_node_vector.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -36,6 +41,7 @@ namespace backend {
 
 namespace {
 
+using zetasql::Function;
 using zetasql_base::testing::StatusIs;
 
 class QueryValidatorTest : public testing::Test {
@@ -154,6 +160,72 @@ TEST_F(QueryValidatorTest, CollectEmulatorOnlyOptionsFromHints) {
     ZETASQL_ASSERT_OK(resolved_query_stmt->Accept(&validator));
     EXPECT_TRUE(opts.disable_query_partitionability_check);
   }
+}
+
+TEST_F(QueryValidatorTest, ValidateDisableInlineHintReturnsOK) {
+  zetasql::TypeFactory type_factory;
+  std::map<std::string, std::unique_ptr<zetasql::Function>> functions;
+  zetasql::ZetaSQLBuiltinFunctionOptions options;
+
+  zetasql::GetZetaSQLFunctions(&type_factory, options, &functions);
+
+  zetasql::Function* substr = functions["substr"].get();
+  const zetasql::FunctionSignature* signature = substr->GetSignature(0);
+
+  std::unique_ptr<zetasql::ResolvedFunctionCall> resolved_function_call =
+      zetasql::MakeResolvedFunctionCall(
+          zetasql::types::StringType(), substr, *signature,
+          zetasql::MakeNodeVectorP<const zetasql::ResolvedExpr>(
+              zetasql::MakeResolvedLiteral(zetasql::Value::String("Hello")),
+              zetasql::MakeResolvedLiteral(zetasql::Value::Int32(0)),
+              zetasql::MakeResolvedLiteral(zetasql::Value::Int32(1))),
+          zetasql::ResolvedFunctionCall::DEFAULT_ERROR_MODE);
+
+  resolved_function_call->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"disable_inline",
+      zetasql::MakeResolvedLiteral(zetasql::Value::Bool(true))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{schema(), &opts};
+  ZETASQL_ASSERT_OK(resolved_function_call->Accept(&validator));
+}
+
+TEST_F(QueryValidatorTest, HashJoinExecutionHintOnePassReturnsOk) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  auto resolved_join_scan = zetasql::MakeResolvedJoinScan();
+  resolved_join_scan->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"hash_join_execution",
+      zetasql::MakeResolvedLiteral(zetasql::Value::String("one_pass"))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{schema(), &opts};
+  ZETASQL_ASSERT_OK(resolved_join_scan->Accept(&validator));
+}
+
+TEST_F(QueryValidatorTest, HashJoinExecutionHintMultiPassReturnsOk) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  auto resolved_join_scan = zetasql::MakeResolvedJoinScan();
+  resolved_join_scan->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"hash_join_execution",
+      zetasql::MakeResolvedLiteral(zetasql::Value::String("multi_pass"))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{schema(), &opts};
+  ZETASQL_ASSERT_OK(resolved_join_scan->Accept(&validator));
+}
+
+TEST_F(QueryValidatorTest, HashJoinExecutionHintInvalidReturnsError) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  auto resolved_join_scan = zetasql::MakeResolvedJoinScan();
+  resolved_join_scan->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"hash_join_execution",
+      zetasql::MakeResolvedLiteral(
+          zetasql::Value::String("invalid_value"))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{schema(), &opts};
+  ASSERT_THAT(resolved_join_scan->Accept(&validator),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

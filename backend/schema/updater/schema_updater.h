@@ -18,9 +18,10 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_SCHEMA_UPDATER_H_
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "zetasql/public/type.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -36,6 +37,11 @@ namespace emulator {
 namespace backend {
 
 static constexpr char kIndexDataTablePrefix[] = "_index_data_table_";
+
+// Container holding all the required inputs for processing a schema change.
+struct SchemaChangeOperation {
+  absl::Span<const std::string> statements;
+};
 
 // Database context within which a schema change is processed.
 struct SchemaChangeContext {
@@ -74,18 +80,19 @@ class SchemaUpdater {
  public:
   SchemaUpdater() = default;
 
-  // Creates a new Schema from `statements` or returns the error encountered
-  // while applying the first invalid statement. Also runs any backfill or
-  // data-dependent verification tasks resulting from the new schema such as
-  // creation of a new index. However, since the database will not contain any
-  // data at this point, none of the backfill tasks are expected to fail.
+  // Creates a new Schema from `schema_change_operation.statements` or returns
+  // the error encountered while applying the first invalid statement. Also runs
+  // any backfill or data-dependent verification tasks resulting from the new
+  // schema such as creation of a new index. However, since the database will
+  // not contain any data at this point, none of the backfill tasks are expected
+  // to fail.
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchemaFromDDL(
-      absl::Span<const std::string> statements,
+      const SchemaChangeOperation& schema_change_operation,
       const SchemaChangeContext& context);
 
-  // Applies the DDL statements in `statements` on top of `existing_schema`. Any
-  // errors during semantic validation of the provided `statements` are
-  // communicated through the return status of the function.
+  // Applies the DDL statements in `schema_change_operation.statements` on top
+  // of `existing_schema`. Any errors during semantic validation of the provided
+  // `statements` are communicated through the return status of the function.
   //
   // If the set of statements is semantically valid, but results in a schema
   // verification/backfill error, then that is communicated through the returned
@@ -94,14 +101,15 @@ class SchemaUpdater {
   // successfully applied statements returned in the `updated_schema` and
   // `num_successful_statements` members respectively.
   absl::StatusOr<SchemaChangeResult> UpdateSchemaFromDDL(
-      const Schema* existing_schema, absl::Span<const std::string> statements,
+      const Schema* existing_schema,
+      const SchemaChangeOperation& schema_change_operation,
       const SchemaChangeContext& context);
 
   // Validates the given set DDL statements, producing a new schema with the
   // DDL statements applied. Does not run any backfill/verification tasks
   // entailed by `statements`.
   absl::StatusOr<std::unique_ptr<const Schema>> ValidateSchemaFromDDL(
-      absl::Span<const std::string> statements,
+      const SchemaChangeOperation& schema_change_operation,
       const SchemaChangeContext& context,
       const Schema* existing_schema = nullptr);
 

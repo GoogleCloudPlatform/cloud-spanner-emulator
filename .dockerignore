@@ -1,0 +1,12 @@
+bazel-*
+.git
+.gitignore
+*.md
+LICENSE
+.dockerignore
+build/docker/
+build/gcb/
+build/kokoro/
+copybara
+METADATA
+OWNERS*

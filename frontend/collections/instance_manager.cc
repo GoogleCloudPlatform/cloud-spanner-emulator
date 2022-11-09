@@ -69,12 +69,31 @@ absl::StatusOr<std::shared_ptr<Instance>> InstanceManager::CreateInstance(
     const std::string& instance_uri,
     const instance_api::Instance& instance_proto) {
   absl::MutexLock lock(&mu_);
+  if (instance_proto.node_count() > 0 &&
+      instance_proto.processing_units() > 0) {
+    return error::InvalidCreateInstanceRequestUnitsNotBoth();
+  }
+  if (instance_proto.processing_units() > 0 &&
+      instance_proto.processing_units() < 1000 &&
+      instance_proto.processing_units() % 100 != 0) {
+    return error::InvalidCreateInstanceRequestUnitsMultiple();
+  }
+  if (instance_proto.processing_units() > 1000 &&
+      instance_proto.processing_units() % 1000 != 0) {
+    return error::InvalidCreateInstanceRequestUnitsMultiple();
+  }
+  int32_t processing_units;
+  if (instance_proto.node_count() > 0) {
+    processing_units = instance_proto.node_count() * 1000;
+  } else {
+    processing_units = instance_proto.processing_units();
+  }
   Labels labels(instance_proto.labels().begin(), instance_proto.labels().end());
   auto inserted = instances_.insert(
       {instance_uri,
        std::make_shared<Instance>(
            instance_uri, instance_proto.config(), instance_proto.display_name(),
-           instance_proto.node_count(), labels, zetasql_base::Clock::RealClock())});
+           processing_units, labels, zetasql_base::Clock::RealClock())});
   if (!inserted.second) {
     return error::InstanceAlreadyExists(instance_uri);
   }

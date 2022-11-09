@@ -36,7 +36,6 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/types/optional.h"
-#include "backend/datamodel/types.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/query_engine_options.h"
@@ -55,14 +54,12 @@
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_graph_editor.h"
-#include "backend/schema/parser/DDLParser.h"
 #include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "backend/schema/verifiers/check_constraint_verifiers.h"
 #include "backend/schema/verifiers/foreign_key_verifiers.h"
-#include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "zetasql/base/status_macros.h"
@@ -112,7 +109,7 @@ class SchemaUpdaterImpl {
   // Apply DDL statements returning the SchemaValidationContext containing
   // the schema change actions resulting from each statement.
   absl::StatusOr<std::vector<SchemaValidationContext>> ApplyDDLStatements(
-      absl::Span<const std::string> statements);
+      const SchemaChangeOperation& schema_change_operation);
 
   std::vector<std::unique_ptr<const Schema>> GetIntermediateSchemas() {
     return std::move(intermediate_schemas_);
@@ -395,10 +392,10 @@ SchemaUpdaterImpl::ApplyDDLStatement(absl::string_view statement) {
 
 absl::StatusOr<std::vector<SchemaValidationContext>>
 SchemaUpdaterImpl::ApplyDDLStatements(
-    absl::Span<const std::string> statements) {
+    const SchemaChangeOperation& schema_change_operation) {
   std::vector<SchemaValidationContext> pending_work;
 
-  for (const auto& statement : statements) {
+  for (const auto& statement : schema_change_operation.statements) {
     ZETASQL_VLOG(2) << "Applying statement " << statement;
     SchemaValidationContext statement_context{
         storage_, &global_names_, type_factory_, schema_change_timestamp_};
@@ -1670,9 +1667,9 @@ const Schema* SchemaUpdater::EmptySchema() {
 }
 
 absl::StatusOr<std::unique_ptr<const Schema>>
-SchemaUpdater::ValidateSchemaFromDDL(absl::Span<const std::string> statements,
-                                     const SchemaChangeContext& context,
-                                     const Schema* existing_schema) {
+SchemaUpdater::ValidateSchemaFromDDL(
+    const SchemaChangeOperation& schema_change_operation,
+    const SchemaChangeContext& context, const Schema* existing_schema) {
   if (existing_schema == nullptr) {
     existing_schema = EmptySchema();
   }
@@ -1681,7 +1678,8 @@ SchemaUpdater::ValidateSchemaFromDDL(absl::Span<const std::string> statements,
                        context.type_factory, context.table_id_generator,
                        context.column_id_generator, context.storage,
                        context.schema_change_timestamp, existing_schema));
-  ZETASQL_ASSIGN_OR_RETURN(pending_work_, updater.ApplyDDLStatements(statements));
+  ZETASQL_ASSIGN_OR_RETURN(pending_work_,
+                   updater.ApplyDDLStatements(schema_change_operation));
   intermediate_schemas_ = updater.GetIntermediateSchemas();
 
   std::unique_ptr<const Schema> new_schema = nullptr;
@@ -1704,14 +1702,16 @@ absl::Status SchemaUpdater::RunPendingActions(int* num_succesful) {
 }
 
 absl::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
-    const Schema* existing_schema, absl::Span<const std::string> statements,
+    const Schema* existing_schema,
+    const SchemaChangeOperation& schema_change_operation,
     const SchemaChangeContext& context) {
   ZETASQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
                    SchemaUpdaterImpl::Build(
                        context.type_factory, context.table_id_generator,
                        context.column_id_generator, context.storage,
                        context.schema_change_timestamp, existing_schema));
-  ZETASQL_ASSIGN_OR_RETURN(pending_work_, updater.ApplyDDLStatements(statements));
+  ZETASQL_ASSIGN_OR_RETURN(pending_work_,
+                   updater.ApplyDDLStatements(schema_change_operation));
   intermediate_schemas_ = updater.GetIntermediateSchemas();
 
   // Use the schema snapshot for the last succesful statement.
@@ -1731,10 +1731,12 @@ absl::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
 }
 
 absl::StatusOr<std::unique_ptr<const Schema>>
-SchemaUpdater::CreateSchemaFromDDL(absl::Span<const std::string> statements,
-                                   const SchemaChangeContext& context) {
-  ZETASQL_ASSIGN_OR_RETURN(SchemaChangeResult result,
-                   UpdateSchemaFromDDL(EmptySchema(), statements, context));
+SchemaUpdater::CreateSchemaFromDDL(
+    const SchemaChangeOperation& schema_change_operation,
+    const SchemaChangeContext& context) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      SchemaChangeResult result,
+      UpdateSchemaFromDDL(EmptySchema(), schema_change_operation, context));
   ZETASQL_RETURN_IF_ERROR(result.backfill_status);
   return std::move(result.updated_schema);
 }

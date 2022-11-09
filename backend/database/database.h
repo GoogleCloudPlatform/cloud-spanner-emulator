@@ -26,7 +26,6 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "absl/types/span.h"
 #include "absl/types/variant.h"
 #include "backend/actions/manager.h"
 #include "backend/common/ids.h"
@@ -57,7 +56,7 @@ class Database {
   // create_statements. Returns an error if create_statements are invalid, or if
   // failed to create the database.
   static absl::StatusOr<std::unique_ptr<Database>> Create(
-      Clock* clock, const std::vector<std::string>& create_statements);
+      Clock* clock, const SchemaChangeOperation& schema_change_operation);
 
   // Creates a read only transaction attached to this database.
   absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
@@ -75,15 +74,16 @@ class Database {
   // incoming schema change requests will be rejected with a FAILED_PRECONDITION
   // error.
   //
-  // DDL statements in `statements` are applied one-by-one until they either all
-  // succeed or the first failure is encoutered.
+  // DDL statements in `schema_change_operation.statements` are applied
+  // one-by-one until they either all succeed or the first failure is
+  // encoutered.
   //
   // On return `num_successful_statements` will contain the number of
   // successfully applied DDL statements and `commit_timestamp` will contain the
   // timestamp at which they were applied.
   //
-  // If all the statements in `statements` are applied succesfully, both
-  // `backfill_status` and the returned status will be set to
+  // If all the statements in `schema_change_operation.statements` are applied
+  // succesfully, both `backfill_status` and the returned status will be set to
   // absl::OkStatus().
   //
   // If all the statements are semantically valid then the return status will
@@ -96,10 +96,10 @@ class Database {
   // encountered while processing the backfill/verification actions for the
   // statements, then the first such error will be returned in
   // `backfill_status`.
-  absl::Status UpdateSchema(absl::Span<const std::string> statements,
-                            int* num_succesful_statements,
-                            absl::Time* commit_timestamp,
-                            absl::Status* backfill_status);
+  absl::Status UpdateSchema(
+      const SchemaChangeOperation& schema_change_operation,
+      int* num_succesful_statements, absl::Time* commit_timestamp,
+      absl::Status* backfill_status);
 
   // Retrives the current version of the schema.
   const Schema* GetLatestSchema() const;

@@ -75,12 +75,12 @@ TEST(ParseCreateTable, CanParseCreateTableWithNoColumns) {
                     ) PRIMARY KEY ()
                     )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       constraints { primary_key {} }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CannotParseCreateTableWithoutName) {
@@ -112,7 +112,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumn) {
                     ) PRIMARY KEY (UserId)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -124,7 +124,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumn) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumnTrailingComma) {
@@ -135,7 +135,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumnTrailingComma) {
                     ) PRIMARY KEY (UserId)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -147,7 +147,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumnTrailingComma) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumn) {
@@ -158,7 +158,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumn) {
                     ) PRIMARY KEY ()
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -167,7 +167,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumn) {
                       }
                       constraints { primary_key {} }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumnTrailingComma) {
@@ -178,7 +178,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumnTrailingComma) {
                     ) PRIMARY KEY ()
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -187,7 +187,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumnTrailingComma) {
                       }
                       constraints { primary_key {} }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithKeyAndNonKeyColumns) {
@@ -199,7 +199,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithKeyAndNonKeyColumns) {
                     ) PRIMARY KEY (UserId)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -215,7 +215,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithKeyAndNonKeyColumns) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumns) {
@@ -227,7 +227,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumns) {
                     ) PRIMARY KEY (UserId, Name)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -247,7 +247,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumns) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithTwoNonKeyColumns) {
@@ -259,7 +259,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithTwoNonKeyColumns) {
                     ) PRIMARY KEY ()
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -272,7 +272,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithTwoNonKeyColumns) {
                       }
                       constraints { primary_key {} }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumnsAndANonKeyColumn) {
@@ -285,7 +285,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumnsAndANonKeyColumn) {
                     ) PRIMARY KEY (UserId, Name)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -309,7 +309,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumnsAndANonKeyColumn) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithAKeyColumnAndTwoNonKeyColumns) {
@@ -322,7 +322,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithAKeyColumnAndTwoNonKeyColumns) {
                     ) PRIMARY KEY (UserId)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -342,7 +342,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithAKeyColumnAndTwoNonKeyColumns) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateInterleavedTableWithNoColumns) {
@@ -352,7 +352,7 @@ TEST(ParseCreateTable, CanParseCreateInterleavedTableWithNoColumns) {
                     ) PRIMARY KEY (), INTERLEAVE IN PARENT Users ON DELETE CASCADE
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Albums"
                       constraints { primary_key {} }
@@ -364,7 +364,7 @@ TEST(ParseCreateTable, CanParseCreateInterleavedTableWithNoColumns) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateInterleavedTableWithKeyAndNonKeyColumns) {
@@ -379,7 +379,7 @@ TEST(ParseCreateTable, CanParseCreateInterleavedTableWithKeyAndNonKeyColumns) {
                       INTERLEAVE IN PARENT Users ON DELETE CASCADE
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Albums"
                       columns {
@@ -416,7 +416,7 @@ TEST(ParseCreateTable, CanParseCreateInterleavedTableWithKeyAndNonKeyColumns) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable,
@@ -427,7 +427,7 @@ TEST(ParseCreateTable,
                     ) PRIMARY KEY (), INTERLEAVE IN PARENT Users ON DELETE NO ACTION
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Albums"
                       constraints { primary_key {} }
@@ -439,7 +439,7 @@ TEST(ParseCreateTable,
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable,
@@ -450,7 +450,7 @@ TEST(ParseCreateTable,
                     ) PRIMARY KEY (), INTERLEAVE IN PARENT Users
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Albums"
                       constraints { primary_key {} }
@@ -462,7 +462,7 @@ TEST(ParseCreateTable,
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithAnArrayField) {
@@ -474,7 +474,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithAnArrayField) {
                     ) PRIMARY KEY (UserId)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -496,7 +496,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithAnArrayField) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithNotNullArrayField) {
@@ -508,7 +508,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithNotNullArrayField) {
                     ) PRIMARY KEY (UserId)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -530,7 +530,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithNotNullArrayField) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithoutInterleaveClause) {
@@ -542,7 +542,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithoutInterleaveClause) {
                     ) PRIMARY KEY (UserId)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -558,7 +558,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithoutInterleaveClause) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithForeignKeys) {
@@ -739,7 +739,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithNumeric) {
                     ) PRIMARY KEY (K)
                   )"),
       IsOkAndHolds(test::EqualsProto(
-          R"(
+          R"pb(
             create_table {
               table_name: "T"
               columns {
@@ -762,7 +762,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithNumeric) {
               }
               constraints { primary_key { key_part { key_column_name: "K" } } }
             }
-          )")));
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
@@ -1297,7 +1297,7 @@ TEST(ParseAlterTable, CanParseAlterColumn) {
                     ALTER TABLE Users ALTER COLUMN Notes STRING(MAX)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "Users"
                       alter_column {
@@ -1309,7 +1309,7 @@ TEST(ParseAlterTable, CanParseAlterColumn) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAlterColumnNotNull) {
@@ -1318,7 +1318,7 @@ TEST(ParseAlterTable, CanParseAlterColumnNotNull) {
                     ALTER TABLE Users ALTER COLUMN Notes STRING(MAX) NOT NULL
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "Users"
                       alter_column {
@@ -1331,7 +1331,7 @@ TEST(ParseAlterTable, CanParseAlterColumnNotNull) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAlterColumnNamedColumn) {
@@ -1341,7 +1341,7 @@ TEST(ParseAlterTable, CanParseAlterColumnNamedColumn) {
                     ALTER TABLE Users ALTER COLUMN `COLUMN` STRING(MAX)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "Users"
                       alter_column {
@@ -1353,7 +1353,7 @@ TEST(ParseAlterTable, CanParseAlterColumnNamedColumn) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 
   // Columns named "COLUMN" can be modified even without quotes.
   EXPECT_THAT(ParseDDLStatement(
@@ -1361,7 +1361,7 @@ TEST(ParseAlterTable, CanParseAlterColumnNamedColumn) {
                     ALTER TABLE Users ALTER COLUMN COLUMN STRING(MAX)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "Users"
                       alter_column {
@@ -1373,7 +1373,7 @@ TEST(ParseAlterTable, CanParseAlterColumnNamedColumn) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseAlterTable, CannotParseAlterColumnMissingColumnName) {
@@ -1430,7 +1430,7 @@ TEST(ParseAlterTable, CanParseSetOnDeleteNoAction) {
             ALTER TABLE Albums SET ON DELETE NO ACTION
           )"),
       IsOkAndHolds(test::EqualsProto(
-          R"(
+          R"pb(
             alter_table {
               table_name: "Albums"
               alter_constraint {
@@ -1438,7 +1438,7 @@ TEST(ParseAlterTable, CanParseSetOnDeleteNoAction) {
                 constraint { interleave { on_delete { action: NO_ACTION } } }
               }
             }
-          )")));
+          )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAlterTableWithRowDeletionPolicy) {
@@ -1506,12 +1506,12 @@ TEST(Miscellaneous, CanParseExtraWhitespaceCharacters) {
                     CREATE TABLE   Users () PRIMARY KEY()
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       constraints { primary_key {} }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(Miscellaneous, CannotParseSmartQuotes) {
@@ -1535,7 +1535,7 @@ TEST(Miscellaneous, CanParseMixedCaseStatements) {
                     ) PRIMARY KEY (UserId)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Users"
                       columns {
@@ -1551,7 +1551,7 @@ TEST(Miscellaneous, CanParseMixedCaseStatements) {
                         primary_key { key_part { key_column_name: "UserId" } }
                       }
                     }
-                  )")));
+                  )pb")));
 
   EXPECT_THAT(ParseDDLStatement(
                   R"(
@@ -1564,7 +1564,7 @@ TEST(Miscellaneous, CanParseMixedCaseStatements) {
                       INTERLEAVE in PARENT Users ON DELETE CASCADE
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Albums"
                       columns {
@@ -1601,7 +1601,7 @@ TEST(Miscellaneous, CanParseMixedCaseStatements) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(Miscellaneous, CanParseCustomFieldLengths) {
@@ -1617,7 +1617,7 @@ TEST(Miscellaneous, CanParseCustomFieldLengths) {
                     ) PRIMARY KEY (Name)
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Sizes"
                       columns {
@@ -1648,7 +1648,7 @@ TEST(Miscellaneous, CanParseCustomFieldLengths) {
                         primary_key { key_part { key_column_name: "Name" } }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(Miscellaneous, CanParseTimestamps) {
@@ -1661,7 +1661,7 @@ TEST(Miscellaneous, CanParseTimestamps) {
                     ) PRIMARY KEY ()
                   )"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "Sizes"
                       columns {
@@ -1678,7 +1678,7 @@ TEST(Miscellaneous, CanParseTimestamps) {
                       }
                       constraints { primary_key {} }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(Miscellaneous, CannotParseStringFieldsWithoutLength) {
@@ -1713,7 +1713,7 @@ TEST(Miscellaneous, CanParseQuotedIdentifiers) {
             ) PRIMARY KEY (`C`)
           )"),
       IsOkAndHolds(test::EqualsProto(
-          R"(
+          R"pb(
             create_table {
               table_name: "T"
               columns {
@@ -1723,7 +1723,7 @@ TEST(Miscellaneous, CanParseQuotedIdentifiers) {
               }
               constraints { primary_key { key_part { key_column_name: "C" } } }
             }
-          )")));
+          )pb")));
 }
 
 // AllowCommitTimestamp
@@ -1739,7 +1739,7 @@ TEST(AllowCommitTimestamp, CanParseSingleOption) {
             ) PRIMARY KEY ()
           )"),
       IsOkAndHolds(test::EqualsProto(
-          R"(
+          R"pb(
             create_table {
               table_name: "Users"
               columns {
@@ -1751,7 +1751,7 @@ TEST(AllowCommitTimestamp, CanParseSingleOption) {
               }
               constraints { primary_key {} }
             }
-          )")));
+          )pb")));
 }
 
 TEST(AllowCommitTimestamp, CanClearOptionWithNull) {
@@ -1765,7 +1765,7 @@ TEST(AllowCommitTimestamp, CanClearOptionWithNull) {
             ) PRIMARY KEY ()
           )"),
       IsOkAndHolds(test::EqualsProto(
-          R"(
+          R"pb(
             create_table {
               table_name: "Users"
               columns {
@@ -1777,7 +1777,7 @@ TEST(AllowCommitTimestamp, CanClearOptionWithNull) {
               }
               constraints { primary_key {} }
             }
-          )")));
+          )pb")));
 }
 
 TEST(AllowCommitTimestamp, CannotParseSingleInvalidOption) {
@@ -1818,7 +1818,7 @@ TEST(AllowCommitTimestamp, CanParseMultipleOptions) {
             ) PRIMARY KEY ()
           )"),
       IsOkAndHolds(test::EqualsProto(
-          R"(
+          R"pb(
             create_table {
               table_name: "Users"
               columns {
@@ -1838,7 +1838,7 @@ TEST(AllowCommitTimestamp, CanParseMultipleOptions) {
               }
               constraints { primary_key {} }
             }
-          )")));
+          )pb")));
 }
 
 TEST(AllowCommitTimestamp, CannotParseMultipleOptionsWithTrailingComma) {
@@ -1859,7 +1859,7 @@ TEST(AllowCommitTimestamp, SetThroughOptions) {
     ALTER TABLE Users ALTER COLUMN UpdateTs
     SET OPTIONS (allow_commit_timestamp = true))"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "Users"
                       alter_column {
@@ -1876,7 +1876,7 @@ TEST(AllowCommitTimestamp, SetThroughOptions) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(AllowCommitTimestamp, CannotParseInvalidOptionValue) {
@@ -2636,7 +2636,7 @@ TEST_F(CheckConstraint, ParseSyntaxErrorsInCheckConstraint) {
   EXPECT_THAT(
       ParseDDLStatement("ALTER TABLE T ADD CONSTRAINT GROUPS CHECK(B > `A`))"),
       StatusIs(absl::StatusCode::kInvalidArgument,
-               HasSubstr("Encountered 'GROUPS' while parsing: identifier")));
+               HasSubstr("Encountered 'GROUPS' while parsing")));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ADD CHECK(()"),
               StatusIs(absl::StatusCode::kInvalidArgument,

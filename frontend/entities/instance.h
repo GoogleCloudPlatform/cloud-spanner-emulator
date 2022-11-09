@@ -36,12 +36,13 @@ namespace frontend {
 class Instance {
  public:
   Instance(const std::string& name, const std::string config,
-           const std::string& display_name, int32_t node_count, Labels labels,
-           zetasql_base::Clock* clock)
+           const std::string& display_name, int32_t processing_units,
+           Labels labels, zetasql_base::Clock* clock)
       : name_(name),
         config_(config),
         display_name_(display_name),
-        node_count_(node_count),
+        node_count_(processing_units / 1000),
+        processing_units_(processing_units),
         labels_(labels) {
     auto current_time = clock->TimeNow();
     create_time_ = current_time;
@@ -66,6 +67,9 @@ class Instance {
 
   // The number of nodes in this instance.
   int32_t node_count_;
+
+  // The number of processing units in this instance.
+  int32_t processing_units_;
 
   // The labels for this instance.
   Labels labels_;

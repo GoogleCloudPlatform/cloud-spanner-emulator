@@ -78,6 +78,16 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
   }
 }
 
+Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
+                 RowReader* reader, const zetasql::AnalyzerOptions& options,
+                 zetasql::TypeFactory* type_factory)
+    : schema_(schema), function_catalog_(function_catalog) {
+  for (const auto* table : schema->tables()) {
+    tables_[table->Name()] = std::make_unique<QueryableTable>(
+        table, reader, options, this, type_factory);
+  }
+}
+
 absl::Status Catalog::GetCatalog(const std::string& name,
                                  zetasql::Catalog** catalog,
                                  const FindOptions& options) {

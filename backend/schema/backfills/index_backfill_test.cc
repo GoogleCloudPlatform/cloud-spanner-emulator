@@ -27,10 +27,9 @@
 #include "absl/types/span.h"
 #include "backend/database/database.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/schema/updater/schema_updater.h"
 #include "backend/transaction/options.h"
 #include "common/errors.h"
-#include "tests/common/actions.h"
-#include "tests/common/schema_constructor.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
@@ -53,23 +52,25 @@ class BackfillTest : public ::testing::Test {
     int num_succesful;
     absl::Status backfill_status;
     absl::Time update_time;
-    ZETASQL_RETURN_IF_ERROR(database_->UpdateSchema(update_statements, &num_succesful,
-                                            &update_time, &backfill_status));
+    ZETASQL_RETURN_IF_ERROR(database_->UpdateSchema(
+        SchemaChangeOperation{.statements = update_statements}, &num_succesful,
+        &update_time, &backfill_status));
     return backfill_status;
   }
 
  protected:
   void SetUp() override {
-    std::vector<std::string> create_statements;
-    create_statements.push_back(R"(
+    std::vector<std::string> create_statements = {R"(
                             CREATE TABLE TestTable (
                               int64_col INT64,
                               string_col STRING(MAX),
                               another_string_col STRING(MAX)
                             ) PRIMARY KEY (int64_col)
-                          )");
-    ZETASQL_ASSERT_OK_AND_ASSIGN(database_,
-                         Database::Create(&clock_, create_statements));
+                          )"};
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        database_,
+        Database::Create(
+            &clock_, SchemaChangeOperation{.statements = create_statements}));
 
     index_update_statements_.push_back(R"(
                             CREATE UNIQUE NULL_FILTERED INDEX TestIndex ON
