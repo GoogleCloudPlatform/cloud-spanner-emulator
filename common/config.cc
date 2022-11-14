@@ -33,6 +33,11 @@ ABSL_FLAG(
     "error handling behavior. For instance, transaction Commits may be aborted "
     "to facilitate application abort-retry testing.");
 
+ABSL_FLAG(
+    bool, enable_column_default_values, false,
+    "If true, the emulator will enable experimental support for column DEFAULT "
+    "values.");
+
 namespace google {
 namespace spanner {
 namespace emulator {
@@ -44,6 +49,10 @@ bool should_log_requests() { return absl::GetFlag(FLAGS_log_requests); }
 
 bool fault_injection_enabled() {
   return absl::GetFlag(FLAGS_enable_fault_injection);
+}
+
+bool column_default_values_enabled() {
+  return absl::GetFlag(FLAGS_enable_column_default_values);
 }
 
 }  // namespace config

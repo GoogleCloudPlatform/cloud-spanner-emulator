@@ -21,13 +21,19 @@
 #include "zetasql/base/logging.h"
 #include "absl/strings/str_cat.h"
 #include "common/config.h"
+#include "common/feature_flags.h"
 #include "frontend/server/server.h"
 
 using Server = ::google::spanner::emulator::frontend::Server;
+using EmulatorFeatureFlags = ::google::spanner::emulator::EmulatorFeatureFlags;
 
 int main(int argc, char** argv) {
   // Start the emulator gRPC server.
   absl::ParseCommandLine(argc, argv);
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_column_default_values = google::spanner::emulator::config::column_default_values_enabled();
+  const_cast<EmulatorFeatureFlags&>(EmulatorFeatureFlags::instance())
+    .set_flags(flags);
   Server::Options options;
   options.server_address = google::spanner::emulator::config::grpc_host_port();
   std::unique_ptr<Server> server = Server::Create(options);

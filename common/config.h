@@ -33,6 +33,9 @@ bool should_log_requests();
 // Returns true if fault injection is enabled.
 bool fault_injection_enabled();
 
+// Returns true if column default values are enabled.
+bool column_default_values_enabled();
+
 }  // namespace config
 }  // namespace emulator
 }  // namespace spanner
