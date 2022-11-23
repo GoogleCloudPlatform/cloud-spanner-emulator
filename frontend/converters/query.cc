@@ -17,13 +17,18 @@
 #include "frontend/converters/query.h"
 
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 
+#include "google/protobuf/struct.pb.h"
+#include "google/spanner/v1/type.pb.h"
 #include "zetasql/public/type.h"
+#include "zetasql/public/value.h"
 #include "absl/status/statusor.h"
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -33,7 +38,8 @@ namespace frontend {
 absl::StatusOr<backend::Query> QueryFromProto(
     std::string sql, const google::protobuf::Struct& params,
     google::protobuf::Map<std::string, google::spanner::v1::Type> param_types,
-    zetasql::TypeFactory* type_factory) {
+    zetasql::TypeFactory* type_factory
+) {
   std::map<std::string, zetasql::Value> declared;
   std::map<std::string, google::protobuf::Value> undeclared;
   for (const auto& [name, proto_value] : params.fields()) {
@@ -44,7 +50,9 @@ absl::StatusOr<backend::Query> QueryFromProto(
     } else {
       const spanner::v1::Type& proto_type = param_type_iter->second;
       const zetasql::Type* type;
-      ZETASQL_RETURN_IF_ERROR(TypeFromProto(proto_type, type_factory, &type));
+      ZETASQL_RETURN_IF_ERROR(TypeFromProto(proto_type, type_factory,
+                                    &type
+                                    ));
       ZETASQL_ASSIGN_OR_RETURN(declared[name], ValueFromProto(proto_value, type));
     }
   }

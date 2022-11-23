@@ -22,8 +22,8 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "google/cloud/spanner/admin/instance_admin_client.h"
 #include "google/cloud/spanner/create_instance_request_builder.h"
-#include "google/cloud/spanner/instance_admin_client.h"
 #include "common/feature_flags.h"
 #include "frontend/server/server.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -62,17 +62,17 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
     ASSERT_NE(server_, nullptr);
 
     // Initialize connection options required by the client library.
-    auto connection_options =
-        std::make_unique<google::cloud::spanner::ConnectionOptions>(
-            grpc::InsecureChannelCredentials());
-    connection_options->set_endpoint(
+    auto connection_options = std::make_unique<google::cloud::Options>();
+    connection_options->set<google::cloud::GrpcCredentialOption>(
+        grpc::InsecureChannelCredentials());
+    connection_options->set<google::cloud::EndpointOption>(
         absl::StrCat(server_->host(), ":", server_->port()));
 
     // Setup an instance which will be reused for all tests.
     google::cloud::spanner::Instance instance(kProjectName, kInstanceName);
     auto instance_client =
-        std::make_unique<google::cloud::spanner::InstanceAdminClient>(
-            google::cloud::spanner::MakeInstanceAdminConnection(
+        std::make_unique<google::cloud::spanner_admin::InstanceAdminClient>(
+            google::cloud::spanner_admin::MakeInstanceAdminConnection(
                 *connection_options));
     ZETASQL_ASSERT_OK(google::spanner::emulator::test::ToUtilStatusOr(
         instance_client

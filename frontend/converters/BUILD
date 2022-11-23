@@ -231,9 +231,13 @@ cc_library(
     deps = [
         "//common:errors",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_protobuf//:protobuf_headers",
+        "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:type_cc_proto",
     ],
 )
 
@@ -244,7 +248,12 @@ cc_test(
         ":types",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:type",
     ],
@@ -292,10 +301,12 @@ cc_library(
         ":values",
         "//backend/query:query_engine",
         "//common:errors",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 

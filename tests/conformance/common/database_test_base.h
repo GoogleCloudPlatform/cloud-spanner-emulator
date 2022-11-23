@@ -33,9 +33,8 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
+#include "google/cloud/spanner/admin/database_admin_client.h"
 #include "google/cloud/spanner/client.h"
-#include "google/cloud/spanner/database_admin_client.h"
-#include "google/cloud/spanner/instance_admin_client.h"
 #include "google/cloud/spanner/keys.h"
 #include "google/cloud/spanner/mutations.h"
 #include "google/cloud/spanner/partition_options.h"
@@ -682,7 +681,7 @@ class DatabaseTest : public ::testing::Test {
   std::unique_ptr<cloud::spanner::Database> database_;
 
   // The client used for the database admin api.
-  std::unique_ptr<cloud::spanner::DatabaseAdminClient> database_client_;
+  std::unique_ptr<cloud::spanner_admin::DatabaseAdminClient> database_client_;
 
   // The client used for the spanner client api.
   std::unique_ptr<cloud::spanner::Client> client_;

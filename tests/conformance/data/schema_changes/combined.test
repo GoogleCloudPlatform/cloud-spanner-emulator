@@ -1,4 +1,5 @@
 # Duplicate table name.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Users (
@@ -6,9 +7,10 @@ CREATE TABLE Users (
 CREATE TABLE users (
 ) PRIMARY KEY();
 --
-ERROR: Duplicate name in schema: Users.
+ERROR:.* Duplicate name in schema: Users.
 ==
 # Index names are in the same namespace.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -19,9 +21,10 @@ CREATE TABLE UsersByName (
 CREATE TABLE usersbyname (
 ) PRIMARY KEY();
 --
-ERROR: Duplicate name in schema: UsersByName.
+ERROR:.* Duplicate name in schema: UsersByName.
 ==
 # NOT NULL constraint cannot be dropped because it affects indexing of nulls
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -35,23 +38,26 @@ CREATE TABLE Albums (
 CREATE INDEX AlbumsByName ON Albums(AlbumName);
 ALTER TABLE Albums ALTER COLUMN AlbumName STRING(MAX);
 --
-ERROR: Changing NOT NULL constraints on column AlbumName is not allowed because it affects index AlbumsByName.
+ERROR:.* Changing NOT NULL constraints on column AlbumName is not allowed because it affects index AlbumsByName.
 ==
 # Interleave within nonexistent table.
+# --regex
 CREATE TABLE Albums (
 ) PRIMARY KEY(),
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 --
-ERROR: Table not found: Users
+ERROR:.* Table not found: Users
 ==
 # Interleave within self, which counts as a nonexistent table.
+# --regex
 CREATE TABLE Albums (
 ) PRIMARY KEY(),
   INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
 --
-ERROR: Table not found: Albums
+ERROR:.* Table not found: Albums
 ==
 # Duplicate column name.
+# --regex
 CREATE TABLE Users (
   UserName STRING(MAX),
   UserName STRING(MAX),
@@ -61,14 +67,14 @@ CREATE TABLE Users (
   username STRING(MAX),
 ) PRIMARY KEY();
 --
-ERROR: Duplicate column name Users.UserName.
+ERROR:.* Duplicate column name Users.UserName.
 ==
 # Primary key references a nonexistent column.
 # --regex
 CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 --
-ERROR: [Tt]able Users references nonexistent key column UserId.
+ERROR:.* [Tt]able Users references nonexistent key column UserId.
 ==
 # Primary key references a column with incorrect case.
 # --regex
@@ -76,7 +82,7 @@ CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(userid);
 --
-ERROR: [Tt]able Users references nonexistent key column userid.
+ERROR:.* [Tt]able Users references nonexistent key column userid.
 ==
 # Primary key references a column twice.
 # --regex
@@ -84,16 +90,18 @@ CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId, UserId);
 --
-ERROR: [Tt]able Users references key column UserId more than once.
+ERROR:.* [Tt]able Users references key column UserId more than once.
 ==
 # Primary key references an ARRAY column.
+# --regex
 CREATE TABLE Users (
   UserIds ARRAY<INT64> NOT NULL,
 ) PRIMARY KEY(UserIds);
 --
-ERROR: Column Users.UserIds has type ARRAY, but is part of the primary key.
+ERROR:.* Column Users.UserIds has type ARRAY, but is part of the primary key.
 ==
 # Interleaved table does not reference parent key column.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -101,9 +109,10 @@ CREATE TABLE Albums (
 ) PRIMARY KEY(),
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 --
-ERROR: Table Albums does not reference parent key column UserId.
+ERROR:.* Table Albums does not reference parent key column UserId.
 ==
 # Interleaved table references parent key column at incorrect position.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -113,9 +122,10 @@ CREATE TABLE Albums (
 ) PRIMARY KEY(AlbumId, UserId),
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 --
-ERROR: Table Albums references parent key column UserId at incorrect position 1.
+ERROR:.* Table Albums references parent key column UserId at incorrect position 1.
 ==
 # Interleaved table references parent key column with incorrect sort order.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -124,9 +134,10 @@ CREATE TABLE Albums (
 ) PRIMARY KEY(UserId DESC),
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 --
-ERROR: Table Albums references parent key column UserId with incorrect order ASC.
+ERROR:.* Table Albums references parent key column UserId with incorrect order ASC.
 ==
 # Interleaved table references parent key column with incorrect length.
+# --regex
 CREATE TABLE Users (
   UserName STRING(MAX) NOT NULL,
 ) PRIMARY KEY(UserName);
@@ -135,7 +146,7 @@ CREATE TABLE Albums (
 ) PRIMARY KEY(UserName),
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 --
-ERROR: Table Albums references parent key column UserName with incorrect length 42 (should be MAX).
+ERROR:.* Table Albums references parent key column UserName with incorrect length 42 \(should be MAX\).
 ==
 # Column of type DOUBLE listed as key of a directory table.
 CREATE TABLE Users (
@@ -147,20 +158,23 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 ==
 # Column has invalid length.
+# --regex
 CREATE TABLE Users (
   UserName STRING(0),
 ) PRIMARY KEY();
 --
-ERROR: Bad length for column Users.UserName: 0 : Allowed length range: [1, 2621440].
+ERROR:.* Bad length for column Users.UserName: 0 : Allowed length range: \[1, 2621440].
 ==
 # ARRAY<STRING> column has invalid length.
+# --regex
 CREATE TABLE Users (
   UserName ARRAY<STRING(400000000)>,
 ) PRIMARY KEY();
 --
-ERROR: Bad length for column Users.UserName: 400000000 : Allowed length range: [1, 2621440].
+ERROR:.* Bad length for column Users.UserName: 400000000 : Allowed length range: \[1, 2621440].
 ==
 # Table has too many keys.
+# --regex
 CREATE TABLE Users (
   UserId1 INT64 NOT NULL,
   UserId2 INT64 NOT NULL,
@@ -205,9 +219,10 @@ CREATE TABLE Photos (
 ) PRIMARY KEY(UserId1, UserId2, UserId3, UserId4, UserId5, UserId6, AlbumId1, AlbumId2, AlbumId3, AlbumId4, AlbumId5, AlbumId6, PhotoId1, PhotoId2, PhotoId3, PhotoId4, PhotoId5),
   INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
 --
-ERROR: Table Photos has too many keys (17); the limit is 16.
+ERROR:.* Table Photos has too many keys \(17\); the limit is 16.
 ==
 # Third-level table has no columns.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -217,7 +232,7 @@ CREATE TABLE Photos (
 ) PRIMARY KEY(),
   INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
 --
-ERROR: Table Albums adds no columns and is not a top level table.
+ERROR:.* Table Albums adds no columns and is not a top level table.
 ==
 # Non-primary key column is NOT NULL for a directory table.
 CREATE TABLE Users (
@@ -229,24 +244,27 @@ CREATE TABLE Users (
 ) PRIMARY KEY();
 ==
 # Options invalid for the column type
+# --regex
 CREATE TABLE Users (
   UserName STRING(MAX) OPTIONS (
     allow_commit_timestamp = true
   ),
 ) PRIMARY KEY();
 --
-ERROR: Column Users.UserName has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+ERROR:.* Column Users.UserName has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
 # Options invalid for the column type if allowed on TIMESTAMP.
+# --regex
 CREATE TABLE Users (
   UserName STRING(MAX) OPTIONS (
     allow_commit_timestamp = true
   ),
 ) PRIMARY KEY();
 --
-ERROR: Column Users.UserName has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+ERROR:.* Column Users.UserName has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
 # Child table must match parent key commit timestamp settings #1
+# --regex
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = true
@@ -257,9 +275,10 @@ CREATE TABLE B (
 ) PRIMARY KEY(Timestamp),
   INTERLEAVE IN PARENT A ON DELETE CASCADE;
 --
-ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+ERROR:.* Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
 # Child table must match parent key commit timestamp settings #2
+# --regex
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = true
@@ -272,9 +291,10 @@ CREATE TABLE B (
 ) PRIMARY KEY(Timestamp),
   INTERLEAVE IN PARENT A ON DELETE CASCADE;
 --
-ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+ERROR:.* Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
 # Child table must match parent key commit timestamp settings #3
+# --regex
 CREATE TABLE A (
   Timestamp INT64 NOT NULL,
 ) PRIMARY KEY(Timestamp);
@@ -285,9 +305,10 @@ CREATE TABLE B (
 ) PRIMARY KEY(Timestamp),
   INTERLEAVE IN PARENT A ON DELETE CASCADE;
 --
-ERROR: Column B.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+ERROR:.* Column B.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
 # Child table must match parent key commit timestamp settings #4
+# --regex
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = false
@@ -300,9 +321,10 @@ CREATE TABLE B (
 ) PRIMARY KEY(Timestamp),
   INTERLEAVE IN PARENT A ON DELETE CASCADE;
 --
-ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+ERROR:.* Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
 # Duplicate index name.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -311,18 +333,20 @@ CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
 CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
 CREATE NULL_FILTERED INDEX usersbyname ON Users(UserName);
 --
-ERROR: Duplicate name in schema: UsersByName.
+ERROR:.* Duplicate name in schema: UsersByName.
 ==
 # Table names are in the same namespace.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
 ) PRIMARY KEY(UserId);
 CREATE NULL_FILTERED INDEX Users ON Users(UserName);
 --
-ERROR: Duplicate name in schema: Users.
+ERROR:.* Duplicate name in schema: Users.
 ==
 # Index specifies nonexistent table for interleaving.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -334,9 +358,10 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(UserId, AlbumName), INTERLEAVE IN DoesNotExist;
 --
-ERROR: Cannot interleave index AlbumsByName within nonexistent table DoesNotExist.
+ERROR:.* Cannot interleave index AlbumsByName within nonexistent table DoesNotExist.
 ==
 # Ordering of a parent key component for an interleaved index doesn't match.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -348,18 +373,20 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(UserId DESC, AlbumName), INTERLEAVE IN Users;
 --
-ERROR: Index AlbumsByName references parent key column UserId with incorrect order ASC.
+ERROR:.* Index AlbumsByName references parent key column UserId with incorrect order ASC.
 ==
 # Index does not specify any key columns.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
 CREATE NULL_FILTERED INDEX UsersByNothing ON Users();
 --
-ERROR: Index UsersByNothing does not specify any key columns.
+ERROR:.* Index UsersByNothing does not specify any key columns.
 ==
 # Index has too many keys. Note the total number of index keys includes the
 # keys of the table being indexed.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserId2 INT64 NOT NULL,
@@ -383,26 +410,29 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId, UserId2);
 CREATE NULL_FILTERED INDEX UsersByData ON Users(Data1, Data2, UserId, Data3, Data4, Data5, Data6, Data7, Data8, Data9, Data10, Data11, Data12, Data13, Data14, Data15);
 --
-ERROR: Index UsersByData has too many keys (17); the limit is 16.
+ERROR:.* Index UsersByData has too many keys \(17\); the limit is 16.
 ==
 # Index specifies nonexistent key column.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
 CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
 --
-ERROR: Index UsersByName specifies key column UserName which does not exist in the index's base table.
+ERROR:.* Index UsersByName specifies key column UserName which does not exist in the index's base table.
 ==
 # Index specifies key column twice.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
 ) PRIMARY KEY(UserId);
 CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName, UserName);
 --
-ERROR: Index UsersByName specifies key column UserName twice.
+ERROR:.* Index UsersByName specifies key column UserName twice.
 ==
 # Index specifies keys that are not a prefix of the interleaved table.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
@@ -414,27 +444,30 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(AlbumName), INTERLEAVE IN Users;
 --
-ERROR: Index AlbumsByName does not reference index parent key column UserId.
+ERROR:.* Index AlbumsByName does not reference index parent key column UserId.
 ==
 # An index on an ARRAY without "DISTINCT_ARRAY_ELEMENT" is an error.
+# --regex
 CREATE TABLE Root (
   user_id INT64 NOT NULL,
   vals ARRAY<INT64>,
 ) PRIMARY KEY(user_id);
 CREATE NULL_FILTERED INDEX Index1 ON Root(vals);
 --
-ERROR: Cannot reference ARRAY vals in the creation of index Index1.
+ERROR:.* Cannot reference ARRAY vals in the creation of index Index1.
 ==
 # Bad index name because index table collides with index directory name.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
 ) PRIMARY KEY(UserId);
 CREATE NULL_FILTERED INDEX Dir_BadIndexName ON Users(UserName);
 --
-ERROR: Index name not valid: Dir_BadIndexName.
+ERROR:.* Index name not valid: Dir_BadIndexName.
 ==
 # Can't drop a table with interleaved tables.
+# --regex
 DROP TABLE DoesNotExist;
 CREATE TABLE Users (
 ) PRIMARY KEY();
@@ -447,9 +480,10 @@ CREATE TABLE Photos (
   INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
 DROP TABLE Albums;
 --
-ERROR: Table not found: DoesNotExist
+ERROR:.* Table not found: DoesNotExist
 ==
 # Can't drop a table with an index.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -460,8 +494,9 @@ CREATE TABLE Albums (
 CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(AlbumName);
 DROP TABLE Albums;
 --
-ERROR: Cannot drop table Albums with indices: AlbumsByName.
+ERROR:.* Cannot drop table Albums with indices: AlbumsByName.
 ==
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -477,26 +512,29 @@ CREATE TABLE Photos (
 CREATE NULL_FILTERED INDEX PhotosByName ON Photos(AlbumId, PhotoName), INTERLEAVE IN Albums;
 DROP TABLE Albums;
 --
-ERROR: Cannot drop table Albums with interleaved tables: Photos.
+ERROR:.* Cannot drop table Albums with interleaved tables: Photos.
 ==
 # Duplicate column name for new column.
+# --regex
 CREATE TABLE Users (
   UserName STRING(MAX),
 ) PRIMARY KEY();
 ALTER TABLE Users ADD COLUMN UserName STRING(MAX);
 ALTER TABLE Users ADD COLUMN username STRING(MAX);
 --
-ERROR: Duplicate column name Users.UserName.
+ERROR:.* Duplicate column name Users.UserName.
 ==
 # Make sure two added columns also fail.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 ALTER TABLE Users ADD COLUMN UserName STRING(MAX);
 ALTER TABLE Users ADD COLUMN UserName STRING(MAX);
 --
-ERROR: Duplicate column name Users.UserName.
+ERROR:.* Duplicate column name Users.UserName.
 ==
 # Duplicate column name for new column (interleave alias version).
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -505,39 +543,44 @@ CREATE TABLE Albums (
 ALTER TABLE Users ADD COLUMN albums STRING(MAX);
 ALTER TABLE Users ADD COLUMN ALBums STRING(MAX);
 --
-ERROR: Table Albums adds no columns and is not a top level table.
+ERROR:.* Table Albums adds no columns and is not a top level table.
 ==
 # New column is NOT NULL.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 ALTER TABLE Users ADD COLUMN UserName STRING(MAX) NOT NULL;
 --
-ERROR: Cannot add NOT NULL column Users.UserName to existing table Users.
+ERROR:.* Cannot add NOT NULL column Users.UserName to existing table Users.
 ==
 # New column has invalid length.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 ALTER TABLE Users ADD COLUMN UserName STRING(0);
 --
-ERROR: Bad length for column Users.UserName: 0 : Allowed length range: [1, 2621440].
+ERROR:.* Bad length for column Users.UserName: 0 : Allowed length range: \[1, 2621440].
 ==
 # Can't drop columns that don't exist.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
 ALTER TABLE Users DROP COLUMN DoesNotExist;
 --
-ERROR: Column not found in table Users: DoesNotExist
+ERROR:.* Column not found in table Users: DoesNotExist
 ==
 # Can't drop key columns.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
 ALTER TABLE Users DROP COLUMN UserId;
 --
-ERROR: Cannot drop key column UserId from table Users.
+ERROR:.* Cannot drop key column UserId from table Users.
 ==
 # Can't drop key columns from non-directory tables, either.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -546,9 +589,10 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 ALTER TABLE Albums DROP COLUMN AlbumId;
 --
-ERROR: Cannot drop key column AlbumId from table Albums.
+ERROR:.* Cannot drop key column AlbumId from table Albums.
 ==
 # Can't drop columns used as index keys.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -556,39 +600,43 @@ CREATE TABLE Users (
 CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName);
 ALTER TABLE Users DROP COLUMN UserName;
 --
-ERROR: Cannot drop column UserName from table Users because it is used by index UsersByName.
+ERROR:.* Cannot drop column UserName from table Users because it is used by index UsersByName.
 ==
 # Can't alter columns that don't exist.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
 ALTER TABLE Users ALTER COLUMN DoesNotExist STRING(MAX);
 --
-ERROR: Column not found in table Users: DoesNotExist
+ERROR:.* Column not found in table Users: DoesNotExist
 ==
 # Altered primary key column is not NOT NULL.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
 ALTER TABLE Users ALTER COLUMN UserId INT64;
 --
-ERROR: Cannot change key column Users.UserId.
+ERROR:.* Cannot change key column Users.UserId.
 ==
 # Altered column has invalid length.
+# --regex
 CREATE TABLE Users (
   UserName STRING(40),
 ) PRIMARY KEY();
 ALTER TABLE Users ALTER COLUMN UserName STRING(400000000);
 --
-ERROR: Bad length for column Users.UserName: 400000000 : Allowed length range: [1, 2621440].
+ERROR:.* Bad length for column Users.UserName: 400000000 : Allowed length range: \[1, 2621440].
 ==
 # Remove NOT NULL from key.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
 ) PRIMARY KEY(UserId);
 ALTER TABLE Users ALTER COLUMN UserId INT64;
 --
-ERROR: Cannot change key column Users.UserId.
+ERROR:.* Cannot change key column Users.UserId.
 ==
 # Arrays: decrease inner length of column.
 CREATE TABLE Users (
@@ -632,20 +680,22 @@ CREATE TABLE Users (
 ) PRIMARY KEY();
 ==
 # SET ON DELETE requires an interleaved table.
+# --regex
 CREATE TABLE Users (
   UserId STRING(MAX) NOT NULL,
 ) PRIMARY KEY(UserId);
 ALTER TABLE Users SET ON DELETE CASCADE;
 --
-ERROR: Cannot SET ON DELETE on table Users that does not have an INTERLEAVE clause.
+ERROR:.* Cannot SET ON DELETE on table Users that does not have an INTERLEAVE clause.
 ==
 # Even an implicitly-interleaved table is insufficient.
+# --regex
 CREATE TABLE Users (
   UserId STRING(MAX) NOT NULL,
 ) PRIMARY KEY(UserId);
 ALTER TABLE Users SET ON DELETE CASCADE;
 --
-ERROR: Cannot SET ON DELETE on table Users that does not have an INTERLEAVE clause.
+ERROR:.* Cannot SET ON DELETE on table Users that does not have an INTERLEAVE clause.
 ==
 # Test that the long-running schema changes do not work for arrays.
 # Arrays: Cannot add NOT NULL.
@@ -679,33 +729,37 @@ CREATE TABLE T (
 ) PRIMARY KEY();
 ==
 # Attempt to name a secondary index PRIMARY_KEY.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
 ) PRIMARY KEY(UserId);
 CREATE INDEX PRIMARY_KEY ON Users(UserName);
 --
-ERROR: Cannot use reserved name PRIMARY_KEY for a secondary index
+ERROR:.* Cannot use reserved name PRIMARY_KEY for .*
 ==
 # Attempt to name a secondary index Primary_Key.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
 ) PRIMARY KEY(UserId);
 CREATE INDEX Primary_Key ON Users(UserName);
 --
-ERROR: Cannot use reserved name PRIMARY_KEY for a secondary index
+ERROR:.* Cannot use reserved name PRIMARY_KEY for .*
 ==
 # Attempt to make a nullable primary key column not null.
+# --regex
 CREATE TABLE Users (
   UserId INT64,
   UserName STRING(MAX),
 ) PRIMARY KEY(UserId);
 ALTER TABLE Users ALTER COLUMN UserId INT64 NOT NULL;
 --
-ERROR: Cannot change key column Users.UserId.
+ERROR:.* Cannot change key column Users.UserId.
 ==
 # Attempt to make a nullable non-key column with an index not null.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -713,18 +767,20 @@ CREATE TABLE Users (
 CREATE INDEX UsersByUserName ON Users(UserName);
 ALTER TABLE Users ALTER COLUMN UserName STRING(MAX) NOT NULL;
 --
-ERROR: Changing NOT NULL constraints on column UserName is not allowed because it affects index UsersByUserName.
+ERROR:.* Changing NOT NULL constraints on column UserName is not allowed because it affects index UsersByUserName.
 ==
 # Attempt to make a nullable primary key column not null.
+# --regex
 CREATE TABLE Users (
   UserId INT64,
   UserName STRING(MAX),
 ) PRIMARY KEY(UserId);
 ALTER TABLE Users ALTER COLUMN UserId INT64 NOT NULL;
 --
-ERROR: Cannot change key column Users.UserId.
+ERROR:.* Cannot change key column Users.UserId.
 ==
 # Attempt to make a nullable non-key column with an index not null.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,
   UserName STRING(MAX),
@@ -732,7 +788,7 @@ CREATE TABLE Users (
 CREATE INDEX UsersByUserName ON Users(UserName);
 ALTER TABLE Users ALTER COLUMN UserName STRING(MAX) NOT NULL;
 --
-ERROR: Changing NOT NULL constraints on column UserName is not allowed because it affects index UsersByUserName.
+ERROR:.* Changing NOT NULL constraints on column UserName is not allowed because it affects index UsersByUserName.
 ==
 # Attempt to make reduce the size of an ARRAY subtype.
 CREATE TABLE Users (
@@ -747,6 +803,7 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 ==
 # Alter a directory table that is tentatively being dropped.
+# --regex
 CREATE TABLE dir1 (
   k INT64 NOT NULL,
   v STRING(1),
@@ -754,9 +811,10 @@ CREATE TABLE dir1 (
 DROP TABLE dir1;
 ALTER TABLE dir1 ADD COLUMN v2 STRING(MAX);
 --
-ERROR: Table not found: dir1
+ERROR:.* Table not found: dir1
 ==
 # Alter a column of a directory table that is tentatively being dropped.
+# --regex
 CREATE TABLE dir1 (
   k INT64 NOT NULL,
   v STRING(1),
@@ -764,9 +822,10 @@ CREATE TABLE dir1 (
 DROP TABLE dir1;
 ALTER TABLE dir1 ALTER COLUMN v STRING(2);
 --
-ERROR: Table not found: dir1
+ERROR:.* Table not found: dir1
 ==
 # Create an index on a directory table that is tentatively being dropped.
+# --regex
 CREATE TABLE dir1 (
   k INT64 NOT NULL,
   v STRING(1),
@@ -774,9 +833,10 @@ CREATE TABLE dir1 (
 DROP TABLE dir1;
 CREATE INDEX dir1IndexOnC ON dir1(v);
 --
-ERROR: Table not found: dir1
+ERROR:.* Table not found: dir1
 ==
 # Create interleaved table in directory table that is tentatively being dropped.
+# --regex
 CREATE TABLE dir1 (
   k INT64 NOT NULL,
   v STRING(1),
@@ -788,7 +848,7 @@ CREATE TABLE tbl (
 ) PRIMARY KEY(k),
   INTERLEAVE IN PARENT dir1 ON DELETE CASCADE;
 --
-ERROR: Table not found: dir1
+ERROR:.* Table not found: dir1
 ==
 # Directory table with two non-key columns.
 CREATE TABLE Users (
@@ -848,13 +908,14 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 ==
 # Interleaved table with no columns.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
 ) PRIMARY KEY(),
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 --
-ERROR: Table Albums adds no columns and is not a top level table.
+ERROR:.* Table Albums adds no columns and is not a top level table.
 ==
 # Interleaved table with key and non-key columns.
 CREATE TABLE Users (
@@ -880,6 +941,7 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 ==
 # Third-level interleaved table.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -890,7 +952,7 @@ CREATE TABLE Photos (
 ) PRIMARY KEY(PhotoId),
   INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
 --
-ERROR: Table Albums adds no columns and is not a top level table.
+ERROR:.* Table Albums adds no columns and is not a top level table.
 ==
 # Date columns.
 CREATE TABLE T (
@@ -1038,6 +1100,7 @@ CREATE TABLE Albums (
 CREATE NULL_FILTERED INDEX AlbumsByUser ON Albums(UserId);
 ==
 # Child table matches parent key commit timestamp settings #1
+# --regex
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = true
@@ -1050,9 +1113,10 @@ CREATE TABLE B (
 ) PRIMARY KEY(Timestamp),
   INTERLEAVE IN PARENT A ON DELETE CASCADE;
 --
-ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+ERROR:.* Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
 # Child table matches parent key commit timestamp settings #2
+# --regex
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = false
@@ -1065,9 +1129,10 @@ CREATE TABLE B (
 ) PRIMARY KEY(Timestamp),
   INTERLEAVE IN PARENT A ON DELETE CASCADE;
 --
-ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+ERROR:.* Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
 # Child table matches parent key commit timestamp settings #3
+# --regex
 CREATE TABLE A (
   Timestamp INT64 NOT NULL,
 ) PRIMARY KEY(Timestamp);
@@ -1078,9 +1143,10 @@ CREATE TABLE B (
 ) PRIMARY KEY(Timestamp),
   INTERLEAVE IN PARENT A ON DELETE CASCADE;
 --
-ERROR: Column B.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+ERROR:.* Column B.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
 # Child table matches parent key commit timestamp settings #4
+# --regex
 CREATE TABLE A (
   Timestamp INT64 NOT NULL OPTIONS (
     allow_commit_timestamp = false
@@ -1091,7 +1157,7 @@ CREATE TABLE B (
 ) PRIMARY KEY(Timestamp),
   INTERLEAVE IN PARENT A ON DELETE CASCADE;
 --
-ERROR: Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
+ERROR:.* Column A.Timestamp has invalid allow_commit_timestamp option.  Option only allowed on TIMESTAMP columns.
 ==
 CREATE TABLE T(
   A INT64,
@@ -1107,6 +1173,7 @@ CREATE TABLE T (
 ) PRIMARY KEY(A);
 ==
 # Basic drop table.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -1114,7 +1181,7 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 DROP TABLE Albums;
 --
-ERROR: Table Albums adds no columns and is not a top level table.
+ERROR:.* Table Albums adds no columns and is not a top level table.
 ==
 # Basic drop index.
 CREATE TABLE Users (
@@ -1236,33 +1303,37 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 ==
 # Interleaved table with implicit ON DELETE NO ACTION.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
 ) PRIMARY KEY(),
   INTERLEAVE IN PARENT Users ON DELETE NO ACTION;
 --
-ERROR: Table Albums adds no columns and is not a top level table.
+ERROR:.* Table Albums adds no columns and is not a top level table.
 ==
 # Interleaved table with explicit ON DELETE NO ACTION.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
 ) PRIMARY KEY(),
   INTERLEAVE IN PARENT Users ON DELETE NO ACTION;
 --
-ERROR: Table Albums adds no columns and is not a top level table.
+ERROR:.* Table Albums adds no columns and is not a top level table.
 ==
 # Interleaved table with ON DELETE NO ACTION allowed outside strict mode.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
 ) PRIMARY KEY(),
   INTERLEAVE IN PARENT Users ON DELETE NO ACTION;
 --
-ERROR: Table Albums adds no columns and is not a top level table.
+ERROR:.* Table Albums adds no columns and is not a top level table.
 ==
 # Interleaved table altered to ON DELETE NO ACTION.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -1270,7 +1341,7 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 ALTER TABLE Albums SET ON DELETE NO ACTION;
 --
-ERROR: Table Albums adds no columns and is not a top level table.
+ERROR:.* Table Albums adds no columns and is not a top level table.
 ==
 # Attempt to make a nullable column not null.
 CREATE TABLE Users (
@@ -1297,6 +1368,7 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 ==
 # Interleaved table altered to ON DELETE CASCADE.  No-op, but legal.
+# --regex
 CREATE TABLE Users (
 ) PRIMARY KEY();
 CREATE TABLE Albums (
@@ -1304,7 +1376,7 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 ALTER TABLE Albums SET ON DELETE CASCADE;
 --
-ERROR: Table Albums adds no columns and is not a top level table.
+ERROR:.* Table Albums adds no columns and is not a top level table.
 ==
 # Check constraint tests for async replication
 # Create table without check constraint as reference.
@@ -1326,13 +1398,14 @@ CREATE TABLE T (
   CreatedAt TIMESTAMP,
 ) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 ==
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
 ) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 ALTER TABLE T ALTER COLUMN CreatedAt INT64;
 --
-ERROR: ROW DELETION POLICY will break if drop/alter column named CreatedAt in table T. Row Deletion Policy must be set on column of type TIMESTAMP.
+ERROR:.* ROW DELETION POLICY will break if drop/alter column named CreatedAt in table T. Row Deletion Policy must be set on column of type TIMESTAMP.
 ==
 CREATE TABLE T (
   Key INT64,
@@ -1377,12 +1450,13 @@ CREATE TABLE T (
 ) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 ==
 # Column is not timestamp
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt INT64,
 ) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 --
-ERROR: Cannot create ROW DELETION POLICY because column CreatedAt in table T is not of type TIMESTAMP.
+ERROR:.* Cannot create ROW DELETION POLICY because column CreatedAt in table T is not of type TIMESTAMP.
 ==
 CREATE TABLE T (
   Key INT64,
@@ -1407,30 +1481,33 @@ CREATE TABLE T (
 ) PRIMARY KEY(Key);
 ==
 # Policy already exist
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
 ) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 --
-ERROR: Cannot create ROW DELETION POLICY because there is already one on column named CreatedAt in table T.
+ERROR:.* Cannot create ROW DELETION POLICY because there is already one on column named CreatedAt in table T.
 ==
 # Column does not exist
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
 ) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(ModifiedAt, INTERVAL 7 DAY));
 --
-ERROR: Cannot create ROW DELETION POLICY because there is no column named ModifiedAt in table T.
+ERROR:.* Cannot create ROW DELETION POLICY because there is no column named ModifiedAt in table T.
 ==
 # Column does not exist
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
 ) PRIMARY KEY(Key);
 ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(ModifiedAt, INTERVAL 7 DAY));
 --
-ERROR: Cannot create ROW DELETION POLICY because there is no column named ModifiedAt in table T.
+ERROR:.* Cannot create ROW DELETION POLICY because there is no column named ModifiedAt in table T.
 ==
 CREATE TABLE T (
   Key INT64,
@@ -1444,33 +1521,37 @@ CREATE TABLE T (
 ) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 ==
 # Policy does not exist for replace
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
 ) PRIMARY KEY(Key);
 ALTER TABLE T REPLACE ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 --
-ERROR: ROW DELETION POLICY does not exist on table T.
+ERROR:.* ROW DELETION POLICY does not exist on table T.
 ==
 # Policy does not exist for drop
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
 ) PRIMARY KEY(Key);
 ALTER TABLE T DROP ROW DELETION POLICY;
 --
-ERROR: ROW DELETION POLICY does not exist on table T.
+ERROR:.* ROW DELETION POLICY does not exist on table T.
 ==
 # Policy will break
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
 ) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 1 DAY));
 ALTER TABLE T DROP COLUMN CreatedAt
 --
-ERROR: ROW DELETION POLICY will break if drop/alter column named CreatedAt in table T. Row Deletion Policy must be set on column of type TIMESTAMP.
+ERROR:.* ROW DELETION POLICY will break if drop/alter column named CreatedAt in table T. Row Deletion Policy must be set on column of type TIMESTAMP.
 ==
 # Child must have delete cascade
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
@@ -1482,9 +1563,10 @@ CREATE TABLE U (
 ) PRIMARY KEY(Key), INTERLEAVE IN PARENT T ON DELETE NO ACTION;
 ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 --
-ERROR: Cannot create row deletion policy on T because there is a descendant Table U with ON DELETE NO ACTION.
+ERROR:.* Cannot create row deletion policy on T because there is a descendant Table U with ON DELETE NO ACTION.
 ==
 # Grandchild must have delete cascade
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
@@ -1501,9 +1583,10 @@ CREATE TABLE V (
 ) PRIMARY KEY(Key), INTERLEAVE IN PARENT U ON DELETE NO ACTION;
 ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 --
-ERROR: Cannot create row deletion policy on T because there is a descendant Table V with ON DELETE NO ACTION.
+ERROR:.* Cannot create row deletion policy on T because there is a descendant Table V with ON DELETE NO ACTION.
 ==
 # Policy on ancestor
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
@@ -1514,9 +1597,10 @@ CREATE TABLE U (
   Data INT64,
 ) PRIMARY KEY(Key), INTERLEAVE IN PARENT T ON DELETE NO ACTION;
 --
-ERROR: Cannot create or alter table U with ON DELETE NO ACTION because there is a row deletion policy on ancestor table T.
+ERROR:.* Cannot create or alter table U with ON DELETE NO ACTION because there is a row deletion policy on ancestor table T.
 ==
 # Policy on ancestor
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
@@ -1528,9 +1612,10 @@ CREATE TABLE U (
 ) PRIMARY KEY(Key), INTERLEAVE IN PARENT T ON DELETE CASCADE;
 ALTER TABLE U SET ON DELETE NO ACTION;
 --
-ERROR: Cannot create or alter table U with ON DELETE NO ACTION because there is a row deletion policy on ancestor table T.
+ERROR:.* Cannot create or alter table U with ON DELETE NO ACTION because there is a row deletion policy on ancestor table T.
 ==
 # Policy on foreign key
+# --regex
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
@@ -1542,7 +1627,7 @@ CREATE TABLE U (
 ) PRIMARY KEY(MyKey);
 ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 --
-ERROR: Cannot add a row deletion policy to table `T`. It is referenced by one or more foreign keys: `FK_Key`.
+ERROR:.* Cannot add a row deletion policy to table `T`. It is referenced by one or more foreign keys: `FK_Key`.
 ==
 # ANALYZE is no-op for emulator.
 ANALYZE

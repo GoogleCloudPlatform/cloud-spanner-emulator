@@ -20,7 +20,12 @@
 
 #include "google/longrunning/operations.pb.h"
 #include "google/protobuf/empty.pb.h"
+#include "google/protobuf/timestamp.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "backend/database/database.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/ddl_parser.h"

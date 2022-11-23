@@ -1,4 +1,5 @@
 # Can't alter parent key columns.
+# --regex
 CREATE TABLE Users (
   UserId STRING(20) NOT NULL
 ) PRIMARY KEY(UserId);
@@ -7,9 +8,10 @@ CREATE TABLE Albums (
 ) PRIMARY KEY(UserId), INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 ALTER TABLE Albums ALTER COLUMN UserId STRING(40) NOT NULL;
 --
-ERROR: Cannot alter parent key column Albums.UserId.
+ERROR:.* Cannot alter parent key column Albums.UserId.
 ==
 # Remove NOT NULL from key in table with children.
+# --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL
 ) PRIMARY KEY(UserId);
@@ -18,7 +20,7 @@ CREATE TABLE Albums (
 ) PRIMARY KEY(UserId), INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 ALTER TABLE Users ALTER COLUMN UserId INT64;
 --
-ERROR: Requested change to key column Users.UserId could not be made.
+ERROR:.* Requested change to key column Users.UserId could not be made.
 ==
 # allow_commit_timestamp option can be altered independently of
 # the parent key column.
@@ -70,6 +72,7 @@ CREATE TABLE foo (
   INTERLEAVE IN PARENT baz ON DELETE CASCADE;
 ==
 # No-op alters of key columns are still invalid
+# --regex
 CREATE TABLE T1 (
   ts TIMESTAMP
 ) PRIMARY KEY(ts);
@@ -78,4 +81,4 @@ CREATE TABLE T2 (
 ) PRIMARY KEY(ts), INTERLEAVE IN PARENT T1 ON DELETE CASCADE;
 ALTER TABLE T2 ALTER COLUMN ts TIMESTAMP
 --
-ERROR: Cannot alter parent key column T2.ts.
+ERROR:.* Cannot alter parent key column T2.ts.

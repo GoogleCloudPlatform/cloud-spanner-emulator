@@ -19,6 +19,7 @@
 #include <chrono>  // NOLINT(build/c++11)
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/memory/memory.h"
@@ -26,13 +27,11 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
+#include "google/cloud/spanner/admin/database_admin_client.h"
 #include "google/cloud/spanner/backoff_policy.h"
 #include "google/cloud/spanner/batch_dml_result.h"
 #include "google/cloud/spanner/commit_result.h"
-#include "google/cloud/spanner/connection_options.h"
 #include "google/cloud/spanner/create_instance_request_builder.h"
-#include "google/cloud/spanner/database_admin_connection.h"
-#include "google/cloud/spanner/internal/database_admin_stub.h"
 #include "google/cloud/spanner/mutations.h"
 #include "google/cloud/spanner/polling_policy.h"
 #include "google/cloud/spanner/retry_policy.h"
@@ -70,11 +69,23 @@ void DatabaseTest::SetUp() {
       absl::StrCat("test-database-", absl::ToUnixMicros(absl::Now())));
 
   // Setup the database client.
-  database_client_ = std::make_unique<cloud::spanner::DatabaseAdminClient>(
-      cloud::spanner::MakeDatabaseAdminConnection(
-          *globals.connection_options, retry_policy->clone(),
-          backoff_policy->clone(), polling_policy->clone()));
-  ZETASQL_ASSERT_OK(ToUtilStatusOr(database_client_->CreateDatabase(*database_).get()));
+  auto connection_options = *globals.connection_options;
+  connection_options.set<cloud::spanner::SpannerRetryPolicyOption>(
+      retry_policy->clone());
+  connection_options.set<cloud::spanner::SpannerBackoffPolicyOption>(
+      backoff_policy->clone());
+  connection_options.set<cloud::spanner::SpannerPollingPolicyOption>(
+      polling_policy->clone());
+  database_client_ =
+      std::make_unique<cloud::spanner_admin::DatabaseAdminClient>(
+          cloud::spanner_admin::MakeDatabaseAdminConnection(
+              std::move(connection_options)));
+  ZETASQL_ASSERT_OK(ToUtilStatusOr(
+      database_client_
+          ->CreateDatabase(
+              database_->instance().FullName(),
+              absl::StrCat("CREATE DATABASE `", database_->database_id(), "`"))
+          .get()));
 
   // Setup a client to interact with the database.
   client_ = std::make_unique<cloud::spanner::Client>(
@@ -82,9 +93,9 @@ void DatabaseTest::SetUp() {
                                              *globals.connection_options));
 
   // Setup stubs to access low-level API features not exposed by the C++ client.
-  std::shared_ptr<grpc::Channel> channel =
-      grpc::CreateChannel(globals.connection_options->endpoint(),
-                          globals.connection_options->credentials());
+  std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(
+      globals.connection_options->get<google::cloud::EndpointOption>(),
+      globals.connection_options->get<google::cloud::GrpcCredentialOption>());
   spanner_stub_ = v1::Spanner::NewStub(channel);
   database_admin_stub_ =
       admin::database::v1::DatabaseAdmin::NewStub(channel);
@@ -94,20 +105,29 @@ void DatabaseTest::SetUp() {
   ZETASQL_ASSERT_OK(SetUpDatabase());
 }
 
-void DatabaseTest::TearDown() { database_client_->DropDatabase(*database_); }
+void DatabaseTest::TearDown() {
+  database_client_->DropDatabase(database_->FullName());
+}
 
 absl::Status DatabaseTest::ResetDatabase() {
   const ConformanceTestGlobals& globals = GetConformanceTestGlobals();
-  ZETASQL_RETURN_IF_ERROR(ToUtilStatus(database_client_->DropDatabase(*database_)));
+  ZETASQL_RETURN_IF_ERROR(
+      ToUtilStatus(database_client_->DropDatabase(database_->FullName())));
   database_ = std::make_unique<google::cloud::spanner::Database>(
       google::cloud::spanner::Instance(globals.project_id, globals.instance_id),
       absl::StrCat("test-database-", absl::ToUnixMicros(absl::Now())));
   return ToUtilStatus(
-      database_client_->CreateDatabase(*database_).get().status());
+      database_client_
+          ->CreateDatabase(
+              database_->instance().FullName(),
+              absl::StrCat("CREATE DATABASE `", database_->database_id(), "`"))
+          .get()
+          .status());
 }
 
 absl::Status DatabaseTest::SetSchema(const std::vector<std::string>& schema) {
-  auto status_or = database_client_->UpdateDatabase(*database_, schema).get();
+  auto status_or =
+      database_client_->UpdateDatabaseDdl(database_->FullName(), schema).get();
   if (!status_or.ok()) {
     return ToUtilStatus(status_or.status());
   }
@@ -116,7 +136,8 @@ absl::Status DatabaseTest::SetSchema(const std::vector<std::string>& schema) {
 
 absl::StatusOr<DatabaseTest::UpdateDatabaseDdlMetadata>
 DatabaseTest::UpdateSchema(const std::vector<std::string>& schema) {
-  auto status_or = database_client_->UpdateDatabase(*database_, schema).get();
+  auto status_or =
+      database_client_->UpdateDatabaseDdl(database_->FullName(), schema).get();
   if (!status_or.ok()) {
     return ToUtilStatus(status_or.status());
   }
@@ -124,7 +145,7 @@ DatabaseTest::UpdateSchema(const std::vector<std::string>& schema) {
 }
 
 absl::StatusOr<std::vector<std::string>> DatabaseTest::GetDatabaseDdl() const {
-  auto status_or = database_client_->GetDatabaseDdl(*database_);
+  auto status_or = database_client_->GetDatabaseDdl(database_->FullName());
   if (!status_or.ok()) {
     return ToUtilStatus(status_or.status());
   }

@@ -17,10 +17,11 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_DDL_TYPE_CONVERSION_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_DDL_TYPE_CONVERSION_H_
 
+#include <memory>
+
 #include "zetasql/public/type.h"
 #include "absl/status/statusor.h"
 #include "backend/schema/ddl/operations.pb.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -29,7 +30,9 @@ namespace backend {
 
 // Converts the ColumnType in DDL statements to zetasql::Type.
 absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
-    const ddl::ColumnType& ddl_type, zetasql::TypeFactory* type_factory);
+    const ddl::ColumnType& ddl_type,
+    zetasql::TypeFactory* type_factory
+);
 
 // Converts zetasql::Type to its equivalent DDL ColumnType. Returns a
 // ddl::ColumnType::UNKNOWN_TYPE type if the passed in googlesql type is not a

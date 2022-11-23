@@ -175,9 +175,10 @@ CREATE TABLE T (
   CONSTRAINT _col_a_gt_zero CHECK(A > 0),
 ) PRIMARY KEY(A);
 --
-ERROR: .*name not valid: _col_a_gt_zero.*
+ERROR:.* .*name not valid: _col_a_gt_zero.*
 ==
 # Multiple table with check constraint of the same name.
+# --regex
 CREATE TABLE T1 (
   A INT64,
   CONSTRAINT a_gt_zero CHECK(A > 0),
@@ -188,9 +189,10 @@ CREATE TABLE T2 (
   CONSTRAINT a_gt_zero CHECK(A > 0),
 ) PRIMARY KEY(A);
 --
-ERROR: Duplicate name in schema: a_gt_zero.
+ERROR:.* Duplicate name in schema: a_gt_zero.
 ==
 # Constraint and table name conflict.
+# --regex
 CREATE TABLE T1 (
   A INT64,
   CONSTRAINT T2 CHECK(A > 0),
@@ -201,26 +203,29 @@ CREATE TABLE T2 (
   CONSTRAINT a_gt_zero CHECK(A > 0),
 ) PRIMARY KEY(A);
 --
-ERROR: Duplicate name in schema: T2.
+ERROR:.* Duplicate name in schema: T2.
 ==
 # Check constraint with const expression.
+# --regex
 CREATE TABLE T (
   A INT64,
   CONSTRAINT const_check CHECK(1 > 0),
 ) PRIMARY KEY(A);
 --
-ERROR: Check constraint `T`.`const_check` does not use any non generated column. Expression: '1 > 0'. A check constraint expression requires at least one non-generated column as dependency.
+ERROR:.* Check constraint `T`.`const_check` does not use any non generated column. Expression: '1 > 0'. A check constraint expression requires at least one non-generated column as dependency.
 ==
 # Check constraint with const expression with gen col.
+# --regex
 CREATE TABLE T (
   A INT64,
   B INT64 as (1) STORED,
   CONSTRAINT const_check CHECK(B > 0),
 ) PRIMARY KEY(A);
 --
-ERROR: Check constraint `T`.`const_check` does not use any non generated column. Expression: 'B > 0'. A check constraint expression requires at least one non-generated column as dependency.
+ERROR:.* Check constraint `T`.`const_check` does not use any non generated column. Expression: 'B > 0'. A check constraint expression requires at least one non-generated column as dependency.
 ==
 # Check constraint with const expression with two level gen col.
+# --regex
 CREATE TABLE T (
   A INT64,
   B INT64 as (1) STORED,
@@ -228,9 +233,10 @@ CREATE TABLE T (
   CONSTRAINT const_check CHECK(C > 0),
 ) PRIMARY KEY(A);
 --
-ERROR: Check constraint `T`.`const_check` does not use any non generated column. Expression: 'C > 0'. A check constraint expression requires at least one non-generated column as dependency.
+ERROR:.* Check constraint `T`.`const_check` does not use any non generated column. Expression: 'C > 0'. A check constraint expression requires at least one non-generated column as dependency.
 ==
 # Check constraint with const expression with two level gen col reverse order.
+# --regex
 CREATE TABLE T (
   A INT64,
   C INT64 AS (B) STORED,
@@ -238,9 +244,10 @@ CREATE TABLE T (
   CONSTRAINT const_check CHECK(C > 0),
 ) PRIMARY KEY(A);
 --
-ERROR: Check constraint `T`.`const_check` does not use any non generated column. Expression: 'C > 0'. A check constraint expression requires at least one non-generated column as dependency.
+ERROR:.* Check constraint `T`.`const_check` does not use any non generated column. Expression: 'C > 0'. A check constraint expression requires at least one non-generated column as dependency.
 ==
 # Check constraint with const expression with two level gen col reverse order by name.
+# --regex
 CREATE TABLE T (
   A INT64,
   C INT64 AS (1) STORED,
@@ -248,17 +255,19 @@ CREATE TABLE T (
   CONSTRAINT const_check CHECK(B > 0),
 ) PRIMARY KEY(A);
 --
-ERROR: Check constraint `T`.`const_check` does not use any non generated column. Expression: 'B > 0'. A check constraint expression requires at least one non-generated column as dependency.
+ERROR:.* Check constraint `T`.`const_check` does not use any non generated column. Expression: 'B > 0'. A check constraint expression requires at least one non-generated column as dependency.
 ==
 # Constraint expression invalid expression.
+# --regex
 CREATE TABLE T (
   A INT64,
   constraint a_is_not_zero CHECK(A B C),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'A B C' from check constraint 'a_is_not_zero' in table 'T': Syntax error: Expected end of input but got identifier "B" [at 1:3]\nA B C\n ^
+ERROR:.* Error parsing expression 'A B C' from check constraint 'a_is_not_zero' in table 'T': Syntax error: Expected end of input but got identifier "B" \[at 1:3]\nA B C\n \^
 ==
 # Constraint using column from another table.
+# --regex
 CREATE TABLE T1 (
   A1 INT64,
 ) PRIMARY KEY(A1);
@@ -269,75 +278,84 @@ CREATE TABLE T2 (
   check (A1 > 0),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'A1 > 0' from check constraint '<unnamed>' in table 'T2': Unrecognized name: A1 [at 1:1]\nA1 > 0\n^
+ERROR:.* Error parsing expression 'A1 > 0' from check constraint '<unnamed>' in table 'T2': Unrecognized name: A1 \[at 1:1]\nA1 > 0\n\^
 ==
 # Constraint with INT32 type.
+# --regex
 CREATE TABLE T (
   A INT64,
   check (CAST(1 as INT32)),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'CAST(1 as INT32)' from check constraint '<unnamed>' in table 'T': Type not found: INT32 [at 1:11]\nCAST(1 as INT32)\n ^
+ERROR:.* Error parsing expression 'CAST\(1 as INT32\)' from check constraint '<unnamed>' in table 'T': Type not found: INT32 \[at 1:11]\nCAST\(1 as INT32\)\n \^
 ==
 # Constraint with INT64 type.
+# --regex
 CREATE TABLE T (
   A INT64,
   check (CAST(1 as INT64)),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'CAST(1 as INT64)' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found INT64 [at 1:1]\nCAST(1 as INT64)\n ^
+ERROR:.* Error parsing expression 'CAST\(1 as INT64\)' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found INT64 \[at 1:1]\nCAST\(1 as INT64\)\n \^
 ==
 # Constraint with FLOAT type.
+# --regex
 CREATE TABLE T (
   A INT64,
   check (CAST(1 as FLOAT)),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'CAST(1 as FLOAT)' from check constraint '<unnamed>' in table 'T': Type not found: FLOAT [at 1:11]\nCAST(1 as FLOAT)\n ^
+ERROR:.* Error parsing expression 'CAST\(1 as FLOAT\)' from check constraint '<unnamed>' in table 'T': Type not found: FLOAT \[at 1:11]\nCAST\(1 as FLOAT\)\n \^
 ==
 # Constraint with FLOAT64 type.
+# --regex
 CREATE TABLE T (
   A INT64,
   check (CAST(1 as FLOAT64)),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'CAST(1 as FLOAT64)' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found FLOAT64 [at 1:1]\nCAST(1 as FLOAT64)\n ^
+ERROR:.* Error parsing expression 'CAST\(1 as FLOAT64\)' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found FLOAT64 \[at 1:1]\nCAST\(1 as FLOAT64\)\n \^
 ==
 # Constraint with STRING type.
+# --regex
 CREATE TABLE T (
   A INT64,
   check ("1 is gt 0"),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression '"1 is gt 0"' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found STRING [at 1:1] "1 is gt 0" ^
+ERROR:.* Error parsing expression '"1 is gt 0"' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found STRING \[at 1:1] "1 is gt 0" \^
 ==
 # Constraint with BYTES type.
+# --regex
 CREATE TABLE T (
   A INT64,
   check (CAST("1 is gt 0" as BYTES)),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'CAST("1 is gt 0" as BYTES)' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found BYTES [at 1:1] CAST("1 is gt 0" as BYTES) ^
+ERROR:.* Error parsing expression 'CAST\("1 is gt 0" as BYTES\)' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found BYTES \[at 1:1] CAST\("1 is gt 0" as BYTES\) \^
 ==
 # Constraint with TIMESTAMP type.
+# --regex
 CREATE TABLE T (
   A INT64,
   Ts TIMESTAMP,
   check (Ts),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'Ts' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found TIMESTAMP [at 1:1] Ts ^
+ERROR:.* Error parsing expression 'Ts' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found TIMESTAMP \[at 1:1] Ts \^
 ==
 # Constraint with DATE type.
+# --regex
 CREATE TABLE T (
   A INT64,
   Day DATE,
   check (Day),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'Day' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found DATE [at 1:1] Day ^
+ERROR:.* Error parsing expression 'Day' from check constraint '<unnamed>' in table 'T': Expected type BOOL; found DATE \[at 1:1] Day \^
 ==
 # Constraint with non-scalar expression.
+# --regex
 CREATE TABLE T1 (
   A INT64,
 ) PRIMARY KEY(A);
@@ -348,35 +366,39 @@ CREATE TABLE T2 (
   constraint fk_t2_b_t1_a check (exists (select t1.A as a from T1 t1 where t1.A = B)),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'exists (select t1.A as a from T1 t1 where t1.A = B)' from check constraint 'fk_t2_b_t1_a' in table 'T2': Cannot use non-scalar expressions inside check constraints.
+ERROR:.* Error parsing expression 'exists \(select t1.A as a from T1 t1 where t1.A = B\)' from check constraint 'fk_t2_b_t1_a' in table 'T2': Cannot use non-scalar expressions inside check constraints.
 ==
 # Constraint with nested non-scalar expression.
+# --regex
 CREATE TABLE T (
   A INT64,
   CHECK (ARRAY_LENGTH(ARRAY(SELECT 1)) > A)
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'ARRAY_LENGTH(ARRAY(SELECT 1)) > A' from check constraint '<unnamed>' in table 'T': Cannot use non-scalar expressions inside check constraints.
+ERROR:.* Error parsing expression 'ARRAY_LENGTH\(ARRAY\(SELECT 1\)\) > A' from check constraint '<unnamed>' in table 'T': Cannot use non-scalar expressions inside check constraints.
 ==
 # Constraint with non-deterministic function.
+# --regex
 CREATE TABLE T (
   A INT64,
   B INT64,
   check (EXTRACT(YEAR from CURRENT_TIMESTAMP()) > 2018),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing expression 'EXTRACT(YEAR from CURRENT_TIMESTAMP()) > 2018' from check constraint '<unnamed>' in table 'T': Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of check constraints must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
+ERROR:.* Error parsing expression 'EXTRACT\(YEAR from CURRENT_TIMESTAMP\(\)\) > 2018' from check constraint '<unnamed>' in table 'T': Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of check constraints must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
 ==
 # Check constraint depending on non-deterministic generated column.
+# --regex
 CREATE TABLE T (
   A INT64,
   B INT64 as (EXTRACT(YEAR from CURRENT_TIMESTAMP())) STORED,
   check (B > A),
 ) PRIMARY KEY(A);
 --
-ERROR: Error parsing the definition of generated column `T`.`B`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
+ERROR:.* Error parsing the definition of generated column `T`.`B`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
 ==
 # Check constraint depending on chained non-deterministic generated column.
+# --regex
 CREATE TABLE T (
   A INT64,
   B INT64 as (EXTRACT(YEAR from CURRENT_TIMESTAMP())),
@@ -384,7 +406,7 @@ CREATE TABLE T (
   check (C > A),
 ) PRIMARY KEY(A);
 --
-ERROR: Generated column `B` without the STORED attribute is not supported.
+ERROR:.* Generated column `B` without the STORED attribute is not supported.
 ==
 # Commit timestamp column not supported.
 # --regex
@@ -394,9 +416,10 @@ CREATE TABLE T (
   CHECK(EXTRACT(YEAR from B) > 2018)
 ) PRIMARY KEY(A);
 --
-ERROR: .*Column `B` has option commit_timestamp, which is not supported in check constraint.
+ERROR:.* .*Column `B` has option commit_timestamp, which is not supported in check constraint.
 ==
 # Column used by check constraint can not be changed to use commit_timestamp.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
   B TIMESTAMP,
@@ -404,9 +427,10 @@ CREATE TABLE T (
 ) PRIMARY KEY(A);
 ALTER TABLE T ALTER COLUMN B SET OPTIONS (allow_commit_timestamp = true);
 --
-ERROR: Column `B` has option commit_timestamp, which is not supported in check constraint.
+ERROR:.* Column `B` has option commit_timestamp, which is not supported in check constraint.
 ==
 # Add check constraint to existing table with duplicate name.
+# --regex
 CREATE TABLE T (
   A INT64,
   Value INT64,
@@ -414,9 +438,10 @@ CREATE TABLE T (
 ) PRIMARY KEY(A);
 ALTER TABLE T ADD CONSTRAINT value_gt_zero check(Value > 0);
 --
-ERROR: Duplicate name in schema: value_gt_zero.
+ERROR:.* Duplicate name in schema: value_gt_zero.
 ==
 # Add check constraint before CREATE TABLE.
+# --regex
 ALTER TABLE T ADD CONSTRAINT value_gt_zero check(Value > 0);
 CREATE TABLE T (
   A INT64,
@@ -424,17 +449,19 @@ CREATE TABLE T (
   CONSTRAINT value_gt_zero check(Value > 0)
 ) PRIMARY KEY(A);
 --
-ERROR: Table not found: T
+ERROR:.* Table not found: T
 ==
 # Add check constraint with const expression.
+# --regex
 CREATE TABLE T (
   A INT64,
 ) PRIMARY KEY(A);
 ALTER TABLE T ADD CONSTRAINT const_check check(1 > 0);
 --
-ERROR: Check constraint `T`.`const_check` does not use any non generated column. Expression: '1 > 0'. A check constraint expression requires at least one non-generated column as dependency.
+ERROR:.* Check constraint `T`.`const_check` does not use any non generated column. Expression: '1 > 0'. A check constraint expression requires at least one non-generated column as dependency.
 ==
 # Change the type of a column that is directly used by a check constraint.
+# --regex
 CREATE TABLE T (
   id INT64 NOT NULL,
   a STRING(MAX),
@@ -442,9 +469,10 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER COLUMN a BYTES(MAX);
 --
-ERROR: Cannot change the data type of column `a`, which is used by check constraint `a_gt_zero`.
+ERROR:.* Cannot change the data type of column `a`, which is used by check constraint `a_gt_zero`.
 ==
 # Change the type of a column that is indirectly used by a check constraint.
+# --regex
 CREATE TABLE T (
   id INT64 NOT NULL,
   a STRING(MAX),
@@ -453,9 +481,10 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER COLUMN a BYTES(MAX);
 --
-ERROR: Cannot change the data type of column `a`, which has a dependent stored generated column.
+ERROR:.* Cannot change the data type of column `a`, which has a dependent stored generated column.
 ==
 # Change the subtype of an array column that is used by a check constraint.
+# --regex
 CREATE TABLE T (
   id INT64 NOT NULL,
   a ARRAY<STRING(MAX)>,
@@ -463,9 +492,10 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER COLUMN a ARRAY<BYTES(MAX)>;
 --
-ERROR: Cannot change the data type of column `a`, which is used by check constraint `a_length_gt_zero`.
+ERROR:.* Cannot change the data type of column `a`, which is used by check constraint `a_length_gt_zero`.
 ==
 # Drop a column that is directly used by a check constraint.
+# --regex
 CREATE TABLE T (
   id INT64 NOT NULL,
   a INT64,
@@ -473,9 +503,10 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 ALTER TABLE T DROP COLUMN a;
 --
-ERROR: Cannot drop column `a` from table `T` because it is referenced by check constraint `a_gt_zero`.
+ERROR:.* Cannot drop column `a` from table `T` because it is referenced by check constraint `a_gt_zero`.
 ==
 # Drop a column that is indirectly used by a check constraint via stored generated columm.
+# --regex
 CREATE TABLE T (
   id INT64 NOT NULL,
   a INT64,
@@ -484,12 +515,13 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 ALTER TABLE T DROP COLUMN a;
 --
-ERROR: Cannot drop column `a` from table `T` because it is referenced by generated column `b`.
+ERROR:.* Cannot drop column `a` from table `T` because it is referenced by generated column `b`.
 ==
 # Constraint with the same name as the defining table.
+# --regex
 CREATE TABLE a (
   b BOOL,
   CONSTRAINT a CHECK (b)
 ) PRIMARY KEY ();
 --
-ERROR: Duplicate name in schema: a.
+ERROR:.* Duplicate name in schema: a.

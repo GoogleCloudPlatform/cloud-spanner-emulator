@@ -22,7 +22,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "google/cloud/spanner/connection_options.h"
+#include "google/cloud/spanner/options.h"
 #include "google/cloud/status.h"
 #include "google/cloud/status_or.h"
 #include "absl/status/status.h"
@@ -42,7 +42,7 @@ struct ConformanceTestGlobals {
   bool in_prod_env = false;
 
   // Client library options for connecting to the Cloud Spanner under test.
-  std::unique_ptr<cloud::spanner::ConnectionOptions> connection_options;
+  std::unique_ptr<cloud::Options> connection_options;
 };
 
 // Returns the globals shared by all conformance tests.

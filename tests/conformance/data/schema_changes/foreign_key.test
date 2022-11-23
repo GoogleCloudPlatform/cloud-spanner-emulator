@@ -227,14 +227,16 @@ CREATE TABLE T (
 ) PRIMARY KEY(A, B);
 ==
 # Referenced table not found.
+# --regex
 CREATE TABLE U (
   X INT64 NOT NULL,
   FOREIGN KEY(X) REFERENCES T(A)
 ) PRIMARY KEY(X);
 --
-ERROR: Table not found: T
+ERROR:.* Table not found: T
 ==
 # Duplicate schema name (CREATE TABLE).
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL
 ) PRIMARY KEY(A);
@@ -243,9 +245,10 @@ CREATE TABLE U (
   CONSTRAINT T FOREIGN KEY(X) REFERENCES T(A)
 ) PRIMARY KEY(X);
 --
-ERROR: Duplicate name in schema: T.
+ERROR:.* Duplicate name in schema: T.
 ==
 # Duplicate schema name (ALTER TABLE).
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL
 ) PRIMARY KEY(A);
@@ -254,7 +257,7 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 ALTER TABLE U ADD CONSTRAINT T FOREIGN KEY(X) REFERENCES T(A);
 --
-ERROR: Duplicate name in schema: T.
+ERROR:.* Duplicate name in schema: T.
 ==
 # System schema name (CREATE TABLE).
 # --regex
@@ -266,7 +269,7 @@ CREATE TABLE U (
   CONSTRAINT _T FOREIGN KEY(X) REFERENCES T(A)
 ) PRIMARY KEY(X);
 --
-ERROR: [Ff]oreign [Kk]ey name not valid: _T.
+ERROR:.* [Ff]oreign [Kk]ey name not valid: _T.
 ==
 # System schema name (ALTER TABLE).
 # --regex
@@ -278,7 +281,7 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 ALTER TABLE U ADD CONSTRAINT _T FOREIGN KEY(X) REFERENCES T(A);
 --
-ERROR: [Ff]oreign [Kk]ey name not valid: _T.
+ERROR:.* [Ff]oreign [Kk]ey name not valid: _T.
 ==
 # Duplicate constrained column usage.
 # --regex
@@ -292,7 +295,7 @@ CREATE TABLE U (
   FOREIGN KEY(X,X) REFERENCES T(A,B)
 ) PRIMARY KEY(X);
 --
-ERROR: Column `X` used more than once for table `U` in foreign key `FK_U_T_[A-F0-9_]+`.
+ERROR:.* Column `X` used more than once for table `U` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
 # Duplicate referenced column usage.
 # --regex
@@ -306,7 +309,7 @@ CREATE TABLE U (
   FOREIGN KEY(X,Y) REFERENCES T(A,A)
 ) PRIMARY KEY(X);
 --
-ERROR: Column `A` used more than once for table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
+ERROR:.* Column `A` used more than once for table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
 # Mismatched number of constrained and referenced columns.
 # --regex
@@ -320,9 +323,10 @@ CREATE TABLE U (
   FOREIGN KEY(X,Y) REFERENCES T(A)
 ) PRIMARY KEY(X);
 --
-ERROR: The number of columns are different for table `U` and table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
+ERROR:.* The number of columns are different for table `U` and table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
 # No constrained columns.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL
 ) PRIMARY KEY(A);
@@ -331,9 +335,10 @@ CREATE TABLE U (
   FOREIGN KEY() REFERENCES T(A)
 ) PRIMARY KEY(X);
 --
-ERROR: Error parsing Spanner DDL statement: CREATE TABLE U ( X INT64 NOT NULL, FOREIGN KEY() REFERENCES T(A) ) PRIMARY KEY(X) : Syntax error on line 4, column 15: Encountered ')' while parsing: identifier
+ERROR:.* Error parsing Spanner DDL statement: CREATE TABLE U \( X INT64 NOT NULL, FOREIGN KEY\(\) REFERENCES T\(A\) \) PRIMARY KEY\(X\) : Syntax error on line 4, column 15: Encountered '\)' while parsing: identifier
 ==
 # No referenced columns.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL
 ) PRIMARY KEY(A);
@@ -342,7 +347,7 @@ CREATE TABLE U (
   FOREIGN KEY(X) REFERENCES T()
 ) PRIMARY KEY(X);
 --
-ERROR: Error parsing Spanner DDL statement: CREATE TABLE U ( X INT64 NOT NULL, FOREIGN KEY(X) REFERENCES T() ) PRIMARY KEY(X) : Syntax error on line 4, column 31: Encountered ')' while parsing: identifier
+ERROR:.* Error parsing Spanner DDL statement: CREATE TABLE U \( X INT64 NOT NULL, FOREIGN KEY\(X\) REFERENCES T\(\) \) PRIMARY KEY\(X\) : Syntax error on line 4, column 31: Encountered '\)' while parsing: identifier
 ==
 # Constrained column not found.
 # --regex
@@ -354,7 +359,7 @@ CREATE TABLE U (
   FOREIGN KEY(Y) REFERENCES T(A)
 ) PRIMARY KEY(X);
 --
-ERROR: Column `Y` not found for table `U` in foreign key `FK_U_T_[A-F0-9_]+`.
+ERROR:.* Column `Y` not found for table `U` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
 # Referenced column not found.
 # --regex
@@ -366,7 +371,7 @@ CREATE TABLE U (
   FOREIGN KEY(X) REFERENCES T(B)
 ) PRIMARY KEY(X);
 --
-ERROR: Column `B` not found for table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
+ERROR:.* Column `B` not found for table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
 # Different column types.
 # --regex
@@ -378,7 +383,7 @@ CREATE TABLE U (
   FOREIGN KEY(X) REFERENCES T(A)
 ) PRIMARY KEY(X);
 --
-ERROR: The column types are different for column `X` of table `U` and column `A` of table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
+ERROR:.* The column types are different for column `X` of table `U` and column `A` of table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
 # Invalid constraint name.
 # --regex
@@ -390,7 +395,7 @@ CREATE TABLE U (
   CONSTRAINT PK_FK FOREIGN KEY(X) REFERENCES T(A)
 ) PRIMARY KEY(X);
 --
-ERROR: Invalid [Ff]oreign [Kk]ey name: PK_FK. Prefix PK_ cannot be used.
+ERROR:.* Invalid [Ff]oreign [Kk]ey name: PK_FK. Prefix PK_ cannot be used.
 ==
 # Cannot drop referenced table.
 # --regex
@@ -407,9 +412,10 @@ CREATE TABLE V (
 ) PRIMARY KEY(Y);
 DROP TABLE T;
 --
-ERROR: Cannot drop table `T`. It is referenced by one or more foreign keys: `FK_U_T_[A-F0-9_]+`, `FK_V_T_[A-F0-9_]+`. You must drop the foreign keys before dropping the table.
+ERROR:.* Cannot drop table `T`. It is referenced by one or more foreign keys: `FK_U_T_[A-F0-9_]+`, `FK_V_T_[A-F0-9_]+`. You must drop the foreign keys before dropping the table.
 ==
 # Cannot alter constrained column's type.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL
 ) PRIMARY KEY(A);
@@ -420,9 +426,10 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 ALTER TABLE U ALTER COLUMN Y FLOAT64 NOT NULL;
 --
-ERROR: Cannot change type of column `Y` from `INT64` to `FLOAT64`
+ERROR:.* Cannot change type of column `Y` from `INT64` to `FLOAT64`
 ==
 # Cannot alter referenced column's type.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL
@@ -433,9 +440,10 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 ALTER TABLE T ALTER COLUMN B FLOAT64 NOT NULL;
 --
-ERROR: Cannot change type of column `B` from `INT64` to `FLOAT64`
+ERROR:.* Cannot change type of column `B` from `INT64` to `FLOAT64`
 ==
 # Cannot alter referenced column's nullability.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -446,7 +454,7 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 ALTER TABLE T ALTER COLUMN B INT64;
 --
-ERROR: Cannot change the nullability for column `B` of table `T`. It is used by one or more foreign keys: `FK_U_T_FFADEDEE3430D435_1`.
+ERROR:.* Cannot change the nullability for column `B` of table `T`. It is used by one or more foreign keys: `FK_U_T_FFADEDEE3430D435_1`.
 ==
 # Cannot alter constrained column's nullability.
 # --regex
@@ -460,9 +468,10 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 ALTER TABLE U ALTER COLUMN Y INT64;
 --
-ERROR: Cannot change the nullability for column `Y` of table `U`. It is used by one or more foreign keys: `FK_U_T_[A-F0-9_]+`.
+ERROR:.* Cannot change the nullability for column `Y` of table `U`. It is used by one or more foreign keys: `FK_U_T_[A-F0-9_]+`.
 ==
 # Cannot drop constrained column.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -475,9 +484,10 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 ALTER TABLE U DROP COLUMN Y;
 --
-ERROR: Cannot drop column `Y` from table `U`. It is used by one or more foreign keys: `FK_U_T_FFADEDEE3430D435_1`, `FK_U_T_FFADEDEE3430D435_2`. You must drop the foreign keys before dropping the column.
+ERROR:.* Cannot drop column `Y` from table `U`. It is used by one or more foreign keys: `FK_U_T_FFADEDEE3430D435_1`, `FK_U_T_FFADEDEE3430D435_2`. You must drop the foreign keys before dropping the column.
 ==
 # Cannot drop referenced column.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -492,9 +502,10 @@ CREATE TABLE V (
 ) PRIMARY KEY(Y);
 ALTER TABLE T DROP COLUMN B;
 --
-ERROR: Cannot drop column `B` from table `T`. It is used by one or more foreign keys: `FK_U_T_FFADEDEE3430D435_1`, `FK_V_T_A032F46D0AA7A2F1_1`. You must drop the foreign keys before dropping the column.
+ERROR:.* Cannot drop column `B` from table `T`. It is used by one or more foreign keys: `FK_U_T_FFADEDEE3430D435_1`, `FK_V_T_A032F46D0AA7A2F1_1`. You must drop the foreign keys before dropping the column.
 ==
 # Invalid column type.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
   B ARRAY<INT64> NOT NULL
@@ -505,7 +516,7 @@ CREATE TABLE U (
   FOREIGN KEY(Y) REFERENCES T(B)
 ) PRIMARY KEY(X);
 --
-ERROR: Column `Y` for foreign key `FK_U_T_FFADEDEE3430D435_1` on table `U` has an unsupported type.
+ERROR:.* Column `Y` for foreign key `FK_U_T_FFADEDEE3430D435_1` on table `U` has an unsupported type.
 ==
 # Invalid referencing commit timestamp.
 # --regex
@@ -519,7 +530,7 @@ CREATE TABLE U (
   FOREIGN KEY(Y) REFERENCES T(B)
 ) PRIMARY KEY(X);
 --
-ERROR: Commit timestamp column is not supported for column `Y` of table `U` in foreign key `FK_U_T_[A-F0-9_]+`.
+ERROR:.* Commit timestamp column is not supported for column `Y` of table `U` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
 # Invalid referenced commit timestamp.
 # --regex
@@ -533,7 +544,7 @@ CREATE TABLE U (
   FOREIGN KEY(Y) REFERENCES T(B)
 ) PRIMARY KEY(X);
 --
-ERROR: Commit timestamp column is not supported for column `B` of table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
+ERROR:.* Commit timestamp column is not supported for column `B` of table `T` in foreign key `FK_U_T_[A-F0-9_]+`.
 ==
 # Invalid set referencing commit timestamp.
 # --regex
@@ -548,7 +559,7 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 ALTER TABLE U ALTER COLUMN Y SET OPTIONS (allow_commit_timestamp = true);
 --
-ERROR: Cannot set the commit_timestamp option for column `Y` of table `U`. It is used by one or more foreign keys: `FK_U_T_[A-F0-9_]+`.
+ERROR:.* Cannot set the commit_timestamp option for column `Y` of table `U`. It is used by one or more foreign keys: `FK_U_T_[A-F0-9_]+`.
 ==
 # Invalid set referenced commit timestamp.
 # --regex
@@ -563,17 +574,19 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 ALTER TABLE T ALTER COLUMN B SET OPTIONS (allow_commit_timestamp = true);
 --
-ERROR: Cannot set the commit_timestamp option for column `B` of table `T`. It is used by one or more foreign keys: `FK_U_T_[A-F0-9_]+`.
+ERROR:.* Cannot set the commit_timestamp option for column `B` of table `T`. It is used by one or more foreign keys: `FK_U_T_[A-F0-9_]+`.
 ==
 # Constraint not found.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
 ) PRIMARY KEY(A);
 ALTER TABLE T DROP CONSTRAINT C;
 --
-ERROR: C is not a constraint in T
+ERROR:.* C is not a constraint in T
 ==
 # Create table with duplicate constraint names.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
 ) PRIMARY KEY(A);
@@ -583,9 +596,10 @@ CREATE TABLE U (
   CONSTRAINT C FOREIGN KEY(X) REFERENCES T(A),
 ) PRIMARY KEY(X);
 --
-ERROR: Duplicate name in schema: C.
+ERROR:.* Duplicate name in schema: C.
 ==
 # Add duplicate constraint names.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
 ) PRIMARY KEY(A);
@@ -595,9 +609,10 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 ALTER TABLE T ADD CONSTRAINT C FOREIGN KEY(A) REFERENCES U(X);
 --
-ERROR: Duplicate name in schema: C.
+ERROR:.* Duplicate name in schema: C.
 ==
 # Cannot drop constrained table's backing index.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -609,9 +624,10 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 DROP INDEX IDX_U_Y_F59F82AF5FD70C80;
 --
-ERROR: Cannot drop index `IDX_U_Y_F59F82AF5FD70C80`. It is in use by foreign keys: `FK_U_T_FFADEDEE3430D435_1`.
+ERROR:.* Cannot drop index `IDX_U_Y_F59F82AF5FD70C80`. It is in use by foreign keys: `FK_U_T_FFADEDEE3430D435_1`.
 ==
 # Cannot drop referenced table's backing index.
+# --regex
 CREATE TABLE T (
   A INT64 NOT NULL,
   B INT64 NOT NULL,
@@ -622,5 +638,5 @@ CREATE TABLE U (
 ) PRIMARY KEY(X);
 DROP INDEX IDX_T_B_U_8EB179EFA3EE9706;
 --
-ERROR: Cannot drop index `IDX_T_B_U_8EB179EFA3EE9706`. It is in use by foreign keys: `FK_U_T_FFADEDEE3430D435_1`.
+ERROR:.* Cannot drop index `IDX_T_B_U_8EB179EFA3EE9706`. It is in use by foreign keys: `FK_U_T_FFADEDEE3430D435_1`.
 ==

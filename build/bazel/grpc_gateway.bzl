@@ -118,17 +118,17 @@ generate_grpc_gateway_file = rule(
         "yaml_config": attr.label(allow_files = True),
         "protoc": attr.label(
             executable = True,
-            cfg = "host",
+            cfg = "exec",
             default = "@com_google_protobuf//:protoc",
         ),
         "protoc_gen_grpc_gateway": attr.label(
             executable = True,
-            cfg = "host",
+            cfg = "exec",
             default = GRPC_GATEWAY_PKG + ":" + GRPC_GATEWAY_BIN,
         ),
         "fix_grpc_gateway": attr.label(
             executable = True,
-            cfg = "host",
+            cfg = "exec",
             default = ":fix_grpc_gateway",
         ),
     },

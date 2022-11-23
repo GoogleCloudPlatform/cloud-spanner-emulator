@@ -16,15 +16,24 @@
 
 #include "frontend/converters/types.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "google/spanner/v1/type.pb.h"
+#include "google/protobuf/descriptor.pb.h"
 #include "zetasql/public/type.h"
+#include "zetasql/public/types/array_type.h"
+#include "zetasql/public/types/struct_type.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -48,7 +57,12 @@ using zetasql::types::NumericType;
 using zetasql::types::StringType;
 using zetasql::types::TimestampType;
 
-TEST(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
+class TypeProtos : public ::testing::Test {
+ public:
+  TypeProtos() = default;
+};
+
+TEST_F(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
   zetasql::TypeFactory factory;
   const zetasql::Type* str_int_pair_type;
   ZETASQL_ASSERT_OK(factory.MakeStructType(
@@ -121,7 +135,8 @@ TEST(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
     // Check proto -> type conversion.
     const zetasql::Type* actual_type;
     ZETASQL_EXPECT_OK(TypeFromProto(PARSE_TEXT_PROTO(expected_type_pb_txt), &factory,
-                            &actual_type));
+                            &actual_type
+                            ));
     EXPECT_TRUE(expected_type->Equals(actual_type))
         << "When parsing {" << expected_type_pb_txt << "} "
         << " expected " << expected_type->DebugString() << " got "
@@ -135,7 +150,7 @@ TEST(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
   }
 }
 
-TEST(TypeProtos, DoesNotConvertUnknownTypesToProtos) {
+TEST_F(TypeProtos, DoesNotConvertUnknownTypesToProtos) {
   google::spanner::v1::Type actual_type_pb;
   EXPECT_EQ(
       absl::StatusCode::kInternal,
@@ -150,7 +165,7 @@ TEST(ValueProtos, DoesNotConvertUnknownProtosToTypes) {
             TypeFromProto(unspecified_type_pb, &factory, &actual_type).code());
 }
 
-TEST(TypeProtos, DoesNotConvertProtoArrayTypeWithUnspecifiedElementType) {
+TEST_F(TypeProtos, DoesNotConvertProtoArrayTypeWithUnspecifiedElementType) {
   zetasql::TypeFactory factory;
   const zetasql::Type* actual_type;
   EXPECT_EQ(

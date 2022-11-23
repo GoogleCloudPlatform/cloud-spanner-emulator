@@ -16,26 +16,38 @@
 
 #include "backend/schema/updater/schema_updater.h"
 
-#include <algorithm>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "zetasql/base/logging.h"
 #include "google/protobuf/repeated_field.h"
 #include "zetasql/public/analyzer.h"
+#include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/analyzer_output.h"
+#include "zetasql/public/catalog.h"
+#include "zetasql/public/function.h"
+#include "zetasql/public/function.pb.h"
 #include "zetasql/public/simple_catalog.h"
 #include "zetasql/public/type.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
+#include "zetasql/resolved_ast/resolved_node.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/meta/type_traits.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
-#include "absl/types/optional.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/query_engine_options.h"
@@ -62,6 +74,7 @@
 #include "backend/schema/verifiers/foreign_key_verifiers.h"
 #include "common/errors.h"
 #include "common/limits.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -133,7 +146,8 @@ class SchemaUpdaterImpl {
 
   // Applies the given `statement` on to `latest_schema_`.
   absl::StatusOr<std::unique_ptr<const Schema>> ApplyDDLStatement(
-      absl::string_view statement);
+      absl::string_view statement
+  );
 
   // Run any pending schema actions resulting from the schema change statements.
   absl::Status RunPendingActions(
@@ -348,7 +362,8 @@ absl::Status SchemaUpdaterImpl::DropNode(const SchemaNode* node) {
 }
 
 absl::StatusOr<std::unique_ptr<const Schema>>
-SchemaUpdaterImpl::ApplyDDLStatement(absl::string_view statement) {
+SchemaUpdaterImpl::ApplyDDLStatement(absl::string_view statement
+) {
   if (statement.empty()) {
     return error::EmptyDDLStatement();
   }
@@ -356,7 +371,8 @@ SchemaUpdaterImpl::ApplyDDLStatement(absl::string_view statement) {
   // Apply the statement to the schema graph.
   ZETASQL_RET_CHECK(!editor_->HasModifications());
   ZETASQL_ASSIGN_OR_RETURN(const auto& ddl_statement,
-                   ddl::ParseDDLStatement(statement));
+                   ddl::ParseDDLStatement(statement
+                                          ));
 
   switch (ddl_statement.kind_case()) {
     case ddl::DDLStatement::kCreateTable: {
@@ -387,7 +403,8 @@ SchemaUpdaterImpl::ApplyDDLStatement(absl::string_view statement) {
                        << ddl_statement.kind_case();
   }
   ZETASQL_ASSIGN_OR_RETURN(auto new_schema_graph, editor_->CanonicalizeGraph());
-  return std::make_unique<const Schema>(std::move(new_schema_graph));
+  return std::make_unique<const Schema>(std::move(new_schema_graph)
+  );
 }
 
 absl::StatusOr<std::vector<SchemaValidationContext>>
@@ -404,7 +421,10 @@ SchemaUpdaterImpl::ApplyDDLStatements(
         latest_schema_->GetSchemaGraph(), statement_context_);
 
     // If there is a semantic validation error, then we return right away.
-    ZETASQL_ASSIGN_OR_RETURN(auto new_schema, ApplyDDLStatement(statement));
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto new_schema,
+        ApplyDDLStatement(statement
+                          ));
 
     // We save every schema snapshot as verifiers/backfillers from the
     // current/next statement may need to refer to the previous/current
@@ -559,7 +579,8 @@ absl::Status SchemaUpdaterImpl::InitColumnNameAndTypesFromTable(
       ZETASQL_ASSIGN_OR_RETURN(
           const zetasql::Type* type,
           DDLColumnTypeToGoogleSqlType(ddl_column.properties().column_type(),
-                                       type_factory_));
+                                       type_factory_
+                                       ));
       name_and_types->emplace_back(ddl_column.column_name(), type);
     }
   } else {
@@ -678,9 +699,11 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
   // Process any changes in column definition.
   if (ddl_column.has_properties() &&
       ddl_column.properties().has_column_type()) {
-    ZETASQL_ASSIGN_OR_RETURN(const zetasql::Type* column_type,
-                     DDLColumnTypeToGoogleSqlType(
-                         ddl_column.properties().column_type(), type_factory_));
+    ZETASQL_ASSIGN_OR_RETURN(
+        const zetasql::Type* column_type,
+        DDLColumnTypeToGoogleSqlType(ddl_column.properties().column_type(),
+                                     type_factory_
+                                     ));
     modifier->set_type(column_type);
 
     ddl::ColumnProperties properties = ddl_column.properties();

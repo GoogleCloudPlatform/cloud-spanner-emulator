@@ -326,21 +326,23 @@ CREATE TABLE T (
 Cannot use non-scalar expressions inside column default
 ==
 # allow_commit_timestamp not allowed on column with default value.
+# --regex
 CREATE TABLE T(
   id INT64,
   ts TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true)
 ) PRIMARY KEY(id);
 --
-ERROR: Cannot use commit timestamp column `ts` as a column with default value.
+ERROR:.* Cannot use commit timestamp column `ts` as a column with default value.
 ==
 # SET DEFAULT: allow_commit_timestamp not allowed on column with default value.
+# --regex
 CREATE TABLE T(
   id INT64,
   ts TIMESTAMP OPTIONS (allow_commit_timestamp = true)
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER ts SET DEFAULT (CURRENT_TIMESTAMP());
 --
-ERROR: Cannot use commit timestamp column `ts` as a column with default value.
+ERROR:.* Cannot use commit timestamp column `ts` as a column with default value.
 ==
 # PENDING_COMMIT_TIMESTAMP not allowed on column with default value.
 CREATE TABLE T (

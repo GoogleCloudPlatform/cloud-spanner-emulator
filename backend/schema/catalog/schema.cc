@@ -25,8 +25,6 @@
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_node.h"
-#include "common/errors.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -58,8 +56,10 @@ const Index* Schema::FindIndex(const std::string& index_name) const {
   return itr->second;
 }
 
-Schema::Schema(std::unique_ptr<const SchemaGraph> graph)
-    : graph_(std::move(graph)) {
+Schema::Schema(std::unique_ptr<const SchemaGraph> graph
+               )
+    : graph_(std::move(graph))
+{
   tables_.clear();
   tables_map_.clear();
   index_map_.clear();

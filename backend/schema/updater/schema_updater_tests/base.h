@@ -17,22 +17,23 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_SCHEMA_UPDATER_TESTS_BASE_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_SCHEMA_UPDATER_TESTS_BASE_H_
 
-#include <iterator>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "zetasql/public/type.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "absl/memory/memory.h"
-#include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/substitute.h"
-#include "absl/time/time.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/common/ids.h"
-#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_graph_editor.h"
@@ -148,10 +149,13 @@ const T* AssertNotNull(const T* value, const char* file, int line) {
 class SchemaUpdaterTest : public testing::Test {
  public:
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
-      absl::Span<const std::string> statements);
+      absl::Span<const std::string> statements
+  );
 
   absl::StatusOr<std::unique_ptr<const Schema>> UpdateSchema(
-      const Schema* base_schema, absl::Span<const std::string> statements);
+      const Schema* base_schema,
+      absl::Span<const std::string> statements
+  );
 
  protected:
   zetasql::TypeFactory type_factory_;

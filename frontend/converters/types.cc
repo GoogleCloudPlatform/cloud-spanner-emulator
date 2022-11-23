@@ -16,10 +16,23 @@
 
 #include "frontend/converters/types.h"
 
+#include <memory>
+#include <string>
 #include <vector>
 
+#include "google/spanner/v1/type.pb.h"
+#include "google/protobuf/descriptor.h"
+#include "zetasql/public/type.h"
+#include "zetasql/public/type.pb.h"
+#include "zetasql/public/types/array_type.h"
+#include "zetasql/public/types/enum_type.h"
+#include "zetasql/public/types/proto_type.h"
+#include "zetasql/public/types/struct_type.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "common/errors.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -27,9 +40,10 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
-absl::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
-                           zetasql::TypeFactory* factory,
-                           const zetasql::Type** type) {
+absl::Status TypeFromProto(
+    const google::spanner::v1::Type& type_pb, zetasql::TypeFactory* factory,
+    const zetasql::Type** type
+) {
   switch (type_pb.code()) {
     case google::spanner::v1::TypeCode::BOOL: {
       *type = factory->get_bool();
@@ -81,8 +95,9 @@ absl::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
       if (!type_pb.has_array_element_type()) {
         return error::ArrayTypeMustSpecifyElementType(type_pb.DebugString());
       }
-      ZETASQL_RETURN_IF_ERROR(
-          TypeFromProto(type_pb.array_element_type(), factory, &element_type))
+      ZETASQL_RETURN_IF_ERROR(TypeFromProto(type_pb.array_element_type(), factory,
+                                    &element_type
+                                    ))
           << "\nWhen parsing array element type of " << type_pb.DebugString();
       ZETASQL_RETURN_IF_ERROR(factory->MakeArrayType(element_type, type))
           << "\nWhen parsing " << type_pb.DebugString();
@@ -94,7 +109,9 @@ absl::Status TypeFromProto(const google::spanner::v1::Type& type_pb,
       for (int i = 0; i < type_pb.struct_type().fields_size(); ++i) {
         const zetasql::Type* type;
         ZETASQL_RETURN_IF_ERROR(TypeFromProto(type_pb.struct_type().fields(i).type(),
-                                      factory, &type))
+                                      factory,
+                                      &type
+                                      ))
             << "\nWhen parsing field #" << i << " of " << type_pb.DebugString();
         zetasql::StructField field(type_pb.struct_type().fields(i).name(),
                                      type);

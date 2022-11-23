@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include <memory>
 #include <string>
 
 #include "google/protobuf/struct.pb.h"
@@ -32,7 +33,6 @@
 #include "frontend/entities/session.h"
 #include "frontend/proto/partition_token.pb.h"
 #include "frontend/server/handler.h"
-#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -195,7 +195,8 @@ absl::Status PartitionQuery(RequestContext* ctx,
   ZETASQL_ASSIGN_OR_RETURN(
       backend::Query query,
       QueryFromProto(request->sql(), request->params(), request->param_types(),
-                     txn->query_engine()->type_factory()));
+                     txn->query_engine()->type_factory()
+                     ));
   ZETASQL_RETURN_IF_ERROR(txn->query_engine()->IsPartitionable(
       query,
       backend::QueryContext{
