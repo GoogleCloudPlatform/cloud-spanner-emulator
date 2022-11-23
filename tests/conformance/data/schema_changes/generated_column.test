@@ -100,7 +100,7 @@ CREATE TABLE T (
   gen INT64 AS (ASCII(data)) STORED,
 ) PRIMARY KEY(id);
 --
-ERROR: Error parsing the definition of generated column `T`.`gen`: Unsupported built-in function: (ascii|ASCII).*
+ERROR:.* Error parsing the definition of generated column `T`.`gen`: Unsupported built-in function: (ascii|ASCII).*
 ==
 # NOT NULL.
 CREATE TABLE T (
@@ -170,9 +170,10 @@ CREATE TABLE Users (
 ) PRIMARY KEY(id);
 ALTER TABLE Users ALTER COLUMN id_plus_one INT64 AS (id * 2) STORED;
 --
-ERROR: Cannot change the expression of a generated column `Users.id_plus_one` because it is stored or (has|have) other dependencies.?
+ERROR:.* Cannot change the expression of a generated column `Users.id_plus_one` because it is stored or (has|have) other dependencies.?
 ==
 # Cannot convert a regular column to a generated column
+# --regex
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
@@ -180,9 +181,10 @@ CREATE TABLE Users (
 ) PRIMARY KEY(id);
 ALTER TABLE Users ALTER COLUMN id_plus_one INT64 AS (id + 1) STORED;
 --
-ERROR: Cannot convert column `Users.id_plus_one` to a generated column.
+ERROR:.* Cannot convert column `Users.id_plus_one` to a generated column.
 ==
 # Cannot convert a generated column to a regular column
+# --regex
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
@@ -190,9 +192,10 @@ CREATE TABLE Users (
 ) PRIMARY KEY(id);
 ALTER TABLE Users ALTER COLUMN id_plus_one INT64;
 --
-ERROR: Cannot convert generated column `Users.id_plus_one` to a regular column.
+ERROR:.* Cannot convert generated column `Users.id_plus_one` to a regular column.
 ==
 # Cannot change the STOREDness of a generated column.
+# --regex
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
@@ -200,49 +203,54 @@ CREATE TABLE Users (
 ) PRIMARY KEY(id);
 ALTER TABLE Users ALTER COLUMN id_plus_one INT64 AS (id + 1);
 --
-ERROR: Generated column `id_plus_one` without the STORED attribute is not supported.
+ERROR:.* Generated column `id_plus_one` without the STORED attribute is not supported.
 ==
 # Generated column definition uses an unknown column.
+# --regex
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
   id_plus_one INT64 AS (id1 + 1) STORED,
 ) PRIMARY KEY(id);
 --
-ERROR: Error parsing the definition of generated column `Users`.`id_plus_one`: Unrecognized name: id1 [at 1:2]
-(id1 + 1)
- ^
+ERROR:.* Error parsing the definition of generated column `Users`.`id_plus_one`: Unrecognized name: id1 \[at 1:2]
+\(id1 \+ 1\)
+ \^
 ==
 # Generated column definition uses an unknown column.
+# --regex
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX)
 ) PRIMARY KEY(id);
 ALTER TABLE Users ADD COLUMN new_column INT64 AS (unknown_column + 1) STORED;
 --
-ERROR: Error parsing the definition of generated column `Users`.`new_column`: Unrecognized name: unknown_column [at 1:2]
-(unknown_column + 1)
- ^
+ERROR:.* Error parsing the definition of generated column `Users`.`new_column`: Unrecognized name: unknown_column \[at 1:2]
+\(unknown_column \+ 1\)
+ \^
 ==
 # Change the type of a stored generated column to a different one.
+# --regex
 CREATE TABLE T (
   id INT64 NOT NULL,
   expr STRING(MAX) AS (ERROR("")) STORED,
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER COLUMN expr BYTES(MAX) AS (ERROR("")) STORED;
 --
-ERROR: Cannot change the data type of a stored generated column `T.expr`.
+ERROR:.* Cannot change the data type of a stored generated column `T.expr`.
 ==
 # Change the type of a stored generated column to a different one (array).
+# --regex
 CREATE TABLE T (
   id INT64 NOT NULL,
   expr ARRAY<STRING(MAX)> AS ([]) STORED,
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER COLUMN expr ARRAY<BYTES(MAX)> AS ([]) STORED;
 --
-ERROR: Cannot change the data type of a stored generated column `T.expr`.
+ERROR:.* Cannot change the data type of a stored generated column `T.expr`.
 ==
 # Change the type of a column that is used by a stored generated column.
+# --regex
 CREATE TABLE T (
   id INT64 NOT NULL,
   a STRING(MAX),
@@ -250,9 +258,10 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER COLUMN a BYTES(MAX);
 --
-ERROR: Cannot change the data type of column `a`, which has a dependent stored generated column.
+ERROR:.* Cannot change the data type of column `a`, which has a dependent stored generated column.
 ==
 # Change the subtype of an array column that is used by a stored generated column
+# --regex
 CREATE TABLE T (
   id INT64 NOT NULL,
   a ARRAY<STRING(MAX)>,
@@ -260,56 +269,62 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER COLUMN a ARRAY<BYTES(MAX)>;
 --
-ERROR: Cannot change the data type of column `a`, which has a dependent stored generated column.
+ERROR:.* Cannot change the data type of column `a`, which has a dependent stored generated column.
 ==
 # Generated column definition has a type mismatch
+# --regex
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
   id_plus_one INT64 AS (SUBSTR(UserName, 1)) STORED,
 ) PRIMARY KEY(id);
 --
-ERROR: Error parsing the definition of generated column `Users`.`id_plus_one`: Expected type INT64; found STRING [at 1:2]
-(SUBSTR(UserName, 1))
- ^
+ERROR:.* Error parsing the definition of generated column `Users`.`id_plus_one`: Expected type INT64; found STRING \[at 1:2]
+\(SUBSTR\(UserName, 1\)\)
+ \^
 ==
 # Generated column definition has a type mismatch
+# --regex
 CREATE TABLE GeneratedColumnDataCoalescing (
   id STRING(MAX) NOT NULL,
   i64 INT64,
   gen_i64_to_b BOOL as (i64) STORED,
 ) PRIMARY KEY (id);
 --
-ERROR: Error parsing the definition of generated column `GeneratedColumnDataCoalescing`.`gen_i64_to_b`: Expected type BOOL; found INT64 [at 1:2]
-(i64)
- ^
+ERROR:.* Error parsing the definition of generated column `GeneratedColumnDataCoalescing`.`gen_i64_to_b`: Expected type BOOL; found INT64 \[at 1:2]
+\(i64\)
+ \^
 ==
 # Generated column in primary key.
+# --regex
 CREATE TABLE Users (
   id INT64 NOT NULL,
   id_plus_one INT64 AS (id + 1) STORED
 ) PRIMARY KEY(id_plus_one);
 --
-ERROR: Generated column `Users.id_plus_one` cannot be part of the primary key.
+ERROR:.* Generated column `Users.id_plus_one` cannot be part of the primary key.
 ==
 # Generated column definition has a simple cycle
+# --regex
 CREATE TABLE T (
   id INT64 NOT NULL,
   a INT64 as (b) STORED,
   b INT64 as (A) STORED
 ) PRIMARY KEY(id);
 --
-ERROR: Cycle detected while analysing generated column, which include objects (a,b)
+ERROR:.* Cycle detected while analysing generated column, which include objects \(a,b\)
 ==
 # Generated column definition has a self reference
+# --regex
 create table t (
   id INT64 NOT NULL,
   a INT64 as (a+1) STORED
 ) PRIMARY KEY(id);
 --
-ERROR: Cycle detected while analysing generated column, which include objects (a)
+ERROR:.* Cycle detected while analysing generated column, which include objects \(a\)
 ==
 # Generated Columns: More elaborate cycle (c -> a -> b -> c)
+# --regex
 create table t (
   id INT64 NOT NULL,
   d INT64,
@@ -318,9 +333,10 @@ create table t (
   a INT64 as (b) STORED
 ) PRIMARY KEY(id);
 --
-ERROR: Cycle detected while analysing generated column, which include objects (c,a,b)
+ERROR:.* Cycle detected while analysing generated column, which include objects \(c,a,b\)
 ==
 # Generated Columns: Cycle a->b->c with start node being b.
+# --regex
 create table t (
   id INT64 NOT NULL,
   b INT64 as (c) STORED,
@@ -328,11 +344,12 @@ create table t (
   a INT64 as (b) STORED
 ) PRIMARY KEY(id);
 --
-ERROR: Cycle detected while analysing generated column, which include objects (b,c,a)
+ERROR:.* Cycle detected while analysing generated column, which include objects \(b,c,a\)
 ==
 # Interesting graph with cycles
 #   A -> B <- C<-|
 #         \-> D--|
+# --regex
 create table t (
   id INT64 NOT NULL,
   a INT64 as (b) STORED,
@@ -341,36 +358,40 @@ create table t (
   d INT64 as (c) STORED
 ) PRIMARY KEY(id);
 --
-ERROR: Cycle detected while analysing generated column, which include objects (a,b,d,c)
+ERROR:.* Cycle detected while analysing generated column, which include objects \(a,b,d,c\)
 ==
 # Cannot add a new column that introduces a cycle (self)
+# --regex
 CREATE TABLE Users (
   id INT64 NOT NULL,
   userName STRING(MAX)
 ) PRIMARY KEY(id);
 ALTER TABLE Users ADD COLUMN col INT64 AS (col+1) STORED;
 --
-ERROR: Cycle detected while analysing generated column, which include objects (col)
+ERROR:.* Cycle detected while analysing generated column, which include objects \(col\)
 ==
 # Generated column with an expression that is too deep.
+# --regex
 CREATE TABLE Users (
   id INT64 NOT NULL,
   StrCol STRING(MAX),
   StrExpr STRING(MAX) AS (CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, "1"))))))))))))))))))))) STORED,
 ) PRIMARY KEY(id);
 --
-ERROR: Error parsing the definition of generated column `Users`.`StrExpr`: Expression depth of 21 exceeds the maximum allowed depth of 20.
+ERROR:.* Error parsing the definition of generated column `Users`.`StrExpr`: Expression depth of 21 exceeds the maximum allowed depth of 20.
 ==
 # Generated column with an expression that is too deep.
+# --regex
 CREATE TABLE Users (
   id INT64 NOT NULL,
   StrCol STRING(MAX)
 ) PRIMARY KEY(id);
 ALTER TABLE Users ADD COLUMN StrExpr STRING(MAX) AS (CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, CONCAT(StrCol, "1"))))))))))))))))))))) STORED;
 --
-ERROR: Error parsing the definition of generated column `Users`.`StrExpr`: Expression depth of 21 exceeds the maximum allowed depth of 20.
+ERROR:.* Error parsing the definition of generated column `Users`.`StrExpr`: Expression depth of 21 exceeds the maximum allowed depth of 20.
 ==
 # Drop a column which is referenced by a generated column.
+# --regex
 CREATE TABLE T (
   id INT64,
   a INT64,
@@ -378,9 +399,10 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 ALTER TABLE T DROP COLUMN a;
 --
-ERROR: Cannot drop column `a` from table `T` because it is referenced by generated column `expr`.
+ERROR:.* Cannot drop column `a` from table `T` because it is referenced by generated column `expr`.
 ==
 # Dropping a generated column used by a generated column.
+# --regex
 CREATE TABLE T (
   id INT64,
   a INT64,
@@ -389,9 +411,10 @@ CREATE TABLE T (
 ) PRIMARY KEY (id);
 ALTER TABLE T DROP COLUMN expr1;
 --
-ERROR: Cannot drop column `expr1` from table `T` because it is referenced by generated column `expr2`.
+ERROR:.* Cannot drop column `expr1` from table `T` because it is referenced by generated column `expr2`.
 ==
 # Changing the type of a dependant column.
+# --regex
 CREATE TABLE T (
   id INT64,
   a   STRING(MAX),
@@ -399,58 +422,65 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER COLUMN a BYTES(MAX);
 --
-ERROR: Cannot change the data type of column `a`, which has a dependent stored generated column.
+ERROR:.* Cannot change the data type of column `a`, which has a dependent stored generated column.
 ==
 # Using non-scalar function in generated column.
+# --regex
 CREATE TABLE T (
   expr BOOL AS ((SELECT true) INTERSECT ALL (SELECT true)) STORED,
 ) PRIMARY KEY();
 --
-ERROR: Error parsing the definition of generated column `T`.`expr`: Cannot use non-scalar expressions inside stored generated columns.
+ERROR:.* Error parsing the definition of generated column `T`.`expr`: Cannot use non-scalar expressions inside stored generated columns.
 ==
 # Subquery
+# --regex
 CREATE TABLE TableWithSelect1 (
   val INT64 AS (SELECT 1) STORED,
 ) PRIMARY KEY();
 --
-ERROR: Error parsing the definition of generated column `TableWithSelect1`.`val`: Cannot use non-scalar expressions inside stored generated columns.
+ERROR:.* Error parsing the definition of generated column `TableWithSelect1`.`val`: Cannot use non-scalar expressions inside stored generated columns.
 ==
 # Nested Subquery
+# --regex
 CREATE TABLE TableWithNestedSubquery (
   val ARRAY<INT64> AS (ARRAY_REVERSE(ARRAY(SELECT 1))) STORED,
 ) PRIMARY KEY();
 --
-ERROR: Error parsing the definition of generated column `TableWithNestedSubquery`.`val`: Cannot use non-scalar expressions inside stored generated columns.
+ERROR:.* Error parsing the definition of generated column `TableWithNestedSubquery`.`val`: Cannot use non-scalar expressions inside stored generated columns.
 ==
 # Non-deterministic function.
+# --regex
 CREATE TABLE T (
   id INT64,
   expr TIMESTAMP AS (CURRENT_TIMESTAMP()) STORED,
 ) PRIMARY KEY(id);
 --
-ERROR: Error parsing the definition of generated column `T`.`expr`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
+ERROR:.* Error parsing the definition of generated column `T`.`expr`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
 ==
 # allow_commit_timestamp not allowed on dependencies of generated columns.
+# --regex
 CREATE TABLE T(
   id INT64,
   ts TIMESTAMP OPTIONS (allow_commit_timestamp = true),
   expr TIMESTAMP AS (ts) STORED
 ) PRIMARY KEY(id);
 --
-ERROR: Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
+ERROR:.* Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
 ==
 # Adding stored generated column that uses a commit timestamp column is
 # disallowed.
+# --regex
 CREATE TABLE T(
   id INT64,
   ts TIMESTAMP OPTIONS (allow_commit_timestamp = true)
 ) PRIMARY KEY(id);
 ALTER TABLE T ADD COLUMN expr TIMESTAMP AS (ts) STORED;
 --
-ERROR: Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
+ERROR:.* Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
 ==
 # Altering a column that is used by a stored generated column to be commit
 # timestamp is disallowed.
+# --regex
 CREATE TABLE T(
   id INT64,
   ts TIMESTAMP,
@@ -458,12 +488,13 @@ CREATE TABLE T(
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER COLUMN ts SET OPTIONS (allow_commit_timestamp = true);
 --
-ERROR: Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
+ERROR:.* Cannot use commit timestamp column `ts` as a dependency of a materialized generated column.
 ==
 # Using PENDING_COMMIT_TIMESTAMP() in generated column at CREATE TABLE.
+# --regex
 CREATE TABLE T (
   id INT64,
   expr TIMESTAMP AS (PENDING_COMMIT_TIMESTAMP()) STORED,
 ) PRIMARY KEY(id);
 --
-ERROR: Error parsing the definition of generated column `T`.`expr`: The PENDING_COMMIT_TIMESTAMP() function may only be used as a value for INSERT or UPDATE of an appropriately typed column. It cannot be used in SELECT, or as the input to any other scalar expression.
+ERROR:.* Error parsing the definition of generated column `T`.`expr`: The PENDING_COMMIT_TIMESTAMP\(\) function may only be used as a value for INSERT or UPDATE of an appropriately typed column. It cannot be used in SELECT, or as the input to any other scalar expression.

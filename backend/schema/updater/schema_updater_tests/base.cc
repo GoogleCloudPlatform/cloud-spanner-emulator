@@ -20,6 +20,8 @@
 #include <string>
 
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/schema/updater/schema_updater.h"
 
 namespace google {
@@ -29,18 +31,26 @@ namespace backend {
 namespace test {
 
 absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::CreateSchema(
-    absl::Span<const std::string> statements) {
-  return UpdateSchema(/*base_schema=*/nullptr, statements);
+    absl::Span<const std::string> statements
+) {
+  return UpdateSchema(/*base_schema=*/nullptr,
+                      statements
+  );
 }
 
 absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::UpdateSchema(
-    const Schema* base_schema, absl::Span<const std::string> statements) {
+    const Schema* base_schema,
+    absl::Span<const std::string> statements
+) {
   SchemaUpdater updater;
   SchemaChangeContext context{.type_factory = &type_factory_,
                               .table_id_generator = &table_id_generator_,
                               .column_id_generator = &column_id_generator_};
   return updater.ValidateSchemaFromDDL(
-      SchemaChangeOperation{.statements = statements}, context, base_schema);
+      SchemaChangeOperation{
+          .statements = statements,
+      },
+      context, base_schema);
 }
 
 }  // namespace test

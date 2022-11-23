@@ -16,12 +16,21 @@
 
 #include "backend/schema/parser/ddl_parser.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/substitute.h"
 #include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -1895,14 +1904,14 @@ TEST(AllowCommitTimestamp, CannotParseInvalidOptionValue) {
 }
 
 TEST(ParseToken, CannotParseUnterminatedTripleQuote) {
-  static const char* const statements[] = {
+  static const char *const statements[] = {
       "'''",        "''''",          "'''''",       "'''abc",
       "'''abc''",   "'''abc'",       "r'''abc",     "b'''abc",
       "\"\"\"",     "\"\"\"\"",      "\"\"\"\"\"",  "rb\"\"\"abc",
       "\"\"\"abc",  "\"\"\"abc\"\"", "\"\"\"abc\"", "r\"\"\"abc",
       "b\"\"\"abc", "rb\"\"\"abc",
   };
-  for (const char* statement : statements) {
+  for (const char *statement : statements) {
     EXPECT_THAT(
         ParseDDLStatement(statement),
         StatusIs(absl::StatusCode::kInvalidArgument,

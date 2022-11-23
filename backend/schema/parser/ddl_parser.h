@@ -17,16 +17,17 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_PARSER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_PARSER_H_
 
+#include <memory>
+
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
-#include "absl/types/span.h"
 #include "backend/schema/ddl/operations.pb.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
 namespace ddl {
 
 // The option to enable the use of cloud spanner commit timestamps for a column.
@@ -37,11 +38,9 @@ absl::StatusOr<CreateDatabase> ParseCreateDatabase(
     absl::string_view create_statement);
 
 // Parses a single DDL statement.
-absl::StatusOr<DDLStatement> ParseDDLStatement(absl::string_view input);
-
-// Parses a list of DDL statements.
-absl::StatusOr<Schema> ParseDDLStatements(
-    absl::Span<const absl::string_view> statements);
+absl::StatusOr<DDLStatement> ParseDDLStatement(
+    absl::string_view input
+);
 
 }  // namespace ddl
 }  // namespace backend

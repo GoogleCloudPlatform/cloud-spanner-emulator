@@ -18,16 +18,14 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/memory/memory.h"
 #include "absl/types/span.h"
 #include "backend/common/case.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_graph.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -39,9 +37,12 @@ namespace backend {
 // relationships.
 class Schema {
  public:
-  Schema() : graph_(std::make_unique<SchemaGraph>()) {}
+  Schema()
+      : graph_(std::make_unique<SchemaGraph>())
+  {}
 
-  explicit Schema(std::unique_ptr<const SchemaGraph> graph);
+  explicit Schema(std::unique_ptr<const SchemaGraph> graph
+  );
 
   // Returns the generation number of this schema.
   int64_t generation() const { return generation_; }

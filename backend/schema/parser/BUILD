@@ -38,11 +38,11 @@ cc_library(
         "//common:errors",
         "//common:feature_flags",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/types:span",
-        "@com_google_zetasql//zetasql/base",
+        "@com_google_protobuf//:protobuf_headers",
     ],
 )
 
@@ -55,7 +55,11 @@ cc_test(
         "//tests/common:proto_matchers",
         "//tests/common:scoped_feature_flags_setter",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

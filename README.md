@@ -44,6 +44,7 @@ with:
 VERSION=1.4.2
 docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator:$VERSION
 ```
+Works on x86 and arm64 architectures.
 
 ### Via pre-built linux binaries
 
@@ -84,6 +85,7 @@ emulator via bazel from the source root with:
 ```shell
 bazel run binaries/gateway_main
 ```
+Works on x86 and arm64 architectures.
 
 ### Via custom docker image
 
@@ -101,6 +103,7 @@ docker run -p 9010:9010 -p 9020:9020 emulator
 
 The first port is the gRPC port and the second port is the REST port.
 
+Works on x86 and arm64 architectures.
 
 ## Technical Details
 
@@ -208,6 +211,9 @@ Notable limitations:
   names generated in production Cloud Spanner are usable in emulator query
   hints. However, index names generated in the emulator cannot be used in the
   emulator or in production.
+
+- The [Cloud Spanner PostgreSQL interface](
+  https://cloud.google.com/spanner/docs/postgresql-interface) is not supported.
 
 ## Frequently Asked Questions (FAQ)
 
