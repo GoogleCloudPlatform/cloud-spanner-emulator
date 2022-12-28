@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
@@ -81,7 +82,9 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
 Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
                  RowReader* reader, const zetasql::AnalyzerOptions& options,
                  zetasql::TypeFactory* type_factory)
-    : schema_(schema), function_catalog_(function_catalog) {
+    : schema_(schema),
+      function_catalog_(function_catalog),
+      type_factory_(type_factory) {
   for (const auto* table : schema->tables()) {
     tables_[table->Name()] = std::make_unique<QueryableTable>(
         table, reader, options, this, type_factory);
@@ -133,11 +136,13 @@ absl::Status Catalog::GetTables(
   }
   return absl::OkStatus();
 }
+
 absl::Status Catalog::GetTypes(
     absl::flat_hash_set<const zetasql::Type*>* output) const {
   // Currently, Cloud Spanner doesn't support proto or enum types.
   return absl::OkStatus();
 }
+
 absl::Status Catalog::GetFunctions(
     absl::flat_hash_set<const zetasql::Function*>* output) const {
   function_catalog_->GetFunctions(output);

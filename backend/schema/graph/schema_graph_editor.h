@@ -250,6 +250,8 @@ class SchemaGraphEditor {
 
   // Validation context passed to Validate() and ValidateUpdate() methods for
   // SchemaNode.
+  // This is also being used in SchemaUpdaterImpl. This is kept as a pointer
+  // to ensure that updates to context in SchemaUpdaterImpl are reflected here.
   SchemaValidationContext* context_ = nullptr;
 
   // Canonicalization/cloning state.

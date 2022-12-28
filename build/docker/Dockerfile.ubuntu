@@ -18,7 +18,7 @@
 #                                     BUILD                                    #
 ################################################################################
 
-FROM gcr.io/cloud-spanner-emulator/bazel-ubuntu:5.2.0-18.04 as build
+FROM gcr.io/cloud-spanner-emulator/bazel-ubuntu:5.4.0-18.04 as build
 
 RUN apt-get update && DEBIAN_FRONTEND="noninteractive"                         \
     TZ="America/Los_Angeles" apt-get install -y tzdata

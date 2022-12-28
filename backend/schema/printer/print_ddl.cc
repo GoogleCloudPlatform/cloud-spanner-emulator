@@ -225,6 +225,7 @@ std::string PrintForeignKey(const ForeignKey* foreign_key) {
 
 std::vector<std::string> PrintDDLStatements(const Schema* schema) {
   std::vector<std::string> statements;
+
   // Print tables
   for (auto table : schema->tables()) {
     statements.push_back(PrintTable(table));

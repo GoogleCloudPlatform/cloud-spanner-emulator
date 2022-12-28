@@ -69,8 +69,11 @@ absl::StatusOr<zetasql::Value> RewriteColumnValue(
     return zetasql::Value::Bytes(value.string_value());
   }
 
-  ZETASQL_RET_CHECK(old_column_type->IsBytes() && new_column_type->IsString());
-  return zetasql::Value::String(value.bytes_value());
+  if (old_column_type->IsBytes() && new_column_type->IsString()) {
+    return zetasql::Value::String(value.bytes_value());
+  }
+
+  return absl::InternalError("Invalid type conversion");
 }
 
 }  // namespace

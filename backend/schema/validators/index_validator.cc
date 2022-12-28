@@ -90,13 +90,14 @@ absl::Status IndexValidator::Validate(const Index* index,
   CaseInsensitiveStringSet keys_set;
   for (const auto* key_column : index->key_columns_) {
     std::string column_name = key_column->column()->Name();
+    if (keys_set.contains(column_name)) {
+      return error::IndexRefsColumnTwice(index->name_, column_name);
+    }
+
     const auto* column_type = key_column->column()->GetType();
     if (!IsSupportedKeyColumnType(column_type)) {
       return error::IndexRefsUnsupportedColumn(index->name_,
                                                ToString(column_type));
-    }
-    if (keys_set.contains(column_name)) {
-      return error::IndexRefsColumnTwice(index->name_, column_name);
     }
     if (index->is_null_filtered_) {
       ZETASQL_RET_CHECK(!key_column->column()->is_nullable());

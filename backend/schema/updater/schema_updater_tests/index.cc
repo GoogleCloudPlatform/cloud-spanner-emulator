@@ -33,7 +33,7 @@ TEST_F(SchemaUpdaterTest, CreateIndex) {
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
-                                        R"(
+                                        R"sql(
       CREATE TABLE T (
         k1 INT64 NOT NULL,
         c1 STRING(10),
@@ -41,12 +41,12 @@ TEST_F(SchemaUpdaterTest, CreateIndex) {
         c3 NUMERIC,
         c4 JSON
       ) PRIMARY KEY (k1)
-    )",
-                                        R"(
+    )sql",
+                                        R"sql(
       CREATE INDEX Idx1 ON T(c1)
-    )",
-                                        R"(
-      CREATE INDEX Idx2 ON T(c1) STORING(c2, c3, c4))",
+    )sql",
+                                        R"sql(
+      CREATE INDEX Idx2 ON T(c1) STORING(c2, c3, c4))sql",
                                     }));
 
   auto idx = schema->FindIndex("Idx1");
@@ -101,28 +101,28 @@ TEST_F(SchemaUpdaterTest, CreateIndex) {
 }
 
 TEST_F(SchemaUpdaterTest, CreateIndex_NoKeys) {
-  EXPECT_THAT(CreateSchema({R"(
+  EXPECT_THAT(CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
       ) PRIMARY KEY (k1)
-    )",
-                            R"(
+    )sql",
+                            R"sql(
       CREATE INDEX Idx ON T()
-    )"}),
+    )sql"}),
               StatusIs(error::IndexWithNoKeys("Idx")));
 }
 
 TEST_F(SchemaUpdaterTest, CreateIndex_DescKeys) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
       ) PRIMARY KEY (k1 ASC)
-    )",
-                                                  R"(
+    )sql",
+                                                  R"sql(
       CREATE INDEX Idx ON T(c1 DESC, k1 DESC)
-    )"}));
+    )sql"}));
 
   auto idx = schema->FindIndex("Idx");
   EXPECT_NE(idx, nullptr);
@@ -133,16 +133,16 @@ TEST_F(SchemaUpdaterTest, CreateIndex_DescKeys) {
 
 TEST_F(SchemaUpdaterTest, CreateIndex_SharedPK) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
-                                        R"(
+                                        R"sql(
       CREATE TABLE T (
         k1 INT64 NOT NULL,
         c1 STRING(MAX),
         c2 STRING(MAX)
       ) PRIMARY KEY (k1)
-    )",
-                                        R"(
+    )sql",
+                                        R"sql(
       CREATE NULL_FILTERED INDEX Idx ON T(k1) STORING(c2)
-    )"}));
+    )sql"}));
 
   auto t = schema->FindTable("T");
   auto k1 = t->FindColumn("k1");
@@ -159,17 +159,17 @@ TEST_F(SchemaUpdaterTest, CreateIndex_SharedPK) {
 
 TEST_F(SchemaUpdaterTest, CreateIndex_NullFiltered_Unique) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
-                                        R"(
+                                        R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 STRING(MAX),
         c2 STRING(MAX),
         c3 STRING(MAX) NOT NULL,
       ) PRIMARY KEY (k1)
-    )",
-                                        R"(
+    )sql",
+                                        R"sql(
       CREATE UNIQUE NULL_FILTERED INDEX Idx ON T(c1) STORING(c2,c3)
-    )"}));
+    )sql"}));
 
   auto idx = schema->FindIndex("Idx");
   EXPECT_TRUE(idx->is_null_filtered());
@@ -197,22 +197,22 @@ TEST_F(SchemaUpdaterTest, CreateIndex_NullFiltered_Unique) {
 
 TEST_F(SchemaUpdaterTest, CreateIndex_Interleave) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
-                                        R"(
+                                        R"sql(
       CREATE TABLE T1 (
         k1 INT64,
         k2 INT64
       ) PRIMARY KEY (k1)
-    )",
-                                        R"(
+    )sql",
+                                        R"sql(
       CREATE TABLE T2 (
         k1 INT64,
         k2 INT64,
         c1 BYTES(MAX)
       ) PRIMARY KEY (k1,k2), INTERLEAVE IN PARENT T1
-    )",
-                                        R"(
+    )sql",
+                                        R"sql(
       CREATE INDEX Idx ON T2(k1,c1), INTERLEAVE IN T1
-    )"}));
+    )sql"}));
 
   auto t1 = schema->FindTable("T1");
   EXPECT_NE(t1, nullptr);
@@ -227,22 +227,22 @@ TEST_F(SchemaUpdaterTest, CreateIndex_Interleave) {
 
 TEST_F(SchemaUpdaterTest, CreateIndex_NullFilteredInterleave) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
-                                        R"(
+                                        R"sql(
       CREATE TABLE T1 (
         k1 INT64,
         k2 INT64
       ) PRIMARY KEY (k1)
-    )",
-                                        R"(
+    )sql",
+                                        R"sql(
       CREATE TABLE T2 (
         k1 INT64,
         k2 INT64,
         c1 BYTES(MAX)
       ) PRIMARY KEY (k1,k2), INTERLEAVE IN PARENT T1
-    )",
-                                        R"(
+    )sql",
+                                        R"sql(
       CREATE NULL_FILTERED INDEX Idx ON T2(k1,c1), INTERLEAVE IN T1
-    )"}));
+    )sql"}));
 
   auto t1 = schema->FindTable("T1");
   EXPECT_NE(t1, nullptr);
@@ -260,22 +260,22 @@ TEST_F(SchemaUpdaterTest, CreateIndex_NullFilteredInterleave) {
 
 TEST_F(SchemaUpdaterTest, CreateIndex_InvalidInterleaved) {
   EXPECT_THAT(
-      CreateSchema({R"(
+      CreateSchema({R"sql(
       CREATE TABLE T1 (
         k1 INT64,
         k2 INT64
       ) PRIMARY KEY (k1)
-    )",
-                    R"(
+    )sql",
+                    R"sql(
       CREATE TABLE T2 (
         k1 INT64,
         k2 INT64,
         c1 BYTES(MAX)
       ) PRIMARY KEY (k1,k2)
-    )",
-                    R"(
+    )sql",
+                    R"sql(
       CREATE INDEX Idx ON T2(k1,c1), INTERLEAVE IN T1
-    )"}),
+    )sql"}),
       StatusIs(error::IndexInterleaveTableUnacceptable("Idx", "T2", "T1")));
 }
 
@@ -285,68 +285,69 @@ TEST_F(SchemaUpdaterTest, CreateIndex_TableNotFound) {
 }
 
 TEST_F(SchemaUpdaterTest, CreateIndex_ColumnNotFound) {
-  EXPECT_THAT(CreateSchema({R"(
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
       ) PRIMARY KEY (k1)
-    )",
-                            R"(
+    )sql",
+                  R"sql(
       CREATE INDEX Idx ON T(c2)
-    )"}),
+    )sql"}),
               StatusIs(error::IndexRefsNonExistentColumn("Idx", "c2")));
 }
 
 TEST_F(SchemaUpdaterTest, CreateIndex_DuplicateColumn) {
-  EXPECT_THAT(CreateSchema({R"(
+  EXPECT_THAT(CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
       ) PRIMARY KEY (k1)
-    )",
-                            R"(
+    )sql",
+                            R"sql(
       CREATE INDEX Idx ON T(c1,c1)
-    )"}),
+    )sql"}),
               StatusIs(error::IndexRefsColumnTwice("Idx", "c1")));
 }
 
 TEST_F(SchemaUpdaterTest, CreateIndex_StoredRefsIndexKey) {
-  EXPECT_THAT(CreateSchema({R"(
+  EXPECT_THAT(CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
       ) PRIMARY KEY (k1)
-    )",
-                            R"(
+    )sql",
+                            R"sql(
       CREATE INDEX Idx ON T(c1) STORING(c1)
-    )"}),
+    )sql"}),
               StatusIs(error::IndexRefsKeyAsStoredColumn("Idx", "c1")));
 }
 
 TEST_F(SchemaUpdaterTest, CreateIndex_UnsupportedArrayTypeKeyColumn) {
-  EXPECT_THAT(CreateSchema({R"(
+  EXPECT_THAT(CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 ARRAY<INT64>
       ) PRIMARY KEY (k1)
-    )",
-                            R"(
+    )sql",
+                            R"sql(
       CREATE INDEX Idx ON T(c1)
-    )"}),
+    )sql"}),
               StatusIs(error::CannotCreateIndexOnColumn("Idx", "c1", "ARRAY")));
 }
 
 TEST_F(SchemaUpdaterTest, CreateIndex_ArrayStoredColumn) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64,
         c2 ARRAY<INT64>
       ) PRIMARY KEY (k1)
-    )",
-                                                  R"(
+    )sql",
+                                                  R"sql(
       CREATE INDEX Idx ON T(c1) STORING(c2)
-    )"}));
+    )sql"}));
 
   auto idx = schema->FindIndex("Idx");
   EXPECT_NE(idx, nullptr);
@@ -360,55 +361,55 @@ TEST_F(SchemaUpdaterTest, CreateIndex_ArrayStoredColumn) {
 }
 
 TEST_F(SchemaUpdaterTest, DropTable_WithIndex) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
       ) PRIMARY KEY (k1 ASC)
-    )",
-                                                  R"(
+    )sql",
+                                                  R"sql(
       CREATE INDEX Idx1 ON T(c1 DESC, k1 DESC)
-    )"}));
+    )sql"}));
 
   // Global index.
-  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
       DROP TABLE T
-    )"}),
+    )sql"}),
               StatusIs(error::DropTableWithDependentIndices("T", "Idx1")));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
       ) PRIMARY KEY (k1 ASC)
-    )",
-                                             R"(
+    )sql",
+                                             R"sql(
       CREATE INDEX Idx2 ON T(k1), INTERLEAVE IN T
-    )"}));
+    )sql"}));
 
   // Interleaved index.
-  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
       DROP TABLE T
-    )"}),
+    )sql"}),
               StatusIs(error::DropTableWithDependentIndices("T", "Idx2")));
 }
 
 TEST_F(SchemaUpdaterTest, DropIndex) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
       ) PRIMARY KEY (k1 ASC)
-    )",
-                                                  R"(
+    )sql",
+                                                  R"sql(
       CREATE INDEX Idx ON T(c1 DESC, k1 DESC)
-    )"}));
+    )sql"}));
 
   EXPECT_EQ(schema->GetSchemaGraph()->GetSchemaNodes().size(), 10);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
       DROP INDEX Idx
-    )"}));
+    )sql"}));
 
   EXPECT_EQ(new_schema->FindIndex("Idx"), nullptr);
 
@@ -422,15 +423,15 @@ TEST_F(SchemaUpdaterTest, CreateIndex_NumericColumn) {
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
-                                        R"(
+                                        R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
         col2 NUMERIC
       ) PRIMARY KEY (col1)
-    )",
-                                        R"(
+    )sql",
+                                        R"sql(
       CREATE INDEX Idx ON T(col2)
-    )"}));
+    )sql"}));
 
   auto t = schema->FindTable("T");
   auto col2 = t->FindColumn("col2");
@@ -449,18 +450,17 @@ TEST_F(SchemaUpdaterTest, CreateIndex_JsonColumn) {
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(
       CreateSchema({
-          R"(
+          R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
         col2 JSON
       ) PRIMARY KEY (col1)
-    )",
-          R"(
+    )sql",
+          R"sql(
       CREATE INDEX Idx ON T(col2)
-    )"}),
+    )sql"}),
       StatusIs(error::CannotCreateIndexOnColumn("Idx", "col2", "JSON")));
 }
-
 }  // namespace
 
 }  // namespace test

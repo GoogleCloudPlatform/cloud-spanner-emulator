@@ -97,6 +97,7 @@ class Catalog : public zetasql::EnumerableCatalog {
 
   // Functions available in the default schema.
   const FunctionCatalog* function_catalog_;
+  zetasql::TypeFactory* type_factory_;
 
   // Mutex to protect state below.
   mutable absl::Mutex mu_;

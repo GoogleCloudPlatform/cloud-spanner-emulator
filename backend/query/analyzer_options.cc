@@ -61,6 +61,7 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL, zetasql::FEATURE_JSON_TYPE,
       zetasql::FEATURE_JSON_ARRAY_FUNCTIONS,
       zetasql::FEATURE_JSON_STRICT_NUMBER_PARSING,
+      zetasql::FEATURE_V_1_4_WITH_EXPRESSION,
   });
   options.SetSupportedStatementKinds({
       zetasql::RESOLVED_QUERY_STMT,

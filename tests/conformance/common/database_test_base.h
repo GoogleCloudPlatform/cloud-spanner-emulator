@@ -79,7 +79,7 @@ namespace spanner_api = ::google::spanner::v1;
 class DatabaseTest : public ::testing::Test {
  public:
   // Standard test fixture callbacks.
-  void SetUp() override;
+  virtual void SetUp() override;
   void TearDown() override;
 
  protected:
@@ -191,7 +191,7 @@ class DatabaseTest : public ::testing::Test {
   absl::Status ResetDatabase();
 
   // Sets the schema on the database created for this test.
-  absl::Status SetSchema(const std::vector<std::string>& schema);
+  virtual absl::Status SetSchema(const std::vector<std::string>& schema);
 
   // Updates the schema of the database created for this test. Returning the
   // result in an `UpdateDatabaseDdlMetadata` message.

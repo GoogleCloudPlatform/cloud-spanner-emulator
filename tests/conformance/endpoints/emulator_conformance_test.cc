@@ -22,6 +22,8 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "google/cloud/common_options.h"
+#include "google/cloud/grpc_options.h"
 #include "google/cloud/spanner/admin/instance_admin_client.h"
 #include "google/cloud/spanner/create_instance_request_builder.h"
 #include "common/feature_flags.h"

@@ -17,6 +17,7 @@
 #include "frontend/converters/values.h"
 
 #include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -26,6 +27,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/time/time.h"
+#include "absl/strings/escaping.h"
 
 namespace google {
 namespace spanner {
@@ -64,13 +66,19 @@ using zetasql::values::Timestamp;
 
 using zetasql_base::testing::StatusIs;
 
-TEST(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
+class ValueProtos : public ::testing::Test {
+ public:
+  ValueProtos() = default;
+};
+
+TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
   zetasql::TypeFactory factory;
   const StructType* str_int_pair;
   ZETASQL_ASSERT_OK(factory.MakeStructType(
       {StructType::StructField("str", factory.get_string()),
        StructType::StructField("int", factory.get_int64())},
       &str_int_pair));
+
   std::vector<std::pair<zetasql::Value, std::string>> test_cases{
       {Null(StringType()), "null_value: NULL_VALUE"},
       {Bool(true), "bool_value: true"},
@@ -134,14 +142,14 @@ TEST(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
   }
 }
 
-TEST(ValueProtos, DoesNotConvertUnknownValueTypesToProtos) {
+TEST_F(ValueProtos, DoesNotConvertUnknownValueTypesToProtos) {
   EXPECT_THAT(ValueToProto(zetasql::values::Invalid()),
               StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(ValueToProto(zetasql::values::Int32(0)),
               StatusIs(absl::StatusCode::kInternal));
 }
 
-TEST(ValueProtos, DoesNotParseProtosWithMismatchingTypes) {
+TEST_F(ValueProtos, DoesNotParseProtosWithMismatchingTypes) {
   std::vector<std::pair<const zetasql::Type*, std::string>> test_cases{
       {Int64Type(), "string_value: 'not a number'"},
       {TimestampType(), "number_value: -1"},
@@ -165,7 +173,7 @@ TEST(ValueProtos, DoesNotParseProtosWithMismatchingTypes) {
   }
 }
 
-TEST(ValueProtos, ParsesSpannerCommitTimestamp) {
+TEST_F(ValueProtos, ParsesSpannerCommitTimestamp) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       zetasql::Value value,
       ValueFromProto(
@@ -174,7 +182,7 @@ TEST(ValueProtos, ParsesSpannerCommitTimestamp) {
   EXPECT_EQ(String("spanner.commit_timestamp()"), value);
 }
 
-TEST(ValueProtos, DoesNotParseInvalidTimestamps) {
+TEST_F(ValueProtos, DoesNotParseInvalidTimestamps) {
   // Missing 'Z' offset.
   EXPECT_THAT(
       ValueFromProto(
@@ -190,7 +198,7 @@ TEST(ValueProtos, DoesNotParseInvalidTimestamps) {
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
-TEST(ValueProtos, DoesNotParseInvalidDates) {
+TEST_F(ValueProtos, DoesNotParseInvalidDates) {
   // Before 0001-01-01.
   EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: '0000-01-02'"),
                              DateType()),
@@ -202,13 +210,13 @@ TEST(ValueProtos, DoesNotParseInvalidDates) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST(ValueProtos, DoesNotParseInvalidBytes) {
+TEST_F(ValueProtos, DoesNotParseInvalidBytes) {
   EXPECT_THAT(
       ValueFromProto(PARSE_TEXT_PROTO("string_value: ';;Z'"), BytesType()),
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
-TEST(ValueProtos, DoesNotParseInvalidNumeric) {
+TEST_F(ValueProtos, DoesNotParseInvalidNumeric) {
   EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: '9252.a53'"),
                              NumericType()),
               StatusIs(absl::StatusCode::kFailedPrecondition));
@@ -224,7 +232,7 @@ TEST(ValueProtos, DoesNotParseInvalidNumeric) {
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
-TEST(ValueProtos, DoesNotParseInvalidJson) {
+TEST_F(ValueProtos, DoesNotParseInvalidJson) {
   EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: 'invalid string'"),
                              JsonType()),
               StatusIs(absl::StatusCode::kFailedPrecondition));

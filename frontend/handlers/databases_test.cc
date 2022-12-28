@@ -21,6 +21,7 @@
 #include "google/protobuf/any.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "google/spanner/v1/commit_response.pb.h"
+#include "google/protobuf/descriptor.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -312,7 +313,7 @@ TEST_F(DatabaseApiTest, UpdateDatabaseDdlPartialSuccess) {
   ZETASQL_EXPECT_OK(CreateTestDatabase());
   ZETASQL_ASSERT_OK_AND_ASSIGN(const std::string session, CreateTestSession());
 
-  spanner_api::CommitRequest commit_request = PARSE_TEXT_PROTO(R"(
+  spanner_api::CommitRequest commit_request = PARSE_TEXT_PROTO(R"pb(
     single_use_transaction { read_write {} }
     mutations {
       insert {
@@ -329,7 +330,7 @@ TEST_F(DatabaseApiTest, UpdateDatabaseDdlPartialSuccess) {
         }
       }
     }
-  )");
+  )pb");
   *commit_request.mutable_session() = session;
   spanner_api::CommitResponse commit_response;
   ZETASQL_ASSERT_OK(Commit(commit_request, &commit_response));
@@ -421,7 +422,8 @@ TEST_F(DatabaseApiTest, UpdateAndGetDatabaseDDL) {
 ) PRIMARY KEY(int64_col))"},
       {
           R"(CREATE TABLE test_table (
-) PRIMARY KEY())"}};
+) PRIMARY KEY())"},
+  };
 
   for (auto schema : test_schemas) {
     ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_, schema));

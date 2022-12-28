@@ -70,6 +70,7 @@ function emulator::run_integration_tests() {
       --test_env=GOOGLE_CLOUD_CPP_SPANNER_TEST_INSTANCE_ID=test-instance-a \
       --test_env=GOOGLE_CLOUD_CPP_AUTO_RUN_EXAMPLES=yes \
       --test_env=GOOGLE_CLOUD_CPP_SPANNER_SLOW_INTEGRATION_TESTS=yes \
+      --test_env=GOOGLE_CLOUD_CPP_TEST_SERVICE_ACCOUNT_KEYFILE=/dev/null \
       --nocache_test_results --test_tag_filters=integration-test ...
   elif [[ $client == "py" ]]; then
     cd "py"

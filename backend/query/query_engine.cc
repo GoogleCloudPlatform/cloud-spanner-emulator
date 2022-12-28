@@ -432,7 +432,8 @@ absl::StatusOr<std::pair<Mutation, int64_t>> EvaluateUpdate(
 absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
     const zetasql::ResolvedStatement* resolved_statement,
     const zetasql::ParameterValueMap& params,
-    zetasql::TypeFactory* type_factory, int64_t* num_output_rows) {
+    zetasql::TypeFactory* type_factory, int64_t* num_output_rows,
+    Catalog& catalog) {
   ZETASQL_RET_CHECK_EQ(resolved_statement->node_kind(), zetasql::RESOLVED_QUERY_STMT)
       << "input is not a query statement";
 
@@ -443,7 +444,7 @@ absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
   // statement.
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(params));
-  ZETASQL_RETURN_IF_ERROR(prepared_query->Prepare(analyzer_options));
+  ZETASQL_RETURN_IF_ERROR(prepared_query->Prepare(analyzer_options, &catalog));
   // Finally execute the query.
   ZETASQL_ASSIGN_OR_RETURN(auto iterator, prepared_query->Execute(params));
 
@@ -627,9 +628,10 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
 
   QueryResult result;
   if (!IsDMLStmt(analyzer_output->resolved_statement()->node_kind())) {
-    ZETASQL_ASSIGN_OR_RETURN(auto cursor,
-                     EvaluateQuery(resolved_statement.get(), params,
-                                   type_factory_, &result.num_output_rows));
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto cursor,
+        EvaluateQuery(resolved_statement.get(), params, type_factory_,
+                      &result.num_output_rows, catalog));
     result.rows = std::move(cursor);
   } else {
     ZETASQL_RET_CHECK_NE(context.writer, nullptr);

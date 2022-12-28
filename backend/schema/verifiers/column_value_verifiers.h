@@ -38,7 +38,9 @@ absl::Status VerifyColumnLength(const Table* table, const Column* column,
                                 int64_t new_max_length,
                                 const SchemaValidationContext* context);
 
-// Verifies that a type change of a column is valid. Only STRING to BYTES and
+// Verifies that a type change of a column is valid. Only following conversions
+// are allowed
+// 1. STRING TO BYTES & BYTES TO STRING
 // BYTES to STRING conversions are allowed. Strings are UTF8 encoded, so a
 // conversion from BYTES to STRING must have valid UTF8 characters.
 absl::Status VerifyColumnTypeChange(const Table* table,
