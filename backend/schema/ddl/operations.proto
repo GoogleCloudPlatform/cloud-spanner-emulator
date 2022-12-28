@@ -44,17 +44,18 @@ message InterleaveConstraint {
   optional OnDeleteAction on_delete = 4;
 }
 
-message PrimaryKeyConstraint {
+message KeyPart {
   enum Order {
     UNKNOWN_ORDER = 0;
     ASC = 1;
     DESC = 2;
   }
-  message KeyPart {
-    optional Order order = 3;
-    optional string key_column_name = 4;
-  }
-  repeated KeyPart key_part = 5;
+  optional Order order = 3;
+  optional string key_column_name = 4;
+}
+
+message PrimaryKeyConstraint {
+  repeated KeyPart key_part = 1;
 }
 
 // Column-level constraints
@@ -183,6 +184,7 @@ message CreateIndex {
   optional IndexProperties properties = 4;
   optional Options options = 5;
   repeated Constraint constraints = 6;
+
 }
 
 // Alter and drop operations.

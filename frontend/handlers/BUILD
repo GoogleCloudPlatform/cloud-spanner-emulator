@@ -62,6 +62,7 @@ cc_test(
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
         "@com_google_googletest//:gtest_main",
         "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_protobuf//:protobuf",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

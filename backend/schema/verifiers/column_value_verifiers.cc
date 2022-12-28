@@ -107,7 +107,8 @@ absl::Status VerifyBytesColumnValue(absl::string_view table_name,
     }
   }
 
-  ZETASQL_RET_CHECK(new_column_type->IsString());
+  ZETASQL_RET_CHECK(new_column_type->IsString()
+  );
 
   // Check that it is valid UTF-8 encoding.
   absl::Status error;

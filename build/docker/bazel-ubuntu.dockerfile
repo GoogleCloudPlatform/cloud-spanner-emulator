@@ -11,12 +11,14 @@ RUN apt-get update && apt-get -qq install -y default-jre default-jdk
 RUN apt-get update && apt-get -qq install curl tar build-essential wget        \
     python python3 zip unzip
 
+ENV BAZEL_VERSION=5.4.0
+
 # Install bazel from source
 RUN mkdir -p bazel                                                          && \
     cd bazel                                                                && \
-    wget https://github.com/bazelbuild/bazel/releases/download/5.2.0/bazel-5.2.0-dist.zip &&\
-    unzip bazel-5.2.0-dist.zip                                              && \
-    rm -rf bazel-5.2.0-dist.zip
+    wget https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-dist.zip &&\
+    unzip bazel-${BAZEL_VERSION}-dist.zip                                              && \
+    rm -rf bazel-${BAZEL_VERSION}-dist.zip
 ENV PATH=$PATH:/usr/bin:/usr/local/bin
 ENV EXTRA_BAZEL_ARGS="--tool_java_runtime_version=local_jdk"
 RUN cd bazel && bash ./compile.sh

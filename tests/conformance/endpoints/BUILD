@@ -31,6 +31,8 @@ cc_test(
         "//tests/conformance/cases",
         "//tests/conformance/common:environment",
         "@com_github_googleapis_google_cloud_cpp//:spanner",
+        "@com_github_googleapis_google_cloud_cpp//google/cloud:google_cloud_cpp_common",
+        "@com_github_googleapis_google_cloud_cpp//google/cloud:google_cloud_cpp_grpc_utils",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base",

@@ -84,6 +84,12 @@ namespace backend {
 
 namespace {
 
+// A struct that defines the columns used by an index.
+struct ColumnsUsedByIndex {
+  std::vector<const KeyColumn*> index_key_columns;
+  std::vector<const Column*> stored_columns;
+};
+
 // A class that processes a set of Cloud Spanner DDL statements, and applies
 // them to an existing (or empty) `Schema` to obtain the updated `Schema`.
 //
@@ -207,8 +213,7 @@ class SchemaUpdaterImpl {
       const ddl::CreateTable* ddl_table);
 
   absl::StatusOr<const KeyColumn*> CreatePrimaryKeyColumn(
-      const ddl::PrimaryKeyConstraint::KeyPart& ddl_key_part,
-      const Table* table);
+      const ddl::KeyPart& ddl_key_part, const Table* table);
 
   absl::Status CreatePrimaryKeyConstraint(
       const ddl::PrimaryKeyConstraint& ddl_primary_key,
@@ -257,11 +262,14 @@ class SchemaUpdaterImpl {
       const Table* indexed_table, const std::string& source_column_name,
       const Table* index_data_table, bool null_filtered_key_column);
 
+  absl::Status AddSearchIndexColumns(
+      const ::google::protobuf::RepeatedPtrField<ddl::KeyPart>& key_parts,
+      const Table* indexed_table, bool is_null_filtered,
+      std::vector<const Column*>& columns, Table::Builder& builder);
+
   absl::StatusOr<std::unique_ptr<const Table>> CreateIndexDataTable(
       const ddl::CreateIndex& ddl_index, const Index* index,
-      const Table* indexed_table,
-      std::vector<const KeyColumn*>* index_key_columns,
-      std::vector<const Column*>* stored_columns);
+      const Table* indexed_table, ColumnsUsedByIndex* columns_used_by_index);
 
   absl::StatusOr<const Index*> CreateIndex(
       const ddl::CreateIndex& ddl_index, const Table* indexed_table = nullptr);
@@ -329,6 +337,8 @@ class SchemaUpdaterImpl {
   std::vector<std::unique_ptr<const Schema>> intermediate_schemas_;
 
   // Validation context for the statement being currently processed.
+  // This is also being used in SchemaGraphEditor. Please make sure this is only
+  // passed by reference.
   SchemaValidationContext* statement_context_;
 
   // Editor used to modify the schema graph.
@@ -854,8 +864,7 @@ Table::OnDeleteAction SchemaUpdaterImpl::GetInterleaveConstraintOnDelete(
 
 absl::Status SchemaUpdaterImpl::CreatePrimaryKeyConstraint(
     const ddl::PrimaryKeyConstraint& ddl_primary_key, Table::Builder* builder) {
-  for (const ddl::PrimaryKeyConstraint::KeyPart& ddl_key_part :
-       ddl_primary_key.key_part()) {
+  for (const ddl::KeyPart& ddl_key_part : ddl_primary_key.key_part()) {
     ZETASQL_ASSIGN_OR_RETURN(const KeyColumn* key_col,
                      CreatePrimaryKeyColumn(ddl_key_part, builder->get()));
     builder->add_key_column(key_col);
@@ -864,12 +873,10 @@ absl::Status SchemaUpdaterImpl::CreatePrimaryKeyConstraint(
 }
 
 absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
-    const ddl::PrimaryKeyConstraint::KeyPart& ddl_key_part,
-    const Table* table) {
+    const ddl::KeyPart& ddl_key_part, const Table* table) {
   KeyColumn::Builder builder;
   const std::string& key_column_name = ddl_key_part.key_column_name();
-  bool is_descending =
-      (ddl_key_part.order() == ddl::PrimaryKeyConstraint::DESC);
+  bool is_descending = (ddl_key_part.order() == ddl::KeyPart::DESC);
 
   // References to columns in primary key clause are case-sensitive.
   const Column* column = table->FindColumnCaseSensitive(key_column_name);
@@ -1142,7 +1149,7 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateForeignKeyIndex(
       key_part->set_key_column_name(column_name);
       const auto* key_column = table->FindKeyColumn(column_name);
       if (key_column != nullptr && key_column->is_descending()) {
-        key_part->set_order(ddl::PrimaryKeyConstraint::DESC);
+        key_part->set_order(ddl::KeyPart::DESC);
       }
     }
     if (CanInterleaveForeignKeyIndex(table, column_names)) {
@@ -1324,12 +1331,30 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
   return column;
 }
 
+absl::Status SchemaUpdaterImpl::AddSearchIndexColumns(
+    const ::google::protobuf::RepeatedPtrField<ddl::KeyPart>& key_parts,
+    const Table* indexed_table, bool is_null_filtered,
+    std::vector<const Column*>& columns, Table::Builder& builder) {
+  for (const ddl::KeyPart& ddl_key_part : key_parts) {
+    const std::string& column_name = ddl_key_part.key_column_name();
+    const Column* column = builder.get()->FindColumn(column_name);
+    // Skip already added columns
+    if (column == nullptr) {
+      ZETASQL_ASSIGN_OR_RETURN(
+          column, CreateIndexDataTableColumn(indexed_table, column_name,
+                                             builder.get(), is_null_filtered));
+      builder.add_column(column);
+    }
+    columns.push_back(column);
+  }
+
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::unique_ptr<const Table>>
 SchemaUpdaterImpl::CreateIndexDataTable(
     const ddl::CreateIndex& ddl_index, const Index* index,
-    const Table* indexed_table,
-    std::vector<const KeyColumn*>* index_key_columns,
-    std::vector<const Column*>* stored_columns) {
+    const Table* indexed_table, ColumnsUsedByIndex* columns_used_by_index) {
   std::string table_name =
       absl::StrCat(kIndexDataTablePrefix, ddl_index.index_name());
   Table::Builder builder;
@@ -1347,8 +1372,8 @@ SchemaUpdaterImpl::CreateIndexDataTable(
         ddl::PrimaryKeyConstraint data_table_pk = ddl_primary_key;
 
         // First create columns for the specified primary key.
-        for (const ddl::PrimaryKeyConstraint::KeyPart& ddl_key_part :
-             ddl_primary_key.key_part()) {
+
+        for (const ddl::KeyPart& ddl_key_part : ddl_primary_key.key_part()) {
           const std::string& column_name = ddl_key_part.key_column_name();
           ZETASQL_ASSIGN_OR_RETURN(const Column* column,
                            CreateIndexDataTableColumn(
@@ -1371,11 +1396,10 @@ SchemaUpdaterImpl::CreateIndexDataTable(
           builder.add_column(column);
 
           // Add to the PK specification.
-          ddl::PrimaryKeyConstraint::KeyPart* key_part =
-              data_table_pk.add_key_part();
+          ddl::KeyPart* key_part = data_table_pk.add_key_part();
           key_part->set_key_column_name(key_col_name);
           if (key_col->is_descending()) {
-            key_part->set_order(ddl::PrimaryKeyConstraint::DESC);
+            key_part->set_order(ddl::KeyPart::DESC);
           }
         }
 
@@ -1383,7 +1407,8 @@ SchemaUpdaterImpl::CreateIndexDataTable(
         int num_declared_keys = ddl_primary_key.key_part_size();
         auto data_table_key_cols = builder.get()->primary_key();
         for (int i = 0; i < num_declared_keys; ++i) {
-          index_key_columns->push_back(data_table_key_cols[i]);
+          columns_used_by_index->index_key_columns.push_back(
+              data_table_key_cols[i]);
         }
         break;
       }
@@ -1418,7 +1443,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
         CreateIndexDataTableColumn(indexed_table, column_name, builder.get(),
                                    /*null_filtered_key_column=*/false));
     builder.add_column(column);
-    stored_columns->push_back(column);
+    columns_used_by_index->stored_columns.push_back(column);
   }
 
   return builder.build();
@@ -1445,18 +1470,18 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
       .set_unique(ddl_index.properties().unique())
       .set_null_filtered(ddl_index.properties().null_filtered());
 
-  std::vector<const KeyColumn*> key_columns;
-  std::vector<const Column*> stored_columns;
+  ColumnsUsedByIndex columns_used_by_index;
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const Table> data_table,
                    CreateIndexDataTable(ddl_index, builder.get(), indexed_table,
-                                        &key_columns, &stored_columns));
+                                        &columns_used_by_index));
+
   builder.set_index_data_table(data_table.get());
 
-  for (const KeyColumn* key_col : key_columns) {
+  for (const KeyColumn* key_col : columns_used_by_index.index_key_columns) {
     builder.add_key_column(key_col);
   }
 
-  for (const Column* col : stored_columns) {
+  for (const Column* col : columns_used_by_index.stored_columns) {
     builder.add_stored_column(col);
   }
 
@@ -1469,10 +1494,11 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
 
   // Register a backfill action for the index.
   const Index* index = builder.get();
-  statement_context_->AddAction(
-      [index](const SchemaValidationContext* context) {
-        return BackfillIndex(index, context);
-      });
+
+    statement_context_->AddAction(
+        [index](const SchemaValidationContext* context) {
+          return BackfillIndex(index, context);
+        });
 
   // The data table must be added after the index for correct order of
   // validation.

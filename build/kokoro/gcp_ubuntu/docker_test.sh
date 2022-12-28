@@ -72,7 +72,7 @@ echo "Placing results in: ${OUTPUT_DIR}"
 echo "Placing logs in: ${LOG_DIR}"
 echo "Using src directory: ${SRC_DIR}"
 
-readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base@sha256:ac3ff899ccd5de7d546e7fc0b2d78d25d81222afa67f48a3b70058248ed2d830
+readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base@sha256:78e6939f115ec1dc3da8fb2bad177e3d1e01fd30a813d9b41a1b899d0ea8bd78
 readonly CACHE_BUCKET="cloud-spanner-emulator-builder-bazel-cache"
 echo "Client integration tests to run: ${CLIENT_INTEGRATION_TESTS}"
 
@@ -108,21 +108,21 @@ IFS=','
 for client in $CLIENT_INTEGRATION_TESTS
  do
     if [[ $client == "go" ]]; then
-      SHA=4f813b29e595e0069502abc59d7528c2a6f96d35c4e864ccbad1897e7e22261e
+      SHA=c117c7aab87b457be443826404a92dfe11b11609c16947467676e866c19ab3c9
     elif [[ $client == "java" ]]; then
-      SHA=b0049515bf933ed93b9956f781a0126070b5690ef7f3800e048f063ee4ab02c7
+      SHA=d7408218d113d8e797abf53192625845dad1b0cd299b64ffb178115efefc378f
     elif [[ $client == "cpp" ]]; then
-      SHA=e5cfa3fb7720722858e45d03a78caf6a6657d0a779602515c8ce622369b4cfec
+      SHA=5ca5604d7466cde25eb224140f44b55a12a2f2a1350c640b6a15c600030a9e5e
     elif [[ $client == "php" ]]; then
-      SHA=d1e2584f6e1f6dc0576fa360e45d614e3f9e2ec0747c978225dd23a4f2510000
+      SHA=3a80d36016330e8e6e140dd913c0ef4f8a739d5267727d7ec59f8b2c304e5e9f
     elif [[ $client == "csharp" ]]; then
-      SHA=c1ba6b827bd554cb9a077036027fb3d4add38832de0351b52120d9d51234f697
+      SHA=4eff20cfb02c722af49d805ead728f9f230621166bea692d1dbe688a0f97a5a5
     elif [[ $client == "ruby" ]]; then
-      SHA=1e9d19d0d7af46106d97b8723e6546fab0b219acf4f9953d56823b07ca3ba926
+      SHA=7829d39e6b8fc4349f908defc67f250ad34c791fbb0722f787427a7360c28dc1
     elif [[ $client == "nodejs" ]]; then
-      SHA=ed340d133d1ba40af158207907597aa0366d4011c95a2370914c6a4269c0da27
+      SHA=1e164b6211eed5eea29f58bb5bcc301205decabdda09380916a4a0e4eb9b14cc
     elif [[ $client == "py" ]]; then
-      SHA=c5ba7cfef87b035c907ebdac4ea7f2808664145adaef6bcc55d55a3e424dea60
+      SHA=1513009d920be6f119f246142f997f15ca49d9581d128421ade8d34edaf92e56
     else
     echo "Unrecognized client: \"${client}\"."
     fi

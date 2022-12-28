@@ -18,8 +18,10 @@
 
 #include <string>
 
+#include "google/protobuf/descriptor.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.pb.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
 #include "backend/datamodel/types.h"
@@ -61,9 +63,13 @@ bool IsAllowedTypeChange(const zetasql::Type* old_column_type,
                                BaseType(new_column_type));
   }
 
-  // Only allow conversions from BYTES to STRING and STRING to BYTES.
-  return (new_column_type->IsString() && old_column_type->IsBytes()) ||
-         (new_column_type->IsBytes() && old_column_type->IsString());
+  // Allow conversions from BYTES to STRING and STRING to BYTES.
+  if ((new_column_type->IsString() && old_column_type->IsBytes()) ||
+      (new_column_type->IsBytes() && old_column_type->IsString())) {
+    return true;
+  }
+
+  return false;
 }
 
 // Validates size reductions and column type changes.
@@ -112,9 +118,9 @@ absl::Status ColumnValidator::Validate(const Column* column,
   ZETASQL_RET_CHECK(!column->name_.empty());
   ZETASQL_RET_CHECK(!column->id_.empty());
   ZETASQL_RET_CHECK(column->type_ != nullptr && IsSupportedColumnType(column->type_));
+  const zetasql::Type* base_type = BaseType(column->type_);
   ZETASQL_RET_CHECK(!column->declared_max_length_.has_value() ||
-            (BaseType(column->type_)->IsString() ||
-             BaseType(column->type_)->IsBytes()));
+            base_type->IsString() || base_type->IsBytes());
 
   if (column->name_.length() > limits::kMaxSchemaIdentifierLength) {
     return error::InvalidSchemaName("Column", column->Name());
@@ -127,7 +133,6 @@ absl::Status ColumnValidator::Validate(const Column* column,
   }
 
   if (column->declared_max_length_.has_value()) {
-    const zetasql::Type* base_type = BaseType(column->type_);
     if (base_type->IsString() && (column->declared_max_length_.value() == 0 ||
                                   column->declared_max_length_.value() >
                                       limits::kMaxStringColumnLength)) {
@@ -274,7 +279,9 @@ absl::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
           : key_column->column_->GetType()->ShortTypeName(
                 zetasql::PRODUCT_EXTERNAL);
   if (!IsSupportedKeyColumnType(key_column->column_->GetType())) {
-    if (key_column->column()->table()->owner_index()) {
+    auto owner_index = key_column->column()->table()->owner_index();
+
+    if (owner_index != nullptr) {
       return error::CannotCreateIndexOnColumn(
           key_column->column()->table()->owner_index()->Name(),
           key_column->column()->Name(), type_name);

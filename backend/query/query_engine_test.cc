@@ -106,6 +106,7 @@ class QueryEngineTest : public testing::Test {
   const Schema* multi_table_schema() { return multi_table_schema_.get(); }
   RowReader* reader() { return &reader_; }
   QueryEngine& query_engine() { return query_engine_; }
+  zetasql::TypeFactory* type_factory() { return &type_factory_; }
 
  private:
   zetasql::TypeFactory type_factory_;

@@ -40,7 +40,8 @@ namespace test {
 // TODO : Deprecate this method and fix all tests.
 inline absl::StatusOr<std::unique_ptr<const backend::Schema>>
 CreateSchemaFromDDL(absl::Span<const std::string> statements,
-                    zetasql::TypeFactory* type_factory) {
+                    zetasql::TypeFactory* type_factory
+) {
   backend::TableIDGenerator table_id_gen;
   backend::ColumnIDGenerator column_id_gen;
   backend::SchemaChangeContext context{
@@ -50,7 +51,10 @@ CreateSchemaFromDDL(absl::Span<const std::string> statements,
   };
   backend::SchemaUpdater updater;
   return updater.ValidateSchemaFromDDL(
-      backend::SchemaChangeOperation{.statements = statements}, context);
+      backend::SchemaChangeOperation{
+          .statements = statements
+      },
+      context);
 }
 
 // Creates a schema with a single table and an index on the table.

@@ -460,13 +460,12 @@ absl::Status VisitColumnNode(const SimpleNode* node,
 }
 
 absl::Status VisitKeyNode(const SimpleNode* node,
-                          PrimaryKeyConstraint* primary_key_constraint) {
+                          std::function<KeyPart*()> add_key_part) {
   for (int i = 0; i < node->jjtGetNumChildren(); i++) {
     // Add key column to the given primary key.
     ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* key_part_node,
                      GetChildAtIndexWithType(node, i, JJTKEY_PART));
-    PrimaryKeyConstraint::KeyPart* key_part =
-        primary_key_constraint->add_key_part();
+    KeyPart* key_part = add_key_part();
 
     // Set columns names for given primary key.
     ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* key_column,
@@ -477,9 +476,18 @@ absl::Status VisitKeyNode(const SimpleNode* node,
     ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* sort_order_desc,
                      GetFirstChildWithType(key_part_node, JJTDESC));
     if (sort_order_desc != nullptr) {
-      key_part->set_order(PrimaryKeyConstraint::DESC);
+      key_part->set_order(KeyPart::DESC);
     }
   }
+  return absl::OkStatus();
+}
+
+absl::Status VisitPrimaryKey(const SimpleNode* node,
+                             PrimaryKeyConstraint* primary_key_constraint) {
+  ZETASQL_RETURN_IF_ERROR(VisitKeyNode(node, [&primary_key_constraint]() -> KeyPart* {
+    return primary_key_constraint->add_key_part();
+  }));
+
   return absl::OkStatus();
 }
 
@@ -708,7 +716,7 @@ absl::Status VisitCreateTableNode(
             child, ddl_text, table->add_constraints()->mutable_check()));
         break;
       case JJTPRIMARY_KEY:
-        ZETASQL_RETURN_IF_ERROR(VisitKeyNode(
+        ZETASQL_RETURN_IF_ERROR(VisitPrimaryKey(
             child, table->add_constraints()->mutable_primary_key()));
         break;
       case JJTTABLE_INTERLEAVE_CLAUSE:
@@ -727,10 +735,9 @@ absl::Status VisitCreateTableNode(
   return absl::OkStatus();
 }
 
-absl::Status VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCREATE_INDEX_STATEMENT));
-
-  // Parse children nodes to set corresponding properties of index.
+absl::Status VisitCreateIndexNodeInternal(const SimpleNode* node,
+                                          CreateIndex* index) {
+  // Parse children nodes to set corresponding properties of index
   for (int i = 0; i < node->jjtGetNumChildren(); i++) {
     ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
     switch (child->getId()) {
@@ -747,7 +754,7 @@ absl::Status VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index) {
         index->set_table_name(child->image());
         break;
       case JJTCOLUMNS:
-        ZETASQL_RETURN_IF_ERROR(VisitKeyNode(
+        ZETASQL_RETURN_IF_ERROR(VisitPrimaryKey(
             child, index->add_constraints()->mutable_primary_key()));
         break;
       case JJTSTORED_COLUMN_LIST:
@@ -762,6 +769,12 @@ absl::Status VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index) {
     }
   }
   return absl::OkStatus();
+}
+
+absl::Status VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index) {
+  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCREATE_INDEX_STATEMENT));
+
+  return VisitCreateIndexNodeInternal(node, index);
 }
 
 absl::Status VisitDropStatementNode(const SimpleNode* node,

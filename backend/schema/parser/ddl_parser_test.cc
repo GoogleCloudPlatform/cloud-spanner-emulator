@@ -79,10 +79,10 @@ TEST(ParseCreateDatabase, CannotParseEmptyDatabaseName) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithNoColumns) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                     ) PRIMARY KEY ()
-                    )"),
+                    )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -94,32 +94,32 @@ TEST(ParseCreateTable, CanParseCreateTableWithNoColumns) {
 
 TEST(ParseCreateTable, CannotParseCreateTableWithoutName) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE (
                     ) PRIMARY KEY ()
-                    )"),
+                    )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ParseCreateTable, CannotParseCreateTableWithoutPrimaryKey) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX)
                     )
-                    )"),
+                    )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Expecting 'PRIMARY' but found 'EOF'")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumn) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL
                     ) PRIMARY KEY (UserId)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -138,11 +138,11 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumn) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumnTrailingComma) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                     ) PRIMARY KEY (UserId)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -161,11 +161,11 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumnTrailingComma) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumn) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       Name STRING(MAX)
                     ) PRIMARY KEY ()
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -181,11 +181,11 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumn) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumnTrailingComma) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       Name STRING(MAX),
                     ) PRIMARY KEY ()
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -201,12 +201,12 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumnTrailingComma) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithKeyAndNonKeyColumns) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX)
                     ) PRIMARY KEY (UserId)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -229,12 +229,12 @@ TEST(ParseCreateTable, CanParseCreateTableWithKeyAndNonKeyColumns) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumns) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX) NOT NULL
                     ) PRIMARY KEY (UserId, Name)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -261,12 +261,12 @@ TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumns) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithTwoNonKeyColumns) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64,
                       Name STRING(MAX)
                     ) PRIMARY KEY ()
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -286,13 +286,13 @@ TEST(ParseCreateTable, CanParseCreateTableWithTwoNonKeyColumns) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumnsAndANonKeyColumn) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX) NOT NULL,
                       Notes STRING(MAX)
                     ) PRIMARY KEY (UserId, Name)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -323,13 +323,13 @@ TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumnsAndANonKeyColumn) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithAKeyColumnAndTwoNonKeyColumns) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX),
                       Notes STRING(MAX)
                     ) PRIMARY KEY (UserId)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -356,10 +356,10 @@ TEST(ParseCreateTable, CanParseCreateTableWithAKeyColumnAndTwoNonKeyColumns) {
 
 TEST(ParseCreateTable, CanParseCreateInterleavedTableWithNoColumns) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Albums (
                     ) PRIMARY KEY (), INTERLEAVE IN PARENT Users ON DELETE CASCADE
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -378,7 +378,7 @@ TEST(ParseCreateTable, CanParseCreateInterleavedTableWithNoColumns) {
 
 TEST(ParseCreateTable, CanParseCreateInterleavedTableWithKeyAndNonKeyColumns) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Albums (
                       UserId INT64 NOT NULL,
                       AlbumId INT64 NOT NULL,
@@ -386,7 +386,7 @@ TEST(ParseCreateTable, CanParseCreateInterleavedTableWithKeyAndNonKeyColumns) {
                       Description STRING(1024)
                     ) PRIMARY KEY (UserId, AlbumId),
                       INTERLEAVE IN PARENT Users ON DELETE CASCADE
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -431,10 +431,10 @@ TEST(ParseCreateTable, CanParseCreateInterleavedTableWithKeyAndNonKeyColumns) {
 TEST(ParseCreateTable,
      CanParseCreateInterleavedTableWithExplicitOnDeleteNoAction) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Albums (
                     ) PRIMARY KEY (), INTERLEAVE IN PARENT Users ON DELETE NO ACTION
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -454,10 +454,10 @@ TEST(ParseCreateTable,
 TEST(ParseCreateTable,
      CanParseCreateInterleavedTableWithImplicitOnDeleteNoAction) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Albums (
                     ) PRIMARY KEY (), INTERLEAVE IN PARENT Users
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -476,12 +476,12 @@ TEST(ParseCreateTable,
 
 TEST(ParseCreateTable, CanParseCreateTableWithAnArrayField) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Names ARRAY<STRING(20)>,
                     ) PRIMARY KEY (UserId)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -510,12 +510,12 @@ TEST(ParseCreateTable, CanParseCreateTableWithAnArrayField) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithNotNullArrayField) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Names ARRAY<STRING(MAX)> NOT NULL,
                     ) PRIMARY KEY (UserId)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -544,12 +544,12 @@ TEST(ParseCreateTable, CanParseCreateTableWithNotNullArrayField) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithoutInterleaveClause) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX)
                     ) PRIMARY KEY (UserId)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -572,16 +572,16 @@ TEST(ParseCreateTable, CanParseCreateTableWithoutInterleaveClause) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithForeignKeys) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE T (
                       A INT64,
                       B STRING(MAX),
                       FOREIGN KEY (B) REFERENCES U (Y),
                       CONSTRAINT FK_UXY FOREIGN KEY (B, A) REFERENCES U (X, Y),
                     ) PRIMARY KEY (A)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     create_table {
                       table_name: "T"
                       columns {
@@ -625,16 +625,16 @@ TEST(ParseCreateTable, CanParseCreateTableWithForeignKeys) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseAlterTableWithAddUnnamedForeignKey) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE T ADD FOREIGN KEY (B, A) REFERENCES U (X, Y)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "T"
                       alter_constraint {
@@ -650,17 +650,17 @@ TEST(ParseCreateTable, CanParseAlterTableWithAddUnnamedForeignKey) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseAlterTableWithAddNamedForeignKey) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE T ADD CONSTRAINT FK_UXY FOREIGN KEY (B, A)
                         REFERENCES U (X, Y)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "T"
                       alter_constraint {
@@ -678,16 +678,16 @@ TEST(ParseCreateTable, CanParseAlterTableWithAddNamedForeignKey) {
                         }
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseAlterTableWithDropConstraint) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE T DROP CONSTRAINT FK_UXY
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
-                  R"(
+                  R"pb(
                     alter_table {
                       table_name: "T"
                       alter_constraint {
@@ -695,7 +695,7 @@ TEST(ParseCreateTable, CanParseAlterTableWithDropConstraint) {
                         type: DROP
                       }
                     }
-                  )")));
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithJson) {
@@ -703,13 +703,13 @@ TEST(ParseCreateTable, CanParseCreateTableWithJson) {
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(
       ParseDDLStatement(
-          R"(
+          R"sql(
                     CREATE TABLE T (
                       K INT64 NOT NULL,
                       JsonVal JSON,
                       JsonArr ARRAY<JSON>
                     ) PRIMARY KEY (K)
-                  )"),
+                  )sql"),
       IsOkAndHolds(test::EqualsProto(
           R"pb(
             create_table {
@@ -740,13 +740,13 @@ TEST(ParseCreateTable, CanParseCreateTableWithJson) {
 TEST(ParseCreateTable, CanParseCreateTableWithNumeric) {
   EXPECT_THAT(
       ParseDDLStatement(
-          R"(
+          R"sql(
                     CREATE TABLE T (
                       K INT64 NOT NULL,
                       NumericVal NUMERIC,
                       NumericArr ARRAY<NUMERIC>
                     ) PRIMARY KEY (K)
-                  )"),
+                  )sql"),
       IsOkAndHolds(test::EqualsProto(
           R"pb(
             create_table {
@@ -776,12 +776,12 @@ TEST(ParseCreateTable, CanParseCreateTableWithNumeric) {
 
 TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
   EXPECT_THAT(
-      ParseDDLStatement(R"(
+      ParseDDLStatement(R"sql(
     CREATE TABLE T(
       Key INT64,
       CreatedAt TIMESTAMP,
     ) PRIMARY KEY (Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
-  )"),
+  )sql"),
       IsOkAndHolds(test::EqualsProto(R"pb(
         create_table {
           table_name: "T"
@@ -799,12 +799,12 @@ TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
       )pb")));
 
   EXPECT_THAT(
-      ParseDDLStatement(R"(
+      ParseDDLStatement(R"sql(
     CREATE TABLE T(
       Key INT64,
       CreatedAt TIMESTAMP,
     ) PRIMARY KEY (Key), ROW DELETION POLICY (Older_thaN(CreatedAt, INTERVAL 7 DAY))
-  )"),
+  )sql"),
       IsOkAndHolds(test::EqualsProto(R"pb(
         create_table {
           table_name: "T"
@@ -822,12 +822,12 @@ TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
       )pb")));
 
   EXPECT_THAT(
-      ParseDDLStatement(R"(
+      ParseDDLStatement(R"sql(
         CREATE TABLE T(
           Key INT64,
           CreatedAt TIMESTAMP OPTIONS (allow_commit_timestamp = true),
         ) PRIMARY KEY (Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
-      )"),
+      )sql"),
       IsOkAndHolds(test::EqualsProto(R"pb(
         create_table {
           table_name: "T"
@@ -847,12 +847,12 @@ TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
         }
       )pb")));
 
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
     CREATE TABLE T(
       Key INT64,
       CreatedAt TIMESTAMP,
     ) PRIMARY KEY (Key), ROW DELETION POLICY (YOUNGER_THAN(CreatedAt, INTERVAL 7 DAY))
-  )"),
+  )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "Only OLDER_THAN is supported."));
 }
@@ -861,9 +861,9 @@ TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
 
 TEST(ParseCreateIndex, CanParseCreateIndexBasicImplicitlyGlobal) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE NULL_FILTERED INDEX UsersByUserId ON Users(UserId)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_index {
@@ -879,10 +879,10 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasicImplicitlyGlobal) {
 
 TEST(ParseCreateIndex, CanParseCreateIndexBasic) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE NULL_FILTERED INDEX GlobalAlbumsByName
                         ON Albums(Name)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_index {
@@ -898,10 +898,10 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasic) {
 
 TEST(ParseCreateIndex, CanParseCreateIndexBasicInterleaved) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE NULL_FILTERED INDEX LocalAlbumsByName
                         ON Albums(UserId, Name DESC), INTERLEAVE IN Users
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_index {
@@ -921,10 +921,10 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasicInterleaved) {
 
 TEST(ParseCreateIndex, CanParseCreateIndexStoringAColumn) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE NULL_FILTERED INDEX GlobalAlbumsByName ON Albums(Name)
                         STORING (Description)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_index {
@@ -945,9 +945,9 @@ TEST(ParseCreateIndex, CanParseCreateIndexStoringAColumn) {
 TEST(ParseCreateIndex, CanParseCreateIndexASCColumn) {
   // The default sort order is ASC for index columns.
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE NULL_FILTERED INDEX UsersAsc ON Users(UserId ASC)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_index {
@@ -963,9 +963,9 @@ TEST(ParseCreateIndex, CanParseCreateIndexASCColumn) {
 
 TEST(ParseCreateIndex, CanParseCreateIndexDESCColumn) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE NULL_FILTERED INDEX UsersAsc ON Users(UserId DESC)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_index {
@@ -983,9 +983,9 @@ TEST(ParseCreateIndex, CanParseCreateIndexDESCColumn) {
 
 TEST(ParseCreateIndex, CanParseCreateIndexNotNullFiltered) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE INDEX UsersByUserId ON Users(UserId)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_index {
@@ -1000,9 +1000,9 @@ TEST(ParseCreateIndex, CanParseCreateIndexNotNullFiltered) {
 
 TEST(ParseCreateIndex, CanParseCreateUniqueIndex) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE UNIQUE INDEX UsersByUserId ON Users(UserId)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_index {
@@ -1061,9 +1061,9 @@ TEST(ParseDropIndex, CannotParseDropIndexInappropriateQuotes) {
 
 TEST(ParseAlterTable, CanParseAddColumn) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE Users ADD COLUMN Notes STRING(MAX)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1081,9 +1081,9 @@ TEST(ParseAlterTable, CanParseAddColumn) {
 
 TEST(ParseAlterTable, CanParseAddColumnNamedColumn) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE Users ADD COLUMN `COLUMN` STRING(MAX)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1101,9 +1101,9 @@ TEST(ParseAlterTable, CanParseAddColumnNamedColumn) {
 
 TEST(ParseAlterTable, CanParseAddColumnNamedColumnNoQuotes) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE Users ADD COLUMN COLUMN STRING(MAX)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1121,9 +1121,9 @@ TEST(ParseAlterTable, CanParseAddColumnNamedColumnNoQuotes) {
 
 TEST(ParseAlterTable, CanParseAddNumericColumn) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE T ADD COLUMN G NUMERIC
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1138,9 +1138,9 @@ TEST(ParseAlterTable, CanParseAddNumericColumn) {
                     }
                   )pb")));
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE T ADD COLUMN H ARRAY<NUMERIC>
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1165,9 +1165,9 @@ TEST(ParseAlterTable, CanParseAddJsonColumn) {
   EmulatorFeatureFlags::Flags flags;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE T ADD COLUMN G JSON
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1182,9 +1182,9 @@ TEST(ParseAlterTable, CanParseAddJsonColumn) {
                     }
                   )pb")));
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE T ADD COLUMN H ARRAY<JSON>
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1302,9 +1302,9 @@ TEST(ParseAlterTable, CannotParseDropColumnMissingTableName) {
 
 TEST(ParseAlterTable, CanParseAlterColumn) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE Users ALTER COLUMN Notes STRING(MAX)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1323,9 +1323,9 @@ TEST(ParseAlterTable, CanParseAlterColumn) {
 
 TEST(ParseAlterTable, CanParseAlterColumnNotNull) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE Users ALTER COLUMN Notes STRING(MAX) NOT NULL
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1346,9 +1346,9 @@ TEST(ParseAlterTable, CanParseAlterColumnNotNull) {
 TEST(ParseAlterTable, CanParseAlterColumnNamedColumn) {
   // Columns named "COLUMN" with quotes can be modified.
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE Users ALTER COLUMN `COLUMN` STRING(MAX)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1366,9 +1366,9 @@ TEST(ParseAlterTable, CanParseAlterColumnNamedColumn) {
 
   // Columns named "COLUMN" can be modified even without quotes.
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     ALTER TABLE Users ALTER COLUMN COLUMN STRING(MAX)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1435,9 +1435,9 @@ TEST(ParseAlterTable, CannotParseAlterColumnMiscErrors) {
 TEST(ParseAlterTable, CanParseSetOnDeleteNoAction) {
   EXPECT_THAT(
       ParseDDLStatement(
-          R"(
+          R"sql(
             ALTER TABLE Albums SET ON DELETE NO ACTION
-          )"),
+          )sql"),
       IsOkAndHolds(test::EqualsProto(
           R"pb(
             alter_table {
@@ -1452,9 +1452,9 @@ TEST(ParseAlterTable, CanParseSetOnDeleteNoAction) {
 
 TEST(ParseAlterTable, CanParseAlterTableWithRowDeletionPolicy) {
   EXPECT_THAT(
-      ParseDDLStatement(R"(
+      ParseDDLStatement(R"sql(
     ALTER TABLE MyTable ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 1 DAY))
-  )"),
+  )sql"),
       IsOkAndHolds(test::EqualsProto(R"pb(
         alter_table {
           table_name: "MyTable"
@@ -1466,9 +1466,9 @@ TEST(ParseAlterTable, CanParseAlterTableWithRowDeletionPolicy) {
       )pb")));
 
   EXPECT_THAT(
-      ParseDDLStatement(R"(
+      ParseDDLStatement(R"sql(
     ALTER TABLE MyTable REPLACE ROW DELETION POLICY (OLDER_THAN(ModifiedAt, INTERVAL 7 DAY))
-  )"),
+  )sql"),
 
       IsOkAndHolds(test::EqualsProto(R"pb(
         alter_table {
@@ -1480,9 +1480,9 @@ TEST(ParseAlterTable, CanParseAlterTableWithRowDeletionPolicy) {
         }
       )pb")));
 
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE MyTable DROP ROW DELETION POLICY
-  )"),
+  )sql"),
               IsOkAndHolds(test::EqualsProto(R"pb(
                 alter_table {
                   table_name: "MyTable"
@@ -1490,9 +1490,9 @@ TEST(ParseAlterTable, CanParseAlterTableWithRowDeletionPolicy) {
                 }
               )pb")));
 
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE MyTable DROP ROW DELETION POLICY (OLDER_THAN(ModifiedAt, INTERVAL 7 DAY))
-  )"),
+  )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Syntax error on line 2, column 50: Expecting "
                                  "'EOF' but found '('")));
@@ -1503,17 +1503,17 @@ TEST(ParseAlterTable, CanParseAlterTableWithRowDeletionPolicy) {
 TEST(Miscellaneous, CannotParseNonAsciiCharacters) {
   // The literal escape character is not considered a valid ascii character.
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE \x1b Users () PRIMARY KEY()
-                  )"),
+                  )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CanParseExtraWhitespaceCharacters) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE   Users () PRIMARY KEY()
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -1526,23 +1526,23 @@ TEST(Miscellaneous, CanParseExtraWhitespaceCharacters) {
 TEST(Miscellaneous, CannotParseSmartQuotes) {
   // Smart quote characters are not considered valid quote characters.
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       “Name” STRING(MAX)
                     ) PRIMARY KEY()
-                  )"),
+                  )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CanParseMixedCaseStatements) {
   // DDL Statements are case insensitive.
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     cREaTE TABLE Users (
                       UserId iNT64 NOT NULL,
                       Name stRIng(maX)
                     ) PRIMARY KEY (UserId)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -1563,7 +1563,7 @@ TEST(Miscellaneous, CanParseMixedCaseStatements) {
                   )pb")));
 
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Albums (
                       UserId Int64 NOT NULL,
                       AlbumId INt64 NOT NULL,
@@ -1571,7 +1571,7 @@ TEST(Miscellaneous, CanParseMixedCaseStatements) {
                       Description string(1024)
                     ) PRIMary KEY (UserId, AlbumId),
                       INTERLEAVE in PARENT Users ON DELETE CASCADE
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -1616,7 +1616,7 @@ TEST(Miscellaneous, CanParseMixedCaseStatements) {
 TEST(Miscellaneous, CanParseCustomFieldLengths) {
   // Passing hex integer literals for length is also supported.
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Sizes (
                       Name STRING(1) NOT NULL,
                       Email STRING(MAX),
@@ -1624,7 +1624,7 @@ TEST(Miscellaneous, CanParseCustomFieldLengths) {
                       PhotoLarge BYTES(MAX),
                       HexLength STRING(0x42),
                     ) PRIMARY KEY (Name)
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -1662,13 +1662,13 @@ TEST(Miscellaneous, CanParseCustomFieldLengths) {
 
 TEST(Miscellaneous, CanParseTimestamps) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Sizes (
                       Age INT64,
                       LastModified TIMESTAMP,
                       BirthDate DATE
                     ) PRIMARY KEY ()
-                  )"),
+                  )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_table {
@@ -1693,34 +1693,34 @@ TEST(Miscellaneous, CanParseTimestamps) {
 TEST(Miscellaneous, CannotParseStringFieldsWithoutLength) {
   // A custom field length is required for string fields.
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Sizes (
                       Name STRING NOT NULL,
                     ) PRIMARY KEY (Name)
-                  )"),
+                  )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CannotParseNonStringFieldsWithLength) {
   // Non-string/bytes field types (e.g. int) don't allow the size option.
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Sizes (
                       Name STRING(128) NOT NULL,
                       Age INT64(4),
                     ) PRIMARY KEY (Name)
-                  )"),
+                  )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CanParseQuotedIdentifiers) {
   EXPECT_THAT(
       ParseDDLStatement(
-          R"(
+          R"sql(
             CREATE TABLE `T` (
               `C` INT64 NOT NULL,
             ) PRIMARY KEY (`C`)
-          )"),
+          )sql"),
       IsOkAndHolds(test::EqualsProto(
           R"pb(
             create_table {
@@ -1740,13 +1740,13 @@ TEST(Miscellaneous, CanParseQuotedIdentifiers) {
 TEST(AllowCommitTimestamp, CanParseSingleOption) {
   EXPECT_THAT(
       ParseDDLStatement(
-          R"(
+          R"sql(
             CREATE TABLE Users (
               UpdateTs TIMESTAMP OPTIONS (
                 allow_commit_timestamp= true
               )
             ) PRIMARY KEY ()
-          )"),
+          )sql"),
       IsOkAndHolds(test::EqualsProto(
           R"pb(
             create_table {
@@ -1766,13 +1766,13 @@ TEST(AllowCommitTimestamp, CanParseSingleOption) {
 TEST(AllowCommitTimestamp, CanClearOptionWithNull) {
   EXPECT_THAT(
       ParseDDLStatement(
-          R"(
+          R"sql(
             CREATE TABLE Users (
               UpdateTs TIMESTAMP OPTIONS (
                 allow_commit_timestamp= null
               )
             ) PRIMARY KEY ()
-          )"),
+          )sql"),
       IsOkAndHolds(test::EqualsProto(
           R"pb(
             create_table {
@@ -1791,33 +1791,33 @@ TEST(AllowCommitTimestamp, CanClearOptionWithNull) {
 
 TEST(AllowCommitTimestamp, CannotParseSingleInvalidOption) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64,
                       UpdateTs TIMESTAMP OPTIONS (
                         bogus_option= true
                       )
                     ) PRIMARY KEY ()
-                  )"),
+                  )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Cannot also set an invalid option with null value.
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64,
                       UpdateTs TIMESTAMP OPTIONS (
                         bogus_option= null
                       )
                     ) PRIMARY KEY ()
-                  )"),
+                  )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(AllowCommitTimestamp, CanParseMultipleOptions) {
   EXPECT_THAT(
       ParseDDLStatement(
-          R"(
+          R"sql(
             CREATE TABLE Users (
               UserId INT64,
               UpdateTs TIMESTAMP OPTIONS (
@@ -1825,7 +1825,7 @@ TEST(AllowCommitTimestamp, CanParseMultipleOptions) {
                 allow_commit_timestamp= false
               )
             ) PRIMARY KEY ()
-          )"),
+          )sql"),
       IsOkAndHolds(test::EqualsProto(
           R"pb(
             create_table {
@@ -1852,21 +1852,21 @@ TEST(AllowCommitTimestamp, CanParseMultipleOptions) {
 
 TEST(AllowCommitTimestamp, CannotParseMultipleOptionsWithTrailingComma) {
   EXPECT_THAT(ParseDDLStatement(
-                  R"(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64,
                       UpdateTs TIMESTAMP OPTIONS (
                         allow_commit_timestamp= true,
                       )
                     ) PRIMARY KEY ()
-                  )"),
+                  )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(AllowCommitTimestamp, SetThroughOptions) {
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ALTER COLUMN UpdateTs
-    SET OPTIONS (allow_commit_timestamp = true))"),
+    SET OPTIONS (allow_commit_timestamp = true))sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     alter_table {
@@ -1891,14 +1891,14 @@ TEST(AllowCommitTimestamp, SetThroughOptions) {
 TEST(AllowCommitTimestamp, CannotParseInvalidOptionValue) {
   EXPECT_THAT(
       ParseDDLStatement(
-          R"(
+          R"sql(
                     CREATE TABLE Users (
                       UserId INT64,
                       UpdateTs TIMESTAMP OPTIONS (
                         allow_commit_timestamp= bogus,
                       )
                     ) PRIMARY KEY ()
-                  )"),
+                  )sql"),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("Encountered 'bogus' while parsing: option_key_val")));
 }
@@ -1945,14 +1945,14 @@ class GeneratedColumns : public ::testing::Test {
 };
 
 TEST_F(GeneratedColumns, CanParseCreateTableWithStoredGeneratedColumn) {
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
                 CREATE TABLE T (
                   K INT64 NOT NULL,
                   V INT64,
                   G INT64 AS (K + V) STORED,
                   G2 INT64 AS (G +
                                K * V) STORED,
-                ) PRIMARY KEY (K))"),
+                ) PRIMARY KEY (K))sql"),
               IsOkAndHolds(test::EqualsProto(R"d(
                 create_table {
                   table_name: "T"
@@ -2071,13 +2071,13 @@ TEST_F(GeneratedColumns, CannotCreateStoredGeneratedColumnWhenDisabled) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_stored_generated_columns = false;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
       CREATE TABLE T (
         K INT64 NOT NULL,
         V INT64,
         G INT64 AS (K + V) STORED
        ) PRIMARY KEY (K)
-    )"),
+    )sql"),
               StatusIs(absl::StatusCode::kUnimplemented,
                        HasSubstr("Generated columns are not enabled.")));
 }
@@ -2092,11 +2092,11 @@ class ColumnDefaultValues : public ::testing::Test {
 };
 
 TEST_F(ColumnDefaultValues, CreateTableWithDefaultNonKeyColumn) {
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
                 CREATE TABLE T (
                   K INT64 NOT NULL,
                   D INT64 DEFAULT (10),
-                ) PRIMARY KEY (K))"),
+                ) PRIMARY KEY (K))sql"),
               IsOkAndHolds(test::EqualsProto(R"d(
                 create_table {
                   table_name: "T"
@@ -2134,11 +2134,11 @@ TEST_F(ColumnDefaultValues, CreateTableWithDefaultNonKeyColumn) {
 }
 
 TEST_F(ColumnDefaultValues, CreateTableWithDefaultPrimaryKeyColumn) {
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
                 CREATE TABLE T (
                   K INT64 NOT NULL DEFAULT (1),
                   V INT64,
-                ) PRIMARY KEY (K))"),
+                ) PRIMARY KEY (K))sql"),
               IsOkAndHolds(test::EqualsProto(R"d(
                 create_table {
                   table_name: "T"
@@ -2179,13 +2179,13 @@ TEST_F(ColumnDefaultValues, CannotParseDefaultColumnWhenDisabled) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_column_default_values = false;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  EXPECT_THAT(ParseDDLStatement(R"(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
       CREATE TABLE T (
         K INT64 NOT NULL DEFAULT (1),
         V INT64,
         G INT64 DEFAULT (10)
        ) PRIMARY KEY (K)
-    )"),
+    )sql"),
               StatusIs(absl::StatusCode::kUnimplemented,
                        HasSubstr("Column DEFAULT values are not enabled.")));
 }
@@ -2195,13 +2195,13 @@ TEST_F(ColumnDefaultValues, CannotParseDefaultAndGeneratedColumn) {
   flags.enable_column_default_values = false;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(
-      ParseDDLStatement(R"(
+      ParseDDLStatement(R"sql(
       CREATE TABLE T (
         K INT64,
         V INT64,
         G INT64 DEFAULT (1) AS (1) STORED,
        ) PRIMARY KEY (K)
-    )"),
+    )sql"),
       StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
 }
 
@@ -2210,13 +2210,13 @@ TEST_F(ColumnDefaultValues, CannotParseGeneratedAndDefaultColumn) {
   flags.enable_column_default_values = false;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(
-      ParseDDLStatement(R"(
+      ParseDDLStatement(R"sql(
       CREATE TABLE T (
         K INT64,
         V INT64,
         G INT64 AS (1) STORED DEFAULT (1),
        ) PRIMARY KEY (K)
-    )"),
+    )sql"),
       StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
 }
 
@@ -2504,7 +2504,7 @@ TEST_F(CheckConstraint, CanParseEscapingCharsInCheckConstraint) {
               )d")));
 
   EXPECT_THAT(
-      ParseDDLStatement(R"(ALTER TABLE T ADD CHECK(B > '\a\b\r\n\t\\'))"),
+      ParseDDLStatement(R"sql(ALTER TABLE T ADD CHECK(B > '\a\b\r\n\t\\'))sql"),
       IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"
@@ -2560,7 +2560,7 @@ TEST_F(CheckConstraint, CanParseEscapingCharsInCheckConstraint) {
 TEST_F(CheckConstraint, CanParseRegexContainsInCheckConstraint) {
   EXPECT_THAT(
       ParseDDLStatement(
-          R"(ALTER TABLE T ADD CHECK(REGEXP_CONTAINS(B, r'f\(a,(.*),d\)')))"),
+          R"sql(ALTER TABLE T ADD CHECK(REGEXP_CONTAINS(B, r'f\(a,(.*),d\)')))sql"),
       IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"
@@ -2577,7 +2577,7 @@ TEST_F(CheckConstraint, CanParseRegexContainsInCheckConstraint) {
 
   EXPECT_THAT(
       ParseDDLStatement(
-          R"(ALTER TABLE T ADD CHECK(REGEXP_CONTAINS(B, rb'f\(a,(.*),d\)')))"),
+          R"sql(ALTER TABLE T ADD CHECK(REGEXP_CONTAINS(B, rb'f\(a,(.*),d\)')))sql"),
       IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"

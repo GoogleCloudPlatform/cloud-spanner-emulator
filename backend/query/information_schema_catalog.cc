@@ -37,7 +37,95 @@ using zetasql::values::NullInt64;
 using zetasql::values::NullString;
 using zetasql::values::String;
 
-constexpr char kInformationSchema[] = "INFORMATION_SCHEMA";
+static constexpr char kInformationSchema[] = "INFORMATION_SCHEMA";
+static constexpr char kTableCatalog[] = "TABLE_CATALOG";
+static constexpr char kTableSchema[] = "TABLE_SCHEMA";
+static constexpr char kTableName[] = "TABLE_NAME";
+static constexpr char kColumnName[] = "COLUMN_NAME";
+static constexpr char kOrdinalPosition[] = "ORDINAL_POSITION";
+static constexpr char kColumnDefault[] = "COLUMN_DEFAULT";
+static constexpr char kDataType[] = "DATA_TYPE";
+static constexpr char kIsNullable[] = "IS_NULLABLE";
+static constexpr char kSpannerType[] = "SPANNER_TYPE";
+static constexpr char kIsGenerated[] = "IS_GENERATED";
+static constexpr char kIsStored[] = "IS_STORED";
+static constexpr char kGenerationExpression[] = "GENERATION_EXPRESSION";
+static constexpr char kSpannerState[] = "SPANNER_STATE";
+static constexpr char kColumns[] = "COLUMNS";
+static constexpr char kCatalogName[] = "CATALOG_NAME";
+static constexpr char kSchemaName[] = "SCHEMA_NAME";
+static constexpr char kPackageName[] = "PACKAGE_NAME";
+static constexpr char kAllowGC[] = "ALLOW_GC";
+static constexpr char kSchemata[] = "SCHEMATA";
+static constexpr char kSpannerStatistics[] = "SPANNER_STATISTICS";
+static constexpr char kDatabaseOptions[] = "DATABASE_OPTIONS";
+static constexpr char kOptionName[] = "OPTION_NAME";
+static constexpr char kOptionType[] = "OPTION_TYPE";
+static constexpr char kOptionValue[] = "OPTION_VALUE";
+static constexpr char kTableType[] = "TABLE_TYPE";
+static constexpr char kParentTableName[] = "PARENT_TABLE_NAME";
+static constexpr char kOnDeleteAction[] = "ON_DELETE_ACTION";
+static constexpr char kRowDeletionPolicyExpression[] =
+    "ROW_DELETION_POLICY_EXPRESSION";
+static constexpr char kTables[] = "TABLES";
+static constexpr char kDatabaseDialect[] = "database_dialect";
+static constexpr char kString[] = "STRING";
+static constexpr char kGoogleStandardSql[] = "GOOGLE_STANDARD_SQL";
+static constexpr char kBaseTable[] = "BASE TABLE";
+static constexpr char kCommitted[] = "COMMITTED";
+static constexpr char kView[] = "VIEW";
+static constexpr char kYes[] = "YES";
+static constexpr char kNo[] = "NO";
+static constexpr char kAlways[] = "ALWAYS";
+static constexpr char kNever[] = "NEVER";
+static constexpr char kPrimary_Key[] = "PRIMARY_KEY";
+static constexpr char kPrimaryKey[] = "PRIMARY KEY";
+static constexpr char kColumnColumnUsage[] = "COLUMN_COLUMN_USAGE";
+static constexpr char kDepenentColumn[] = "DEPENDENT_COLUMN";
+static constexpr char kIndexes[] = "INDEXES";
+static constexpr char kIndex[] = "INDEX";
+static constexpr char kIndexName[] = "INDEX_NAME";
+static constexpr char kIndexType[] = "INDEX_TYPE";
+static constexpr char kIsUnique[] = "IS_UNIQUE";
+static constexpr char kIsNullFiltered[] = "IS_NULL_FILTERED";
+static constexpr char kIndexState[] = "INDEX_STATE";
+static constexpr char kSpannerIsManaged[] = "SPANNER_IS_MANAGED";
+static constexpr char kReadWrite[] = "READ_WRITE";
+static constexpr char kColumnOrdering[] = "COLUMN_ORDERING";
+static constexpr char kConstraintCatalog[] = "CONSTRAINT_CATALOG";
+static constexpr char kConstraintSchema[] = "CONSTRAINT_SCHEMA";
+static constexpr char kConstraintName[] = "CONSTRAINT_NAME";
+static constexpr char kCheckClause[] = "CHECK_CLAUSE";
+static constexpr char kDesc[] = "DESC";
+static constexpr char kAsc[] = "ASC";
+static constexpr char kAllowCommitTimestamp[] = "allow_commit_timestamp";
+static constexpr char kBool[] = "BOOL";
+static constexpr char kTrue[] = "TRUE";
+static constexpr char kConstraintType[] = "CONSTRAINT_TYPE";
+static constexpr char kIsDeferrable[] = "IS_DEFERRABLE";
+static constexpr char kInitiallyDeferred[] = "INITIALLY_DEFERRED";
+static constexpr char kEnforced[] = "ENFORCED";
+static constexpr char kCheck[] = "CHECK";
+static constexpr char kColumnOptions[] = "COLUMN_OPTIONS";
+static constexpr char kUnique[] = "UNIQUE";
+static constexpr char kForeignKey[] = "FOREIGN KEY";
+static constexpr char kIndexColumns[] = "INDEX_COLUMNS";
+static constexpr char kTableConstraints[] = "TABLE_CONSTRAINTS";
+static constexpr char kCheckConstraints[] = "CHECK_CONSTRAINTS";
+static constexpr char kConstraintTableUsage[] = "CONSTRAINT_TABLE_USAGE";
+static constexpr char kReferentialConstraints[] = "REFERENTIAL_CONSTRAINTS";
+static constexpr char kUniqueConstraintCatalog[] = "UNIQUE_CONSTRAINT_CATALOG";
+static constexpr char kUniqueConstraintSchema[] = "UNIQUE_CONSTRAINT_SCHEMA";
+static constexpr char kUniqueConstraintName[] = "UNIQUE_CONSTRAINT_NAME";
+static constexpr char kMatchOption[] = "MATCH_OPTION";
+static constexpr char kUpdateRule[] = "UPDATE_RULE";
+static constexpr char kDeleteRule[] = "DELETE_RULE";
+static constexpr char kSimple[] = "SIMPLE";
+static constexpr char kNoAction[] = "NO ACTION";
+static constexpr char kKeyColumnUsage[] = "KEY_COLUMN_USAGE";
+static constexpr char kConstraintColumnUsage[] = "CONSTRAINT_COLUMN_USAGE";
+static constexpr char kPositionInUniqueConstraint[] =
+    "POSITION_IN_UNIQUE_CONSTRAINT";
 
 // Metadata for information schema columns. This was generated by running the
 // following query against cloud spanner:
@@ -174,7 +262,7 @@ const std::vector<ColumnsMetaEntry>* ColumnsMetadata() {
 }
 
 bool IsNullable(const ColumnsMetaEntry& column) {
-  return std::string(column.is_nullable) == "YES";
+  return std::string(column.is_nullable) == kYes;
 }
 
 // Metadata for information schema index columns. This was generated by running
@@ -344,7 +432,8 @@ std::string ForeignKeyReferencedIndexName(const ForeignKey* foreign_key) {
 }  // namespace
 
 InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
-    : zetasql::SimpleCatalog(kName), default_schema_(default_schema) {
+    : zetasql::SimpleCatalog(kInformationSchema),
+      default_schema_(default_schema) {
   AddSchemataTable();
   AddSpannerStatisticsTable();
   AddDatabaseOptionsTable();
@@ -380,13 +469,12 @@ InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
 void InformationSchemaCatalog::AddSchemataTable() {
   // Setup table schema.
   auto schemata = new zetasql::SimpleTable(
-      "SCHEMATA",
-      {{"CATALOG_NAME", StringType()}, {"SCHEMA_NAME", StringType()}});
+      kSchemata, {{kCatalogName, StringType()}, {kSchemaName, StringType()}});
 
   // Add table rows.
   std::vector<std::vector<zetasql::Value>> rows;
   rows.push_back({String(""), String("")});
-  rows.push_back({String(""), String("INFORMATION_SCHEMA")});
+  rows.push_back({String(""), String(kInformationSchema)});
 
   // Add table to catalog.
   schemata->SetContents(rows);
@@ -396,32 +484,34 @@ void InformationSchemaCatalog::AddSchemataTable() {
 void InformationSchemaCatalog::AddSpannerStatisticsTable() {
   // Setup table schema.
   auto spanner_statistics = new zetasql::SimpleTable(
-      "SPANNER_STATISTICS", {{"CATALOG_NAME", StringType()},
-                             {"SCHEMA_NAME", StringType()},
-                             {"PACKAGE_NAME", StringType()},
-                             {"ALLOW_GC", BoolType()}});
+      kSpannerStatistics, {{kCatalogName, StringType()},
+                           {kSchemaName, StringType()},
+                           {kPackageName, StringType()},
+                           {kAllowGC, BoolType()}});
 
   // Skip statistics rows in emulator.
+  std::vector<std::vector<zetasql::Value>> rows;
 
   // Add table to catalog.
+  spanner_statistics->SetContents(rows);
   AddOwnedTable(spanner_statistics);
 }
 
 void InformationSchemaCatalog::AddDatabaseOptionsTable() {
   // Setup table schema.
   auto database_options = new zetasql::SimpleTable(
-      "DATABASE_OPTIONS", {{"CATALOG_NAME", StringType()},
-                           {"SCHEMA_NAME", StringType()},
-                           {"OPTION_NAME", StringType()},
-                           {"OPTION_TYPE", StringType()},
-                           {"OPTION_VALUE", StringType()}});
+      kDatabaseOptions, {{kCatalogName, StringType()},
+                         {kSchemaName, StringType()},
+                         {kOptionName, StringType()},
+                         {kOptionType, StringType()},
+                         {kOptionValue, StringType()}});
 
   // Add table to catalog.
   AddOwnedTable(database_options);
 
   std::vector<std::vector<zetasql::Value>> rows;
-  rows.push_back({String(""), String(""), String("database_dialect"),
-                  String("STRING"), String("GOOGLE_STANDARD_SQL")});
+  rows.push_back({String(""), String(""), String(kDatabaseDialect),
+                  String(kString), String(kGoogleStandardSql)});
 
   database_options->SetContents(rows);
 }
@@ -429,14 +519,14 @@ void InformationSchemaCatalog::AddDatabaseOptionsTable() {
 zetasql::SimpleTable* InformationSchemaCatalog::AddTablesTable() {
   // Setup table schema.
   auto tables = new zetasql::SimpleTable(
-      "TABLES", {{"TABLE_CATALOG", StringType()},
-                 {"TABLE_SCHEMA", StringType()},
-                 {"TABLE_TYPE", StringType()},
-                 {"TABLE_NAME", StringType()},
-                 {"PARENT_TABLE_NAME", StringType()},
-                 {"ON_DELETE_ACTION", StringType()},
-                 {"SPANNER_STATE", StringType()},
-                 {"ROW_DELETION_POLICY_EXPRESSION", StringType()}});
+      kTables, {{kTableCatalog, StringType()},
+                {kTableSchema, StringType()},
+                {kTableType, StringType()},
+                {kTableName, StringType()},
+                {kParentTableName, StringType()},
+                {kOnDeleteAction, StringType()},
+                {kSpannerState, StringType()},
+                {kRowDeletionPolicyExpression, StringType()}});
   // Add table to catalog so it is included in rows.
   AddOwnedTable(tables);
   return tables;
@@ -452,7 +542,7 @@ void InformationSchemaCatalog::FillTablesTable(zetasql::SimpleTable* tables) {
         // table_schema
         String(""),
         // table_type
-        String("BASE TABLE"),
+        String(kBaseTable),
         // table_name
         String(table->Name()),
         // parent_table_name
@@ -462,7 +552,7 @@ void InformationSchemaCatalog::FillTablesTable(zetasql::SimpleTable* tables) {
             ? String(OnDeleteActionToString(table->on_delete_action()))
             : NullString(),
         // spanner_state,
-        String("COMMITTED"),
+        String(kCommitted),
         // row_deletion_policy_expression
         table->row_deletion_policy().has_value()
             ? String(RowDeletionPolicyToString(
@@ -478,7 +568,7 @@ void InformationSchemaCatalog::FillTablesTable(zetasql::SimpleTable* tables) {
         // table_schema
         String(kInformationSchema),
         // table_type
-        String("VIEW"),
+        String(kView),
         // table_name
         String(table->Name()),
         // parent_table_name
@@ -498,19 +588,19 @@ void InformationSchemaCatalog::FillTablesTable(zetasql::SimpleTable* tables) {
 zetasql::SimpleTable* InformationSchemaCatalog::AddColumnsTable() {
   // Setup table schema.
   auto columns = new zetasql::SimpleTable(
-      "COLUMNS", {{"TABLE_CATALOG", StringType()},
-                  {"TABLE_SCHEMA", StringType()},
-                  {"TABLE_NAME", StringType()},
-                  {"COLUMN_NAME", StringType()},
-                  {"ORDINAL_POSITION", Int64Type()},
-                  {"COLUMN_DEFAULT", StringType()},
-                  {"DATA_TYPE", StringType()},
-                  {"IS_NULLABLE", StringType()},
-                  {"SPANNER_TYPE", StringType()},
-                  {"IS_GENERATED", StringType()},
-                  {"GENERATION_EXPRESSION", StringType()},
-                  {"IS_STORED", StringType()},
-                  {"SPANNER_STATE", StringType()}});
+      kColumns, {{kTableCatalog, StringType()},
+                 {kTableSchema, StringType()},
+                 {kTableName, StringType()},
+                 {kColumnName, StringType()},
+                 {kOrdinalPosition, Int64Type()},
+                 {kColumnDefault, StringType()},
+                 {kDataType, StringType()},
+                 {kIsNullable, StringType()},
+                 {kSpannerType, StringType()},
+                 {kIsGenerated, StringType()},
+                 {kGenerationExpression, StringType()},
+                 {kIsStored, StringType()},
+                 {kSpannerState, StringType()}});
   AddOwnedTable(columns);
   return columns;
 }
@@ -544,18 +634,18 @@ void InformationSchemaCatalog::FillColumnsTable(
           // data_type,
           NullString(),
           // is_nullable
-          String(column->is_nullable() ? "YES" : "NO"),
+          String(column->is_nullable() ? kYes : kNo),
           // spanner_type
           String(ColumnTypeToString(column->GetType(),
                                     column->declared_max_length())),
           // is_generated
-          String(column->is_generated() ? "ALWAYS" : "NEVER"),
+          String(column->is_generated() ? kAlways : kNever),
           // generation_expression
           column->is_generated() ? String(expression) : NullString(),
           // is_stored
-          column->is_generated() ? String("YES") : NullString(),
+          column->is_generated() ? String(kYes) : NullString(),
           // spanner_state
-          String("COMMITTED"),
+          String(kCommitted),
       });
     }
   }
@@ -586,7 +676,7 @@ void InformationSchemaCatalog::FillColumnsTable(
           // spanner_type
           String(metadata.spanner_type),
           // is_generated
-          String("NEVER"),
+          String(kNever),
           // generation_expression
           NullString(),
           // is_stored
@@ -604,11 +694,11 @@ void InformationSchemaCatalog::FillColumnsTable(
 zetasql::SimpleTable* InformationSchemaCatalog::AddColumnColumnUsageTable() {
   // Setup table schema.
   auto column_column_usage = new zetasql::SimpleTable(
-      "COLUMN_COLUMN_USAGE", {{"TABLE_CATALOG", StringType()},
-                              {"TABLE_SCHEMA", StringType()},
-                              {"TABLE_NAME", StringType()},
-                              {"COLUMN_NAME", StringType()},
-                              {"DEPENDENT_COLUMN", StringType()}});
+      kColumnColumnUsage, {{kTableCatalog, StringType()},
+                           {kTableSchema, StringType()},
+                           {kTableName, StringType()},
+                           {kColumnName, StringType()},
+                           {kDepenentColumn, StringType()}});
   AddOwnedTable(column_column_usage);
   return column_column_usage;
 }
@@ -644,19 +734,19 @@ void InformationSchemaCatalog::FillColumnColumnUsageTable(
 
 zetasql::SimpleTable* InformationSchemaCatalog::AddIndexesTable() {
   // Setup table schema.
-  auto indexes = new zetasql::SimpleTable(
-      "INDEXES", {
-                     {"TABLE_CATALOG", StringType()},
-                     {"TABLE_SCHEMA", StringType()},
-                     {"TABLE_NAME", StringType()},
-                     {"INDEX_NAME", StringType()},
-                     {"INDEX_TYPE", StringType()},
-                     {"PARENT_TABLE_NAME", StringType()},
-                     {"IS_UNIQUE", BoolType()},
-                     {"IS_NULL_FILTERED", BoolType()},
-                     {"INDEX_STATE", StringType()},
-                     {"SPANNER_IS_MANAGED", BoolType()},
-                 });
+  auto indexes =
+      new zetasql::SimpleTable(kIndexes, {
+                                               {kTableCatalog, StringType()},
+                                               {kTableSchema, StringType()},
+                                               {kTableName, StringType()},
+                                               {kIndexName, StringType()},
+                                               {kIndexType, StringType()},
+                                               {kParentTableName, StringType()},
+                                               {kIsUnique, BoolType()},
+                                               {kIsNullFiltered, BoolType()},
+                                               {kIndexState, StringType()},
+                                               {kSpannerIsManaged, BoolType()},
+                                           });
   AddOwnedTable(indexes);
   return indexes;
 }
@@ -678,7 +768,7 @@ void InformationSchemaCatalog::FillIndexesTable(
           // index_name
           String(index->Name()),
           // index_type
-          String("INDEX"),
+          String(kIndex),
           // parent_table_name
           String(index->parent() ? index->parent()->Name() : ""),
           // is_unique
@@ -686,7 +776,7 @@ void InformationSchemaCatalog::FillIndexesTable(
           // is_null_filtered
           Bool(index->is_null_filtered()),
           // index_state
-          String("READ_WRITE"),
+          String(kReadWrite),
           // spanner_is_managed
           Bool(index->is_managed()),
       });
@@ -701,9 +791,9 @@ void InformationSchemaCatalog::FillIndexesTable(
         // table_name
         String(table->Name()),
         // index_name
-        String("PRIMARY_KEY"),
+        String(kPrimary_Key),
         // index_type
-        String("PRIMARY_KEY"),
+        String(kPrimary_Key),
         // parent_table_name
         String(""),
         // is_unique
@@ -727,9 +817,9 @@ void InformationSchemaCatalog::FillIndexesTable(
         // table_name
         String(table->Name()),
         // index_name
-        String("PRIMARY_KEY"),
+        String(kPrimary_Key),
         // index_type
-        String("PRIMARY_KEY"),
+        String(kPrimary_Key),
         // parent_table_name
         String(""),
         // is_unique
@@ -750,18 +840,18 @@ void InformationSchemaCatalog::FillIndexesTable(
 zetasql::SimpleTable* InformationSchemaCatalog::AddIndexColumnsTable() {
   // Setup table schema.
   auto index_columns = new zetasql::SimpleTable(
-      "INDEX_COLUMNS", {
-                           {"TABLE_CATALOG", StringType()},
-                           {"TABLE_SCHEMA", StringType()},
-                           {"TABLE_NAME", StringType()},
-                           {"INDEX_NAME", StringType()},
-                           {"INDEX_TYPE", StringType()},
-                           {"COLUMN_NAME", StringType()},
-                           {"ORDINAL_POSITION", Int64Type()},
-                           {"COLUMN_ORDERING", StringType()},
-                           {"IS_NULLABLE", StringType()},
-                           {"SPANNER_TYPE", StringType()},
-                       });
+      kIndexColumns, {
+                         {kTableCatalog, StringType()},
+                         {kTableSchema, StringType()},
+                         {kTableName, StringType()},
+                         {kIndexName, StringType()},
+                         {kIndexType, StringType()},
+                         {kColumnName, StringType()},
+                         {kOrdinalPosition, Int64Type()},
+                         {kColumnOrdering, StringType()},
+                         {kIsNullable, StringType()},
+                         {kSpannerType, StringType()},
+                     });
 
   // Add table to catalog.
   AddOwnedTable(index_columns);
@@ -788,18 +878,18 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
             // index_name
             String(index->Name()),
             // index_type
-            String("INDEX"),
+            String(kIndex),
             // column_name
             String(key_column->column()->Name()),
             // ordinal_position
             Int64(pos++),
             // column_ordering
-            String(key_column->is_descending() ? "DESC" : "ASC"),
+            String(key_column->is_descending() ? kDesc : kAsc),
             // is_nullable
             String(key_column->column()->is_nullable() &&
                            !index->is_null_filtered()
-                       ? "YES"
-                       : "NO"),
+                       ? kYes
+                       : kNo),
             // spanner_type
             String(ColumnTypeToString(
                 key_column->column()->GetType(),
@@ -819,7 +909,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
             // index_name
             String(index->Name()),
             // index_type
-            String("INDEX"),
+            String(kIndex),
             // column_name
             String(column->Name()),
             // ordinal_position
@@ -827,7 +917,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
             // column_ordering
             NullString(),
             // is_nullable
-            String(column->is_nullable() ? "YES" : "NO"),
+            String(column->is_nullable() ? kYes : kNo),
             // spanner_type
             String(ColumnTypeToString(column->GetType(),
                                       column->declared_max_length())),
@@ -847,17 +937,17 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
             // table_name
             String(table->Name()),
             // index_name
-            String("PRIMARY_KEY"),
+            String(kPrimary_Key),
             // index_type
-            String("PRIMARY_KEY"),
+            String(kPrimary_Key),
             // column_name
             String(key_column->column()->Name()),
             // ordinal_position
             Int64(pos++),
             // column_ordering
-            String(key_column->is_descending() ? "DESC" : "ASC"),
+            String(key_column->is_descending() ? kDesc : kAsc),
             // is_nullable
-            String(key_column->column()->is_nullable() ? "YES" : "NO"),
+            String(key_column->column()->is_nullable() ? kYes : kNo),
             // spanner_type
             String(ColumnTypeToString(
                 key_column->column()->GetType(),
@@ -884,9 +974,9 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
           // table_name
           String(table->Name()),
           // index_name
-          String("PRIMARY_KEY"),
+          String(kPrimary_Key),
           // index_type
-          String("PRIMARY_KEY"),
+          String(kPrimary_Key),
           // column_name
           String(column->Name()),
           // ordinal_position
@@ -908,14 +998,14 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
 
 void InformationSchemaCatalog::AddColumnOptionsTable() {
   // Setup table schema.
-  auto columns = new zetasql::SimpleTable("COLUMN_OPTIONS",
-                                            {{"TABLE_CATALOG", StringType()},
-                                             {"TABLE_SCHEMA", StringType()},
-                                             {"TABLE_NAME", StringType()},
-                                             {"COLUMN_NAME", StringType()},
-                                             {"OPTION_NAME", StringType()},
-                                             {"OPTION_TYPE", StringType()},
-                                             {"OPTION_VALUE", StringType()}});
+  auto columns = new zetasql::SimpleTable(kColumnOptions,
+                                            {{kTableCatalog, StringType()},
+                                             {kTableSchema, StringType()},
+                                             {kTableName, StringType()},
+                                             {kColumnName, StringType()},
+                                             {kOptionName, StringType()},
+                                             {kOptionType, StringType()},
+                                             {kOptionValue, StringType()}});
 
   // Add table rows.
   std::vector<std::vector<zetasql::Value>> rows;
@@ -931,9 +1021,9 @@ void InformationSchemaCatalog::AddColumnOptionsTable() {
                         // column_name
                         String(column->Name()),
                         // option_name
-                        String("allow_commit_timestamp"), String("BOOL"),
+                        String(kAllowCommitTimestamp), String(kBool),
                         // option_value
-                        String("TRUE")});
+                        String(kTrue)});
       }
     }
   }
@@ -946,18 +1036,18 @@ void InformationSchemaCatalog::AddColumnOptionsTable() {
 zetasql::SimpleTable* InformationSchemaCatalog::AddTableConstraintsTable() {
   // Setup table schema.
   auto table_constraints = new zetasql::SimpleTable(
-      "TABLE_CONSTRAINTS", {
-                               {"CONSTRAINT_CATALOG", StringType()},
-                               {"CONSTRAINT_SCHEMA", StringType()},
-                               {"CONSTRAINT_NAME", StringType()},
-                               {"TABLE_CATALOG", StringType()},
-                               {"TABLE_SCHEMA", StringType()},
-                               {"TABLE_NAME", StringType()},
-                               {"CONSTRAINT_TYPE", StringType()},
-                               {"IS_DEFERRABLE", StringType()},
-                               {"INITIALLY_DEFERRED", StringType()},
-                               {"ENFORCED", StringType()},
-                           });
+      kTableConstraints, {
+                             {kConstraintCatalog, StringType()},
+                             {kConstraintSchema, StringType()},
+                             {kConstraintName, StringType()},
+                             {kTableCatalog, StringType()},
+                             {kTableSchema, StringType()},
+                             {kTableName, StringType()},
+                             {kConstraintType, StringType()},
+                             {kIsDeferrable, StringType()},
+                             {kInitiallyDeferred, StringType()},
+                             {kEnforced, StringType()},
+                         });
 
   // Add table to catalog.
   AddOwnedTable(table_constraints);
@@ -985,13 +1075,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
         // table_name
         String(table->Name()),
         // constraint_type,
-        String("PRIMARY KEY"),
+        String(kPrimaryKey),
         // is_deferrable,
-        String("NO"),
+        String(kNo),
         // initially_deferred,
-        String("NO"),
+        String(kNo),
         // enforced,
-        String("YES"),
+        String(kYes),
     });
 
     // Add the NOT NULL check constraints.
@@ -1013,13 +1103,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
           // table_name
           String(table->Name()),
           // constraint_type,
-          String("CHECK"),
+          String(kCheck),
           // is_deferrable,
-          String("NO"),
+          String(kNo),
           // initially_deferred,
-          String("NO"),
+          String(kNo),
           // enforced,
-          String("YES"),
+          String(kYes),
       });
     }
 
@@ -1039,13 +1129,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
           // table_name
           String(table->Name()),
           // constraint_type,
-          String("CHECK"),
+          String(kCheck),
           // is_deferrable,
-          String("NO"),
+          String(kNo),
           // initially_deferred,
-          String("NO"),
+          String(kNo),
           // enforced,
-          String("YES"),
+          String(kYes),
       });
     }
 
@@ -1065,13 +1155,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
           // table_name
           String(table->Name()),
           // constraint_type,
-          String("FOREIGN KEY"),
+          String(kForeignKey),
           // is_deferrable,
-          String("NO"),
+          String(kNo),
           // initially_deferred,
-          String("NO"),
+          String(kNo),
           // enforced,
-          String("YES"),
+          String(kYes),
       });
 
       // Add the foreign key's unique backing index as a unique constraint.
@@ -1090,13 +1180,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
             // table_name
             String(foreign_key->referenced_table()->Name()),
             // constraint_type,
-            String("UNIQUE"),
+            String(kUnique),
             // is_deferrable,
-            String("NO"),
+            String(kNo),
             // initially_deferred,
-            String("NO"),
+            String(kNo),
             // enforced,
-            String("YES"),
+            String(kYes),
         });
       }
     }
@@ -1119,13 +1209,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
         // table_name
         String(table->Name()),
         // constraint_type
-        String("PRIMARY KEY"),
+        String(kPrimaryKey),
         // is_deferrable,
-        String("NO"),
+        String(kNo),
         // initially_deferred
-        String("NO"),
+        String(kNo),
         // enforced
-        String("YES"),
+        String(kYes),
     });
 
     // Add the NOT NULL check constraints.
@@ -1149,13 +1239,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
           // table_name
           String(table->Name()),
           // constraint_type,
-          String("CHECK"),
+          String(kCheck),
           // is_deferrable,
-          String("NO"),
+          String(kNo),
           // initially_deferred,
-          String("NO"),
+          String(kNo),
           // enforced,
-          String("YES"),
+          String(kYes),
       });
     }
   }
@@ -1166,13 +1256,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
 zetasql::SimpleTable* InformationSchemaCatalog::AddCheckConstraintsTable() {
   // Setup table schema.
   auto check_constraints = new zetasql::SimpleTable(
-      "CHECK_CONSTRAINTS", {
-                               {"CONSTRAINT_CATALOG", StringType()},
-                               {"CONSTRAINT_SCHEMA", StringType()},
-                               {"CONSTRAINT_NAME", StringType()},
-                               {"CHECK_CLAUSE", StringType()},
-                               {"SPANNER_STATE", StringType()},
-                           });
+      kCheckConstraints, {
+                             {kConstraintCatalog, StringType()},
+                             {kConstraintSchema, StringType()},
+                             {kConstraintName, StringType()},
+                             {kCheckClause, StringType()},
+                             {kSpannerState, StringType()},
+                         });
 
   // Add table to catalog.
   AddOwnedTable(check_constraints);
@@ -1200,7 +1290,7 @@ void InformationSchemaCatalog::FillCheckConstraintsTable(
           // check clause
           String(CheckNotNullClause(column->Name())),
           // spanner state
-          String("COMMITTED"),
+          String(kCommitted),
       });
     }
 
@@ -1216,7 +1306,7 @@ void InformationSchemaCatalog::FillCheckConstraintsTable(
           // check clasue
           String(check_constraint->expression()),
           // spanner state
-          String("COMMITTED"),
+          String(kCommitted),
       });
     }
   }
@@ -1240,7 +1330,7 @@ void InformationSchemaCatalog::FillCheckConstraintsTable(
           // check clause
           String(CheckNotNullClause(column->Name())),
           // spanner state
-          String("COMMITTED"),
+          String(kCommitted),
       });
     }
   }
@@ -1251,14 +1341,14 @@ zetasql::SimpleTable*
 InformationSchemaCatalog::AddConstraintTableUsageTable() {
   // Setup table schema.
   auto constraint_table_usage = new zetasql::SimpleTable(
-      "CONSTRAINT_TABLE_USAGE", {
-                                    {"TABLE_CATALOG", StringType()},
-                                    {"TABLE_SCHEMA", StringType()},
-                                    {"TABLE_NAME", StringType()},
-                                    {"CONSTRAINT_CATALOG", StringType()},
-                                    {"CONSTRAINT_SCHEMA", StringType()},
-                                    {"CONSTRAINT_NAME", StringType()},
-                                });
+      kConstraintTableUsage, {
+                                 {kTableCatalog, StringType()},
+                                 {kTableSchema, StringType()},
+                                 {kTableName, StringType()},
+                                 {kConstraintCatalog, StringType()},
+                                 {kConstraintSchema, StringType()},
+                                 {kConstraintName, StringType()},
+                             });
 
   // Add table to catalog.
   AddOwnedTable(constraint_table_usage);
@@ -1412,19 +1502,18 @@ zetasql::SimpleTable*
 InformationSchemaCatalog::AddReferentialConstraintsTable() {
   // Setup table schema.
   auto referential_constraints = new zetasql::SimpleTable(
-      "REFERENTIAL_CONSTRAINTS",
-      {
-          {"CONSTRAINT_CATALOG", StringType()},
-          {"CONSTRAINT_SCHEMA", StringType()},
-          {"CONSTRAINT_NAME", StringType()},
-          {"UNIQUE_CONSTRAINT_CATALOG", StringType()},
-          {"UNIQUE_CONSTRAINT_SCHEMA", StringType()},
-          {"UNIQUE_CONSTRAINT_NAME", StringType()},
-          {"MATCH_OPTION", StringType()},
-          {"UPDATE_RULE", StringType()},
-          {"DELETE_RULE", StringType()},
-          {"SPANNER_STATE", StringType()},
-      });
+      kReferentialConstraints, {
+                                   {kConstraintCatalog, StringType()},
+                                   {kConstraintSchema, StringType()},
+                                   {kConstraintName, StringType()},
+                                   {kUniqueConstraintCatalog, StringType()},
+                                   {kUniqueConstraintSchema, StringType()},
+                                   {kUniqueConstraintName, StringType()},
+                                   {kMatchOption, StringType()},
+                                   {kUpdateRule, StringType()},
+                                   {kDeleteRule, StringType()},
+                                   {kSpannerState, StringType()},
+                               });
 
   // Add table to catalog.
   AddOwnedTable(referential_constraints);
@@ -1452,13 +1541,13 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable(
           // unique_constraint_name
           String(ForeignKeyReferencedIndexName(foreign_key)),
           // match_option
-          String("SIMPLE"),
+          String(kSimple),
           // update_rule
-          String("NO ACTION"),
+          String(kNoAction),
           // delete_rule
-          String("NO ACTION"),
+          String(kNoAction),
           // spanner_state
-          String("COMMITTED"),
+          String(kCommitted),
       });
     }
   }
@@ -1469,17 +1558,17 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable(
 zetasql::SimpleTable* InformationSchemaCatalog::AddKeyColumnUsageTable() {
   // Setup table schema.
   auto key_column_usage = new zetasql::SimpleTable(
-      "KEY_COLUMN_USAGE", {
-                              {"CONSTRAINT_CATALOG", StringType()},
-                              {"CONSTRAINT_SCHEMA", StringType()},
-                              {"CONSTRAINT_NAME", StringType()},
-                              {"TABLE_CATALOG", StringType()},
-                              {"TABLE_SCHEMA", StringType()},
-                              {"TABLE_NAME", StringType()},
-                              {"COLUMN_NAME", StringType()},
-                              {"ORDINAL_POSITION", Int64Type()},
-                              {"POSITION_IN_UNIQUE_CONSTRAINT", Int64Type()},
-                          });
+      kKeyColumnUsage, {
+                           {kConstraintCatalog, StringType()},
+                           {kConstraintSchema, StringType()},
+                           {kConstraintName, StringType()},
+                           {kTableCatalog, StringType()},
+                           {kTableSchema, StringType()},
+                           {kTableName, StringType()},
+                           {kColumnName, StringType()},
+                           {kOrdinalPosition, Int64Type()},
+                           {kPositionInUniqueConstraint, Int64Type()},
+                       });
 
   // Add table to catalog.
   AddOwnedTable(key_column_usage);
@@ -1615,15 +1704,15 @@ zetasql::SimpleTable*
 InformationSchemaCatalog::AddConstraintColumnUsageTable() {
   // Setup table schema.
   auto constraint_column_usage = new zetasql::SimpleTable(
-      "CONSTRAINT_COLUMN_USAGE", {
-                                     {"TABLE_CATALOG", StringType()},
-                                     {"TABLE_SCHEMA", StringType()},
-                                     {"TABLE_NAME", StringType()},
-                                     {"COLUMN_NAME", StringType()},
-                                     {"CONSTRAINT_CATALOG", StringType()},
-                                     {"CONSTRAINT_SCHEMA", StringType()},
-                                     {"CONSTRAINT_NAME", StringType()},
-                                 });
+      kConstraintColumnUsage, {
+                                  {kTableCatalog, StringType()},
+                                  {kTableSchema, StringType()},
+                                  {kTableName, StringType()},
+                                  {kColumnName, StringType()},
+                                  {kConstraintCatalog, StringType()},
+                                  {kConstraintSchema, StringType()},
+                                  {kConstraintName, StringType()},
+                              });
 
   // Add table to catalog.
   AddOwnedTable(constraint_column_usage);

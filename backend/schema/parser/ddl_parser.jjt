@@ -78,6 +78,7 @@ void create_statement() #void :
     | create_table_statement()
     | create_index_statement()
 
+
   )
 }
 
@@ -318,6 +319,8 @@ void drop_statement() :
   <DROP>
 
     ( <TABLE> #table | <INDEX> #index ) identifier() #name
+
+
 
 }
 
