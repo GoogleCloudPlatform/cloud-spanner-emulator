@@ -15,6 +15,7 @@
 //
 
 options {
+  OUTPUT_LANGUAGE = "c++";
   STATIC = false;
   IGNORE_CASE = true;
   NODE_SCOPE_HOOK = true;
@@ -49,17 +50,11 @@ PARSER_BEGIN(DDLParser)
 
  public:
   SimpleNode* GetParseResult() {
-    Node* result;
+    Node* result = nullptr;
     if (errorHandler->getErrorCount() == 0) {
-      ZETASQL_CHECK_NE(static_cast<Node*>(NULL), jjtree.peekNode());
-      result = jjtree.popNode();
-    } else {
-      result = NULL;
+      result = jjtree.peekNode();
+      ZETASQL_CHECK_NE(nullptr, result);
     }
-    while (jjtree.peekNode() != NULL) {
-      delete jjtree.popNode();
-    }
-
     return dynamic_cast<SimpleNode*>(result);
   }
 
@@ -73,7 +68,6 @@ PARSER_END(DDLParser)
 
 TOKEN_MGR_DECLS:
 {
- public:
   void CommonTokenAction(Token * t) {
     const DDLCharStream* stream = dynamic_cast<DDLCharStream*>(input_stream);
     t->set_absolute_position(stream->token_begin(), t->image.size());

@@ -16,6 +16,8 @@
 
 #include "frontend/converters/time.h"
 
+#include <cstdint>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -31,6 +33,8 @@ namespace frontend {
 namespace converters {
 
 namespace {
+using ::google::protobuf::Duration;
+using ::google::protobuf::Timestamp;
 using ::google::spanner::emulator::test::EqualsProto;
 using ::zetasql_base::testing::IsOkAndHolds;
 using ::zetasql_base::testing::StatusIs;
@@ -94,6 +98,120 @@ TEST(TimestampToProtoConversionTest, InfinitePast) {
 TEST(TimestampToProtoConversionTest, InfiniteFuture) {
   absl::Time time = absl::InfiniteFuture();
   EXPECT_THAT(TimestampToProto(time),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(TimestampFromProtoConversionTest, UnixEpoch) {
+  Timestamp timestamp;
+  timestamp.set_seconds(0);
+  timestamp.set_nanos(0);
+  EXPECT_THAT(TimestampFromProto(timestamp), IsOkAndHolds(absl::UnixEpoch()));
+}
+
+TEST(TimestampFromProtoConversionTest, MinAllowedValue) {
+  int64_t seconds = -62135596800;
+  Timestamp timestamp;
+  timestamp.set_seconds(seconds);
+  timestamp.set_nanos(0);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto time, TimestampFromProto(timestamp));
+  EXPECT_EQ(time, absl::FromUnixSeconds(seconds));
+}
+
+TEST(TimestampFromProtoConversionTest, MaxAllowedValue) {
+  int64_t seconds = 253402300799;
+  Timestamp timestamp;
+  timestamp.set_seconds(seconds);
+  timestamp.set_nanos(0);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto time, TimestampFromProto(timestamp));
+  EXPECT_EQ(time, absl::FromUnixSeconds(seconds));
+}
+
+TEST(TimestampFromProtoConversionTest, LessThanMinAllowedValue) {
+  Timestamp timestamp;
+  timestamp.set_seconds(-62135596801);
+  timestamp.set_nanos(0);
+  EXPECT_THAT(TimestampFromProto(timestamp),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(TimestampFromProtoConversionTest, GreaterThanMaxAllowedValue) {
+  Timestamp timestamp;
+  timestamp.set_seconds(253402300800);
+  timestamp.set_nanos(0);
+  EXPECT_THAT(TimestampFromProto(timestamp),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(TimestampFromProtoConversionTest, LessThanMinAllowedValueForNanoSeconds) {
+  Timestamp timestamp;
+  timestamp.set_seconds(1);
+  timestamp.set_nanos(-1);
+  EXPECT_THAT(TimestampFromProto(timestamp),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(TimestampFromProtoConversionTest,
+     GreaterThanMaxAllowedValueForNanoSeconds) {
+  Timestamp timestamp;
+  timestamp.set_seconds(1);
+  timestamp.set_nanos(1000000000);
+  EXPECT_THAT(TimestampFromProto(timestamp),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(DurationFromProtoConversionTest, UnixEpoch) {
+  Duration duration;
+  duration.set_seconds(0);
+  duration.set_nanos(0);
+  EXPECT_THAT(
+      DurationFromProto(duration),
+      IsOkAndHolds(absl::time_internal::ToUnixDuration(absl::UnixEpoch())));
+}
+
+TEST(DurationFromProtoConversionTest, MinAllowedValue) {
+  Duration duration;
+  duration.set_seconds(-315576000000);
+  duration.set_nanos(-999999999);
+  ZETASQL_ASSERT_OK(DurationFromProto(duration));
+}
+
+TEST(DurationFromProtoConversionTest, MaxAllowedValue) {
+  Duration duration;
+  duration.set_seconds(315576000000);
+  duration.set_nanos(999999999);
+  ZETASQL_ASSERT_OK(DurationFromProto(duration));
+}
+
+TEST(DurationFromProtoConversionTest, LessThanMinAllowedValue) {
+  Duration duration;
+  duration.set_seconds(-315576000001);
+  duration.set_nanos(-999999999);
+  EXPECT_THAT(DurationFromProto(duration),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(DurationFromProtoConversionTest, GreaterThanMaxAllowedValue) {
+  Duration duration;
+  duration.set_seconds(315576000001);
+  duration.set_nanos(999999999);
+  EXPECT_THAT(DurationFromProto(duration),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(DurationFromProtoConversionTest, LessThanMinAllowedValueForNanoSeconds) {
+  Duration duration;
+  duration.set_seconds(1);
+  duration.set_nanos(-1000000000);
+  EXPECT_THAT(DurationFromProto(duration),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(DurationFromProtoConversionTest,
+     GreaterThanMaxAllowedValueForNanoSeconds) {
+  Duration duration;
+  duration.set_seconds(1);
+  duration.set_nanos(1000000000);
+  EXPECT_THAT(DurationFromProto(duration),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 

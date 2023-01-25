@@ -16,8 +16,6 @@
 
 #include "backend/schema/parser/ddl_token_validation.h"
 
-#include <string>
-
 #include "backend/schema/parser/DDLParserConstants.h"
 #include "backend/schema/parser/Token.h"
 #include "backend/schema/parser/ddl_token_validation_utils.h"

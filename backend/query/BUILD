@@ -203,12 +203,32 @@ cc_library(
     name = "information_schema_catalog",
     srcs = ["information_schema_catalog.cc"],
     hdrs = ["information_schema_catalog.h"],
+    data = [
+        ":info_schema_columns_metadata.csv",
+        ":info_schema_columns_metadata_for_index.csv",
+    ],
     deps = [
         "//backend/schema/catalog:schema",
         "//backend/schema/printer:print_ddl",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:variant",
+        "@com_google_zetasql//zetasql/base:no_destructor",
         "@com_google_zetasql//zetasql/public:simple_catalog",
+        "@com_googlesource_code_riegeli//riegeli/bytes:cfile_reader",
+        "@com_googlesource_code_riegeli//riegeli/csv:csv_reader",
+        "@com_googlesource_code_riegeli//riegeli/csv:csv_record",
+    ],
+)
+
+cc_test(
+    name = "information_schema_catalog_test",
+    srcs = ["information_schema_catalog_test.cc"],
+    deps = [
+        "information_schema_catalog",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 

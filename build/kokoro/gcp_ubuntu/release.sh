@@ -57,7 +57,7 @@ EOF
 else
   # Activate our GCloud credentials with docker to allow GCR access.
   yes | gcloud auth configure-docker
-  docker run --privileged linuxkit/binfmt:v0.8
+  docker run --privileged linuxkit/binfmt:bebbae0c1100ebf7bf2ad4dfb9dfd719cf0ef132
   builder_name=$(docker buildx create)
   docker buildx use "$builder_name"
   docker buildx inspect --bootstrap

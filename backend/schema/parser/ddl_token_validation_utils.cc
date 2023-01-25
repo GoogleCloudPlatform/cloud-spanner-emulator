@@ -16,8 +16,6 @@
 
 #include "backend/schema/parser/ddl_token_validation_utils.h"
 
-#include <string>
-
 #include "zetasql/public/strings.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"

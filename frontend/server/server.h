@@ -21,7 +21,7 @@
 #include <string>
 
 #include "frontend/server/environment.h"
-#include "grpcpp/impl/codegen/service_type.h"
+#include "grpcpp/impl/service_type.h"
 #include "grpcpp/server.h"
 #include "grpcpp/support/status.h"
 

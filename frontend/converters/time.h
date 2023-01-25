@@ -33,7 +33,6 @@ namespace emulator {
 // 3339](https://www.ietf.org/rfc/rfc3339.txt) format.
 absl::StatusOr<google::protobuf::Timestamp> TimestampToProto(absl::Time time);
 
-// TODO: Add tests for TimestampFromProto and DurationFromProto.
 absl::StatusOr<absl::Time> TimestampFromProto(
     const google::protobuf::Timestamp& proto);
 
