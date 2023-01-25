@@ -22,7 +22,7 @@
 #include "common/config.h"
 #include "frontend/server/request_context.h"
 #include "grpcpp/grpcpp.h"
-#include "grpcpp/impl/codegen/sync_stream.h"
+#include "grpcpp/support/sync_stream.h"
 #include "absl/status/status.h"
 
 namespace google {

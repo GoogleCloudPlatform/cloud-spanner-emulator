@@ -32,17 +32,24 @@ function emulator::copy_logs() {
 
 function emulator::build_and_test() {
   set +e
+  # Build with optional caching
   if [[ -z "${REMOTE_CACHE}" ]]; then
-     bazel test -c opt ...
+     bazel build -c opt ...
   else
-    bazel test -c opt ... \
+    bazel build -c opt ... \
     --remote_cache=${REMOTE_CACHE} \
     --google_default_credentials
   fi
   exit_code=$?
+  if [[ $exit_code != 0 ]]; then
+    set -e
+    emulator::copy_logs
+    exit $exit_code
+  fi
 
+# Run tests without cache
+  bazel test -c opt ...
   set -e
-
   if [[ $exit_code != 0 ]]; then
     emulator::copy_logs
     exit $exit_code

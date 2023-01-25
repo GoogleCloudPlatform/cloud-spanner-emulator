@@ -38,10 +38,22 @@ void identifier() #void :
   | pseudoReservedWord()
 }
 
+void qualified_identifier() #void :
+{}
+{
+  ((identifier() #part) (("." identifier() #part)*))
+}
+
 void identifier_list() :
 {}
 {
   (identifier() #identifier) ("," identifier() #identifier)*
+}
+
+void qualified_identifier_list() :
+{}
+{
+  (qualified_identifier() #identifier) ("," qualified_identifier() #identifier)*
 }
 
 void path() :
@@ -75,12 +87,13 @@ void create_statement() #void :
 {
   <CREATE>
   (   create_database_statement()
+
     | create_table_statement()
     | create_index_statement()
 
-
   )
 }
+
 
 void options_clause() :
 {}
@@ -99,13 +112,13 @@ void create_database_statement() :
 void create_table_statement() :
 {}
 {
-  <TABLE> identifier() #name
+  <TABLE>
+  qualified_identifier() #name
   "(" [ table_element() ( LOOKAHEAD(2) "," table_element() )* [ "," ] ] ")"
   primary_key()
   [ LOOKAHEAD(2) "," table_interleave_clause() ]
   [ LOOKAHEAD(2) "," row_deletion_policy_clause() ]
 }
-
 
 void table_element() #void :
 {}
@@ -139,7 +152,7 @@ void column_def_alter() :
     LOOKAHEAD(2) <SET> ( options_clause()
                          | column_default_clause()
                        )
-  | LOOKAHEAD(2) <DROP> <DEFAULTT> #drop_default_clause
+  | LOOKAHEAD(2) <DROP> <DEFAULTT> #drop_column_default
   | column_def_alter_attrs()
 }
 
@@ -154,11 +167,13 @@ void column_type() :
   | <TIMESTAMP>
   | <DATE>
   | <NUMERIC>
+  | <PG> "." qualified_identifier() #pgtype
   | <JSON>
   | <ARRAY> "<" column_type() ">"
 
 
 }
+
 
 void column_length() :
 {}
@@ -191,9 +206,10 @@ void foreign_key() :
   [ <CONSTRAINT> identifier() #constraint_name ]
   <FOREIGN> <KEY>
     "(" identifier_list() #referencing_columns ")"
-  <REFERENCES> identifier() #referenced_table
+  <REFERENCES> qualified_identifier() #referenced_table
     "(" identifier_list() #referenced_columns ")"
 }
+
 
 void statement_token_no_paren() :
 {}
@@ -211,7 +227,7 @@ void check_constraint() :
 void table_interleave_clause() :
 {}
 {
-  <INTERLEAVE> <IN> <PARENT> identifier() #interleave_in
+  <INTERLEAVE> <IN> <PARENT> qualified_identifier() #interleave_in
     [ on_delete_clause() ]
 }
 
@@ -245,18 +261,21 @@ void create_index_statement() :
 {
   [ <UNIQUE> #unique_index ]
   [ <NULL_FILTERED> #null_filtered ]
-  <INDEX> identifier() #name
-  <ON> identifier() #table
+  <INDEX>
+  qualified_identifier() #name
+  <ON> qualified_identifier() #table
   key() #columns
   [ <STORING> stored_column_list() ]
   [ LOOKAHEAD(2) "," index_interleave_clause() ]
 }
 
+
 void index_interleave_clause() :
 {}
 {
-  <INTERLEAVE> <IN> identifier() #interleave_in
+  <INTERLEAVE> <IN> qualified_identifier() #interleave_in
 }
+
 
 void key() #void :
 {}
@@ -309,7 +328,7 @@ void option_key_val() :
     | <TRUE> #bool_true_val
     | <FALSE> #bool_false_val
     | <INTEGER_LITERAL> #integer_val
-    | string_value()  #str_val
+    | string_value() #str_val
   )
 }
 
@@ -318,8 +337,9 @@ void drop_statement() :
 {
   <DROP>
 
-    ( <TABLE> #table | <INDEX> #index ) identifier() #name
-
+    ( <TABLE> #table
+    | <INDEX> #index
+  ) qualified_identifier() #name
 
 
 }
@@ -343,29 +363,29 @@ void alter_database_statement() :
 void alter_table_statement() :
 {}
 {
-  <TABLE> (identifier() #table_name)
-  (   LOOKAHEAD(3) <DROP> <CONSTRAINT> #drop_constraint
-        identifier() #constraint_name
+  <TABLE> (qualified_identifier() #table_name)
+  (   LOOKAHEAD(3) <DROP> <CONSTRAINT> #drop_constraint identifier() #constraint_name
     | LOOKAHEAD(3) <DROP> <ROW> <DELETION> <POLICY> #drop_row_deletion_policy
-    | LOOKAHEAD(3) <DROP> #drop_column [LOOKAHEAD(2) <COLUMN>] (identifier() #column_name)
+    | LOOKAHEAD(3) <DROP> #drop_column [LOOKAHEAD(2) <COLUMN>]
+        (identifier() #column_name)
     | LOOKAHEAD(1) <ALTER> #alter_column [LOOKAHEAD(2) <COLUMN>]
         (identifier() #name) column_def_alter()
     | <SET> #set_on_delete on_delete_clause()
     | LOOKAHEAD(4) <ADD> foreign_key()
     | LOOKAHEAD(4) <ADD> check_constraint()
     | LOOKAHEAD(4) <ADD> row_deletion_policy_clause() #add_row_deletion_policy
-    // ADD COLUMN could mask the above ADD clauses, so putting it at the end.
-    | LOOKAHEAD(1) <ADD> #add_column [LOOKAHEAD(3) <COLUMN>] column_def()
+    | LOOKAHEAD(1) <ADD> #add_column [LOOKAHEAD(6) <COLUMN>
+      ] column_def()
     | <REPLACE> row_deletion_policy_clause() #replace_row_deletion_policy
   )
 }
-
 
 void analyze_statement() :
 {}
 {
   <ANALYZE>
 }
+
 
 TOKEN:
 {

@@ -20,8 +20,8 @@
 #include <string>
 
 #include "zetasql/base/logging.h"
-#include "absl/strings/numbers.h"
 #include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 
 namespace google {
 namespace spanner {
@@ -47,7 +47,7 @@ class NodeBase {
                         absl::StartsWithIgnoreCase(image_, "-0x");
     int64_t rv;
     if (is_hex) {
-      if (!absl::numbers_internal::safe_strtoi_base(image_, &rv, 16)) {
+      if (!absl::SimpleHexAtoi(image_, &rv)) {
         return -1;
       }
       return rv;

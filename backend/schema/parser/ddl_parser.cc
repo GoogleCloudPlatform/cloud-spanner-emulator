@@ -171,29 +171,27 @@ class DDLErrorHandler : public ErrorHandler {
   bool ignore_further_errors_;
 };
 
-absl::StatusOr<std::unique_ptr<SimpleNode>> ParseDDLStatementToNode(
-    absl::string_view statement) {
+absl::StatusOr<SimpleNode*> ParseDDLStatementToNode(
+    DDLParser& parser, absl::string_view statement) {
   // Empty DDL statements are not allowed in Cloud Spanner.
   if (statement.empty()) {
     return error::EmptyDDLStatement();
   }
 
-  // Instantiate a new DDLParser with given statement and custom error handler.
+  // Set custom error handler.
   std::vector<std::string> errors;
   DDLErrorHandler error_handler(&errors);
-  DDLParser parser(new DDLParserTokenManager(new DDLCharStream(statement)));
   parser.setErrorHandler(&error_handler);
 
   // Parse the input statement as a valid DDL statement into a node.
-  std::unique_ptr<SimpleNode> node =
-      absl::WrapUnique<SimpleNode>(parser.ParseDDL());
+  SimpleNode* node = parser.ParseDDL();
   if (node == nullptr) {
     if (errors.empty()) {
       errors.push_back("Unknown error while parsing ddl statement into node.");
     }
     return error::DDLStatementWithErrors(statement, errors);
   }
-  return std::move(node);
+  return node;
 }
 
 absl::Status CheckNodeType(const SimpleNode* node, int expected_type) {
@@ -881,7 +879,7 @@ absl::Status VisitAlterColumnNode(
           child, alter_column->mutable_column(), ddl_text));
       break;
     }
-    case JJTDROP_DEFAULT_CLAUSE: {
+    case JJTDROP_COLUMN_DEFAULT: {
       alter_column->set_type(AlterColumn::DROP_DEFAULT);
       break;
     }
@@ -1129,25 +1127,29 @@ absl::StatusOr<CreateDatabase> BuildCreateDatabaseStatement(
 
 absl::StatusOr<CreateDatabase> ParseCreateDatabase(
     absl::string_view create_statement) {
+  // Instantiate a new DDLParser with given statement.
+  DDLParser parser(
+      new DDLParserTokenManager(new DDLCharStream(create_statement)));
   // Parse input statement into the root node.
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<SimpleNode> node,
-                   ParseDDLStatementToNode(create_statement));
+  ZETASQL_ASSIGN_OR_RETURN(SimpleNode * node,
+                   ParseDDLStatementToNode(parser, create_statement));
 
   // Try to read root node as a valid CreateDatabaseStatement.
-  return BuildCreateDatabaseStatement(node.get());
+  return BuildCreateDatabaseStatement(node);
 }
 
 absl::StatusOr<DDLStatement> ParseDDLStatement(
     absl::string_view input
 ) {
+  // Instantiate a new DDLParser with given statement.
+  DDLParser parser(new DDLParserTokenManager(new DDLCharStream(input)));
   // Parse input statement into the root node.
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<SimpleNode> node,
-                   ParseDDLStatementToNode(input));
+  ZETASQL_ASSIGN_OR_RETURN(SimpleNode * node, ParseDDLStatementToNode(parser, input));
 
   // Try to read root node as a valid DDLStatement.
   std::vector<std::string> errors;
   DDLStatement statement;
-  ZETASQL_ASSIGN_OR_RETURN(statement, BuildDDLStatement(node.get(), input,
+  ZETASQL_ASSIGN_OR_RETURN(statement, BuildDDLStatement(node, input,
                                                 &errors
                                                 ));
   if (!errors.empty()) {

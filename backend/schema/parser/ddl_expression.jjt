@@ -39,12 +39,10 @@ void googlesql_operator() :
   | "^"
   | "&"
 }
-
-void googlesql_punctuation_no_paren() :
+void googlesql_punctuation_no_paren_without_dot() :
 {}
 {
     ","
-  | "."
   | "["
   | "]"
   | ":"
@@ -54,7 +52,14 @@ void googlesql_punctuation_no_paren() :
   | "?"
 }
 
-void googlesql_statement_token_no_paren() :
+void googlesql_punctuation_no_paren() :
+{}
+{
+    googlesql_punctuation_no_paren_without_dot()
+  | "."
+}
+
+void googlesql_statement_token_no_paren_without_dot() :
 {}
 {
   (   <INTEGER_LITERAL>
@@ -63,5 +68,13 @@ void googlesql_statement_token_no_paren() :
     | identifier()
     | any_reserved_word()
     | googlesql_operator()
-    | googlesql_punctuation_no_paren() )
+    | googlesql_punctuation_no_paren_without_dot() )
 }
+
+void googlesql_statement_token_no_paren() :
+{}
+{
+  (   googlesql_statement_token_no_paren_without_dot()
+    | "." )
+}
+

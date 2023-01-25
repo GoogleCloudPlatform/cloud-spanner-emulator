@@ -108,7 +108,7 @@ function emulator::run_integration_tests() {
       --config=emulator-config --description="Test Instance" --nodes=1
     export TEST_PROJECT=emulator-project
     export SPANNER_EMULATOR_HOST=localhost:9010
-    dotnet test
+    dotnet test --filter SupportedOnEmulator\!=No
   else
     echo "Unrecognized client: \"${client}\"."
   fi
