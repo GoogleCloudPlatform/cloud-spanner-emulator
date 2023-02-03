@@ -325,8 +325,8 @@ void option_key_val() :
   identifier() #key
   "="
   (   <NULLL> #nulll
-    | <TRUE> #bool_true_val
-    | <FALSE> #bool_false_val
+    | <TRUEE> #bool_true_val
+    | <FALSEE> #bool_false_val
     | <INTEGER_LITERAL> #integer_val
     | string_value() #str_val
   )
