@@ -197,6 +197,21 @@ absl::StatusOr<CommitResult> DatabaseTest::CommitDml(
       }));
 }
 
+absl::StatusOr<CommitResult> DatabaseTest::CommitDmlReturning(
+    const SqlStatement sql_statement, std::vector<ValueRow>& result) {
+  return ToUtilStatusOr(client().Commit(
+      [&](Transaction const& txn) -> cloud::StatusOr<Mutations> {
+        auto rows = client().ExecuteQuery(txn, std::move(sql_statement));
+        for (auto& row : rows) {
+          if (!row.ok()) {
+            return row.status();
+          }
+          result.push_back(row.value());
+        }
+        return Mutations{};
+      }));
+}
+
 absl::StatusOr<CommitResult> DatabaseTest::CommitDmlTransaction(
     Transaction txn, const std::vector<SqlStatement>& sql_statements) {
   for (const auto& sql_statement : sql_statements) {

@@ -29,37 +29,38 @@ namespace emulator {
 namespace backend {
 
 absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
-    const ddl::ColumnType& ddl_type,
+    const ddl::ColumnDefinition& ddl_column_def,
     zetasql::TypeFactory* type_factory
 ) {
-  ZETASQL_RET_CHECK(ddl_type.has_type())
+  ZETASQL_RET_CHECK(ddl_column_def.has_type())
       << "No type field specification in "
-      << "ddl::ColumnType input: " << ddl_type.ShortDebugString();
+      << "ddl::ColumnDefinition input: " << ddl_column_def.ShortDebugString();
 
-  switch (ddl_type.type()) {
-    case ddl::ColumnType::FLOAT64:
+  switch (ddl_column_def.type()) {
+    case ddl::ColumnDefinition::DOUBLE:
       return type_factory->get_double();
-    case ddl::ColumnType::INT64:
+    case ddl::ColumnDefinition::INT64:
       return type_factory->get_int64();
-    case ddl::ColumnType::BOOL:
+    case ddl::ColumnDefinition::BOOL:
       return type_factory->get_bool();
-    case ddl::ColumnType::STRING:
+    case ddl::ColumnDefinition::STRING:
       return type_factory->get_string();
-    case ddl::ColumnType::BYTES:
+    case ddl::ColumnDefinition::BYTES:
       return type_factory->get_bytes();
-    case ddl::ColumnType::TIMESTAMP:
+    case ddl::ColumnDefinition::TIMESTAMP:
       return type_factory->get_timestamp();
-    case ddl::ColumnType::DATE:
+    case ddl::ColumnDefinition::DATE:
       return type_factory->get_date();
-    case ddl::ColumnType::NUMERIC:
+    case ddl::ColumnDefinition::NUMERIC:
       return type_factory->get_numeric();
-    case ddl::ColumnType::JSON:
+    case ddl::ColumnDefinition::JSON:
       return type_factory->get_json();
-    case ddl::ColumnType::ARRAY: {
-      ZETASQL_RET_CHECK(ddl_type.has_array_subtype())
-          << "Missing array_subtype field for ddl::ColumnType input: "
-          << ddl_type.ShortDebugString();
-      if (ddl_type.array_subtype().type() == ddl::ColumnType::ARRAY) {
+    case ddl::ColumnDefinition::ARRAY: {
+      ZETASQL_RET_CHECK(ddl_column_def.has_array_subtype())
+          << "Missing array_subtype field for ddl::ColumnDefinition input: "
+          << ddl_column_def.ShortDebugString();
+      if (ddl_column_def.array_subtype().type() ==
+          ddl::ColumnDefinition::ARRAY) {
         // TODO : Update when we have a proper way to
         // construct user-facing error messages in the error catalog.
         return absl::Status(absl::StatusCode::kInvalidArgument,
@@ -67,7 +68,7 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       }
       ZETASQL_ASSIGN_OR_RETURN(
           auto array_element_type,
-          DDLColumnTypeToGoogleSqlType(ddl_type.array_subtype(),
+          DDLColumnTypeToGoogleSqlType(ddl_column_def.array_subtype(),
                                        type_factory
                                        ));
       ZETASQL_RET_CHECK_NE(array_element_type, nullptr);
@@ -77,31 +78,34 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       return array_type;
     }
     default:
-      ZETASQL_RET_CHECK(false) << "Unrecognized ddl::ColumnType: "
-                       << ddl_type.ShortDebugString();
+      ZETASQL_RET_CHECK(false) << "Unrecognized ddl::ColumnDefinition: "
+                       << ddl_column_def.ShortDebugString();
   }
 }
 
-ddl::ColumnType GoogleSqlTypeToDDLColumnType(const zetasql::Type* type) {
-  ddl::ColumnType ddl_type;
+ddl::ColumnDefinition GoogleSqlTypeToDDLColumnType(
+    const zetasql::Type* type) {
+  ddl::ColumnDefinition ddl_column_def;
   if (type->IsArray()) {
-    ddl_type.set_type(ddl::ColumnType::ARRAY);
-    *ddl_type.mutable_array_subtype() =
+    ddl_column_def.set_type(ddl::ColumnDefinition::ARRAY);
+    *ddl_column_def.mutable_array_subtype() =
         GoogleSqlTypeToDDLColumnType(type->AsArray()->element_type());
-    return ddl_type;
+    return ddl_column_def;
   }
 
-  ddl_type.set_type(ddl::ColumnType::UNKNOWN_TYPE);
-  if (type->IsDouble()) ddl_type.set_type(ddl::ColumnType::FLOAT64);
-  if (type->IsInt64()) ddl_type.set_type(ddl::ColumnType::INT64);
-  if (type->IsBool()) ddl_type.set_type(ddl::ColumnType::BOOL);
-  if (type->IsString()) ddl_type.set_type(ddl::ColumnType::STRING);
-  if (type->IsBytes()) ddl_type.set_type(ddl::ColumnType::BYTES);
-  if (type->IsTimestamp()) ddl_type.set_type(ddl::ColumnType::TIMESTAMP);
-  if (type->IsDate()) ddl_type.set_type(ddl::ColumnType::DATE);
-  if (type->IsNumericType()) ddl_type.set_type(ddl::ColumnType::NUMERIC);
-  if (type->IsJson()) ddl_type.set_type(ddl::ColumnType::JSON);
-  return ddl_type;
+  ddl_column_def.set_type(ddl::ColumnDefinition::NONE);
+  if (type->IsDouble()) ddl_column_def.set_type(ddl::ColumnDefinition::DOUBLE);
+  if (type->IsInt64()) ddl_column_def.set_type(ddl::ColumnDefinition::INT64);
+  if (type->IsBool()) ddl_column_def.set_type(ddl::ColumnDefinition::BOOL);
+  if (type->IsString()) ddl_column_def.set_type(ddl::ColumnDefinition::STRING);
+  if (type->IsBytes()) ddl_column_def.set_type(ddl::ColumnDefinition::BYTES);
+  if (type->IsTimestamp())
+    ddl_column_def.set_type(ddl::ColumnDefinition::TIMESTAMP);
+  if (type->IsDate()) ddl_column_def.set_type(ddl::ColumnDefinition::DATE);
+  if (type->IsNumericType())
+    ddl_column_def.set_type(ddl::ColumnDefinition::NUMERIC);
+  if (type->IsJson()) ddl_column_def.set_type(ddl::ColumnDefinition::JSON);
+  return ddl_column_def;
 }
 
 }  // namespace backend

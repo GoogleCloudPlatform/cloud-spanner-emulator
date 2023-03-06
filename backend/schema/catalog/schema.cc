@@ -25,11 +25,15 @@
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_node.h"
+#include "re2/re2.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+const char kManagedIndexNonFingerprintRegex[] = "(IDX_\\w+_)[0-9A-F]{16}";
+const int kFingerprintLength = 16;
 
 const Table* Schema::FindTable(const std::string& table_name) const {
   auto itr = tables_map_.find(table_name);
@@ -51,9 +55,29 @@ const Table* Schema::FindTableCaseSensitive(
 const Index* Schema::FindIndex(const std::string& index_name) const {
   auto itr = index_map_.find(index_name);
   if (itr == index_map_.end()) {
-    return nullptr;
+    return this->FindManagedIndex(index_name);
   }
   return itr->second;
+}
+
+const Index* Schema::FindManagedIndex(const std::string& index_name) const {
+  // Check that the index_name matches the format of managed index names, and
+  // extract the non-fingerprint part of the index.
+  std::string non_fingerprint_index_name;
+  if (!RE2::FullMatch(index_name, kManagedIndexNonFingerprintRegex,
+                      &non_fingerprint_index_name)) {
+    return nullptr;
+  }
+
+  for (const auto& itr : index_map_) {
+    if (itr.second->is_managed() &&
+        itr.first.length() ==
+            non_fingerprint_index_name.length() + kFingerprintLength &&
+        itr.first.find(non_fingerprint_index_name) != std::string::npos) {
+      return itr.second;
+    }
+  }
+  return nullptr;
 }
 
 Schema::Schema(std::unique_ptr<const SchemaGraph> graph

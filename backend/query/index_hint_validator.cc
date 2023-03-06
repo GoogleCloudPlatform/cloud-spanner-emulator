@@ -52,7 +52,7 @@ namespace {
 bool MatchesManagedIndexName(absl::string_view table_name,
                              absl::string_view index_name) {
   return RE2::FullMatch(index_name, absl::StrCat("IDX_", table_name, "_",
-                                                 "\\w+", "_", "[0-9A-Z]{16}"));
+                                                 "\\w+", "_", "[0-9A-F]{16}"));
 }
 
 // Returns true if an index's name matches the name of an index created in the

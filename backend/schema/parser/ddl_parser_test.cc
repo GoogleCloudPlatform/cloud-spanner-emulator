@@ -45,33 +45,49 @@ using ::zetasql_base::testing::IsOk;
 using ::zetasql_base::testing::IsOkAndHolds;
 using ::zetasql_base::testing::StatusIs;
 
+absl::StatusOr<DDLStatement> ParseDDLStatement(
+    absl::string_view ddl
+) {
+  DDLStatement statement;
+  absl::Status s = ParseDDLStatement(ddl, &statement);
+  if (s.ok()) {
+    return statement;
+  }
+  return s;
+}
+
 // CREATE DATABASE
 
 TEST(ParseCreateDatabase, CanParseCreateDatabase) {
-  EXPECT_THAT(ParseCreateDatabase("CREATE DATABASE mydb"),
-              IsOkAndHolds(test::EqualsProto("database_name: 'mydb'")));
+  EXPECT_THAT(ParseDDLStatement("CREATE DATABASE mydb"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_database { db_name: "mydb" }
+              )pb")));
 }
 
 TEST(ParseCreateDatabase, CanParsesCreateDatabaseWithQuotes) {
-  EXPECT_THAT(ParseCreateDatabase("CREATE DATABASE `mydb`"),
-              IsOkAndHolds(test::EqualsProto("database_name: 'mydb'")));
+  EXPECT_THAT(ParseDDLStatement("CREATE DATABASE `mydb`"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_database { db_name: "mydb" }
+              )pb")));
 }
 
 TEST(ParseCreateDatabase, CanParseCreateDatabaseWithHyphen) {
   // If database ID contains a hyphen, it must be enclosed in backticks.
 
   // Fails without backticks.
-  EXPECT_THAT(ParseCreateDatabase("CREATE DATABASE mytestdb-1"),
+  EXPECT_THAT(ParseDDLStatement("CREATE DATABASE mytestdb-1"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Passes with backticks.
-  EXPECT_THAT(
-      ParseCreateDatabase("CREATE DATABASE `mytestdb-1`"),
-      IsOkAndHolds(test::EqualsProto("database_name: 'mytestdb-1'")));
+  EXPECT_THAT(ParseDDLStatement("CREATE DATABASE `mytestdb-1`"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_database { db_name: "mytestdb-1" }
+              )pb")));
 }
 
 TEST(ParseCreateDatabase, CannotParseEmptyDatabaseName) {
-  EXPECT_THAT(ParseCreateDatabase("CREATE DATABASE"),
+  EXPECT_THAT(ParseDDLStatement("CREATE DATABASE"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
@@ -87,7 +103,6 @@ TEST(ParseCreateTable, CanParseCreateTableWithNoColumns) {
                   R"pb(
                     create_table {
                       table_name: "Users"
-                      constraints { primary_key {} }
                     }
                   )pb")));
 }
@@ -114,49 +129,39 @@ TEST(ParseCreateTable, CannotParseCreateTableWithoutPrimaryKey) {
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumn) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL
                     ) PRIMARY KEY (UserId)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Users"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              primary_key { key_name: "UserId" }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumnTrailingComma) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                     ) PRIMARY KEY (UserId)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Users"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              primary_key { key_name: "UserId" }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumn) {
@@ -170,11 +175,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumn) {
                   R"pb(
                     create_table {
                       table_name: "Users"
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                      }
-                      constraints { primary_key {} }
+                      column { column_name: "Name" type: STRING }
                     }
                   )pb")));
 }
@@ -190,73 +191,50 @@ TEST(ParseCreateTable, CanParseCreateTableWithOnlyANonKeyColumnTrailingComma) {
                   R"pb(
                     create_table {
                       table_name: "Users"
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                      }
-                      constraints { primary_key {} }
+                      column { column_name: "Name" type: STRING }
                     }
                   )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithKeyAndNonKeyColumns) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX)
                     ) PRIMARY KEY (UserId)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Users"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                      }
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING }
+              primary_key { key_name: "UserId" }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumns) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX) NOT NULL
                     ) PRIMARY KEY (UserId, Name)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Users"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      constraints {
-                        primary_key {
-                          key_part { key_column_name: "UserId" }
-                          key_part { key_column_name: "Name" }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING not_null: true }
+              primary_key { key_name: "UserId" }
+              primary_key { key_name: "Name" }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithTwoNonKeyColumns) {
@@ -271,114 +249,77 @@ TEST(ParseCreateTable, CanParseCreateTableWithTwoNonKeyColumns) {
                   R"pb(
                     create_table {
                       table_name: "Users"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                      }
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                      }
-                      constraints { primary_key {} }
+                      column { column_name: "UserId" type: INT64 }
+                      column { column_name: "Name" type: STRING }
                     }
                   )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithTwoKeyColumnsAndANonKeyColumn) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX) NOT NULL,
                       Notes STRING(MAX)
                     ) PRIMARY KEY (UserId, Name)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Users"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Notes"
-                        properties { column_type { type: STRING } }
-                      }
-                      constraints {
-                        primary_key {
-                          key_part { key_column_name: "UserId" }
-                          key_part { key_column_name: "Name" }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING not_null: true }
+              column { column_name: "Notes" type: STRING }
+              primary_key { key_name: "UserId" }
+              primary_key { key_name: "Name" }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithAKeyColumnAndTwoNonKeyColumns) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX),
                       Notes STRING(MAX)
                     ) PRIMARY KEY (UserId)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Users"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                      }
-                      columns {
-                        column_name: "Notes"
-                        properties { column_type { type: STRING } }
-                      }
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING }
+              column { column_name: "Notes" type: STRING }
+              primary_key { key_name: "UserId" }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateInterleavedTableWithNoColumns) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Albums (
                     ) PRIMARY KEY (), INTERLEAVE IN PARENT Users ON DELETE CASCADE
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Albums"
-                      constraints { primary_key {} }
-                      constraints {
-                        interleave {
-                          type: IN_PARENT
-                          parent: "Users"
-                          on_delete { action: CASCADE }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Albums"
+              interleave_clause { table_name: "Users" on_delete: CASCADE }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateInterleavedTableWithKeyAndNonKeyColumns) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Albums (
                       UserId INT64 NOT NULL,
                       AlbumId INT64 NOT NULL,
@@ -387,187 +328,122 @@ TEST(ParseCreateTable, CanParseCreateInterleavedTableWithKeyAndNonKeyColumns) {
                     ) PRIMARY KEY (UserId, AlbumId),
                       INTERLEAVE IN PARENT Users ON DELETE CASCADE
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Albums"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "AlbumId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                        constraints { column_length { max_length: 1024 } }
-                      }
-                      columns {
-                        column_name: "Description"
-                        properties { column_type { type: STRING } }
-                        constraints { column_length { max_length: 1024 } }
-                      }
-                      constraints {
-                        primary_key {
-                          key_part { key_column_name: "UserId" }
-                          key_part { key_column_name: "AlbumId" }
-                        }
-                      }
-                      constraints {
-                        interleave {
-                          type: IN_PARENT
-                          parent: "Users"
-                          on_delete { action: CASCADE }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Albums"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "AlbumId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING length: 1024 }
+              column { column_name: "Description" type: STRING length: 1024 }
+              primary_key { key_name: "UserId" }
+              primary_key { key_name: "AlbumId" }
+              interleave_clause { table_name: "Users" on_delete: CASCADE }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable,
      CanParseCreateInterleavedTableWithExplicitOnDeleteNoAction) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Albums (
                     ) PRIMARY KEY (), INTERLEAVE IN PARENT Users ON DELETE NO ACTION
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Albums"
-                      constraints { primary_key {} }
-                      constraints {
-                        interleave {
-                          type: IN_PARENT
-                          parent: "Users"
-                          on_delete { action: NO_ACTION }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Albums"
+              interleave_clause { table_name: "Users" on_delete: NO_ACTION }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable,
      CanParseCreateInterleavedTableWithImplicitOnDeleteNoAction) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Albums (
                     ) PRIMARY KEY (), INTERLEAVE IN PARENT Users
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Albums"
-                      constraints { primary_key {} }
-                      constraints {
-                        interleave {
-                          type: IN_PARENT
-                          parent: "Users"
-                          on_delete { action: NO_ACTION }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Albums"
+              interleave_clause { table_name: "Users" on_delete: NO_ACTION }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithAnArrayField) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Names ARRAY<STRING(20)>,
                     ) PRIMARY KEY (UserId)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Users"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Names"
-                        properties {
-                          column_type {
-                            type: ARRAY
-                            array_subtype: { type: STRING }
-                          }
-                        }
-                        constraints { column_length { max_length: 20 } }
-                      }
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column {
+                column_name: "Names"
+                type: ARRAY
+                array_subtype { type: STRING length: 20 }
+              }
+              primary_key { key_name: "UserId" }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithNotNullArrayField) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Names ARRAY<STRING(MAX)> NOT NULL,
                     ) PRIMARY KEY (UserId)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Users"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Names"
-                        properties {
-                          column_type {
-                            type: ARRAY
-                            array_subtype: { type: STRING }
-                          }
-                        }
-                        constraints { not_null { nullable: false } }
-                      }
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column {
+                column_name: "Names"
+                type: ARRAY
+                not_null: true
+                array_subtype { type: STRING }
+              }
+              primary_key { key_name: "UserId" }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithoutInterleaveClause) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX)
                     ) PRIMARY KEY (UserId)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Users"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                      }
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING }
+              primary_key { key_name: "UserId" }
+            }
+          )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithForeignKeys) {
@@ -584,45 +460,31 @@ TEST(ParseCreateTable, CanParseCreateTableWithForeignKeys) {
                   R"pb(
                     create_table {
                       table_name: "T"
-                      columns {
+                      column {
                         column_name: "A"
-                        properties {
-                          column_type {
-                            type: INT64
-                          }
-                        }
+                        type: INT64
                       }
-                      columns {
+                      column {
                         column_name: "B"
-                        properties {
-                          column_type {
-                            type: STRING
-                          }
-                        }
+                        type: STRING
                       }
-                      constraints {
-                        foreign_key {
-                          referencing_column_name: "B"
-                          referenced_table_name: "U"
-                          referenced_column_name: "Y"
-                        }
+                      primary_key {
+                        key_name: "A"
                       }
-                      constraints {
-                        foreign_key {
-                          constraint_name: "FK_UXY"
-                          referencing_column_name: "B"
-                          referencing_column_name: "A"
-                          referenced_table_name: "U"
-                          referenced_column_name: "X"
-                          referenced_column_name: "Y"
-                        }
+                      foreign_key {
+                        constrained_column_name: "B"
+                        referenced_table_name: "U"
+                        referenced_column_name: "Y"
+                        enforced: true
                       }
-                      constraints {
-                        primary_key {
-                          key_part {
-                            key_column_name: "A"
-                          }
-                        }
+                      foreign_key {
+                        constraint_name: "FK_UXY"
+                        constrained_column_name: "B"
+                        constrained_column_name: "A"
+                        referenced_table_name: "U"
+                        referenced_column_name: "X"
+                        referenced_column_name: "Y"
+                        enforced: true
                       }
                     }
                   )pb")));
@@ -637,16 +499,14 @@ TEST(ParseCreateTable, CanParseAlterTableWithAddUnnamedForeignKey) {
                   R"pb(
                     alter_table {
                       table_name: "T"
-                      alter_constraint {
-                        type: ADD
-                        constraint {
-                          foreign_key {
-                            referencing_column_name: "B"
-                            referencing_column_name: "A"
-                            referenced_table_name: "U"
-                            referenced_column_name: "X"
-                            referenced_column_name: "Y"
-                          }
+                      add_foreign_key {
+                        foreign_key {
+                          constrained_column_name: "B"
+                          constrained_column_name: "A"
+                          referenced_table_name: "U"
+                          referenced_column_name: "X"
+                          referenced_column_name: "Y"
+                          enforced: true
                         }
                       }
                     }
@@ -663,18 +523,15 @@ TEST(ParseCreateTable, CanParseAlterTableWithAddNamedForeignKey) {
                   R"pb(
                     alter_table {
                       table_name: "T"
-                      alter_constraint {
-                        constraint_name: "FK_UXY"
-                        type: ADD
-                        constraint {
-                          foreign_key {
-                            constraint_name: "FK_UXY"
-                            referencing_column_name: "B"
-                            referencing_column_name: "A"
-                            referenced_table_name: "U"
-                            referenced_column_name: "X"
-                            referenced_column_name: "Y"
-                          }
+                      add_foreign_key {
+                        foreign_key {
+                          constraint_name: "FK_UXY"
+                          constrained_column_name: "B"
+                          constrained_column_name: "A"
+                          referenced_table_name: "U"
+                          referenced_column_name: "X"
+                          referenced_column_name: "Y"
+                          enforced: true
                         }
                       }
                     }
@@ -690,9 +547,8 @@ TEST(ParseCreateTable, CanParseAlterTableWithDropConstraint) {
                   R"pb(
                     alter_table {
                       table_name: "T"
-                      alter_constraint {
-                        constraint_name: "FK_UXY"
-                        type: DROP
+                      drop_constraint {
+                        name: "FK_UXY"
                       }
                     }
                   )pb")));
@@ -701,151 +557,119 @@ TEST(ParseCreateTable, CanParseAlterTableWithDropConstraint) {
 TEST(ParseCreateTable, CanParseCreateTableWithJson) {
   EmulatorFeatureFlags::Flags flags;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  EXPECT_THAT(
-      ParseDDLStatement(
-          R"sql(
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
                     CREATE TABLE T (
                       K INT64 NOT NULL,
                       JsonVal JSON,
                       JsonArr ARRAY<JSON>
                     ) PRIMARY KEY (K)
                   )sql"),
-      IsOkAndHolds(test::EqualsProto(
-          R"pb(
-            create_table {
-              table_name: "T"
-              columns {
-                column_name: "K"
-                properties { column_type { type: INT64 } }
-                constraints { not_null { nullable: false } }
-              }
-              columns {
-                column_name: "JsonVal"
-                properties { column_type { type: JSON } }
-              }
-              columns {
-                column_name: "JsonArr"
-                properties {
-                  column_type {
-                    type: ARRAY
-                    array_subtype: { type: JSON }
-                  }
-                }
-              }
-              constraints { primary_key { key_part { key_column_name: "K" } } }
-            }
-          )pb")));
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "T"
+                      column { column_name: "K" type: INT64 not_null: true }
+                      column { column_name: "JsonVal" type: JSON }
+                      column {
+                        column_name: "JsonArr"
+                        type: ARRAY
+                        array_subtype { type: JSON }
+                      }
+                      primary_key { key_name: "K" }
+                    }
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithNumeric) {
-  EXPECT_THAT(
-      ParseDDLStatement(
-          R"sql(
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
                     CREATE TABLE T (
                       K INT64 NOT NULL,
                       NumericVal NUMERIC,
                       NumericArr ARRAY<NUMERIC>
                     ) PRIMARY KEY (K)
                   )sql"),
-      IsOkAndHolds(test::EqualsProto(
-          R"pb(
-            create_table {
-              table_name: "T"
-              columns {
-                column_name: "K"
-                properties { column_type { type: INT64 } }
-                constraints { not_null { nullable: false } }
-              }
-              columns {
-                column_name: "NumericVal"
-                properties { column_type { type: NUMERIC } }
-              }
-              columns {
-                column_name: "NumericArr"
-                properties {
-                  column_type {
-                    type: ARRAY
-                    array_subtype: { type: NUMERIC }
-                  }
-                }
-              }
-              constraints { primary_key { key_part { key_column_name: "K" } } }
-            }
-          )pb")));
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "T"
+                      column { column_name: "K" type: INT64 not_null: true }
+                      column { column_name: "NumericVal" type: NUMERIC }
+                      column {
+                        column_name: "NumericArr"
+                        type: ARRAY
+                        array_subtype { type: NUMERIC }
+                      }
+                      primary_key { key_name: "K" }
+                    }
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
-  EXPECT_THAT(
-      ParseDDLStatement(R"sql(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
     CREATE TABLE T(
       Key INT64,
       CreatedAt TIMESTAMP,
     ) PRIMARY KEY (Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
   )sql"),
-      IsOkAndHolds(test::EqualsProto(R"pb(
-        create_table {
-          table_name: "T"
-          columns {
-            column_name: "Key"
-            properties { column_type { type: INT64 } }
-          }
-          columns {
-            column_name: "CreatedAt"
-            properties { column_type { type: TIMESTAMP } }
-          }
-          constraints { primary_key { key_part { key_column_name: "Key" } } }
-          row_deletion_policy { column_name: "CreatedAt" older_than: 7 }
-        }
-      )pb")));
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column { column_name: "Key" type: INT64 }
+                  column { column_name: "CreatedAt" type: TIMESTAMP }
+                  primary_key { key_name: "Key" }
+                  row_deletion_policy {
+                    column_name: "CreatedAt"
+                    older_than { count: 7 unit: DAYS }
+                  }
+                }
+              )pb")));
 
-  EXPECT_THAT(
-      ParseDDLStatement(R"sql(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
     CREATE TABLE T(
       Key INT64,
       CreatedAt TIMESTAMP,
     ) PRIMARY KEY (Key), ROW DELETION POLICY (Older_thaN(CreatedAt, INTERVAL 7 DAY))
   )sql"),
-      IsOkAndHolds(test::EqualsProto(R"pb(
-        create_table {
-          table_name: "T"
-          columns {
-            column_name: "Key"
-            properties { column_type { type: INT64 } }
-          }
-          columns {
-            column_name: "CreatedAt"
-            properties { column_type { type: TIMESTAMP } }
-          }
-          constraints { primary_key { key_part { key_column_name: "Key" } } }
-          row_deletion_policy { column_name: "CreatedAt" older_than: 7 }
-        }
-      )pb")));
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column { column_name: "Key" type: INT64 }
+                  column { column_name: "CreatedAt" type: TIMESTAMP }
+                  primary_key { key_name: "Key" }
+                  row_deletion_policy {
+                    column_name: "CreatedAt"
+                    older_than { count: 7 unit: DAYS }
+                  }
+                }
+              )pb")));
 
-  EXPECT_THAT(
-      ParseDDLStatement(R"sql(
+  EXPECT_THAT(ParseDDLStatement(R"sql(
         CREATE TABLE T(
           Key INT64,
           CreatedAt TIMESTAMP OPTIONS (allow_commit_timestamp = true),
         ) PRIMARY KEY (Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
       )sql"),
-      IsOkAndHolds(test::EqualsProto(R"pb(
-        create_table {
-          table_name: "T"
-          columns {
-            column_name: "Key"
-            properties { column_type { type: INT64 } }
-          }
-          columns {
-            column_name: "CreatedAt"
-            properties { column_type { type: TIMESTAMP } }
-            options {
-              option_val { name: "allow_commit_timestamp" bool_value: true }
-            }
-          }
-          constraints { primary_key { key_part { key_column_name: "Key" } } }
-          row_deletion_policy { column_name: "CreatedAt" older_than: 7 }
-        }
-      )pb")));
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column { column_name: "Key" type: INT64 }
+                  column {
+                    column_name: "CreatedAt"
+                    type: TIMESTAMP
+                    set_options {
+                      option_name: "allow_commit_timestamp"
+                      bool_value: true
+                    }
+                  }
+                  primary_key { key_name: "Key" }
+                  row_deletion_policy {
+                    column_name: "CreatedAt"
+                    older_than { count: 7 unit: DAYS }
+                  }
+                }
+              )pb")));
 
   EXPECT_THAT(ParseDDLStatement(R"sql(
     CREATE TABLE T(
@@ -854,7 +678,12 @@ TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
     ) PRIMARY KEY (Key), ROW DELETION POLICY (YOUNGER_THAN(CreatedAt, INTERVAL 7 DAY))
   )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       "Only OLDER_THAN is supported."));
+                       R"(Error parsing Spanner DDL statement:
+    CREATE TABLE T(
+      Key INT64,
+      CreatedAt TIMESTAMP,
+    ) PRIMARY KEY (Key), ROW DELETION POLICY (YOUNGER_THAN(CreatedAt, INTERVAL 7 DAY))
+   : Only OLDER_THAN is supported.)"));
 }
 
 // CREATE INDEX
@@ -868,11 +697,9 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasicImplicitlyGlobal) {
                   R"pb(
                     create_index {
                       index_name: "UsersByUserId"
-                      table_name: "Users"
-                      properties { null_filtered: true }
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
+                      index_base_name: "Users"
+                      key { key_name: "UserId" }
+                      null_filtered: true
                     }
                   )pb")));
 }
@@ -887,11 +714,9 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasic) {
                   R"pb(
                     create_index {
                       index_name: "GlobalAlbumsByName"
-                      table_name: "Albums"
-                      properties { null_filtered: true }
-                      constraints {
-                        primary_key { key_part { key_column_name: "Name" } }
-                      }
+                      index_base_name: "Albums"
+                      key { key_name: "Name" }
+                      null_filtered: true
                     }
                   )pb")));
 }
@@ -906,15 +731,11 @@ TEST(ParseCreateIndex, CanParseCreateIndexBasicInterleaved) {
                   R"pb(
                     create_index {
                       index_name: "LocalAlbumsByName"
-                      table_name: "Albums"
-                      properties { null_filtered: true }
-                      constraints {
-                        primary_key {
-                          key_part { key_column_name: "UserId" }
-                          key_part { key_column_name: "Name" order: DESC }
-                        }
-                      }
-                      constraints { interleave { parent: "Users" } }
+                      index_base_name: "Albums"
+                      key { key_name: "UserId" }
+                      key { key_name: "Name" order: DESC }
+                      null_filtered: true
+                      interleave_in_table: "Users"
                     }
                   )pb")));
 }
@@ -929,15 +750,10 @@ TEST(ParseCreateIndex, CanParseCreateIndexStoringAColumn) {
                   R"pb(
                     create_index {
                       index_name: "GlobalAlbumsByName"
-                      table_name: "Albums"
-                      columns {
-                        column_name: "Description"
-                        properties { stored: "Description" }
-                      }
-                      properties { null_filtered: true }
-                      constraints {
-                        primary_key { key_part { key_column_name: "Name" } }
-                      }
+                      index_base_name: "Albums"
+                      key { key_name: "Name" }
+                      null_filtered: true
+                      stored_column_definition { name: "Description" }
                     }
                   )pb")));
 }
@@ -952,11 +768,9 @@ TEST(ParseCreateIndex, CanParseCreateIndexASCColumn) {
                   R"pb(
                     create_index {
                       index_name: "UsersAsc"
-                      table_name: "Users"
-                      properties { null_filtered: true }
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
+                      index_base_name: "Users"
+                      key { key_name: "UserId" }
+                      null_filtered: true
                     }
                   )pb")));
 }
@@ -964,19 +778,15 @@ TEST(ParseCreateIndex, CanParseCreateIndexASCColumn) {
 TEST(ParseCreateIndex, CanParseCreateIndexDESCColumn) {
   EXPECT_THAT(ParseDDLStatement(
                   R"sql(
-                    CREATE NULL_FILTERED INDEX UsersAsc ON Users(UserId DESC)
+                    CREATE NULL_FILTERED INDEX UsersDesc ON Users(UserId DESC)
                   )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
                     create_index {
-                      index_name: "UsersAsc"
-                      table_name: "Users"
-                      properties { null_filtered: true }
-                      constraints {
-                        primary_key {
-                          key_part { key_column_name: "UserId" order: DESC }
-                        }
-                      }
+                      index_name: "UsersDesc"
+                      index_base_name: "Users"
+                      key { key_name: "UserId" order: DESC }
+                      null_filtered: true
                     }
                   )pb")));
 }
@@ -990,10 +800,8 @@ TEST(ParseCreateIndex, CanParseCreateIndexNotNullFiltered) {
                   R"pb(
                     create_index {
                       index_name: "UsersByUserId"
-                      table_name: "Users"
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
+                      index_base_name: "Users"
+                      key { key_name: "UserId" }
                     }
                   )pb")));
 }
@@ -1007,11 +815,9 @@ TEST(ParseCreateIndex, CanParseCreateUniqueIndex) {
                   R"pb(
                     create_index {
                       index_name: "UsersByUserId"
-                      table_name: "Users"
-                      properties { unique: true }
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
+                      index_base_name: "Users"
+                      key { key_name: "UserId" }
+                      unique: true
                     }
                   )pb")));
 }
@@ -1060,63 +866,48 @@ TEST(ParseDropIndex, CannotParseDropIndexInappropriateQuotes) {
 // ALTER TABLE ADD COLUMN
 
 TEST(ParseAlterTable, CanParseAddColumn) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     ALTER TABLE Users ADD COLUMN Notes STRING(MAX)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    alter_table {
-                      table_name: "Users"
-                      alter_column {
-                        type: ADD
-                        column {
-                          column_name: "Notes"
-                          properties { column_type { type: STRING } }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Users"
+              add_column { column { column_name: "Notes" type: STRING } }
+            }
+          )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAddColumnNamedColumn) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     ALTER TABLE Users ADD COLUMN `COLUMN` STRING(MAX)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    alter_table {
-                      table_name: "Users"
-                      alter_column {
-                        type: ADD
-                        column {
-                          column_name: "COLUMN"
-                          properties { column_type { type: STRING } }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Users"
+              add_column { column { column_name: "COLUMN" type: STRING } }
+            }
+          )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAddColumnNamedColumnNoQuotes) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     ALTER TABLE Users ADD COLUMN COLUMN STRING(MAX)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    alter_table {
-                      table_name: "Users"
-                      alter_column {
-                        type: ADD
-                        column {
-                          column_name: "COLUMN"
-                          properties { column_type { type: STRING } }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Users"
+              add_column { column { column_name: "COLUMN" type: STRING } }
+            }
+          )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAddNumericColumn) {
@@ -1128,13 +919,7 @@ TEST(ParseAlterTable, CanParseAddNumericColumn) {
                   R"pb(
                     alter_table {
                       table_name: "T"
-                      alter_column {
-                        type: ADD
-                        column {
-                          column_name: "G"
-                          properties { column_type { type: NUMERIC } }
-                        }
-                      }
+                      add_column { column { column_name: "G" type: NUMERIC } }
                     }
                   )pb")));
   EXPECT_THAT(ParseDDLStatement(
@@ -1145,16 +930,11 @@ TEST(ParseAlterTable, CanParseAddNumericColumn) {
                   R"pb(
                     alter_table {
                       table_name: "T"
-                      alter_column {
-                        type: ADD
+                      add_column {
                         column {
                           column_name: "H"
-                          properties {
-                            column_type {
-                              type: ARRAY
-                              array_subtype: { type: NUMERIC }
-                            }
-                          }
+                          type: ARRAY
+                          array_subtype { type: NUMERIC }
                         }
                       }
                     }
@@ -1172,13 +952,7 @@ TEST(ParseAlterTable, CanParseAddJsonColumn) {
                   R"pb(
                     alter_table {
                       table_name: "T"
-                      alter_column {
-                        type: ADD
-                        column {
-                          column_name: "G"
-                          properties { column_type { type: JSON } }
-                        }
-                      }
+                      add_column { column { column_name: "G" type: JSON } }
                     }
                   )pb")));
   EXPECT_THAT(ParseDDLStatement(
@@ -1189,16 +963,11 @@ TEST(ParseAlterTable, CanParseAddJsonColumn) {
                   R"pb(
                     alter_table {
                       table_name: "T"
-                      alter_column {
-                        type: ADD
+                      add_column {
                         column {
                           column_name: "H"
-                          properties {
-                            column_type {
-                              type: ARRAY
-                              array_subtype: { type: JSON }
-                            }
-                          }
+                          type: ARRAY
+                          array_subtype { type: JSON }
                         }
                       }
                     }
@@ -1245,30 +1014,21 @@ TEST(ParseAlterTable, CanParseDropColumn) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP COLUMN Notes"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
-                    alter_table {
-                      table_name: "Users"
-                      alter_column { type: DROP column_name: "Notes" }
-                    }
+                    alter_table { table_name: "Users" drop_column: "Notes" }
                   )pb")));
 
   // We can even drop columns named "COLUMN" with quotes.
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP COLUMN `COLUMN`"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
-                    alter_table {
-                      table_name: "Users"
-                      alter_column { type: DROP column_name: "COLUMN" }
-                    }
+                    alter_table { table_name: "Users" drop_column: "COLUMN" }
                   )pb")));
 
   // And then we can omit the quotes if we want.
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP COLUMN COLUMN"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
-                    alter_table {
-                      table_name: "Users"
-                      alter_column { type: DROP column_name: "COLUMN" }
-                    }
+                    alter_table { table_name: "Users" drop_column: "COLUMN" }
                   )pb")));
 
   // But this one fails, since it doesn't mention column name.
@@ -1301,88 +1061,65 @@ TEST(ParseAlterTable, CannotParseDropColumnMissingTableName) {
 // ALTER TABLE ALTER COLUMN
 
 TEST(ParseAlterTable, CanParseAlterColumn) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     ALTER TABLE Users ALTER COLUMN Notes STRING(MAX)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    alter_table {
-                      table_name: "Users"
-                      alter_column {
-                        column_name: "Notes"
-                        type: ALTER
-                        column {
-                          column_name: "Notes"
-                          properties { column_type { type: STRING } }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Users"
+              alter_column { column { column_name: "Notes" type: STRING } }
+            }
+          )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAlterColumnNotNull) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     ALTER TABLE Users ALTER COLUMN Notes STRING(MAX) NOT NULL
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    alter_table {
-                      table_name: "Users"
-                      alter_column {
-                        column_name: "Notes"
-                        type: ALTER
-                        column {
-                          column_name: "Notes"
-                          properties { column_type { type: STRING } }
-                          constraints { not_null { nullable: false } }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Users"
+              alter_column {
+                column { column_name: "Notes" type: STRING not_null: true }
+              }
+            }
+          )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAlterColumnNamedColumn) {
   // Columns named "COLUMN" with quotes can be modified.
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     ALTER TABLE Users ALTER COLUMN `COLUMN` STRING(MAX)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    alter_table {
-                      table_name: "Users"
-                      alter_column {
-                        column_name: "COLUMN"
-                        type: ALTER
-                        column {
-                          column_name: "COLUMN"
-                          properties { column_type { type: STRING } }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Users"
+              alter_column { column { column_name: "COLUMN" type: STRING } }
+            }
+          )pb")));
 
   // Columns named "COLUMN" can be modified even without quotes.
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     ALTER TABLE Users ALTER COLUMN COLUMN STRING(MAX)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    alter_table {
-                      table_name: "Users"
-                      alter_column {
-                        column_name: "COLUMN"
-                        type: ALTER
-                        column {
-                          column_name: "COLUMN"
-                          properties { column_type { type: STRING } }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Users"
+              alter_column { column { column_name: "COLUMN" type: STRING } }
+            }
+          )pb")));
 }
 
 TEST(ParseAlterTable, CannotParseAlterColumnMissingColumnName) {
@@ -1433,68 +1170,62 @@ TEST(ParseAlterTable, CannotParseAlterColumnMiscErrors) {
 // ALTER TABLE SET ONDELETE
 
 TEST(ParseAlterTable, CanParseSetOnDeleteNoAction) {
-  EXPECT_THAT(
-      ParseDDLStatement(
-          R"sql(
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
             ALTER TABLE Albums SET ON DELETE NO ACTION
           )sql"),
-      IsOkAndHolds(test::EqualsProto(
-          R"pb(
-            alter_table {
-              table_name: "Albums"
-              alter_constraint {
-                type: ALTER
-                constraint { interleave { on_delete { action: NO_ACTION } } }
-              }
-            }
-          )pb")));
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "Albums"
+                      set_on_delete { action: NO_ACTION }
+                    }
+                  )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAlterTableWithRowDeletionPolicy) {
-  EXPECT_THAT(
-      ParseDDLStatement(R"sql(
-    ALTER TABLE MyTable ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 1 DAY))
-  )sql"),
-      IsOkAndHolds(test::EqualsProto(R"pb(
-        alter_table {
-          table_name: "MyTable"
-          alter_row_deletion_policy {
-            type: ADD
-            row_deletion_policy { column_name: "CreatedAt" older_than: 1 }
-          }
-        }
-      )pb")));
-
-  EXPECT_THAT(
-      ParseDDLStatement(R"sql(
-    ALTER TABLE MyTable REPLACE ROW DELETION POLICY (OLDER_THAN(ModifiedAt, INTERVAL 7 DAY))
-  )sql"),
-
-      IsOkAndHolds(test::EqualsProto(R"pb(
-        alter_table {
-          table_name: "MyTable"
-          alter_row_deletion_policy {
-            type: REPLACE
-            row_deletion_policy { column_name: "ModifiedAt" older_than: 7 }
-          }
-        }
-      )pb")));
-
   EXPECT_THAT(ParseDDLStatement(R"sql(
-    ALTER TABLE MyTable DROP ROW DELETION POLICY
+    ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
   )sql"),
               IsOkAndHolds(test::EqualsProto(R"pb(
                 alter_table {
-                  table_name: "MyTable"
-                  alter_row_deletion_policy { type: DROP }
+                  table_name: "T"
+                  add_row_deletion_policy {
+                    column_name: "CreatedAt"
+                    older_than { count: 7 unit: DAYS }
+                  }
                 }
               )pb")));
 
   EXPECT_THAT(ParseDDLStatement(R"sql(
-    ALTER TABLE MyTable DROP ROW DELETION POLICY (OLDER_THAN(ModifiedAt, INTERVAL 7 DAY))
+    ALTER TABLE T REPLACE ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
+  )sql"),
+
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  alter_row_deletion_policy {
+                    column_name: "CreatedAt"
+                    older_than { count: 7 unit: DAYS }
+                  }
+                }
+              )pb")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE T DROP ROW DELETION POLICY
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  drop_row_deletion_policy {}
+                }
+              )pb")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE T DROP ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
   )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("Syntax error on line 2, column 50: Expecting "
+                       HasSubstr("Syntax error on line 2, column 44: Expecting "
                                  "'EOF' but found '('")));
 }
 
@@ -1518,7 +1249,6 @@ TEST(Miscellaneous, CanParseExtraWhitespaceCharacters) {
                   R"pb(
                     create_table {
                       table_name: "Users"
-                      constraints { primary_key {} }
                     }
                   )pb")));
 }
@@ -1536,34 +1266,27 @@ TEST(Miscellaneous, CannotParseSmartQuotes) {
 
 TEST(Miscellaneous, CanParseMixedCaseStatements) {
   // DDL Statements are case insensitive.
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     cREaTE TABLE Users (
                       UserId iNT64 NOT NULL,
                       Name stRIng(maX)
                     ) PRIMARY KEY (UserId)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Users"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                      }
-                      constraints {
-                        primary_key { key_part { key_column_name: "UserId" } }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING }
+              primary_key { key_name: "UserId" }
+            }
+          )pb")));
 
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Albums (
                       UserId Int64 NOT NULL,
                       AlbumId INt64 NOT NULL,
@@ -1572,122 +1295,57 @@ TEST(Miscellaneous, CanParseMixedCaseStatements) {
                     ) PRIMary KEY (UserId, AlbumId),
                       INTERLEAVE in PARENT Users ON DELETE CASCADE
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Albums"
-                      columns {
-                        column_name: "UserId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "AlbumId"
-                        properties { column_type { type: INT64 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                        constraints { column_length { max_length: 1024 } }
-                      }
-                      columns {
-                        column_name: "Description"
-                        properties { column_type { type: STRING } }
-                        constraints { column_length { max_length: 1024 } }
-                      }
-                      constraints {
-                        primary_key {
-                          key_part { key_column_name: "UserId" }
-                          key_part { key_column_name: "AlbumId" }
-                        }
-                      }
-                      constraints {
-                        interleave {
-                          type: IN_PARENT
-                          parent: "Users"
-                          on_delete { action: CASCADE }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Albums"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "AlbumId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING length: 1024 }
+              column { column_name: "Description" type: STRING length: 1024 }
+              primary_key { key_name: "UserId" }
+              primary_key { key_name: "AlbumId" }
+              interleave_clause { table_name: "Users" on_delete: CASCADE }
+            }
+          )pb")));
 }
 
-TEST(Miscellaneous, CanParseCustomFieldLengths) {
+TEST(Miscellaneous, CanParseCustomFieldLengthsAndTimestamps) {
   // Passing hex integer literals for length is also supported.
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Sizes (
                       Name STRING(1) NOT NULL,
                       Email STRING(MAX),
                       PhotoSmall BYTES(1),
                       PhotoLarge BYTES(MAX),
                       HexLength STRING(0x42),
-                    ) PRIMARY KEY (Name)
-                  )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Sizes"
-                      columns {
-                        column_name: "Name"
-                        properties { column_type { type: STRING } }
-                        constraints { column_length { max_length: 1 } }
-                        constraints { not_null { nullable: false } }
-                      }
-                      columns {
-                        column_name: "Email"
-                        properties { column_type { type: STRING } }
-                      }
-                      columns {
-                        column_name: "PhotoSmall"
-                        properties { column_type { type: BYTES } }
-                        constraints { column_length { max_length: 1 } }
-                      }
-                      columns {
-                        column_name: "PhotoLarge"
-                        properties { column_type { type: BYTES } }
-                      }
-                      columns {
-                        column_name: "HexLength"
-                        properties { column_type { type: STRING } }
-                        constraints { column_length { max_length: 66 } }
-                      }
-                      constraints {
-                        primary_key { key_part { key_column_name: "Name" } }
-                      }
-                    }
-                  )pb")));
-}
-
-TEST(Miscellaneous, CanParseTimestamps) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
-                    CREATE TABLE Sizes (
                       Age INT64,
                       LastModified TIMESTAMP,
                       BirthDate DATE
-                    ) PRIMARY KEY ()
+                    ) PRIMARY KEY (Name)
                   )sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    create_table {
-                      table_name: "Sizes"
-                      columns {
-                        column_name: "Age"
-                        properties { column_type { type: INT64 } }
-                      }
-                      columns {
-                        column_name: "LastModified"
-                        properties { column_type { type: TIMESTAMP } }
-                      }
-                      columns {
-                        column_name: "BirthDate"
-                        properties { column_type { type: DATE } }
-                      }
-                      constraints { primary_key {} }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Sizes"
+              column {
+                column_name: "Name"
+                type: STRING
+                not_null: true
+                length: 1
+              }
+              column { column_name: "Email" type: STRING }
+              column { column_name: "PhotoSmall" type: BYTES length: 1 }
+              column { column_name: "PhotoLarge" type: BYTES }
+              column { column_name: "HexLength" type: STRING length: 66 }
+              column { column_name: "Age" type: INT64 }
+              column { column_name: "LastModified" type: TIMESTAMP }
+              column { column_name: "BirthDate" type: DATE }
+              primary_key { key_name: "Name" }
+            }
+          )pb")));
 }
 
 TEST(Miscellaneous, CannotParseStringFieldsWithoutLength) {
@@ -1714,79 +1372,72 @@ TEST(Miscellaneous, CannotParseNonStringFieldsWithLength) {
 }
 
 TEST(Miscellaneous, CanParseQuotedIdentifiers) {
-  EXPECT_THAT(
-      ParseDDLStatement(
-          R"sql(
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
             CREATE TABLE `T` (
               `C` INT64 NOT NULL,
             ) PRIMARY KEY (`C`)
           )sql"),
-      IsOkAndHolds(test::EqualsProto(
-          R"pb(
-            create_table {
-              table_name: "T"
-              columns {
-                column_name: "C"
-                properties { column_type { type: INT64 } }
-                constraints { not_null { nullable: false } }
-              }
-              constraints { primary_key { key_part { key_column_name: "C" } } }
-            }
-          )pb")));
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "T"
+                      column { column_name: "C" type: INT64 not_null: true }
+                      primary_key { key_name: "C" }
+                    }
+                  )pb")));
 }
 
 // AllowCommitTimestamp
 
 TEST(AllowCommitTimestamp, CanParseSingleOption) {
-  EXPECT_THAT(
-      ParseDDLStatement(
-          R"sql(
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
             CREATE TABLE Users (
               UpdateTs TIMESTAMP OPTIONS (
-                allow_commit_timestamp= true
+                allow_commit_timestamp = true
               )
             ) PRIMARY KEY ()
           )sql"),
-      IsOkAndHolds(test::EqualsProto(
-          R"pb(
-            create_table {
-              table_name: "Users"
-              columns {
-                column_name: "UpdateTs"
-                properties { column_type { type: TIMESTAMP } }
-                options {
-                  option_val { name: "allow_commit_timestamp" bool_value: true }
-                }
-              }
-              constraints { primary_key {} }
-            }
-          )pb")));
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Users"
+                      column {
+                        column_name: "UpdateTs"
+                        type: TIMESTAMP
+                        set_options {
+                          option_name: "allow_commit_timestamp"
+                          bool_value: true
+                        }
+                      }
+                    }
+                  )pb")));
 }
 
 TEST(AllowCommitTimestamp, CanClearOptionWithNull) {
-  EXPECT_THAT(
-      ParseDDLStatement(
-          R"sql(
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
             CREATE TABLE Users (
               UpdateTs TIMESTAMP OPTIONS (
                 allow_commit_timestamp= null
               )
             ) PRIMARY KEY ()
           )sql"),
-      IsOkAndHolds(test::EqualsProto(
-          R"pb(
-            create_table {
-              table_name: "Users"
-              columns {
-                column_name: "UpdateTs"
-                properties { column_type { type: TIMESTAMP } }
-                options {
-                  option_val { name: "allow_commit_timestamp" null_value: true }
-                }
-              }
-              constraints { primary_key {} }
-            }
-          )pb")));
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Users"
+                      column {
+                        column_name: "UpdateTs"
+                        type: TIMESTAMP
+                        set_options {
+                          option_name: "allow_commit_timestamp"
+                          null_value: true
+                        }
+                      }
+                    }
+                  )pb")));
 }
 
 TEST(AllowCommitTimestamp, CannotParseSingleInvalidOption) {
@@ -1815,9 +1466,8 @@ TEST(AllowCommitTimestamp, CannotParseSingleInvalidOption) {
 }
 
 TEST(AllowCommitTimestamp, CanParseMultipleOptions) {
-  EXPECT_THAT(
-      ParseDDLStatement(
-          R"sql(
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
             CREATE TABLE Users (
               UserId INT64,
               UpdateTs TIMESTAMP OPTIONS (
@@ -1826,28 +1476,25 @@ TEST(AllowCommitTimestamp, CanParseMultipleOptions) {
               )
             ) PRIMARY KEY ()
           )sql"),
-      IsOkAndHolds(test::EqualsProto(
-          R"pb(
-            create_table {
-              table_name: "Users"
-              columns {
-                column_name: "UserId"
-                properties { column_type { type: INT64 } }
-              }
-              columns {
-                column_name: "UpdateTs"
-                properties { column_type { type: TIMESTAMP } }
-                options {
-                  option_val { name: "allow_commit_timestamp" bool_value: true }
-                  option_val {
-                    name: "allow_commit_timestamp"
-                    bool_value: false
-                  }
-                }
-              }
-              constraints { primary_key {} }
-            }
-          )pb")));
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Users"
+                      column { column_name: "UserId" type: INT64 }
+                      column {
+                        column_name: "UpdateTs"
+                        type: TIMESTAMP
+                        set_options {
+                          option_name: "allow_commit_timestamp"
+                          bool_value: true
+                        }
+                        set_options {
+                          option_name: "allow_commit_timestamp"
+                          bool_value: false
+                        }
+                      }
+                    }
+                  )pb")));
 }
 
 TEST(AllowCommitTimestamp, CannotParseMultipleOptionsWithTrailingComma) {
@@ -1864,28 +1511,17 @@ TEST(AllowCommitTimestamp, CannotParseMultipleOptionsWithTrailingComma) {
 }
 
 TEST(AllowCommitTimestamp, SetThroughOptions) {
-  EXPECT_THAT(ParseDDLStatement(R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
     ALTER TABLE Users ALTER COLUMN UpdateTs
     SET OPTIONS (allow_commit_timestamp = true))sql"),
-              IsOkAndHolds(test::EqualsProto(
-                  R"pb(
-                    alter_table {
-                      table_name: "Users"
-                      alter_column {
-                        column_name: "UpdateTs"
-                        type: ALTER
-                        column {
-                          column_name: "UpdateTs"
-                          options {
-                            option_val {
-                              name: "allow_commit_timestamp"
-                              bool_value: true
-                            }
-                          }
-                        }
-                      }
-                    }
-                  )pb")));
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            set_column_options {
+              column_path { table_name: "Users" column_name: "UpdateTs" }
+              options { option_name: "allow_commit_timestamp" bool_value: true }
+            }
+          )pb")));
 }
 
 TEST(AllowCommitTimestamp, CannotParseInvalidOptionValue) {
@@ -1954,55 +1590,38 @@ TEST_F(GeneratedColumns, CanParseCreateTableWithStoredGeneratedColumn) {
                                K * V) STORED,
                 ) PRIMARY KEY (K))sql"),
               IsOkAndHolds(test::EqualsProto(R"d(
-                create_table {
+                create_table   {
                   table_name: "T"
-                  columns {
+                  column {
                     column_name: "K"
-                    properties {
-                      column_type {
-                        type: INT64
-                      }
-                    }
-                    constraints {
-                      not_null {
-                        nullable: false
-                      }
-                    }
+                    type: INT64
+                    not_null: true
                   }
-                  columns {
+                  column {
                     column_name: "V"
-                    properties {
-                      column_type {
-                        type: INT64
-                      }
-                    }
+                    type: INT64
                   }
-                  columns {
+                  column {
                     column_name: "G"
-                    properties {
-                      column_type {
-                        type: INT64
-                      }
+                    type: INT64
+                    generated_column {
                       expression: "(K + V)"
+                      stored: true
                     }
                   }
-                  columns {
+                  column {
                     column_name: "G2"
-                    properties {
-                      column_type {
-                        type: INT64
-                      }
+                    type: INT64
+                    generated_column {
                       expression: "(G +\n                               K * V)"
+                      stored: true
                     }
                   }
-                  constraints {
-                    primary_key {
-                      key_part {
-                        key_column_name: "K"
-                      }
-                    }
+                  primary_key {
+                    key_name: "K"
                   }
-                })d")));
+                }
+              )d")));
 }
 
 TEST_F(GeneratedColumns, CanParseAlterTableAddStoredGeneratedColumn) {
@@ -2012,15 +1631,13 @@ TEST_F(GeneratedColumns, CanParseAlterTableAddStoredGeneratedColumn) {
           R"d(
             alter_table {
               table_name: "T"
-              alter_column {
-                type: ADD
+              add_column {
                 column {
                   column_name: "G"
-                  properties {
-                    column_type {
-                      type: INT64
-                    }
+                  type: INT64
+                  generated_column {
                     expression: "(K + V)"
+                    stored: true
                   }
                 }
               }
@@ -2037,49 +1654,18 @@ TEST_F(GeneratedColumns, CanParseAlterTableAlterStoredGeneratedColumn) {
             alter_table {
               table_name: "T"
               alter_column {
-                column_name: "G"
-                type: ALTER
                 column {
                   column_name: "G"
-                  properties {
-                    column_type {
-                      type: INT64
-                    }
+                  type: INT64
+                  not_null: true
+                  generated_column {
                     expression: "(K + V)"
-                  }
-                  constraints {
-                    not_null {
-                      nullable: false
-                    }
+                    stored: true
                   }
                 }
               }
             }
           )d")));
-}
-
-TEST_F(GeneratedColumns, CannotCreateNonStoredGeneratedColumn) {
-  EXPECT_THAT(
-      ParseDDLStatement("ALTER TABLE T ADD COLUMN G INT64 AS (K + V)"),
-      StatusIs(
-          absl::StatusCode::kUnimplemented,
-          HasSubstr("Generated column `G` without the STORED attribute is not "
-                    "supported.")));
-}
-
-TEST_F(GeneratedColumns, CannotCreateStoredGeneratedColumnWhenDisabled) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_stored_generated_columns = false;
-  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  EXPECT_THAT(ParseDDLStatement(R"sql(
-      CREATE TABLE T (
-        K INT64 NOT NULL,
-        V INT64,
-        G INT64 AS (K + V) STORED
-       ) PRIMARY KEY (K)
-    )sql"),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("Generated columns are not enabled.")));
 }
 
 class ColumnDefaultValues : public ::testing::Test {
@@ -2098,39 +1684,25 @@ TEST_F(ColumnDefaultValues, CreateTableWithDefaultNonKeyColumn) {
                   D INT64 DEFAULT (10),
                 ) PRIMARY KEY (K))sql"),
               IsOkAndHolds(test::EqualsProto(R"d(
-                create_table {
+                create_table   {
                   table_name: "T"
-                  columns {
+                  column {
                     column_name: "K"
-                    properties {
-                      column_type {
-                        type: INT64
-                      }
-                    }
-                    constraints {
-                      not_null {
-                        nullable: false
-                      }
-                    }
+                    type: INT64
+                    not_null: true
                   }
-                  columns {
+                  column {
                     column_name: "D"
-                    properties {
-                      column_type {
-                        type: INT64
-                      }
-                      expression: "(10)"
-                      has_default_value: true
+                    type: INT64
+                    column_default {
+                      expression: "10"
                     }
                   }
-                  constraints {
-                    primary_key {
-                      key_part {
-                        key_column_name: "K"
-                      }
-                    }
+                  primary_key {
+                    key_name: "K"
                   }
-                })d")));
+                }
+              )d")));
 }
 
 TEST_F(ColumnDefaultValues, CreateTableWithDefaultPrimaryKeyColumn) {
@@ -2140,54 +1712,25 @@ TEST_F(ColumnDefaultValues, CreateTableWithDefaultPrimaryKeyColumn) {
                   V INT64,
                 ) PRIMARY KEY (K))sql"),
               IsOkAndHolds(test::EqualsProto(R"d(
-                create_table {
+                create_table   {
                   table_name: "T"
-                  columns {
+                  column {
                     column_name: "K"
-                    properties {
-                      column_type {
-                        type: INT64
-                      }
-                      expression: "(1)"
-                      has_default_value: true
-                    }
-                    constraints {
-                      not_null {
-                        nullable: false
-                      }
+                    type: INT64
+                    not_null: true
+                    column_default {
+                      expression: "1"
                     }
                   }
-                  columns {
+                  column {
                     column_name: "V"
-                    properties {
-                      column_type {
-                        type: INT64
-                      }
-                    }
+                    type: INT64
                   }
-                  constraints {
-                    primary_key {
-                      key_part {
-                        key_column_name: "K"
-                      }
-                    }
+                  primary_key {
+                    key_name: "K"
                   }
-                })d")));
-}
-
-TEST_F(ColumnDefaultValues, CannotParseDefaultColumnWhenDisabled) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_column_default_values = false;
-  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  EXPECT_THAT(ParseDDLStatement(R"sql(
-      CREATE TABLE T (
-        K INT64 NOT NULL DEFAULT (1),
-        V INT64,
-        G INT64 DEFAULT (10)
-       ) PRIMARY KEY (K)
-    )sql"),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("Column DEFAULT values are not enabled.")));
+                }
+              )d")));
 }
 
 TEST_F(ColumnDefaultValues, CannotParseDefaultAndGeneratedColumn) {
@@ -2224,23 +1767,19 @@ TEST_F(ColumnDefaultValues, AlterTableAddDefaultColumn) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ADD COLUMN D INT64 DEFAULT (1)"),
               IsOkAndHolds(test::EqualsProto(
                   R"d(
-            alter_table {
-              table_name: "T"
-              alter_column {
-                type: ADD
-                column {
-                  column_name: "D"
-                  properties {
-                    column_type {
-                      type: INT64
+                    alter_table   {
+                      table_name: "T"
+                      add_column {
+                        column {
+                          column_name: "D"
+                          type: INT64
+                          column_default {
+                            expression: "1"
+                          }
+                        }
+                      }
                     }
-                    expression: "(1)"
-                    has_default_value: true
-                  }
-                }
-              }
-            }
-          )d")));
+                )d")));
 }
 
 TEST_F(ColumnDefaultValues, AlterTableAlterDefaultColumn) {
@@ -2248,29 +1787,20 @@ TEST_F(ColumnDefaultValues, AlterTableAlterDefaultColumn) {
                   "ALTER TABLE T ALTER COLUMN D INT64 NOT NULL DEFAULT (1)"),
               IsOkAndHolds(test::EqualsProto(
                   R"d(
-            alter_table {
-              table_name: "T"
-              alter_column {
-                column_name: "D"
-                type: ALTER
-                column {
-                  column_name: "D"
-                  properties {
-                    column_type {
-                      type: INT64
+                    alter_table   {
+                      table_name: "T"
+                      alter_column {
+                        column {
+                          column_name: "D"
+                          type: INT64
+                          not_null: true
+                          column_default {
+                            expression: "1"
+                          }
+                        }
+                      }
                     }
-                    expression: "(1)"
-                    has_default_value: true
-                  }
-                  constraints {
-                    not_null {
-                      nullable: false
-                    }
-                  }
-                }
-              }
-            }
-          )d")));
+                )d")));
 }
 
 TEST_F(ColumnDefaultValues, AlterTableAlterDefaultColumnToNull) {
@@ -2278,66 +1808,56 @@ TEST_F(ColumnDefaultValues, AlterTableAlterDefaultColumnToNull) {
                   "ALTER TABLE T ALTER COLUMN D INT64 NOT NULL DEFAULT (NULL)"),
               IsOkAndHolds(test::EqualsProto(
                   R"d(
-            alter_table {
-              table_name: "T"
-              alter_column {
-                column_name: "D"
-                type: ALTER
-                column {
-                  column_name: "D"
-                  properties {
-                    column_type {
-                      type: INT64
+                    alter_table   {
+                      table_name: "T"
+                      alter_column {
+                        column {
+                          column_name: "D"
+                          type: INT64
+                          not_null: true
+                          column_default {
+                            expression: "NULL"
+                          }
+                        }
+                      }
                     }
-                    expression: "(NULL)"
-                    has_default_value: true
-                  }
-                  constraints {
-                    not_null {
-                      nullable: false
-                    }
-                  }
-                }
-              }
-            }
-          )d")));
+                )d")));
 }
 
 TEST_F(ColumnDefaultValues, AlterTableSetDefaultToColumn) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ALTER COLUMN D SET DEFAULT (1)"),
               IsOkAndHolds(test::EqualsProto(
                   R"d(
-            alter_table {
-              table_name: "T"
-              alter_column {
-                column_name: "D"
-                type: SET_DEFAULT
-                column {
-                  column_name: "D"
-                  properties {
-                    expression: "(1)"
-                    has_default_value: true
-                  }
-                }
-              }
-            }
-          )d")));
+                    alter_table   {
+                      table_name: "T"
+                      alter_column {
+                        column {
+                          column_name: "D"
+                          type: NONE
+                          column_default {
+                            expression: "1"
+                          }
+                        }
+                        operation: SET_DEFAULT
+                      }
+                    }
+              )d")));
 }
 
 TEST_F(ColumnDefaultValues, AlterTableDropDefaultToColumn) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ALTER COLUMN D DROP DEFAULT"),
               IsOkAndHolds(test::EqualsProto(
                   R"d(
-            alter_table {
-              table_name: "T"
-              alter_column {
-                column_name: "D"
-                type: DROP_DEFAULT
-                column {
-                  column_name: "D"
+              alter_table   {
+                table_name: "T"
+                alter_column {
+                  column {
+                    column_name: "D"
+                    type: NONE
+                  }
+                  operation: DROP_DEFAULT
                 }
               }
-            }
           )d")));
 }
 
@@ -2356,27 +1876,11 @@ TEST_F(ColumnDefaultValues, InvalidSetDefault) {
 class CheckConstraint : public ::testing::Test {
  public:
   CheckConstraint()
-      : feature_flags_({.enable_stored_generated_columns = true,
-                        .enable_check_constraint = true}) {}
+      : feature_flags_({.enable_stored_generated_columns = true}) {}
 
  private:
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
-
-TEST_F(CheckConstraint, CannotParseCreateTableWithCheckConstraintFlagOff) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_check_constraint = false;
-  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  EXPECT_THAT(ParseDDLStatement("CREATE TABLE T ("
-                                "  Id INT64,"
-                                "  Value INT64,"
-                                "  CHECK(Value > 0),"
-                                "  CONSTRAINT value_gt_zero CHECK(Value > 0),"
-                                "  CHECK(Value > 1),"
-                                ") PRIMARY KEY(Id)"),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("Check Constraint is not implemented.")));
-}
 
 TEST_F(CheckConstraint, CanParseCreateTableWithCheckConstraint) {
   EXPECT_THAT(ParseDDLStatement("CREATE TABLE T ("
@@ -2387,48 +1891,34 @@ TEST_F(CheckConstraint, CanParseCreateTableWithCheckConstraint) {
                                 "  CHECK(Value > 1),"
                                 ") PRIMARY KEY(Id)"),
               IsOkAndHolds(test::EqualsProto(R"d(
-                create_table {
+                create_table   {
                   table_name: "T"
-                    columns {
-                      column_name: "Id"
-                      properties {
-                        column_type {
-                          type: INT64
-                        }
-                      }
-                    }
-                    columns {
-                      column_name: "Value"
-                      properties {
-                        column_type {
-                          type: INT64
-                        }
-                      }
-                    }
-                    constraints {
-                      check {
-                        sql_expression: "Value > 0"
-                      }
-                    }
-                    constraints {
-                      check {
-                        constraint_name: "value_gt_zero"
-                        sql_expression: "Value > 0"
-                      }
-                    }
-                    constraints {
-                      check {
-                        sql_expression: "Value > 1"
-                      }
-                    }
-                    constraints {
-                      primary_key {
-                        key_part {
-                          key_column_name: "Id"
-                        }
-                      }
-                    }
-                  })d")));
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                  }
+                  column {
+                    column_name: "Value"
+                    type: INT64
+                  }
+                  primary_key {
+                    key_name: "Id"
+                  }
+                  check_constraint {
+                    expression: "Value > 0"
+                    enforced: true
+                  }
+                  check_constraint {
+                    name: "value_gt_zero"
+                    expression: "Value > 0"
+                    enforced: true
+                  }
+                  check_constraint {
+                    expression: "Value > 1"
+                    enforced: true
+                  }
+                }
+              )d")));
 }
 
 TEST_F(CheckConstraint, CanParseAlterTableAddCheckConstraint) {
@@ -2437,14 +1927,11 @@ TEST_F(CheckConstraint, CanParseAlterTableAddCheckConstraint) {
       IsOkAndHolds(test::EqualsProto(R"d(
         alter_table {
           table_name: "T"
-          alter_constraint {
-            constraint_name: "B_GT_ZERO"
-            type: ADD
-            constraint {
-              check {
-                constraint_name: "B_GT_ZERO"
-                sql_expression: "B > 0"
-              }
+          add_check_constraint {
+            check_constraint {
+              name: "B_GT_ZERO"
+              expression: "B > 0"
+              enforced: true
             }
           }
         }
@@ -2456,12 +1943,10 @@ TEST_F(CheckConstraint, CanParseAlterTableAddUnamedCheckConstraint) {
               IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"
-                  alter_constraint {
-                    type: ADD
-                    constraint {
-                      check {
-                        sql_expression: "B > 0"
-                      }
+                  add_check_constraint {
+                    check_constraint {
+                      expression: "B > 0"
+                      enforced: true
                     }
                   }
                 }
@@ -2475,12 +1960,10 @@ TEST_F(CheckConstraint, CanParseEscapingCharsInCheckConstraint) {
       IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"
-                  alter_constraint {
-                    type: ADD
-                    constraint {
-                      check {
-                        sql_expression: "B > CONCAT(\')\\\'\"\', \'\'\'\'\")\'\'\', \"\'\\\")\", \"\"\"\'\")\"\"\")"
-                      }
+                  add_check_constraint {
+                    check_constraint {
+                      expression: "B > CONCAT(\')\\\'\"\', \'\'\'\'\")\'\'\', \"\'\\\")\", \"\"\"\'\")\"\"\")"
+                      enforced: true
                     }
                   }
                 }
@@ -2492,12 +1975,10 @@ TEST_F(CheckConstraint, CanParseEscapingCharsInCheckConstraint) {
       IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"
-                  alter_constraint {
-                    type: ADD
-                    constraint {
-                      check {
-                        sql_expression: "B > CONCAT(b\')\\\'\"\', b\'\'\'\'\")\'\'\', b\"\'\\\")\", b\"\"\"\'\")\"\"\")"
-                      }
+                  add_check_constraint {
+                    check_constraint {
+                      expression: "B > CONCAT(b\')\\\'\"\', b\'\'\'\'\")\'\'\', b\"\'\\\")\", b\"\"\"\'\")\"\"\")"
+                      enforced: true
                     }
                   }
                 }
@@ -2508,12 +1989,10 @@ TEST_F(CheckConstraint, CanParseEscapingCharsInCheckConstraint) {
       IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"
-                  alter_constraint {
-                    type: ADD
-                    constraint {
-                      check {
-                        sql_expression: "B > \'\\a\\b\\r\\n\\t\\\\\'"
-                      }
+                  add_check_constraint {
+                    check_constraint {
+                      expression: "B > \'\\a\\b\\r\\n\\t\\\\\'"
+                      enforced: true
                     }
                   }
                 }
@@ -2527,12 +2006,10 @@ TEST_F(CheckConstraint, CanParseEscapingCharsInCheckConstraint) {
               IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"
-                  alter_constraint {
-                    type: ADD
-                    constraint {
-                      check {
-                        sql_expression: "B > CONCAT(\'\\n\', \'\'\'\'line 1\n  line 2\'\'\', \"\\n\", \"\"\"line 11\n  line22\"\"\")"
-                      }
+                  add_check_constraint {
+                    check_constraint {
+                      expression: "B > CONCAT(\'\\n\', \'\'\'\'line 1\n  line 2\'\'\', \"\\n\", \"\"\"line 11\n  line22\"\"\")"
+                      enforced: true
                     }
                   }
                 }
@@ -2545,12 +2022,10 @@ TEST_F(CheckConstraint, CanParseEscapingCharsInCheckConstraint) {
               IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"
-                  alter_constraint {
-                    type: ADD
-                    constraint {
-                      check {
-                        sql_expression: "B > CONCAT(b\'\\n\', b\'\'\'\'line 1\n  line 2\'\'\', b\"\\n\", b\"\"\"line 11\n  line22\"\"\")"
-                      }
+                  add_check_constraint {
+                    check_constraint {
+                      expression: "B > CONCAT(b\'\\n\', b\'\'\'\'line 1\n  line 2\'\'\', b\"\\n\", b\"\"\"line 11\n  line22\"\"\")"
+                      enforced: true
                     }
                   }
                 }
@@ -2564,12 +2039,10 @@ TEST_F(CheckConstraint, CanParseRegexContainsInCheckConstraint) {
       IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"
-                  alter_constraint {
-                    type: ADD
-                    constraint {
-                      check {
-                        sql_expression: "REGEXP_CONTAINS(B, r\'f\\(a,(.*),d\\)\')"
-                      }
+                  add_check_constraint {
+                    check_constraint {
+                      expression: "REGEXP_CONTAINS(B, r\'f\\(a,(.*),d\\)\')"
+                      enforced: true
                     }
                   }
                 }
@@ -2581,12 +2054,10 @@ TEST_F(CheckConstraint, CanParseRegexContainsInCheckConstraint) {
       IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"
-                  alter_constraint {
-                    type: ADD
-                    constraint {
-                      check {
-                        sql_expression: "REGEXP_CONTAINS(B, rb\'f\\(a,(.*),d\\)\')"
-                      }
+                  add_check_constraint {
+                    check_constraint {
+                      expression: "REGEXP_CONTAINS(B, rb\'f\\(a,(.*),d\\)\')"
+                      enforced: true
                     }
                   }
                 }
@@ -2598,12 +2069,10 @@ TEST_F(CheckConstraint, CanParseOctalNumberInCheckConstraint) {
               IsOkAndHolds(test::EqualsProto(R"d(
                 alter_table {
                   table_name: "T"
-                  alter_constraint {
-                    type: ADD
-                    constraint {
-                      check {
-                        sql_expression: "B > 05"
-                      }
+                  add_check_constraint {
+                    check_constraint {
+                      expression: "B > 05"
+                      enforced: true
                     }
                   }
                 }
@@ -2614,12 +2083,10 @@ TEST_F(CheckConstraint, CanParseOctalNumberInCheckConstraint) {
       IsOkAndHolds(test::EqualsProto(R"d(
         alter_table {
           table_name: "T"
-          alter_constraint {
-            type: ADD
-            constraint {
-              check {
-                sql_expression: "B > 005 + 5 + 0.5 + .5e2"
-              }
+          add_check_constraint {
+            check_constraint {
+              expression: "B > 005 + 5 + 0.5 + .5e2"
+              enforced: true
             }
           }
         }

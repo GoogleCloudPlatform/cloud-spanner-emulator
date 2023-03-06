@@ -190,8 +190,9 @@ class SchemaUpdaterImpl {
       CheckConstraint::Builder* builder);
 
   template <typename ColumnModifier>
-  absl::Status SetColumnOptions(const ddl::Options& options,
-                                ColumnModifier* modifier);
+  absl::Status SetColumnOptions(
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+      ColumnModifier* modifier);
 
   template <typename ColumnDefModifier>
   absl::Status SetColumnDefinition(const ddl::ColumnDefinition& ddl_column,
@@ -203,39 +204,36 @@ class SchemaUpdaterImpl {
                                      const Table* table,
                                      Column::Editor* editor);
 
-  absl::Status AlterColumnSetDropDefault(const ddl::AlterColumn& alter_column,
-                                         const Table* table,
-                                         const Column* column,
-                                         Column::Editor* editor);
+  absl::Status AlterColumnSetDropDefault(
+      const ddl::AlterTable::AlterColumn& alter_column, const Table* table,
+      const Column* column, Column::Editor* editor);
 
   absl::StatusOr<const Column*> CreateColumn(
       const ddl::ColumnDefinition& ddl_column, const Table* table,
       const ddl::CreateTable* ddl_table);
 
   absl::StatusOr<const KeyColumn*> CreatePrimaryKeyColumn(
-      const ddl::KeyPart& ddl_key_part, const Table* table);
+      const ddl::KeyPartClause& ddl_key_part, const Table* table);
 
   absl::Status CreatePrimaryKeyConstraint(
-      const ddl::PrimaryKeyConstraint& ddl_primary_key,
-      Table::Builder* builder);
+      const ddl::KeyPartClause& ddl_key_part, Table::Builder* builder);
 
   absl::Status CreateInterleaveConstraint(
-      const ddl::InterleaveConstraint& interleave, Table::Builder* builder);
+      const ddl::InterleaveClause& interleave, Table::Builder* builder);
   absl::Status CreateInterleaveConstraint(const Table* parent,
                                           Table::OnDeleteAction on_delete,
                                           Table::Builder* builder);
+
   absl::StatusOr<const Table*> GetInterleaveConstraintTable(
-      const ddl::InterleaveConstraint& interleave,
+      const std::string& interleave_in_table_name,
       const Table::Builder& builder) const;
   static Table::OnDeleteAction GetInterleaveConstraintOnDelete(
-      const ddl::InterleaveConstraint& interleave);
+      const ddl::InterleaveClause& interleave);
 
   absl::Status CreateForeignKeyConstraint(
-      const ddl::ForeignKeyConstraint& ddl_foreign_key,
-      const Table* referencing_table);
+      const ddl::ForeignKey& ddl_foreign_key, const Table* referencing_table);
   absl::StatusOr<const ForeignKey*> BuildForeignKeyConstraint(
-      const ddl::ForeignKeyConstraint& ddl_foreign_key,
-      const Table* referencing_table);
+      const ddl::ForeignKey& ddl_foreign_key, const Table* referencing_table);
   absl::Status EvaluateForeignKeyReferencedPrimaryKey(
       const Table* table,
       const google::protobuf::RepeatedPtrField<std::string>& column_names,
@@ -263,26 +261,41 @@ class SchemaUpdaterImpl {
       const Table* index_data_table, bool null_filtered_key_column);
 
   absl::Status AddSearchIndexColumns(
-      const ::google::protobuf::RepeatedPtrField<ddl::KeyPart>& key_parts,
+      const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>& key_parts,
       const Table* indexed_table, bool is_null_filtered,
       std::vector<const Column*>& columns, Table::Builder& builder);
 
   absl::StatusOr<std::unique_ptr<const Table>> CreateIndexDataTable(
-      const ddl::CreateIndex& ddl_index, const Index* index,
-      const Table* indexed_table, ColumnsUsedByIndex* columns_used_by_index);
+      absl::string_view index_name,
+      const std::vector<ddl::KeyPartClause>& table_pk,
+      const std::string* interleave_in_table,
+      const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
+          stored_columns,
+      const Index* index, const Table* indexed_table,
+      ColumnsUsedByIndex* columns_used_by_index);
 
   absl::StatusOr<const Index*> CreateIndex(
       const ddl::CreateIndex& ddl_index, const Table* indexed_table = nullptr);
+
+  absl::StatusOr<const Index*> CreateIndexHelper(
+      const std::string& index_name, const std::string& index_base_name,
+      bool is_unique, bool is_null_filtered,
+      const std::string* interleave_in_table,
+      const std::vector<ddl::KeyPartClause>& table_pk,
+      const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
+          stored_columns,
+      const Table* indexed_table);
 
   absl::Status AlterRowDeletionPolicy(
       std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
       const Table* table);
   absl::Status AlterTable(const ddl::AlterTable& alter_table);
-  absl::Status AlterInterleave(const ddl::InterleaveConstraint& ddl_interleave,
-                               const Table* table);
+  absl::Status AlterInterleaveAction(
+      const ddl::InterleaveClause::Action& ddl_interleave_action,
+      const Table* table);
   absl::Status AddCheckConstraint(
       const ddl::CheckConstraint& ddl_check_constraint, const Table* table);
-  absl::Status AddForeignKey(const ddl::ForeignKeyConstraint& ddl_foreign_key,
+  absl::Status AddForeignKey(const ddl::ForeignKey& ddl_foreign_key,
                              const Table* table);
   absl::Status DropConstraint(const std::string& constraint_name,
                               const Table* table);
@@ -290,6 +303,9 @@ class SchemaUpdaterImpl {
   absl::Status DropTable(const ddl::DropTable& drop_table);
 
   absl::Status DropIndex(const ddl::DropIndex& drop_index);
+
+  absl::Status ApplyImplSetColumnOptions(
+      const ddl::SetColumnOptions& set_column_options);
 
   // Adds a new schema object `node` to the schema copy being edited by
   // `editor_`.
@@ -371,8 +387,36 @@ absl::Status SchemaUpdaterImpl::DropNode(const SchemaNode* node) {
   return absl::OkStatus();
 }
 
+absl::Status ValidateDdlStatement(const ddl::DDLStatement& ddl) {
+  auto check_generated_column = [&](const ddl::ColumnDefinition& col) {
+    if (col.has_generated_column()) {
+      if (!col.generated_column().stored()) {
+        return error::NonStoredGeneratedColumnUnsupported(col.column_name());
+      }
+    }
+    return absl::OkStatus();
+  };
+
+  if (ddl.has_create_table()) {
+    for (const auto& col : ddl.create_table().column()) {
+      ZETASQL_RETURN_IF_ERROR(check_generated_column(col));
+    }
+  }
+  if (ddl.has_alter_table()) {
+    if (ddl.alter_table().has_add_column()) {
+      ZETASQL_RETURN_IF_ERROR(
+          check_generated_column(ddl.alter_table().add_column().column()));
+    } else if (ddl.alter_table().has_alter_column()) {
+      ZETASQL_RETURN_IF_ERROR(
+          check_generated_column(ddl.alter_table().alter_column().column()));
+    }
+  }
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::unique_ptr<const Schema>>
-SchemaUpdaterImpl::ApplyDDLStatement(absl::string_view statement
+SchemaUpdaterImpl::ApplyDDLStatement(
+    absl::string_view statement
 ) {
   if (statement.empty()) {
     return error::EmptyDDLStatement();
@@ -380,11 +424,10 @@ SchemaUpdaterImpl::ApplyDDLStatement(absl::string_view statement
 
   // Apply the statement to the schema graph.
   ZETASQL_RET_CHECK(!editor_->HasModifications());
-  ZETASQL_ASSIGN_OR_RETURN(const auto& ddl_statement,
-                   ddl::ParseDDLStatement(statement
-                                          ));
-
-  switch (ddl_statement.kind_case()) {
+  ddl::DDLStatement ddl_statement;
+  ZETASQL_RETURN_IF_ERROR(ddl::ParseDDLStatement(statement, &ddl_statement));
+  ZETASQL_RETURN_IF_ERROR(ValidateDdlStatement(ddl_statement));
+  switch (ddl_statement.statement_case()) {
     case ddl::DDLStatement::kCreateTable: {
       ZETASQL_RETURN_IF_ERROR(CreateTable(ddl_statement.create_table()));
       break;
@@ -408,12 +451,17 @@ SchemaUpdaterImpl::ApplyDDLStatement(absl::string_view statement
     case ddl::DDLStatement::kAnalyze:
       // Intentionally no=op.
       break;
+    case ddl::DDLStatement::kSetColumnOptions:
+      ZETASQL_RETURN_IF_ERROR(
+          ApplyImplSetColumnOptions(ddl_statement.set_column_options()));
+      break;
     default:
       ZETASQL_RET_CHECK(false) << "Unsupported ddl statement: "
-                       << ddl_statement.kind_case();
+                       << ddl_statement.statement_case();
   }
   ZETASQL_ASSIGN_OR_RETURN(auto new_schema_graph, editor_->CanonicalizeGraph());
-  return std::make_unique<const Schema>(std::move(new_schema_graph)
+  return std::make_unique<const Schema>(
+      std::move(new_schema_graph)
   );
 }
 
@@ -454,22 +502,20 @@ SchemaUpdaterImpl::ApplyDDLStatements(
 }
 
 template <typename ColumnModifier>
-absl::Status SchemaUpdaterImpl::SetColumnOptions(const ddl::Options& options,
-                                                 ColumnModifier* modifier) {
+absl::Status SchemaUpdaterImpl::SetColumnOptions(
+    const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+    ColumnModifier* modifier) {
   std::optional<bool> allows_commit_timestamp = std::nullopt;
-  for (const ddl::Options::Option& option : options.option_val()) {
-    ZETASQL_RET_CHECK_EQ(option.name(), ddl::kCommitTimestampOptionName)
-        << "Invalid column option: " << option.name();
-    switch (option.kind_case()) {
-      case ddl::Options_Option::kBoolValue:
-        allows_commit_timestamp = option.bool_value();
-        break;
-      case ddl::Options_Option::kNullValue:
-        allows_commit_timestamp = std::nullopt;
-        break;
-      default:
-        ZETASQL_RET_CHECK(false) << "Option " << ddl::kCommitTimestampOptionName
-                         << " can only take bool_value or null_value.";
+  for (const ddl::SetOption& option : set_options) {
+    ZETASQL_RET_CHECK_EQ(option.option_name(), ddl::kCommitTimestampOptionName)
+        << "Invalid column option: " << option.option_name();
+    if (option.has_bool_value()) {
+      allows_commit_timestamp = option.bool_value();
+    } else if (option.has_null_value()) {
+      allows_commit_timestamp = std::nullopt;
+    } else {
+      ZETASQL_RET_CHECK(false) << "Option " << ddl::kCommitTimestampOptionName
+                       << " can only take bool_value or null_value.";
     }
   }
   modifier->set_allow_commit_timestamp(allows_commit_timestamp);
@@ -479,39 +525,40 @@ absl::Status SchemaUpdaterImpl::SetColumnOptions(const ddl::Options& options,
 absl::Status SchemaUpdaterImpl::AlterColumnDefinition(
     const ddl::ColumnDefinition& ddl_column, const Table* table,
     Column::Editor* editor) {
-  if (ddl_column.has_options()) {
+  if (ddl_column.set_options_size() != 0) {
     // Column options are specified using the SET OPTIONS syntax and
     // cannot be combined with changes to column definitions so we
     // return from here.
-    return SetColumnOptions(ddl_column.options(), editor);
+    return SetColumnOptions(ddl_column.set_options(), editor);
   }
   return SetColumnDefinition(ddl_column, table, /*ddl_create_table=*/nullptr,
                              editor);
 }
 
 absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
-    const ddl::AlterColumn& alter_column, const Table* table,
+    const ddl::AlterTable::AlterColumn& alter_column, const Table* table,
     const Column* column, Column::Editor* editor) {
-  const ddl::AlterColumn::Type type = alter_column.type();
-  ZETASQL_RET_CHECK(type == ddl::AlterColumn::SET_DEFAULT ||
-            type == ddl::AlterColumn::DROP_DEFAULT);
+  const ddl::AlterTable::AlterColumn::AlterColumnOp type =
+      alter_column.operation();
+  ZETASQL_RET_CHECK(type == ddl::AlterTable::AlterColumn::SET_DEFAULT ||
+            type == ddl::AlterTable::AlterColumn::DROP_DEFAULT);
 
   const ddl::ColumnDefinition& new_column_def = alter_column.column();
-  if (type == ddl::AlterColumn::SET_DEFAULT) {
+  if (type == ddl::AlterTable::AlterColumn::SET_DEFAULT) {
     if (column->is_generated()) {
       return error::CannotSetDefaultValueOnGeneratedColumn(column->FullName());
     }
-    ZETASQL_RET_CHECK(new_column_def.properties().has_expression() &&
-              new_column_def.properties().has_default_value());
+    ZETASQL_RET_CHECK(new_column_def.has_column_default() &&
+              new_column_def.column_default().has_expression());
 
     absl::Status s = AnalyzeColumnDefaultValue(
-        new_column_def.properties().expression(), column->Name(),
+        new_column_def.column_default().expression(), column->Name(),
         column->GetType(), table, /*ddl_create_table=*/nullptr);
     if (!s.ok()) {
       return error::ColumnDefaultValueParseError(table->Name(), column->Name(),
                                                  s.message());
     }
-    editor->set_expression(new_column_def.properties().expression());
+    editor->set_expression(new_column_def.column_default().expression());
     editor->set_has_default_value(true);
   } else {
     if (!column->has_default_value()) {
@@ -584,11 +631,10 @@ absl::Status SchemaUpdaterImpl::InitColumnNameAndTypesFromTable(
   if (ddl_create_table != nullptr) {
     // We are processing a CREATE TABLE statement, so 'const Table* table' may
     // not have all the columns yet. Add all columns from the ddl.
-    for (const ddl::ColumnDefinition& ddl_column :
-         ddl_create_table->columns()) {
+    for (const ddl::ColumnDefinition& ddl_column : ddl_create_table->column()) {
       ZETASQL_ASSIGN_OR_RETURN(
           const zetasql::Type* type,
-          DDLColumnTypeToGoogleSqlType(ddl_column.properties().column_type(),
+          DDLColumnTypeToGoogleSqlType(ddl_column,
                                        type_factory_
                                        ));
       name_and_types->emplace_back(ddl_column.column_name(), type);
@@ -707,45 +753,41 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
   bool is_generated = false;
   bool has_default_value = false;
   // Process any changes in column definition.
-  if (ddl_column.has_properties() &&
-      ddl_column.properties().has_column_type()) {
-    ZETASQL_ASSIGN_OR_RETURN(
-        const zetasql::Type* column_type,
-        DDLColumnTypeToGoogleSqlType(ddl_column.properties().column_type(),
-                                     type_factory_
-                                     ));
-    modifier->set_type(column_type);
+  ZETASQL_ASSIGN_OR_RETURN(
+      const zetasql::Type* column_type,
+      DDLColumnTypeToGoogleSqlType(ddl_column,
+                                   type_factory_
+                                   ));
+  modifier->set_type(column_type);
 
-    ddl::ColumnProperties properties = ddl_column.properties();
-    if (properties.has_expression()) {
-      modifier->set_expression(ddl_column.properties().expression());
+  if (ddl_column.has_column_default()) {
+    has_default_value = true;
+    modifier->set_expression(ddl_column.column_default().expression());
+    absl::Status s = AnalyzeColumnDefaultValue(
+        ddl_column.column_default().expression(), ddl_column.column_name(),
+        column_type, table, ddl_create_table);
+    if (!s.ok()) {
+      return error::ColumnDefaultValueParseError(
+          table->Name(), ddl_column.column_name(), s.message());
+    }
+  } else if (ddl_column.has_generated_column()) {
+    if (!ddl_column.generated_column().stored()) {
+      return error::NonStoredGeneratedColumnUnsupported(
+          ddl_column.column_name());
+    }
 
-      if (properties.has_has_default_value() &&
-          properties.has_default_value()) {
-        // This column has a default value.
-        has_default_value = true;
-        absl::Status s = AnalyzeColumnDefaultValue(
-            ddl_column.properties().expression(), ddl_column.column_name(),
-            column_type, table, ddl_create_table);
-        if (!s.ok()) {
-          return error::ColumnDefaultValueParseError(
-              table->Name(), ddl_column.column_name(), s.message());
-        }
-      } else {
-        // This is a generated column.
-        is_generated = true;
-        absl::flat_hash_set<std::string> dependent_column_names;
-        absl::Status s = AnalyzeGeneratedColumn(
-            ddl_column.properties().expression(), ddl_column.column_name(),
-            column_type, table, ddl_create_table, &dependent_column_names);
-        if (!s.ok()) {
-          return error::GeneratedColumnDefinitionParseError(
-              table->Name(), ddl_column.column_name(), s.message());
-        }
-        for (const std::string& column_name : dependent_column_names) {
-          modifier->add_dependent_column_name(column_name);
-        }
-      }
+    is_generated = true;
+    modifier->set_expression(ddl_column.generated_column().expression());
+    absl::flat_hash_set<std::string> dependent_column_names;
+    absl::Status s = AnalyzeGeneratedColumn(
+        ddl_column.generated_column().expression(), ddl_column.column_name(),
+        column_type, table, ddl_create_table, &dependent_column_names);
+    if (!s.ok()) {
+      return error::GeneratedColumnDefinitionParseError(
+          table->Name(), ddl_column.column_name(), s.message());
+    }
+    for (const std::string& column_name : dependent_column_names) {
+      modifier->add_dependent_column_name(column_name);
     }
   }
 
@@ -760,28 +802,17 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
 
   modifier->set_has_default_value(has_default_value);
   // Set the default values for nullability and length.
-  modifier->set_nullable(true);
+  modifier->set_nullable(!ddl_column.not_null());
   modifier->set_declared_max_length(std::nullopt);
-  for (const ddl::Constraint& ddl_constraint : ddl_column.constraints()) {
-    switch (ddl_constraint.kind_case()) {
-      case ddl::Constraint::kNotNull: {
-        modifier->set_nullable(ddl_constraint.not_null().nullable());
-        break;
-      }
-      case ddl::Constraint::kColumnLength: {
-        modifier->set_declared_max_length(
-            ddl_constraint.column_length().max_length());
-        break;
-      }
-      default:
-        ZETASQL_RET_CHECK(false) << "Unexpected constraint: "
-                         << ddl_constraint.kind_case()
-                         << " for column: " << ddl_column.column_name();
-    }
+  if (ddl_column.has_length()) {
+    modifier->set_declared_max_length(ddl_column.length());
+  } else if (ddl_column.type() == ddl::ColumnDefinition::ARRAY &&
+             ddl_column.has_array_subtype() &&
+             ddl_column.array_subtype().has_length()) {
+    modifier->set_declared_max_length(ddl_column.array_subtype().length());
   }
-
-  if (ddl_column.has_options()) {
-    ZETASQL_RETURN_IF_ERROR(SetColumnOptions(ddl_column.options(), modifier));
+  if (!ddl_column.set_options().empty()) {
+    ZETASQL_RETURN_IF_ERROR(SetColumnOptions(ddl_column.set_options(), modifier));
   }
 
   return absl::OkStatus();
@@ -810,9 +841,9 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
 }
 
 absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
-    const ddl::InterleaveConstraint& interleave, Table::Builder* builder) {
-  ZETASQL_ASSIGN_OR_RETURN(const Table* parent,
-                   GetInterleaveConstraintTable(interleave, *builder));
+    const ddl::InterleaveClause& interleave, Table::Builder* builder) {
+  ZETASQL_ASSIGN_OR_RETURN(const Table* parent, GetInterleaveConstraintTable(
+                                            interleave.table_name(), *builder));
   Table::OnDeleteAction on_delete = GetInterleaveConstraintOnDelete(interleave);
   return CreateInterleaveConstraint(parent, on_delete, builder);
 }
@@ -840,43 +871,41 @@ absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
 }
 
 absl::StatusOr<const Table*> SchemaUpdaterImpl::GetInterleaveConstraintTable(
-    const ddl::InterleaveConstraint& interleave,
+    const std::string& interleave_in_table_name,
     const Table::Builder& builder) const {
-  const auto* parent = latest_schema_->FindTable(interleave.parent());
+  const auto* parent = latest_schema_->FindTable(interleave_in_table_name);
   if (parent == nullptr) {
     const Table* table = builder.get();
     if (table->owner_index() == nullptr) {
-      return error::TableNotFound(interleave.parent());
+      return error::TableNotFound(interleave_in_table_name);
     } else {
       return error::IndexInterleaveTableNotFound(table->owner_index()->Name(),
-                                                 interleave.parent());
+                                                 interleave_in_table_name);
     }
   }
   return parent;
 }
 
 Table::OnDeleteAction SchemaUpdaterImpl::GetInterleaveConstraintOnDelete(
-    const ddl::InterleaveConstraint& interleave) {
-  return interleave.on_delete().action() == ddl::OnDeleteAction::CASCADE
+    const ddl::InterleaveClause& interleave) {
+  return interleave.on_delete() == ddl::InterleaveClause::CASCADE
              ? Table::OnDeleteAction::kCascade
              : Table::OnDeleteAction::kNoAction;
 }
 
 absl::Status SchemaUpdaterImpl::CreatePrimaryKeyConstraint(
-    const ddl::PrimaryKeyConstraint& ddl_primary_key, Table::Builder* builder) {
-  for (const ddl::KeyPart& ddl_key_part : ddl_primary_key.key_part()) {
-    ZETASQL_ASSIGN_OR_RETURN(const KeyColumn* key_col,
-                     CreatePrimaryKeyColumn(ddl_key_part, builder->get()));
-    builder->add_key_column(key_col);
-  }
+    const ddl::KeyPartClause& ddl_key_part, Table::Builder* builder) {
+  ZETASQL_ASSIGN_OR_RETURN(const KeyColumn* key_col,
+                   CreatePrimaryKeyColumn(ddl_key_part, builder->get()));
+  builder->add_key_column(key_col);
   return absl::OkStatus();
 }
 
 absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
-    const ddl::KeyPart& ddl_key_part, const Table* table) {
+    const ddl::KeyPartClause& ddl_key_part, const Table* table) {
   KeyColumn::Builder builder;
-  const std::string& key_column_name = ddl_key_part.key_column_name();
-  bool is_descending = (ddl_key_part.order() == ddl::KeyPart::DESC);
+  const std::string& key_column_name = ddl_key_part.key_name();
+  bool is_descending = (ddl_key_part.order() == ddl::KeyPartClause::DESC);
 
   // References to columns in primary key clause are case-sensitive.
   const Column* column = table->FindColumnCaseSensitive(key_column_name);
@@ -891,8 +920,7 @@ absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
 }
 
 absl::Status SchemaUpdaterImpl::CreateForeignKeyConstraint(
-    const ddl::ForeignKeyConstraint& ddl_foreign_key,
-    const Table* referencing_table) {
+    const ddl::ForeignKey& ddl_foreign_key, const Table* referencing_table) {
   // Build and add the emulator foreign key before creating any of its backing
   // indexes. This ensures the foreign key is validated first which in turn
   // ensures better foreign key error messages instead of obscure index errors.
@@ -934,14 +962,14 @@ absl::Status SchemaUpdaterImpl::CreateForeignKeyConstraint(
 
   bool referencing_index_required = false;
   ZETASQL_RETURN_IF_ERROR(EvaluateForeignKeyReferencingPrimaryKey(
-      referencing_table, ddl_foreign_key.referencing_column_name(),
+      referencing_table, ddl_foreign_key.constrained_column_name(),
       index_column_order, &referencing_index_required));
   if (referencing_index_required) {
     ZETASQL_ASSIGN_OR_RETURN(
         const Index* referencing_index,
         CreateForeignKeyIndex(
             foreign_key, referencing_table,
-            index_column_names(ddl_foreign_key.referencing_column_name(),
+            index_column_names(ddl_foreign_key.constrained_column_name(),
                                index_column_order),
             /*unique=*/false));
     ZETASQL_RETURN_IF_ERROR(
@@ -963,8 +991,7 @@ absl::Status SchemaUpdaterImpl::CreateForeignKeyConstraint(
 }
 
 absl::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
-    const ddl::ForeignKeyConstraint& ddl_foreign_key,
-    const Table* referencing_table) {
+    const ddl::ForeignKey& ddl_foreign_key, const Table* referencing_table) {
   ForeignKey::Builder builder;
 
   ZETASQL_RETURN_IF_ERROR(
@@ -1017,7 +1044,7 @@ absl::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
         return absl::OkStatus();
       };
   ZETASQL_RETURN_IF_ERROR(add_columns(referencing_table,
-                              ddl_foreign_key.referencing_column_name(),
+                              ddl_foreign_key.constrained_column_name(),
                               [&builder](const Column* column) {
                                 builder.add_referencing_column(column);
                               }));
@@ -1139,22 +1166,19 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateForeignKeyIndex(
   if (index == nullptr) {
     ddl::CreateIndex ddl_index;
     ddl_index.set_index_name(index_name);
-    ddl_index.set_table_name(table->Name());
-    ddl_index.mutable_properties()->set_unique(unique);
-    ddl_index.mutable_properties()->set_null_filtered(null_filtered);
-    ddl::PrimaryKeyConstraint* primary_key =
-        ddl_index.add_constraints()->mutable_primary_key();
+    ddl_index.set_index_base_name(table->Name());
+    ddl_index.set_unique(unique);
+    ddl_index.set_null_filtered(null_filtered);
     for (const std::string& column_name : column_names) {
-      auto* key_part = primary_key->add_key_part();
-      key_part->set_key_column_name(column_name);
+      auto* key_part = ddl_index.add_key();
+      key_part->set_key_name(column_name);
       const auto* key_column = table->FindKeyColumn(column_name);
       if (key_column != nullptr && key_column->is_descending()) {
-        key_part->set_order(ddl::KeyPart::DESC);
+        key_part->set_order(ddl::KeyPartClause::DESC);
       }
     }
     if (CanInterleaveForeignKeyIndex(table, column_names)) {
-      ddl_index.add_constraints()->mutable_interleave()->set_parent(
-          table->Name());
+      ddl_index.set_interleave_in_table(table->Name());
     }
     ZETASQL_ASSIGN_OR_RETURN(index, CreateIndex(ddl_index, table));
   }
@@ -1195,9 +1219,8 @@ absl::Status SchemaUpdaterImpl::CreateCheckConstraint(
 
   std::string check_constraint_name;
   bool is_generated_name = false;
-  if (ddl_check_constraint.has_constraint_name() &&
-      !ddl_check_constraint.constraint_name().empty()) {
-    check_constraint_name = ddl_check_constraint.constraint_name();
+  if (ddl_check_constraint.has_name()) {
+    check_constraint_name = ddl_check_constraint.name();
     ZETASQL_RETURN_IF_ERROR(
         global_names_.AddName("Check Constraint", check_constraint_name));
   } else {
@@ -1207,10 +1230,10 @@ absl::Status SchemaUpdaterImpl::CreateCheckConstraint(
   }
   builder.set_constraint_name(check_constraint_name);
   builder.has_generated_name(is_generated_name);
-  builder.set_expression(ddl_check_constraint.sql_expression());
+  builder.set_expression(ddl_check_constraint.expression());
 
   absl::flat_hash_set<std::string> dependent_column_names;
-  absl::Status s = AnalyzeCheckConstraint(ddl_check_constraint.sql_expression(),
+  absl::Status s = AnalyzeCheckConstraint(ddl_check_constraint.expression(),
                                           table, ddl_create_table,
                                           &dependent_column_names, &builder);
 
@@ -1218,7 +1241,7 @@ absl::Status SchemaUpdaterImpl::CreateCheckConstraint(
     const std::string display_name =
         is_generated_name ? "<unnamed>" : check_constraint_name;
     return error::CheckConstraintExpressionParseError(
-        table->Name(), ddl_check_constraint.sql_expression(), display_name,
+        table->Name(), ddl_check_constraint.expression(), display_name,
         s.message());
   }
 
@@ -1250,7 +1273,7 @@ absl::Status SchemaUpdaterImpl::CreateTable(const ddl::CreateTable& ddl_table) {
   builder.set_id(table_id_generator_->NextId(ddl_table.table_name()))
       .set_name(ddl_table.table_name());
 
-  for (const ddl::ColumnDefinition& ddl_column : ddl_table.columns()) {
+  for (const ddl::ColumnDefinition& ddl_column : ddl_table.column()) {
     ZETASQL_ASSIGN_OR_RETURN(const Column* column,
                      CreateColumn(ddl_column, builder.get(), &ddl_table));
     builder.add_column(column);
@@ -1263,36 +1286,21 @@ absl::Status SchemaUpdaterImpl::CreateTable(const ddl::CreateTable& ddl_table) {
   }
 
   // Some constraints have a dependency on the primary key, so create it first.
-  for (const ddl::Constraint& ddl_constraint : ddl_table.constraints()) {
-    if (ddl_constraint.kind_case() == ddl::Constraint::kPrimaryKey) {
-      ZETASQL_RETURN_IF_ERROR(
-          CreatePrimaryKeyConstraint(ddl_constraint.primary_key(), &builder));
-      break;
-    }
+  for (const ddl::KeyPartClause& ddl_key_part : ddl_table.primary_key()) {
+    ZETASQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(ddl_key_part, &builder));
   }
 
-  for (const ddl::Constraint& ddl_constraint : ddl_table.constraints()) {
-    switch (ddl_constraint.kind_case()) {
-      case ddl::Constraint::kInterleave: {
-        ZETASQL_RETURN_IF_ERROR(
-            CreateInterleaveConstraint(ddl_constraint.interleave(), &builder));
-        break;
-      }
-      case ddl::Constraint::kForeignKey: {
-        ZETASQL_RETURN_IF_ERROR(CreateForeignKeyConstraint(ddl_constraint.foreign_key(),
-                                                   builder.get()));
-        break;
-      }
-      case ddl::Constraint::kPrimaryKey:
-        break;
-      case ddl::Constraint::kCheck:
-        ZETASQL_RETURN_IF_ERROR(CreateCheckConstraint(ddl_constraint.check(),
-                                              builder.get(), &ddl_table));
-        break;
-      default:
-        ZETASQL_RET_CHECK(false) << "Unsupported constraint type: "
-                         << ddl_constraint.DebugString();
-    }
+  for (const ddl::ForeignKey& ddl_foreign_key : ddl_table.foreign_key()) {
+    ZETASQL_RETURN_IF_ERROR(CreateForeignKeyConstraint(ddl_foreign_key, builder.get()));
+  }
+  if (ddl_table.has_interleave_clause()) {
+    ZETASQL_RETURN_IF_ERROR(
+        CreateInterleaveConstraint(ddl_table.interleave_clause(), &builder));
+  }
+  for (const ddl::CheckConstraint& ddl_check_constraint :
+       ddl_table.check_constraint()) {
+    ZETASQL_RETURN_IF_ERROR(
+        CreateCheckConstraint(ddl_check_constraint, builder.get(), &ddl_table));
   }
 
   if (ddl_table.has_row_deletion_policy()) {
@@ -1332,11 +1340,11 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
 }
 
 absl::Status SchemaUpdaterImpl::AddSearchIndexColumns(
-    const ::google::protobuf::RepeatedPtrField<ddl::KeyPart>& key_parts,
+    const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>& key_parts,
     const Table* indexed_table, bool is_null_filtered,
     std::vector<const Column*>& columns, Table::Builder& builder) {
-  for (const ddl::KeyPart& ddl_key_part : key_parts) {
-    const std::string& column_name = ddl_key_part.key_column_name();
+  for (const ddl::KeyPartClause& ddl_key_part : key_parts) {
+    const std::string& column_name = ddl_key_part.key_name();
     const Column* column = builder.get()->FindColumn(column_name);
     // Skip already added columns
     if (column == nullptr) {
@@ -1353,91 +1361,82 @@ absl::Status SchemaUpdaterImpl::AddSearchIndexColumns(
 
 absl::StatusOr<std::unique_ptr<const Table>>
 SchemaUpdaterImpl::CreateIndexDataTable(
-    const ddl::CreateIndex& ddl_index, const Index* index,
-    const Table* indexed_table, ColumnsUsedByIndex* columns_used_by_index) {
-  std::string table_name =
-      absl::StrCat(kIndexDataTablePrefix, ddl_index.index_name());
+    absl::string_view index_name,
+    const std::vector<ddl::KeyPartClause>& index_pk,
+    const std::string* interleave_in_table,
+    const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
+        stored_columns,
+    const Index* index, const Table* indexed_table,
+    ColumnsUsedByIndex* columns_used_by_index) {
+  std::string table_name = absl::StrCat(kIndexDataTablePrefix, index_name);
   Table::Builder builder;
   builder.set_name(table_name)
       .set_id(table_id_generator_->NextId(table_name))
       .set_owner_index(index);
 
   // Add indexed columns to the index_data_table's columns and primary key.
-  for (const ddl::Constraint& ddl_constraint : ddl_index.constraints()) {
-    switch (ddl_constraint.kind_case()) {
-      case ddl::Constraint::kPrimaryKey: {
-        const ddl::PrimaryKeyConstraint ddl_primary_key =
-            ddl_constraint.primary_key();
-        // The primary key is a combination of (index_keys,indexed_table_keys)
-        ddl::PrimaryKeyConstraint data_table_pk = ddl_primary_key;
+  if (!index_pk.empty()) {
+    // The primary key is a combination of (index_keys,indexed_table_keys)
+    std::vector<ddl::KeyPartClause> data_table_pk;
+    data_table_pk.reserve(index_pk.size());
+    // First create columns for the specified primary key.
 
-        // First create columns for the specified primary key.
+    for (const ddl::KeyPartClause& ddl_key_part : index_pk) {
+      data_table_pk.push_back(ddl_key_part);
 
-        for (const ddl::KeyPart& ddl_key_part : ddl_primary_key.key_part()) {
-          const std::string& column_name = ddl_key_part.key_column_name();
-          ZETASQL_ASSIGN_OR_RETURN(const Column* column,
-                           CreateIndexDataTableColumn(
-                               indexed_table, column_name, builder.get(),
-                               index->is_null_filtered()));
-          builder.add_column(column);
-        }
-
-        // Next, create columns for the indexed table's primary key.
-        for (const KeyColumn* key_col : indexed_table->primary_key()) {
-          if (builder.get()->FindColumn(key_col->column()->Name()) != nullptr) {
-            // Skip already added columns
-            continue;
-          }
-          std::string key_col_name = key_col->column()->Name();
-          ZETASQL_ASSIGN_OR_RETURN(const Column* column,
-                           CreateIndexDataTableColumn(
-                               indexed_table, key_col_name, builder.get(),
-                               index->is_null_filtered()));
-          builder.add_column(column);
-
-          // Add to the PK specification.
-          ddl::KeyPart* key_part = data_table_pk.add_key_part();
-          key_part->set_key_column_name(key_col_name);
-          if (key_col->is_descending()) {
-            key_part->set_order(ddl::KeyPart::DESC);
-          }
-        }
-
-        ZETASQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(data_table_pk, &builder));
-        int num_declared_keys = ddl_primary_key.key_part_size();
-        auto data_table_key_cols = builder.get()->primary_key();
-        for (int i = 0; i < num_declared_keys; ++i) {
-          columns_used_by_index->index_key_columns.push_back(
-              data_table_key_cols[i]);
-        }
-        break;
-      }
-      case ddl::Constraint::kInterleave: {
-        const auto& ddl_interleave = ddl_constraint.interleave();
-        const Table* parent_table = indexed_table;
-        if (!absl::EqualsIgnoreCase(parent_table->Name(),
-                                    ddl_interleave.parent())) {
-          ZETASQL_ASSIGN_OR_RETURN(parent_table, GetInterleaveConstraintTable(
-                                             ddl_interleave, builder));
-        }
-        ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
-            parent_table, Table::OnDeleteAction::kCascade, &builder));
-        break;
-      }
-      default:
-        ZETASQL_RET_CHECK(false) << "Unsupported constraint type: "
-                         << ddl_constraint.DebugString();
+      const std::string& column_name = ddl_key_part.key_name();
+      ZETASQL_ASSIGN_OR_RETURN(
+          const Column* column,
+          CreateIndexDataTableColumn(indexed_table, column_name, builder.get(),
+                                     index->is_null_filtered()));
+      builder.add_column(column);
     }
+
+    // Next, create columns for the indexed table's primary key.
+    for (const KeyColumn* key_col : indexed_table->primary_key()) {
+      if (builder.get()->FindColumn(key_col->column()->Name()) != nullptr) {
+        // Skip already added columns
+        continue;
+      }
+      std::string key_col_name = key_col->column()->Name();
+      ZETASQL_ASSIGN_OR_RETURN(
+          const Column* column,
+          CreateIndexDataTableColumn(indexed_table, key_col_name, builder.get(),
+                                     index->is_null_filtered()));
+      builder.add_column(column);
+
+      // Add to the PK specification.
+      ddl::KeyPartClause key_part;
+      key_part.set_key_name(key_col_name);
+      if (key_col->is_descending()) {
+        key_part.set_order(ddl::KeyPartClause::DESC);
+      }
+      data_table_pk.push_back(key_part);
+    }
+
+    for (const ddl::KeyPartClause& ddl_key_part : data_table_pk) {
+      ZETASQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(ddl_key_part, &builder));
+    }
+    int num_declared_keys = index_pk.size();
+    auto data_table_key_cols = builder.get()->primary_key();
+    for (int i = 0; i < num_declared_keys; ++i) {
+      columns_used_by_index->index_key_columns.push_back(
+          data_table_key_cols[i]);
+    }
+  }
+  if (interleave_in_table != nullptr) {
+    const Table* parent_table = indexed_table;
+    if (!absl::EqualsIgnoreCase(parent_table->Name(), *interleave_in_table)) {
+      ZETASQL_ASSIGN_OR_RETURN(parent_table, GetInterleaveConstraintTable(
+                                         *interleave_in_table, builder));
+    }
+    ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
+        parent_table, Table::OnDeleteAction::kCascade, &builder));
   }
 
   // Add stored columns to index data table.
-  for (const ddl::ColumnDefinition& ddl_column : ddl_index.columns()) {
-    ZETASQL_RET_CHECK(ddl_column.has_properties() &&
-              ddl_column.properties().has_stored() &&
-              ddl_column.properties().stored() == ddl_column.column_name())
-        << "Invalid stored column specification for index: "
-        << ddl_index.DebugString() << " " << ddl_column.DebugString();
-    const std::string& column_name = ddl_column.column_name();
+  for (const ddl::StoredColumnDefinition& ddl_column : stored_columns) {
+    const std::string& column_name = ddl_column.name();
     ZETASQL_ASSIGN_OR_RETURN(
         const Column* column,
         CreateIndexDataTableColumn(indexed_table, column_name, builder.get(),
@@ -1451,29 +1450,51 @@ SchemaUpdaterImpl::CreateIndexDataTable(
 
 absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
     const ddl::CreateIndex& ddl_index, const Table* indexed_table) {
+  const std::string* interleave_in_table =
+      ddl_index.has_interleave_in_table() ? &ddl_index.interleave_in_table()
+                                          : nullptr;
+  const auto& index_pk = std::vector<ddl::KeyPartClause>(
+      ddl_index.key().begin(), ddl_index.key().end());
+  bool is_unique = ddl_index.unique();
+  bool is_null_filtered = ddl_index.null_filtered();
+  return CreateIndexHelper(ddl_index.index_name(), ddl_index.index_base_name(),
+                           is_unique, is_null_filtered, interleave_in_table,
+                           index_pk, ddl_index.stored_column_definition(),
+                           indexed_table);
+}
+
+absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
+    const std::string& index_name, const std::string& index_base_name,
+    bool is_unique, bool is_null_filtered,
+    const std::string* interleave_in_table,
+    const std::vector<ddl::KeyPartClause>& table_pk,
+    const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
+        stored_columns,
+    const Table* indexed_table) {
   if (indexed_table == nullptr) {
-    indexed_table = latest_schema_->FindTable(ddl_index.table_name());
+    indexed_table = latest_schema_->FindTable(index_base_name);
     if (indexed_table == nullptr) {
-      return error::TableNotFound(ddl_index.table_name());
+      return error::TableNotFound(index_base_name);
     }
   }
   if (latest_schema_->num_index() >= limits::kMaxIndexesPerDatabase) {
-    return error::TooManyIndicesPerDatabase(ddl_index.index_name(),
+    return error::TooManyIndicesPerDatabase(index_name,
                                             limits::kMaxIndexesPerDatabase);
   }
 
   // Tables and indexes share a namespace.
-  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Index", ddl_index.index_name()));
+  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Index", index_name));
 
   Index::Builder builder;
-  builder.set_name(ddl_index.index_name())
-      .set_unique(ddl_index.properties().unique())
-      .set_null_filtered(ddl_index.properties().null_filtered());
-
+  builder.set_name(index_name);
+  builder.set_unique(is_unique);
+  builder.set_null_filtered(is_null_filtered);
   ColumnsUsedByIndex columns_used_by_index;
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const Table> data_table,
-                   CreateIndexDataTable(ddl_index, builder.get(), indexed_table,
-                                        &columns_used_by_index));
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<const Table> data_table,
+      CreateIndexDataTable(
+          index_name, table_pk, interleave_in_table, stored_columns,
+          builder.get(), indexed_table, &columns_used_by_index));
 
   builder.set_index_data_table(data_table.get());
 
@@ -1522,60 +1543,48 @@ absl::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_table) {
     return error::TableNotFound(alter_table.table_name());
   }
 
-  ZETASQL_RET_CHECK(alter_table.has_alter_column() ||
-            alter_table.has_alter_constraint() ||
-            alter_table.has_alter_row_deletion_policy());
-
-  if (alter_table.has_alter_constraint()) {
-    const auto& alter_constraint = alter_table.alter_constraint();
-    auto alter_type = alter_constraint.type();
-    if (alter_constraint.constraint().has_interleave() &&
-        alter_type == ddl::AlterConstraint::ALTER) {
-      return AlterInterleave(alter_constraint.constraint().interleave(), table);
+  switch (alter_table.alter_type_case()) {
+    case ddl::AlterTable::kSetInterleaveClause: {
+      return AlterInterleaveAction(
+          alter_table.set_interleave_clause().interleave_clause().on_delete(),
+          table);
     }
-    if (alter_constraint.constraint().has_check() &&
-        alter_type == ddl::AlterConstraint::ADD) {
-      return AddCheckConstraint(alter_constraint.constraint().check(), table);
+    case ddl::AlterTable::kSetOnDelete: {
+      return AlterInterleaveAction(alter_table.set_on_delete().action(), table);
     }
-    if (alter_constraint.constraint().has_foreign_key() &&
-        alter_type == ddl::AlterConstraint::ADD) {
-      return AddForeignKey(alter_constraint.constraint().foreign_key(), table);
+    case ddl::AlterTable::kAddCheckConstraint: {
+      return AddCheckConstraint(
+          alter_table.add_check_constraint().check_constraint(), table);
     }
-    if (!alter_constraint.has_constraint() &&
-        alter_constraint.has_constraint_name() &&
-        alter_type == ddl::AlterConstraint::DROP) {
-      return DropConstraint(alter_constraint.constraint_name(), table);
+    case ddl::AlterTable::kAddForeignKey: {
+      return AddForeignKey(alter_table.add_foreign_key().foreign_key(), table);
     }
-    return error::Internal(
-        absl::StrCat("Invalid alter table constraint operation: ",
-                     alter_table.DebugString()));
-  }
-
-  if (alter_table.has_alter_column()) {
-    const auto& alter_column = alter_table.alter_column();
-    switch (alter_column.type()) {
-      case ddl::AlterColumn::ADD: {
-        const auto& column_def = alter_column.column();
-        ZETASQL_ASSIGN_OR_RETURN(
-            const Column* new_column,
-            CreateColumn(column_def, table, /*ddl_table=*/nullptr));
-        if (new_column->is_generated()) {
-          const_cast<Column*>(new_column)->PopulateDependentColumns();
-        }
-        ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
-            table, [new_column](Table::Editor* editor) -> absl::Status {
-              editor->add_column(new_column);
-              return absl::OkStatus();
-            }));
-        break;
+    case ddl::AlterTable::kDropConstraint: {
+      return DropConstraint(alter_table.drop_constraint().name(), table);
+    }
+    case ddl::AlterTable::kAddColumn: {
+      const auto& column_def = alter_table.add_column().column();
+      ZETASQL_ASSIGN_OR_RETURN(const Column* new_column,
+                       CreateColumn(column_def, table, /*ddl_table=*/nullptr));
+      if (new_column->is_generated()) {
+        const_cast<Column*>(new_column)->PopulateDependentColumns();
       }
-      case ddl::AlterColumn::SET_DEFAULT:
-      case ddl::AlterColumn::DROP_DEFAULT: {
-        const Column* column = table->FindColumn(alter_column.column_name());
-        if (column == nullptr) {
-          return error::ColumnNotFound(table->Name(),
-                                       alter_column.column_name());
-        }
+      ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+          table, [new_column](Table::Editor* editor) -> absl::Status {
+            editor->add_column(new_column);
+            return absl::OkStatus();
+          }));
+      return absl::OkStatus();
+    }
+    case ddl::AlterTable::kAlterColumn: {
+      const std::string& column_name =
+          alter_table.alter_column().column().column_name();
+      const Column* column = table->FindColumn(column_name);
+      if (column == nullptr) {
+        return error::ColumnNotFound(table->Name(), column_name);
+      }
+      const auto& alter_column = alter_table.alter_column();
+      if (alter_column.has_operation()) {
         ZETASQL_RETURN_IF_ERROR(
             AlterNode<Column>(column,
                               [this, &alter_column, &column,
@@ -1583,14 +1592,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_table) {
                                 return AlterColumnSetDropDefault(
                                     alter_column, table, column, editor);
                               }));
-        break;
-      }
-      case ddl::AlterColumn::ALTER: {
-        const Column* column = table->FindColumn(alter_column.column_name());
-        if (column == nullptr) {
-          return error::ColumnNotFound(table->Name(),
-                                       alter_column.column_name());
-        }
+      } else {
         const auto& column_def = alter_column.column();
         ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
             column,
@@ -1598,62 +1600,53 @@ absl::Status SchemaUpdaterImpl::AlterTable(const ddl::AlterTable& alter_table) {
              &table](Column::Editor* editor) -> absl::Status {
               return AlterColumnDefinition(column_def, table, editor);
             }));
-        break;
       }
-      case ddl::AlterColumn::DROP: {
-        const Column* column = table->FindColumn(alter_column.column_name());
-        if (column == nullptr) {
-          return error::ColumnNotFound(table->Name(),
-                                       alter_column.column_name());
-        }
-        ZETASQL_RETURN_IF_ERROR(DropNode(column));
-        break;
-      }
-      default:
-        ZETASQL_RET_CHECK(false) << "Invalid alter column specification: "
-                         << alter_column.DebugString();
+      return absl::OkStatus();
     }
-    return absl::OkStatus();
-  }
-
-  if (alter_table.has_alter_row_deletion_policy()) {
-    const auto& policy = alter_table.alter_row_deletion_policy();
-    switch (policy.type()) {
-      case ddl::AlterRowDeletionPolicy::ADD: {
-        if (!table->row_deletion_policy().has_value()) {
-          return AlterRowDeletionPolicy(policy.row_deletion_policy(), table);
-        } else {
-          return error::RowDeletionPolicyAlreadyExists(
-              policy.row_deletion_policy().column_name(), table->Name());
-        }
+    case ddl::AlterTable::kDropColumn: {
+      const Column* column = table->FindColumn(alter_table.drop_column());
+      if (column == nullptr) {
+        return error::ColumnNotFound(table->Name(), alter_table.drop_column());
       }
-      case ddl::AlterRowDeletionPolicy::REPLACE: {
-        if (table->row_deletion_policy().has_value()) {
-          return AlterRowDeletionPolicy(policy.row_deletion_policy(), table);
-        } else {
-          return error::RowDeletionPolicyDoesNotExist(table->Name());
-        }
-      }
-      case ddl::AlterRowDeletionPolicy::DROP: {
-        if (table->row_deletion_policy().has_value()) {
-          return AlterRowDeletionPolicy(std::nullopt, table);
-        } else {
-          return error::RowDeletionPolicyDoesNotExist(table->Name());
-        }
-      }
-      default:
-        return error::Internal(absl::StrCat(
-            "Invalid alter row deletion policy: ", policy.DebugString()));
+      ZETASQL_RETURN_IF_ERROR(DropNode(column));
+      return absl::OkStatus();
     }
+    case ddl::AlterTable::kAddRowDeletionPolicy: {
+      const auto& policy = alter_table.add_row_deletion_policy();
+      if (!table->row_deletion_policy().has_value()) {
+        return AlterRowDeletionPolicy(policy, table);
+      } else {
+        return error::RowDeletionPolicyAlreadyExists(policy.column_name(),
+                                                     table->Name());
+      }
+    }
+    case ddl::AlterTable::kAlterRowDeletionPolicy: {
+      const auto& policy = alter_table.alter_row_deletion_policy();
+      if (table->row_deletion_policy().has_value()) {
+        return AlterRowDeletionPolicy(policy, table);
+      } else {
+        return error::RowDeletionPolicyDoesNotExist(table->Name());
+      }
+    }
+    case ddl::AlterTable::kDropRowDeletionPolicy: {
+      if (table->row_deletion_policy().has_value()) {
+        return AlterRowDeletionPolicy(std::nullopt, table);
+      } else {
+        return error::RowDeletionPolicyDoesNotExist(table->Name());
+      }
+    }
+    default:
+      return error::Internal(absl::StrCat("Unsupported alter table type: ",
+                                          alter_table.DebugString()));
   }
-
   return absl::OkStatus();
 }
 
-absl::Status SchemaUpdaterImpl::AlterInterleave(
-    const ddl::InterleaveConstraint& ddl_interleave, const Table* table) {
+absl::Status SchemaUpdaterImpl::AlterInterleaveAction(
+    const ddl::InterleaveClause::Action& ddl_interleave_action,
+    const Table* table) {
   return AlterNode<Table>(table, [&](Table::Editor* editor) {
-    if (ddl_interleave.on_delete().action() == ddl::OnDeleteAction::CASCADE) {
+    if (ddl_interleave_action == ddl::InterleaveClause::CASCADE) {
       editor->set_on_delete(Table::OnDeleteAction::kCascade);
     } else {
       editor->set_on_delete(Table::OnDeleteAction::kNoAction);
@@ -1671,7 +1664,7 @@ absl::Status SchemaUpdaterImpl::AddCheckConstraint(
 }
 
 absl::Status SchemaUpdaterImpl::AddForeignKey(
-    const ddl::ForeignKeyConstraint& ddl_foreign_key, const Table* table) {
+    const ddl::ForeignKey& ddl_foreign_key, const Table* table) {
   return AlterNode<Table>(table, [&](Table::Editor* editor) -> absl::Status {
     return CreateForeignKeyConstraint(ddl_foreign_key, table);
   });
@@ -1706,6 +1699,27 @@ absl::Status SchemaUpdaterImpl::DropIndex(const ddl::DropIndex& drop_index) {
     return error::IndexNotFound(drop_index.index_name());
   }
   return DropNode(index);
+}
+
+absl::Status SchemaUpdaterImpl::ApplyImplSetColumnOptions(
+    const ddl::SetColumnOptions& set_column_options) {
+  for (const ddl::SetColumnOptions::ColumnPath& path :
+       set_column_options.column_path()) {
+    const Table* table = latest_schema_->FindTable(path.table_name());
+    if (table == nullptr) {
+      return error::TableNotFound(path.table_name());
+    }
+    const Column* column = table->FindColumn(path.column_name());
+    if (column == nullptr) {
+      return error::ColumnNotFound(path.table_name(), path.column_name());
+    }
+    ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+        column,
+        [this, &set_column_options](Column::Editor* editor) -> absl::Status {
+          return SetColumnOptions(set_column_options.options(), editor);
+        }));
+  }
+  return absl::OkStatus();
 }
 
 }  // namespace

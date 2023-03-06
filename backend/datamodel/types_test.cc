@@ -34,7 +34,7 @@ namespace {
 
 class TypesTest : public ::testing::Test {
  public:
-  TypesTest() {}
+  TypesTest() = default;
 
   std::vector<const zetasql::Type*> supported_types() {
     return {type_factory_.get_int64(),     type_factory_.get_bool(),

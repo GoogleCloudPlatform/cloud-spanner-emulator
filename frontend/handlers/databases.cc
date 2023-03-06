@@ -21,6 +21,7 @@
 #include "google/longrunning/operations.pb.h"
 #include "google/protobuf/empty.pb.h"
 #include "google/protobuf/timestamp.pb.h"
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -103,10 +104,10 @@ absl::Status CreateDatabase(RequestContext* ctx,
   }
 
   // Extract database name from create statement.
-  ZETASQL_ASSIGN_OR_RETURN(
-      backend::ddl::CreateDatabase stmt,
-      backend::ddl::ParseCreateDatabase(request->create_statement()));
-  std::string database_name = stmt.database_name();
+  backend::ddl::DDLStatement stmt;
+  ZETASQL_RETURN_IF_ERROR(
+      backend::ddl::ParseDDLStatement(request->create_statement(), &stmt));
+  std::string database_name = stmt.create_database().db_name();
 
   // Validate database name.
   ZETASQL_RETURN_IF_ERROR(ValidateDatabaseId(database_name));
@@ -117,11 +118,13 @@ absl::Status CreateDatabase(RequestContext* ctx,
   for (const std::string& statement : request->extra_statements()) {
     create_statements.push_back(statement);
   }
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Database> database,
-                   ctx->env()->database_manager()->CreateDatabase(
-                       database_uri, backend::SchemaChangeOperation{
-                                         .statements = create_statements,
-                                     }));
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::shared_ptr<Database> database,
+      ctx->env()->database_manager()->CreateDatabase(
+          database_uri,
+          backend::SchemaChangeOperation{
+              .statements = create_statements,
+          }));
 
   // Create an operation tracking the database creation.
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Operation> operation,

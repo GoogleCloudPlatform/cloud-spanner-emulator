@@ -83,7 +83,7 @@ std::string RowDeletionPolicyToString(const ddl::RowDeletionPolicy& policy) {
   absl::StrAppend(&str, policy.column_name());
   absl::StrAppend(&str, ", ");
   absl::StrAppend(&str, "INTERVAL ");
-  absl::StrAppend(&str, policy.older_than());
+  absl::StrAppend(&str, policy.older_than().count());
   absl::StrAppend(&str, " DAY)");
   return str;
 }
@@ -113,7 +113,7 @@ std::string PrintColumn(const Column* column) {
   } else if (column->has_default_value()) {
     absl::StrAppend(
         &ddl_string,
-        absl::Substitute(" DEFAULT $0", column->expression().value()));
+        absl::Substitute(" DEFAULT ($0)", column->expression().value()));
   }
   if (column->GetType()->IsTimestamp() &&
       column->has_allows_commit_timestamp()) {

@@ -27,7 +27,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-KeySet::KeySet() {}
+KeySet::KeySet() = default;
 
 KeySet::KeySet(const Key& key) { AddKey(key); }
 

@@ -58,29 +58,33 @@ using zetasql_base::testing::StatusIs;
 
 class ReadWriteTransactionTest : public testing::Test {
  public:
-  ReadWriteTransactionTest()
-      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
-        lock_manager_(std::make_unique<LockManager>(&clock_)),
-        storage_(std::make_unique<InMemoryStorage>()),
-        versioned_catalog_(std::make_unique<VersionedCatalog>(
-            std::move(test::CreateSchemaFromDDL(
-                          {
-                              R"(
+  ReadWriteTransactionTest() = default;
+  void SetUp() override {
+    type_factory_ = std::make_unique<zetasql::TypeFactory>();
+    lock_manager_ = std::make_unique<LockManager>(&clock_);
+    storage_ = std::make_unique<InMemoryStorage>();
+    versioned_catalog_ =
+        std::make_unique<VersionedCatalog>(std::move(GetSchema().value()));
+    action_manager_ = std::make_unique<ActionManager>();
+    action_manager_->AddActionsForSchema(
+        versioned_catalog_->GetSchema(absl::InfiniteFuture()),
+        /*function_catalog=*/nullptr);
+  }
+
+  virtual absl::StatusOr<std::unique_ptr<const backend::Schema>> GetSchema() {
+    return test::CreateSchemaFromDDL(
+        {
+            R"sql(
                   CREATE TABLE test_table (
                     int64_col INT64 NOT NULL,
                     string_col STRING(MAX),
                     int64_val_col INT64
                   ) PRIMARY KEY (int64_col)
-                )",
-                              R"(
+                )sql",
+            R"sql(
                   CREATE UNIQUE INDEX test_index ON test_table(string_col DESC)
-                )"},
-                          type_factory_.get())
-                          .value()))),
-        action_manager_(std::make_unique<ActionManager>()) {
-    action_manager_->AddActionsForSchema(
-        versioned_catalog_->GetSchema(absl::InfiniteFuture()),
-        /*function_catalog=*/nullptr);
+                )sql"},
+        type_factory_.get());
   }
 
  protected:
@@ -701,6 +705,250 @@ TEST_F(ReadWriteTransactionTest, CannotInsertWithDuplicateColumns) {
 
   auto txn1 = CreateReadWriteTransaction();
   EXPECT_THAT(txn1->Write(m), StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+class GeneratedPrimaryKeyTransactionTest : public ReadWriteTransactionTest {
+  absl::StatusOr<std::unique_ptr<const backend::Schema>> GetSchema() override {
+    return test::CreateSchemaFromDDL(
+        {
+            R"sql(
+                  CREATE TABLE test_table (
+                    k1 INT64 NOT NULL,
+                    k2 INT64,
+                    k3 INT64 AS (k2) STORED,
+                    k4 INT64 NOT NULL,
+                  ) PRIMARY KEY (k1,k3)
+                )sql"},
+        type_factory_.get());
+  }
+};
+
+TEST_F(GeneratedPrimaryKeyTransactionTest, InsertMutations) {
+  Mutation m;
+  m.AddWriteOp(
+      MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
+      {{Int64(1), Int64(1), Int64(1)}, {Int64(3), Int64(3), Int64(3)}});
+  m.AddWriteOp(MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
+               {{Int64(1), Int64(2), Int64(2)}});
+
+  // Commit the transaction.
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
+
+  // Verify the values.
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"k1", "k2", "k3", "k4"}),
+              IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(1)},
+                                {Int64(1), Int64(2), Int64(2), Int64(2)},
+                                {Int64(3), Int64(3), Int64(3), Int64(3)}}));
+}
+
+TEST_F(GeneratedPrimaryKeyTransactionTest,
+       FailsInsertDependentColumnsNotPresent) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table", {"k1", "k4"},
+               {{Int64(1), Int64(1)}});
+
+  // Commit the transaction.
+  auto txn1 = CreateReadWriteTransaction();
+  EXPECT_THAT(txn1->Write(m),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kFailedPrecondition,
+                  testing::HasSubstr(
+                      "The value of generated primary key column "
+                      "`test_table.k3` cannot be evaluated since value of all "
+                      "its dependent columns is not specified.")));
+}
+
+TEST_F(GeneratedPrimaryKeyTransactionTest, DuplicateKeyInsertionsFail) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
+               {{Int64(1), Int64(1), Int64(1)}});
+
+  // Commit the transaction.
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_ASSERT_OK(txn1->Write(m));
+  ZETASQL_ASSERT_OK(txn1->Commit());
+
+  // Verify the values.
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"k1", "k2", "k3", "k4"}),
+              IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(1)}}));
+  ZETASQL_EXPECT_OK(txn2->Commit());
+
+  Mutation m2;
+  m2.AddWriteOp(MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
+                {{Int64(1), Int64(1), Int64(100)}});
+
+  // Row with PRIMARY KEY(1,1) already exists.
+  auto txn3 = CreateReadWriteTransaction();
+  EXPECT_THAT(
+      txn3->Write(m2),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kAlreadyExists,
+          testing::HasSubstr(
+              "Table test_table: Row {Int64(1), Int64(1)} already exists.")));
+}
+
+TEST_F(GeneratedPrimaryKeyTransactionTest, UpdateNonPkSamePk) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
+               {{Int64(1), Int64(1), Int64(1)}});
+  m.AddWriteOp(MutationOpType::kUpdate, "test_table", {"k1", "k2", "k3", "k4"},
+               {{Int64(1), Int64(1), Int64(1), Int64(4)}});
+
+  // Commit the transaction.
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
+
+  // Verify the values.
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"k1", "k2", "k3", "k4"}),
+              IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(4)}}));
+}
+
+TEST_F(GeneratedPrimaryKeyTransactionTest,
+       CantUpdateGpkThroughDependentColumns) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
+               {{Int64(1), Int64(1), Int64(1)}});
+  m.AddWriteOp(MutationOpType::kUpdate, "test_table", {"k1", "k2", "k3", "k4"},
+               {{Int64(1), Int64(2), Int64(1), Int64(4)}});
+
+  // Value of generated primary key columns evaluated should be same as that of
+  // user provided value of generated primary key column.
+  auto txn1 = CreateReadWriteTransaction();
+  EXPECT_THAT(txn1->Write(m), StatusIs(absl::StatusCode::kOutOfRange));
+}
+
+TEST_F(GeneratedPrimaryKeyTransactionTest,
+       FailsUpdateWithoutExplicitPrimaryKey) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
+               {{Int64(1), Int64(1), Int64(1)}});
+  // Update is successful when columns dependent on the key column are provided.
+  m.AddWriteOp(MutationOpType::kUpdate, "test_table", {"k1", "k2", "k4"},
+               {{Int64(1), Int64(1), Int64(50)}});
+
+  // Commit the transaction.
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
+
+  // Verify the values.
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"k1", "k2", "k3", "k4"}),
+              IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(50)}}));
+  ZETASQL_EXPECT_OK(txn2->Commit());
+
+  Mutation m2;
+  m2.AddWriteOp(MutationOpType::kUpdate, "test_table", {"k1", "k4"},
+                {{Int64(1), Int64(100)}});
+
+  // Value of generated primary key column must be explicitly specified or
+  // all the dependent columns of gpk columns should be specified.
+  auto txn3 = CreateReadWriteTransaction();
+  EXPECT_THAT(
+      txn3->Write(m2),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          testing::HasSubstr("The value of generated primary key column "
+                             "`test_table.k3` must be explicitly specified")));
+}
+
+TEST_F(GeneratedPrimaryKeyTransactionTest, FailsUpdateAsRowDoesntExist) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
+               {{Int64(1), Int64(1), Int64(1)}});
+
+  // Commit the transaction.
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
+
+  // Verify the values.
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"k1", "k2", "k3", "k4"}),
+              IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(1)}}));
+  ZETASQL_EXPECT_OK(txn2->Commit());
+
+  Mutation m2;
+  m2.AddWriteOp(MutationOpType::kUpdate, "test_table", {"k1", "k3", "k4"},
+                {{Int64(1), Int64(2), Int64(100)}});
+
+  // Row to update not is found.
+  auto txn3 = CreateReadWriteTransaction();
+  EXPECT_THAT(txn3->Write(m2),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kNotFound,
+                  testing::HasSubstr("Row {Int64(1), Int64(2)} not found.")));
+}
+
+TEST_F(GeneratedPrimaryKeyTransactionTest,
+       FailsInsertOrUpdateWhenSpecifyingGpk) {
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
+               {{Int64(1), Int64(1), Int64(1)}});
+
+  // Commit the transaction.
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn1->Write(m));
+  ZETASQL_EXPECT_OK(txn1->Commit());
+
+  // Verify the values.
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn2.get(), {"k1", "k2", "k3", "k4"}),
+              IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(1)}}));
+  ZETASQL_EXPECT_OK(txn2->Commit());
+
+  Mutation m2;
+  m2.AddWriteOp(MutationOpType::kInsertOrUpdate, "test_table",
+                {"k1", "k2", "k3", "k4"},
+                {{Int64(1), Int64(1), Int64(1), Int64(100)}});
+
+  // Value of generated primary key column cannot be specified except in
+  // update operations.
+  auto txn3 = CreateReadWriteTransaction();
+  EXPECT_THAT(txn3->Write(m2),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kFailedPrecondition,
+                  testing::HasSubstr(
+                      "Cannot write into generated column `test_table.k3`.")));
+}
+
+TEST_F(GeneratedPrimaryKeyTransactionTest, DeleteMutations) {
+  Mutation m;
+  m.AddWriteOp(
+      MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
+      {{Int64(1), Int64(1), Int64(1)}, {Int64(3), Int64(3), Int64(3)}});
+  m.AddWriteOp(MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
+               {{Int64(1), Int64(2), Int64(2)}});
+
+  // Commit the transaction.
+  auto txn1 = CreateReadWriteTransaction();
+  ZETASQL_ASSERT_OK(txn1->Write(m));
+  ZETASQL_ASSERT_OK(txn1->Commit());
+
+  // Verify the values.
+  auto txn2 = CreateReadWriteTransaction();
+  ASSERT_THAT(ReadAll(txn2.get(), {"k1", "k2", "k3", "k4"}),
+              IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(1)},
+                                {Int64(1), Int64(2), Int64(2), Int64(2)},
+                                {Int64(3), Int64(3), Int64(3), Int64(3)}}));
+  ZETASQL_ASSERT_OK(txn2->Commit());
+
+  Mutation m2;
+  m2.AddDeleteOp("test_table", KeySet(Key({Int64(1), Int64(1)})));
+  auto txn3 = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn3->Write(m2));
+  ZETASQL_EXPECT_OK(txn3->Commit());
+
+  auto txn4 = CreateReadWriteTransaction();
+  EXPECT_THAT(ReadAll(txn4.get(), {"k1", "k2", "k3", "k4"}),
+              IsOkAndHoldsRows({{Int64(1), Int64(2), Int64(2), Int64(2)},
+                                {Int64(3), Int64(3), Int64(3), Int64(3)}}));
 }
 
 }  // namespace

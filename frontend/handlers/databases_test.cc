@@ -67,7 +67,8 @@ class DatabaseApiTest : public test::ServerTest {
 
   absl::Status CreateDatabase(
       const std::string& instance_uri, const std::string& database_name,
-      const std::vector<std::string>& extra_statements = {}) {
+      const std::vector<std::string>& extra_statements = {}
+  ) {
     grpc::ClientContext context;
     database_api::CreateDatabaseRequest request;
     request.set_parent(instance_uri);

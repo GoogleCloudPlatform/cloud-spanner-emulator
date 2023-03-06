@@ -64,7 +64,7 @@ int64_t LogicalBytesInternal(const zetasql::Value& value) {
 
 }  // namespace
 
-Key::Key() {}
+Key::Key() = default;
 
 Key::Key(std::vector<zetasql::Value> columns)
     : columns_(std::move(columns)), is_descending_(columns_.size()) {}

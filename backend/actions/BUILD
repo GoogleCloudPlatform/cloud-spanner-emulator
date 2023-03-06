@@ -216,6 +216,7 @@ cc_library(
         "//backend/common:graph_dependency_helper",
         "//backend/query:analyzer_options",
         "//backend/schema/catalog:schema",
+        "//common:errors",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",

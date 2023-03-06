@@ -16,6 +16,15 @@
 
 #!/bin/bash
 
+go_SHA=4056ab393fe07541b22517efc6fa83b0414ab58b6fd5655377da9df709793938
+java_SHA=7d284e598108a84617ac169716b41c74b5f92127849f8abd5e58327d2150981e
+cpp_SHA=e79a0c6a2b825081675dd32900fbd0785051ae7a496d0459eb373225936ee5ce
+php_SHA=f87b59fa6952a51740e393702088a2932deab2c4492877371fc40c8f1d2bc73f
+csharp_SHA=f595a60a506bae6280068a8e02c6b1fb4b690ee7cb0fa9cac717de895cda1a2e
+ruby_SHA=b4a216853184d14f6b951f5870023fad12ea41d0dc82e5940356d692d1577946
+nodejs_SHA=24ea87de30a409f44a03141cc60c8ed35cc993544f6f1def58daf8a4e940d5bf
+py_SHA=3e6efec9f94ba96487c5a520a50f839c6c31212225c29e779792bf5389c428cf
+
 if [[ "$#" -eq 0 ]]; then
   echo "Running client library integration tests."
   DOCKER_ARGS="";
@@ -72,7 +81,7 @@ echo "Placing results in: ${OUTPUT_DIR}"
 echo "Placing logs in: ${LOG_DIR}"
 echo "Using src directory: ${SRC_DIR}"
 
-readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base@sha256:c58f9b2f008d1a14370ddadf022c3c2dea1d924eb534820e427fa53a325d48e1
+readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base@sha256:c7a5a1b1eb7b33bdd515b66c7d0bb31a49724c7af1767e0e9367e66a6fee70de
 readonly CACHE_BUCKET="cloud-spanner-emulator-builder-bazel-cache"
 echo "Client integration tests to run: ${CLIENT_INTEGRATION_TESTS}"
 
@@ -108,21 +117,21 @@ IFS=','
 for client in $CLIENT_INTEGRATION_TESTS
  do
     if [[ $client == "go" ]]; then
-      SHA=d2d8b4d15d7614c4f84623593c6e8b7d1e4207bb1ad2007b936d1004273c7337
+      SHA=$go_SHA
     elif [[ $client == "java" ]]; then
-      SHA=7e61402fa1d952c4f352e122590c48ae75a73d296eb32e1aed07bae1715e78c7
+      SHA=$java_SHA
     elif [[ $client == "cpp" ]]; then
-      SHA=28b68ebfa796b2a26a63968f39a14f81e46cb3ec8364098f84870332a003787f
+      SHA=$cpp_SHA
     elif [[ $client == "php" ]]; then
-      SHA=d697883a79b01b69792f91f2fcdc931982bab354671e5e57ecd4ba9c7b89c08a
+      SHA=$php_SHA
     elif [[ $client == "csharp" ]]; then
-      SHA=6ee4f71c147b35f6013fbfd3c1e5b9624cc4db4f4e996ce39480da69ca0b272a
+      SHA=$csharp_SHA
     elif [[ $client == "ruby" ]]; then
-      SHA=0c728d91a3520c20fb0d487447590da558638246df66ef06839e13ee442d6368
+      SHA=$ruby_SHA
     elif [[ $client == "nodejs" ]]; then
-      SHA=9bad1aab76f336ed565235cee19ee1fd69f37665004901d041267809eac2c572
+      SHA=$nodejs_SHA
     elif [[ $client == "py" ]]; then
-      SHA=5148dc8858fc2a6302d3477ace37e4492ee24a219bfa88126367faaeb7e149d5
+      SHA=$py_SHA
     else
     echo "Unrecognized client: \"${client}\"."
     fi

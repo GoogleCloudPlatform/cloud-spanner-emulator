@@ -26,6 +26,7 @@ cc_library(
         "foreign_key_validator.cc",
         "index_validator.cc",
         "table_validator.cc",
+        "view_validator.cc",
     ],
     hdrs = [
         "check_constraint_validator.h",
@@ -33,6 +34,7 @@ cc_library(
         "foreign_key_validator.h",
         "index_validator.h",
         "table_validator.h",
+        "view_validator.h",
     ],
     deps = [
         "//backend/common:case",
@@ -52,6 +54,7 @@ cc_library(
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
         "@com_google_protobuf//:protobuf_headers",
         "@com_google_zetasql//zetasql/base:ret_check",

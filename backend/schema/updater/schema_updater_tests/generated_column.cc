@@ -27,6 +27,8 @@ namespace backend {
 namespace test {
 
 using google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
+using ::testing::HasSubstr;
+using ::zetasql_base::testing::StatusIs;
 
 class GeneratedColumnSchemaUpdaterTest : public SchemaUpdaterTest {
  public:
@@ -91,6 +93,59 @@ TEST_F(GeneratedColumnSchemaUpdaterTest, Basic) {
   get_column_names(col->dependent_columns(), &dependent_column_names);
   EXPECT_THAT(dependent_column_names,
               testing::UnorderedElementsAreArray({"G1"}));
+}
+
+TEST_F(GeneratedColumnSchemaUpdaterTest,
+       CannotCreateTableAddNonStoredGeneratedColumn) {
+  EXPECT_THAT(
+      CreateSchema({R"(
+      CREATE TABLE T (
+        K INT64 NOT NULL,
+        V INT64,
+        G INT64 AS (K + V),
+      ) PRIMARY KEY (K)
+    )"}),
+      StatusIs(
+          absl::StatusCode::kUnimplemented,
+          HasSubstr("Generated column `G` without the STORED attribute is not "
+                    "supported.")));
+}
+
+TEST_F(GeneratedColumnSchemaUpdaterTest,
+       CannotAlterTableAddNonStoredGeneratedColumn) {
+  EXPECT_THAT(
+      CreateSchema({R"(
+      CREATE TABLE T (
+        K INT64 NOT NULL,
+        V INT64,
+      ) PRIMARY KEY (K)
+    )",
+                    R"(
+      ALTER TABLE T ADD COLUMN G INT64 AS (K + V)
+    )"}),
+      StatusIs(
+          absl::StatusCode::kUnimplemented,
+          HasSubstr("Generated column `G` without the STORED attribute is not "
+                    "supported.")));
+}
+
+TEST_F(GeneratedColumnSchemaUpdaterTest,
+       CannotAlterTableAlterColumnToNonStoredGenerated) {
+  EXPECT_THAT(
+      CreateSchema({R"(
+      CREATE TABLE T (
+        K INT64 NOT NULL,
+        V INT64,
+        G INT64,
+      ) PRIMARY KEY (K)
+    )",
+                    R"(
+      ALTER TABLE T ALTER COLUMN G INT64 AS (K + V)
+    )"}),
+      StatusIs(
+          absl::StatusCode::kUnimplemented,
+          HasSubstr("Generated column `G` without the STORED attribute is not "
+                    "supported.")));
 }
 
 }  // namespace test

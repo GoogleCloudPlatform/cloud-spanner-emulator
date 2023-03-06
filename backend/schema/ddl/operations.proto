@@ -18,260 +18,336 @@ syntax = "proto2";
 
 package google.spanner.emulator.backend.ddl;
 
-//
-// ANALYZE is a special DDL operation that doesn't trigger a schema change in
-// emulator. The emulator will accept it but perform no-op. This allows the same
-// script to run in both emulator and production.
 
-// Table/Index-only constraints.
-message OnDeleteAction {
-  enum Action {
-    UNKNOWN_ACTION = 0;
-    NO_ACTION = 1;
-    CASCADE = 2;
+message DDLStatement {
+  oneof statement {
+    // Database statements.
+    CreateDatabase create_database = 1;
+
+
+    // Table statements.
+    CreateTable create_table = 8;
+    SetColumnOptions set_column_options = 10;
+    AlterTable alter_table = 11;
+    DropTable drop_table = 12;
+
+    // Index statements.
+    CreateIndex create_index = 13;
+    DropIndex drop_index = 16;
+
+    // Statistics statements.
+    Analyze analyze = 75;
   }
-  optional Action action = 1;
 }
 
-message InterleaveConstraint {
+// Used for all SET OPTIONS statements.
+message SetOption {
+  optional string option_name = 1;  // Field name within *OptionsProto.
+  // Option value: exactly one of the following fields must be present.
+  optional bool null_value = 2;  // Clears the field regardless of type.
+  optional bool bool_value = 3;
+  optional int64 int64_value = 4;
+  optional double double_value = 8;
+  optional string string_value = 5;
+}
+
+
+
+message ColumnDefinition {
+  // Required in all cases, except when stored as part of array_subtype.
+  optional string column_name = 1;
+
   enum Type {
-    UNKNOWN_TYPE = 0;
-    IN_PARENT = 1;
+    NONE = 0;
+
+    DOUBLE = 1;
+    INT64 = 3;
+    BOOL = 7;
+    STRING = 8;
+    BYTES = 10;
+    TIMESTAMP = 18;
+    DATE = 15;
+    ARRAY = 16;
+    NUMERIC = 19;
+    JSON = 20;
+
+
+
   }
-  optional Type type = 1;
-  optional string parent = 2;
-  optional string child = 3;
-  optional OnDeleteAction on_delete = 4;
+
+  optional Type type = 2;
+  optional bool not_null = 6;
+  // User-specified max length for this column (STRING, BYTES
+  // only).
+  // This field will only be set if the user defines a specific column length;
+  // if 'MAX' is specified, it will be unset.
+  optional int64 length = 7;
+
+  repeated SetOption set_options = 8;
+
+  optional ColumnDefinition array_subtype = 9;  // Set iff type == ARRAY.
+
+  // Stores information about generated columns.
+  message GeneratedColumnDefinition {
+    // Googlesql string for the generated column.
+    optional string expression = 1;
+
+    // True if the generated column is defined as STORED.
+    optional bool stored = 2;
+
+  }
+
+  optional GeneratedColumnDefinition generated_column = 11;
+
+  message ColumnDefaultDefinition {
+    // Googlesql string for the default expression.
+    optional string expression = 1;
+
+  }
+
+  optional ColumnDefaultDefinition column_default = 12;
 }
 
-message KeyPart {
+// Used for CREATE TABLE and CREATE INDEX
+message KeyPartClause {
+  // Name of key component.  May refer to a column name (e.g. dob), or
+  // to a protocol-buffer stored scalar (e.g. data_proto.name).
+  optional string key_name = 1;
+
   enum Order {
-    UNKNOWN_ORDER = 0;
-    ASC = 1;
-    DESC = 2;
+    ASC = 0;   // Ascending direction with NULLs sorted first.
+    DESC = 1;  // Descending direction with NULLs sorted last.
   }
-  optional Order order = 3;
-  optional string key_column_name = 4;
+  // The ordering specified by this key component (if at all)
+  optional Order order = 2 [default = ASC];
 }
 
-message PrimaryKeyConstraint {
-  repeated KeyPart key_part = 1;
-}
+message ForeignKey {
+  // Optional name of the foreign key constraint.
+  optional string constraint_name = 1;
 
-// Column-level constraints
-message NotNullConstraint {
-  optional bool nullable = 1;
-}
+  // One or more names of columns of the table defining the foreign key.
+  repeated string constrained_column_name = 2;
 
-message ColumnLengthConstraint {
-  optional int64 max_length = 1;
-}
+  // Dotted path name of the referenced table.
+  optional string referenced_table_name = 3;
 
-message CommitTimestampConstraint {
-  optional bool is_commit_timestamp = 1;
+  // The names of columns of the referenced table. The number of referenced
+  // column names is equal to the number of constrained column names.
+  repeated string referenced_column_name = 4;
+
+  // Whether or not the constraint is enforced.
+  optional bool enforced = 5;
 }
 
 message CheckConstraint {
-  optional string constraint_name = 1;
-  optional string sql_expression = 2;
+  // Name of the check constraint.
+  optional string name = 1;
+
+  // Required
+  // GoogleSQL string for the constraint.
+  optional string expression = 2;
+
+  // True if the constraint is enforced.
+  optional bool enforced = 3;
+
 }
 
-// Foregin key constraint on a combination of one-or-more columns.
-message ForeignKeyConstraint {
-  optional string constraint_name = 1;
-  repeated string referencing_column_name = 2;
-  optional string referenced_table_name = 3;
-  repeated string referenced_column_name = 4;
-}
+// Used for CREATE TABLE.
+message InterleaveClause {
+  // The name of the table in which this table/queue is interleaved. It is
+  // referred to as the interleaving table.
+  optional string table_name = 1;
 
-message Constraint {
-  oneof kind {
-    InterleaveConstraint interleave = 1;
-    ForeignKeyConstraint foreign_key = 2;
-    NotNullConstraint not_null = 3;
-    ColumnLengthConstraint column_length = 4;
-    PrimaryKeyConstraint primary_key = 6;
-    CommitTimestampConstraint commit_timestamp = 7;
-    CheckConstraint check = 8;
-  }
-}
-
-// Free-form options.
-message Options {
-  message Option {
-    optional string name = 1;
-    oneof kind {
-      bool bool_value = 2;
-      int64 int_value = 3;
-      int64 string_value = 4;
-      bool null_value = 5;
-    }
-  }
-  repeated Option option_val = 1;
-}
-
-message ColumnType {
   enum Type {
-    UNKNOWN_TYPE = 0;
-    FLOAT64 = 1;
-    INT64 = 2;
-    BOOL = 3;
-    STRING = 4;
-    BYTES = 5;
-    TIMESTAMP = 6;
-    DATE = 7;
-    ARRAY = 8;
-    NUMERIC = 9;
-    JSON = 10;
-
+    // Interleave this table in the parent table, requiring that the parent row
+    // exists for the child row to exist.
+    IN_PARENT = 0;
   }
-  optional Type type = 1;
-  optional ColumnType array_subtype = 2;
-}
+  // Type of the relationship between the two tables involved.
+  optional Type type = 4 [default = IN_PARENT];
 
-// Properties for columns, tables and indexes.
+  enum Action {
+    NO_ACTION = 0;
 
-message ColumnProperties {
-  optional ColumnType column_type = 1;
-
-  // Stored columns are used by index definitions.
-  optional string stored = 2;
-  // If present, refers to the expression of a generated column or a default
-  // value.
-  optional string expression = 5;
-  // If present and true, indicates that this column has a default value, and
-  // the `expression` property above contains the default expression.
-  optional bool has_default_value = 6;
-}
-
-message IndexProperties {
-  optional bool null_filtered = 1;
-  optional bool unique = 2;
-}
-
-// Definitions for columns, tables and indexes.
-message ColumnDefinition {
-  optional string column_name = 1;
-
-  optional ColumnProperties properties = 2;
-  optional Options options = 3;
-  repeated Constraint constraints = 4;
+    CASCADE = 1;
+  }
+  optional Action on_delete = 3;
 }
 
 message CreateDatabase {
-  optional string database_name = 1;
+  optional string db_name = 1;
 }
 
+
 message RowDeletionPolicy {
+  // The timestamp column based on which we set the policy.
   optional string column_name = 1;
-  optional int64 older_than = 2;
+
+  // If now - 'column_name' exceeds 'older_than', the row will be deleted.
+  optional DDLTimeLengthProto older_than = 2;
+
+  // Scan data and delete rows every 'interval'.
+  // Note that it is possible that we could skip intervals.
+  optional DDLTimeLengthProto interval = 3;
+}
+
+enum ExistenceModifier {
+  // Creation/deletion fails if the thing to be created already exists.
+  NONE = 0;
+  // Creation is skipped without error if the thing to be created exists
+  // already.
+  IF_NOT_EXISTS = 1;
+  // For CREATE OR REPLACE statements, if the thing being created already exists
+  // then it will be deleted first, then recreated.
+  OR_REPLACE = 2;
+  // Deletion is skippped without error if the thing to be dropped doesn't
+  // exist.
+  IF_EXISTS = 3;
 }
 
 message CreateTable {
   optional string table_name = 1;
-  repeated ColumnDefinition columns = 2;
-
-  optional Options options = 4;
-  repeated Constraint constraints = 5;
-  optional RowDeletionPolicy row_deletion_policy = 6;
+  repeated ColumnDefinition column = 2;
+  repeated KeyPartClause primary_key = 3;
+  repeated ForeignKey foreign_key = 10;
+  repeated CheckConstraint check_constraint = 11;
+  optional InterleaveClause interleave_clause = 7;
+  optional RowDeletionPolicy row_deletion_policy = 9;
+  // How to handle creation if the table already exists.
+  optional ExistenceModifier existence_modifier = 13;
 }
 
-message CreateIndex {
-  optional string index_name = 1;
-  optional string table_name = 2;
-  repeated ColumnDefinition columns = 3;
-
-  optional IndexProperties properties = 4;
-  optional Options options = 5;
-  repeated Constraint constraints = 6;
-
-}
-
-// Alter and drop operations.
-message AlterConstraint {
-  optional string constraint_name = 1;
-  enum Type {
-    UNKNOWN_TYPE = 0;
-    ADD = 1;
-    ALTER = 2;
-    DROP = 3;
+message SetColumnOptions {
+  message ColumnPath {
+    optional string table_name = 1;
+    optional string column_name = 2;
   }
-  optional Type type = 2;
-  optional Constraint constraint = 3;
-}
-
-message AlterColumn {
-  optional string column_name = 1;
-  enum Type {
-    UNKNOWN_TYPE = 0;
-    ADD = 1;
-    ALTER = 2;
-    DROP = 3;
-    SET_DEFAULT = 4;
-    DROP_DEFAULT = 5;
-  }
-  optional Type type = 2;
-  optional ColumnDefinition column = 3;
-}
-
-message AlterRowDeletionPolicy {
-  enum Type {
-    UNKNOWN_TYPE = 0;
-    ADD = 1;
-    REPLACE = 2;
-    DROP = 3;
-  }
-  optional Type type = 1;
-  optional RowDeletionPolicy row_deletion_policy = 2;
-}
-
-message AlterTable {
-  optional string table_name = 1;
-  optional AlterColumn alter_column = 2;
-
-  optional Options options = 3;
-  optional AlterConstraint alter_constraint = 4;
-  optional AlterRowDeletionPolicy alter_row_deletion_policy = 5;
-}
-
-message AlterIndex {
-  optional string index_name = 1;
-
-  optional Options options = 2;
-  optional AlterConstraint alter_constraint = 3;
+  repeated ColumnPath column_path = 1;
+  repeated SetOption options = 3;
 }
 
 message DropTable {
   optional string table_name = 1;
+  optional ExistenceModifier existence_modifier = 2;
+}
+
+message AlterTable {
+  optional string table_name = 1;
+
+  message AddColumn {
+    optional ColumnDefinition column = 1;
+    // How to handle the ADD COLUMN if the column is already part of the table.
+    optional ExistenceModifier existence_modifier = 2;
+  }
+  message AlterColumn {
+    optional ColumnDefinition column = 1;  // Column name given here.
+    enum AlterColumnOp {
+      SET_DEFAULT = 1;
+      DROP_DEFAULT = 2;
+    }
+    // Defines the specific alter operation on the column.
+    optional AlterColumnOp operation = 2;
+  }
+  message SetInterleaveClause {
+    optional InterleaveClause interleave_clause = 1;
+  }
+  message SetOnDelete {
+    optional InterleaveClause.Action action = 1;
+  }
+  message DropRowDeletionPolicy {}
+  message DropConstraint {
+    optional string name = 1;
+  }
+  message AddForeignKey {
+    optional ForeignKey foreign_key = 1;
+  }
+  message AddCheckConstraint {
+    optional CheckConstraint check_constraint = 1;
+  }
+  oneof alter_type {
+    AddColumn add_column = 3;
+    string drop_column = 4;
+    AlterColumn alter_column = 5;
+    SetInterleaveClause set_interleave_clause = 18;
+    SetOnDelete set_on_delete = 10;
+    RowDeletionPolicy add_row_deletion_policy = 11;
+    RowDeletionPolicy alter_row_deletion_policy = 12;
+    DropRowDeletionPolicy drop_row_deletion_policy = 13;
+    DropConstraint drop_constraint = 15;
+    AddForeignKey add_foreign_key = 16;
+    AddCheckConstraint add_check_constraint = 17;
+  }
+}
+
+// ANALYZE is a special DDL operation that doesn't trigger a schema change in
+// emulator. The emulator will accept it but perform no-op. This allows the same
+// script to run in both emulator and production.
+message Analyze {
+  // Intentionally empty.
+}
+
+message StoredColumnDefinition {
+  optional string name = 1;
+}
+
+message CreateIndex {
+  optional string index_name = 1;
+  optional string index_base_name = 2;
+  repeated KeyPartClause key = 3;
+
+  optional bool null_filtered = 5;
+
+  // Not present for standard "global" indexes.
+  optional string interleave_in_table = 6;
+
+  optional bool unique = 10;
+
+  // List of columns stored in the index.
+  repeated StoredColumnDefinition stored_column_definition = 15;
+
+  // Determines what to do if the index already exists. Defaults to an error.
+  optional ExistenceModifier existence_modifier = 17;
 }
 
 message DropIndex {
   optional string index_name = 1;
+  optional ExistenceModifier existence_modifier = 2;
 }
 
-message DropDatabase {
-  optional string database_name = 1;
+
+message TokenColumnDefinition {
+  // Required.
+  optional KeyPartClause token_column = 1;
+  repeated SetOption set_options = 2;
 }
 
-message Analyze {}
+message CreateSearchIndex {
+  // Required.
+  optional string index_name = 1;
+  // Required.
+  optional string index_base_name = 2;
+  // Each column here corresponds to one token index per secondary index.
+  // They should exist in the base table already.
+  repeated TokenColumnDefinition token_column_definition = 3;
+
+  repeated KeyPartClause partition_by = 4;
+  // Normally there will be at most a single order_by column listed here, but
+  // if the user provides their own UID column, there could be up to two.
+  repeated KeyPartClause order_by = 5;
+  repeated string null_filtered_column = 6;
+  optional string interleave_in_table = 7;
+  repeated StoredColumnDefinition stored_column_definition = 8;
+  repeated SetOption set_options = 9;
+  optional bool null_filtered = 10;
+}
 
 
-message DDLStatement {
-  oneof kind {
-    CreateTable create_table = 1;
-    CreateIndex create_index = 2;
-
-    AlterTable alter_table = 3;
-    AlterIndex alter_index = 5;
-
-    DropTable drop_table = 6;
-    DropIndex drop_index = 8;
-
-    Analyze analyze = 10;
+message DDLTimeLengthProto {
+  enum Unit {
+    DAYS = 86400;  // 24 HOURS
   }
-}
 
-message Schema {
-  optional string schema_name = 1;
-  repeated DDLStatement ddl_statements = 3;
+  optional int64 count = 1;
+  optional Unit unit = 2;
 }

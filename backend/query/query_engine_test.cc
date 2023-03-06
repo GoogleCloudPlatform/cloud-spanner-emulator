@@ -37,6 +37,7 @@
 #include "backend/schema/catalog/schema.h"
 #include "tests/common/row_reader.h"
 #include "tests/common/schema_constructor.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
@@ -462,6 +463,120 @@ TEST_P(ParameterSensitiveHintTests, TestParameterSensitiveHint) {
 INSTANTIATE_TEST_SUITE_P(
     RunParameterSensitiveHintTests, ParameterSensitiveHintTests,
     testing::ValuesIn(ParameterSensitiveHintInfo::TestCases()));
+
+class DmlReturningTest : public QueryEngineTest {
+ public:
+  DmlReturningTest() : feature_flags_({.enable_dml_returning = true}) {}
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
+};
+
+TEST_F(DmlReturningTest, ExecuteSqlInsertReturning) {
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(
+              AllOf(Field(&MutationOp::type, MutationOpType::kInsert),
+                    Field(&MutationOp::table, "test_table"),
+                    Field(&MutationOp::columns,
+                          std::vector<std::string>{"int64_col", "string_col"}),
+                    Field(&MutationOp::rows,
+                          UnorderedElementsAre(
+                              ValueList{Int64(3), String("three")},
+                              ValueList{Int64(5), String("five")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES(5, 'five'), (3, 'three') "
+                "THEN RETURN int64_col + 1 AS new_col1, string_col AS new_col"},
+          QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+  EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("new_col1", "new_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), StringType()));
+  EXPECT_THAT(
+      GetAllColumnValues(std::move(result.rows)),
+      IsOkAndHolds(UnorderedElementsAre(ValueList{Int64(4), String("three")},
+                                        ValueList{Int64(6), String("five")})));
+}
+
+TEST_F(DmlReturningTest, ExecuteSqlDeleteReturning) {
+  MockRowWriter writer;
+  EXPECT_CALL(writer,
+              Write(Property(
+                  &Mutation::ops,
+                  UnorderedElementsAre(AllOf(
+                      Field(&MutationOp::type, MutationOpType::kDelete),
+                      Field(&MutationOp::table, "test_table"),
+                      Field(&MutationOp::key_set,
+                            Property(&KeySet::keys, UnorderedElementsAre(
+                                                        Key{{Int64(2)}},
+                                                        Key{{Int64(4)}}))))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"DELETE FROM test_table WHERE int64_col > 1 THEN RETURN *"},
+          QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("int64_col", "string_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), StringType()));
+  EXPECT_THAT(
+      GetAllColumnValues(std::move(result.rows)),
+      IsOkAndHolds(UnorderedElementsAre(ValueList{Int64(2), String("two")},
+                                        ValueList{Int64(4), String("four")})));
+}
+
+TEST_F(DmlReturningTest, ExecuteSqlUpdatesReturning) {
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "string_col"}),
+              Field(
+                  &MutationOp::rows,
+                  UnorderedElementsAre(ValueList{Int64(2), String("foo")},
+                                       ValueList{Int64(4), String("foo")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(QueryResult result,
+                       query_engine().ExecuteSql(
+                           Query{"UPDATE test_table SET string_col = 'foo' "
+                                 "WHERE int64_col > 1 THEN RETURN *"},
+                           QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("int64_col", "string_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), StringType()));
+  EXPECT_THAT(
+      GetAllColumnValues(std::move(result.rows)),
+      IsOkAndHolds(UnorderedElementsAre(ValueList{Int64(2), String("foo")},
+                                        ValueList{Int64(4), String("foo")})));
+}
 
 }  // namespace
 

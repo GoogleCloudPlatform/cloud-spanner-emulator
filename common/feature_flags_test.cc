@@ -50,6 +50,21 @@ TEST(EmulatorFeatureFlags, Basic) {
   EXPECT_TRUE(features.flags().enable_column_default_values);
 }
 
+TEST(EmulatorFeatureFlags, DmlReturningFlag) {
+  const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
+
+  EXPECT_FALSE(features.flags().enable_dml_returning);
+
+  {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_dml_returning = true;
+    test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+    EXPECT_TRUE(features.flags().enable_dml_returning);
+  }
+
+  EXPECT_FALSE(features.flags().enable_dml_returning);
+}
+
 }  // namespace
 }  // namespace emulator
 }  // namespace spanner

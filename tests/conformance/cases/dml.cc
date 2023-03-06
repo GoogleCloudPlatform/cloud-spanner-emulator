@@ -16,7 +16,11 @@
 
 #include <string>
 #include <tuple>
+#include <vector>
 
+#include "gmock/gmock.h"
+#include "absl/status/statusor.h"
+#include "google/cloud/spanner/value.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -70,6 +74,16 @@ class DmlTest : public DatabaseTest {
             ID     INT64 NOT NULL,
             Val    JSON,
           ) PRIMARY KEY(ID)
+        )",
+        R"(CREATE TABLE TableGen(
+            K      INT64,
+            V1     INT64,
+            V2     INT64,
+            G1     INT64 AS (G2 + 1) STORED,
+            G2     INT64 NOT NULL AS (v1 + v2) STORED,
+            G3     INT64 AS (G1) STORED,
+            V3     INT64 NOT NULL DEFAULT (2),
+          ) PRIMARY KEY (K)
         )",
         "CREATE INDEX NullableIndex ON Nullable(Value)",
     });
@@ -390,6 +404,95 @@ TEST_F(DmlTest, JsonType) {
   EXPECT_THAT(
       Query("SELECT TO_JSON_STRING(T.Val) FROM JsonTable T WHERE ID = 3"),
       IsOkAndHoldsRow({R"({"a":"newstr","b":123})"}));
+}
+
+TEST_F(DmlTest, Returning) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_dml_returning = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  // Insert THEN RETURN
+  std::vector<ValueRow> result_for_insert;
+  ZETASQL_EXPECT_OK(CommitDmlReturning(
+      {SqlStatement("INSERT INTO Users(ID, Name, Age) Values (1, 'Levin', 27) "
+                    "THEN RETURN Age;")},
+      result_for_insert));
+
+  absl::StatusOr<std::vector<ValueRow>> result_or = result_for_insert;
+  EXPECT_THAT(result_or, IsOkAndHoldsRow({Value(27)}));
+
+  EXPECT_THAT(Query("SELECT Age FROM Users WHERE ID = 1;"),
+              IsOkAndHoldsRows({{27}}));
+
+  // Update THEN RETURN
+  std::vector<ValueRow> result_for_update;
+  ZETASQL_EXPECT_OK(CommitDmlReturning(
+      {SqlStatement("UPDATE Users SET Age = Age + 1 WHERE ID = 1 "
+                    "THEN RETURN Age, Name;")},
+      result_for_update));
+  result_or = result_for_update;
+  EXPECT_THAT(result_or, IsOkAndHoldsRow({28, "Levin"}));
+
+  EXPECT_THAT(Query("SELECT Age, Name FROM Users WHERE ID = 1;"),
+              IsOkAndHoldsRow({28, "Levin"}));
+
+  // Delete THEN RETURN
+  std::vector<ValueRow> result_for_delete;
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement("DELETE FROM Users WHERE ID = 1 "
+                                             "THEN RETURN Name, Age;")},
+                               result_for_delete));
+  result_or = result_for_delete;
+  EXPECT_THAT(result_or, IsOkAndHoldsRow({"Levin", 28}));
+  EXPECT_THAT(Query("SELECT Age, Name FROM Users WHERE ID = 1;"),
+              IsOkAndHoldsRows({}));
+}
+
+TEST_F(DmlTest, ReturningGeneratedColumns) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_dml_returning = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  // Insert THEN RETURN
+  std::vector<ValueRow> result_for_insert;
+  ZETASQL_EXPECT_OK(CommitDmlReturning(
+      {SqlStatement("INSERT INTO TableGen(K, V1, V2) Values (1, 1, 1) "
+                    "THEN RETURN G1, G2, G3 + 1, V3;")},
+      result_for_insert));
+  absl::StatusOr<std::vector<ValueRow>> result_or = result_for_insert;
+  if (!in_prod_env()) {
+    // TODO: This shows that the generated column is not evaluated
+    // in the googlesql reference implementation, which is also a requirement
+    // for GPK support. Once that work is done, this TODO and test should be
+    // updated.
+    Value null_val = cloud::spanner::MakeNullValue<std::int64_t>();
+    EXPECT_THAT(result_or, IsOkAndHoldsRow({null_val, null_val, null_val, 2}));
+    return;
+  }
+  EXPECT_THAT(result_or, IsOkAndHoldsRow({3, 2, 4, 2}));
+  EXPECT_THAT(Query("SELECT G1, G2, G3 + 1, V3 FROM TableGen WHERE K = 1;"),
+              IsOkAndHoldsRow({3, 2, 4, 2}));
+
+  // Update THEN RETURN
+  std::vector<ValueRow> result_for_update;
+  ZETASQL_EXPECT_OK(
+      CommitDmlReturning({SqlStatement("UPDATE TableGen SET V1 = 3 WHERE K = 1 "
+                                       "THEN RETURN G1, G2, G3 + 1;")},
+                         result_for_update));
+  result_or = result_for_update;
+  EXPECT_THAT(result_or, IsOkAndHoldsRow({5, 4, 6}));
+  EXPECT_THAT(Query("SELECT G1, G2, G3 + 1 FROM TableGen WHERE K = 1;"),
+              IsOkAndHoldsRow({5, 4, 6}));
+
+  // Delete THEN RETURN
+  std::vector<ValueRow> result_for_delete;
+  ZETASQL_EXPECT_OK(
+      CommitDmlReturning({SqlStatement("DELETE FROM TableGen WHERE K = 1 "
+                                       "THEN RETURN G1, G2, G3 + 1, V3;")},
+                         result_for_delete));
+  result_or = result_for_delete;
+  EXPECT_THAT(result_or, IsOkAndHoldsRow({5, 4, 6, 2}));
+  EXPECT_THAT(Query("SELECT G1, G2, G3 + 1 FROM TableGen WHERE K = 1;"),
+              IsOkAndHoldsRows({}));
 }
 
 }  // namespace
