@@ -29,6 +29,7 @@
 #include "backend/schema/builders/column_builder.h"
 #include "backend/schema/builders/index_builder.h"
 #include "backend/schema/builders/table_builder.h"
+#include "backend/schema/builders/view_builder.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
@@ -451,6 +452,26 @@ TEST_F(SchemaTest, IndexBuilder) {
                          .build();
   EXPECT_EQ(invalid_idx->Validate(&context_),
             error::InvalidSchemaName("Index", index_name));
+}
+
+TEST_F(SchemaTest, ViewBuilder) {
+  View::Builder vb;
+  vb.set_name("V1");
+  vb.set_sql_security(View::SqlSecurity::INVOKER);
+  vb.set_sql_body("SELECT t.int64_col AS c1 FROM test_table t");
+  vb.add_column(View::Column{"c1", type_factory_->get_int64()});
+  auto test_table = base_schema_->FindTable("test_table");
+  ASSERT_TRUE(test_table != nullptr);
+  vb.add_dependency(test_table);
+
+  auto view = vb.build();
+
+  ZETASQL_EXPECT_OK(view->Validate(&context_));
+  EXPECT_EQ(view->Name(), "V1");
+  EXPECT_EQ(view->body(), "SELECT t.int64_col AS c1 FROM test_table t");
+  EXPECT_THAT(view->dependencies(), testing::ElementsAreArray({test_table}));
+  EXPECT_THAT(view->columns(), testing::ElementsAreArray({testing::FieldsAre(
+                                   "c1", type_factory_->get_int64())}));
 }
 
 // TODO: GetDatabaseDDL needs more robust testing with

@@ -68,6 +68,10 @@ class Schema {
   int num_index() const { return index_map_.size(); }
 
  private:
+  // Tries to find the managed index from the non-fingerprint part of the
+  // index name.
+  const Index* FindManagedIndex(const std::string& index_name) const;
+
   // Manages the lifetime of all schema objects. Maintains the order
   // in which the nodes were added to the graph.
   std::unique_ptr<const SchemaGraph> graph_;

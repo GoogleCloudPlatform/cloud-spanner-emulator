@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_TESTS_COMMON_SCHEMA_CONSTRUCTOR_H_
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "zetasql/public/type.h"

@@ -450,8 +450,6 @@ absl::Status CannotAlterColumnDataTypeWithDependentStoredGeneratedColumn(
     absl::string_view column_name);
 absl::Status CannotUseCommitTimestampOnGeneratedColumnDependency(
     absl::string_view column_name);
-absl::Status CannotUseGeneratedColumnInPrimaryKey(
-    absl::string_view table_name, absl::string_view column_name);
 absl::Status CannotWriteToGeneratedColumn(absl::string_view table_name,
                                           absl::string_view column_name);
 absl::Status NonDeterministicFunctionInColumnExpression(
@@ -468,6 +466,10 @@ absl::Status CannotUseCommitTimestampWithColumnDefaultValue(
     absl::string_view column_name);
 absl::Status DefaultPKNeedsExplicitValue(absl::string_view column_name,
                                          absl::string_view op_name);
+absl::Status GeneratedPKNeedsExplicitValue(absl::string_view column_name);
+absl::Status GeneratedPkModified(absl::string_view column_name);
+absl::Status UserSuppliedValueInNonUpdateGpk(absl::string_view column_name);
+absl::Status NeedAllDependentColumnsForGpk(absl::string_view column_name);
 absl::Status CannotSetDefaultValueOnGeneratedColumn(
     absl::string_view column_name);
 

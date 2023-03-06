@@ -38,12 +38,16 @@ namespace backend {
 
 namespace {
 
+using ::testing::HasSubstr;
+using ::zetasql_base::testing::StatusIs;
+
 class DDLColumnTypeToGoogleSqlTypeTest : public ::testing::Test {
  public:
-  DDLColumnTypeToGoogleSqlTypeTest() {}
+  DDLColumnTypeToGoogleSqlTypeTest() = default;
 
-  ddl::ColumnType MakeColumnType(ddl::ColumnType::Type column_type) {
-    ddl::ColumnType ddl_type;
+  ddl::ColumnDefinition MakeColumnDefinitionForType(
+      ddl::ColumnDefinition::Type column_type) {
+    ddl::ColumnDefinition ddl_type;
     ddl_type.set_type(column_type);
     return ddl_type;
   }
@@ -53,7 +57,7 @@ class DDLColumnTypeToGoogleSqlTypeTest : public ::testing::Test {
 };
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Float64) {
-  auto ddl_type = MakeColumnType(ddl::ColumnType::FLOAT64);
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::DOUBLE);
   ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
                        DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
   EXPECT_TRUE(converted_type->Equals(type_factory_.get_double()));
@@ -62,7 +66,7 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Float64) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Int64) {
-  auto ddl_type = MakeColumnType(ddl::ColumnType::INT64);
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::INT64);
   ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
                        DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
   EXPECT_TRUE(converted_type->Equals(type_factory_.get_int64()));
@@ -71,7 +75,7 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Int64) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Bool) {
-  auto ddl_type = MakeColumnType(ddl::ColumnType::BOOL);
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::BOOL);
   ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
                        DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
   EXPECT_TRUE(converted_type->Equals(type_factory_.get_bool()));
@@ -80,7 +84,7 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Bool) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, String) {
-  auto ddl_type = MakeColumnType(ddl::ColumnType::STRING);
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::STRING);
   ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
                        DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
   EXPECT_TRUE(converted_type->Equals(type_factory_.get_string()));
@@ -89,7 +93,7 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, String) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Bytes) {
-  auto ddl_type = MakeColumnType(ddl::ColumnType::BYTES);
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::BYTES);
   ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
                        DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
   EXPECT_TRUE(converted_type->Equals(type_factory_.get_bytes()));
@@ -98,7 +102,7 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Bytes) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Timestamp) {
-  auto ddl_type = MakeColumnType(ddl::ColumnType::TIMESTAMP);
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::TIMESTAMP);
   ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
                        DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
   EXPECT_TRUE(converted_type->Equals(type_factory_.get_timestamp()));
@@ -107,7 +111,7 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Timestamp) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Date) {
-  auto ddl_type = MakeColumnType(ddl::ColumnType::DATE);
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::DATE);
   ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
                        DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
   EXPECT_TRUE(converted_type->Equals(type_factory_.get_date()));
@@ -116,7 +120,7 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Date) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Numeric) {
-  auto ddl_type = MakeColumnType(ddl::ColumnType::NUMERIC);
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::NUMERIC);
   ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
                        DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
   EXPECT_TRUE(converted_type->Equals(type_factory_.get_numeric()));
@@ -125,7 +129,7 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Numeric) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Json) {
-  auto ddl_type = MakeColumnType(ddl::ColumnType::JSON);
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::JSON);
   ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
                        DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
   EXPECT_TRUE(converted_type->Equals(type_factory_.get_json()));
@@ -133,9 +137,17 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Json) {
               test::EqualsProto(ddl_type));
 }
 
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, TestUnrecognizedColumnType) {
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::NONE);
+  EXPECT_THAT(DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_),
+              StatusIs(absl::StatusCode::kInternal,
+                       HasSubstr("Unrecognized ddl::ColumnDefinition:")));
+}
+
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Array) {
-  auto array_element_type = MakeColumnType(ddl::ColumnType::STRING);
-  auto array_type = MakeColumnType(ddl::ColumnType::ARRAY);
+  auto array_element_type =
+      MakeColumnDefinitionForType(ddl::ColumnDefinition::STRING);
+  auto array_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::ARRAY);
   *(array_type.mutable_array_subtype()) = array_element_type;
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       const zetasql::Type* converted_type,
@@ -151,11 +163,12 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Array) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, ArrayOfArray) {
-  auto array_element_type = MakeColumnType(ddl::ColumnType::STRING);
-  auto array_type1 = MakeColumnType(ddl::ColumnType::ARRAY);
+  auto array_element_type =
+      MakeColumnDefinitionForType(ddl::ColumnDefinition::STRING);
+  auto array_type1 = MakeColumnDefinitionForType(ddl::ColumnDefinition::ARRAY);
   *(array_type1.mutable_array_subtype()) = array_element_type;
 
-  auto array_type2 = MakeColumnType(ddl::ColumnType::ARRAY);
+  auto array_type2 = MakeColumnDefinitionForType(ddl::ColumnDefinition::ARRAY);
   *(array_type2.mutable_array_subtype()) = array_type1;
 
   EXPECT_THAT(DDLColumnTypeToGoogleSqlType(array_type2, &type_factory_),
@@ -163,8 +176,8 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, ArrayOfArray) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, InvalidGoogleSqlType) {
-  ddl::ColumnType unknown_type;
-  unknown_type.set_type(ddl::ColumnType::UNKNOWN_TYPE);
+  ddl::ColumnDefinition unknown_type;
+  unknown_type.set_type(ddl::ColumnDefinition::NONE);
   EXPECT_THAT(GoogleSqlTypeToDDLColumnType(type_factory_.get_float()),
               test::EqualsProto(unknown_type));
 }

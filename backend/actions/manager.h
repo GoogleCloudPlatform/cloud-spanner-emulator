@@ -57,7 +57,8 @@ class ActionRegistry {
 
   // Executes the generated key effector that applies to the given mutation op.
   absl::Status ExecuteGeneratedKeyEffectors(
-      const MutationOp& op, std::vector<zetasql::Value>* generated_values,
+      const MutationOp& op,
+      std::vector<std::vector<zetasql::Value>>* generated_values,
       std::vector<const Column*>* columns_with_generated_values);
 
   // Executes the list of modifiers that apply to the given operation.

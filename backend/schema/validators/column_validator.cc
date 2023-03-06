@@ -159,10 +159,6 @@ absl::Status ColumnValidator::Validate(const Column* column,
   }
 
   if (column->is_generated()) {
-    if (column->table()->FindKeyColumn(column->Name())) {
-      return error::CannotUseGeneratedColumnInPrimaryKey(
-          column->table()->Name(), column->Name());
-    }
     for (const Column* dep : column->dependent_columns()) {
       if (dep->allows_commit_timestamp()) {
         return error::CannotUseCommitTimestampOnGeneratedColumnDependency(

@@ -31,6 +31,7 @@
 #include "backend/actions/ops.h"
 #include "backend/common/graph_dependency_helper.h"
 #include "backend/query/analyzer_options.h"
+#include "common/errors.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -63,6 +64,17 @@ absl::Status GetGeneratedColumnsInTopologicalOrder(
     }
   }
   return sorter.TopologicalOrder(generated_columns);
+}
+
+bool IsAnyDependentColumnPresent(const Column* generated_column,
+                                 std::vector<std::string> columns) {
+  for (const auto& dep_col : generated_column->dependent_columns()) {
+    if (std::find(columns.begin(), columns.end(), dep_col->Name()) !=
+        columns.end()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::PreparedExpression>>
@@ -123,12 +135,17 @@ GeneratedColumnEffector::ComputeGeneratedColumnValue(
 }
 
 absl::Status GeneratedColumnEffector::Effect(
-    const MutationOp& op, std::vector<zetasql::Value>* generated_values,
+    const MutationOp& op,
+    std::vector<std::vector<zetasql::Value>>* generated_values,
     std::vector<const Column*>* columns_with_generated_values) const {
   ZETASQL_RET_CHECK(for_keys_ == true);
 
   columns_with_generated_values->reserve(generated_columns_.size());
 
+  // This vector stores column values for each row that can be used to evaluate
+  // generated columns.
+  std::vector<zetasql::ParameterValueMap> row_column_values(
+      op.rows.size(), zetasql::ParameterValueMap());
   // Evaluate generated columns in topological order.
   for (int i = 0; i < generated_columns_.size(); ++i) {
     const Column* generated_column = generated_columns_[i];
@@ -136,26 +153,57 @@ absl::Status GeneratedColumnEffector::Effect(
       // skip non-key columns.
       continue;
     }
+    auto column_supplied_itr = std::find(op.columns.begin(), op.columns.end(),
+                                         generated_column->Name());
+    bool is_user_supplied_value = column_supplied_itr != op.columns.end();
 
-    // If this column has a default value and the user is supplying a value
-    // for it, then we don't need to compute its default value.
-    if (std::find(op.columns.begin(), op.columns.end(),
-                  generated_column->Name()) != op.columns.end()) {
-      continue;
+    if (generated_column->has_default_value()) {
+      // If this column has a default value and the user is supplying a value
+      // for it, then we don't need to compute its default value.
+      if (is_user_supplied_value) {
+        continue;
+      }
+      if (op.type == MutationOpType::kUpdate ||
+          op.type == MutationOpType::kDelete) {
+        return error::DefaultPKNeedsExplicitValue(generated_column->FullName(),
+                                                  "Update/Delete");
+      }
+    } else if (generated_column->is_generated() && is_user_supplied_value) {
+      // If this column is generated column and user is supplying a value for it
+      // and the user is not supplying values for dependent column values to
+      // evaluate generated column value, we don't need to compute its generated
+      // value.
+      if (!IsAnyDependentColumnPresent(generated_column, op.columns)) {
+        continue;
+      }
+      // Users should supply values for generated columns only in update
+      // operations.
+      if (op.type != MutationOpType::kUpdate) {
+        return error::UserSuppliedValueInNonUpdateGpk(
+            generated_column->FullName());
+      }
     }
-    if (generated_column->has_default_value() &&
-        (op.type == MutationOpType::kUpdate ||
-         op.type == MutationOpType::kDelete)) {
-      return error::DefaultPKNeedsExplicitValue(generated_column->FullName(),
-                                                "Update/Delete");
+
+    for (int i = 0; i < op.rows.size(); ++i) {
+      // Calculate values of generated columns for each row.
+      for (int j = 0; j < op.columns.size(); ++j) {
+        row_column_values[i][op.columns[j]] = op.rows[i][j];
+      }
+      ZETASQL_ASSIGN_OR_RETURN(
+          zetasql::Value value,
+          ComputeGeneratedColumnValue(generated_column, row_column_values[i]));
+      if (generated_column->is_generated() && is_user_supplied_value) {
+        size_t index = column_supplied_itr - op.columns.begin();
+        zetasql::Value provided_value = op.rows[i][index];
+        if (provided_value != value) {
+          return error::GeneratedPkModified(generated_column->FullName());
+        }
+      }
+      // Update row_column_values so that other dependent columns on this
+      // generated column can use the value.
+      row_column_values[i][generated_column->Name()] = value;
+      generated_values->at(i).push_back(value);
     }
-
-    zetasql::ParameterValueMap row_column_values;
-    ZETASQL_ASSIGN_OR_RETURN(
-        zetasql::Value value,
-        ComputeGeneratedColumnValue(generated_column, row_column_values));
-
-    generated_values->push_back(value);
     columns_with_generated_values->push_back(generated_column);
   }
   return absl::OkStatus();

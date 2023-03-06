@@ -29,7 +29,7 @@ LockHandle::LockHandle(LockManager* manager, TransactionID tid,
                        TransactionPriority priority)
     : manager_(manager), tid_(tid), priority_(priority) {}
 
-LockHandle::~LockHandle() {}
+LockHandle::~LockHandle() = default;
 
 void LockHandle::EnqueueLock(const LockRequest& request) {
   manager_->EnqueueLock(this, request);

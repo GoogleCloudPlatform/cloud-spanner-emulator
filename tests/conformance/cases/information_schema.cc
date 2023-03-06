@@ -102,11 +102,19 @@ class InformationSchemaTest : public DatabaseTest {
                                 "CHANGE_STREAM_OPTIONS",
                                 "CHANGE_STREAM_PRIVILEGES",
                                 "CHANGE_STREAM_TABLES",
+                                "MODELS",
+                                "MODEL_OPTIONS",
+                                "MODEL_COLUMNS",
+                                "MODEL_COLUMNS_OPTIONS",
                                 "VIEWS",
                                 "ROLES",
                                 "ROLE_GRANTEES",
                                 "TABLE_PRIVILEGES",
                                 "COLUMN_PRIVILEGES",
+                                "PARAMETERS",
+                                "ROUTINES",
+                                "ROUTINE_OPTIONS",
+                                "ROUTINE_PRIVILEGES",
                             })};
 
   // Information schema columns not yet supported.
@@ -680,6 +688,14 @@ TEST_F(InformationSchemaTest, MetaCheckConstraints) {
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_TABLE_PRIVILEGES%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLES%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_GRANTEES%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODELS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_OPTIONS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMNS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMNS_OPTIONS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PARAMETERS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINES%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_OPTIONS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_PRIVILEGES%'
       order by
         t.constraint_name
   )",

@@ -18,6 +18,7 @@
 #include "backend/schema/parser/ddl_parser.h"
 
 #include <functional>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -31,9 +32,11 @@
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/substitute.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/DDLParserTree.h"
 #include "backend/schema/parser/DDLParserTreeConstants.h"
+#include "backend/schema/parser/JavaCC.h"
 #include "backend/schema/parser/ddl_includes.h"
 #include "backend/schema/parser/ddl_token_validation_utils.h"
 #include "common/errors.h"
@@ -46,15 +49,15 @@ namespace emulator {
 namespace backend {
 namespace ddl {
 
+typedef google::protobuf::RepeatedPtrField<SetOption> OptionList;
+
 const char kCommitTimestampOptionName[] = "allow_commit_timestamp";
 
 namespace {
 
-// Determines whether the given string is printable.
-bool IsPrintable(absl::string_view str) {
+bool IsPrint(absl::string_view str) {
   const char* strp = str.data();
   const char* end = strp + str.size();
-  // Check that each character in the string is printable.
   while (strp < end) {
     if (!absl::ascii_isprint(*strp++)) {
       return false;
@@ -63,8 +66,14 @@ bool IsPrintable(absl::string_view str) {
   return true;
 }
 
+// Build a string representing a syntax error for the given token.
+std::string SyntaxError(const Token* token, absl::string_view detail) {
+  return absl::StrCat("Syntax error on line ", token->beginLine, ", column ",
+                      token->beginColumn, ": ", detail);
+}
+
 // Returns the image of the token with special handling of EOF.
-static std::string GetTokenRepresentation(Token* token) {
+std::string GetTokenRepresentation(Token* token) {
   if (token->kind == _EOF) {
     // token->image is empty string which is not helpful.
     return "'EOF'";
@@ -80,7 +89,7 @@ static std::string GetTokenRepresentation(Token* token) {
       return "a non-ASCII UTF-8 character. Did you perhaps copy the Spanner "
              "Cloud DDL statements from a word-processed document, including "
              "non-breaking spaces or smart quotes?";
-    } else if (!IsPrintable(token_str)) {
+    } else if (!IsPrint(token_str)) {
       return absl::StrCat("a non-printable ASCII character ('",
                           absl::CEscape(token_str), "').");
     }
@@ -111,26 +120,30 @@ static std::string GetTokenRepresentation(Token* token) {
   }
 
   if (token->kind == UNCLOSED_SQ3 || token->kind == UNCLOSED_DQ3) {
-    return absl::StrCat("Syntax error on line ", token->beginLine, ", column ",
-                        token->beginColumn,
-                        ": Encountered an unclosed triple quoted string.");
+    return SyntaxError(token, "Encountered an unclosed triple quoted string.");
   }
 
   return absl::StrCat("'", token->image, "'");
 }
 
-class DDLErrorHandler : public ErrorHandler {
+// Note that the methods in this class have unusual names because we are
+// implementing JavaCC's ErrorHandler interface, which uses these names.
+class CloudDDLErrorHandler : public ErrorHandler {
  public:
-  explicit DDLErrorHandler(std::vector<std::string>* errors)
+  explicit CloudDDLErrorHandler(std::vector<std::string>* errors)
       : errors_(errors), ignore_further_errors_(false) {}
-  ~DDLErrorHandler() override {}
+  ~CloudDDLErrorHandler() override = default;
 
+  // Called when the parser encounters a different token when expecting to
+  // consume a specific kind of token.
+  // expected_kind - token kind that the parser was trying to consume.
+  // expected_token - the image of the token - tokenImages[expected_kind].
+  // actual - the actual token that the parser got instead.
   void handleUnexpectedToken(int expected_kind,
                              JAVACC_STRING_TYPE expected_token, Token* actual,
                              DDLParser* parser) override {
-    if (ignore_further_errors_) {
-      return;
-    }
+    if (ignore_further_errors_) return;
+
     // expected_kind is -1 when the next token is not expected, when choosing
     // the next rule based on next token. Every invocation of
     // handleUnexpectedToken with expeced_kind=-1 is followed by a call to
@@ -139,7 +152,7 @@ class DDLErrorHandler : public ErrorHandler {
       return;
     }
 
-    // The parser would continue to throw unexpected token at us but only the
+    // The parser would continue to through unexpected token at us but only the
     // first error is the cause.
     ignore_further_errors_ = true;
 
@@ -150,12 +163,14 @@ class DDLErrorHandler : public ErrorHandler {
                      GetTokenRepresentation(actual)));
   }
 
+  // Called when the parser cannot continue parsing.
+  // last - the last token successfully parsed.
+  // unexpected - the token at which the error occurs.
+  // production - the production in which this error occurs.
   void handleParseError(Token* last, Token* unexpected,
                         JAVACC_STRING_TYPE production,
                         DDLParser* parser) override {
-    if (ignore_further_errors_) {
-      return;
-    }
+    if (ignore_further_errors_) return;
     ignore_further_errors_ = true;
 
     errors_->push_back(absl::StrCat(
@@ -167,63 +182,38 @@ class DDLErrorHandler : public ErrorHandler {
   int getErrorCount() override { return errors_->size(); }
 
  private:
+  // List of errors found during the parse.  Will be empty IFF
+  // there were no problems parsing.
   std::vector<std::string>* errors_;
   bool ignore_further_errors_;
 };
 
-absl::StatusOr<SimpleNode*> ParseDDLStatementToNode(
-    DDLParser& parser, absl::string_view statement) {
-  // Empty DDL statements are not allowed in Cloud Spanner.
-  if (statement.empty()) {
-    return error::EmptyDDLStatement();
-  }
+//////////////////////////////////////////////////////////////////////////
+// Node and Child helper functions
 
-  // Set custom error handler.
-  std::vector<std::string> errors;
-  DDLErrorHandler error_handler(&errors);
-  parser.setErrorHandler(&error_handler);
-
-  // Parse the input statement as a valid DDL statement into a node.
-  SimpleNode* node = parser.ParseDDL();
-  if (node == nullptr) {
-    if (errors.empty()) {
-      errors.push_back("Unknown error while parsing ddl statement into node.");
-    }
-    return error::DDLStatementWithErrors(statement, errors);
-  }
-  return node;
-}
-
-absl::Status CheckNodeType(const SimpleNode* node, int expected_type) {
-  if (node->getId() != expected_type) {
-    return error::Internal(
-        absl::StrCat("Expected '", jjtNodeName[expected_type], "', found '",
-                     jjtNodeName[node->getId()], "'"));
-  }
-  return absl::OkStatus();
-}
-
-absl::StatusOr<const SimpleNode*> GetChildAtIndex(const SimpleNode* parent,
-                                                  int pos) {
-  if (pos >= parent->jjtGetNumChildren()) {
-    return error::Internal(absl::StrCat("Out of bounds children pos [", pos,
-                                        "], total number of children ",
-                                        parent->jjtGetNumChildren()));
-  }
+// Return child node of "parent" by position.
+SimpleNode* GetChildNode(const SimpleNode* parent, int pos) {
+  ZETASQL_CHECK_LT(pos, parent->jjtGetNumChildren())
+      << "[" << pos << "] vs " << parent->jjtGetNumChildren();
   return dynamic_cast<SimpleNode*>(parent->jjtGetChild(pos));
 }
 
-absl::StatusOr<const SimpleNode*> GetChildAtIndexWithType(
-    const SimpleNode* parent, int pos, int expected_type) {
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(parent, pos));
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(child, expected_type));
+void CheckNode(const SimpleNode* node, int expected_type) {
+  ZETASQL_CHECK_EQ(node->getId(), expected_type)
+      << "Expected '" << jjtNodeName[expected_type] << "' but was '"
+      << jjtNodeName[node->getId()] << "'";
+}
+
+SimpleNode* GetChildNode(const SimpleNode* parent, int pos, int expected_type) {
+  SimpleNode* child = GetChildNode(parent, pos);
+  CheckNode(child, expected_type);
   return child;
 }
 
-absl::StatusOr<const SimpleNode*> GetFirstChildWithType(
-    const SimpleNode* parent, int type) {
+// Returns the first child node of the type or NULL if not present
+SimpleNode* GetFirstChildNode(const SimpleNode* parent, int type) {
   for (int i = 0; i < parent->jjtGetNumChildren(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(parent, i));
+    SimpleNode* child = GetChildNode(parent, i);
     if (child->getId() == type) {
       return child;
     }
@@ -231,157 +221,54 @@ absl::StatusOr<const SimpleNode*> GetFirstChildWithType(
   return nullptr;
 }
 
-void SetColumnLength(const SimpleNode* length_node, ColumnDefinition* column,
-                     std::vector<std::string>* errors) {
-  if (length_node == nullptr) {
-    return;
-  }
-  if (absl::AsciiStrToUpper(length_node->image()) == "MAX") {
-    return;
-  }
-
-  int64_t length = length_node->image_as_int64();
-  if (length < 0) {
-    errors->push_back(
-        absl::StrCat("Invalid length for column: ", column->column_name(),
-                     ", found: ", length_node->image()));
-    return;
-  }
-  column->add_constraints()->mutable_column_length()->set_max_length(length);
-}
-
-absl::Status VisitColumnTypeNode(const SimpleNode* column_type_node,
-                                 ColumnDefinition* column_definition,
-                                 ColumnType* column_type, int recursion_depth,
-                                 std::vector<std::string>* errors
-) {
-  if (recursion_depth > 4) {
-    return error::Internal("DDL parser exceeded max recursion stack depth");
-  }
-
-  // Parse column type.
-  std::string type_name = absl::AsciiStrToUpper(column_type_node->image());
-  ColumnType::Type type;
-  if (!ColumnType::Type_Parse(type_name, &type)) {
-    return error::Internal(
-        absl::StrCat("Unrecognized column type: ", type_name));
-  }
-  column_type->set_type(type);
-
-  if (type == ColumnType::ARRAY) {
-    // If column type is Array, recursively set column subtypes.
-    ZETASQL_ASSIGN_OR_RETURN(
-        const SimpleNode* column_subtype_node,
-        GetChildAtIndexWithType(column_type_node, 0, JJTCOLUMN_TYPE));
-    ZETASQL_RETURN_IF_ERROR(VisitColumnTypeNode(column_subtype_node, column_definition,
-                                        column_type->mutable_array_subtype(),
-                                        recursion_depth + 1,
-                                        errors
-                                        ));
-  } else {
-    // Set column length constraints since this is a leaf column type node and
-    // would contain length constraints if applicable.
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* length_node,
-                     GetFirstChildWithType(column_type_node, JJTLENGTH));
-    SetColumnLength(length_node, column_definition, errors);
-  }
-  return absl::OkStatus();
-}
-
-absl::string_view GetExpressionStr(const SimpleNode& expression_node,
-                                   absl::string_view ddl_text) {
-  int node_offset = expression_node.absolute_begin_column();
-  int node_length = expression_node.absolute_end_column() - node_offset;
+// Returns the text in ddl_text that was used to parse node.
+absl::string_view ExtractTextForNode(const SimpleNode* node,
+                                     absl::string_view ddl_text) {
+  ZETASQL_DCHECK(node);
+  int node_offset = node->absolute_begin_column();
+  int node_length = node->absolute_end_column() - node_offset;
   return absl::ClippedSubstr(ddl_text, node_offset, node_length);
 }
 
-absl::Status VisitGenerationClauseNode(const SimpleNode* node,
-                                       ColumnDefinition* column_definition,
-                                       absl::string_view ddl_text) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTGENERATION_CLAUSE));
-  if (!EmulatorFeatureFlags::instance()
-           .flags()
-           .enable_stored_generated_columns) {
-    return error::GeneratedColumnsNotEnabled();
-  }
-  bool is_stored = false;
+std::string GetQualifiedIdentifier(const SimpleNode* node) {
+  std::string rv;
   for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
-    switch (child->getId()) {
-      case JJTEXPRESSION: {
-        column_definition->mutable_properties()->set_expression(
-            absl::StrCat("(", GetExpressionStr(*child, ddl_text), ")"));
-        break;
-      }
-      case JJTSTORED: {
-        is_stored = true;
-        break;
-      }
-      default:
-        return error::Internal(absl::StrCat(
-            "Unexpected generated column info: ", child->toString()));
-    }
+    absl::StrAppend(&rv, i != 0 ? "." : "",
+                    GetChildNode(node, i, JJTPART)->image());
   }
-  if (!is_stored) {
-    return error::NonStoredGeneratedColumnUnsupported(
-        column_definition->column_name());
-  }
-
-  return absl::OkStatus();
+  return rv;
 }
 
-absl::Status VisitColumnDefaultClauseNode(const SimpleNode* node,
-                                          ColumnDefinition* column_definition,
-                                          absl::string_view ddl_text) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCOLUMN_DEFAULT_CLAUSE));
+////////////////////////////////////////////////////////////////////////////
+// Visit functions each take a const SimpleNode* representing the "root" AST
+// node for the given structure, parse its contents, and put the results
+// in a peer proto node passed in as second argument.
 
-  if (!EmulatorFeatureFlags::instance().flags().enable_column_default_values) {
-    return error::ColumnDefaultValuesNotEnabled();
-  }
-
-  if (node->jjtGetNumChildren() != 1) {
-    return absl::Status(
-        absl::StatusCode::kInvalidArgument,
-        "A column default value has to contain exactly one valid expression");
-  }
-  ZETASQL_ASSIGN_OR_RETURN(
-      const SimpleNode* child,
-      GetChildAtIndexWithType(node, 0, JJTCOLUMN_DEFAULT_EXPRESSION));
-
-  column_definition->mutable_properties()->set_expression(
-      absl::StrCat("(", GetExpressionStr(*child, ddl_text), ")"));
-  column_definition->mutable_properties()->set_has_default_value(true);
-
-  return absl::OkStatus();
-}
-
-absl::StatusOr<std::string> GetOptionName(const SimpleNode* node) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTOPTION_KEY_VAL));
-  if (node->jjtGetNumChildren() < 2) {
-    return error::Internal(absl::StrCat(
-        "Expected at least 2 children for node OPTION_KEY_VAL, found ",
-        node->jjtGetNumChildren(), " children."));
-  }
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* key,
-                   GetChildAtIndexWithType(node, 0, JJTKEY));
+std::string CheckOptionKeyValNodeAndGetName(const SimpleNode* node) {
+  CheckNode(node, JJTOPTION_KEY_VAL);
+  const int num_children = node->jjtGetNumChildren();
+  ZETASQL_CHECK_GE(num_children, 2);
+  const SimpleNode* key = GetChildNode(node, 0, JJTKEY);
   return key->image();
 }
 
-absl::Status VisitColumnOptionKeyValNode(const SimpleNode* node,
-                                         Options* options) {
-  // Check that option set on column is kCommitTimestampOptionName. When
-  // multiple commit timestamp options are set, last value is applied.
-  ZETASQL_ASSIGN_OR_RETURN(std::string option_name, GetOptionName(node));
-  if (option_name != kCommitTimestampOptionName) {
-    return absl::Status(absl::StatusCode::kInvalidArgument,
-                        absl::StrCat("Option: ", option_name, " is unknown."));
-  }
-  Options::Option* option = options->add_option_val();
-  option->set_name(kCommitTimestampOptionName);
+void VisitColumnOptionKeyValNode(const SimpleNode* node, OptionList* options,
+                                 std::vector<std::string>* errors) {
+  std::string option_name = CheckOptionKeyValNodeAndGetName(node);
 
-  // Set the tri-state boolean value for kAllowCommitTimestamp option.
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* bool_node, GetChildAtIndex(node, 1));
-  switch (bool_node->getId()) {
+  // If this is an invalid option, return error. Later during schema
+  // change, we will verify the valid option against the
+  // column type.
+  if (option_name != kCommitTimestampOptionName) {
+    errors->push_back(absl::StrCat("Option: ", option_name, " is unknown."));
+    return;
+  }
+
+  SetOption* option = options->Add();
+  option->set_option_name(kCommitTimestampOptionName);
+
+  const SimpleNode* child = GetChildNode(node, 1);
+  switch (child->getId()) {
     case JJTNULLL:
       option->set_null_value(true);
       break;
@@ -392,770 +279,664 @@ absl::Status VisitColumnOptionKeyValNode(const SimpleNode* node,
       option->set_bool_value(false);
       break;
     default: {
-      return absl::Status(
-          absl::StatusCode::kInvalidArgument,
+      // handleUnexpectedToken() should have already caught this case
+      // and added an error.
+      errors->push_back(
           absl::StrCat("Unexpected value for option: ", option_name,
-                       ", supported values are true, false, and null."));
+                       ". "
+                       "Supported option values are true, false, and null."));
+      break;
     }
   }
-  return absl::OkStatus();
 }
 
-absl::Status VisitColumnOptionListNode(const SimpleNode* node,
-                                       Options* options) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTOPTIONS_CLAUSE));
-  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* option_node,
-                     GetChildAtIndexWithType(node, i, JJTOPTION_KEY_VAL));
-    ZETASQL_RETURN_IF_ERROR(VisitColumnOptionKeyValNode(option_node, options));
+void VisitColumnOptionListNode(const SimpleNode* node, int option_list_offset,
+                               OptionList* options,
+                               std::vector<std::string>* errors) {
+  CheckNode(node, JJTOPTIONS_CLAUSE);
+  // The option_list node is suppressed (#void) so it is not
+  // created. The children of this node are OPTION_KEY_VALs.
+  for (int i = option_list_offset; i < node->jjtGetNumChildren(); ++i) {
+    VisitColumnOptionKeyValNode(GetChildNode(node, i, JJTOPTION_KEY_VAL),
+                                options, errors);
   }
-  return absl::OkStatus();
 }
 
-absl::Status VisitColumnNode(const SimpleNode* node,
-                             ColumnDefinition* column_definition,
-                             absl::string_view ddl_text,
-                             std::vector<std::string>* errors
-) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCOLUMN_DEF));
+void VisitCreateDatabaseNode(const SimpleNode* node, CreateDatabase* database,
+                             std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_DATABASE_STATEMENT);
 
-  // Set optional column constraints and properties.
-  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+
     switch (child->getId()) {
-      case JJTNAME:
-        column_definition->set_column_name(child->image());
+      case JJTDB_NAME:
+        database->set_db_name(child->image());
         break;
-      case JJTCOLUMN_TYPE:
-        ZETASQL_RETURN_IF_ERROR(VisitColumnTypeNode(
-            child, column_definition,
-            column_definition->mutable_properties()->mutable_column_type(), 0,
-            errors
-            ));
+      default:
+        ZETASQL_LOG(ERROR) << "Unknown node type: " << node->toString();
+    }
+  }
+}
+
+void VisitOnDeleteClause(const SimpleNode* node,
+                         InterleaveClause::Action* on_delete_action) {
+  CheckNode(node, JJTON_DELETE_CLAUSE);
+  if (GetFirstChildNode(node, JJTNO_ACTION) != nullptr) {
+    *on_delete_action = InterleaveClause::NO_ACTION;
+  } else if (GetFirstChildNode(node, JJTCASCADE) != nullptr) {
+    *on_delete_action = InterleaveClause::CASCADE;
+  } else {
+    ZETASQL_LOG(ERROR) << "ON DELETE does not specify a valid behavior: "
+               << node->toString();
+  }
+}
+
+void VisitInterleaveNode(const SimpleNode* node, InterleaveClause* interleave) {
+  interleave->set_table_name(
+      GetQualifiedIdentifier(GetChildNode(node, 0, JJTINTERLEAVE_IN)));
+
+  // Default behavior is ON DELETE NO ACTION.
+  InterleaveClause::Action on_delete_action = InterleaveClause::NO_ACTION;
+  SimpleNode* on_delete_node = GetFirstChildNode(node, JJTON_DELETE_CLAUSE);
+  if (on_delete_node != nullptr) {
+    VisitOnDeleteClause(on_delete_node, &on_delete_action);
+  }
+  interleave->set_on_delete(on_delete_action);
+}
+
+void VisitTableInterleaveNode(const SimpleNode* node,
+                              InterleaveClause* interleave) {
+  CheckNode(node, JJTTABLE_INTERLEAVE_CLAUSE);
+  VisitInterleaveNode(node, interleave);
+}
+
+void VisitIndexInterleaveNode(const SimpleNode* node,
+                              std::string* interleave_in_table) {
+  CheckNode(node, JJTINDEX_INTERLEAVE_CLAUSE);
+  ZETASQL_CHECK_EQ(1, node->jjtGetNumChildren());
+  *interleave_in_table =
+      GetQualifiedIdentifier(GetChildNode(node, 0, JJTINTERLEAVE_IN));
+}
+
+void VisitIntervalExpressionNode(const SimpleNode* node, int64_t* days) {
+  CheckNode(node, JJTINTERVAL_EXPRESSION);
+  ZETASQL_CHECK_EQ(1, node->jjtGetNumChildren());
+
+  *days = GetChildNode(node, 0)->image_as_int64();
+}
+
+void VisitRowDeletionPolicyExpressionNode(const SimpleNode* node,
+                                          RowDeletionPolicy* policy,
+                                          std::vector<std::string>* errors) {
+  CheckNode(node, JJTROW_DELETION_POLICY_EXPRESSION);
+  ZETASQL_CHECK_EQ(3, node->jjtGetNumChildren());
+
+  SimpleNode* function = GetChildNode(node, 0, JJTROW_DELETION_POLICY_FUNCTION);
+  if (!absl::EqualsIgnoreCase(function->image(), "OLDER_THAN")) {
+    errors->push_back("Only OLDER_THAN is supported.");
+    return;
+  }
+
+  SimpleNode* column = GetChildNode(node, 1, JJTROW_DELETION_POLICY_COLUMN);
+  policy->set_column_name(column->image());
+
+  SimpleNode* interval_expr = GetChildNode(node, 2, JJTINTERVAL_EXPRESSION);
+  int64_t days;
+  VisitIntervalExpressionNode(interval_expr, &days);
+  policy->mutable_older_than()->set_count(days);
+  policy->mutable_older_than()->set_unit(DDLTimeLengthProto::DAYS);
+}
+
+void VisitTableRowDeletionPolicyNode(const SimpleNode* node,
+                                     RowDeletionPolicy* policy,
+                                     std::vector<std::string>* errors) {
+  CheckNode(node, JJTROW_DELETION_POLICY_CLAUSE);
+  ZETASQL_CHECK_EQ(1, node->jjtGetNumChildren());
+  VisitRowDeletionPolicyExpressionNode(GetChildNode(node, 0), policy, errors);
+}
+
+void SetSortOrder(const SimpleNode* key_part_node, KeyPartClause* key_part,
+                  std::vector<std::string>* errors) {
+  if (GetFirstChildNode(key_part_node, JJTDESC) != nullptr) {
+    key_part->set_order(KeyPartClause::DESC);
+  }
+}
+
+// Visit a node that defines a key.
+void VisitKeyNode(const SimpleNode* node,
+                  google::protobuf::RepeatedPtrField<KeyPartClause>* key,
+                  std::vector<std::string>* errors) {
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i, JJTKEY_PART);
+    KeyPartClause* key_part = key->Add();
+    key_part->set_key_name(GetChildNode(child, 0, JJTPATH)->image());
+    SetSortOrder(child, key_part, errors);
+  }
+}
+
+void VisitStoredColumnNode(const SimpleNode* node, StoredColumnDefinition* def,
+                           std::vector<std::string>* errors) {
+  CheckNode(node, JJTSTORED_COLUMN);
+  const int num_children = node->jjtGetNumChildren();
+  ZETASQL_CHECK_EQ(num_children, 1);
+  def->set_name(GetChildNode(node, 0, JJTPATH)->image());
+}
+
+void VisitStoredColumnListNode(
+    const SimpleNode* node,
+    google::protobuf::RepeatedPtrField<StoredColumnDefinition>* stored_columns,
+    std::vector<std::string>* errors) {
+  CheckNode(node, JJTSTORED_COLUMN_LIST);
+  ZETASQL_CHECK_GT(node->jjtGetNumChildren(), 0);
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* stored_column = GetChildNode(node, i, JJTSTORED_COLUMN);
+    VisitStoredColumnNode(stored_column, stored_columns->Add(), errors);
+  }
+}
+
+// All length requirements/restrictions will be enforced by the validator code.
+void SetColumnLength(const SimpleNode* length_node, ColumnDefinition* column) {
+  // If the length is MAX, then we leave off the length from ColumnDefinition.
+  // The server will use whatever maximum length it is willing to allow, which
+  // may be universe- or database-specific.
+  if (length_node != nullptr &&
+      !absl::EqualsIgnoreCase(length_node->image(), "MAX")) {
+    column->set_length(length_node->image_as_int64());
+  }
+}
+
+void VisitColumnTypeNode(const SimpleNode* column_type,
+                         ColumnDefinition* column, int recursion_depth,
+                         std::vector<std::string>* errors) {
+  if (recursion_depth > 4) {
+    errors->push_back("DDL parser exceeded max recursion stack depth");
+    return;
+  }
+
+  std::string type_name = absl::AsciiStrToUpper(column_type->image());
+  ColumnDefinition::Type type;
+
+    if (type_name == "FLOAT64") {
+      type = ColumnDefinition::DOUBLE;
+    } else if (!ColumnDefinition::Type_Parse(type_name, &type)) {
+      ZETASQL_LOG(ERROR) << "Unrecognized type: " << type_name;
+    }
+
+  column->set_type(type);
+  if (type == ColumnDefinition::ARRAY) {
+    // Read the subtype.
+    SimpleNode* column_subtype = GetChildNode(column_type, 0, JJTCOLUMN_TYPE);
+    VisitColumnTypeNode(column_subtype, column->mutable_array_subtype(),
+                        recursion_depth + 1, errors);
+  }
+  const SimpleNode* length_node = GetFirstChildNode(column_type, JJTLENGTH);
+  SetColumnLength(length_node, column);
+  if (column->length() < 0) {
+    errors->push_back(
+        absl::StrCat("Invalid length for column: ", column->column_name(),
+                     ", found: ", length_node->image()));
+  }
+}
+
+void VisitGenerationClauseNode(const SimpleNode* node, ColumnDefinition* column,
+                               absl::string_view ddl_text) {
+  CheckNode(node, JJTGENERATION_CLAUSE);
+  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTEXPRESSION: {
+        column->mutable_generated_column()->set_expression(
+            absl::StrCat("(", ExtractTextForNode(child, ddl_text), ")"));
         break;
+      }
+      case JJTSTORED: {
+        column->mutable_generated_column()->set_stored(true);
+        break;
+      }
+      default:
+        ZETASQL_LOG(ERROR) << "Unexpected generated column info: " << child->toString();
+    }
+  }
+}
+
+void VisitColumnDefaultClauseNode(const SimpleNode* node,
+                                  ColumnDefinition* column,
+                                  absl::string_view ddl_text) {
+  CheckNode(node, JJTCOLUMN_DEFAULT_CLAUSE);
+
+  ZETASQL_DCHECK_EQ(node->jjtGetNumChildren(), 1);
+
+  SimpleNode* child = GetChildNode(node, 0, JJTCOLUMN_DEFAULT_EXPRESSION);
+
+  column->mutable_column_default()->set_expression(
+      absl::StrCat(ExtractTextForNode(child, ddl_text)));
+}
+
+void VisitColumnNode(const SimpleNode* node, ColumnDefinition* column,
+                     absl::string_view ddl_text,
+                     std::vector<std::string>* errors) {
+  CheckNode(node, JJTCOLUMN_DEF);
+  column->set_column_name(GetChildNode(node, 0, JJTNAME)->image());
+  SimpleNode* column_type = GetChildNode(node, 1, JJTCOLUMN_TYPE);
+  VisitColumnTypeNode(column_type, column, 0, errors);
+
+  // Handle NOT NULL, and OPTIONS
+  for (int i = 2; i < node->jjtGetNumChildren(); ++i) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
       case JJTNOT_NULL:
-        column_definition->add_constraints()->mutable_not_null()->set_nullable(
-            false);
+        column->set_not_null(true);
         break;
       case JJTGENERATION_CLAUSE:
-        ZETASQL_RETURN_IF_ERROR(
-            VisitGenerationClauseNode(child, column_definition, ddl_text));
-        break;
-      case JJTCOLUMN_DEFAULT_CLAUSE:
-        ZETASQL_RETURN_IF_ERROR(
-            VisitColumnDefaultClauseNode(child, column_definition, ddl_text));
+        VisitGenerationClauseNode(child, column, ddl_text);
         break;
       case JJTOPTIONS_CLAUSE:
-        ZETASQL_RETURN_IF_ERROR(VisitColumnOptionListNode(
-            child, column_definition->mutable_options()));
+        VisitColumnOptionListNode(child, 0 /* option_list_offset */,
+                                  column->mutable_set_options(), errors);
+        break;
+      case JJTCOLUMN_DEFAULT_CLAUSE:
+        VisitColumnDefaultClauseNode(child, column, ddl_text);
         break;
       default:
-        return error::Internal(
-            absl::StrCat("Unexpected column info: ", child->toString()));
+        ZETASQL_LOG(ERROR) << "Unexpected column info: " << child->toString();
     }
   }
-  return absl::OkStatus();
 }
 
-absl::Status VisitKeyNode(const SimpleNode* node,
-                          std::function<KeyPart*()> add_key_part) {
-  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
-    // Add key column to the given primary key.
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* key_part_node,
-                     GetChildAtIndexWithType(node, i, JJTKEY_PART));
-    KeyPart* key_part = add_key_part();
+void VisitColumnNodeAlterAttrs(const SimpleNode* node,
+                               const std::string& column_name,
+                               ColumnDefinition* column,
+                               absl::string_view ddl_text,
+                               std::vector<std::string>* errors) {
+  CheckNode(node, JJTCOLUMN_DEF_ALTER_ATTRS);
+  column->set_column_name(column_name);
+  SimpleNode* column_type = GetChildNode(node, 0, JJTCOLUMN_TYPE);
+  VisitColumnTypeNode(column_type, column, 0, errors);
 
-    // Set columns names for given primary key.
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* key_column,
-                     GetChildAtIndexWithType(key_part_node, 0, JJTPATH));
-    key_part->set_key_column_name(key_column->image());
-
-    // Set sort order for the key column.
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* sort_order_desc,
-                     GetFirstChildWithType(key_part_node, JJTDESC));
-    if (sort_order_desc != nullptr) {
-      key_part->set_order(KeyPart::DESC);
-    }
-  }
-  return absl::OkStatus();
-}
-
-absl::Status VisitPrimaryKey(const SimpleNode* node,
-                             PrimaryKeyConstraint* primary_key_constraint) {
-  ZETASQL_RETURN_IF_ERROR(VisitKeyNode(node, [&primary_key_constraint]() -> KeyPart* {
-    return primary_key_constraint->add_key_part();
-  }));
-
-  return absl::OkStatus();
-}
-
-absl::Status VisitOnDeleteClause(const SimpleNode* node,
-                                 OnDeleteAction* on_delete_action) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTON_DELETE_CLAUSE));
-
-  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
+  // Handle NOT NULL.
+  for (int i = 1; i < node->jjtGetNumChildren(); ++i) {
+    SimpleNode* child = GetChildNode(node, i);
     switch (child->getId()) {
-      case JJTNO_ACTION:
-        on_delete_action->set_action(OnDeleteAction::NO_ACTION);
+      case JJTNOT_NULL:
+        column->set_not_null(true);
         break;
-      case JJTCASCADE:
-        on_delete_action->set_action(OnDeleteAction::CASCADE);
+      case JJTGENERATION_CLAUSE:
+        VisitGenerationClauseNode(child, column, ddl_text);
+        break;
+      case JJTCOLUMN_DEFAULT_CLAUSE:
+        VisitColumnDefaultClauseNode(child, column, ddl_text);
         break;
       default:
-        return error::Internal(absl::StrCat(
-            "ON DELETE does not specify a valid behavior: ", node->toString()));
+        ZETASQL_LOG(ERROR) << "Unexpected column info: " << child->toString();
     }
   }
-  return absl::OkStatus();
 }
 
-absl::Status VisitTableInterleaveNode(const SimpleNode* node,
-                                      InterleaveConstraint* interleave) {
-  // Set interleave relationships.
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* parent_table_node,
-                   GetChildAtIndexWithType(node, 0, JJTINTERLEAVE_IN));
-  interleave->set_parent(parent_table_node->image());
-  interleave->set_type(InterleaveConstraint::IN_PARENT);
-
-  // Set on delete behavior for interleaved table.
-  OnDeleteAction on_delete_action = OnDeleteAction{};
-  on_delete_action.set_action(OnDeleteAction::NO_ACTION);
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* on_delete_node,
-                   GetFirstChildWithType(node, JJTON_DELETE_CLAUSE));
-  if (on_delete_node != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(VisitOnDeleteClause(on_delete_node, &on_delete_action));
+void VisitColumnNodeAlter(const std::string& table_name,
+                          const std::string& column_name,
+                          const SimpleNode* node, absl::string_view ddl_text,
+                          DDLStatement* statement,
+                          std::vector<std::string>* errors) {
+  CheckNode(node, JJTCOLUMN_DEF_ALTER);
+  const SimpleNode* child = GetChildNode(node, 0);
+  AlterTable* alter_table = statement->mutable_alter_table();
+  switch (child->getId()) {
+    case JJTOPTIONS_CLAUSE: {
+      // "ALTER COLUMN c SET OPTIONS (...)" does not contain the
+      // column TYPE or NOT NULL attributes. Translate this into a
+      // SetColumnOptions statement which does not take these
+      // attributes as input, and the schema change code will keep
+      // these attributes unchanged.
+      SetColumnOptions* set_options = statement->mutable_set_column_options();
+      SetColumnOptions::ColumnPath* path = set_options->add_column_path();
+      path->set_table_name(table_name);
+      path->set_column_name(column_name);
+      VisitColumnOptionListNode(child, 0 /* option_list_offset */,
+                                set_options->mutable_options(), errors);
+      break;
+    }
+    case JJTCOLUMN_DEFAULT_CLAUSE: {
+      // "ALTER COLUMN c SET DEFAULT " does not contain the column TYPE or
+      // NOT NULL attributes.
+      alter_table->set_table_name(table_name);
+      AlterTable::AlterColumn* alter_column =
+          alter_table->mutable_alter_column();
+      ColumnDefinition* column = alter_column->mutable_column();
+      alter_column->set_operation(AlterTable::AlterColumn::SET_DEFAULT);
+      column->set_column_name(column_name);
+      // `type` is required in ColumnDefinition, so set it to NONE here.
+      column->set_type(ColumnDefinition::NONE);
+      VisitColumnDefaultClauseNode(child, column, ddl_text);
+      break;
+    }
+    case JJTDROP_COLUMN_DEFAULT: {
+      // "ALTER COLUMN c DROP DEFAULT " does not contain the column TYPE or
+      // NOT NULL attributes.
+      alter_table->set_table_name(table_name);
+      AlterTable::AlterColumn* alter_column =
+          alter_table->mutable_alter_column();
+      ColumnDefinition* column = alter_column->mutable_column();
+      alter_column->set_operation(AlterTable::AlterColumn::DROP_DEFAULT);
+      column->set_column_name(column_name);
+      // `type` is required in ColumnDefinition, so set it to NONE here.
+      column->set_type(ColumnDefinition::NONE);
+      column->clear_column_default();
+      break;
+    }
+    case JJTCOLUMN_DEF_ALTER_ATTRS: {
+      // For "ALTER COLUMN c TYPE NOT NULL"
+      alter_table->set_table_name(table_name);
+      ColumnDefinition* column =
+          alter_table->mutable_alter_column()->mutable_column();
+      VisitColumnNodeAlterAttrs(child, column_name, column, ddl_text, errors);
+      break;
+    }
+    default:
+      ZETASQL_LOG(ERROR) << "Unexpected alter column type: "
+                 << GetChildNode(node, 1)->toString();
   }
-  *interleave->mutable_on_delete() = on_delete_action;
-  return absl::OkStatus();
 }
 
-absl::Status VisitStoredColumnNode(const SimpleNode* node,
-                                   ColumnDefinition* def) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTSTORED_COLUMN));
-  if (node->jjtGetNumChildren() != 1) {
-    return error::Internal(absl::StrCat(
-        "Expect exactly 1 child for STORED_COLUMN node: ", node->toString(),
-        ", found: ", node->jjtGetNumChildren(), "."));
-  }
-
-  // Get name of stored column and set the stored column properties.
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* name_node,
-                   GetChildAtIndexWithType(node, 0, JJTPATH));
-  def->set_column_name(name_node->image());
-  def->mutable_properties()->set_stored(name_node->image());
-  return absl::OkStatus();
-}
-
-absl::Status VisitStoredColumnListNode(const SimpleNode* node,
-                                       CreateIndex* index) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTSTORED_COLUMN_LIST));
-  if (node->jjtGetNumChildren() == 0) {
-    return error::Internal(
-        absl::StrCat("Expect at least 1 child for STORED_COLUMN_LIST node: ",
-                     node->toString()));
-  }
-
-  // Populate each of the stored columns in the index.
-  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* stored_column,
-                     GetChildAtIndexWithType(node, i, JJTSTORED_COLUMN));
-    ColumnDefinition* column_definition = index->add_columns();
-    ZETASQL_RETURN_IF_ERROR(VisitStoredColumnNode(stored_column, column_definition));
-  }
-  return absl::OkStatus();
-}
-
-absl::Status VisitIndexInterleaveNode(const SimpleNode* node,
-                                      CreateIndex* index) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTINDEX_INTERLEAVE_CLAUSE));
-  if (node->jjtGetNumChildren() != 1) {
-    return error::Internal(absl::StrCat(
-        "Expect exactly 1 child corresponding to parent table name for "
-        "INDEX_INTERLEAVE_CLAUSE node: ",
-        node->toString(), ", found: ", node->jjtGetNumChildren(), "."));
-  }
-
-  // Set name of parent table in which index is interleaved.
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* parent_name_node,
-                   GetChildAtIndexWithType(node, 0, JJTINTERLEAVE_IN));
-  index->add_constraints()->mutable_interleave()->set_parent(
-      parent_name_node->image());
-  return absl::OkStatus();
-}
-
-absl::Status AddForeignKeyColumnNames(
-    const SimpleNode* child, std::function<void(const std::string&)> add) {
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* names,
-                   GetChildAtIndexWithType(child, 0, JJTIDENTIFIER_LIST));
+void AddForeignKeyColumnNames(SimpleNode* child,
+                              std::function<void(const std::string&)> add) {
+  const SimpleNode* names = GetChildNode(child, 0, JJTIDENTIFIER_LIST);
   for (int i = 0; i < names->jjtGetNumChildren(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* name,
-                     GetChildAtIndexWithType(names, i, JJTIDENTIFIER));
+    const SimpleNode* name = GetChildNode(names, i, JJTIDENTIFIER);
     add(name->image());
   }
-  return absl::OkStatus();
 }
 
-absl::Status VisitForeignKeyNode(const SimpleNode* node,
-                                 ForeignKeyConstraint* foreign_key) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTFOREIGN_KEY));
-  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
+void VisitForeignKeyNode(const SimpleNode* node, ForeignKey* foreign_key,
+                         std::vector<std::string>* errors) {
+  CheckNode(node, JJTFOREIGN_KEY);
+  foreign_key->set_enforced(true);
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
     switch (child->getId()) {
       case JJTCONSTRAINT_NAME:
         foreign_key->set_constraint_name(child->image());
         break;
       case JJTREFERENCING_COLUMNS:
-        ZETASQL_RETURN_IF_ERROR(AddForeignKeyColumnNames(
+        AddForeignKeyColumnNames(
             child, [&foreign_key](const std::string& name) {
-              foreign_key->add_referencing_column_name(name);
-            }));
+              foreign_key->add_constrained_column_name(name);
+            });
         break;
       case JJTREFERENCED_TABLE:
-        foreign_key->set_referenced_table_name(child->image());
+        foreign_key->set_referenced_table_name(GetQualifiedIdentifier(child));
         break;
       case JJTREFERENCED_COLUMNS:
-        ZETASQL_RETURN_IF_ERROR(AddForeignKeyColumnNames(
+        AddForeignKeyColumnNames(
             child, [&foreign_key](const std::string& name) {
               foreign_key->add_referenced_column_name(name);
-            }));
+            });
         break;
       default:
-        return error::Internal(
-            absl::StrCat("Unexpected foreign key node: ", child->toString()));
+        // We can only get here if there is a bug in the grammar or parser.
+        ZETASQL_LOG(ERROR) << "Unexpected foreign key attribute: " << child->toString();
     }
   }
-  return absl::OkStatus();
 }
 
-absl::Status VisitCheckConstraintNode(const SimpleNode* node,
-                                      absl::string_view ddl_text,
-                                      CheckConstraint* check_constraint) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCHECK_CONSTRAINT));
-  if (!EmulatorFeatureFlags::instance().flags().enable_check_constraint) {
-    return error::CheckConstraintNotEnabled();
-  }
-
+void VisitCheckConstraintNode(const SimpleNode* node,
+                              absl::string_view ddl_text,
+                              CheckConstraint* check_constraint,
+                              std::vector<std::string>* errors) {
+  CheckNode(node, JJTCHECK_CONSTRAINT);
+  check_constraint->set_enforced(true);
   for (int i = 0; i < node->jjtGetNumChildren(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
+    SimpleNode* child = GetChildNode(node, i);
     switch (child->getId()) {
-      case JJTCONSTRAINT_NAME:
-        check_constraint->set_constraint_name(child->image());
-        break;
+      case JJTCONSTRAINT_NAME: {
+        check_constraint->set_name(child->image());
+        continue;
+      }
       case JJTCHECK_CONSTRAINT_EXPRESSION: {
-        check_constraint->set_sql_expression(
-            std::string(GetExpressionStr(*child, ddl_text)));  // NOLINT
+        check_constraint->set_expression(
+            absl::StrCat(ExtractTextForNode(child, ddl_text)));
+        continue;
+      }
+      default: {
+        ZETASQL_LOG(ERROR) << "Unexpected check constraint attribute: "
+                   << child->toString();
+      }
+    }
+  }
+}
+
+void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
+                          absl::string_view ddl_text,
+                          std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_TABLE_STATEMENT);
+
+  int offset = 0;
+  table->set_table_name(
+      GetQualifiedIdentifier(GetChildNode(node, offset, JJTNAME)));
+  offset++;
+
+  for (int i = offset; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTCOLUMN_DEF:
+        VisitColumnNode(child, table->add_column(), ddl_text, errors);
+        break;
+      case JJTFOREIGN_KEY:
+        VisitForeignKeyNode(child, table->add_foreign_key(), errors);
+        break;
+      case JJTCHECK_CONSTRAINT:
+        VisitCheckConstraintNode(child, ddl_text, table->add_check_constraint(),
+                                 errors);
+        break;
+      case JJTPRIMARY_KEY:
+        VisitKeyNode(child, table->mutable_primary_key(), errors);
+        break;
+      case JJTTABLE_INTERLEAVE_CLAUSE:
+        VisitTableInterleaveNode(child, table->mutable_interleave_clause());
+        break;
+      case JJTROW_DELETION_POLICY_CLAUSE:
+        VisitTableRowDeletionPolicyNode(
+            child, table->mutable_row_deletion_policy(), errors);
+        break;
+      default:
+        ZETASQL_LOG(ERROR) << "Unexpected table info: " << child->toString();
+    }
+  }
+}
+
+void VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index,
+                          std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_INDEX_STATEMENT);
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTUNIQUE_INDEX:
+        index->set_unique(true);
+        break;
+      case JJTNULL_FILTERED:
+        index->set_null_filtered(true);
+        break;
+      case JJTNAME:
+        index->set_index_name(GetQualifiedIdentifier(child));
+        break;
+      case JJTTABLE:
+        index->set_index_base_name(GetQualifiedIdentifier(child));
+        break;
+      case JJTCOLUMNS:
+        VisitKeyNode(child, index->mutable_key(), errors);
+        break;
+      case JJTSTORED_COLUMN_LIST:
+        VisitStoredColumnListNode(
+            child, index->mutable_stored_column_definition(), errors);
+        break;
+      case JJTINDEX_INTERLEAVE_CLAUSE:
+        VisitIndexInterleaveNode(child, index->mutable_interleave_in_table());
+        break;
+      default:
+        ZETASQL_LOG(ERROR) << "Unexpected index info: " << child->toString();
+    }
+  }
+}
+
+void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
+                         DDLStatement* statement,
+                         std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_TABLE_STATEMENT);
+  const SimpleNode* child = GetChildNode(node, 1);
+  std::string table_name =
+      GetQualifiedIdentifier(GetFirstChildNode(node, JJTTABLE_NAME));
+  if (child->getId() == JJTALTER_COLUMN) {
+    // Depending on the ALTER COLUMN variant, we may generate either
+    // an AlterTable or SetColumnOptions statement.
+    std::string column_name = GetChildNode(node, 2, JJTNAME)->image();
+    VisitColumnNodeAlter(table_name, column_name,
+                         GetChildNode(node, 3, JJTCOLUMN_DEF_ALTER), ddl_text,
+                         statement, errors);
+  } else {
+    // These will generate an AlterTable statement.
+    AlterTable* alter_table = statement->mutable_alter_table();
+    alter_table->set_table_name(table_name);
+    switch (child->getId()) {
+      case JJTADD_COLUMN: {
+        int offset = 2;
+        VisitColumnNode(GetChildNode(node, offset, JJTCOLUMN_DEF),
+                        alter_table->mutable_add_column()->mutable_column(),
+                        ddl_text, errors);
+      } break;
+      case JJTDROP_COLUMN: {
+        SimpleNode* column = GetChildNode(node, 2, JJTCOLUMN_NAME);
+        alter_table->set_drop_column(column->image());
+        break;
+      }
+      case JJTSET_ON_DELETE: {
+        SimpleNode* on_delete_node = GetChildNode(node, 2, JJTON_DELETE_CLAUSE);
+        InterleaveClause::Action on_delete_action;
+        VisitOnDeleteClause(on_delete_node, &on_delete_action);
+        alter_table->mutable_set_on_delete()->set_action(on_delete_action);
+        break;
+      }
+      case JJTFOREIGN_KEY:
+        VisitForeignKeyNode(
+            child,
+            alter_table->mutable_add_foreign_key()->mutable_foreign_key(),
+            errors);
+        break;
+      case JJTCHECK_CONSTRAINT:
+        VisitCheckConstraintNode(child, ddl_text,
+                                 alter_table->mutable_add_check_constraint()
+                                     ->mutable_check_constraint(),
+                                 errors);
+        break;
+      case JJTDROP_CONSTRAINT: {
+        SimpleNode* constraint_name = GetChildNode(node, 2, JJTCONSTRAINT_NAME);
+        alter_table->mutable_drop_constraint()->set_name(
+            constraint_name->image());
+        break;
+      }
+      case JJTADD_ROW_DELETION_POLICY: {
+        VisitTableRowDeletionPolicyNode(
+            GetChildNode(child, 0, JJTROW_DELETION_POLICY_CLAUSE),
+            alter_table->mutable_add_row_deletion_policy(), errors);
+        break;
+      }
+      case JJTREPLACE_ROW_DELETION_POLICY: {
+        VisitTableRowDeletionPolicyNode(
+            GetChildNode(child, 0, JJTROW_DELETION_POLICY_CLAUSE),
+            alter_table->mutable_alter_row_deletion_policy(), errors);
+        break;
+      }
+      case JJTDROP_ROW_DELETION_POLICY: {
+        alter_table->mutable_drop_row_deletion_policy();
         break;
       }
       default:
-        return error::Internal(absl::StrCat(
-            "Unexpected check constraint attribute: ", child->toString()));
+        ZETASQL_LOG(ERROR) << "Unexpected alter table type: "
+                   << GetChildNode(node, 1)->toString();
     }
   }
-  return absl::OkStatus();
 }
 
-absl::Status VisitRowDeletionPolicyExpression(const SimpleNode* node,
-                                              RowDeletionPolicy* policy) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTROW_DELETION_POLICY_EXPRESSION));
-  ZETASQL_ASSIGN_OR_RETURN(
-      const SimpleNode* function,
-      GetChildAtIndexWithType(node, 0, JJTROW_DELETION_POLICY_FUNCTION));
-  if (absl::AsciiStrToUpper(function->image()) != "OLDER_THAN") {
-    return absl::Status(absl::StatusCode::kInvalidArgument,
-                        "Only OLDER_THAN is supported.");
-  }
+// End Visit functions
+//////////////////////////////////////////////////////////////////////////
 
-  ZETASQL_ASSIGN_OR_RETURN(
-      const SimpleNode* column,
-      GetChildAtIndexWithType(node, 1, JJTROW_DELETION_POLICY_COLUMN));
-  policy->set_column_name(column->image());
+// Walk over AST to build up an un-validated DDLStatement.
+void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
+                            DDLStatement* statement,
+                            std::vector<std::string>* errors) {
+  CheckNode(root, JJTDDL_STATEMENT);
 
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* interval_expr,
-                   GetChildAtIndexWithType(node, 2, JJTINTERVAL_EXPRESSION));
-
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* days,
-                   GetChildAtIndexWithType(interval_expr, 0, JJTINT_VALUE));
-  policy->set_older_than(days->image_as_int64());
-  return absl::OkStatus();
-}
-
-absl::Status VisitRowDeletionPolicyNode(const SimpleNode* node,
-                                        RowDeletionPolicy* policy) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTROW_DELETION_POLICY_CLAUSE));
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, 0));
-  return VisitRowDeletionPolicyExpression(child, policy);
-}
-
-absl::Status VisitCreateTableNode(
-    const SimpleNode* node, CreateTable* table, absl::string_view ddl_text,
-    std::vector<std::string>* errors
-) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCREATE_TABLE_STATEMENT));
-
-  // Parse children nodes to set corresponding properties of table.
-  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
-    switch (child->getId()) {
-      case JJTNAME:
-        table->set_table_name(child->image());
-        break;
-      case JJTCOLUMN_DEF:
-        ZETASQL_RETURN_IF_ERROR(VisitColumnNode(child, table->add_columns(), ddl_text,
-                                        errors
-                                        ));
-        break;
-      case JJTFOREIGN_KEY:
-        ZETASQL_RETURN_IF_ERROR(VisitForeignKeyNode(
-            child, table->add_constraints()->mutable_foreign_key()));
-        break;
-      case JJTCHECK_CONSTRAINT:
-        ZETASQL_RETURN_IF_ERROR(VisitCheckConstraintNode(
-            child, ddl_text, table->add_constraints()->mutable_check()));
-        break;
-      case JJTPRIMARY_KEY:
-        ZETASQL_RETURN_IF_ERROR(VisitPrimaryKey(
-            child, table->add_constraints()->mutable_primary_key()));
-        break;
-      case JJTTABLE_INTERLEAVE_CLAUSE:
-        ZETASQL_RETURN_IF_ERROR(VisitTableInterleaveNode(
-            child, table->add_constraints()->mutable_interleave()));
-        break;
-      case JJTROW_DELETION_POLICY_CLAUSE:
-        ZETASQL_RETURN_IF_ERROR(VisitRowDeletionPolicyNode(
-            child, table->mutable_row_deletion_policy()));
-        break;
-      default:
-        return error::Internal(
-            absl::StrCat("Unexpected table info: ", child->toString()));
-    }
-  }
-  return absl::OkStatus();
-}
-
-absl::Status VisitCreateIndexNodeInternal(const SimpleNode* node,
-                                          CreateIndex* index) {
-  // Parse children nodes to set corresponding properties of index
-  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
-    switch (child->getId()) {
-      case JJTUNIQUE_INDEX:
-        index->mutable_properties()->set_unique(true);
-        break;
-      case JJTNULL_FILTERED:
-        index->mutable_properties()->set_null_filtered(true);
-        break;
-      case JJTNAME:
-        index->set_index_name(child->image());
-        break;
-      case JJTTABLE:
-        index->set_table_name(child->image());
-        break;
-      case JJTCOLUMNS:
-        ZETASQL_RETURN_IF_ERROR(VisitPrimaryKey(
-            child, index->add_constraints()->mutable_primary_key()));
-        break;
-      case JJTSTORED_COLUMN_LIST:
-        ZETASQL_RETURN_IF_ERROR(VisitStoredColumnListNode(child, index));
-        break;
-      case JJTINDEX_INTERLEAVE_CLAUSE:
-        ZETASQL_RETURN_IF_ERROR(VisitIndexInterleaveNode(child, index));
-        break;
-      default:
-        return error::Internal(
-            absl::StrCat("Unexpected index info: ", child->toString()));
-    }
-  }
-  return absl::OkStatus();
-}
-
-absl::Status VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCREATE_INDEX_STATEMENT));
-
-  return VisitCreateIndexNodeInternal(node, index);
-}
-
-absl::Status VisitDropStatementNode(const SimpleNode* node,
-                                    DDLStatement* ddl_statement) {
-  // Name of the object to drop.
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* name_node,
-                   GetFirstChildWithType(node, JJTNAME));
-
-  // Find type of object to drop, and set corresponding fields in ddl_statement.
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, 0));
-  switch (child->getId()) {
-    case JJTTABLE:
-      ddl_statement->mutable_drop_table()->set_table_name(name_node->image());
+  const SimpleNode* stmt = GetChildNode(root, 0);
+  switch (stmt->getId()) {
+    case JJTCREATE_DATABASE_STATEMENT:
+      VisitCreateDatabaseNode(stmt, statement->mutable_create_database(),
+                              errors);
       break;
-    case JJTINDEX:
-      ddl_statement->mutable_drop_index()->set_index_name(name_node->image());
-      break;
-    default:
-      return error::Internal(absl::StrCat(
-          "Unexpected object type for drop statement: ", child->toString()));
-  }
-  return absl::OkStatus();
-}
-
-absl::Status VisitAlterTableAddColumnNode(
-    const SimpleNode* node, AlterTable* alter_table, absl::string_view ddl_text,
-    std::vector<std::string>* errors
-) {
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* column_node,
-                   GetChildAtIndexWithType(node, 2, JJTCOLUMN_DEF));
-  AlterColumn* alter_column = alter_table->mutable_alter_column();
-  alter_column->set_type(AlterColumn::ADD);
-  return VisitColumnNode(column_node, alter_column->mutable_column(), ddl_text,
-                         errors
-  );
-}
-
-absl::Status VisitAlterTableDropColumnNode(const SimpleNode* node,
-                                           AlterTable* alter_table) {
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* name_node,
-                   GetChildAtIndexWithType(node, 2, JJTCOLUMN_NAME));
-  AlterColumn* drop_column = alter_table->mutable_alter_column();
-  drop_column->set_type(AlterColumn::DROP);
-  drop_column->set_column_name(name_node->image());
-  return absl::OkStatus();
-}
-
-absl::Status VisitAlterColumnAttrsNode(
-    const SimpleNode* node, ColumnDefinition* column_definition,
-    absl::string_view ddl_text,
-    std::vector<std::string>* errors
-) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCOLUMN_DEF_ALTER_ATTRS));
-
-  // Set altered column attributes.
-  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
-    switch (child->getId()) {
-      case JJTCOLUMN_TYPE:
-        ZETASQL_RETURN_IF_ERROR(VisitColumnTypeNode(
-            child, column_definition,
-            column_definition->mutable_properties()->mutable_column_type(), 0,
-            errors
-            ));
-        break;
-      case JJTNOT_NULL:
-        column_definition->add_constraints()->mutable_not_null()->set_nullable(
-            false);
-        break;
-      case JJTGENERATION_CLAUSE:
-        ZETASQL_RETURN_IF_ERROR(
-            VisitGenerationClauseNode(child, column_definition, ddl_text));
-        break;
-      case JJTCOLUMN_DEFAULT_CLAUSE:
-        ZETASQL_RETURN_IF_ERROR(
-            VisitColumnDefaultClauseNode(child, column_definition, ddl_text));
-        break;
-      default:
-        return error::Internal(
-            absl::StrCat("Unexpected alter column info: ", child->toString()));
-    }
-  }
-  return absl::OkStatus();
-}
-
-absl::Status VisitAlterColumnNode(
-    const SimpleNode* node, AlterColumn* alter_column,
-    absl::string_view ddl_text,
-    std::vector<std::string>* errors
-) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCOLUMN_DEF_ALTER));
-
-  // Check the type of alter column and set corresponding properties.
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, 0));
-  switch (child->getId()) {
-    case JJTOPTIONS_CLAUSE: {
-      ZETASQL_RETURN_IF_ERROR(VisitColumnOptionListNode(
-          child, alter_column->mutable_column()->mutable_options()));
-      break;
-    }
-    case JJTCOLUMN_DEFAULT_CLAUSE: {
-      alter_column->set_type(AlterColumn::SET_DEFAULT);
-      ZETASQL_RETURN_IF_ERROR(VisitColumnDefaultClauseNode(
-          child, alter_column->mutable_column(), ddl_text));
-      break;
-    }
-    case JJTDROP_COLUMN_DEFAULT: {
-      alter_column->set_type(AlterColumn::DROP_DEFAULT);
-      break;
-    }
-    case JJTCOLUMN_DEF_ALTER_ATTRS:
-      ZETASQL_RETURN_IF_ERROR(VisitAlterColumnAttrsNode(
-          child, alter_column->mutable_column(), ddl_text,
-          errors
-          ));
-      break;
-    default:
-      return error::Internal(
-          absl::StrCat("Unexpected alter column type: ", child->toString()));
-  }
-  return absl::OkStatus();
-}
-
-absl::Status VisitAlterTableAlterColumnNode(
-    const SimpleNode* node, AlterTable* alter_table, absl::string_view ddl_text,
-    std::vector<std::string>* errors
-) {
-  // Set name of the column to be altered.
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* column_name_node,
-                   GetChildAtIndexWithType(node, 2, JJTNAME));
-  AlterColumn* alter_column = alter_table->mutable_alter_column();
-  alter_column->set_column_name(column_name_node->image());
-
-  // Set the same column name in the ColumnDefinition section of an AlterColumn
-  // operation as the DDL currently doesn't support renaming columns in ALTER
-  // COLUMN.
-  alter_column->mutable_column()->set_column_name(column_name_node->image());
-  alter_column->set_type(AlterColumn::ALTER);
-
-  // Set altered column definition.
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* alter_column_node,
-                   GetChildAtIndexWithType(node, 3, JJTCOLUMN_DEF_ALTER));
-  return VisitAlterColumnNode(alter_column_node, alter_column, ddl_text,
-                              errors
-  );
-}
-
-absl::Status VisitAlterTableSetOnDelete(const SimpleNode* node,
-                                        AlterTable* alter_table) {
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* on_delete_node,
-                   GetChildAtIndexWithType(node, 2, JJTON_DELETE_CLAUSE));
-
-  AlterConstraint* alter_constraint = alter_table->mutable_alter_constraint();
-  alter_constraint->set_type(AlterConstraint::ALTER);
-
-  return VisitOnDeleteClause(on_delete_node,
-                             alter_constraint->mutable_constraint()
-                                 ->mutable_interleave()
-                                 ->mutable_on_delete());
-}
-
-absl::Status VisitAlterTableAddForeignKey(const SimpleNode* node,
-                                          AlterTable* alter_table) {
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* foreign_key,
-                   GetChildAtIndexWithType(node, 1, JJTFOREIGN_KEY));
-  ZETASQL_RETURN_IF_ERROR(
-      VisitForeignKeyNode(foreign_key, alter_table->mutable_alter_constraint()
-                                           ->mutable_constraint()
-                                           ->mutable_foreign_key()));
-  const std::string& constraint_name = alter_table->alter_constraint()
-                                           .constraint()
-                                           .foreign_key()
-                                           .constraint_name();
-  if (!constraint_name.empty()) {
-    alter_table->mutable_alter_constraint()->set_constraint_name(
-        constraint_name);
-  }
-  alter_table->mutable_alter_constraint()->set_type(AlterConstraint::ADD);
-  return absl::OkStatus();
-}
-
-absl::Status VisitAlterTableDropConstraint(const SimpleNode* node,
-                                           AlterTable* alter_table) {
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* name,
-                   GetChildAtIndexWithType(node, 2, JJTCONSTRAINT_NAME));
-  alter_table->mutable_alter_constraint()->set_constraint_name(name->image());
-  alter_table->mutable_alter_constraint()->set_type(AlterConstraint::DROP);
-  return absl::OkStatus();
-}
-
-absl::Status VisitAlterTableAddCheckConstraint(const SimpleNode* node,
-                                               AlterTable* alter_table,
-                                               absl::string_view ddl_text) {
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* check_constraint,
-                   GetChildAtIndexWithType(node, 1, JJTCHECK_CONSTRAINT));
-  ZETASQL_RETURN_IF_ERROR(
-      VisitCheckConstraintNode(check_constraint, ddl_text,
-                               alter_table->mutable_alter_constraint()
-                                   ->mutable_constraint()
-                                   ->mutable_check()));
-  const std::string& constraint_name =
-      alter_table->alter_constraint().constraint().check().constraint_name();
-  if (!constraint_name.empty()) {
-    alter_table->mutable_alter_constraint()->set_constraint_name(
-        constraint_name);
-  }
-  alter_table->mutable_alter_constraint()->set_type(AlterConstraint::ADD);
-  return absl::OkStatus();
-}
-
-absl::Status VisitAlterRowDeletionPolicy(
-    const SimpleNode* node, AlterRowDeletionPolicy* alter_row_deletion_policy,
-    AlterRowDeletionPolicy::Type type) {
-  ZETASQL_ASSIGN_OR_RETURN(
-      const SimpleNode* policy_node,
-      GetChildAtIndexWithType(node, 0, JJTROW_DELETION_POLICY_CLAUSE));
-  alter_row_deletion_policy->set_type(type);
-  return VisitRowDeletionPolicyNode(
-      policy_node, alter_row_deletion_policy->mutable_row_deletion_policy());
-}
-
-absl::Status VisitAlterTableNode(const SimpleNode* node,
-                                 DDLStatement* statement,
-                                 absl::string_view ddl_text,
-                                 std::vector<std::string>* errors
-) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTALTER_TABLE_STATEMENT));
-
-  // Name of the table to alter.
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* table_name_node,
-                   GetFirstChildWithType(node, JJTTABLE_NAME));
-  AlterTable* alter_table = statement->mutable_alter_table();
-  alter_table->set_table_name(table_name_node->image());
-
-  // Find the type of alter table and set corresponding alter values.
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, 1));
-  switch (child->getId()) {
-    case JJTADD_COLUMN:
-      return VisitAlterTableAddColumnNode(node, alter_table, ddl_text,
-                                          errors
-      );
-    case JJTDROP_COLUMN:
-      return VisitAlterTableDropColumnNode(node, alter_table);
-    case JJTALTER_COLUMN:
-      return VisitAlterTableAlterColumnNode(node, alter_table, ddl_text,
-                                            errors
-      );
-    case JJTSET_ON_DELETE:
-      return VisitAlterTableSetOnDelete(node, alter_table);
-    case JJTFOREIGN_KEY:
-      return VisitAlterTableAddForeignKey(node, alter_table);
-    case JJTCHECK_CONSTRAINT:
-      return VisitAlterTableAddCheckConstraint(node, alter_table, ddl_text);
-    case JJTDROP_CONSTRAINT:
-      return VisitAlterTableDropConstraint(node, alter_table);
-    case JJTADD_ROW_DELETION_POLICY:
-      return VisitAlterRowDeletionPolicy(
-          child, alter_table->mutable_alter_row_deletion_policy(),
-          AlterRowDeletionPolicy::ADD);
-    case JJTREPLACE_ROW_DELETION_POLICY:
-      return VisitAlterRowDeletionPolicy(
-          child, alter_table->mutable_alter_row_deletion_policy(),
-          AlterRowDeletionPolicy::REPLACE);
-    case JJTDROP_ROW_DELETION_POLICY:
-      alter_table->mutable_alter_row_deletion_policy()->set_type(
-          AlterRowDeletionPolicy::DROP);
-      return absl::OkStatus();
-    default:
-      return error::Internal(
-          absl::StrCat("Unexpected alter table type: ", child->toString()));
-  }
-}
-
-absl::StatusOr<DDLStatement> BuildDDLStatement(
-    const SimpleNode* root, absl::string_view ddl_text,
-    std::vector<std::string>* errors
-) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(root, JJTDDL_STATEMENT));
-  if (root->jjtGetNumChildren() != 1) {
-    return error::Internal(
-        absl::StrCat("Expected 1 child of type DDL_STATEMENT, found ",
-                     root->jjtGetNumChildren(), " children."));
-  }
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(root, 0));
-
-  DDLStatement statement;
-  switch (child->getId()) {
     case JJTCREATE_TABLE_STATEMENT:
-      ZETASQL_RETURN_IF_ERROR(VisitCreateTableNode(
-          child, statement.mutable_create_table(), ddl_text,
-          errors
-          ));
+      VisitCreateTableNode(stmt, statement->mutable_create_table(), ddl_text,
+                           errors);
       break;
     case JJTCREATE_INDEX_STATEMENT:
-      ZETASQL_RETURN_IF_ERROR(
-          VisitCreateIndexNode(child, statement.mutable_create_index()));
+      VisitCreateIndexNode(stmt, statement->mutable_create_index(), errors);
       break;
     case JJTDROP_STATEMENT: {
-      ZETASQL_RETURN_IF_ERROR(VisitDropStatementNode(child, &statement));
-      break;
-    }
+      const SimpleNode* drop_stmt = GetChildNode(stmt, 0);
+      std::string name =
+          GetQualifiedIdentifier(GetFirstChildNode(stmt, JJTNAME));
+      switch (drop_stmt->getId()) {
+        case JJTTABLE:
+          statement->mutable_drop_table()->set_table_name(name);
+          break;
+        case JJTINDEX:
+          statement->mutable_drop_index()->set_index_name(name);
+          break;
+        default:
+          ZETASQL_LOG(ERROR) << "Unexpected object type: "
+                     << GetChildNode(stmt, 0)->toString();
+      }
+    } break;
     case JJTALTER_TABLE_STATEMENT:
-      ZETASQL_RETURN_IF_ERROR(VisitAlterTableNode(child, &statement, ddl_text,
-                                          errors
-                                          ));
+      VisitAlterTableNode(stmt, ddl_text, statement, errors);
       break;
     case JJTANALYZE_STATEMENT:
-      // Intentionally no-op
-      statement.mutable_analyze();
+      CheckNode(stmt, JJTANALYZE_STATEMENT);
+      statement->mutable_analyze();
       break;
     default:
-      return error::Internal(
-          absl::StrCat("Unexpected statement: ", child->toString()));
+      ZETASQL_LOG(ERROR) << "Unexpected statement: " << stmt->toString();
   }
-  return statement;
 }
 
-absl::StatusOr<CreateDatabase> VisitCreateDatabaseNode(const SimpleNode* node) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(node, JJTCREATE_DATABASE_STATEMENT));
-
-  CreateDatabase database;
-  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* child, GetChildAtIndex(node, i));
-    switch (child->getId()) {
-      case JJTDB_NAME:
-        database.set_database_name(child->image());
-        break;
-      default:
-        return error::Internal(
-            absl::StrCat("Unknown node type: ", node->toString()));
-    }
+absl::Status UnvalidatedParseCloudDDLStatement(absl::string_view ddl,
+                                               DDLStatement* statement) {
+  // Special case: JavaCC doesn't like parsing a completely empty string. Return
+  // an error immediately instead.
+  if (ddl.empty()) {
+    return error::EmptyDDLStatement();
   }
-  return database;
-}
 
-absl::StatusOr<CreateDatabase> BuildCreateDatabaseStatement(
-    const SimpleNode* root) {
-  ZETASQL_RETURN_IF_ERROR(CheckNodeType(root, JJTDDL_STATEMENT));
+  // The parser owns the token manager and character streams.
+  DDLParser parser(new DDLParserTokenManager(new DDLCharStream(ddl)));
 
-  // Root node for CreateDatabase should have one create_database child node.
-  if (root->jjtGetNumChildren() != 1) {
-    return error::Internal(absl::StrCat(
-        "Expected 1 child of type CREATE_DATABASE_STATEMENT, found ",
-        root->jjtGetNumChildren(), " children."));
+  std::vector<std::string> errors;
+  CloudDDLErrorHandler error_handler(&errors);
+  parser.setErrorHandler(&error_handler);
+
+  SimpleNode* node = parser.ParseDDL();
+  if (node == nullptr) {
+    // NULL means error from JavaCC. "errors" contains parse issues.
+    if (errors.empty()) errors.push_back("Unknown error.");
+    return error::DDLStatementWithErrors(ddl, errors);
   }
-  ZETASQL_ASSIGN_OR_RETURN(const SimpleNode* create_database_node,
-                   GetChildAtIndex(root, 0));
-  return VisitCreateDatabaseNode(create_database_node);
+
+  statement->Clear();
+  BuildCloudDDLStatement(node, ddl, statement, &errors);
+  return error::DDLStatementWithErrors(ddl, errors);
 }
 
 }  // namespace
 
-absl::StatusOr<CreateDatabase> ParseCreateDatabase(
-    absl::string_view create_statement) {
-  // Instantiate a new DDLParser with given statement.
-  DDLParser parser(
-      new DDLParserTokenManager(new DDLCharStream(create_statement)));
-  // Parse input statement into the root node.
-  ZETASQL_ASSIGN_OR_RETURN(SimpleNode * node,
-                   ParseDDLStatementToNode(parser, create_statement));
-
-  // Try to read root node as a valid CreateDatabaseStatement.
-  return BuildCreateDatabaseStatement(node);
-}
-
-absl::StatusOr<DDLStatement> ParseDDLStatement(
-    absl::string_view input
-) {
-  // Instantiate a new DDLParser with given statement.
-  DDLParser parser(new DDLParserTokenManager(new DDLCharStream(input)));
-  // Parse input statement into the root node.
-  ZETASQL_ASSIGN_OR_RETURN(SimpleNode * node, ParseDDLStatementToNode(parser, input));
-
-  // Try to read root node as a valid DDLStatement.
-  std::vector<std::string> errors;
-  DDLStatement statement;
-  ZETASQL_ASSIGN_OR_RETURN(statement, BuildDDLStatement(node, input,
-                                                &errors
-                                                ));
-  if (!errors.empty()) {
-    return error::DDLStatementWithErrors(input, errors);
-  }
-  return statement;
+absl::Status ParseDDLStatement(absl::string_view ddl, DDLStatement* statement) {
+  return UnvalidatedParseCloudDDLStatement(ddl, statement);
 }
 
 }  // namespace ddl

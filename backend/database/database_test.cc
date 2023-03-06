@@ -40,6 +40,7 @@ namespace backend {
 namespace {
 
 using zetasql::values::Int64;
+using zetasql_base::testing::StatusIs;
 
 class DatabaseTest : public ::testing::Test {
  public:
@@ -58,7 +59,8 @@ class DatabaseTest : public ::testing::Test {
 };
 
 TEST_F(DatabaseTest, CreateSuccessful) {
-  ZETASQL_EXPECT_OK(Database::Create(&clock_, SchemaChangeOperation{}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<Database> database,
+                       Database::Create(&clock_, SchemaChangeOperation{}));
 
   std::vector<std::string> create_statements = {R"(
     CREATE TABLE T(
@@ -69,8 +71,10 @@ TEST_F(DatabaseTest, CreateSuccessful) {
                                                 R"(
     CREATE INDEX I on T(k1))"};
 
-  ZETASQL_EXPECT_OK(Database::Create(
-      &clock_, SchemaChangeOperation{.statements = create_statements}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      database,
+      Database::Create(&clock_,
+                       SchemaChangeOperation{.statements = create_statements}));
 }
 
 TEST_F(DatabaseTest, UpdateSchemaSuccessful) {

@@ -63,6 +63,9 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_JSON_STRICT_NUMBER_PARSING,
       zetasql::FEATURE_V_1_4_WITH_EXPRESSION,
   });
+  if (EmulatorFeatureFlags::instance().flags().enable_dml_returning) {
+    options.EnableLanguageFeature(zetasql::FEATURE_V_1_3_DML_RETURNING);
+  }
   options.SetSupportedStatementKinds({
       zetasql::RESOLVED_QUERY_STMT,
       zetasql::RESOLVED_INSERT_STMT,

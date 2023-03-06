@@ -27,6 +27,7 @@ cc_library(
         "index.cc",
         "schema.cc",
         "table.cc",
+        "view.cc",
     ],
     hdrs = [
         "check_constraint.h",
@@ -35,6 +36,7 @@ cc_library(
         "index.h",
         "schema.h",
         "table.h",
+        "view.h",
     ],
     deps = [
         "//backend/common:case",
@@ -58,6 +60,7 @@ cc_library(
         "@com_google_zetasql//zetasql/public:options_cc_proto",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:type_cc_proto",
+        "@com_googlesource_code_re2//:re2",
     ],
 )
 

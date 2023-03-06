@@ -14,30 +14,31 @@
 // limitations under the License.
 //
 
-#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_PARSER_H_
-#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_PARSER_H_
+#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_VALIDATORS_VIEW_VALIDATOR_H_
+#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_VALIDATORS_VIEW_VALIDATOR_H_
 
-#include <memory>
-
+#include "backend/schema/catalog/view.h"
+#include "backend/schema/updater/schema_validation_context.h"
 #include "absl/status/status.h"
-#include "absl/strings/string_view.h"
-#include "backend/schema/ddl/operations.pb.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
 
-namespace ddl {
+// Implementation of View::Validate() / View::ValidateUpdate().
+class ViewValidator {
+ public:
+  static absl::Status Validate(const View* view,
+                               SchemaValidationContext* context);
 
-// The option to enable the use of cloud spanner commit timestamps for a column.
-extern const char kCommitTimestampOptionName[];
+  static absl::Status ValidateUpdate(const View* view, const View* old_view,
+                                     SchemaValidationContext* context);
+};
 
-absl::Status ParseDDLStatement(absl::string_view ddl, DDLStatement* statement);
-
-}  // namespace ddl
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner
 }  // namespace google
-#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_PARSER_H_
+
+#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_VALIDATORS_VIEW_VALIDATOR_H_

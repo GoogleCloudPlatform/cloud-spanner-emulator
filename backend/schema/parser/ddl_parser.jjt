@@ -89,7 +89,7 @@ void create_statement() #void :
   (   create_database_statement()
 
     | create_table_statement()
-    | create_index_statement()
+    | LOOKAHEAD(2) create_index_statement()
 
   )
 }
@@ -342,22 +342,17 @@ void drop_statement() :
   ) qualified_identifier() #name
 
 
+
 }
 
 void alter_statement() #void :
 {}
 {
   <ALTER>
-  (   alter_database_statement()
-    | alter_table_statement()
+  (
+    alter_table_statement()
 
   )
-}
-
-void alter_database_statement() :
-{}
-{
-  <DATABASE> (identifier() #database_name) <SET> options_clause()
 }
 
 void alter_table_statement() :

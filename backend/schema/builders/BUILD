@@ -26,6 +26,7 @@ cc_library(
         "foreign_key_builder.h",
         "index_builder.h",
         "table_builder.h",
+        "view_builder.h",
     ],
     deps = [
         "//backend/common:ids",

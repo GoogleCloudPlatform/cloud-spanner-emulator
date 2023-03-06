@@ -30,14 +30,14 @@ namespace backend {
 
 // Converts the ColumnType in DDL statements to zetasql::Type.
 absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
-    const ddl::ColumnType& ddl_type,
+    const ddl::ColumnDefinition& ddl_column_def,
     zetasql::TypeFactory* type_factory
 );
 
-// Converts zetasql::Type to its equivalent DDL ColumnType. Returns a
-// ddl::ColumnType::UNKNOWN_TYPE type if the passed in googlesql type is not a
-// recognized type. REQUIRES: type!=nullptr.
-ddl::ColumnType GoogleSqlTypeToDDLColumnType(const zetasql::Type* type);
+// Converts zetasql::Type to its equivalent DDL ColumnDefinition.
+// Returns a ddl::ColumnDefinition::NONE type if the passed in googlesql type is
+// not a recognized type. REQUIRES: type!=nullptr.
+ddl::ColumnDefinition GoogleSqlTypeToDDLColumnType(const zetasql::Type* type);
 
 }  // namespace backend
 }  // namespace emulator

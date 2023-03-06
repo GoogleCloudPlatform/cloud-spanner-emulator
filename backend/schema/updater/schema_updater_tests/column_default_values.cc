@@ -63,7 +63,7 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, NonKeyColumns) {
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
-  EXPECT_EQ(col->expression().value(), "(1)");
+  EXPECT_EQ(col->expression().value(), "1");
   EXPECT_EQ(col->dependent_columns().size(), 0);
 
   col = table->FindColumn("D2");
@@ -74,7 +74,7 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, NonKeyColumns) {
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
-  EXPECT_EQ(col->expression().value(), "(2)");
+  EXPECT_EQ(col->expression().value(), "2");
   EXPECT_EQ(col->dependent_columns().size(), 0);
 }
 
@@ -107,7 +107,7 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, KeyColumn) {
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
-  EXPECT_EQ(col->expression().value(), "(20)");
+  EXPECT_EQ(col->expression().value(), "20");
   EXPECT_EQ(col->dependent_columns().size(), 0);
 
   col = table->FindColumn("K3");
@@ -117,7 +117,7 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, KeyColumn) {
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
-  EXPECT_EQ(col->expression().value(), "(30)");
+  EXPECT_EQ(col->expression().value(), "30");
   EXPECT_EQ(col->dependent_columns().size(), 0);
 }
 
@@ -152,7 +152,7 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, SetDropDefault) {
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
-  EXPECT_EQ(col->expression().value(), "(2)");
+  EXPECT_EQ(col->expression().value(), "2");
   EXPECT_EQ(col->dependent_columns().size(), 0);
 
   col = table->FindColumn("K3");
@@ -162,7 +162,7 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, SetDropDefault) {
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
-  EXPECT_EQ(col->expression().value(), "(30)");
+  EXPECT_EQ(col->expression().value(), "30");
   EXPECT_EQ(col->dependent_columns().size(), 0);
 
   col = table->FindColumn("V");

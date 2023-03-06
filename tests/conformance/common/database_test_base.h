@@ -609,6 +609,9 @@ class DatabaseTest : public ::testing::Test {
   absl::StatusOr<CommitResult> CommitDml(
       const std::vector<SqlStatement>& sql_statements);
 
+  absl::StatusOr<CommitResult> CommitDmlReturning(
+      const SqlStatement sql_statement, std::vector<ValueRow>& result);
+
   // Commits the given transaction with the set of sql statements provided.
   absl::StatusOr<CommitResult> CommitDmlTransaction(
       Transaction txn, const std::vector<SqlStatement>& sql_statements);
