@@ -66,11 +66,19 @@ absl::Status GetGeneratedColumnsInTopologicalOrder(
   return sorter.TopologicalOrder(generated_columns);
 }
 
-bool IsAnyDependentColumnPresent(const Column* generated_column,
-                                 std::vector<std::string> columns) {
+// Check if any dependent column is present in the user supplied columns for the
+// generated key column.
+bool IsAnyDependentColumnPresent(
+    const Column* generated_column,
+    std::vector<std::string> user_supplied_columns) {
+  ZETASQL_DCHECK(generated_column->is_generated());
   for (const auto& dep_col : generated_column->dependent_columns()) {
-    if (std::find(columns.begin(), columns.end(), dep_col->Name()) !=
-        columns.end()) {
+    if (dep_col->is_generated() &&
+        generated_column->table()->FindKeyColumn(dep_col->Name()) != nullptr) {
+      return IsAnyDependentColumnPresent(dep_col, user_supplied_columns);
+    }
+    if (std::find(user_supplied_columns.begin(), user_supplied_columns.end(),
+                  dep_col->Name()) != user_supplied_columns.end()) {
       return true;
     }
   }

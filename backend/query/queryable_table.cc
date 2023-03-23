@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -91,34 +92,17 @@ class RowCursorEvaluatorTableIterator
   std::vector<zetasql::Value> values_;
 };
 
-QueryableTable::QueryableTable(const backend::Table* table, RowReader* reader)
-    : wrapped_table_(table), reader_(reader) {
-  for (const auto* column : table->columns()) {
-    columns_.push_back(std::make_unique<const QueryableColumn>(column));
-  }
-
-  // Populate primary_key_column_indexes_.
-  for (const auto& key_column : table->primary_key()) {
-    for (int i = 0; i < wrapped_table_->columns().size(); ++i) {
-      if (key_column->column() == wrapped_table_->columns()[i]) {
-        primary_key_column_indexes_.push_back(i);
-        break;
-      }
-    }
-  }
-}
-
-QueryableTable::QueryableTable(const backend::Table* table, RowReader* reader,
-                               const zetasql::AnalyzerOptions& options,
-                               zetasql::Catalog* catalog,
-                               zetasql::TypeFactory* type_factory)
+QueryableTable::QueryableTable(
+    const backend::Table* table, RowReader* reader,
+    std::optional<const zetasql::AnalyzerOptions> options,
+    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory)
     : wrapped_table_(table), reader_(reader) {
   for (const auto* column : table->columns()) {
     std::unique_ptr<const zetasql::AnalyzerOutput> output = nullptr;
-    if (type_factory != nullptr && column->has_default_value()) {
-      absl::Status s =
-          zetasql::AnalyzeExpression(column->expression().value(), options,
-                                       catalog, type_factory, &output);
+    if (options.has_value() && column->has_default_value()) {
+      absl::Status s = zetasql::AnalyzeExpression(
+          column->expression().value(), options.value(), catalog, type_factory,
+          &output);
       ZETASQL_DCHECK(s.ok()) << "Failed to analyze default expression for column "
                      << column->FullName() << "\n";
     }

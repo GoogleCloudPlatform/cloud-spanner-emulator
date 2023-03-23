@@ -113,8 +113,6 @@ class SchemaUpdater {
       const Schema* existing_schema = nullptr);
 
  private:
-  static const Schema* EmptySchema();
-
   absl::Status RunPendingActions(int* num_succesful);
 
   std::vector<SchemaValidationContext> pending_work_;

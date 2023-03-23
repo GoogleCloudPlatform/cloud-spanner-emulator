@@ -46,8 +46,10 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/substitute.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
+#include "backend/common/case.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/query_engine_options.h"
@@ -59,20 +61,25 @@
 #include "backend/schema/builders/foreign_key_builder.h"
 #include "backend/schema/builders/index_builder.h"
 #include "backend/schema/builders/table_builder.h"
+#include "backend/schema/builders/view_builder.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_graph_editor.h"
+#include "backend/schema/graph/schema_node.h"
 #include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_validation_context.h"
+#include "backend/schema/updater/sql_expression_validators.h"
 #include "backend/schema/verifiers/check_constraint_verifiers.h"
 #include "backend/schema/verifiers/foreign_key_verifiers.h"
 #include "common/errors.h"
+#include "common/feature_flags.h"
 #include "common/limits.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
@@ -189,6 +196,11 @@ class SchemaUpdaterImpl {
       absl::flat_hash_set<std::string>* dependent_column_names,
       CheckConstraint::Builder* builder);
 
+  absl::Status AnalyzeViewDefinition(
+      absl::string_view view_name, absl::string_view view_definition,
+      std::vector<View::Column>* output_columns,
+      absl::flat_hash_set<const SchemaNode*>* dependencies) const;
+
   template <typename ColumnModifier>
   absl::Status SetColumnOptions(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
@@ -286,6 +298,8 @@ class SchemaUpdaterImpl {
           stored_columns,
       const Table* indexed_table);
 
+  absl::Status CreateFunction(const ddl::CreateFunction& ddl_function);
+
   absl::Status AlterRowDeletionPolicy(
       std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
       const Table* table);
@@ -306,6 +320,8 @@ class SchemaUpdaterImpl {
 
   absl::Status ApplyImplSetColumnOptions(
       const ddl::SetColumnOptions& set_column_options);
+
+  absl::Status DropFunction(const ddl::DropFunction& drop_function);
 
   // Adds a new schema object `node` to the schema copy being edited by
   // `editor_`.
@@ -411,6 +427,13 @@ absl::Status ValidateDdlStatement(const ddl::DDLStatement& ddl) {
           check_generated_column(ddl.alter_table().alter_column().column()));
     }
   }
+
+  if ((ddl.has_create_function() || ddl.has_drop_function()) &&
+      !EmulatorFeatureFlags::instance().flags().enable_views) {
+    return error::ViewsNotSupported(ddl.has_create_function() ? "CREATE"
+                                                              : "DROP");
+  }
+
   return absl::OkStatus();
 }
 
@@ -422,11 +445,12 @@ SchemaUpdaterImpl::ApplyDDLStatement(
     return error::EmptyDDLStatement();
   }
 
-  // Apply the statement to the schema graph.
   ZETASQL_RET_CHECK(!editor_->HasModifications());
   ddl::DDLStatement ddl_statement;
   ZETASQL_RETURN_IF_ERROR(ddl::ParseDDLStatement(statement, &ddl_statement));
   ZETASQL_RETURN_IF_ERROR(ValidateDdlStatement(ddl_statement));
+
+  // Apply the statement to the schema graph.
   switch (ddl_statement.statement_case()) {
     case ddl::DDLStatement::kCreateTable: {
       ZETASQL_RETURN_IF_ERROR(CreateTable(ddl_statement.create_table()));
@@ -434,6 +458,10 @@ SchemaUpdaterImpl::ApplyDDLStatement(
     }
     case ddl::DDLStatement::kCreateIndex: {
       ZETASQL_RETURN_IF_ERROR(CreateIndex(ddl_statement.create_index()).status());
+      break;
+    }
+    case ddl::DDLStatement::kCreateFunction: {
+      ZETASQL_RETURN_IF_ERROR(CreateFunction(ddl_statement.create_function()));
       break;
     }
     case ddl::DDLStatement::kAlterTable: {
@@ -455,12 +483,15 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       ZETASQL_RETURN_IF_ERROR(
           ApplyImplSetColumnOptions(ddl_statement.set_column_options()));
       break;
+    case ddl::DDLStatement::kDropFunction:
+      ZETASQL_RETURN_IF_ERROR(DropFunction(ddl_statement.drop_function()));
+      break;
     default:
       ZETASQL_RET_CHECK(false) << "Unsupported ddl statement: "
                        << ddl_statement.statement_case();
   }
   ZETASQL_ASSIGN_OR_RETURN(auto new_schema_graph, editor_->CanonicalizeGraph());
-  return std::make_unique<const Schema>(
+  return std::make_unique<const OwningSchema>(
       std::move(new_schema_graph)
   );
 }
@@ -472,9 +503,30 @@ SchemaUpdaterImpl::ApplyDDLStatements(
 
   for (const auto& statement : schema_change_operation.statements) {
     ZETASQL_VLOG(2) << "Applying statement " << statement;
+
+    // Set up the SchemaValidationContext before passing it to `editor_`. This
+    // includes setting the old schema snapshot and a callback to construct
+    // a temporary schema snapshot of the pending new schema. The temporary
+    // schema snapshot does not own the new schema nodes but will remain alive
+    // for the lifetime of `editor_` and `statement_context_`. The callback
+    // mechanism is needed because 1) SchemaUpdater doesn't know at which point
+    // SchemaGraphEditor will validate the new schema and 2) SchemaGraphEditor
+    // or SchemaValidationContext cannot take a dependency on Schema.
+    std::unique_ptr<const Schema> new_tmp_schema = nullptr;
     SchemaValidationContext statement_context{
         storage_, &global_names_, type_factory_, schema_change_timestamp_};
     statement_context_ = &statement_context;
+    statement_context_->SetOldSchemaSnapshot(latest_schema_);
+    statement_context_->SetTempNewSchemaSnapshotConstructor(
+        [this,
+         &new_tmp_schema](const SchemaGraph* unowned_graph) -> const Schema* {
+          new_tmp_schema = std::make_unique<const Schema>(
+              unowned_graph
+          );
+          return new_tmp_schema.get();
+        });
+
+    // Initialize the editor that will be used to stage the schema changes.
     editor_ = std::make_unique<SchemaGraphEditor>(
         latest_schema_->GetSchemaGraph(), statement_context_);
 
@@ -487,8 +539,7 @@ SchemaUpdaterImpl::ApplyDDLStatements(
     // We save every schema snapshot as verifiers/backfillers from the
     // current/next statement may need to refer to the previous/current
     // schema snapshots.
-    statement_context.SetOldSchemaSnapshot(latest_schema_);
-    statement_context.SetNewSchemaSnapshot(new_schema.get());
+    statement_context_->SetValidatedNewSchemaSnapshot(new_schema.get());
     latest_schema_ = new_schema.get();
     intermediate_schemas_.emplace_back(std::move(new_schema));
 
@@ -571,60 +622,6 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
   return absl::OkStatus();
 }
 
-class ColumnExpressionValidator : public QueryValidator {
- public:
-  ColumnExpressionValidator(
-      const Schema* schema, const zetasql::Table* table,
-      QueryEngineOptions* options, absl::string_view expression_use,
-      absl::flat_hash_set<std::string>* dependent_column_names,
-      bool allow_volatile_expression)
-      : QueryValidator(schema, options),
-        table_(table),
-        expression_use_(expression_use),
-        dependent_column_names_(dependent_column_names),
-        allow_volatile_expression_(allow_volatile_expression) {}
-
-  absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override {
-    if (node->IsScan() ||
-        node->node_kind() == zetasql::RESOLVED_SUBQUERY_EXPR) {
-      return error::NonScalarExpressionInColumnExpression(expression_use_);
-    }
-    if (node->node_kind() == zetasql::RESOLVED_EXPRESSION_COLUMN) {
-      std::string column_name =
-          node->GetAs<zetasql::ResolvedExpressionColumn>()->name();
-      const zetasql::Column* column = table_->FindColumnByName(column_name);
-      ZETASQL_RET_CHECK_NE(column, nullptr);
-      dependent_column_names_->insert(column->Name());
-    }
-    return QueryValidator::DefaultVisit(node);
-  }
-
- protected:
-  absl::Status VisitResolvedFunctionCall(
-      const zetasql::ResolvedFunctionCall* node) override {
-    // The validation order matters here.
-    // Need to invoke the parent visitor first since some higher level
-    // validation should precede the deterministic function check. For example,
-    // using pending_commit_timestamp() in generated column at CREATE TABLE
-    // should return error due to that function only being allowed in INSERT or
-    // UPDATE.
-    ZETASQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedFunctionCall(node));
-    if (!allow_volatile_expression_ &&
-        node->function()->function_options().volatility !=
-            zetasql::FunctionEnums::IMMUTABLE) {
-      return error::NonDeterministicFunctionInColumnExpression(
-          node->function()->SQLName(), expression_use_);
-    }
-    return absl::OkStatus();
-  }
-
- private:
-  const zetasql::Table* table_;
-  absl::string_view expression_use_;
-  absl::flat_hash_set<std::string>* dependent_column_names_;
-  bool allow_volatile_expression_;
-};
-
 absl::Status SchemaUpdaterImpl::InitColumnNameAndTypesFromTable(
     const Table* table, const ddl::CreateTable* ddl_create_table,
     std::vector<zetasql::SimpleTable::NameAndType>* name_and_types) {
@@ -662,15 +659,14 @@ absl::Status SchemaUpdaterImpl::AnalyzeColumnExpression(
   }
   std::unique_ptr<const zetasql::AnalyzerOutput> output;
   FunctionCatalog function_catalog(type_factory_);
-  Catalog catalog(latest_schema_, &function_catalog);
+  Catalog catalog(latest_schema_, &function_catalog, type_factory_);
 
   ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeExpressionForAssignmentToType(
       expression, options, &catalog, type_factory_, target_type, &output));
 
-  QueryEngineOptions query_engine_options;
-  ColumnExpressionValidator validator(
-      latest_schema_, &simple_table, &query_engine_options, expression_use,
-      dependent_column_names, allow_volatile_expression);
+  ColumnExpressionValidator validator(latest_schema_, &simple_table,
+                                      expression_use, dependent_column_names,
+                                      allow_volatile_expression);
   ZETASQL_RETURN_IF_ERROR(output->resolved_expr()->Accept(&validator));
   if (output->resolved_expr()->GetTreeDepth() >
       limits::kColumnExpressionMaxDepth) {
@@ -1528,6 +1524,101 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
   return index;
 }
 
+absl::Status SchemaUpdaterImpl::AnalyzeViewDefinition(
+    absl::string_view view_name, absl::string_view view_definition,
+    std::vector<View::Column>* output_columns,
+    absl::flat_hash_set<const SchemaNode*>* dependencies) const {
+  auto body = absl::Substitute("CREATE VIEW `$0` SQL SECURITY INVOKER AS $1",
+                               view_name, view_definition);
+
+  // Analyze the view definition.
+  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
+  auto analyzer_options = MakeGoogleSqlAnalyzerOptionsForViews();
+  analyzer_options.set_prune_unused_columns(true);
+  FunctionCatalog function_catalog(type_factory_);
+  Catalog catalog(latest_schema_, &function_catalog, type_factory_,
+                  analyzer_options);
+  ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeStatement(body, analyzer_options, &catalog,
+                                              type_factory_, &analyzer_output));
+
+  // Check the view definition for only allowed elements.
+  const zetasql::ResolvedCreateViewStmt* create_view_stmt =
+      analyzer_output->resolved_statement()
+          ->GetAs<zetasql::ResolvedCreateViewStmt>();
+  ViewDefinitionValidator validator(latest_schema_, analyzer_options.language(),
+                                    dependencies);
+  ZETASQL_RETURN_IF_ERROR(create_view_stmt->query()->Accept(&validator));
+  for (const auto& c : create_view_stmt->output_column_list()) {
+    output_columns->emplace_back(View::Column{c->name(), c->column().type()});
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::CreateFunction(
+    const ddl::CreateFunction& ddl_function) {
+  if (latest_schema_->views().size() >= limits::kMaxViewsPerDatabase) {
+    return error::TooManyViewsPerDatabase(ddl_function.function_name(),
+                                          limits::kMaxViewsPerDatabase);
+  }
+
+  if (!ddl_function.has_sql_security() ||
+      ddl_function.sql_security() != ddl::Function::INVOKER) {
+    return error::ViewRequiresInvokerSecurity(ddl_function.function_name());
+  }
+
+  const View* existing_view =
+      latest_schema_->FindView(ddl_function.function_name());
+  const bool replace = existing_view && ddl_function.has_is_or_replace() &&
+                       ddl_function.is_or_replace();
+  if (replace) {
+    // TODO : Implement replace functionality for views.
+    return error::ViewsNotSupported("REPLACE");
+  }
+
+  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("View", ddl_function.function_name()));
+
+  // Analyze the view definition.
+  absl::Status error;
+  absl::flat_hash_set<const SchemaNode*> dependencies;
+  std::vector<View::Column> output_columns;
+  auto status = AnalyzeViewDefinition(ddl_function.function_name(),
+                                      ddl_function.sql_body(), &output_columns,
+                                      &dependencies);
+  if (!status.ok()) {
+    return replace ? error::ViewReplaceError(ddl_function.function_name(),
+                                             status.message())
+                   : error::ViewBodyAnalysisError(ddl_function.function_name(),
+                                                  status.message());
+  }
+
+  View::Builder builder;
+  builder.set_name(ddl_function.function_name())
+      .set_sql_security([&]() {
+        switch (ddl_function.sql_security()) {
+          case ddl::Function::UNSPECIFIED_SQL_SECURITY:
+            return View::SqlSecurity::UNSPECIFIED;
+          case ddl::Function::INVOKER:
+            return View::SqlSecurity::INVOKER;
+        }
+      }())
+      .set_sql_body(ddl_function.sql_body());
+
+  for (auto output_column : output_columns) {
+    builder.add_column(std::move(output_column));
+  }
+
+  for (const auto& dependency : dependencies) {
+    builder.add_dependency(dependency);
+  }
+
+  // At this point, logic for a new view and replacing a view diverage.
+  // Replacement has some additional checks and then we alter the existing
+  // schema node; whereas a new view just adds a new schema node.
+  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+
+  return absl::OkStatus();
+}
+
 absl::Status SchemaUpdaterImpl::AlterRowDeletionPolicy(
     std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
     const Table* table) {
@@ -1690,6 +1781,7 @@ absl::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_table) {
   if (table == nullptr) {
     return error::TableNotFound(drop_table.table_name());
   }
+  // TODO : Error if any view depends on this table.
   return DropNode(table);
 }
 
@@ -1722,12 +1814,22 @@ absl::Status SchemaUpdaterImpl::ApplyImplSetColumnOptions(
   return absl::OkStatus();
 }
 
-}  // namespace
+absl::Status SchemaUpdaterImpl::DropFunction(
+    const ddl::DropFunction& drop_function) {
+  const View* view = latest_schema_->FindView(drop_function.function_name());
+  if (view == nullptr) {
+    return error::ViewNotFound(drop_function.function_name());
+  }
+  // TODO : Error if any view depends on this view.
+  return DropNode(view);
+}
 
-const Schema* SchemaUpdater::EmptySchema() {
+const Schema* EmptySchema() {
   static const Schema* empty_schema = new Schema;
   return empty_schema;
 }
+
+}  // namespace
 
 absl::StatusOr<std::unique_ptr<const Schema>>
 SchemaUpdater::ValidateSchemaFromDDL(

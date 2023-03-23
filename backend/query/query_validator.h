@@ -37,10 +37,11 @@ namespace backend {
 class QueryValidator : public zetasql::ResolvedASTVisitor {
  public:
   explicit QueryValidator(const Schema* schema,
-                          QueryEngineOptions* extracted_options)
+                          QueryEngineOptions* extracted_options = nullptr,
+                          const zetasql::LanguageOptions language_options =
+                              MakeGoogleSqlLanguageOptions())
       : schema_(schema),
-        analyzer_options_(MakeGoogleSqlAnalyzerOptions()),
-        language_options_(MakeGoogleSqlLanguageOptions()),
+        language_options_(std::move(language_options)),
         sql_features_(SqlFeaturesView()),
         extracted_options_(extracted_options) {}
 
@@ -63,6 +64,8 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
 
   absl::Status VisitResolvedSampleScan(
       const zetasql::ResolvedSampleScan* node) override;
+
+  const Schema* schema() const { return schema_; }
 
  private:
   // Validates the child hint nodes of `node`.
@@ -97,8 +100,6 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
           node_hint_map) const;
 
   const Schema* schema_;
-
-  const zetasql::AnalyzerOptions analyzer_options_;
 
   const zetasql::LanguageOptions language_options_;
 

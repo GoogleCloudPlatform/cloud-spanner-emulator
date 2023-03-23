@@ -91,9 +91,19 @@ void create_statement() #void :
     | create_table_statement()
     | LOOKAHEAD(2) create_index_statement()
 
+    | create_or_replace_statement()
   )
 }
 
+
+void create_or_replace_statement() :
+{}
+{
+  [ or_replace() ]
+  (
+      create_view_statement()
+  )
+}
 
 void options_clause() :
 {}
@@ -332,6 +342,35 @@ void option_key_val() :
   )
 }
 
+void or_replace() :
+{}
+{
+  <OR> <REPLACE>
+}
+
+void sql_security_invoker() :
+{}
+{
+  <SQL> <SECURITY> <INVOKER>
+}
+
+void create_view_statement() :
+{}
+{
+  ( <VIEW> )
+  ( qualified_identifier() #name )
+  [ sql_security_invoker() ]
+  <AS> statement_tokens() #view_definition
+}
+
+void statement_tokens() :
+{}
+{
+  ( statement_token_no_paren()
+  | "("
+  | ")" )+
+}
+
 void drop_statement() :
 {}
 {
@@ -339,6 +378,7 @@ void drop_statement() :
 
     ( <TABLE> #table
     | <INDEX> #index
+    | <VIEW> #view
   ) qualified_identifier() #name
 
 

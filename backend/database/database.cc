@@ -72,7 +72,8 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
 
   database->action_manager_->AddActionsForSchema(
       database->versioned_catalog_->GetLatestSchema(),
-      database->query_engine_->function_catalog());
+      database->query_engine_->function_catalog(),
+      database->query_engine_->type_factory());
 
   return database;
 }
@@ -139,7 +140,8 @@ absl::Status Database::UpdateSchema(
     ZETASQL_RETURN_IF_ERROR(versioned_catalog_->AddSchema(
         update_timestamp, std::move(result.updated_schema)));
     action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
-                                         query_engine_->function_catalog());
+                                         query_engine_->function_catalog(),
+                                         query_engine_->type_factory());
   }
   return absl::OkStatus();
 }

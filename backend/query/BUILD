@@ -59,6 +59,7 @@ cc_library(
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:analyzer",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:evaluator",
         "@com_google_zetasql//zetasql/public:evaluator_table_iterator",
@@ -110,6 +111,8 @@ cc_library(
         "//common:feature_flags",
         "@com_google_absl//absl/time",
         "@com_google_zetasql//zetasql/public:analyzer",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
+        "@com_google_zetasql//zetasql/public:language_options",
         "@com_google_zetasql//zetasql/public:options_cc_proto",
     ],
 )
@@ -200,13 +203,40 @@ cc_test(
     ],
 )
 
-cc_library(
-    name = "information_schema_catalog",
-    srcs = ["information_schema_catalog.cc"],
-    hdrs = ["information_schema_catalog.h"],
+cc_binary(
+    name = "populate_info_schema_columns_metadata",
+    srcs = ["populate_info_schema_columns_metadata.cc"],
     data = [
         ":info_schema_columns_metadata.csv",
         ":info_schema_columns_metadata_for_index.csv",
+    ],
+    deps = [
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/base",
+        "@com_googlesource_code_riegeli//riegeli/bytes:cfile_reader",
+        "@com_googlesource_code_riegeli//riegeli/csv:csv_reader",
+        "@com_googlesource_code_riegeli//riegeli/csv:csv_record",
+    ],
+)
+
+genrule(
+    name = "gen_populate_info_schema_columns_metadata",
+    srcs = [
+        "info_schema_columns_metadata.csv",
+        "info_schema_columns_metadata_for_index.csv",
+    ],
+    outs = ["info_schema_columns_metadata_values.h"],
+    cmd = "$(location :populate_info_schema_columns_metadata) > $@",
+    tools = [":populate_info_schema_columns_metadata"],
+)
+
+cc_library(
+    name = "information_schema_catalog",
+    srcs = ["information_schema_catalog.cc"],
+    hdrs = [
+        "info_schema_columns_metadata_values.h",
+        "information_schema_catalog.h",
     ],
     deps = [
         "//backend/schema/catalog:schema",
@@ -215,9 +245,6 @@ cc_library(
         "@com_google_absl//absl/types:variant",
         "@com_google_zetasql//zetasql/base:no_destructor",
         "@com_google_zetasql//zetasql/public:simple_catalog",
-        "@com_googlesource_code_riegeli//riegeli/bytes:cfile_reader",
-        "@com_googlesource_code_riegeli//riegeli/csv:csv_reader",
-        "@com_googlesource_code_riegeli//riegeli/csv:csv_record",
     ],
 )
 
@@ -242,13 +269,17 @@ cc_library(
         "catalog.h",
     ],
     deps = [
+        ":analyzer_options",
         ":function_catalog",
         ":information_schema_catalog",
         ":queryable_table",
+        ":queryable_view",
         "//backend/access:read",
         "//backend/common:case",
         "//backend/schema/catalog:schema",
         "//common:errors",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
@@ -256,6 +287,7 @@ cc_library(
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:simple_catalog",
+        "@com_google_zetasql//zetasql/public:type",
     ],
 )
 
@@ -265,19 +297,23 @@ cc_test(
         "catalog_test.cc",
     ],
     deps = [
+        ":analyzer_options",
         ":catalog",
         ":function_catalog",
         "//backend/schema/catalog:schema",
         "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
         "//tests/common:test_schema_constructor",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:analyzer",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:function",
+        "@com_google_zetasql//zetasql/public:type",
     ],
 )
 
@@ -339,6 +375,53 @@ cc_library(
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:evaluator_table_iterator",
         "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_library(
+    name = "queryable_view",
+    srcs = [
+        "queryable_view.cc",
+    ],
+    hdrs = [
+        "queryable_view.h",
+    ],
+    deps = [
+        "//backend/access:read",
+        "//backend/schema/catalog:schema",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:evaluator_table_iterator",
+        "@com_google_zetasql//zetasql/public:simple_catalog",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "queryable_view_test",
+    srcs = ["queryable_view_test.cc"],
+    deps = [
+        ":catalog",
+        ":queryable_column",
+        ":queryable_view",
+        "//common:feature_flags",
+        "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
+        "//tests/common:test_schema_constructor",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:type_cc_proto",
     ],
 )
 
@@ -436,6 +519,7 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:analyzer",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
     ],
 )
 

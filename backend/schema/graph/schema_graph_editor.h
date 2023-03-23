@@ -49,7 +49,14 @@ namespace backend {
 // Updates/deletions are made on clones of the nodes in the original graph and
 // the CanonicalizeGraph() method must be called to obtain a new graph with the
 // additions/updates/deletions applied. An instance of SchemaGraphEditor should
-// not be re-used after a call to CanonicalizeGraph().
+// not be re-used after a call to CanonicalizeGraph(). Additions, Edits and
+// Deletions maintain the same relative order of nodes in the new graph as in
+// the original graph.
+//
+// During CanonicalizeGraph(), this class may call Validate() and
+// ValidateUpdate() on the SchemaNodes(s) in the new and old graph respectively.
+// Validate() and ValidateUpdate() are called in the same order in which the
+// nodes were added to the containing SchemaGraph.
 class SchemaGraphEditor {
  public:
   SchemaGraphEditor(const SchemaGraph* original_graph,
@@ -235,12 +242,6 @@ class SchemaGraphEditor {
 
   // Canonicalizes the graph to process any pending deletes.
   absl::Status CanonicalizeDeletion();
-
-  // Checks certain invariants about number of nodes and clones.
-  absl::Status CheckInvariants() const;
-
-  // Calls Validate() and ValidateUpdate() on the new nodes.
-  absl::Status CheckValid() const;
 
   // The current depth of the cloning stack.
   int depth_ = 0;

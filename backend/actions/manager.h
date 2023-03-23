@@ -47,7 +47,8 @@ namespace backend {
 class ActionRegistry {
  public:
   explicit ActionRegistry(const Schema* schema,
-                          const FunctionCatalog* function_catalog);
+                          const FunctionCatalog* function_catalog,
+                          zetasql::TypeFactory* type_factory);
 
   // Executes the list of validators that apply to the given operation.
   absl::Status ExecuteValidators(const ActionContext* ctx, const WriteOp& op);
@@ -106,7 +107,8 @@ class ActionManager {
  public:
   // Builds the registry of actions for given schema and function_catalog.
   void AddActionsForSchema(const Schema* schema,
-                           const FunctionCatalog* function_catalog);
+                           const FunctionCatalog* function_catalog,
+                           zetasql::TypeFactory* type_factory);
 
   // Returns the action registry for given schema.
   absl::StatusOr<ActionRegistry*> GetActionsForSchema(

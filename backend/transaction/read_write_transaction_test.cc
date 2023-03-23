@@ -64,11 +64,11 @@ class ReadWriteTransactionTest : public testing::Test {
     lock_manager_ = std::make_unique<LockManager>(&clock_);
     storage_ = std::make_unique<InMemoryStorage>();
     versioned_catalog_ =
-        std::make_unique<VersionedCatalog>(std::move(GetSchema().value()));
+        std::make_unique<VersionedCatalog>(std::move(GetSchema()).value());
     action_manager_ = std::make_unique<ActionManager>();
     action_manager_->AddActionsForSchema(
         versioned_catalog_->GetSchema(absl::InfiniteFuture()),
-        /*function_catalog=*/nullptr);
+        /*function_catalog=*/nullptr, type_factory_.get());
   }
 
   virtual absl::StatusOr<std::unique_ptr<const backend::Schema>> GetSchema() {
@@ -110,20 +110,22 @@ class ReadWriteTransactionTest : public testing::Test {
   }
 
   absl::StatusOr<std::vector<ValueList>> ReadAll(
-      ReadWriteTransaction* txn, std::vector<std::string> columns) {
-    return ReadAllUsingIndex(txn, /*index =*/"", columns);
+      ReadWriteTransaction* txn, std::vector<std::string> columns,
+      std::string table_name = "test_table") {
+    return ReadAllUsingIndex(txn, /*index =*/"", columns, table_name);
   }
 
   absl::StatusOr<std::vector<ValueList>> ReadAllUsingIndex(
       ReadWriteTransaction* txn, std::string index,
-      std::vector<std::string> columns) {
-    return ReadUsingIndex(txn, KeySet(KeyRange::All()), index, columns);
+      std::vector<std::string> columns, std::string table_name = "test_table") {
+    return ReadUsingIndex(txn, KeySet(KeyRange::All()), index, columns,
+                          table_name);
   }
 
   absl::StatusOr<std::vector<ValueList>> ReadUsingIndex(
       ReadWriteTransaction* txn, KeySet key_set, std::string index,
-      std::vector<std::string> columns) {
-    backend::ReadArg read_arg{.table = "test_table",
+      std::vector<std::string> columns, std::string table_name = "test_table") {
+    backend::ReadArg read_arg{.table = table_name,
                               .index = index,
                               .key_set = key_set,
                               .columns = columns};
@@ -414,7 +416,8 @@ TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {
                     .value();
   ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
   action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
-                                       /*function_catalog=*/nullptr);
+                                       /*function_catalog=*/nullptr,
+                                       type_factory_.get());
 
   // Transaction should return latest schema unless an operation is performed.
   ASSERT_NE(txn->schema()->FindTable("new_table"), nullptr);
@@ -438,7 +441,8 @@ TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {
                .value();
   ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
   action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
-                                       /*function_catalog=*/nullptr);
+                                       /*function_catalog=*/nullptr,
+                                       type_factory_.get());
 
   // Transaction is aborted.
   EXPECT_THAT(txn->Write(m), StatusIs(absl::StatusCode::kAborted));
@@ -723,6 +727,31 @@ class GeneratedPrimaryKeyTransactionTest : public ReadWriteTransactionTest {
   }
 };
 
+TEST_F(GeneratedPrimaryKeyTransactionTest, InsertMutationsTableWithOnlyKeys) {
+  // Update the schema with "new_table".
+  auto schema = test::CreateSchemaFromDDL(
+                    {
+                        R"(
+                          CREATE TABLE new_table (
+                            k1 INT64 NOT NULL,
+                            k2 INT64 AS (k1) STORED,
+                          ) PRIMARY KEY (k1,k2)
+                        )",
+                    },
+                    type_factory_.get())
+                    .value();
+  ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
+  action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
+                                       /*function_catalog=*/nullptr,
+                                       type_factory_.get());
+  auto txn = CreateReadWriteTransaction();
+  ASSERT_NE(txn->schema()->FindTable("new_table"), nullptr);
+
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "new_table", {"k1"}, {{Int64(1)}});
+  ZETASQL_EXPECT_OK(txn->Write(m));
+}
+
 TEST_F(GeneratedPrimaryKeyTransactionTest, InsertMutations) {
   Mutation m;
   m.AddWriteOp(
@@ -742,6 +771,53 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, InsertMutations) {
               IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(1)},
                                 {Int64(1), Int64(2), Int64(2), Int64(2)},
                                 {Int64(3), Int64(3), Int64(3), Int64(3)}}));
+}
+
+TEST_F(GeneratedPrimaryKeyTransactionTest,
+       InsertMutationsTableWithDependentGeneratedKeyColumns) {
+  // Update the schema with "new_table".
+  // This test also checks if topological sort is working as expected. Note k3
+  // is dependent on a column k5 which is defined later. k5 should be evaluated
+  // before k3.
+  auto schema = test::CreateSchemaFromDDL(
+                    {
+                        R"sql(
+                  CREATE TABLE new_table (
+                    k1 INT64 NOT NULL,
+                    k2 INT64,
+                    k3 INT64 AS (k5) STORED,
+                    k4 INT64 NOT NULL,
+                    k5 INT64 AS (k2) STORED,
+                  ) PRIMARY KEY (k1,k3,k5)
+                )sql"},
+                    type_factory_.get())
+                    .value();
+  ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
+  action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
+                                       /*function_catalog=*/nullptr,
+                                       type_factory_.get());
+
+  auto txn = CreateReadWriteTransaction();
+  ASSERT_NE(txn->schema()->FindTable("new_table"), nullptr);
+
+  Mutation m;
+  m.AddWriteOp(
+      MutationOpType::kInsert, "new_table", {"k1", "k2", "k4"},
+      {{Int64(1), Int64(1), Int64(1)}, {Int64(3), Int64(3), Int64(3)}});
+  m.AddWriteOp(MutationOpType::kInsert, "new_table", {"k1", "k2", "k4"},
+               {{Int64(1), Int64(2), Int64(2)}});
+
+  // Commit the transaction.
+  ZETASQL_EXPECT_OK(txn->Write(m));
+  ZETASQL_EXPECT_OK(txn->Commit());
+
+  // Verify the values.
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(
+      ReadAll(txn2.get(), {"k1", "k2", "k3", "k4", "k5"}, "new_table"),
+      IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(1), Int64(1)},
+                        {Int64(1), Int64(2), Int64(2), Int64(2), Int64(2)},
+                        {Int64(3), Int64(3), Int64(3), Int64(3), Int64(3)}}));
 }
 
 TEST_F(GeneratedPrimaryKeyTransactionTest,

@@ -50,6 +50,12 @@ class SchemaGraph {
     pool_->Add(std::move(node_ptr));
   }
 
+  // A schema graph with no nodes.
+  static const SchemaGraph* CreateEmpty() {
+    static const SchemaGraph* empty = new SchemaGraph();
+    return empty;
+  }
+
  private:
   // List representing the order of the nodes in the graph.
   std::vector<const SchemaNode*> schema_nodes_;

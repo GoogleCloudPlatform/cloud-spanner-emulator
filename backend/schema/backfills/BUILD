@@ -37,6 +37,7 @@ cc_library(
         "//backend/common:rows",
         "//backend/datamodel:types",
         "//backend/datamodel:value",
+        "//backend/query:analyzer_options",
         "//backend/query:catalog",
         "//backend/query:function_catalog",
         "//backend/schema/catalog:schema",

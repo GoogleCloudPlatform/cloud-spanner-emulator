@@ -43,9 +43,12 @@ py_test(
 py_test(
     name = "database_admin_test",
     srcs = ["database_admin_test.py"],
+    data = [
+    ],
     python_version = "PY3",
     deps = [
         ":emulator",
+        "@bazel_tools//tools/python/runfiles",
     ],
 )
 

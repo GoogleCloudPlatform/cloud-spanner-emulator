@@ -31,6 +31,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/common/case.h"
+#include "backend/query/analyzer_options.h"
 #include "backend/query/feature_filter/gsql_supported_functions.h"
 #include "backend/query/feature_filter/sql_feature_filter.h"
 #include "common/errors.h"
@@ -327,6 +328,9 @@ absl::Status QueryValidator::CheckHintValue(
 absl::Status QueryValidator::ExtractEmulatorOptionsForNode(
     const absl::flat_hash_map<absl::string_view, zetasql::Value>&
         node_hint_map) const {
+  // Only extract options if they are requested.
+  if (extracted_options_ == nullptr) return absl::OkStatus();
+
   for (const auto& [hint_name, hint_value] : node_hint_map) {
     if (absl::EqualsIgnoreCase(hint_name,
                                kHintDisableQueryPartitionabilityCheck)) {

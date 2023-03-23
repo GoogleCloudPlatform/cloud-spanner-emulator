@@ -124,9 +124,22 @@ absl::Status ValidateGeneratedColumnsNotPresent(
 
 bool AreAllDependentColumnsPresent(const Column* column,
                                    const std::vector<const Column*>& columns) {
+  // Checks if user has supplied values for all dependent columns of a key
+  // generated column.
+  ZETASQL_DCHECK(column->is_generated());
   for (const Column* dep_col : column->dependent_columns()) {
-    if (std::find(columns.begin(), columns.end(), dep_col) == columns.end())
+    // A generated dependent column should have all dependent columns on the
+    // generated column present.
+    // Non-generated dependent column should be specified by user.
+    if (dep_col->is_generated() &&
+        column->table()->FindKeyColumn(dep_col->Name()) != nullptr) {
+      if (!AreAllDependentColumnsPresent(dep_col, columns)) {
+        return false;
+      }
+    } else if (std::find(columns.begin(), columns.end(), dep_col) ==
+               columns.end()) {
       return false;
+    }
   }
   return true;
 }

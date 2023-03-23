@@ -25,27 +25,40 @@
 #include "backend/common/case.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/view.h"
 #include "backend/schema/graph/schema_graph.h"
+#include "backend/schema/graph/schema_node.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
 
-// Schema represents a single generation of schema of a database. It is
-// a graph of SchemaNodes representing table/index/column hierarchies and
-// relationships.
+// Schema represents a single generation of schema of a database. It is an
+// abstract class that provides a convenient interface for looking up schema
+// objects. A Schema doesn't take ownership of the schema objects. That is
+// managed by the SchemaGraph passed to it and which must outlive the
+// Schema instance.
 class Schema {
  public:
   Schema()
-      : graph_(std::make_unique<SchemaGraph>())
+      : graph_(SchemaGraph::CreateEmpty())
   {}
 
-  explicit Schema(std::unique_ptr<const SchemaGraph> graph
+  explicit Schema(const SchemaGraph* graph
   );
+
+  virtual ~Schema() = default;
 
   // Returns the generation number of this schema.
   int64_t generation() const { return generation_; }
+
+  // Finds a view by its name. Returns a const pointer of the view, or
+  // nullptr if the view is not found. Name comparison is case-insensitive.
+  const View* FindView(const std::string& view_name) const;
+
+  // Same as FindView but case-sensitive.
+  const View* FindViewCaseSensitive(const std::string& view_name) const;
 
   // Finds a table by its name. Returns a const pointer of the table, or nullptr
   // if the table is not found. Name comparison is case-insensitive.
@@ -60,9 +73,10 @@ class Schema {
 
   // List all the user-visible tables in this schema.
   absl::Span<const Table* const> tables() const { return tables_; }
+  absl::Span<const View* const> views() const { return views_; }
 
   // Return the underlying SchemaGraph owning the objects in the schema.
-  const SchemaGraph* GetSchemaGraph() const { return graph_.get(); }
+  const SchemaGraph* GetSchemaGraph() const { return graph_; }
 
   // Returns the number of indices in the schema.
   int num_index() const { return index_map_.size(); }
@@ -73,14 +87,21 @@ class Schema {
   const Index* FindManagedIndex(const std::string& index_name) const;
 
   // Manages the lifetime of all schema objects. Maintains the order
-  // in which the nodes were added to the graph.
-  std::unique_ptr<const SchemaGraph> graph_;
+  // in which the nodes were added to the graph. Must outlive *this.
+  const SchemaGraph* graph_;
 
   // The generation number of this schema.
   int64_t generation_ = 0;
 
   // A vector that maintains the original order of tables in the DDL.
   std::vector<const Table*> tables_;
+
+  // A map that owns all the views. Key is the name of the view. Hash and
+  // comparison on the keys are case-insensitive.
+  CaseInsensitiveStringMap<const View*> views_map_;
+
+  // A vector that maintains the original order of views in the DDL.
+  std::vector<const View*> views_;
 
   // A map that owns all the tables. Key is the name of the tables. Hash and
   // comparison on the keys are case-insensitive.
@@ -89,6 +110,22 @@ class Schema {
   // A map that owns all of the indexes. Key is the name of the index. Hash and
   // comparison on the keys are case-insensitive.
   CaseInsensitiveStringMap<const Index*> index_map_;
+};
+
+// A Schema that also owns the SchemaGraph that manages the lifetime of the
+// schema nodes.
+class OwningSchema : public Schema {
+ public:
+  explicit OwningSchema(std::unique_ptr<const SchemaGraph> graph
+                        )
+      : Schema(graph.get()
+               ),
+        graph_(std::move(graph)) {}
+
+  ~OwningSchema() override = default;
+
+ private:
+  std::unique_ptr<const SchemaGraph> graph_;
 };
 
 }  // namespace backend

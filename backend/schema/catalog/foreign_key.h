@@ -31,7 +31,6 @@ namespace backend {
 class Column;
 class Index;
 class Table;
-class SchemaValidationContext;
 
 // Foreign key relationship between two tables.
 class ForeignKey : public SchemaNode {

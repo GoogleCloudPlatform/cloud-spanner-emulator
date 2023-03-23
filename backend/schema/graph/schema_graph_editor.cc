@@ -16,6 +16,7 @@
 
 #include "backend/schema/graph/schema_graph_editor.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -143,9 +144,6 @@ bool SchemaGraphEditor::IsOriginalNode(const SchemaNode* node) const {
 absl::StatusOr<std::unique_ptr<SchemaGraph>>
 SchemaGraphEditor::CanonicalizeGraph() {
   std::unique_ptr<SchemaGraph> cloned_graph = nullptr;
-  // Set the edited nodes in the context so that nodes can check
-  // if they were edited/cloned inside ValidateUpdate()/Validate().
-  context_->set_edited_nodes(&edited_clones_);
   if (deleted_node_) {
     ZETASQL_VLOG(2) << "Canonicalizing deletes";
     ZETASQL_RETURN_IF_ERROR(CanonicalizeDeletion());
@@ -153,28 +151,60 @@ SchemaGraphEditor::CanonicalizeGraph() {
     ZETASQL_VLOG(2) << "Canonicalizing edits and additions";
     ZETASQL_RETURN_IF_ERROR(CanonicalizeEdits());
   }
-  ZETASQL_RETURN_IF_ERROR(CheckInvariants());
-  ZETASQL_RETURN_IF_ERROR(CheckValid());
+  // Set the edited nodes in the context so that nodes can check
+  // if they were edited/cloned inside ValidateUpdate()/Validate().
+  context_->set_edited_nodes(&edited_clones_);
+
+  // Create a temporary graph so that we can temporarily set a 'new schema'
+  // on the validation context. At this point, deleted nodes in the old schema
+  // have been marked for deletion (i.e. is_deleted() will return true). They
+  // will be excluded from new_nodes_, but their memory will not yet be freed
+  // so that ValidateUpdate() may be called on them.
+  auto cloned_pool_ptr = cloned_pool_.get();
+  new_nodes_.erase(
+      std::remove_if(new_nodes_.begin(), new_nodes_.end(),
+                     [](const SchemaNode* node) { return node->is_deleted(); }),
+      new_nodes_.end());
   cloned_graph = std::make_unique<SchemaGraph>(std::move(new_nodes_),
                                                std::move(cloned_pool_));
-  return cloned_graph;
-}
+  context_->MakeNewTempSchemaSnapshot(cloned_graph.get());
 
-absl::Status SchemaGraphEditor::CheckValid() const {
-  if (!deleted_node_) {
-    // ValidateUpdate was already called on deleted nodes.
-    auto orig_nodes = original_graph_->GetSchemaNodes();
-    for (int i = 0; i < num_original_nodes(); ++i) {
-      ZETASQL_RETURN_IF_ERROR(new_nodes_[i]->ValidateUpdate(orig_nodes[i], context_));
-    }
+  // Validate the update on cloned nodes which still includes edited and
+  // deleted nodes.
+  for (const auto* orig_node : original_graph_->GetSchemaNodes()) {
+    auto clone = FindClone(orig_node);
+    ZETASQL_RET_CHECK_NE(clone, nullptr);
+    ZETASQL_RETURN_IF_ERROR(clone->ValidateUpdate(orig_node, context_));
   }
 
-  // A final pass on the canonicalized set of nodes to perform per-node
+  // Finally, erase deleted nodes from the new graph.
+  if (deleted_node_) {
+    trimmed_ = cloned_pool_ptr->Trim();
+  }
+
+  // Do a final pass on the canonicalized set of nodes to perform per-node
   // validation.
-  for (const auto* node : new_nodes_) {
+  for (const auto* node : cloned_graph->GetSchemaNodes()) {
     ZETASQL_RETURN_IF_ERROR(node->Validate(context_));
   }
-  return absl::OkStatus();
+  context_->ClearNewTempSchemaSnapshot();
+
+  // Check the invariants around the nodes.
+  ZETASQL_RET_CHECK_EQ(cloned_pool_ptr->size(), cloned_graph->GetSchemaNodes().size())
+      << "\nNodes:\n"
+      << cloned_pool_ptr->DebugString();
+
+  ZETASQL_RET_CHECK_EQ(cloned_pool_ptr->size(),
+               num_original_nodes() - trimmed_ + added_nodes_.size())
+      << "Internal error while cloning schema graph "
+      << "Original: " << num_original_nodes() << "\n"
+      << "Cloned: " << cloned_pool_ptr->size() << "\n"
+      << "Added: " << added_nodes_.size() << "\n"
+      << "Trimmed: " << trimmed_ << "\n"
+      << "Nodes:\n"
+      << cloned_pool_ptr->DebugString();
+
+  return cloned_graph;
 }
 
 absl::Status SchemaGraphEditor::CanonicalizeEdits() {
@@ -247,38 +277,6 @@ absl::Status SchemaGraphEditor::CanonicalizeDeletion() {
     ZETASQL_VLOG(5) << "Fixup pass " << i + 1 << " deletions: " << new_deletions;
   }
   delete_fixup_ = false;
-
-  for (const auto* orig_node : original_graph_->GetSchemaNodes()) {
-    auto clone = FindClone(orig_node);
-    ZETASQL_RET_CHECK_NE(clone, nullptr);
-    // Validate the update on cloned/edited nodes.
-    ZETASQL_RETURN_IF_ERROR(clone->ValidateUpdate(orig_node, context_));
-  }
-
-  // Erase deleted nodes from the new graph.
-  new_nodes_.erase(
-      std::remove_if(new_nodes_.begin(), new_nodes_.end(),
-                     [](const SchemaNode* node) { return node->is_deleted(); }),
-      new_nodes_.end());
-  trimmed_ = cloned_pool_->Trim();
-  return absl::OkStatus();
-}
-
-absl::Status SchemaGraphEditor::CheckInvariants() const {
-  ZETASQL_RET_CHECK_EQ(cloned_pool_->size(), new_nodes_.size())
-      << "\nNodes:\n"
-      << cloned_pool_->DebugString();
-
-  ZETASQL_RET_CHECK_EQ(cloned_pool_->size(),
-               num_original_nodes() - trimmed_ + added_nodes_.size())
-      << "Internal error while cloning schema graph "
-      << "Original: " << num_original_nodes() << "\n"
-      << "Cloned: " << cloned_pool_->size() << "\n"
-      << "Added: " << added_nodes_.size() << "\n"
-      << "Trimmed: " << trimmed_ << "\n"
-      << "Nodes:\n"
-      << cloned_pool_->DebugString();
-
   return absl::OkStatus();
 }
 

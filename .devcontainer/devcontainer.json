@@ -1,0 +1,22 @@
+/**
+ * This is used to start a development container with all the prerequisites
+ * for the emulator.
+ * More info: https://containers.dev/features.
+ */
+
+{
+  "name": "emulator",
+  "image": "gcr.io/cloud-spanner-emulator/devcontainer",
+
+  // Features to add to the dev container.
+  "features": {},
+
+  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  "forwardPorts": [9010, 9020],
+
+  // Use 'postCreateCommand' to run commands after the container is created.
+  // "postCreateCommand": "bazel build binaries/gateway_main",
+
+  // Configure tool-specific properties.
+  "customizations": {}
+}

@@ -559,6 +559,17 @@ absl::Status RowDeletionPolicyOnAncestors(
 absl::Status ForeignKeyRowDeletionPolicyAddNotAllowed(
     absl::string_view table_name, absl::string_view foreign_keys);
 
+// Views errors.
+absl::Status ViewsNotSupported(absl::string_view view_op_name);
+absl::Status TooManyViewsPerDatabase(absl::string_view function_name,
+                                     int limit);
+absl::Status ViewBodyAnalysisError(absl::string_view view_name,
+                                   absl::string_view error);
+
+absl::Status ViewNotFound(absl::string_view view_name);
+absl::Status ViewRequiresInvokerSecurity(absl::string_view view_name);
+absl::Status ViewReplaceError(absl::string_view view_name,
+                              absl::string_view error);
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

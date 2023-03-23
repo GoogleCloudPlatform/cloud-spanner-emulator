@@ -22,6 +22,7 @@
 #include "absl/status/status.h"
 #include "backend/actions/check_constraint.h"
 #include "backend/datamodel/key_range.h"
+#include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/column.h"
@@ -36,7 +37,8 @@ namespace backend {
 absl::Status VerifyCheckConstraintData(const CheckConstraint* check_constraint,
                                        const SchemaValidationContext* context) {
   FunctionCatalog function_catalog(context->type_factory());
-  Catalog catalog(context->new_schema(), &function_catalog);
+  Catalog catalog(context->validated_new_schema(), &function_catalog,
+                  context->type_factory());
   CheckConstraintVerifier verifier(check_constraint, &catalog);
 
   const Table* table = check_constraint->table();

@@ -20,6 +20,7 @@
 #include <string>
 
 #include "zetasql/public/analyzer.h"
+#include "zetasql/public/analyzer_options.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -41,7 +42,9 @@ namespace {
 
 class IndexHintValidatorTest : public testing::Test {
  public:
-  IndexHintValidatorTest() : fn_catalog_(&type_factory_) {}
+  IndexHintValidatorTest()
+      : analyzer_options_(MakeGoogleSqlAnalyzerOptions()),
+        fn_catalog_(&type_factory_) {}
 
   void SetUp() override {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema_, test::CreateSchemaFromDDL(
@@ -74,15 +77,14 @@ class IndexHintValidatorTest : public testing::Test {
                                       &type_factory_));
 
     catalog_ = std::make_unique<Catalog>(schema_.get(), &fn_catalog_,
-                                         /*reader=*/nullptr);
+                                         &type_factory_, analyzer_options_);
   }
 
   std::unique_ptr<const zetasql::AnalyzerOutput> AnalyzeQuery(
       const std::string& sql) {
     std::unique_ptr<const zetasql::AnalyzerOutput> output;
-    ZETASQL_EXPECT_OK(zetasql::AnalyzeStatement(sql, MakeGoogleSqlAnalyzerOptions(),
-                                          catalog_.get(), &type_factory_,
-                                          &output));
+    ZETASQL_EXPECT_OK(zetasql::AnalyzeStatement(
+        sql, analyzer_options_, catalog_.get(), &type_factory_, &output));
     return output;
   }
 
@@ -90,6 +92,8 @@ class IndexHintValidatorTest : public testing::Test {
 
  private:
   zetasql::TypeFactory type_factory_;
+
+  const zetasql::AnalyzerOptions analyzer_options_;
 
   const FunctionCatalog fn_catalog_;
 

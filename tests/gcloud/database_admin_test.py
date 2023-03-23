@@ -17,6 +17,7 @@
 """Tests for Cloud Spanner DatabaseAdmin api."""
 
 from tests.gcloud import emulator
+from bazel_tools.tools.python.runfiles import runfiles
 
 
 class GCloudDatabaseAdminTest(emulator.TestCase):

@@ -70,8 +70,8 @@ mkdir -p "${IMAGE_DIR}"
 docker save --output "${IMAGE_DIR}"/emulator-docker-image.tar ${IMAGE_LOCAL_TAG}
 
 container_id=$(docker create "${IMAGE_LOCAL_TAG}")
-docker cp "$container_id":/gateway_main.runfiles/com_google_cloud_spanner_emulator/binaries/gateway_main_/gateway_main $OUTPUT_DIR
-docker cp "$container_id":/gateway_main.runfiles/com_google_cloud_spanner_emulator/binaries/emulator_main $OUTPUT_DIR
+docker cp "$container_id":/gateway_main $OUTPUT_DIR
+docker cp "$container_id":/emulator_main $OUTPUT_DIR
 docker rm "$container_id"
 
 tar -C "${OUTPUT_DIR}" -czf "${OUTPUT_DIR}"/cloud-spanner-emulator_linux_amd64-"${EMULATOR_VERSION}".tar.gz gateway_main emulator_main

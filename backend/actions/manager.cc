@@ -85,8 +85,9 @@ absl::Status ActionRegistry::ExecuteVerifiers(const ActionContext* ctx,
 }
 
 ActionRegistry::ActionRegistry(const Schema* schema,
-                               const FunctionCatalog* function_catalog)
-    : schema_(schema), catalog_(schema, function_catalog) {
+                               const FunctionCatalog* function_catalog,
+                               zetasql::TypeFactory* type_factory_)
+    : schema_(schema), catalog_(schema, function_catalog, type_factory_) {
   BuildActionRegistry();
 }
 
@@ -171,10 +172,11 @@ void ActionRegistry::BuildActionRegistry() {
   }
 }
 
-void ActionManager::AddActionsForSchema(
-    const Schema* schema, const FunctionCatalog* function_catalog) {
+void ActionManager::AddActionsForSchema(const Schema* schema,
+                                        const FunctionCatalog* function_catalog,
+                                        zetasql::TypeFactory* type_factory) {
   registry_[schema] =
-      std::make_unique<ActionRegistry>(schema, function_catalog);
+      std::make_unique<ActionRegistry>(schema, function_catalog, type_factory);
 }
 
 absl::StatusOr<ActionRegistry*> ActionManager::GetActionsForSchema(
