@@ -18,6 +18,8 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ANALYZER_OPTIONS_H_
 
 #include "zetasql/public/analyzer.h"
+#include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/language_options.h"
 
 namespace google {
 namespace spanner {
@@ -29,6 +31,8 @@ zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions();
 zetasql::LanguageOptions MakeGoogleSqlLanguageOptions();
 
 zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance();
+
+zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViews();
 
 }  // namespace backend
 }  // namespace emulator

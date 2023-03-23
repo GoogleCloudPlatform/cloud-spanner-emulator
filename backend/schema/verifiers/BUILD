@@ -73,6 +73,7 @@ cc_library(
     deps = [
         "//backend/actions:check_constraint",
         "//backend/datamodel:key_range",
+        "//backend/query:analyzer_options",
         "//backend/query:catalog",
         "//backend/query:function_catalog",
         "//backend/schema/catalog:schema",

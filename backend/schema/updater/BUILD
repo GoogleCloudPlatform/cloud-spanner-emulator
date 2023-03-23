@@ -91,6 +91,20 @@ cc_test(
 )
 
 cc_library(
+    name = "sql_expression_validators",
+    srcs = [],
+    hdrs = ["sql_expression_validators.h"],
+    deps = [
+        "//backend/query:query_validator",
+        "//common:errors",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
+        "@com_google_zetasql//zetasql/public:language_options",
+        "@com_google_zetasql//zetasql/resolved_ast",
+    ],
+)
+
+cc_library(
     name = "schema_updater",
     srcs = [
         "schema_updater.cc",
@@ -102,6 +116,8 @@ cc_library(
         ":ddl_type_conversion",
         ":global_schema_names",
         ":schema_validation_context",
+        ":sql_expression_validators",
+        "//backend/common:case",
         "//backend/common:ids",
         "//backend/query:analyzer_options",
         "//backend/query:catalog",
@@ -113,10 +129,12 @@ cc_library(
         "//backend/schema/ddl:operations_cc_proto",
         "//backend/schema/graph:schema_graph",
         "//backend/schema/graph:schema_graph_editor",
+        "//backend/schema/graph:schema_node",
         "//backend/schema/parser:ddl_parser",
         "//backend/schema/verifiers:check_constraint_verifiers",
         "//backend/schema/verifiers:foreign_key_verifiers",
         "//common:errors",
+        "//common:feature_flags",
         "//common:limits",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -159,6 +177,7 @@ cc_library(
     name = "schema_validation_context",
     hdrs = ["schema_validation_context.h"],
     deps = [
+        "//backend/schema/graph:schema_graph",
         "//backend/schema/graph:schema_node",
         "//backend/storage",
         "@com_google_absl//absl/container:flat_hash_set",

@@ -43,23 +43,25 @@ namespace {
 class PartitionedDMLValidatorTest : public testing::Test {
  public:
   PartitionedDMLValidatorTest()
-      : fn_catalog_(&type_factory_),
+      : analyzer_options_(MakeGoogleSqlAnalyzerOptions()),
+        fn_catalog_(&type_factory_),
         schema_(test::CreateSchemaWithMultiTables(&type_factory_)),
-        catalog_(std::make_unique<Catalog>(schema_.get(), &fn_catalog_,
-                                           /*reader=*/nullptr)) {}
+        catalog_(std::make_unique<Catalog>(
+            schema_.get(), &fn_catalog_, &type_factory_, analyzer_options_)) {}
 
  protected:
   std::unique_ptr<const zetasql::AnalyzerOutput> AnalyzeQuery(
       const std::string& sql) {
     std::unique_ptr<const zetasql::AnalyzerOutput> output;
-    ZETASQL_EXPECT_OK(zetasql::AnalyzeStatement(sql, MakeGoogleSqlAnalyzerOptions(),
-                                          catalog_.get(), &type_factory_,
-                                          &output));
+    ZETASQL_EXPECT_OK(zetasql::AnalyzeStatement(
+        sql, analyzer_options_, catalog_.get(), &type_factory_, &output));
     return output;
   }
 
  private:
   zetasql::TypeFactory type_factory_;
+
+  const zetasql::AnalyzerOptions analyzer_options_;
 
   const FunctionCatalog fn_catalog_;
 

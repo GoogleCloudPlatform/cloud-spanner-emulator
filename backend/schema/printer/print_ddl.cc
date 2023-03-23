@@ -159,6 +159,16 @@ std::string PrintIndex(const Index* index) {
   return ddl_string;
 }
 
+std::string PrintView(const View* view) {
+  std::string view_string =
+      absl::Substitute("CREATE VIEW $0", PrintName(view->Name()));
+  if (view->security() == View::SqlSecurity::INVOKER) {
+    absl::StrAppend(&view_string, " SQL SECURITY INVOKER");
+  }
+  absl::StrAppend(&view_string, " AS ", view->body());
+  return view_string;
+}
+
 std::string PrintTable(const Table* table) {
   std::string table_string =
       absl::Substitute("CREATE TABLE $0 (\n", PrintName(table->Name()));
@@ -241,6 +251,13 @@ std::vector<std::string> PrintDDLStatements(const Schema* schema) {
         statements.push_back(PrintIndex(index));
       }
     }
+  }
+
+  // Print views that depend on the tables/indexes.
+  // Views should already be in the topological order in this so dependencies
+  // should be printed before depending views.
+  for (auto view : schema->views()) {
+    statements.push_back(PrintView(view));
   }
   return statements;
 }

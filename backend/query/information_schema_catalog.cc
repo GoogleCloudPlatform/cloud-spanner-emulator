@@ -20,10 +20,6 @@
 #include <vector>
 
 #include "backend/schema/printer/print_ddl.h"
-#include "riegeli/bytes/cfile_reader.h"
-#include "riegeli/csv/csv_reader.h"
-#include "riegeli/csv/csv_record.h"
-#include "zetasql/base/no_destructor.h"
 
 namespace google {
 namespace spanner {
@@ -40,13 +36,6 @@ using ::zetasql::values::Int64;
 using ::zetasql::values::NullInt64;
 using ::zetasql::values::NullString;
 using ::zetasql::values::String;
-using ::riegeli::CsvReader;
-using ::riegeli::CsvReaderBase;
-using ::riegeli::CsvRecord;
-using ::riegeli::CFileReader;
-
-using ColumnsMetaEntry = InformationSchemaCatalog::ColumnsMetaEntry;
-using IndexColumnsMetaEntry = InformationSchemaCatalog::IndexColumnsMetaEntry;
 
 static constexpr char kInformationSchema[] = "INFORMATION_SCHEMA";
 static constexpr char kTableCatalog[] = "TABLE_CATALOG";
@@ -138,8 +127,6 @@ static constexpr char kConstraintColumnUsage[] = "CONSTRAINT_COLUMN_USAGE";
 static constexpr char kPositionInUniqueConstraint[] =
     "POSITION_IN_UNIQUE_CONSTRAINT";
 
-static constexpr char csv_separator = ',';
-
 bool IsNullable(const ColumnsMetaEntry& column) {
   return std::string(column.is_nullable) == kYes;
 }
@@ -156,6 +143,26 @@ typename std::vector<T>::const_iterator FindMetadata(
       return it;
   }
   return metadata_entries.cend();
+}
+
+// Returns a reference to an information schema column's metadata. The column's
+// metadata must exist; otherwise, the process crashes with a fatal message.
+const ColumnsMetaEntry& GetColumnMetadata(const zetasql::Table* table,
+                                          const zetasql::Column* column) {
+  auto m = FindMetadata(ColumnsMetadata(), table->Name(), column->Name());
+  if (m == ColumnsMetadata().end()) {
+    ZETASQL_LOG(DFATAL) << "Missing metadata for column " << table->Name() << "."
+                << column->Name();
+  }
+  return *m;
+}
+
+// Returns a pointer to an information schema key column's metadata. Returns
+// nullptr if not found.
+const IndexColumnsMetaEntry* FindKeyColumnMetadata(
+    const zetasql::Table* table, const zetasql::Column* column) {
+  auto m = FindMetadata(IndexColumnsMetadata(), table->Name(), column->Name());
+  return m == IndexColumnsMetadata().end() ? nullptr : &*m;
 }
 
 template <typename T>
@@ -217,6 +224,16 @@ InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
   FillReferentialConstraintsTable(referential_constraints);
   FillKeyColumnUsageTable(key_column_usage);
   FillConstraintColumnUsageTable(constraint_column_usage);
+}
+
+const std::vector<ColumnsMetaEntry>&
+InformationSchemaCatalog::ColumnsMetadata() {
+  return google::spanner::emulator::backend::ColumnsMetadata();
+}
+
+const std::vector<IndexColumnsMetaEntry>&
+InformationSchemaCatalog::IndexColumnsMetadata() {
+  return google::spanner::emulator::backend::IndexColumnsMetadata();
 }
 
 void InformationSchemaCatalog::AddSchemataTable() {
@@ -1644,106 +1661,6 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
   }
 
   constraint_column_usage->SetContents(rows);
-}
-
-const std::vector<ColumnsMetaEntry>&
-InformationSchemaCatalog::ColumnsMetadata() {
-  static const zetasql_base::NoDestructor<std::vector<ColumnsMetaEntry>>
-      kColumnsMetadata(PopulateInformationSchemaMetadata());
-  return *kColumnsMetadata;
-}
-
-const std::vector<IndexColumnsMetaEntry>&
-InformationSchemaCatalog::IndexColumnsMetadata() {
-  static const zetasql_base::NoDestructor<std::vector<IndexColumnsMetaEntry>>
-      kColumnsMetadataForIndex(PopulateInformationSchemaMetadataForIndex());
-  return *kColumnsMetadataForIndex;
-}
-
-// Returns a reference to an information schema column's metadata. The column's
-// metadata must exist; otherwise, the process crashes with a fatal message.
-const ColumnsMetaEntry& InformationSchemaCatalog::GetColumnMetadata(
-    const zetasql::Table* table, const zetasql::Column* column) {
-  auto m = FindMetadata(ColumnsMetadata(), table->Name(), column->Name());
-  if (m == ColumnsMetadata().end()) {
-    ZETASQL_LOG(DFATAL) << "Missing metadata for column " << table->Name() << "."
-                << column->Name();
-  }
-  return *m;
-}
-
-// Returns a pointer to an information schema key column's metadata. Returns
-// nullptr if not found.
-const IndexColumnsMetaEntry* InformationSchemaCatalog::FindKeyColumnMetadata(
-    const zetasql::Table* table, const zetasql::Column* column) {
-  auto m = FindMetadata(IndexColumnsMetadata(), table->Name(), column->Name());
-  return m == IndexColumnsMetadata().end() ? nullptr : &*m;
-}
-
-std::vector<ColumnsMetaEntry>
-InformationSchemaCatalog::PopulateInformationSchemaMetadata() {
-  std::vector<ColumnsMetaEntry> columns_metadata;
-  // clang-format off
-  const std::string file_name =
-      "backend/query/info_schema_columns_metadata.csv"; // NOLINT
-  // clang-format on
-  CsvReaderBase::Options options;
-  options.set_field_separator(csv_separator);
-  options.set_required_header(
-      {"table_name", "column_name", "is_nullable", "spanner_type"});
-  CFileReader file_reader = CFileReader(file_name);
-  CsvReader csv_reader(&file_reader, options);
-  if (!csv_reader.status().ok()) {
-    ZETASQL_LOG(ERROR) << "Error reading csv file";
-    return columns_metadata;
-  }
-  for (CsvRecord record; csv_reader.ReadRecord(record);) {
-    if (record.fields().size() != 4) {
-      ZETASQL_LOG(ERROR) << "Number of columns in csv should be exactly 4";
-      return columns_metadata;
-    }
-    ColumnsMetaEntry entry{.table_name = record["table_name"],
-                           .column_name = record["column_name"],
-                           .is_nullable = record["is_nullable"],
-                           .spanner_type = record["spanner_type"]};
-    columns_metadata.push_back(entry);
-  }
-  return columns_metadata;
-}
-
-std::vector<IndexColumnsMetaEntry>
-InformationSchemaCatalog::PopulateInformationSchemaMetadataForIndex() {
-  std::vector<IndexColumnsMetaEntry> columns_metadata_for_index;
-  // clang-format off
-  const std::string file_name =
-      "backend/query/info_schema_columns_metadata_for_index.csv"; // NOLINT
-  // clang-format on
-  CsvReaderBase::Options options;
-  options.set_field_separator(csv_separator);
-  options.set_required_header({"table_name", "column_name", "is_nullable",
-                               "column_ordering", "spanner_type",
-                               "ordinal_position"});
-  CFileReader file_reader = CFileReader(file_name);
-  CsvReader csv_reader(&file_reader, options);
-  if (!csv_reader.status().ok()) {
-    ZETASQL_LOG(ERROR) << "Error reading csv file";
-    return columns_metadata_for_index;
-  }
-  for (CsvRecord record; csv_reader.ReadRecord(record);) {
-    if (record.fields().size() != 6) {
-      ZETASQL_LOG(ERROR) << "Number of columns in csv should be exactly 6";
-      return columns_metadata_for_index;
-    }
-    IndexColumnsMetaEntry entry{
-        .table_name = record["table_name"],
-        .column_name = record["column_name"],
-        .is_nullable = record["is_nullable"],
-        .column_ordering = record["column_ordering"],
-        .spanner_type = record["spanner_type"],
-        .primary_key_ordinal = std::stoi(record["ordinal_position"])};
-    columns_metadata_for_index.push_back(entry);
-  }
-  return columns_metadata_for_index;
 }
 
 }  // namespace backend

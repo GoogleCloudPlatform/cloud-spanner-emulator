@@ -2124,6 +2124,67 @@ TEST_F(CheckConstraint, ParseSyntaxErrorsInCheckConstraint) {
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
+TEST(ParseViews, CreateViewNoSqlSecurity) {
+  // The parser is able to parse this, but should be rejected during
+  // schema update.
+  EXPECT_THAT(ParseDDLStatement("CREATE VIEW `MyView` AS SELECT 1"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "MyView"
+                  function_kind: VIEW
+                  sql_body: "SELECT 1"
+                  language: SQL
+                })pb")));
+}
+
+TEST(ParseViews, CreateViewWithSqlSecurity) {
+  EXPECT_THAT(ParseDDLStatement("CREATE VIEW MyView "
+                                "SQL SECURITY INVOKER AS SELECT 1"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "MyView"
+                  function_kind: VIEW
+                  sql_body: "SELECT 1"
+                  sql_security: INVOKER
+                  language: SQL
+                })pb")));
+}
+
+TEST(ParseViews, CreateOrReplaceView) {
+  EXPECT_THAT(ParseDDLStatement("CREATE OR REPLACE VIEW MyView "
+                                "SQL SECURITY INVOKER AS SELECT 1"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "MyView"
+                  function_kind: VIEW
+                  sql_body: "SELECT 1"
+                  sql_security: INVOKER
+                  is_or_replace: true
+                  language: SQL
+                })pb")));
+}
+
+TEST(ParseViews, ParenthesizedViewDefinition) {
+  EXPECT_THAT(ParseDDLStatement("CREATE OR REPLACE VIEW MyView "
+                                "SQL SECURITY INVOKER AS (SELECT 1)"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "MyView"
+                  function_kind: VIEW
+                  is_or_replace: true
+                  sql_security: INVOKER
+                  sql_body: "(SELECT 1)"
+                  language: SQL
+                })pb")));
+}
+
+TEST(ParseViews, DropView) {
+  EXPECT_THAT(
+      ParseDDLStatement("DROP VIEW MyView "),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        drop_function { function_name: "MyView" function_kind: VIEW })pb")));
+}
+
 TEST(ParseAnalyze, CanParseAnalyze) {
   EXPECT_THAT(ParseDDLStatement("ANALYZE"), IsOk());
 }

@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_INDEX_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -29,7 +30,6 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_node.h"
-#include "backend/schema/updater/schema_validation_context.h"
 
 namespace google {
 namespace spanner {

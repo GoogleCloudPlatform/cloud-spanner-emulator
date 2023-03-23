@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "absl/container/flat_hash_set.h"
@@ -41,11 +42,6 @@ class SchemaObjectsPool {
     schema_node_pool_.insert(std::move(node));
   }
 
-  // Removes the given 'node' from the pool. Returns true if the node
-  // existed in the pool and was deleted.
-  bool Remove(const SchemaNode* node) {
-    return schema_node_pool_.erase(node) > 0;
-  }
 
   // Removes deleted nodes from the pool. Returns the number of removed nodes.
   int Trim() {
@@ -63,7 +59,7 @@ class SchemaObjectsPool {
 
   int size() const { return schema_node_pool_.size(); }
 
-  std::string DebugString() {
+  std::string DebugString() const {
     std::string out;
     for (const auto& node : schema_node_pool_) {
       absl::StrAppend(&out, "\n", node->DebugString());

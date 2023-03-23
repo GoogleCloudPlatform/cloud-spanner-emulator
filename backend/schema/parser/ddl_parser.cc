@@ -744,6 +744,32 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
   }
 }
 
+void VisitCreateViewNode(const SimpleNode* node, CreateFunction* function,
+                         bool is_or_replace, absl::string_view ddl_text,
+                         std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_VIEW_STATEMENT);
+
+  const SimpleNode* name = GetFirstChildNode(node, JJTNAME);
+  ZETASQL_DCHECK(name);
+  function->set_function_name(GetQualifiedIdentifier(name));
+
+  function->set_language(Function::SQL);
+  function->set_function_kind(Function::VIEW);
+
+  if (is_or_replace) {
+    function->set_is_or_replace(true);
+  }
+
+  if (GetFirstChildNode(node, JJTSQL_SECURITY_INVOKER)) {
+    function->set_sql_security(Function::INVOKER);
+  }
+
+  const SimpleNode* view_definition =
+      GetFirstChildNode(node, JJTVIEW_DEFINITION);
+  function->set_sql_body(
+      absl::StrCat((ExtractTextForNode(view_definition, ddl_text))));
+}
+
 void VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index,
                           std::vector<std::string>* errors) {
   CheckNode(node, JJTCREATE_INDEX_STATEMENT);
@@ -889,6 +915,10 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
         case JJTINDEX:
           statement->mutable_drop_index()->set_index_name(name);
           break;
+        case JJTVIEW:
+          statement->mutable_drop_function()->set_function_kind(Function::VIEW);
+          statement->mutable_drop_function()->set_function_name(name);
+          break;
         default:
           ZETASQL_LOG(ERROR) << "Unexpected object type: "
                      << GetChildNode(stmt, 0)->toString();
@@ -901,6 +931,20 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       CheckNode(stmt, JJTANALYZE_STATEMENT);
       statement->mutable_analyze();
       break;
+    case JJTCREATE_OR_REPLACE_STATEMENT: {
+      bool has_or_replace = (GetFirstChildNode(stmt, JJTOR_REPLACE) != nullptr);
+      const SimpleNode* actual_stmt =
+          GetChildNode(stmt, has_or_replace ? 1 : 0);
+      switch (actual_stmt->getId()) {
+        case JJTCREATE_VIEW_STATEMENT:
+          VisitCreateViewNode(actual_stmt, statement->mutable_create_function(),
+                              has_or_replace, ddl_text, errors);
+          break;
+        default:
+          ZETASQL_LOG(ERROR) << "Unexpected statement: " << stmt->toString();
+      }
+      break;
+    }
     default:
       ZETASQL_LOG(ERROR) << "Unexpected statement: " << stmt->toString();
   }

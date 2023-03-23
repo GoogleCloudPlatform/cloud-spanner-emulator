@@ -22,11 +22,16 @@
 
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
+#include "zetasql/public/types/type.h"
+#include "zetasql/public/types/type_factory.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "backend/access/read.h"
+#include "backend/query/analyzer_options.h"
 #include "backend/query/function_catalog.h"
 #include "backend/query/information_schema_catalog.h"
 #include "backend/query/queryable_table.h"
@@ -72,22 +77,19 @@ class NetCatalog : public zetasql::Catalog {
 };
 
 Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
-                 RowReader* reader)
-    : schema_(schema), function_catalog_(function_catalog) {
-  for (const auto* table : schema->tables()) {
-    tables_[table->Name()] = std::make_unique<QueryableTable>(table, reader);
-  }
-}
-
-Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
-                 RowReader* reader, const zetasql::AnalyzerOptions& options,
-                 zetasql::TypeFactory* type_factory)
+                 zetasql::TypeFactory* type_factory,
+                 const zetasql::AnalyzerOptions& options, RowReader* reader)
     : schema_(schema),
       function_catalog_(function_catalog),
       type_factory_(type_factory) {
+  // Pass the reader to tables.
   for (const auto* table : schema->tables()) {
     tables_[table->Name()] = std::make_unique<QueryableTable>(
         table, reader, options, this, type_factory);
+  }
+
+  for (const auto* view : schema->views()) {
+    views_[view->Name()] = std::make_unique<QueryableView>(view);
   }
 }
 
@@ -105,14 +107,18 @@ absl::Status Catalog::GetCatalog(const std::string& name,
 absl::Status Catalog::GetTable(const std::string& name,
                                const zetasql::Table** table,
                                const FindOptions& options) {
-  auto iter = tables_.find(name);
-  if (iter == tables_.end()) {
-    *table = nullptr;
-    return error::TableNotFound(name);
-  } else {
-    *table = iter->second.get();
+  *table = nullptr;
+  if (auto it = views_.find(name); it != views_.end()) {
+    *table = it->second.get();
     return absl::OkStatus();
   }
+
+  if (auto it = tables_.find(name); it != tables_.end()) {
+    *table = it->second.get();
+    return absl::OkStatus();
+  }
+
+  return error::TableNotFound(name);
 }
 
 absl::Status Catalog::GetFunction(const std::string& name,

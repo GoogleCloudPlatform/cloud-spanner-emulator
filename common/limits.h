@@ -41,6 +41,10 @@ constexpr int kMaxTransactionsPerSession = 32;
 // Maximum number of tables per database.
 constexpr int kMaxTablesPerDatabase = 2560;
 
+// Maximum number of views per database.
+// https://cloud.google.com/spanner/quotas#views.
+constexpr int kMaxViewsPerDatabase = 5000;
+
 // Maximum length of a schema identifier e.g. table/column/index name.
 constexpr int kMaxSchemaIdentifierLength = 128;
 

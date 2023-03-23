@@ -105,7 +105,7 @@ class InformationSchemaTest : public DatabaseTest {
                                 "MODELS",
                                 "MODEL_OPTIONS",
                                 "MODEL_COLUMNS",
-                                "MODEL_COLUMNS_OPTIONS",
+                                "MODEL_COLUMN_OPTIONS",
                                 "VIEWS",
                                 "ROLES",
                                 "ROLE_GRANTEES",
@@ -691,7 +691,7 @@ TEST_F(InformationSchemaTest, MetaCheckConstraints) {
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODELS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_OPTIONS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMNS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMNS_OPTIONS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMN_OPTIONS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PARAMETERS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINES%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_OPTIONS%'

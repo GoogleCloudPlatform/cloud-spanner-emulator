@@ -2287,6 +2287,51 @@ absl::Status ForeignKeyRowDeletionPolicyAddNotAllowed(
                        "referenced by one or more foreign keys: `$1`.",
                        table_name, foreign_keys));
 }
+
+absl::Status ViewsNotSupported(absl::string_view view_op_name) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("`$0` for INVOKER RIGHTS views is not supported.",
+                       view_op_name));
+}
+
+absl::Status TooManyViewsPerDatabase(absl::string_view function_name,
+                                     int limit) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Cannot add Function $0 : too many "
+                                       "functions (limit $1 per database).",
+                                       function_name, limit));
+}
+
+absl::Status ViewRequiresInvokerSecurity(absl::string_view view_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("View `$0` is missing the SQL SECURITY INVOKER clause.",
+                       view_name));
+}
+
+absl::Status ViewBodyAnalysisError(absl::string_view view_name,
+                                   absl::string_view error) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Error parsing the definition of view `$0`: $1",
+                       view_name, error));
+}
+
+absl::Status ViewReplaceError(absl::string_view view_name,
+                              absl::string_view error) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot replace VIEW `$0` because new definition is "
+                       "invalid with the following diagnostic message:\n\n$1",
+                       view_name, error));
+}
+
+absl::Status ViewNotFound(absl::string_view view_name) {
+  return absl::Status(absl::StatusCode::kNotFound,
+                      absl::Substitute("View not found: $0", view_name));
+}
+
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

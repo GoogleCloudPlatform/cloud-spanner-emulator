@@ -39,7 +39,8 @@ namespace backend {
 // ZetaSQL dependencies from the former.
 class QueryableColumn : public zetasql::Column {
  public:
-  QueryableColumn(const backend::Column* column) : wrapped_column_(column) {}
+  explicit QueryableColumn(const backend::Column* column)
+      : wrapped_column_(column) {}
 
   QueryableColumn(const backend::Column* column,
                   std::unique_ptr<const zetasql::AnalyzerOutput> output)

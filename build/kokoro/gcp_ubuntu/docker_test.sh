@@ -15,15 +15,15 @@
 #
 
 #!/bin/bash
-
-go_SHA=4056ab393fe07541b22517efc6fa83b0414ab58b6fd5655377da9df709793938
-java_SHA=7d284e598108a84617ac169716b41c74b5f92127849f8abd5e58327d2150981e
-cpp_SHA=e79a0c6a2b825081675dd32900fbd0785051ae7a496d0459eb373225936ee5ce
-php_SHA=f87b59fa6952a51740e393702088a2932deab2c4492877371fc40c8f1d2bc73f
-csharp_SHA=f595a60a506bae6280068a8e02c6b1fb4b690ee7cb0fa9cac717de895cda1a2e
-ruby_SHA=b4a216853184d14f6b951f5870023fad12ea41d0dc82e5940356d692d1577946
-nodejs_SHA=24ea87de30a409f44a03141cc60c8ed35cc993544f6f1def58daf8a4e940d5bf
-py_SHA=3e6efec9f94ba96487c5a520a50f839c6c31212225c29e779792bf5389c428cf
+base_SHA=cf586d8ae09c4a0f9ba613f1fb89104b7f2f245729f88204bb409fba2266b33a
+go_SHA=9ba9ca1bab302461de4d6462ed2a64a8b5fe5cabb8c718a7a31a25cfd4308187
+java_SHA=5da0c7567fe3224cf8d686429de3f446159ef742f111b9d4aaf120ca7a4122e3
+cpp_SHA=09b8c004e05174b913d9faed7e4bb3586a35349aed7782a1d16b9c36f075cbd4
+php_SHA=83be858b5f16da1ae68584ab4b99d483a9c3235336ac2d5e4514b6376bac1f56
+csharp_SHA=9840a6e57da7c7c0b3017752356b6b73822097cee46b930f3f22826f0ac7d560
+ruby_SHA=aabd3e1acf9f5c7c4444b72db757c94ab6cb6c9ce716f4143a896dd808bff55b
+nodejs_SHA=6b64712aa937c4c785533bb5c2fdd9a87e3fd4702643191e09094b41ea0281b4
+py_SHA=8d46cba4c1bde2c976a7f6edf01d2eae534b4e1eafdbb72ce4f52f560a49d439
 
 if [[ "$#" -eq 0 ]]; then
   echo "Running client library integration tests."
@@ -81,7 +81,7 @@ echo "Placing results in: ${OUTPUT_DIR}"
 echo "Placing logs in: ${LOG_DIR}"
 echo "Using src directory: ${SRC_DIR}"
 
-readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base@sha256:c7a5a1b1eb7b33bdd515b66c7d0bb31a49724c7af1767e0e9367e66a6fee70de
+readonly BASE_DOCKER_IMAGE=gcr.io/cloud-spanner-emulator-builder/build-base@sha256:${base_SHA}
 readonly CACHE_BUCKET="cloud-spanner-emulator-builder-bazel-cache"
 echo "Client integration tests to run: ${CLIENT_INTEGRATION_TESTS}"
 

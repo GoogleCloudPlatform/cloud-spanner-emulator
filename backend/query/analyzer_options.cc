@@ -17,6 +17,8 @@
 #include "backend/query/analyzer_options.h"
 
 #include "zetasql/public/analyzer.h"
+#include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/language_options.h"
 #include "zetasql/public/options.pb.h"
 #include "absl/time/time.h"
 #include "common/constants.h"
@@ -87,6 +89,21 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance() {
   auto options = MakeGoogleSqlLanguageOptions();
   DisableOption(zetasql::FEATURE_ANALYTIC_FUNCTIONS, &options);
   return options;
+}
+
+zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViews() {
+  auto language_opts = MakeGoogleSqlLanguageOptions();
+  // Only CREATE VIEW and CREATE FUNCTION are supported in DDL.
+  language_opts.SetSupportedStatementKinds({
+      zetasql::RESOLVED_CREATE_VIEW_STMT,
+  });
+  // VIEW defintions must be specified in strict name resolution mode.
+  language_opts.set_name_resolution_mode(zetasql::NAME_RESOLUTION_STRICT);
+
+  auto analyzer_options = MakeGoogleSqlAnalyzerOptions();
+  analyzer_options.set_prune_unused_columns(true);
+  analyzer_options.set_language(language_opts);
+  return analyzer_options;
 }
 
 }  // namespace backend

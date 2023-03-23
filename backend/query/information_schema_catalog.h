@@ -23,12 +23,16 @@
 #include "zetasql/public/simple_catalog.h"
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
+#include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/schema/catalog/schema.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+struct ColumnsMetaEntry;
+struct IndexColumnsMetaEntry;
 
 // InformationSchemaCatalog provides the INFORMATION_SCHEMA tables.
 //
@@ -50,59 +54,11 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
 
   explicit InformationSchemaCatalog(const Schema* default_schema);
 
-  struct ColumnsMetaEntry {
-    std::string table_name;
-    std::string column_name;
-    std::string is_nullable;
-    std::string spanner_type;
-  };
-
-  struct IndexColumnsMetaEntry {
-    std::string table_name;
-    std::string column_name;
-    std::string is_nullable;
-    std::string column_ordering;
-    std::string spanner_type;
-
-    // Not all information schema tables have a primary key on the prefix of
-    // table columns. CONSTRAINT_COLUMN_USAGE, for example, has table columns:
-    //
-    //   TABLE_CATALOG
-    //   TABLE_SCHEMA
-    //   TABLE_NAME
-    //   COLUMN_NAME
-    //   CONSTRAINT_CATALOG
-    //   CONSTRAINT_SCHEMA
-    //   CONSTRAINT_NAME
-    //
-    // but its primary key is:
-    //
-    //   CONSTRAINT_CATALOG
-    //   CONSTRAINT_SCHEMA
-    //   CONSTRAINT_NAME
-    //   COLUMN_NAME
-    //
-    // which corresponds to ordinal positions [1, 2, 3, 4].
-    //
-    // The default position of 0 indicates that the column is in the same
-    // ordinal position in both the table and its primary key.
-    int primary_key_ordinal = 0;
-  };
-
   const std::vector<ColumnsMetaEntry>& ColumnsMetadata();
   const std::vector<IndexColumnsMetaEntry>& IndexColumnsMetadata();
 
  private:
   const Schema* default_schema_;
-
-  const ColumnsMetaEntry& GetColumnMetadata(const zetasql::Table* table,
-                                            const zetasql::Column* column);
-  const IndexColumnsMetaEntry* FindKeyColumnMetadata(
-      const zetasql::Table* table, const zetasql::Column* column);
-
-  std::vector<ColumnsMetaEntry> PopulateInformationSchemaMetadata();
-  std::vector<IndexColumnsMetaEntry>
-  PopulateInformationSchemaMetadataForIndex();
 
   void AddSchemataTable();
   void AddSpannerStatisticsTable();

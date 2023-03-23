@@ -19,6 +19,7 @@ syntax = "proto2";
 package google.spanner.emulator.backend.ddl;
 
 
+
 message DDLStatement {
   oneof statement {
     // Database statements.
@@ -34,6 +35,10 @@ message DDLStatement {
     // Index statements.
     CreateIndex create_index = 13;
     DropIndex drop_index = 16;
+
+    // Function statements.
+    CreateFunction create_function = 34;
+    DropFunction drop_function = 36;
 
     // Statistics statements.
     Analyze analyze = 75;
@@ -138,6 +143,37 @@ message ForeignKey {
 
   // Whether or not the constraint is enforced.
   optional bool enforced = 5;
+}
+
+message Function {
+  enum Kind {
+    INVALID_KIND = 0;
+    VIEW = 1;
+  }
+
+  enum Language {
+    UNSPECIFIED_LANGUAGE = 0;
+    SQL = 1;
+  }
+
+  enum SqlSecurity {
+    UNSPECIFIED_SQL_SECURITY = 0;
+    INVOKER = 2;
+  }
+}
+
+message CreateFunction {
+  optional string function_name = 1;
+  optional Function.Kind function_kind = 3;
+  optional bool is_or_replace = 4;
+  optional Function.SqlSecurity sql_security = 5;
+  optional string sql_body = 9;
+  optional Function.Language language = 10;
+}
+
+message DropFunction {
+  optional string function_name = 1;
+  optional Function.Kind function_kind = 2;
 }
 
 message CheckConstraint {

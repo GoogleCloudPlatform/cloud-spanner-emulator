@@ -37,7 +37,6 @@
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
-#include "backend/schema/updater/schema_validation_context.h"
 #include "absl/status/status.h"
 
 namespace google {

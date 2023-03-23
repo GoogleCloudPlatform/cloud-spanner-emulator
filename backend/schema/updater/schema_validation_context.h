@@ -24,6 +24,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
+#include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/storage/storage.h"
 #include "absl/status/status.h"
@@ -53,11 +54,14 @@ class SchemaValidationContext {
   using SchemaChangeAction =
       std::function<absl::Status(const SchemaValidationContext*)>;
 
+  // A callback used to return an unowned instance of a Schema.
+  using SchemaConstructorCb = std::function<const Schema*(const SchemaGraph*)>;
+
   // Test-only constructor.
   // TODO : Split out into a separate Schema update validation
   // context that is used by SchemaUpdater and can therefore be mocked
   // separately.
-  SchemaValidationContext() {}
+  SchemaValidationContext() = default;
 
   SchemaValidationContext(Storage* storage, GlobalSchemaNames* global_names,
                           zetasql::TypeFactory* type_factory,
@@ -66,6 +70,8 @@ class SchemaValidationContext {
         global_names_(global_names),
         type_factory_(type_factory),
         pending_commit_timestamp_(pending_commit_timestamp) {}
+
+  ~SchemaValidationContext() = default;
 
   // TODO : Split out into a separate StatementValidationContext.
   // Interface accessed by validators to enqueue schema
@@ -96,9 +102,21 @@ class SchemaValidationContext {
     return pending_commit_timestamp_;
   }
 
+  // Returns the Schema snapshot for the old/unmodified schema.
   const Schema* old_schema() const { return old_schema_snapshot_; }
 
-  const Schema* new_schema() const { return new_schema_snapshot_; }
+  // Returns the Schema snapshot for the updated validated schema. This is only
+  // valid to call during the verification and backfill phase. Attempts to call
+  // this during the validation phase will result in undefined behavior. Callers
+  // wishing to access a temporary, unvalidated snapshot of the new schema
+  // during the validation phase should call `tmp_new_schema()` instead.
+  const Schema* validated_new_schema() const { return new_schema_snapshot_; }
+
+  // Returns the temporary schema snapshot of the new schema during the
+  // validation phase and is invalid to call during the verification and
+  // backfill phases. Callers should not hold on to any references to the
+  // returned schema or its nodes.
+  const Schema* tmp_new_schema() const { return tmp_new_schema_; }
 
   // Interface accessed by SchemaUpdater to execute queued
   // actions.
@@ -108,8 +126,13 @@ class SchemaValidationContext {
     old_schema_snapshot_ = old_schema;
   }
 
-  void SetNewSchemaSnapshot(const Schema* new_schema) {
+  void SetValidatedNewSchemaSnapshot(const Schema* new_schema) {
     new_schema_snapshot_ = new_schema;
+  }
+
+  void SetTempNewSchemaSnapshotConstructor(
+      SchemaConstructorCb schema_constructor) {
+    tmp_new_schema_cb_ = std::move(schema_constructor);
   }
 
   // Runs all SchemaVerifiers added to this validation context.
@@ -170,6 +193,16 @@ class SchemaValidationContext {
     added_nodes_ = added_nodes;
   }
 
+  // Called by SchemaGraphEditor to expose a temporary `schema_graph` via
+  // the `Schema` interface to Validate/ValidateUpdate() functions during the
+  // validation phase.
+  void MakeNewTempSchemaSnapshot(const SchemaGraph* schema_graph) {
+    if (tmp_new_schema_cb_ == nullptr) return;
+    tmp_new_schema_ = tmp_new_schema_cb_(schema_graph);
+  }
+
+  void ClearNewTempSchemaSnapshot() { tmp_new_schema_ = nullptr; }
+
   const std::vector<std::unique_ptr<const SchemaNode>>* added_nodes_ = nullptr;
 
   // Used to read data from the database for verifiers. Not owned.
@@ -188,10 +221,18 @@ class SchemaValidationContext {
   std::vector<SchemaChangeAction> actions_;
 
   // The old schema.
-  const Schema* old_schema_snapshot_;
+  const Schema* old_schema_snapshot_ = nullptr;
 
   // The new schema.
-  const Schema* new_schema_snapshot_;
+  const Schema* new_schema_snapshot_ = nullptr;
+
+  // Callback to construct a temporary instance of the new Schema.
+  SchemaConstructorCb tmp_new_schema_cb_ = nullptr;
+
+  // Holds an instance of the temporary new schema during the validation phase.
+  // This instance is not owned by SchemaValidationContext but is guaranteed
+  // to be alive during the validation phase.
+  const Schema* tmp_new_schema_ = nullptr;
 };
 
 }  // namespace backend

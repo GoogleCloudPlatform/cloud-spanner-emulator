@@ -24,12 +24,15 @@
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
 #include "zetasql/public/simple_catalog.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "backend/access/read.h"
 #include "backend/common/case.h"
+#include "backend/query/analyzer_options.h"
 #include "backend/query/function_catalog.h"
 #include "backend/query/queryable_table.h"
+#include "backend/query/queryable_view.h"
 #include "backend/schema/catalog/schema.h"
 #include "absl/status/status.h"
 
@@ -44,16 +47,13 @@ class NetCatalog;
 // hierarchy. For more details, see code of zetasql::Catalog.
 class Catalog : public zetasql::EnumerableCatalog {
  public:
-  // 'reader' can be nullptr unless CreateEvaluatorTableIterator is called on
-  // tables in the catalog.
+  // 'reader' can be nullptr unless CreateEvaluatorTableIterator is called
+  // on tables in the catalog.
   Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
-          RowReader* reader);
-  Catalog(const Schema* schema, const FunctionCatalog* function_catalog)
-      : Catalog(schema, function_catalog, /*reader=*/nullptr) {}
-
-  Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
-          RowReader* reader, const zetasql::AnalyzerOptions& options,
-          zetasql::TypeFactory* type_factory);
+          zetasql::TypeFactory* type_factory,
+          const zetasql::AnalyzerOptions& options =
+              MakeGoogleSqlAnalyzerOptions(),
+          RowReader* reader = nullptr);
 
   std::string FullName() const final {
     // The name of the root catalog is "".
@@ -90,14 +90,15 @@ class Catalog : public zetasql::EnumerableCatalog {
   zetasql::Catalog* GetNetFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
 
   // The backend schema (which is the default schema in this catalog).
-  const Schema* schema_;
+  const Schema* schema_ = nullptr;
 
   // Tables available in the default schema.
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableTable>> tables_;
+  CaseInsensitiveStringMap<std::unique_ptr<const QueryableView>> views_;
 
   // Functions available in the default schema.
-  const FunctionCatalog* function_catalog_;
-  zetasql::TypeFactory* type_factory_;
+  const FunctionCatalog* function_catalog_ = nullptr;
+  zetasql::TypeFactory* type_factory_ = nullptr;
 
   // Mutex to protect state below.
   mutable absl::Mutex mu_;

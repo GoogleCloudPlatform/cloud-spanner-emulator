@@ -35,6 +35,22 @@ namespace backend {
 const char kManagedIndexNonFingerprintRegex[] = "(IDX_\\w+_)[0-9A-F]{16}";
 const int kFingerprintLength = 16;
 
+const View* Schema::FindView(const std::string& view_name) const {
+  auto itr = views_map_.find(view_name);
+  if (itr == views_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
+const View* Schema::FindViewCaseSensitive(const std::string& view_name) const {
+  auto view = FindView(view_name);
+  if (!view || view->Name() != view_name) {
+    return nullptr;
+  }
+  return view;
+}
+
 const Table* Schema::FindTable(const std::string& table_name) const {
   auto itr = tables_map_.find(table_name);
   if (itr == tables_map_.end()) {
@@ -80,14 +96,23 @@ const Index* Schema::FindManagedIndex(const std::string& index_name) const {
   return nullptr;
 }
 
-Schema::Schema(std::unique_ptr<const SchemaGraph> graph
+Schema::Schema(const SchemaGraph* graph
                )
-    : graph_(std::move(graph))
+    : graph_(graph)
 {
+  views_.clear();
+  views_map_.clear();
   tables_.clear();
   tables_map_.clear();
   index_map_.clear();
   for (const SchemaNode* node : graph_->GetSchemaNodes()) {
+    const View* view = node->As<const View>();
+    if (view != nullptr) {
+      views_.push_back(view);
+      views_map_[view->Name()] = view;
+      continue;
+    }
+
     const Table* table = node->As<const Table>();
     if (table != nullptr && table->is_public()) {
       tables_.push_back(table);

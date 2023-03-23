@@ -40,19 +40,20 @@ namespace backend {
 // the table through a RowReader.
 class QueryableTable : public zetasql::Table {
  public:
-  QueryableTable(const backend::Table* table, RowReader* reader);
-
-  QueryableTable(const backend::Table* table, RowReader* reader,
-                 const zetasql::AnalyzerOptions& options,
-                 zetasql::Catalog* catalog,
-                 zetasql::TypeFactory* type_factory);
+  // 'options' , 'catalog' , 'type_factory' must be non-null when specifying a
+  // QueryableTable with default value columns.
+  QueryableTable(
+      const backend::Table* table, RowReader* reader,
+      std::optional<const zetasql::AnalyzerOptions> options = std::nullopt,
+      zetasql::Catalog* catalog = nullptr,
+      zetasql::TypeFactory* type_factory = nullptr);
 
   std::string Name() const override { return wrapped_table_->Name(); }
 
   // FullName is used in debugging so it's OK to not include full path here.
   std::string FullName() const override { return Name(); }
 
-  int NumColumns() const override { return wrapped_table_->columns().size(); }
+  int NumColumns() const override { return columns_.size(); }
 
   const zetasql::Column* GetColumn(int i) const override {
     return columns_[i].get();

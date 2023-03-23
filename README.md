@@ -14,6 +14,16 @@ targeting Cloud Spanner.
 
 There are multiple ways to invoke the emulator.
 
+### Via devcontainers
+To build, develop and test emulator, devcontainers can be used which installs
+all the emulator dependencies inside a docker container. Opening this repository
+in vscode will automatically use the devcontainer defined in .devcontainer
+directory. This requires docker to be installed on the local machine.
+
+To work directly in the browser without installing docker, a github Codespace
+can be created and opened in vscode.dev in the browser.
+
+
 ### Via gcloud
 
 The emulator is included in the [Google Cloud SDK](https://cloud.google.com/sdk)
@@ -41,7 +51,7 @@ images are also tagged with version numbers, so you can run a specific version
 with:
 
 ```shell
-VERSION=1.5.0
+VERSION=1.5.2
 docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator:$VERSION
 ```
 Works on x86 and arm64 architectures.
@@ -53,7 +63,7 @@ binary is not fully static, but has been tested on Ubuntu 18.04+, CentOS
 7+, RHEL 8+ and Debian 10+.
 
 ```shell
-VERSION=1.5.0
+VERSION=1.5.2
 wget https://storage.googleapis.com/cloud-spanner-emulator/releases/${VERSION}/cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 tar zxvf cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
 chmod u+x gateway_main emulator_main
@@ -77,7 +87,7 @@ emulator:
 
 ### Via bazel
 
-Production releases of the emulator are built on Ubuntu 16.04 with bazel 3.4.1
+Production releases of the emulator are built on Ubuntu 18.04 with bazel 5.4.0
 and gcc 8.4. You may be able to compile on compatible systems with compatible
 toolchains. From the emulator source directory, you can build and run the
 emulator via bazel from the source root with:
