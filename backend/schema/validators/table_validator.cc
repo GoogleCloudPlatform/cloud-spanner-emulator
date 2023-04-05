@@ -282,7 +282,6 @@ absl::Status TableValidator::Validate(const Table* table,
 
   if (!table->indexes_.empty()) {
     ZETASQL_RET_CHECK(!table->columns_.empty());
-    ZETASQL_RET_CHECK(!table->primary_key_.empty());
   }
 
   for (const Index* index : table->indexes_) {

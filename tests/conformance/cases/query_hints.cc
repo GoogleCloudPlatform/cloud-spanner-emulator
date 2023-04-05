@@ -195,6 +195,13 @@ TEST_F(QueryHintsTest, DisableNullFilteredIndexCheckForValidQuery) {
   ZETASQL_EXPECT_OK(Query(modified_valid_query));
 }
 
+TEST_F(QueryHintsTest, DisableNullFilteredIndexAtStatementLevel) {
+  ZETASQL_EXPECT_OK(
+      Query("@{spanner_emulator.disable_query_null_filtered_index_check=true} "
+            "SELECT ID FROM Users@{force_index=UsersByAge} "
+            "WHERE Age IS NOT NULL"));
+}
+
 }  // namespace
 
 }  // namespace test

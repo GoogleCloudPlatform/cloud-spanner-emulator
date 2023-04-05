@@ -14,6 +14,9 @@
 // limitations under the License.
 //
 
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -29,9 +32,6 @@ namespace types = zetasql::types;
 namespace {
 
 TEST_F(SchemaUpdaterTest, CreateIndex) {
-  EmulatorFeatureFlags::Flags flags;
-  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T (
@@ -418,10 +418,32 @@ TEST_F(SchemaUpdaterTest, DropIndex) {
   EXPECT_EQ(new_schema->GetSchemaGraph()->GetSchemaNodes().size(), 4);
 }
 
-TEST_F(SchemaUpdaterTest, CreateIndex_NumericColumn) {
-  EmulatorFeatureFlags::Flags flags;
-  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+TEST_F(SchemaUpdaterTest, CreateIndexOnTableWithNoPK) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE T ( col1 INT64 ) PRIMARY KEY ()
+    )sql",
+                                        R"sql(
+      CREATE INDEX Idx ON T(col1)
+    )sql"}));
+  auto t = schema->FindTable("T");
+  ASSERT_NE(t, nullptr);
+  auto col1 = t->FindColumn("col1");
+  ASSERT_NE(col1, nullptr);
+  auto idx = schema->FindIndex("Idx");
+  ASSERT_NE(idx, nullptr);
 
+  EXPECT_EQ(idx->key_columns().size(), 1);
+
+  auto idx_data = idx->index_data_table();
+  auto data_columns = idx_data->columns();
+  EXPECT_EQ(data_columns.size(), 1);
+  EXPECT_THAT(data_columns[0], ColumnIs("col1", types::Int64Type()));
+
+  EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col1));
+}
+
+TEST_F(SchemaUpdaterTest, CreateIndex_NumericColumn) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T (
@@ -446,8 +468,6 @@ TEST_F(SchemaUpdaterTest, CreateIndex_NumericColumn) {
 }
 
 TEST_F(SchemaUpdaterTest, CreateIndex_JsonColumn) {
-  EmulatorFeatureFlags::Flags flags;
-  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(
       CreateSchema({
           R"sql(

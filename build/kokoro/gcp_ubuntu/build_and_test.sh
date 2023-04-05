@@ -49,6 +49,7 @@ function emulator::build_and_test() {
 
 # Run tests without cache
   bazel test -c opt ...
+  exit_code=$?
   set -e
   if [[ $exit_code != 0 ]]; then
     emulator::copy_logs

@@ -208,7 +208,8 @@ absl::Status QueryValidator::CheckEmulatorHintName(
       {zetasql::RESOLVED_TABLE_SCAN,
        {kHintDisableQueryNullFilteredIndexCheck}},
       {zetasql::RESOLVED_QUERY_STMT,
-       {kHintDisableQueryPartitionabilityCheck}},
+       {kHintDisableQueryPartitionabilityCheck,
+        kHintDisableQueryNullFilteredIndexCheck}},
   };
 
   const auto& iter = supported_hints->find(node_kind);

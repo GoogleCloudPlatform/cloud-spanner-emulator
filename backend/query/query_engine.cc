@@ -59,6 +59,7 @@
 #include "backend/query/query_validator.h"
 #include "backend/query/queryable_column.h"
 #include "backend/query/queryable_table.h"
+#include "common/config.h"
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
@@ -541,16 +542,18 @@ absl::StatusOr<std::map<std::string, zetasql::Value>> ExtractParameters(
   // Build new parameter map which includes all unresolved parameters.
   auto params = query.declared_params;
   for (const auto& [name, type] : analyzer_output->undeclared_parameters()) {
-    if (type->IsTimestamp() || type->IsDate()) {
-      return error::UnableToInferUndeclaredParameter(name, type->DebugString());
-    }
-
     auto it = undeclared_params.find(name);
 
     // ZetaSQL will return an undeclared parameter error for any parameters that
     // do not have values specified (ie, when it == end()).
     if (it != undeclared_params.end()) {
       auto parsed_value = frontend::ValueFromProto(*it->second, type);
+
+      if (parsed_value.ok() && !parsed_value->is_null() &&
+          (type->IsTimestamp() || type->IsDate())) {
+        return error::UnableToInferUndeclaredParameter(name,
+                                                       type->DebugString());
+      }
 
       // If the value does not parse as the given type, the error code is
       // kInvalidArgument, not kFailedPrecondition, for example.
@@ -598,7 +601,8 @@ ExtractValidatedResolvedStatementAndOptions(
 
   // Validate the index hints.
   IndexHintValidator index_hint_validator{
-      schema, options.disable_query_null_filtered_index_check};
+      schema, options.disable_query_null_filtered_index_check ||
+                  config::disable_query_null_filtered_index_check()};
   ZETASQL_RETURN_IF_ERROR(statement->Accept(&index_hint_validator));
 
   // Check the query size limits

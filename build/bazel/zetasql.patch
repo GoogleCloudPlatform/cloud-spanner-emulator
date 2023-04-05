@@ -9,16 +9,3 @@
 @@ -19,1 +19,1 @@
 -package(default_visibility = ["//zetasql/base:zetasql_implementation"])
 +package(default_visibility = ["//visibility:public"])
-
---- zetasql/parser/gen_parse_tree.py
-+++ zetasql/parser/gen_parse_tree.py
-@@ -23,7 +23,7 @@ Still a work in progress.
- 
- """
- 
--import collections
-+import collections.abc
- import enum
- import operator
- import re
- 

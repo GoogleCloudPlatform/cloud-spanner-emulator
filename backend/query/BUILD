@@ -46,6 +46,7 @@ cc_library(
         "//backend/datamodel:value",
         "//backend/query/feature_filter:query_size_limits_checker",
         "//backend/schema/catalog:schema",
+        "//common:config",
         "//common:constants",
         "//common:errors",
         "//common:limits",

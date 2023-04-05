@@ -88,7 +88,7 @@ emulator:
 ### Via bazel
 
 Production releases of the emulator are built on Ubuntu 18.04 with bazel 5.4.0
-and gcc 8.4. You may be able to compile on compatible systems with compatible
+and gcc 9.4. You may be able to compile on compatible systems with compatible
 toolchains. From the emulator source directory, you can build and run the
 emulator via bazel from the source root with:
 
