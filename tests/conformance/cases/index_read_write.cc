@@ -49,7 +49,9 @@ class IndexTest : public DatabaseTest {
         "Users(Name, Age)",
         "CREATE UNIQUE INDEX UsersByNameAgeUnique ON Users(Name, Age)",
         "CREATE UNIQUE NULL_FILTERED INDEX UsersByNameUniqueFiltered ON "
-        "Users(Name)"});
+        "Users(Name)",
+        "CREATE TABLE NoPkTable ( Col1 INT64 ) PRIMARY KEY()",
+        "CREATE INDEX NoPkTableIdx ON NoPkTable(Col1)"});
   }
 };
 
@@ -169,6 +171,16 @@ TEST_F(IndexTest, AllEntriesAreUnique) {
                         {"Adam", 20, 0},
                         {"John", 28, 3},
                         {"Matthew", Null<std::int64_t>(), 7}}));
+}
+
+TEST_F(IndexTest, ReadOnIndexWithSingletonRow) {
+  ZETASQL_EXPECT_OK(Insert("NoPkTable", {"Col1"}, {20}));
+  EXPECT_THAT(Insert("NoPkTable", {"Col1"}, {30}),
+              StatusIs(absl::StatusCode::kAlreadyExists));
+  EXPECT_THAT(ReadAllWithIndex("NoPkTable", "NoPkTableIdx", {"Col1"}),
+              IsOkAndHoldsRows({{
+                  20,
+              }}));
 }
 
 TEST_F(IndexTest, TriggersUniqueIndexViolationWithImplicitNulls) {

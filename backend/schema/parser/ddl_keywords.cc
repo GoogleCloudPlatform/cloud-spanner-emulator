@@ -32,6 +32,10 @@ std::string ToToken(absl::string_view word) {
     token = "DEFAULTT";
   } else if (token == "NULL") {
     token = "NULLL";
+  } else if (token == "FALSE") {
+    token = "FALSEE";
+  } else if (token == "TRUE") {
+    token = "TRUEE";
   } else if (token == "TOKEN") {
     token = "TOKENT";
   }

@@ -9,17 +9,19 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive"                         \
 
 # Unfortunately ZetaSQL has issues with clang (default bazel compiler), so
 # we install GCC. Also install make for rules_foreign_cc bazel rules.
-RUN apt-get -qq install -y software-properties-common
+ENV GCC_VERSION=9
+RUN apt-get -qq install -y software-properties-common make rename  git
 RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
     apt-get -qq update                                                      && \
-    apt-get -qq install -y gcc-8 g++-8 make rename  git                     && \
+    apt-get -qq install -y gcc-${GCC_VERSION} g++-${GCC_VERSION}            && \
     apt-get -qq install -y ca-certificates libgnutls30                      && \
-    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 90           \
-                        --slave   /usr/bin/g++ g++ /usr/bin/g++-8           && \
-    update-alternatives --set gcc /usr/bin/gcc-8
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${GCC_VERSION} 90  \
+                        --slave   /usr/bin/g++ g++ /usr/bin/g++-${GCC_VERSION} && \
+    update-alternatives --set gcc /usr/bin/gcc-${GCC_VERSION}
+
 ENV BAZEL_CXXOPTS="-std=c++17"
 
-ENV CLOUD_SDK_VERSION=416.0.0
+ENV CLOUD_SDK_VERSION=420.0.0
 # Install google-cloud-sdk to get gcloud.
 RUN mkdir -p /usr/local/gcloud                                              && \
     cd /usr/local/gcloud                                                    && \

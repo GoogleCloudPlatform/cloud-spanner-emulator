@@ -445,7 +445,8 @@ absl::Status MutationTableRequired() {
 }
 
 // Transaction errors.
-absl::Status AbortConcurrentTransaction(int64_t requestor_id, int64_t holder_id) {
+absl::Status AbortConcurrentTransaction(int64_t requestor_id,
+                                        int64_t holder_id) {
   return absl::Status(
       absl::StatusCode::kAborted,
       absl::StrCat("Transaction ", requestor_id,
@@ -804,7 +805,8 @@ absl::Status NoColumnsTable(absl::string_view object_type,
 }
 
 absl::Status TooManyIndicesPerTable(absl::string_view index_name,
-                                    absl::string_view table_name, int64_t limit) {
+                                    absl::string_view table_name,
+                                    int64_t limit) {
   return absl::Status(
       absl::StatusCode::kFailedPrecondition,
       absl::Substitute("Cannot add index $0 to table $1: too many indices "
@@ -1894,11 +1896,11 @@ absl::Status NullFilteredIndexUnusable(absl::string_view index_name) {
           "Please test this query against Cloud Spanner. If you confirm "
           "against Cloud Spanner that the null filtered index can be used to "
           "answer the query, set the hint @{spanner_emulator."
-          "disable_query_null_filtered_index_check=true} on the table "
-          "to bypass this check in the emulator. This hint will be ignored by "
-          "the production Cloud Spanner service and the emulator will accept "
-          "the query and return a valid result when it is run with the check "
-          "disabled.",
+          "disable_query_null_filtered_index_check=true} on the table, or the "
+          "query statement to bypass this check in the emulator. This hint "
+          "will be ignored by the production Cloud Spanner service and the "
+          "emulator will accept the query and return a valid result when it is "
+          "run with the check disabled.",
           index_name));
 }
 

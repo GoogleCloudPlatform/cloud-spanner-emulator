@@ -33,6 +33,18 @@ bool should_log_requests();
 // Returns true if fault injection is enabled.
 bool fault_injection_enabled();
 
+// If true, then queries that use NULL_FILTERED indexes will be answered.
+//
+// Note: The emulator cannot be used to validate the behavior of NULL_FILTERED
+// indexes. Before disabling this check, please ensure that you have tested the
+// queries that use null filtered indexes against production Cloud Spanner.
+//
+// Please consider using the query hint
+// `@{spanner_emulator.disable_query_null_filtered_index_check=true}` to disable
+// this check per query, instead of disabling this check for all the queries at
+// once.
+bool disable_query_null_filtered_index_check();
+
 }  // namespace config
 }  // namespace emulator
 }  // namespace spanner

@@ -24,6 +24,15 @@
 constexpr char kPendingCommitTimestampFunctionName[] =
     "pending_commit_timestamp";
 
+// Name of the bit_reverse function.
+constexpr char kBitReverseFunctionName[] = "bit_reverse";
+
+// Name of the get_internal_sequence_state function.
+constexpr char kGetInternalSequenceStateFunctionName[] =
+    "get_internal_sequence_state";
+
+constexpr char kGetNextSequenceValueFunctionName[] = "get_next_sequence_value";
+
 // String used to tell cloud spanner to insert the commit timestamp into a
 // TIMESTAMP column with allow_commit_timestamp option set to true upon
 // transaction commit.

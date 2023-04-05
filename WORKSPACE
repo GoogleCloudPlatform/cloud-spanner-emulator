@@ -101,10 +101,10 @@ gazelle_dependencies()
 
 go_repository(
     name = "org_golang_google_grpc",
-    importpath = "google.golang.org/grpc",
-    sum = "h1:kd48UiU7EHsV4rnLyOJRuP/Il/UHE7gdDAQ+SZI7nZk=",
-    version = "v1.52.0",
     build_file_proto_mode = "disable_global",
+    importpath = "google.golang.org/grpc",
+    sum = "h1:EhTqbhiYeixwWQtAEZAxmV9MGqcjEU2mFx52xCzNyag=",
+    version = "v1.54.0",
 )
 
 go_repository(
@@ -119,8 +119,8 @@ go_repository(
     name = "org_golang_google_genproto",
     build_file_proto_mode = "disable_global",
     importpath = "google.golang.org/genproto",
-    sum = "h1:BWUVssLB0HVOSY78gIdvk1dTVYtT1y8SBWtPYuTJ/6w=",
-    version = "v0.0.0-20230110181048-76db0878b65f",
+    sum = "h1:Kd6tRRHXw8z4TlPlWi+NaK10gsePL6GdZBQChptOLGA=",
+    version = "v0.0.0-20230327215041-6ac7f18bb9d5",
 )
 
 go_repository(
@@ -129,8 +129,8 @@ go_repository(
     importpath = "google.golang.org/protobuf",
     patch_args = ["-p1"],
     patches = ["//build/bazel:golang_protobuf.patch"],
-    sum = "h1:d0NfwRgPtno5B1Wa6L2DAG+KivqkdutMf1UhdNx175w=",
-    version = "v1.28.1",
+    sum = "h1:kPPoIgf3TsEvrm0PFe15JQ+570QVxYzEvvHqChK+cng=",
+    version = "v1.30.0",
 )
 
 go_rules_dependencies()
@@ -139,8 +139,8 @@ go_repository(
     name = "com_github_golang_protobuf",
     build_file_proto_mode = "disable_global",
     importpath = "github.com/golang/protobuf",
-    sum = "h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=",
-    version = "v1.5.2",
+    sum = "h1:KhyjKVUg7Usr/dYsdSqoFveMYd5ko72D+zANwlG1mmg=",
+    version = "v1.5.3",
 )
 
 go_repository(
@@ -163,24 +163,24 @@ go_repository(
     name = "org_golang_x_net",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/net",
-    sum = "h1:Q5QPcMlvfxFTAPV0+07Xz/MpK9NTXu2VDUuy0FeMfaU=",
-    version = "v0.4.0",
+    sum = "h1:Zrh2ngAOFYneWTAIAPethzeaQLuHwhuBkuV6ZiRnUaQ=",
+    version = "v0.8.0",
 )
 
 go_repository(
     name = "org_golang_x_sys",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/sys",
-    sum = "h1:w8ZOecv6NaNa/zC8944JTU3vz4u6Lagfk4RPQxv92NQ=",
-    version = "v0.3.0",
+    sum = "h1:MVltZSvRTcU2ljQOhs94SXPftV6DCNnZViHeQps87pQ=",
+    version = "v0.6.0",
 )
 
 go_repository(
     name = "org_golang_x_text",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/text",
-    sum = "h1:OLmvp0KP+FVG99Ct/qFiL/Fhk4zp4QQnZ7b2U+5piUM=",
-    version = "v0.5.0",
+    sum = "h1:57P1ETyNKtuIjB4SRd15iJxuhj8Gc416Y78H3qgMh68=",
+    version = "v0.8.0",
 )
 
 ################################################################################
@@ -214,9 +214,9 @@ protobuf_deps()
 
 http_archive(
     name = "com_google_absl",
-    sha256 = "5b7640be0e119de1a9d941cb6b2607d76978eba5720196f1d4fc6de0421d2241",
-    strip_prefix = "abseil-cpp-20220623.0",
-    url = "https://github.com/abseil/abseil-cpp/archive/refs/tags/20220623.0.zip",
+    sha256 = "61d0af0262a0131bb8917fcb883e5e831ee5ad1535433f2f13f85906d1607f81",
+    strip_prefix = "abseil-cpp-20230125.1",
+    url = "https://github.com/abseil/abseil-cpp/archive/refs/tags/20230125.1.zip",
 )
 
 http_archive(
@@ -249,9 +249,9 @@ http_archive(
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
     patches = ["//build/bazel:zetasql.patch"],
-    sha256 = "4092dce28d3fb5b0071d0268bcb3ba13e28eb4f981c5c267688b8c3590ca7705",
-    strip_prefix = "zetasql-177d495a064e38684c462cf883e22428273bd996",
-    url = "https://github.com/google/zetasql/archive/177d495a064e38684c462cf883e22428273bd996.tar.gz",
+    sha256 = "9aa01afab8defc7a30b157a5c1dd594b1291bb85e3bfacc9f765b4bc1479dd25",
+    strip_prefix = "zetasql-f764f4e986ac1516ab5ae95e6d6ce2f4416cc6ff",
+    url = "https://github.com/google/zetasql/archive/f764f4e986ac1516ab5ae95e6d6ce2f4416cc6ff.tar.gz",
 )
 
 http_archive(

@@ -239,6 +239,10 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
              key: "ptimestamp"
              value { string_value: "1970-01-01T00:00:00.000001Z" }
            }
+           fields {
+             key: "pdate"
+             value { string_value: "2000-01-01" }
+           }
       )pb");
   param_types = {};
   result = PARSE_TEXT_PROTO(
@@ -308,7 +312,11 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
            }
            fields {
              key: "ptimestamp"
-             value { string_value: "1970-01-01T00:00:00.000001Z" }
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pdate"
+             value { null_value: NULL_VALUE }
            }
       )pb");
   param_types = {};
@@ -322,9 +330,13 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                                      fields { type { code: BOOL } }
                                      fields { type { code: NUMERIC } }
                                      fields { type { code: JSON } }
+                                     fields { type { code: TIMESTAMP } }
+                                     fields { type { code: DATE } }
                                    }
                                  }
                                  rows {
+                                   values { null_value: NULL_VALUE }
+                                   values { null_value: NULL_VALUE }
                                    values { null_value: NULL_VALUE }
                                    values { null_value: NULL_VALUE }
                                    values { null_value: NULL_VALUE }
@@ -342,7 +354,9 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                     CAST(@pBytes AS BYTES),
                     CAST(@pBytes AS BYTES) = b"bytes",
                     CAST(@pNumeric AS NUMERIC),
-                    CAST(@pJson AS JSON))",
+                    CAST(@pJson AS JSON),
+                    CAST(@pTimestamp AS TIMESTAMP),
+                    CAST(@pDate AS DATE))",
                       params, param_types),
               IsOkAndHolds(Partially(test::EqualsProto(result))));
 
@@ -411,148 +425,6 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                }
              }
            }
-           fields {
-             key: "ptimestamp"
-             value { string_value: "1970-01-01T00:00:00.000001Z" }
-           }
-      )pb");
-  param_types = {};
-  result = PARSE_TEXT_PROTO(R"pb(metadata {
-                                   row_type {
-                                     fields {
-                                       type {
-                                         code: ARRAY
-                                         array_element_type { code: BOOL }
-                                       }
-                                     }
-                                     fields {
-                                       type {
-                                         code: ARRAY
-                                         array_element_type { code: INT64 }
-                                       }
-                                     }
-                                     fields {
-                                       type {
-                                         code: ARRAY
-                                         array_element_type { code: FLOAT64 }
-                                       }
-                                     }
-                                     fields {
-                                       type {
-                                         code: ARRAY
-                                         array_element_type { code: STRING }
-                                       }
-                                     }
-                                     fields {
-                                       type {
-                                         code: ARRAY
-                                         array_element_type { code: BYTES }
-                                       }
-                                     }
-                                     fields {
-                                       type {
-                                         code: ARRAY
-                                         array_element_type { code: NUMERIC }
-                                       }
-                                     }
-                                     fields {
-                                       type {
-                                         code: ARRAY
-                                         array_element_type { code: JSON }
-                                       }
-                                     }
-                                   }
-                                 }
-                                 rows {
-                                   values {
-                                     list_value {
-                                       values { bool_value: true }
-                                       values { null_value: NULL_VALUE }
-                                     }
-                                   }
-                                   values {
-                                     list_value {
-                                       values { string_value: "-1" }
-                                       values { null_value: NULL_VALUE }
-                                     }
-                                   }
-                                   values {
-                                     list_value {
-                                       values { null_value: NULL_VALUE }
-                                       values { number_value: 1.5 }
-                                     }
-                                   }
-                                   values {
-                                     list_value {
-                                       values { null_value: NULL_VALUE }
-                                       values { string_value: "str" }
-                                     }
-                                   }
-                                   values {
-                                     list_value {
-                                       values { null_value: NULL_VALUE }
-                                       values { string_value: "Ynl0ZXM=" }
-                                     }
-                                   }
-                                   values {
-                                     list_value {
-                                       values { null_value: NULL_VALUE }
-                                       values { string_value: "123.456" }
-                                     }
-                                   }
-                                   values {
-                                     list_value {
-                                       values { null_value: NULL_VALUE }
-                                       values { string_value: "{\"key\":123}" }
-                                     }
-                                   }
-                                 })pb");
-  EXPECT_THAT(Execute(
-                  R"(SELECT
-                CAST(@pBoolArray AS ARRAY<BOOL>),
-                CAST(@pInt64Array AS ARRAY<INT64>),
-                CAST(@pDoubleArray AS ARRAY<FLOAT64>),
-                CAST(@pStringArray AS ARRAY<STRING>),
-                CAST(@pBytesArray AS ARRAY<BYTES>),
-                CAST(@pNumericArray AS ARRAY<NUMERIC>),
-                CAST(@pJsonArray AS ARRAY<JSON>))",
-                  params, param_types),
-              IsOkAndHolds(Partially(test::EqualsProto(result))));
-
-  // Roundtrip NULL values of all supported array types.
-  params = PARSE_TEXT_PROTO(
-      R"pb(fields {
-             key: "pboolarray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pbytesarray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pdoublearray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pint64array"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pstringarray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pnumericarray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pjsonarray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "ptimestamp"
-             value { string_value: "1970-01-01T00:00:00.000001Z" }
-           }
       )pb");
   param_types = {};
   result = PARSE_TEXT_PROTO(
@@ -603,6 +475,163 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
              }
            }
            rows {
+             values {
+               list_value {
+                 values { bool_value: true }
+                 values { null_value: NULL_VALUE }
+               }
+             }
+             values {
+               list_value {
+                 values { string_value: "-1" }
+                 values { null_value: NULL_VALUE }
+               }
+             }
+             values {
+               list_value {
+                 values { null_value: NULL_VALUE }
+                 values { number_value: 1.5 }
+               }
+             }
+             values {
+               list_value {
+                 values { null_value: NULL_VALUE }
+                 values { string_value: "str" }
+               }
+             }
+             values {
+               list_value {
+                 values { null_value: NULL_VALUE }
+                 values { string_value: "Ynl0ZXM=" }
+               }
+             }
+             values {
+               list_value {
+                 values { null_value: NULL_VALUE }
+                 values { string_value: "123.456" }
+               }
+             }
+             values {
+               list_value {
+                 values { null_value: NULL_VALUE }
+                 values { string_value: "{\"key\":123}" }
+               }
+             }
+           })pb");
+  EXPECT_THAT(Execute(
+                  R"(SELECT
+                CAST(@pBoolArray AS ARRAY<BOOL>),
+                CAST(@pInt64Array AS ARRAY<INT64>),
+                CAST(@pDoubleArray AS ARRAY<FLOAT64>),
+                CAST(@pStringArray AS ARRAY<STRING>),
+                CAST(@pBytesArray AS ARRAY<BYTES>),
+                CAST(@pNumericArray AS ARRAY<NUMERIC>),
+                CAST(@pJsonArray AS ARRAY<JSON>))",
+                  params, param_types),
+              IsOkAndHolds(Partially(test::EqualsProto(result))));
+
+  // Roundtrip NULL values of all supported array types.
+  params = PARSE_TEXT_PROTO(
+      R"pb(fields {
+             key: "pboolarray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pbytesarray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pdoublearray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pint64array"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pstringarray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pnumericarray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pjsonarray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "ptimestamparray"
+             value { null_value: NULL_VALUE }
+           }
+           fields {
+             key: "pdatearray"
+             value { null_value: NULL_VALUE }
+           }
+      )pb");
+  param_types = {};
+  result = PARSE_TEXT_PROTO(
+      R"pb(metadata {
+             row_type {
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: BOOL }
+                 }
+               }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: INT64 }
+                 }
+               }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: FLOAT64 }
+                 }
+               }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: STRING }
+                 }
+               }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: BYTES }
+                 }
+               }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: NUMERIC }
+                 }
+               }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: JSON }
+                 }
+               }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: TIMESTAMP }
+                 }
+               }
+               fields {
+                 type {
+                   code: ARRAY
+                   array_element_type { code: DATE }
+                 }
+               }
+             }
+           }
+           rows {
+             values { null_value: NULL_VALUE }
+             values { null_value: NULL_VALUE }
              values { null_value: NULL_VALUE }
              values { null_value: NULL_VALUE }
              values { null_value: NULL_VALUE }
@@ -619,11 +648,14 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                 CAST(@pStringArray AS ARRAY<STRING>),
                 CAST(@pBytesArray AS ARRAY<BYTES>),
                 CAST(@pNumericArray AS ARRAY<NUMERIC>),
-                CAST(@pJsonArray AS ARRAY<JSON>))",
+                CAST(@pJsonArray AS ARRAY<JSON>),
+                CAST(@pTimestampArray AS ARRAY<TIMESTAMP>),
+                CAST(@pDateArray AS ARRAY<DATE>))",
                   params, param_types),
               IsOkAndHolds(Partially(test::EqualsProto(result))));
 
-  // Error message for unsupported undeclared parameter types.
+  // Error message for unsupported undeclared parameter types with non-null
+  // values.
   params = PARSE_TEXT_PROTO(
       R"(fields {
            key: "ptimestamp"

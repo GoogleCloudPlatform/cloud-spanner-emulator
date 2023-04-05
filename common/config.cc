@@ -33,6 +33,16 @@ ABSL_FLAG(
     "error handling behavior. For instance, transaction Commits may be aborted "
     "to facilitate application abort-retry testing.");
 
+ABSL_FLAG(bool, disable_query_null_filtered_index_check, false,
+          "If true, then queries that use NULL_FILTERED indexes will be "
+          "answered. Please test all queries using null filtered indexes "
+          "against production Cloud Spanner before disabling this check."
+          "\n"
+          "Please consider using the query hint "
+          "`@{spanner_emulator.disable_query_null_filtered_index_check=true}` "
+          "to disable this check per query, instead of disabling this check "
+          "for all the queries at once.");
+
 namespace google {
 namespace spanner {
 namespace emulator {
@@ -44,6 +54,10 @@ bool should_log_requests() { return absl::GetFlag(FLAGS_log_requests); }
 
 bool fault_injection_enabled() {
   return absl::GetFlag(FLAGS_enable_fault_injection);
+}
+
+bool disable_query_null_filtered_index_check() {
+  return absl::GetFlag(FLAGS_disable_query_null_filtered_index_check);
 }
 
 }  // namespace config
