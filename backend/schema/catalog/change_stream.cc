@@ -14,29 +14,25 @@
 // limitations under the License.
 //
 
-#include "backend/schema/catalog/view.h"
+#include "backend/schema/catalog/change_stream.h"
 
+#include <algorithm>
 #include <string>
 
-#include "zetasql/public/type.h"
-#include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_map.h"
+#include "zetasql/public/options.pb.h"
+#include "zetasql/public/type.pb.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
-#include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
-#include "backend/common/case.h"
 #include "backend/datamodel/types.h"
-#include "backend/schema/catalog/check_constraint.h"
-#include "backend/schema/catalog/column.h"
-#include "backend/schema/catalog/foreign_key.h"
-#include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/table.h"
+#include "backend/schema/graph/schema_graph_editor.h"
+#include "backend/schema/graph/schema_node.h"
+#include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
@@ -45,22 +41,22 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-absl::Status View::Validate(SchemaValidationContext* context) const {
+absl::Status ChangeStream::Validate(SchemaValidationContext* context) const {
   return validate_(this, context);
 }
 
-absl::Status View::ValidateUpdate(const SchemaNode* orig,
-                                  SchemaValidationContext* context) const {
-  return validate_update_(this, orig->As<const View>(), context);
+absl::Status ChangeStream::ValidateUpdate(
+    const SchemaNode* old, SchemaValidationContext* context) const {
+  return validate_update_(this, old->template As<const ChangeStream>(),
+                          context);
 }
 
-absl::Status View::DeepClone(SchemaGraphEditor* editor,
-                             const SchemaNode* orig) {
-  // We just need to propagate the clone event to dependencies.
-  for (const SchemaNode*& dep : dependencies_) {
-    ZETASQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dep));
-    dep = cloned_dep;
-  }
+std::string ChangeStream::DebugString() const {
+  return absl::Substitute("I:$0[$1]", name_, change_stream_data_table_->Name());
+}
+
+absl::Status ChangeStream::DeepClone(SchemaGraphEditor* editor,
+                                     const SchemaNode* orig) {
   return absl::OkStatus();
 }
 

@@ -575,6 +575,21 @@ bool IsDMLStmt(const zetasql::ResolvedNodeKind& query_kind) {
          query_kind == zetasql::RESOLVED_DELETE_STMT;
 }
 
+bool IsDMLStmtWitoutSelect(
+    const zetasql::ResolvedStatement* resolved_statement) {
+  const zetasql::ResolvedNodeKind& query_kind =
+      resolved_statement->node_kind();
+  if (!IsDMLStmt(query_kind)) return false;
+
+  if (query_kind == zetasql::RESOLVED_INSERT_STMT &&
+      resolved_statement->GetAs<zetasql::ResolvedInsertStmt>()->query() !=
+          nullptr) {
+    // This is an INSERT SELECT query.
+    return false;
+  }
+  return true;
+}
+
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedStatement>>
 ExtractValidatedResolvedStatementAndOptions(
     const zetasql::AnalyzerOutput* analyzer_output, const Schema* schema,
@@ -591,7 +606,7 @@ ExtractValidatedResolvedStatementAndOptions(
   // through hint if the caller requested them.
   QueryEngineOptions options;
   std::unique_ptr<QueryValidator> query_validator =
-      IsDMLStmt(analyzer_output->resolved_statement()->node_kind())
+      IsDMLStmtWitoutSelect(analyzer_output->resolved_statement())
           ? std::make_unique<DMLQueryValidator>(schema, &options)
           : std::make_unique<QueryValidator>(schema, &options);
   ZETASQL_RETURN_IF_ERROR(statement->Accept(query_validator.get()));

@@ -31,6 +31,7 @@
 #include "absl/types/span.h"
 #include "backend/common/case.h"
 #include "backend/common/ids.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
@@ -46,6 +47,7 @@ namespace backend {
 
 class ForeignKey;
 class Index;
+class ChangeStream;
 
 // Table represents a table in a database.
 class Table : public SchemaNode {
@@ -107,6 +109,11 @@ class Table : public SchemaNode {
 
   // Returns the list of all indexes on this table.
   absl::Span<const Index* const> indexes() const { return indexes_; }
+
+  // Returns the list of all change streams on this table.
+  absl::Span<const ChangeStream* const> change_streams() const {
+    return change_streams_;
+  }
 
   // Returns the primary key of this table.
   const absl::Span<const KeyColumn* const> primary_key() const {
@@ -220,6 +227,10 @@ class Table : public SchemaNode {
   // List of indexes referring to this table. These are owned by the Schema, not
   // by the Table.
   std::vector<const Index*> indexes_;
+
+  // List of change streams referring to this table. These are owned by the
+  // Schema, not by the Table.
+  std::vector<const ChangeStream*> change_streams_;
 
   // The Index that owns this table if one exists.
   const Index* owner_index_ = nullptr;

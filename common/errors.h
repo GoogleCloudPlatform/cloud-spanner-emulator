@@ -194,6 +194,11 @@ absl::Status InvalidDropKeyColumn(absl::string_view colum_name,
                                   absl::string_view table_name);
 absl::Status TooManyTablesPerDatabase(absl::string_view table_name,
                                       int64_t limit);
+absl::Status TooManyChangeStreamsPerDatabase(
+    absl::string_view change_stream_name, int64_t limit);
+absl::Status TooManyChangeStreamsTrackingSameObject(
+    absl::string_view change_stream_name, int64_t limit,
+    absl::string_view object_name_string);
 absl::Status TooManyIndicesPerDatabase(absl::string_view index_name,
                                        int64_t limit);
 absl::Status TooManyColumns(absl::string_view object_type,
@@ -272,6 +277,7 @@ absl::Status TableNotFound(absl::string_view table_name);
 absl::Status TableNotFoundAtTimestamp(absl::string_view table_name,
                                       absl::Time timestamp);
 absl::Status IndexNotFound(absl::string_view index_name);
+absl::Status ChangeStreamNotFound(absl::string_view change_stream_name);
 absl::Status DropForeignKeyManagedIndex(absl::string_view index_name,
                                         absl::string_view foreign_key_names);
 absl::Status ColumnNotFound(absl::string_view table_name,
@@ -516,6 +522,7 @@ absl::Status NoFeatureSupportDifferentTypeArrayCasts(
     absl::string_view from_type, absl::string_view to_type);
 absl::Status UnsupportedTablesampleRepeatable();
 absl::Status UnsupportedTablesampleSystem();
+absl::Status ToJsonStringNonJsonTypeNotSupported(absl::string_view type_name);
 
 // Query size limits errors.
 absl::Status TooManyFunctions(int max_function_nodes);
@@ -570,6 +577,25 @@ absl::Status ViewNotFound(absl::string_view view_name);
 absl::Status ViewRequiresInvokerSecurity(absl::string_view view_name);
 absl::Status ViewReplaceError(absl::string_view view_name,
                               absl::string_view error);
+absl::Status ViewReplaceRecursive(absl::string_view view_name);
+absl::Status DependentViewBecomesInvalid(absl::string_view modify_action,
+                                         absl::string_view view_name,
+                                         absl::string_view dependent_view_name,
+                                         absl::string_view error);
+absl::Status DependentViewColumnRename(absl::string_view modify_action,
+                                       absl::string_view view_name,
+                                       absl::string_view dependent_view,
+                                       absl::string_view old_column_name,
+                                       absl::string_view new_column_name);
+absl::Status DependentViewColumnRetype(absl::string_view modify_action,
+                                       absl::string_view view_name,
+                                       absl::string_view dependent_view,
+                                       absl::string_view old_type,
+                                       absl::string_view new_type);
+absl::Status InvalidDropDependentViews(absl::string_view type_kind,
+                                       absl::string_view name,
+                                       absl::string_view dependent_views);
+
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

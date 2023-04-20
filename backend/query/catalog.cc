@@ -140,6 +140,9 @@ absl::Status Catalog::GetTables(
   for (auto iter = tables_.begin(); iter != tables_.end(); ++iter) {
     output->insert(iter->second.get());
   }
+  for (auto iter = views_.begin(); iter != views_.end(); ++iter) {
+    output->insert(iter->second.get());
+  }
   return absl::OkStatus();
 }
 

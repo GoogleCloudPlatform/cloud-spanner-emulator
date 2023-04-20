@@ -269,6 +269,19 @@ TEST_F(QueryTest, JSONFunctions) {
 
   EXPECT_THAT(Query(R"(SELECT TO_JSON_STRING(JSON '{"a":"str", "b":2}'))"),
               IsOkAndHoldsRow({R"({"a":"str","b":2})"}));
+  EXPECT_THAT(
+      Query(R"(SELECT TO_JSON_STRING('{"a":"str", "b":2}'))"),
+      StatusIs(
+          absl::StatusCode::kUnimplemented,
+          testing::HasSubstr(
+              "TO_JSON_STRING is not supported on values of type STRING")));
+  EXPECT_THAT(Query(R"(SELECT TO_JSON_STRING(JSON '123'))"),
+              IsOkAndHoldsRow({R"(123)"}));
+  EXPECT_THAT(
+      Query(R"(SELECT TO_JSON_STRING(123))"),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               testing::HasSubstr(
+                   "TO_JSON_STRING is not supported on values of type INT64")));
 
   EXPECT_THAT(Query(R"(SELECT FORMAT("%'p", JSON '{"a":"str", "b":2}'))"),
               IsOkAndHoldsRow({R"({"a":"str","b":2})"}));

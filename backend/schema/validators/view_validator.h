@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_VALIDATORS_VIEW_VALIDATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_VALIDATORS_VIEW_VALIDATOR_H_
 
+#include "absl/container/flat_hash_set.h"
 #include "backend/schema/catalog/view.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "absl/status/status.h"
@@ -35,6 +36,11 @@ class ViewValidator {
   static absl::Status ValidateUpdate(const View* view, const View* old_view,
                                      SchemaValidationContext* context);
 };
+
+// Gathers the transitive set of dependencies, i.e., this recursively expands
+// dependencies; initial_set is the starting set of dependencies.
+absl::flat_hash_set<const SchemaNode*> GatherTransitiveDependenciesForView(
+    const absl::flat_hash_set<const SchemaNode*>& initial_set);
 
 }  // namespace backend
 }  // namespace emulator

@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include <string>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -477,6 +479,20 @@ TEST_F(CommitTimestamps, CanInsertPendingCommitTimestampWithSubsetOfColumns) {
   EXPECT_THAT(Query("SELECT ID, Name, Age, CommitTS FROM Users"),
               IsOkAndHoldsRows(
                   {{1, Null<std::string>(), 27, result.commit_timestamp}}));
+}
+
+// TODO: Fix this inconsistent behavior.
+TEST_F(CommitTimestamps, CannotInsertPendingCommitTimestampFromSelect) {
+  auto result =
+      CommitDml({{SqlStatement("INSERT INTO Users(ID, Age, CommitTS) "
+                               "SELECT 1, 27, PENDING_COMMIT_TIMESTAMP()")}});
+  std::string error_msg =
+      "The PENDING_COMMIT_TIMESTAMP() function may only be used as a value "
+      "for INSERT or UPDATE of an appropriately typed column. It cannot be "
+      "used in SELECT, or as the input to any other scalar expression.";
+  EXPECT_THAT(result,
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
+                                        testing::HasSubstr(error_msg)));
 }
 
 TEST_F(CommitTimestamps, CanUpdateAndCommitPendingCommitTimestampInDml) {

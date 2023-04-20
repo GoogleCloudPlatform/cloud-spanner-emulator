@@ -41,6 +41,13 @@ constexpr int kMaxTransactionsPerSession = 32;
 // Maximum number of tables per database.
 constexpr int kMaxTablesPerDatabase = 2560;
 
+// Maximum number of change streams per database.
+//   https://cloud.google.com/spanner/quotas#change-streams
+constexpr int kMaxChangeStreamsPerDatabase = 10;
+
+// Maximum number of change streams per column.
+constexpr int kMaxChangeStreamsTrackingATableOrColumn = 3;
+
 // Maximum number of views per database.
 // https://cloud.google.com/spanner/quotas#views.
 constexpr int kMaxViewsPerDatabase = 5000;

@@ -73,7 +73,10 @@ TEST_F(ViewsTest, Basic) {
   EXPECT_EQ(v->columns().size(), 2);
   EXPECT_THAT(absl::StripAsciiWhitespace(v->body()),
               testing::StrEq("SELECT T.col1, T.col2 FROM T"));
-  EXPECT_THAT(v->dependencies(), testing::ElementsAreArray({t}));
+  EXPECT_THAT(
+      v->dependencies(),
+      testing::UnorderedElementsAreArray((std::vector<const SchemaNode*>{
+          t, t->FindColumn("col1"), t->FindColumn("col2")})));
   EXPECT_THAT(v->security(), testing::Eq(View::SqlSecurity::INVOKER));
 }
 
@@ -97,7 +100,13 @@ TEST_F(ViewsTest, MultipleTableDependencies) {
   auto v = schema->FindView("V");
   auto t1 = schema->FindTable("T1");
   auto t2 = schema->FindTable("T2");
-  EXPECT_THAT(v->dependencies(), testing::UnorderedElementsAreArray({t1, t2}));
+  EXPECT_THAT(v->dependencies(),
+              testing::UnorderedElementsAreArray(std::vector<const SchemaNode*>{
+                  t1,
+                  t1->FindColumn("col1"),
+                  t2,
+                  t2->FindColumn("k1"),
+              }));
 }
 
 TEST_F(ViewsTest, ViewDependsOnView) {
@@ -175,7 +184,7 @@ TEST_F(ViewsTest, ViewAnalysisError_UnsupportedFunction_PrunedColumn) {
                       "Unsupported built-in function: APPROX_COUNT_DISTINCT")));
 }
 
-TEST_F(ViewsTest, ViewReplaceError) {
+TEST_F(ViewsTest, ViewReplace) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -186,17 +195,140 @@ TEST_F(ViewsTest, ViewReplaceError) {
     CREATE VIEW V SQL SECURITY INVOKER AS
     SELECT T1.col1, T1.col2 FROM T1
   )"}));
+  auto view = schema->FindView("V");
+  EXPECT_EQ(view->columns().size(), 2);
+  EXPECT_EQ(view->columns()[0].name, "col1");
+  EXPECT_EQ(view->columns()[0].type, zetasql::types::Int64Type());
 
-  EXPECT_THAT(
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto new_schema,
       UpdateSchema(schema.get(),
                    {
                        "CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS "
                        "SELECT T1.col2 FROM T1",
+                   }));
+  EXPECT_EQ(new_schema->views().size(), 1);
+  auto new_view = new_schema->FindView("V");
+  EXPECT_NE(new_view, nullptr);
+  EXPECT_EQ(new_view->columns().size(), 1);
+  EXPECT_EQ(new_view->columns()[0].name, "col2");
+  EXPECT_EQ(new_view->columns()[0].type, zetasql::types::StringType());
+}
+
+TEST_F(ViewsTest, ViewReplace_NoCircularDependency) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    CREATE VIEW v1 SQL SECURITY INVOKER AS
+    SELECT 1 AS k1
+  )",
+                                                  R"(
+    CREATE VIEW V2 SQL SECURITY INVOKER AS
+    SELECT V1.k1 AS k2 FROM V1
+  )"}));
+
+  EXPECT_THAT(
+      UpdateSchema(schema.get(),
+                   {
+                       "CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS "
+                       "SELECT V2.k2 FROM V2",
                    }),
       ::zetasql_base::testing::StatusIs(
-          absl::StatusCode::kUnimplemented,
-          testing::HasSubstr(
-              "`REPLACE` for INVOKER RIGHTS views is not supported")));
+          absl::StatusCode::kFailedPrecondition,
+          testing::HasSubstr("Cannot replace VIEW `v1` because new definition "
+                             "is recursive.")));
+}
+
+TEST_F(ViewsTest, ViewReplaceDependentViewInvalidDefinition) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    CREATE VIEW v1 SQL SECURITY INVOKER AS
+    SELECT 1 AS k1, 2 AS k2
+  )",
+                                                  R"(
+    CREATE VIEW V2 SQL SECURITY INVOKER AS
+    SELECT V1.k2 AS k2 FROM V1
+  )"}));
+
+  EXPECT_THAT(
+      UpdateSchema(schema.get(),
+                   {
+                       "CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS "
+                       "SELECT 1 AS k1",
+                   }),
+      ::zetasql_base::testing::StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          testing::ContainsRegex(
+              "Cannot alter view .* The new definition causes "
+              "the definition of VIEW .* to become invalid with the "
+              "following diagnostic message: Name k2 not found inside V1")));
+}
+
+TEST_F(ViewsTest, ViewReplaceDependentViewIncompatibleTypeChange) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    CREATE VIEW v1 SQL SECURITY INVOKER AS
+    SELECT 1 AS k1, 2 AS k2
+  )",
+                                                  R"(
+    CREATE TABLE T1 (col1 STRING(MAX)) PRIMARY KEY()
+  )",
+                                                  R"(
+    CREATE VIEW V2 SQL SECURITY INVOKER AS
+    SELECT V1.k2 AS a1, T1.col1 AS a2 FROM V1, T1
+  )"}));
+
+  EXPECT_THAT(
+      UpdateSchema(schema.get(),
+                   {
+                       "CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS "
+                       "SELECT 1 AS k1, CAST('2' AS STRING) AS k2",
+                   }),
+      ::zetasql_base::testing::StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          testing::ContainsRegex(
+              "Cannot alter view `v1`. Action would implicitly change the "
+              "type of an output column for VIEW `V2` from `INT64` to "
+              "`STRING`")));
+
+  EXPECT_THAT(UpdateSchema(schema.get(),
+                           {
+                               "ALTER TABLE T1 ALTER COLUMN col1 BYTES(MAX)",
+                           }),
+              ::zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kFailedPrecondition,
+                  testing::ContainsRegex(
+                      "Cannot alter column `T1.col1`. Action would implicitly "
+                      "change the "
+                      "type of an output column for VIEW `V2` from `STRING` to "
+                      "`BYTES`")));
+}
+
+TEST_F(ViewsTest, ViewReplace_DependentViewCompatibleTypeChange) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    CREATE VIEW v1 SQL SECURITY INVOKER AS
+    SELECT 'a' AS k1
+  )",
+                                                  R"(
+    CREATE TABLE T1 (col1 STRING(MAX)) PRIMARY KEY()
+  )",
+                                                  R"(
+    CREATE VIEW V2 SQL SECURITY INVOKER AS
+    SELECT CAST(V1.k1 AS STRING) AS c1, CAST(T1.col1 AS STRING) AS col1
+    FROM V1, T1
+  )"}));
+
+  // Explicit cast on the output of V1 ensures that the dependent view V2
+  // is still valid after the output type of V1 is changed.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto new_schema,
+      UpdateSchema(schema.get(),
+                   {
+                       "CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS "
+                       "SELECT 1 AS k1",
+                       "ALTER TABLE T1 ALTER COLUMN col1 BYTES(MAX)",
+                   }));
+  auto v2 = new_schema->FindView("V2");
+  EXPECT_NE(v2, nullptr);
+  EXPECT_EQ(v2->columns().size(), 2);
+  EXPECT_EQ(v2->columns()[0].type, zetasql::types::StringType());
+  EXPECT_EQ(v2->columns()[1].type, zetasql::types::StringType());
 }
 
 TEST_F(ViewsTest, StrictNameResolutionMode) {
@@ -234,6 +366,17 @@ TEST_F(ViewsTest, DropViewBasic) {
   EXPECT_NE(new_chema->FindTable("T1"), nullptr);
 }
 
+TEST_F(ViewsTest, UnnamedColumnView) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto schema, CreateSchema({
+                       "CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS c",
+                   }));
+  auto v = schema->FindView("V");
+  ASSERT_NE(v, nullptr);
+  EXPECT_EQ(v->columns().size(), 1);
+  EXPECT_EQ(v->columns()[0].name, "c");
+}
+
 TEST_F(ViewsTest, ViewNotFound) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       auto schema, CreateSchema({
@@ -265,6 +408,41 @@ TEST_F(ViewsTest, PrintViewBasic) {
            "CREATE VIEW V SQL SECURITY INVOKER AS SELECT T1.col1 FROM T1"}));
 }
 
+TEST_F(ViewsTest, DropView_Dependencies) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+    CREATE TABLE T1(
+      col1 INT64,
+      col2 INT64
+    ) PRIMARY KEY(col1)
+  )",
+                                        R"(
+    CREATE VIEW V1 SQL SECURITY INVOKER AS
+    SELECT T1.col2 AS k1 FROM T1
+  )",
+                                        R"(
+    CREATE OR REPLACE VIEW V2 SQL SECURITY INVOKER AS
+    SELECT V1.k1 AS k2 FROM V1)",
+                                    }));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {"DROP VIEW V1"}),
+              ::zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kFailedPrecondition,
+                  testing::HasSubstr("Cannot drop View `V1` on which there "
+                                     "are dependent views: V2.")));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {"DROP TABLE T1"}),
+              ::zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kFailedPrecondition,
+                  testing::HasSubstr("Cannot drop Table `T1` on which there "
+                                     "are dependent views: V1.")));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {"ALTER TABLE T1 DROP COLUMN col2"}),
+              ::zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kFailedPrecondition,
+                  testing::HasSubstr("Cannot drop Column `col2` on which there "
+                                     "are dependent views: V1.")));
+}
 }  // namespace
 
 }  // namespace test

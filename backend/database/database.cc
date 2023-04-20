@@ -59,7 +59,7 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
   database->action_manager_ = std::make_unique<ActionManager>();
 
   if (schema_change_operation.statements.empty()) {
-    database->versioned_catalog_ = std::make_unique<VersionedCatalog>();
+      database->versioned_catalog_ = std::make_unique<VersionedCatalog>();
   } else {
     SchemaUpdater updater;
     ZETASQL_ASSIGN_OR_RETURN(

@@ -38,6 +38,7 @@ cc_library(
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:language_options",
+        "@com_google_zetasql//zetasql/public:options_cc_proto",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
         "@com_google_zetasql//zetasql/public/functions:datetime_cc_proto",

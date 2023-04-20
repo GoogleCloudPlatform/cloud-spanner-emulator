@@ -92,14 +92,21 @@ cc_test(
 
 cc_library(
     name = "sql_expression_validators",
-    srcs = [],
+    srcs = ["sql_expression_validators.cc"],
     hdrs = ["sql_expression_validators.h"],
     deps = [
+        "//backend/query:catalog",
         "//backend/query:query_validator",
+        "//backend/query:queryable_table",
+        "//backend/query:queryable_view",
+        "//backend/schema/catalog:schema",
         "//common:errors",
+        "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:analyzer_options",
         "@com_google_zetasql//zetasql/public:language_options",
+        "@com_google_zetasql//zetasql/public:simple_catalog",
+        "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/resolved_ast",
     ],
 )
@@ -131,6 +138,7 @@ cc_library(
         "//backend/schema/graph:schema_graph_editor",
         "//backend/schema/graph:schema_node",
         "//backend/schema/parser:ddl_parser",
+        "//backend/schema/validators:schema_validators",
         "//backend/schema/verifiers:check_constraint_verifiers",
         "//backend/schema/verifiers:foreign_key_verifiers",
         "//common:errors",

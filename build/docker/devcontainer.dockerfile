@@ -9,7 +9,7 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive"                         \
 
 # Unfortunately ZetaSQL has issues with clang (default bazel compiler), so
 # we install GCC. Also install make for rules_foreign_cc bazel rules.
-ENV GCC_VERSION=9
+ENV GCC_VERSION=8
 RUN apt-get -qq install -y software-properties-common make rename  git
 RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
     apt-get -qq update                                                      && \
@@ -29,7 +29,9 @@ RUN mkdir -p /usr/local/gcloud                                              && \
     tar -xf google-cloud-sdk-${CLOUD_SDK_VERSION}-linux-x86_64.tar.gz       && \
     /usr/local/gcloud/google-cloud-sdk/install.sh                           && \
     ln -s /usr/local/gcloud/google-cloud-sdk/bin/gcloud /usr/bin/gcloud     && \
+    ln -s /usr/local/gcloud/google-cloud-sdk/bin/gsutil /usr/bin/gsutil     && \
     rm google-cloud-sdk-${CLOUD_SDK_VERSION}-linux-x86_64.tar.gz
+ENV GCLOUD_DIR="/usr/local/gcloud/google-cloud-sdk/bin"
 
 # Configure gcloud to use emulator locally.
 ENV SPANNER_EMULATOR_HOST=localhost:9010

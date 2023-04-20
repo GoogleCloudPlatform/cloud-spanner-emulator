@@ -21,6 +21,7 @@ licenses(["unencumbered"])
 cc_library(
     name = "schema_builders",
     hdrs = [
+        "change_stream_builder.h",
         "check_constraint_builder.h",
         "column_builder.h",
         "foreign_key_builder.h",

@@ -26,10 +26,12 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/time/time.h"
+#include "backend/schema/builders/change_stream_builder.h"
 #include "backend/schema/builders/column_builder.h"
 #include "backend/schema/builders/index_builder.h"
 #include "backend/schema/builders/table_builder.h"
 #include "backend/schema/builders/view_builder.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
@@ -66,6 +68,12 @@ class SchemaTest : public testing::Test {
         .set_id(name)
         .set_type(type_factory_->get_string())
         .set_table(table);
+    return c;
+  }
+
+  ChangeStream::Builder change_stream_builder(const std::string& name) {
+    ChangeStream::Builder c;
+    c.set_name(name).set_id(name);
     return c;
   }
 
@@ -330,6 +338,19 @@ TEST_F(SchemaTest, TableBuilder) {
   auto tinvalid = tb.build();
   EXPECT_EQ(tinvalid->Validate(&context_),
             error::InvalidSchemaName("Table", table_name));
+}
+
+TEST_F(SchemaTest, ChangeStreamBuilderValid) {
+  auto c = change_stream_builder("C").build();
+  ZETASQL_EXPECT_OK(c->Validate(&context_));
+}
+
+TEST_F(SchemaTest, ChangeStreamBuilderInvalid) {
+  ChangeStream::Builder cs = change_stream_builder("C1");
+  const std::string change_stream_name(130, 'C');
+  auto invalid_cs = change_stream_builder(change_stream_name).build();
+  EXPECT_EQ(invalid_cs->Validate(&context_),
+            error::InvalidSchemaName("Change Stream", change_stream_name));
 }
 
 TEST_F(SchemaTest, IndexBuilder) {
