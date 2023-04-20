@@ -23,6 +23,7 @@
 
 #include "absl/types/span.h"
 #include "backend/common/case.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/view.h"
@@ -71,15 +72,29 @@ class Schema {
   // nullptr if the index is not found. Name comparison is case-insensitive.
   const Index* FindIndex(const std::string& index_name) const;
 
+  // Finds a change stream by its name. Returns a const pointer of the change
+  // stream, or nullptr if the change stream is not found. Name comparison is
+  // case-insensitive.
+  std::shared_ptr<const ChangeStream> FindChangeStream(
+      const std::string& change_stream_name) const;
+
   // List all the user-visible tables in this schema.
   absl::Span<const Table* const> tables() const { return tables_; }
   absl::Span<const View* const> views() const { return views_; }
+
+  // List all the user-visible change streams in this schema.
+  absl::Span<const std::shared_ptr<const ChangeStream>> change_streams() const {
+    return change_streams_;
+  }
 
   // Return the underlying SchemaGraph owning the objects in the schema.
   const SchemaGraph* GetSchemaGraph() const { return graph_; }
 
   // Returns the number of indices in the schema.
   int num_index() const { return index_map_.size(); }
+
+  // Returns the number of change streams in the schema.
+  int num_change_stream() const { return change_streams_map_.size(); }
 
  private:
   // Tries to find the managed index from the non-fingerprint part of the
@@ -106,6 +121,14 @@ class Schema {
   // A map that owns all the tables. Key is the name of the tables. Hash and
   // comparison on the keys are case-insensitive.
   CaseInsensitiveStringMap<const Table*> tables_map_;
+
+  // A vector that maintains the original order of change streams in the DDL.
+  std::vector<std::shared_ptr<const ChangeStream>> change_streams_;
+
+  // A map that owns all the change streams. Key is the name of the change
+  // stream. Hash and comparison on the keys are case-insensitive.
+  CaseInsensitiveStringMap<std::shared_ptr<const ChangeStream>>
+      change_streams_map_;
 
   // A map that owns all of the indexes. Key is the name of the index. Hash and
   // comparison on the keys are case-insensitive.

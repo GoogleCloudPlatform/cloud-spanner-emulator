@@ -67,13 +67,32 @@ class GCloudDatabaseAdminTest(emulator.TestCase):
           self.JoinLines(
               'NAME           STATE',
               'test-database  READY'))
+    elif self.GCloudVersion() < 425:
+      self.assertEqual(
+          self.RunGCloud(
+              'spanner', 'databases', 'list', '--instance=test-instance'
+          ),
+          self.JoinLines(
+              (
+                  'NAME           STATE  VERSION_RETENTION_PERIOD '
+                  ' EARLIEST_VERSION_TIME  KMS_KEY_NAME'
+              ),
+              'test-database  READY',
+          ),
+      )
     else:
       self.assertEqual(
-          self.RunGCloud('spanner', 'databases', 'list',
-                         '--instance=test-instance'),
+          self.RunGCloud(
+              'spanner', 'databases', 'list', '--instance=test-instance'
+          ),
           self.JoinLines(
-              'NAME           STATE  VERSION_RETENTION_PERIOD  EARLIEST_VERSION_TIME  KMS_KEY_NAME',
-              'test-database  READY'))
+              (
+                  'NAME           STATE  VERSION_RETENTION_PERIOD '
+                  ' EARLIEST_VERSION_TIME  KMS_KEY_NAME  ENABLE_DROP_PROTECTION'
+              ),
+              'test-database  READY',
+          ),
+      )
 
   def testDeleteDatabase(self):
     # Create an instance.

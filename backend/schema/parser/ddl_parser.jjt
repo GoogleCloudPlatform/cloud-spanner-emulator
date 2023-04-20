@@ -92,6 +92,7 @@ void create_statement() #void :
     | LOOKAHEAD(2) create_index_statement()
 
     | create_or_replace_statement()
+    | create_change_stream_statement()
   )
 }
 
@@ -280,6 +281,40 @@ void create_index_statement() :
 }
 
 
+void create_change_stream_statement() :
+{}
+{
+  <CHANGE> <STREAM> qualified_identifier() #name
+  [ change_stream_for_clause() ]
+  [ options_clause() ]
+}
+
+void change_stream_for_clause() :
+{}
+{
+  <FOR>
+  (   <ALL> #all
+    | change_stream_tracked_tables()
+  )
+}
+
+void change_stream_tracked_tables() :
+{}
+{
+  change_stream_tracked_tables_entry()
+  ( "," change_stream_tracked_tables_entry() )*
+}
+
+void change_stream_tracked_tables_entry() :
+{}
+{
+  qualified_identifier() #table
+  [ (
+      "(" [ (identifier() #column) ( "," identifier() #column )* ] ")"
+    ) #explicit_columns // Needed to distinguish between `Table` and `Table()`
+  ]
+}
+
 void index_interleave_clause() :
 {}
 {
@@ -379,6 +414,7 @@ void drop_statement() :
     ( <TABLE> #table
     | <INDEX> #index
     | <VIEW> #view
+    | <CHANGE> <STREAM> #change_stream
   ) qualified_identifier() #name
 
 
@@ -391,6 +427,7 @@ void alter_statement() #void :
   <ALTER>
   (
     alter_table_statement()
+    | alter_change_stream_statement()
 
   )
 }
@@ -412,6 +449,16 @@ void alter_table_statement() :
     | LOOKAHEAD(1) <ADD> #add_column [LOOKAHEAD(6) <COLUMN>
       ] column_def()
     | <REPLACE> row_deletion_policy_clause() #replace_row_deletion_policy
+  )
+}
+
+void alter_change_stream_statement() :
+{}
+{
+  <CHANGE> <STREAM> (qualified_identifier() #name)
+  (   LOOKAHEAD(2) <SET> change_stream_for_clause()
+    | <SET> options_clause()
+    | <DROP> <FOR> <ALL> #drop_for_all
   )
 }
 

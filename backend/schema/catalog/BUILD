@@ -21,6 +21,7 @@ licenses(["unencumbered"])
 cc_library(
     name = "schema",
     srcs = [
+        "change_stream.cc",
         "check_constraint.cc",
         "column.cc",
         "foreign_key.cc",
@@ -30,6 +31,7 @@ cc_library(
         "view.cc",
     ],
     hdrs = [
+        "change_stream.h",
         "check_constraint.h",
         "column.h",
         "foreign_key.h",

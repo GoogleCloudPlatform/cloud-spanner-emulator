@@ -133,6 +133,10 @@ class SchemaGraphEditor {
   absl::StatusOr<const SchemaNode*> Clone(const SchemaNode* node);
 
   // Clones an iterable container of nodes in-place. Erases deleted nodes.
+  // Should only be used to clone a container of nodes on which there is no
+  // dependency of the owning referencing node as deleted nodes in the container
+  // will be erased, preventing the owning node from learning about their
+  // deletion through the `is_deleted()` method.
   template <typename T, typename C>
   absl::Status CloneContainer(C* nodes) {
     for (auto it = nodes->begin(); it != nodes->end();) {

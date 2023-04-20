@@ -238,6 +238,271 @@ TEST_F(GeneratedColumnTest, NoDirectWrite) {
                            "Cannot UPDATE value on non-writable column: G1")));
 }
 
+class GeneratedPrimaryKeyReadWriteTest : public DatabaseTest {
+ public:
+  absl::Status SetUpDatabase() override {
+    return SetSchema({
+        R"sql(CREATE TABLE T1(
+          k1 INT64 ,
+          k2 INT64 ,
+          k3_stored INT64 NOT NULL AS (k2) STORED,
+          k4 INT64 NOT NULL,
+        ) PRIMARY KEY (k1, k3_stored))sql",
+        R"sql(CREATE TABLE T2(
+          k1 INT64 NOT NULL,
+          k2_stored INT64 AS (k1*2) STORED,
+          k3 INT64 NOT NULL,
+          k4_stored INT64 AS (k3*3) STORED,
+        ) PRIMARY KEY (k2_stored))sql"});
+  }
+};
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, InsertMutations) {
+  // A few inserts:
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 5),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 6),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 7),
+  }));
+
+  EXPECT_THAT(
+      ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+      IsOkAndHoldsUnorderedRows({{1, 1, 1, 5}, {1, 2, 2, 6}, {2, 1, 1, 7}}));
+
+  // All columns are present:
+  ZETASQL_ASSERT_OK(Insert("T1", {"k1", "k2", "k4"}, {2, 200, 8}));
+  EXPECT_THAT(
+      ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+      IsOkAndHoldsUnorderedRows(
+          {{1, 1, 1, 5}, {1, 2, 2, 6}, {2, 1, 1, 7}, {2, 200, 200, 8}}));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, CannotInsertInNonWriteableColumn) {
+  // A few inserts:
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 5),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 6),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 7),
+  }));
+
+  // Cannot write into a non-writable column k3_stored.
+  EXPECT_THAT(Commit({MakeInsert("T1", {"k1", "k3_stored", "k4"}, 3, 4, 9)}),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+
+  EXPECT_THAT(
+      ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+      IsOkAndHoldsUnorderedRows({{1, 1, 1, 5}, {1, 2, 2, 6}, {2, 1, 1, 7}}));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, DuplicatePrimaryKeyInsertFails) {
+  // A few inserts:
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 5),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 6),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 7),
+  }));
+
+  EXPECT_THAT(
+      ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+      IsOkAndHoldsUnorderedRows({{1, 1, 1, 5}, {1, 2, 2, 6}, {2, 1, 1, 7}}));
+
+  // These inserts fail because the primary key already exists:
+  EXPECT_THAT(Insert("T1", {"k1", "k2", "k4"}, {1, 2, 9}),
+              StatusIs(absl::StatusCode::kAlreadyExists));
+
+  EXPECT_THAT(Insert("T1", {"k1", "k2", "k4"}, {2, 1, 10}),
+              StatusIs(absl::StatusCode::kAlreadyExists));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, InsertOrUpdateMutations) {
+  // All 3 inserts.
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsertOrUpdate("T1", {"k1", "k2", "k4"}, 1, 1, 1),
+      MakeInsertOrUpdate("T1", {"k1", "k2", "k4"}, 2, 1, 2),
+      MakeInsertOrUpdate("T1", {"k1", "k2", "k4"}, 1, 2, 3),
+  }));
+  EXPECT_THAT(
+      ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+      IsOkAndHoldsUnorderedRows({{1, 1, 1, 1}, {2, 1, 1, 2}, {1, 2, 2, 3}}));
+
+  // An insert and an update.
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsertOrUpdate("T1", {"k1", "k2", "k4"}, 3, 3, 9),
+      MakeInsertOrUpdate("T1", {"k1", "k2", "k4"}, 3, 3, 300),
+  }));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsUnorderedRows(
+                  {{1, 1, 1, 1}, {2, 1, 1, 2}, {1, 2, 2, 3}, {3, 3, 3, 300}}));
+
+  // All columns are present:
+  ZETASQL_ASSERT_OK(InsertOrUpdate("T1", {"k1", "k2", "k4"}, {2, 200, 2}));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsUnorderedRows({{1, 1, 1, 1},
+                                         {2, 1, 1, 2},
+                                         {1, 2, 2, 3},
+                                         {3, 3, 3, 300},
+                                         {2, 200, 200, 2}}));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, UpdateMutations) {
+  // Insert a few rows and update one.
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
+      MakeUpdate("T1", {"k1", "k3_stored", "k4"}, 1, 2, 100),
+  }));
+  EXPECT_THAT(
+      ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+      IsOkAndHoldsUnorderedRows({{1, 1, 1, 1}, {1, 2, 2, 100}, {2, 1, 1, 3}}));
+
+  ZETASQL_ASSERT_OK(Update("T1", {"k1", "k2", "k4"}, {1, 1, 200}));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsUnorderedRows(
+                  {{1, 1, 1, 200}, {1, 2, 2, 100}, {2, 1, 1, 3}}));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, UpdateFailsAllPkColumnsNotPresent) {
+  // Insert a few rows and update one.
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
+      MakeUpdate("T1", {"k1", "k3_stored", "k4"}, 1, 2, 100),
+  }));
+  EXPECT_THAT(
+      ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+      IsOkAndHoldsUnorderedRows({{1, 1, 1, 1}, {1, 2, 2, 100}, {2, 1, 1, 3}}));
+
+  // This update fails because all PK columns must be present:
+  EXPECT_THAT(Update("T1", {"k1", "k4"}, {1, 1000}),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, CannotModifyGeneratedKeyColumn) {
+  // Insert a few rows and update one.
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
+      MakeUpdate("T1", {"k1", "k3_stored", "k4"}, 1, 2, 100),
+  }));
+  EXPECT_THAT(
+      ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+      IsOkAndHoldsUnorderedRows({{1, 1, 1, 1}, {1, 2, 2, 100}, {2, 1, 1, 3}}));
+
+  // Value of k3 can't be modified due to non key dependent column k2 when
+  // trying to update Key(k1(1),k3_stored(1)).
+  EXPECT_THAT(Update("T1", {"k1", "k2", "k3_stored", "k4"}, {1, 3, 1, 100}),
+              StatusIs(absl::StatusCode::kOutOfRange));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, DeleteMutations) {
+  // Insert a few rows and delete one.
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
+      MakeDelete("T1", Singleton(1, 1)),
+  }));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsRows({{1, 2, 2, 2}, {2, 1, 1, 3}}));
+
+  // This delete fails because all PK columns must be present:
+  EXPECT_THAT(Delete("T1", Key(1)),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsRows({{1, 2, 2, 2}, {2, 1, 1, 3}}));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, DeleteMutationsDifferentCommit) {
+  // Insert a few rows and delete one.
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
+  }));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsRows({{1, 1, 1, 1}, {1, 2, 2, 2}, {2, 1, 1, 3}}));
+  ZETASQL_EXPECT_OK(Commit({
+      MakeDelete("T1", Singleton(1, 1)),
+  }));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsRows({{1, 2, 2, 2}, {2, 1, 1, 3}}));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, ReplaceMutations) {
+  // Insert a few rows and replace one.
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
+      MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
+      MakeReplace("T1", {"k1", "k2", "k4"}, 1, 2, 100),
+  }));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsRows({{1, 1, 1, 1}, {1, 2, 2, 100}, {2, 1, 1, 3}}));
+
+  ZETASQL_ASSERT_OK(Replace("T1", {"k1", "k2", "k4"}, {1, 1, 200}));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsRows({{1, 1, 1, 200}, {1, 2, 2, 100}, {2, 1, 1, 3}}));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, DmlInsert) {
+  ZETASQL_EXPECT_OK(
+      CommitDml({SqlStatement("INSERT T1(k1,k2,k4) Values (1,1,1),(2,1,2)")}));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsRows({{1, 1, 1, 1}, {2, 1, 1, 2}}));
+
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("INSERT T2(k1,k3) Values (1,1)")}));
+  EXPECT_THAT(ReadAll("T2", {"k1", "k3", "k2_stored", "k4_stored"}),
+              IsOkAndHoldsRows({{1, 1, 2, 3}}));
+
+  // Cannot write into a non-writable column k3.
+  EXPECT_THAT(
+      CommitDml({SqlStatement("INSERT T1(k1,k3_stored,k4) Values(3,3,3)")}),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, DmlUpdate) {
+  ZETASQL_EXPECT_OK(
+      CommitDml({SqlStatement("INSERT T1(k1,k2,k4) Values (1,1,1),(2,1,2)")}));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsRows({{1, 1, 1, 1}, {2, 1, 1, 2}}));
+
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("UPDATE T1 SET k4=50 WHERE k3_stored=1")}));
+  EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
+              IsOkAndHoldsRows({{1, 1, 1, 50}, {2, 1, 1, 50}}));
+
+  // Cannot update value of a non-writable column k3.
+  EXPECT_THAT(
+      CommitDml({SqlStatement("UPDATE T1 SET k3_stored=2 WHERE k3_stored=1")}),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(GeneratedPrimaryKeyReadWriteTest, DmlInsertDistinctOnlyGpkValues) {
+  // If we try to insert a primary key that is distinct due to the GPK value
+  // only, test fails due to lacking support in googlesql reference.
+  // TODO: Implement evaluating generated column values.
+  EXPECT_THAT(
+      CommitDml({SqlStatement("INSERT T1(k1,k2,k4) Values (1,1,1),(1,2,2)")}),
+      (!in_prod_env())
+          ? StatusIs(absl::StatusCode::kAlreadyExists,
+                     testing::HasSubstr(
+                         "Failed to insert row with primary key ({pk#k1:1, "
+                         "pk#k3_stored:NULL}) due to previously inserted row"))
+          : StatusIs(absl::StatusCode::kOk));
+
+  EXPECT_THAT(
+      CommitDml({SqlStatement("INSERT T2(k1,k3) Values (1,1),(2,1)")}),
+      (!in_prod_env())
+          ? StatusIs(
+                absl::StatusCode::kAlreadyExists,
+                testing::HasSubstr(
+                    "Failed to insert row with primary key "
+                    "({pk#k2_stored:NULL}) due to previously inserted row"))
+          : StatusIs(absl::StatusCode::kOk));
+}
+
 }  // namespace
 
 }  // namespace test

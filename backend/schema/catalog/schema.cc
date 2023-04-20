@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_node.h"
@@ -76,6 +77,15 @@ const Index* Schema::FindIndex(const std::string& index_name) const {
   return itr->second;
 }
 
+std::shared_ptr<const ChangeStream> Schema::FindChangeStream(
+    const std::string& change_stream_name) const {
+  auto itr = change_streams_map_.find(change_stream_name);
+  if (itr == change_streams_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
 const Index* Schema::FindManagedIndex(const std::string& index_name) const {
   // Check that the index_name matches the format of managed index names, and
   // extract the non-fingerprint part of the index.
@@ -105,6 +115,8 @@ Schema::Schema(const SchemaGraph* graph
   tables_.clear();
   tables_map_.clear();
   index_map_.clear();
+
+  // TODO: clear change_streams_map_
   for (const SchemaNode* node : graph_->GetSchemaNodes()) {
     const View* view = node->As<const View>();
     if (view != nullptr) {
@@ -123,6 +135,14 @@ Schema::Schema(const SchemaGraph* graph
     const Index* index = node->As<const Index>();
     if (index != nullptr) {
       index_map_[index->Name()] = index;
+      continue;
+    }
+
+    std::shared_ptr<const ChangeStream> change_stream =
+        std::shared_ptr<const ChangeStream>(node->As<ChangeStream>());
+    if (change_stream != nullptr) {
+      change_streams_.push_back(change_stream);
+      change_streams_map_[change_stream->Name()] = change_stream;
       continue;
     }
 

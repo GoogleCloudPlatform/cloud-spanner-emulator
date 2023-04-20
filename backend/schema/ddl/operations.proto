@@ -36,6 +36,11 @@ message DDLStatement {
     CreateIndex create_index = 13;
     DropIndex drop_index = 16;
 
+    // Change Stream statements.
+    CreateChangeStream create_change_stream = 56;
+    AlterChangeStream alter_change_stream = 67;
+    DropChangeStream drop_change_stream = 60;
+
     // Function statements.
     CreateFunction create_function = 34;
     DropFunction drop_function = 36;
@@ -212,7 +217,7 @@ message InterleaveClause {
 }
 
 message CreateDatabase {
-  optional string db_name = 1;
+  optional string db_name = 4;
 }
 
 
@@ -254,6 +259,55 @@ message CreateTable {
   optional ExistenceModifier existence_modifier = 13;
 }
 
+message ChangeStreamForClause {
+  message TrackedTables {
+    message Entry {
+      // Name of the tracked table.
+      optional string table_name = 1;
+
+      message TrackedColumns {
+        // Name of the tracked columns. Primary key columns are tracked by
+        // default and are not listed here. If `column_name` is empty, only the
+        // primary key columns of the table are tracked.
+        repeated string column_name = 1;
+      }
+
+      oneof track_type {
+        // If set, value must be true, and all columns of the table are tracked
+        // implicitly.
+        bool all_columns = 2;
+        // If exists, only columns listed in `tracked_columns` and the primary
+        // key columns of the table are tracked.
+        TrackedColumns tracked_columns = 3;
+      }
+    }
+
+    // Tracked tables and information about which of their columns are tracked.
+    repeated Entry table_entry = 1;
+  }
+
+  oneof for_clause_type {
+    // If set, the value must be true, signifying all trackable database objects
+    // are tracked implicitly. Non-trackable database objects include:
+    //   * internal system tables/queues
+    //   * queues
+    //   * indexes
+    //   * views / materialized views
+    //   * stored or non-stored generated columns (except for STORED VOLATILE
+    //     columns)
+    bool all = 1;
+
+    // If exists, only explicitly listed tables are tracked.
+    TrackedTables tracked_tables = 2;
+  }
+}
+
+message CreateChangeStream {
+  optional string change_stream_name = 1;
+  optional ChangeStreamForClause for_clause = 2;
+  repeated SetOption set_options = 3;
+}
+
 message SetColumnOptions {
   message ColumnPath {
     optional string table_name = 1;
@@ -266,6 +320,10 @@ message SetColumnOptions {
 message DropTable {
   optional string table_name = 1;
   optional ExistenceModifier existence_modifier = 2;
+}
+
+message DropChangeStream {
+  optional string change_stream_name = 1;
 }
 
 message AlterTable {
@@ -313,6 +371,21 @@ message AlterTable {
     DropConstraint drop_constraint = 15;
     AddForeignKey add_foreign_key = 16;
     AddCheckConstraint add_check_constraint = 17;
+  }
+}
+
+message AlterChangeStream {
+  optional string change_stream_name = 1;
+
+  message SetOptions {
+    repeated SetOption options = 1;
+  }
+
+  oneof alter_type {
+    ChangeStreamForClause set_for_clause = 2;
+    SetOptions set_options = 3;
+    // Only DROP FOR ALL is supported for now.
+    ChangeStreamForClause drop_for_clause = 4;
   }
 }
 

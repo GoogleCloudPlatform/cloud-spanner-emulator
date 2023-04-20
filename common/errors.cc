@@ -22,6 +22,7 @@
 #include "google/rpc/error_details.pb.h"
 #include "absl/status/status.h"
 #include "absl/strings/cord.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
@@ -822,6 +823,28 @@ absl::Status TooManyTablesPerDatabase(absl::string_view table_name,
                                        table_name, limit));
 }
 
+absl::Status TooManyChangeStreamsPerDatabase(
+    absl::string_view change_stream_name, int64_t limit) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Cannot add Change Stream $0 : "
+                                       "because the maximum number "
+                                       "of Change Streams per Database "
+                                       "(limit $1) has been reached.",
+                                       change_stream_name, limit));
+}
+
+absl::Status TooManyChangeStreamsTrackingSameObject(
+    absl::string_view change_stream_name, int64_t limit,
+    absl::string_view object_name_string) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Failed to create or alter Change Stream $0 : "
+                       "because it is not allowed to have more than "
+                       "$1 Change Streams tracking the same table or "
+                       "non-key column or ALL: $2.",
+                       change_stream_name, limit, object_name_string));
+}
+
 absl::Status TooManyIndicesPerDatabase(absl::string_view index_name,
                                        int64_t limit) {
   return absl::Status(absl::StatusCode::kFailedPrecondition,
@@ -1066,6 +1089,12 @@ absl::Status TableNotFoundAtTimestamp(absl::string_view table_name,
 absl::Status IndexNotFound(absl::string_view index_name) {
   return absl::Status(absl::StatusCode::kNotFound,
                       absl::Substitute("Index not found: $0", index_name));
+}
+
+absl::Status ChangeStreamNotFound(absl::string_view change_stream_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::StrCat("Change Stream not found: ", change_stream_name));
 }
 
 absl::Status DropForeignKeyManagedIndex(absl::string_view index_name,
@@ -2041,6 +2070,13 @@ absl::Status UnsupportedTablesampleSystem() {
                       "SYSTEM sampling is not supported");
 }
 
+absl::Status ToJsonStringNonJsonTypeNotSupported(absl::string_view type_name) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("TO_JSON_STRING is not supported on values of type $0",
+                       type_name));
+}
+
 absl::Status TooManyFunctions(int max_function_nodes) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
@@ -2327,6 +2363,69 @@ absl::Status ViewReplaceError(absl::string_view view_name,
       absl::Substitute("Cannot replace VIEW `$0` because new definition is "
                        "invalid with the following diagnostic message:\n\n$1",
                        view_name, error));
+}
+
+absl::Status ViewReplaceRecursive(absl::string_view view_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot replace VIEW `$0` because new definition is recursive.",
+          view_name));
+}
+
+absl::Status DependentViewBecomesInvalid(absl::string_view modify_action,
+                                         absl::string_view view_name,
+                                         absl::string_view dependent_view_name,
+                                         absl::string_view error) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot $0 `$1`. The new definition causes "
+                       "the definition of VIEW `$2` to become invalid with the "
+                       "following diagnostic message: $3",
+                       modify_action, view_name, dependent_view_name, error));
+}
+
+absl::Status DependentViewColumnRename(absl::string_view modify_action,
+                                       absl::string_view view_name,
+                                       absl::string_view dependent_view,
+                                       absl::string_view old_column_name,
+                                       absl::string_view new_column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot $0 replace VIEW `$1`. Action would implicitly change the "
+          "name "
+          "of an output column for VIEW `$2` from `$3` to `$4`.\nTip: Give "
+          "explicit names to output columns in the VIEW definition before "
+          "making this change.",
+          modify_action, view_name, dependent_view, old_column_name,
+          new_column_name));
+}
+
+absl::Status DependentViewColumnRetype(absl::string_view modify_action,
+                                       absl::string_view view_name,
+                                       absl::string_view dependent_view,
+                                       absl::string_view old_type,
+                                       absl::string_view new_type) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot $0 `$1`. Action would implicitly change the type "
+          "of an output column for VIEW `$2` from `$3` to `$4`.\nTip: Give "
+          "explicit type to output columns in the VIEW definition before "
+          "making this change by adding casts/conversions to the intended "
+          "final output type.",
+          modify_action, view_name, dependent_view, old_type, new_type));
+}
+
+absl::Status InvalidDropDependentViews(absl::string_view type_kind,
+                                       absl::string_view table_name,
+                                       absl::string_view dependent_view) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot drop $0 `$1` on which there are dependent views: $2.",
+          type_kind, table_name, dependent_view));
 }
 
 absl::Status ViewNotFound(absl::string_view view_name) {

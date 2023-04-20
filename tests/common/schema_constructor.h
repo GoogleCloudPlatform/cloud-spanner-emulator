@@ -78,6 +78,26 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
   return std::move(maybe_schema.value());
 }
 
+inline std::unique_ptr<const backend::Schema>
+CreateSchemaWithOneTableAndOneChangeStream(
+    zetasql::TypeFactory* type_factory) {
+  auto maybe_schema = CreateSchemaFromDDL(
+      {
+          R"(
+              CREATE TABLE test_table (
+                int64_col INT64 NOT NULL,
+                string_col STRING(MAX)
+              ) PRIMARY KEY (int64_col)
+            )",
+          R"(
+              CREATE CHANGE STREAM change_stream_test_table FOR test_table
+            )",
+      },
+      type_factory);
+  ZETASQL_CHECK_OK(maybe_schema.status());
+  return std::move(maybe_schema.value());
+}
+
 // Creates a schema with two child tables interleaved in a parent table.
 inline std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
     zetasql::TypeFactory* const type_factory) {

@@ -52,6 +52,8 @@ namespace ddl {
 typedef google::protobuf::RepeatedPtrField<SetOption> OptionList;
 
 const char kCommitTimestampOptionName[] = "allow_commit_timestamp";
+const char kChangeStreamValueCaptureTypeOptionName[] = "value_capture_type";
+const char kChangeStreamRetentionPeriodOptionName[] = "retention_period";
 
 namespace {
 
@@ -804,6 +806,232 @@ void VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index,
   }
 }
 
+void VisitChangeStreamExplicitColumns(
+    const SimpleNode* node,
+    ChangeStreamForClause::TrackedTables::Entry::TrackedColumns*
+        tracked_columns,
+    std::vector<std::string>* errors) {
+  CheckNode(node, JJTEXPLICIT_COLUMNS);
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTCOLUMN:
+        tracked_columns->add_column_name(child->image());
+        break;
+      default:
+        ZETASQL_LOG(ERROR) << "Unexpected change streams tracked column: "
+                   << child->toString();
+    }
+  }
+}
+
+void VisitChangeStreamTrackedTablesEntry(
+    const SimpleNode* node,
+    ChangeStreamForClause::TrackedTables::Entry* table_entry,
+    std::vector<std::string>* errors) {
+  CheckNode(node, JJTCHANGE_STREAM_TRACKED_TABLES_ENTRY);
+  table_entry->set_table_name(
+      GetQualifiedIdentifier(GetChildNode(node, 0, JJTTABLE)));
+  bool all_columns = true;
+  for (int i = 1; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTEXPLICIT_COLUMNS: {
+        all_columns = false;
+        VisitChangeStreamExplicitColumns(
+            child, table_entry->mutable_tracked_columns(), errors);
+        break;
+      }
+      default:
+        ZETASQL_LOG(ERROR) << "Unexpected change streams tracked tables entry: "
+                   << child->toString();
+    }
+  }
+  if (all_columns) {
+    // `all_columns` is part of a oneof, so we only set it if it is true.
+    table_entry->set_all_columns(true);
+  }
+}
+
+void VisitChangeStreamTrackedTables(
+    const SimpleNode* node,
+    ChangeStreamForClause::TrackedTables* tracked_tables,
+    std::vector<std::string>* errors) {
+  CheckNode(node, JJTCHANGE_STREAM_TRACKED_TABLES);
+  // The parser does not accept a FOR clause without anything following.
+  ZETASQL_CHECK_GE(node->jjtGetNumChildren(), 1);
+  google::protobuf::RepeatedPtrField<ChangeStreamForClause::TrackedTables::Entry>*
+      table_entry = tracked_tables->mutable_table_entry();
+  ChangeStreamForClause::TrackedTables::Entry* last = nullptr;
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTCHANGE_STREAM_TRACKED_TABLES_ENTRY: {
+        last = table_entry->Add();
+        VisitChangeStreamTrackedTablesEntry(child, last, errors);
+        break;
+      }
+      default:
+        ZETASQL_LOG(ERROR) << "Unexpected change stream tracked tables: "
+                   << child->toString();
+    }
+  }
+}
+
+void VisitChangeStreamForClause(const SimpleNode* node,
+                                ChangeStreamForClause* for_clause,
+                                std::vector<std::string>* errors) {
+  CheckNode(node, JJTCHANGE_STREAM_FOR_CLAUSE);
+  ZETASQL_CHECK_EQ(1, node->jjtGetNumChildren());
+  SimpleNode* child = GetChildNode(node, 0);
+  switch (child->getId()) {
+    case JJTALL:
+      for_clause->set_all(true);
+      break;
+    case JJTCHANGE_STREAM_TRACKED_TABLES:
+      VisitChangeStreamTrackedTables(
+          child, for_clause->mutable_tracked_tables(), errors);
+      break;
+    default:
+      ZETASQL_LOG(ERROR) << "Unexpected change stream for clause: "
+                 << child->toString();
+  }
+}
+
+bool UnescapeStringLiteral(absl::string_view val, std::string* result) {
+  if (val.size() <= 2) {
+    ZETASQL_LOG(ERROR) << "Invalid string literal: " << val;
+  }
+  ZETASQL_CHECK_EQ(val[0], val[val.size() - 1]);
+  ZETASQL_CHECK(val[0] == '\'' || val[0] == '"');
+  return absl::CUnescape(absl::ClippedSubstr(val, 1, val.size() - 2), result);
+}
+
+// Build a string representing a basic logical error for the given node.
+// Errors reported with LogicalError should be things that can only be detected
+// during parsing, and not later during canonicalization.  If an error can be
+// detected during canonicalization, defer it to then, because we expect that
+// some customers may want to generate the DDL statements themselves and so
+// we'll have to check for it there anyway.
+std::string LogicalError(const SimpleNode* node, const std::string& detail) {
+  return absl::StrCat("Error on line ", node->begin_line(), ", column ",
+                      node->begin_column(), ": ", detail);
+}
+
+void VisitStringOrNullOptionValNode(const SimpleNode* value_node,
+                                    SetOption* option,
+                                    std::vector<std::string>* errors) {
+  if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+    return;
+  }
+  if (value_node->getId() != JJTSTR_VAL ||
+      !ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
+           .ok()) {
+    errors->push_back(
+        absl::StrCat("Unexpected value for option: ", option->option_name(),
+                     ". Supported option values are strings and NULL."));
+    return;
+  }
+  std::string string_value;
+  if (!UnescapeStringLiteral(value_node->image(), &string_value)) {
+    errors->push_back(LogicalError(
+        value_node,
+        absl::StrCat("Cannot parse string literal: ", value_node->image())));
+    return;
+  }
+  option->set_string_value(string_value);
+}
+
+void VisitChangeStreamOptionKeyValNode(const SimpleNode* node,
+                                       OptionList* options,
+                                       std::vector<std::string>* errors) {
+  std::string name = CheckOptionKeyValNodeAndGetName(node);
+  for (const SetOption& option : *options) {
+    if (option.option_name() == name) {
+      errors->push_back(absl::StrCat("Duplicate option: ", name));
+      return;
+    }
+  }
+
+  const SimpleNode* value_node = GetChildNode(node, 1);
+
+  if (name == kChangeStreamRetentionPeriodOptionName ||
+      name == kChangeStreamValueCaptureTypeOptionName) {
+    SetOption* option = options->Add();
+    option->set_option_name(name);
+    VisitStringOrNullOptionValNode(value_node, option, errors);
+  } else {
+    errors->push_back(absl::StrCat("Option: ", name, " is unknown."));
+  }
+}
+
+void VisitChangeStreamOptionsClause(const SimpleNode* node,
+                                    int option_list_offset, OptionList* options,
+                                    std::vector<std::string>* errors) {
+  CheckNode(node, JJTOPTIONS_CLAUSE);
+  // The option_list node is suppressed (defined #void in .jjt) so it is not
+  // created. The children of this node are OPTION_KEY_VALs.
+  for (int i = option_list_offset; i < node->jjtGetNumChildren(); ++i) {
+    VisitChangeStreamOptionKeyValNode(GetChildNode(node, i, JJTOPTION_KEY_VAL),
+                                      options, errors);
+  }
+}
+
+void VisitCreateChangeStreamNode(const SimpleNode* node,
+                                 CreateChangeStream* change_stream,
+                                 std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_CHANGE_STREAM_STATEMENT);
+  change_stream->set_change_stream_name(
+      GetQualifiedIdentifier(GetChildNode(node, 0, JJTNAME)));
+  for (int i = 1; i < node->jjtGetNumChildren(); i++) {
+    const SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTCHANGE_STREAM_FOR_CLAUSE:
+        VisitChangeStreamForClause(child, change_stream->mutable_for_clause(),
+                                   errors);
+        break;
+      case JJTOPTIONS_CLAUSE:
+        VisitChangeStreamOptionsClause(child, /*option_list_offset=*/0,
+                                       change_stream->mutable_set_options(),
+                                       errors);
+        break;
+      default:
+        ZETASQL_LOG(ERROR) << "Unexpected create change stream clause: "
+                   << child->toString();
+    }
+  }
+}
+
+void VisitAlterChangeStreamNode(const SimpleNode* node,
+                                AlterChangeStream* change_stream,
+                                std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_CHANGE_STREAM_STATEMENT);
+  change_stream->set_change_stream_name(
+      GetQualifiedIdentifier(GetChildNode(node, 0, JJTNAME)));
+  const SimpleNode* child = GetChildNode(node, 1);
+  switch (child->getId()) {
+    case JJTCHANGE_STREAM_FOR_CLAUSE:
+      VisitChangeStreamForClause(child, change_stream->mutable_set_for_clause(),
+                                 errors);
+      break;
+    case JJTOPTIONS_CLAUSE:
+      VisitChangeStreamOptionsClause(
+          child, /*option_list_offset=*/0,
+          change_stream->mutable_set_options()->mutable_options(), errors);
+      break;
+    case JJTDROP_FOR_ALL: {
+      ChangeStreamForClause* drop_for_clause =
+          change_stream->mutable_drop_for_clause();
+      drop_for_clause->set_all(true);
+      break;
+    }
+    default:
+      ZETASQL_LOG(ERROR) << "Unexpected alter change stream clause: "
+                 << child->toString();
+  }
+}
+
 void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
                          DDLStatement* statement,
                          std::vector<std::string>* errors) {
@@ -904,6 +1132,10 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
     case JJTCREATE_INDEX_STATEMENT:
       VisitCreateIndexNode(stmt, statement->mutable_create_index(), errors);
       break;
+    case JJTCREATE_CHANGE_STREAM_STATEMENT:
+      VisitCreateChangeStreamNode(
+          stmt, statement->mutable_create_change_stream(), errors);
+      break;
     case JJTDROP_STATEMENT: {
       const SimpleNode* drop_stmt = GetChildNode(stmt, 0);
       std::string name =
@@ -914,6 +1146,9 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
           break;
         case JJTINDEX:
           statement->mutable_drop_index()->set_index_name(name);
+          break;
+        case JJTCHANGE_STREAM:
+          statement->mutable_drop_change_stream()->set_change_stream_name(name);
           break;
         case JJTVIEW:
           statement->mutable_drop_function()->set_function_kind(Function::VIEW);
@@ -926,6 +1161,10 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
     } break;
     case JJTALTER_TABLE_STATEMENT:
       VisitAlterTableNode(stmt, ddl_text, statement, errors);
+      break;
+    case JJTALTER_CHANGE_STREAM_STATEMENT:
+      VisitAlterChangeStreamNode(stmt, statement->mutable_alter_change_stream(),
+                                 errors);
       break;
     case JJTANALYZE_STATEMENT:
       CheckNode(stmt, JJTANALYZE_STATEMENT);

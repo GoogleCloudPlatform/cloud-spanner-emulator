@@ -23,107 +23,279 @@ class GCloudReadWriteTest(emulator.TestCase):
 
   def testExecuteSql(self):
     # Create an instance.
-    self.RunGCloud('spanner', 'instances', 'create', 'test-instance',
-                   '--config=emulator-config', '--description=Test Instance',
-                   '--nodes', '3')
+    self.RunGCloud(
+        'spanner',
+        'instances',
+        'create',
+        'test-instance',
+        '--config=emulator-config',
+        '--description=Test Instance',
+        '--nodes',
+        '3',
+    )
     # Create the database.
     self.assertEqual(
         self.RunGCloud(
-            'spanner', 'databases', 'create', 'test-database',
+            'spanner',
+            'databases',
+            'create',
+            'test-database',
             '--instance=test-instance',
-            '--ddl=CREATE TABLE mytable (a INT64, b INT64) PRIMARY KEY(a)'),
-        self.JoinLines(''))
+            '--ddl=CREATE TABLE mytable (a INT64, b INT64) PRIMARY KEY(a)',
+        ),
+        self.JoinLines(''),
+    )
     # Perform a read.
     self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'execute-sql', 'test-database',
-                       '--instance=test-instance',
-                       '--sql=SELECT * FROM mytable'), self.JoinLines(''))
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'execute-sql',
+            'test-database',
+            '--instance=test-instance',
+            '--sql=SELECT * FROM mytable',
+        ),
+        self.JoinLines(''),
+    )
 
   def testInsert(self):
     # Create an instance.
-    self.RunGCloud('spanner', 'instances', 'create', 'test-instance',
-                   '--config=emulator-config', '--description=Test Instance',
-                   '--nodes', '3')
+    self.RunGCloud(
+        'spanner',
+        'instances',
+        'create',
+        'test-instance',
+        '--config=emulator-config',
+        '--description=Test Instance',
+        '--nodes',
+        '3',
+    )
     # Create the database.
     self.assertEqual(
         self.RunGCloud(
-            'spanner', 'databases', 'create', 'test-database',
+            'spanner',
+            'databases',
+            'create',
+            'test-database',
             '--instance=test-instance',
-            '--ddl=CREATE TABLE mytable (a INT64, b INT64) PRIMARY KEY(a)'),
-        self.JoinLines(''))
+            '--ddl=CREATE TABLE mytable (a INT64, b INT64) PRIMARY KEY(a)',
+        ),
+        self.JoinLines(''),
+    )
     # Perform an insert.
     # Command outputs a commit timestamp that is hard to assert.
-    self.RunGCloud('spanner', 'rows', 'insert', '--data=a=1,b=1',
-                   '--table=mytable', '--database=test-database',
-                   '--instance=test-instance')
+    self.RunGCloud(
+        'spanner',
+        'rows',
+        'insert',
+        '--data=a=1,b=1',
+        '--table=mytable',
+        '--database=test-database',
+        '--instance=test-instance',
+    )
     # Perform a read.
     self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'execute-sql', 'test-database',
-                       '--instance=test-instance',
-                       '--sql=SELECT * FROM mytable'),
-        self.JoinLines('a  b', '1  1'))
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'execute-sql',
+            'test-database',
+            '--instance=test-instance',
+            '--sql=SELECT * FROM mytable',
+        ),
+        self.JoinLines('a  b', '1  1'),
+    )
+
+  # TODO: Test returned strings from ddl.
+  def testUpdateDDLChangeStream(self):
+    # Create an instance.
+    self.RunGCloud(
+        'spanner',
+        'instances',
+        'create',
+        'test-instance',
+        '--config=emulator-config',
+        '--description=Test Instance',
+        '--nodes',
+        '3',
+    )
+    # Create the database.
+    self.assertEqual(
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'create',
+            'test-database',
+            '--instance=test-instance',
+            '--ddl=CREATE TABLE mytable (a INT64, b INT64) PRIMARY KEY(a)',
+        ),
+        self.JoinLines(''),
+    )
+    # Perform an update to create a change stream.
+    self.RunGCloud(
+        'spanner',
+        'databases',
+        'ddl',
+        'update',
+        'test-database',
+        '--instance=test-instance',
+        '--ddl=CREATE CHANGE STREAM myChangeStream FOR ALL',
+    )
+    # Perform an update to alter a change stream.
+    self.RunGCloud(
+        'spanner',
+        'databases',
+        'ddl',
+        'update',
+        'test-database',
+        '--instance=test-instance',
+        (
+            '--ddl=ALTER CHANGE STREAM myChangeStream SET OPTIONS ('
+            " value_capture_type = 'NEW_VALUES' )"
+        ),
+    )
+    # Perform an update to drop a change stream.
+    self.RunGCloud(
+        'spanner',
+        'databases',
+        'ddl',
+        'update',
+        'test-database',
+        '--instance=test-instance',
+        '--ddl=DROP CHANGE STREAM myChangeStream',
+    )
 
   def testUpdate(self):
     # Create an instance.
-    self.RunGCloud('spanner', 'instances', 'create', 'test-instance',
-                   '--config=emulator-config', '--description=Test Instance',
-                   '--nodes', '3')
+    self.RunGCloud(
+        'spanner',
+        'instances',
+        'create',
+        'test-instance',
+        '--config=emulator-config',
+        '--description=Test Instance',
+        '--nodes',
+        '3',
+    )
     # Create the database.
     self.assertEqual(
         self.RunGCloud(
-            'spanner', 'databases', 'create', 'test-database',
+            'spanner',
+            'databases',
+            'create',
+            'test-database',
             '--instance=test-instance',
-            '--ddl=CREATE TABLE mytable (a INT64, b INT64) PRIMARY KEY(a)'),
-        self.JoinLines(''))
+            '--ddl=CREATE TABLE mytable (a INT64, b INT64) PRIMARY KEY(a)',
+        ),
+        self.JoinLines(''),
+    )
     # Perform an insert.
     # Command outputs a commit timestamp that is hard to assert.
-    self.RunGCloud('spanner', 'rows', 'insert', '--data=a=1,b=1',
-                   '--table=mytable', '--database=test-database',
-                   '--instance=test-instance')
+    self.RunGCloud(
+        'spanner',
+        'rows',
+        'insert',
+        '--data=a=1,b=1',
+        '--table=mytable',
+        '--database=test-database',
+        '--instance=test-instance',
+    )
     # Perform an update.
     # Command outputs a commit timestamp that is hard to assert.
-    self.RunGCloud('spanner', 'rows', 'update', '--data=a=1,b=2',
-                   '--table=mytable', '--database=test-database',
-                   '--instance=test-instance')
+    self.RunGCloud(
+        'spanner',
+        'rows',
+        'update',
+        '--data=a=1,b=2',
+        '--table=mytable',
+        '--database=test-database',
+        '--instance=test-instance',
+    )
+
     # Perform a read.
     self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'execute-sql', 'test-database',
-                       '--instance=test-instance',
-                       '--sql=SELECT * FROM mytable'),
-        self.JoinLines('a  b', '1  2'))
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'execute-sql',
+            'test-database',
+            '--instance=test-instance',
+            '--sql=SELECT * FROM mytable',
+        ),
+        self.JoinLines('a  b', '1  2'),
+    )
 
   def testDelete(self):
     # Create an instance.
-    self.RunGCloud('spanner', 'instances', 'create', 'test-instance',
-                   '--config=emulator-config', '--description=Test Instance',
-                   '--nodes', '3')
+    self.RunGCloud(
+        'spanner',
+        'instances',
+        'create',
+        'test-instance',
+        '--config=emulator-config',
+        '--description=Test Instance',
+        '--nodes',
+        '3',
+    )
     # Create the database.
     self.assertEqual(
         self.RunGCloud(
-            'spanner', 'databases', 'create', 'test-database',
+            'spanner',
+            'databases',
+            'create',
+            'test-database',
             '--instance=test-instance',
-            '--ddl=CREATE TABLE mytable (a INT64, b INT64) PRIMARY KEY(a)'),
-        self.JoinLines(''))
+            '--ddl=CREATE TABLE mytable (a INT64, b INT64) PRIMARY KEY(a)',
+        ),
+        self.JoinLines(''),
+    )
     # Perform an insert.
     # Command outputs a commit timestamp that is hard to assert.
-    self.RunGCloud('spanner', 'rows', 'insert', '--data=a=1,b=1',
-                   '--table=mytable', '--database=test-database',
-                   '--instance=test-instance')
+    self.RunGCloud(
+        'spanner',
+        'rows',
+        'insert',
+        '--data=a=1,b=1',
+        '--table=mytable',
+        '--database=test-database',
+        '--instance=test-instance',
+    )
     # Perform a read to verify row exist.
     self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'execute-sql', 'test-database',
-                       '--instance=test-instance',
-                       '--sql=SELECT * FROM mytable'),
-        self.JoinLines('a  b', '1  1'))
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'execute-sql',
+            'test-database',
+            '--instance=test-instance',
+            '--sql=SELECT * FROM mytable',
+        ),
+        self.JoinLines('a  b', '1  1'),
+    )
     # Perform a delete.
     # Command outputs a commit timestamp that is hard to assert.
-    self.RunGCloud('spanner', 'rows', 'delete', '--keys=1', '--table=mytable',
-                   '--database=test-database', '--instance=test-instance')
+    self.RunGCloud(
+        'spanner',
+        'rows',
+        'delete',
+        '--keys=1',
+        '--table=mytable',
+        '--database=test-database',
+        '--instance=test-instance',
+    )
     # Perform a read to verify row does not exist.
     self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'execute-sql', 'test-database',
-                       '--instance=test-instance',
-                       '--sql=SELECT * FROM mytable'), self.JoinLines(''))
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'execute-sql',
+            'test-database',
+            '--instance=test-instance',
+            '--sql=SELECT * FROM mytable',
+        ),
+        self.JoinLines(''),
+    )
+
 
 if __name__ == '__main__':
   emulator.RunTests()

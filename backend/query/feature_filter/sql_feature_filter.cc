@@ -22,6 +22,7 @@
 #include "zetasql/public/function.h"
 #include "zetasql/public/functions/datetime.pb.h"
 #include "zetasql/public/language_options.h"
+#include "zetasql/public/options.pb.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/value.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
@@ -168,6 +169,12 @@ absl::Status FilterResolvedFunction(
   }
   if (name == "nullif" && function_call.argument_list(0)->type()->IsStruct()) {
     return error::NullifStructNotSupported();
+  }
+  if (name == "to_json_string" &&
+      !function_call.argument_list(0)->type()->IsJsonType()) {
+    return error::ToJsonStringNonJsonTypeNotSupported(
+        function_call.argument_list(0)->type()->TypeName(
+            zetasql::PRODUCT_EXTERNAL));
   }
 
   return absl::OkStatus();

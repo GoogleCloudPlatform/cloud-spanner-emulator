@@ -295,16 +295,12 @@ ERROR:.* Error parsing the definition of generated column `GeneratedColumnDataCo
 \(i64\)
  \^
 ==
-# This test will be reenabled as part of TODO
 # Generated column in primary key.
-# # --regex
-# CREATE TABLE Users (
-# id INT64 NOT NULL,
-# id_plus_one INT64 AS (id + 1) STORED
-# ) PRIMARY KEY(id_plus_one);
-# --
-# ERROR:.* Generated column `Users.id_plus_one` cannot be part of the primary key.
-# ==
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  id_plus_one INT64 NOT NULL AS (id + 1) STORED,
+) PRIMARY KEY(id_plus_one);
+==
 # Generated column definition has a simple cycle
 # --regex
 CREATE TABLE T (

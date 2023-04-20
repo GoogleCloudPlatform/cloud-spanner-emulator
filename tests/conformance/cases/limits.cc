@@ -47,6 +47,10 @@ TEST_F(LimitsTest, MaxColumnsPerTable) {
               StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
+// TODO: Add the tests for MaxTableNameLength,
+// MaxChangeStreamsPerTable, MaxChangeStreamsPerColumn, and
+// MaxChangeStreamsPerDatabase.
+
 TEST_F(LimitsTest, MaxTableNameLength) {
   std::string create_table_statement = absl::StrCat(
       "CREATE TABLE test_table_name_greater_than_128_characters_",

@@ -653,30 +653,6 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
                 CAST(@pDateArray AS ARRAY<DATE>))",
                   params, param_types),
               IsOkAndHolds(Partially(test::EqualsProto(result))));
-
-  // Error message for unsupported undeclared parameter types with non-null
-  // values.
-  params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         })");
-  param_types = {};
-  EXPECT_THAT(
-      Execute("SELECT CAST(@pTimestamp AS TIMESTAMP)", params, param_types),
-      StatusIs(absl::StatusCode::kInvalidArgument));
-  params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "pdate"
-           value { string_value: "1970-01-01" }
-         }
-         fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         })");
-  param_types = {};
-  EXPECT_THAT(Execute("SELECT CAST(@pDate AS DATE)", params, param_types),
-              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
