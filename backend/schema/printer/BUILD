@@ -31,6 +31,7 @@ cc_library(
         "//backend/datamodel:types",
         "//backend/schema/catalog:schema",
         "//backend/schema/parser:ddl_reserved_words",  # buildcleaner: keep
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",

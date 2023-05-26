@@ -17,7 +17,13 @@
 #include <string>
 #include <vector>
 
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
+#include "common/errors.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
@@ -146,6 +152,38 @@ TEST_F(GeneratedColumnSchemaUpdaterTest,
           absl::StatusCode::kUnimplemented,
           HasSubstr("Generated column `G` without the STORED attribute is not "
                     "supported.")));
+}
+
+std::vector<std::string> SchemaForCaseSensitivityTests() {
+  return {
+      R"sql(
+                CREATE TABLE T (
+                  K INT64 NOT NULL,
+                  V INT64,
+                ) PRIMARY KEY (K)
+            )sql",
+  };
+}
+
+TEST_F(GeneratedColumnSchemaUpdaterTest,
+       StoredColumnExpressionIsCaseInsensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T ADD COLUMN G INT64 AS (k + v) STORED
+    )"}));
+}
+
+TEST_F(GeneratedColumnSchemaUpdaterTest, StoredColumnNameIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T DROP COLUMN g
+    )"}),
+              StatusIs(absl::StatusCode::kNotFound,
+                       HasSubstr("Column not found in table T: g")));
 }
 
 }  // namespace test

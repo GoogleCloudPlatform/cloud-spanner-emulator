@@ -135,10 +135,6 @@ absl::Status ValidatePartitionToken(
   return absl::OkStatus();
 }
 
-bool IsDmlResult(const backend::QueryResult& result) {
-  return result.rows == nullptr;
-}
-
 void AddQueryStatsFromQueryResult(const backend::QueryResult& result,
                                   google::protobuf::Struct* stats) {
   (*stats->mutable_fields())["rows_returned"].set_string_value(
@@ -278,7 +274,7 @@ absl::Status ExecuteSql(RequestContext* ctx,
                            txn->ToProto());
         }
 
-        if (IsDmlResult(result)) {
+        if (is_dml_query) {
           if (txn->IsPartitionedDml()) {
             response->mutable_stats()->set_row_count_lower_bound(
                 result.modified_row_count);
@@ -286,8 +282,15 @@ absl::Status ExecuteSql(RequestContext* ctx,
             response->mutable_stats()->set_row_count_exact(
                 result.modified_row_count);
           }
-          // Set empty row type.
-          response->mutable_metadata()->mutable_row_type();
+
+          if (result.rows == nullptr) {
+            // Set empty row type.
+            response->mutable_metadata()->mutable_row_type();
+          } else {
+            // It contains DML THEN RETURN row results.
+            ZETASQL_RETURN_IF_ERROR(RowCursorToResultSetProto(result.rows.get(),
+                                                      /*limit=*/0, response));
+          }
         } else {
           ZETASQL_RETURN_IF_ERROR(RowCursorToResultSetProto(result.rows.get(),
                                                     /*limit=*/0, response));
@@ -416,7 +419,7 @@ absl::Status ExecuteStreamingSql(
         backend::QueryResult& result = maybe_result.value();
 
         std::vector<spanner_api::PartialResultSet> responses;
-        if (IsDmlResult(result)) {
+        if (is_dml_query) {
           responses.emplace_back();
           if (txn->IsPartitionedDml()) {
             responses.back().mutable_stats()->set_row_count_lower_bound(
@@ -425,8 +428,14 @@ absl::Status ExecuteStreamingSql(
             responses.back().mutable_stats()->set_row_count_exact(
                 result.modified_row_count);
           }
-          // Set empty row type.
-          responses.back().mutable_metadata()->mutable_row_type();
+          if (result.rows == nullptr) {
+            // Set empty row type.
+            responses.back().mutable_metadata()->mutable_row_type();
+          } else {
+            // It contains DML THEN RETURN row results.
+            ZETASQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
+                                            result.rows.get(), /*limit=*/0));
+          }
         } else {
           ZETASQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
                                           result.rows.get(), /*limit=*/0));

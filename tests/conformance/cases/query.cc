@@ -213,6 +213,18 @@ TEST_F(QueryTest, CannotExecuteInvalidSelectStatement) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+TEST_F(QueryTest, InvalidSelectStructColumns) {
+  PopulateDatabase();
+
+  EXPECT_THAT(
+      Query("SELECT STRUCT< int64_f INT64 > (100) AS expr0 "
+            "FROM Users "
+            "WHERE Users.UserId = 10 "),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               testing::HasSubstr(
+                   "A struct value cannot be returned as a column value.")));
+}
+
 TEST_F(QueryTest, HashFunctions) {
   const char hash[] = {'\xb1', '\n', '\x8d', '\xb1', 'd',    '\xe0',
                        'u',    'A',  '\x05', '\xb7', '\xa9', '\x9b',

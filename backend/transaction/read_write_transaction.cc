@@ -386,7 +386,7 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
   for (int i = 0; i < mutation_op.rows.size(); i++) {
     const ValueList& row = mutation_op.rows[i];
     ValueList new_row = row;
-    // If we have key columns with generated values, append them here:
+    // If we have key columns with default values, append them here:
     new_row.insert(new_row.end(), generated_values[i].begin(),
                    generated_values[i].end());
 

@@ -53,7 +53,8 @@ class Catalog : public zetasql::EnumerableCatalog {
           zetasql::TypeFactory* type_factory,
           const zetasql::AnalyzerOptions& options =
               MakeGoogleSqlAnalyzerOptions(),
-          RowReader* reader = nullptr);
+          RowReader* reader = nullptr,
+          QueryEvaluator* query_evaluator = nullptr);
 
   std::string FullName() const final {
     // The name of the root catalog is "".
@@ -99,6 +100,10 @@ class Catalog : public zetasql::EnumerableCatalog {
   // Functions available in the default schema.
   const FunctionCatalog* function_catalog_ = nullptr;
   zetasql::TypeFactory* type_factory_ = nullptr;
+
+  // Callback used to evaluate queries. May be unset for queries that
+  // do not involve views.
+  QueryEvaluator* query_evaluator_ = nullptr;
 
   // Mutex to protect state below.
   mutable absl::Mutex mu_;

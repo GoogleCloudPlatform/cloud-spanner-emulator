@@ -2124,6 +2124,139 @@ TEST_F(CheckConstraint, ParseSyntaxErrorsInCheckConstraint) {
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
+TEST(CreateChangeStream, CanParseCreateChangeStreamForAll) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
+      ALL)sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_change_stream {
+                  change_stream_name: "ChangeStream"
+                  for_clause { all: true }
+                })pb")));
+}
+
+TEST(CreateChangeStream, CanParseCreateChangeStreamForExplicitEntireTable) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
+      TestTable)sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_change_stream {
+                  change_stream_name: "ChangeStream"
+                  for_clause {
+                    tracked_tables {
+                      table_entry { table_name: "TestTable" all_columns: true }
+                    }
+                  }
+                })pb")));
+}
+
+TEST(CreateChangeStream, CanParseCreateChangeStreamForExplicitTablePkOnly) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
+      TestTable())sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_change_stream {
+                  change_stream_name: "ChangeStream"
+                  for_clause {
+                    tracked_tables {
+                      table_entry {
+                        table_name: "TestTable"
+                        tracked_columns {}
+                      }
+                    }
+                  }
+                })pb")));
+}
+
+TEST(CreateChangeStream,
+     CanParseCreateChangeStreamForExplicitTableExplicitColumn) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
+      TestTable(TestCol))sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_change_stream {
+                  change_stream_name: "ChangeStream"
+                  for_clause {
+                    tracked_tables {
+                      table_entry {
+                        table_name: "TestTable"
+                        tracked_columns { column_name: "TestCol" }
+                      }
+                    }
+                  }
+                })pb")));
+}
+
+TEST(CreateChangeStream,
+     CanParseCreateChangeStreamSetOptionsDataRetentionPeriod) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
+      ALL OPTIONS ( retention_period = '36h' ))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_change_stream {
+          change_stream_name: "ChangeStream"
+          for_clause { all: true }
+          set_options { option_name: "retention_period" string_value: "36h" }
+        })pb")));
+}
+
+TEST(CreateChangeStream, CanParseCreateChangeStreamSetOptionsValueCaptureType) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
+      ALL OPTIONS ( value_capture_type = 'NEW_ROW' ))sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_change_stream {
+                  change_stream_name: "ChangeStream"
+                  for_clause { all: true }
+                  set_options {
+                    option_name: "value_capture_type"
+                    string_value: "NEW_ROW"
+                  }
+                })pb")));
+}
+
+TEST(AlterChangeStream,
+     CanParseAlterChangeStreamSetOptionsDataRetentionPeriod) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM ChangeStream SET OPTIONS ( retention_period = '7d' ))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_change_stream {
+          change_stream_name: "ChangeStream"
+          set_options {
+            options { option_name: "retention_period" string_value: "7d" }
+          }
+        })pb")));
+}
+
+TEST(AlterChangeStream, CanParseAlterChangeStreamSetOptionsValueCaptureType) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM ChangeStream SET OPTIONS ( value_capture_type = 'NEW_VALUES' ))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_change_stream {
+          change_stream_name: "ChangeStream"
+          set_options {
+            options {
+              option_name: "value_capture_type"
+              string_value: "NEW_VALUES"
+            }
+          }
+        })pb")));
+}
+
+TEST(AlterChangeStream, CanParseAlterChangeStreamSuspend) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(ALTER CHANGE STREAM ChangeStream DROP FOR ALL )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_change_stream {
+                  change_stream_name: "ChangeStream"
+                  drop_for_clause { all: true }
+                })pb")));
+}
+
+TEST(DropChangeStream, CanParseDropChangeStream) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(DROP CHANGE STREAM ChangeStream)sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        drop_change_stream { change_stream_name: "ChangeStream" })pb")));
+}
+
 TEST(ParseViews, CreateViewNoSqlSecurity) {
   // The parser is able to parse this, but should be rejected during
   // schema update.

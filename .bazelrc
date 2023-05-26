@@ -1,4 +1,5 @@
 build --cxxopt=-std=c++17
+build --host_cxxopt=-std=c++17
 
 # gRPC has some issues with building under bazel on MacOS with thread-locals.
 # See https://github.com/bazelbuild/bazel/issues/4341 for more details. This

@@ -32,6 +32,10 @@ using ::riegeli::CFileReader;
 
 static constexpr char kCsvSeparator = ',';
 
+// This is used to create c++ code which are used to populate information
+// schema. It reads information schema data from csv files and
+// populates a header file with a static vector.
+
 std::string PopulateInfoSchemaColumnsMetadata() {
   std::string metadata_code =
       R"(struct ColumnsMetaEntry {
@@ -137,6 +141,57 @@ inline const std::vector<IndexColumnsMetaEntry>& IndexColumnsMetadata() {
   return metadata_for_index_code;
 }
 
+std::string PopulateSpannerSysColumnsMetadata() {
+  std::string metadata_code =
+      R"(struct SpannerSysColumnsMetaEntry {
+  const char* table_name;
+  const char* column_name;
+  const char* is_nullable;
+  const char* spanner_type;
+  int primary_key_ordinal;
+};
+
+inline const std::vector<SpannerSysColumnsMetaEntry>&
+SpannerSysColumnsMetadata() {
+  // clang-format off
+  static const zetasql_base::NoDestructor<std::vector<SpannerSysColumnsMetaEntry>>
+      kSpannerSysColumnsMetadata({
+)";
+
+  // clang-format off
+  constexpr absl::string_view kSpannerSysColumnsMetadata =
+      "backend/query/spanner_sys_columns_metadata.csv"; // NOLINT
+  // clang-format on
+  CsvReaderBase::Options options;
+  options.set_field_separator(kCsvSeparator);
+  options.set_required_header({"table_name", "column_name", "is_nullable",
+                               "spanner_type", "ordinal_position"});
+  CFileReader file_reader = CFileReader(kSpannerSysColumnsMetadata);
+  CsvReader csv_reader(&file_reader, options);
+  ZETASQL_CHECK(csv_reader.status().ok())
+      << "Error reading csv file:" << csv_reader.status();
+  absl::StrAppend(&metadata_code, "  // NOLINTBEGIN(whitespace/line_length)\n");
+  for (CsvRecord record; csv_reader.ReadRecord(record);) {
+    std::string table_name = absl::StrCat("\"", record["table_name"], "\"");
+    std::string column_name = absl::StrCat("\"", record["column_name"], "\"");
+    std::string is_nullable = absl::StrCat("\"", record["is_nullable"], "\"");
+    std::string spanner_type = absl::StrCat("\"", record["spanner_type"], "\"");
+    std::string ordinal_position = record["ordinal_position"];
+    absl::StrAppend(&metadata_code, "    {", table_name, ", ", column_name,
+                    ", ", is_nullable, ", ", spanner_type, ", ",
+                    ordinal_position, "},\n");
+  }
+  absl::StrAppend(&metadata_code, R"(  });
+  // NOLINTEND(whitespace/line_length)
+  // clang-format on
+    return *kSpannerSysColumnsMetadata;
+}
+
+)");
+  ZETASQL_CHECK(csv_reader.Close()) << csv_reader.status();
+  return metadata_code;
+}
+
 int main(int argc, char* argv[]) {
   absl::ParseCommandLine(argc, argv);
 
@@ -157,6 +212,7 @@ namespace google::spanner::emulator::backend {
 
 $1
 $2
+$3
 }  // namespace google::spanner::emulator::backend
 
 #endif  // $0
@@ -167,7 +223,7 @@ $2
       kTemplate,
       "THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_INFO_SCHEMA_",
       PopulateInfoSchemaColumnsMetadata(),
-      PopulateInfoSchemaColumnsMetadataForIndex());
-
+      PopulateInfoSchemaColumnsMetadataForIndex(),
+      PopulateSpannerSysColumnsMetadata());
   return 0;
 }

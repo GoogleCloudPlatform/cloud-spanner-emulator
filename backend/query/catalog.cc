@@ -35,6 +35,7 @@
 #include "backend/query/function_catalog.h"
 #include "backend/query/information_schema_catalog.h"
 #include "backend/query/queryable_table.h"
+#include "backend/query/queryable_view.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
@@ -78,7 +79,8 @@ class NetCatalog : public zetasql::Catalog {
 
 Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
                  zetasql::TypeFactory* type_factory,
-                 const zetasql::AnalyzerOptions& options, RowReader* reader)
+                 const zetasql::AnalyzerOptions& options, RowReader* reader,
+                 QueryEvaluator* query_evaluator)
     : schema_(schema),
       function_catalog_(function_catalog),
       type_factory_(type_factory) {
@@ -88,8 +90,10 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
         table, reader, options, this, type_factory);
   }
 
+  // Pass the query_evaluator to views.
   for (const auto* view : schema->views()) {
-    views_[view->Name()] = std::make_unique<QueryableView>(view);
+    views_[view->Name()] =
+        std::make_unique<QueryableView>(view, query_evaluator);
   }
 }
 

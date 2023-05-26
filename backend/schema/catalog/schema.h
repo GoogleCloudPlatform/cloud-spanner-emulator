@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "absl/types/span.h"
 #include "backend/common/case.h"
 #include "backend/schema/catalog/change_stream.h"
@@ -34,6 +35,8 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+namespace database_api = ::google::spanner::admin::database::v1;
 
 // Schema represents a single generation of schema of a database. It is an
 // abstract class that provides a convenient interface for looking up schema
@@ -71,6 +74,9 @@ class Schema {
   // Finds an index by its name. Returns a const pointer of the index, or
   // nullptr if the index is not found. Name comparison is case-insensitive.
   const Index* FindIndex(const std::string& index_name) const;
+
+  // Same as FindIndex but case-sensitive.
+  const Index* FindIndexCaseSensitive(const std::string& index_name) const;
 
   // Finds a change stream by its name. Returns a const pointer of the change
   // stream, or nullptr if the change stream is not found. Name comparison is

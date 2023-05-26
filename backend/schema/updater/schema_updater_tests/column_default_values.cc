@@ -78,6 +78,25 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, NonKeyColumns) {
   EXPECT_EQ(col->dependent_columns().size(), 0);
 }
 
+TEST_F(ColumnDefaultValueSchemaUpdaterTest, FunctionAsDefault) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+        CREATE TABLE T (
+          K INT64 NOT NULL,
+          V TIMESTAMP DEFAULT (CURRENT_TIMESTAMP())
+        ) PRIMARY KEY(K)
+      )"}));
+
+  const Table* table = schema->FindTable("T");
+  ASSERT_NE(table, nullptr);
+  const Column* col = table->FindColumn("V");
+  ASSERT_NE(col, nullptr);
+  EXPECT_EQ(col->Name(), "V");
+  EXPECT_FALSE(col->is_generated());
+  EXPECT_TRUE(col->has_default_value());
+  EXPECT_TRUE(col->expression().has_value());
+  EXPECT_EQ(col->expression().value(), "CURRENT_TIMESTAMP()");
+}
+
 TEST_F(ColumnDefaultValueSchemaUpdaterTest, KeyColumn) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       auto schema,

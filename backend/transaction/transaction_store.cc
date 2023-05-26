@@ -17,6 +17,7 @@
 #include "backend/transaction/transaction_store.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <variant>
@@ -32,6 +33,7 @@
 #include "backend/locking/request.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/storage/in_memory_iterator.h"
 #include "backend/storage/iterator.h"
 #include "backend/transaction/commit_timestamp.h"
 #include "common/errors.h"
@@ -200,20 +202,21 @@ absl::Status TransactionStore::Read(
     for (auto itr = begin_itr; itr != end_itr; ++itr) {
       if (itr->second.first == OpType::kInsert) {
         // Add inserts into the StorageIterator.
-        Row row_values = itr->second.second;
+        const Row& row_values = itr->second.second;
         ValueList values;
         values.reserve(columns.size());
         for (const Column* column : columns) {
           if (row_values.find(column) == row_values.end()) {
             values.emplace_back(zetasql::values::Null(column->GetType()));
           } else {
-            values.emplace_back(row_values[column]);
+            values.emplace_back(row_values.at(column));
           }
         }
-        rows.emplace_back(std::make_pair(itr->first, values));
+        rows.emplace_back(itr->first, std::move(values));
       }
     }
   }
+  auto buffered_rows_count = rows.size();
 
   // Read from the base storage and apply the changes buffered in transaction
   // store.
@@ -256,7 +259,7 @@ absl::Status TransactionStore::Read(
         }
       }
     }
-    rows.emplace_back(std::make_pair(base_itr->Key(), values));
+    rows.emplace_back(base_itr->Key(), std::move(values));
   }
 
   // Pending commit timestamp values in buffer cannot be returned to
@@ -276,10 +279,14 @@ absl::Status TransactionStore::Read(
     }
   }
 
-  // Sort the keys to provide iterating in order.
-  // Note: this can be optimized by iterating the base_store_iterator and
-  // transaction_store_ietrator in parallel and comparing the keys.
-  std::sort(rows.begin(), rows.end(), SortByKey);
+  // The keys need to be sorted to provide iterating in order. The rows added
+  // from buffered ops and the ones added from base storage were already in
+  // sorted order respectively. Merge these two sorted subarrays to get overall
+  // sorted order.
+  ZETASQL_DCHECK(buffered_rows_count <= rows.size())
+      << buffered_rows_count << " vs " << rows.size();
+  auto first_base_row_iter = rows.begin() + buffered_rows_count;
+  std::inplace_merge(rows.begin(), first_base_row_iter, rows.end(), SortByKey);
   *storage_itr = std::make_unique<FixedRowStorageIterator>(std::move(rows));
   return absl::OkStatus();
 }

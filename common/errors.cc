@@ -1749,6 +1749,15 @@ absl::Status CannotUseCommitTimestampOnGeneratedColumnDependency(
                        column_name));
 }
 
+absl::Status CannotUseGeneratedColumnInPrimaryKey(
+    absl::string_view table_name, absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Generated column `$0.$1` cannot be part of the "
+                       "primary key.",
+                       table_name, column_name));
+}
+
 absl::Status CannotWriteToGeneratedColumn(absl::string_view table_name,
                                           absl::string_view column_name) {
   return absl::Status(
@@ -1813,43 +1822,6 @@ absl::Status DefaultPKNeedsExplicitValue(absl::string_view column_name,
           "Implicit use of primary key default value for column `$0` is not "
           "allowed in $1 mutations. The column must have a specific value.",
           column_name, op_name));
-}
-
-absl::Status GeneratedPKNeedsExplicitValue(absl::string_view column_name) {
-  return absl::Status(
-      absl::StatusCode::kFailedPrecondition,
-      absl::Substitute(
-          "The value of generated primary key column `$0` must be explicitly "
-          "specified or else its non-key dependent columns must be specified "
-          "in Update mutations.",
-          column_name));
-}
-
-absl::Status GeneratedPkModified(absl::string_view column_name) {
-  return absl::Status(
-      absl::StatusCode::kOutOfRange,
-      absl::Substitute(
-          "The value of generated primary key column `$0` cannot be modified "
-          "when its non-key dependent columns are updated.",
-          column_name));
-}
-
-absl::Status NeedAllDependentColumnsForGpk(absl::string_view column_name) {
-  return absl::Status(
-      absl::StatusCode::kFailedPrecondition,
-      absl::Substitute(
-          "The value of generated primary key column `$0` cannot be evaluated "
-          "since value of all its dependent columns is not specified. ",
-          column_name));
-}
-
-absl::Status UserSuppliedValueInNonUpdateGpk(absl::string_view column_name) {
-  return absl::Status(
-      absl::StatusCode::kInvalidArgument,
-      absl::Substitute(
-          "The value of generated primary key column `$0` cannot be specified "
-          "in operations except update operations.",
-          column_name));
 }
 
 absl::Status CannotSetDefaultValueOnGeneratedColumn(
@@ -2344,7 +2316,7 @@ absl::Status TooManyViewsPerDatabase(absl::string_view function_name,
 absl::Status ViewRequiresInvokerSecurity(absl::string_view view_name) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
-      absl::Substitute("View `$0` is missing the SQL SECURITY INVOKER clause.",
+      absl::Substitute("View `$0` is missing the SQL SECURITY clause.",
                        view_name));
 }
 
@@ -2432,7 +2404,10 @@ absl::Status ViewNotFound(absl::string_view view_name) {
   return absl::Status(absl::StatusCode::kNotFound,
                       absl::Substitute("View not found: $0", view_name));
 }
-
+absl::Status WithViewsAreNotSupported() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "WITH clauses are unsupported in view definitions.");
+}
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

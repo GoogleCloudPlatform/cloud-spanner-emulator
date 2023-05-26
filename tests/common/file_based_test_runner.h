@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "absl/status/status.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -56,6 +57,7 @@ struct FileBasedTestCaseInput {
 // Output for a file based test case.
 struct FileBasedTestCaseOutput {
   std::string text;
+  std::optional<absl::StatusCode> status_code;
 };
 
 // Container for input and exected result of a file-based test case.

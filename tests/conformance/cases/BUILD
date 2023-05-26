@@ -65,11 +65,13 @@ cc_library(
         "transaction_errors.cc",
         "transactions.cc",
         "values.cc",
+        "views.cc",
     ],
     data = [
         "//tests/conformance/data/schema_changes:test_files",
     ],
     deps = [
+        "//common:feature_flags",
         "//tests/common:file_based_test_runner",
         "//tests/common:proto_matchers",
         "//tests/common:scoped_feature_flags_setter",

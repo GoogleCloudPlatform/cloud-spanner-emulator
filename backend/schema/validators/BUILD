@@ -54,6 +54,7 @@ cc_library(
         "//backend/schema/updater:sql_expression_validators",
         "//backend/schema/verifiers:column_value_verifiers",
         "//common:errors",
+        "//common:feature_flags",
         "//common:limits",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",

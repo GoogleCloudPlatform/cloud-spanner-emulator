@@ -52,6 +52,7 @@ namespace ddl {
 typedef google::protobuf::RepeatedPtrField<SetOption> OptionList;
 
 const char kCommitTimestampOptionName[] = "allow_commit_timestamp";
+const char kPGCommitTimestampOptionName[] = "commit_timestamp";
 const char kChangeStreamValueCaptureTypeOptionName[] = "value_capture_type";
 const char kChangeStreamRetentionPeriodOptionName[] = "retention_period";
 

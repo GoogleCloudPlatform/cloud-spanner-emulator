@@ -53,7 +53,9 @@ class InformationSchemaTest : public DatabaseTest {
          "  TimestampArray ARRAY<TIMESTAMP>,"
          "  DateArray ARRAY<DATE>,"
          "  GenValue INT64 AS (Key1 + 1) STORED,"
+         "  GenFunctionValue INT64 AS (LENGTH(Key2)) STORED,"
          "  DefaultColValue INT64 DEFAULT (100),"
+         "  DefaultTimestampColValue TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()),"
          "  CONSTRAINT CheckConstraintName CHECK(IntValue > 0),"
          "  CHECK(IntValue > 0),"
          ") PRIMARY KEY (Key1, Key2 DESC)",
@@ -96,8 +98,8 @@ class InformationSchemaTest : public DatabaseTest {
 
   // Information schema tables not yet supported.
   const std::pair<std::string, Value> kUnsupportedTables{
-      "unsupported_tables", std::vector<std::string>({
-                                "CHANGE_STREAMS",
+      "unsupported_tables",
+      std::vector<std::string>({"CHANGE_STREAMS",
                                 "CHANGE_STREAM_COLUMNS",
                                 "CHANGE_STREAM_OPTIONS",
                                 "CHANGE_STREAM_PRIVILEGES",
@@ -115,7 +117,10 @@ class InformationSchemaTest : public DatabaseTest {
                                 "ROUTINES",
                                 "ROUTINE_OPTIONS",
                                 "ROUTINE_PRIVILEGES",
-                            })};
+                                "ROLE_TABLE_GRANTS",
+                                "ROLE_COLUMN_GRANTS",
+                                "ROLE_CHANGE_STREAM_GRANTS",
+                                "ROLE_ROUTINE_GRANTS"})};
 
   // Information schema columns not yet supported.
   const std::pair<std::string, Value> kUnsupportedColumns{
@@ -688,6 +693,10 @@ TEST_F(InformationSchemaTest, MetaCheckConstraints) {
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_TABLE_PRIVILEGES%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLES%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_GRANTEES%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_TABLE_GRANTS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_COLUMN_GRANTS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_CHANGE_STREAM_GRANTS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_ROUTINE_GRANTS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODELS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_OPTIONS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMNS%'
@@ -1298,7 +1307,9 @@ TEST_F(InformationSchemaTest, DefaultColumns) {
     {"", "", "Base", "TimestampArray", 15, Ns(), Ns(), "YES", "ARRAY<TIMESTAMP>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "Base", "DateArray", 16, Ns(), Ns(), "YES", "ARRAY<DATE>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "Base", "GenValue", 17, Ns(), Ns(), "YES", "INT64", "ALWAYS", "Key1 + 1", "YES", "COMMITTED"},  // NOLINT
-    {"", "", "Base", "DefaultColValue", 18, "100", Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "Base", "GenFunctionValue", 18, Ns(), Ns(), "YES", "INT64", "ALWAYS", "LENGTH(Key2)", "YES", "COMMITTED"},  // NOLINT
+    {"", "", "Base", "DefaultColValue", 19, "100", Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "Base", "DefaultTimestampColValue", 20, "CURRENT_TIMESTAMP()", Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "CascadeChild", "Key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "CascadeChild", "Key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "CascadeChild", "ChildKey", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT

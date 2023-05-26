@@ -40,6 +40,7 @@ cc_library(
         ":query_validator",
         ":queryable_column",
         ":queryable_table",
+        ":queryable_view",
         "//backend/access:read",
         "//backend/access:write",
         "//backend/common:case",
@@ -84,6 +85,7 @@ cc_test(
         ":query_engine",
         "//backend/access:read",
         "//backend/access:write",
+        "//backend/actions:manager",
         "//backend/datamodel:key_set",
         "//backend/datamodel:value",
         "//backend/schema/catalog:schema",
@@ -96,6 +98,7 @@ cc_test(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_grpc",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:type",
@@ -150,6 +153,7 @@ cc_library(
     deps = [
         ":query_validator",
         "//common:constants",
+        "//common:errors",
         "@com_google_absl//absl/status",
     ],
 )
@@ -226,6 +230,7 @@ genrule(
     srcs = [
         "info_schema_columns_metadata.csv",
         "info_schema_columns_metadata_for_index.csv",
+        "spanner_sys_columns_metadata.csv",
     ],
     outs = ["info_schema_columns_metadata_values.h"],
     cmd = "$(location :populate_info_schema_columns_metadata) > $@",
@@ -244,7 +249,7 @@ cc_library(
         "//backend/schema/printer:print_ddl",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:variant",
-        "@com_google_zetasql//zetasql/base:no_destructor",
+        "@com_google_zetasql//zetasql/base:no_destructor",  # buildcleaner: keep
         "@com_google_zetasql//zetasql/public:simple_catalog",
     ],
 )
@@ -390,6 +395,7 @@ cc_library(
     deps = [
         "//backend/access:read",
         "//backend/schema/catalog:schema",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

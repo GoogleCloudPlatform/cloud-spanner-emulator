@@ -59,6 +59,7 @@
 #include "backend/query/query_validator.h"
 #include "backend/query/queryable_column.h"
 #include "backend/query/queryable_table.h"
+#include "backend/query/queryable_view.h"
 #include "common/config.h"
 #include "common/constants.h"
 #include "common/errors.h"
@@ -654,6 +655,27 @@ class ExtractDmlTargetTableVisitor : public zetasql::ResolvedASTVisitor {
   std::optional<std::string> target_table_;
 };
 
+// A QueryEvaluator instance against a specific QueryEngine and QueryContext.
+class QueryEvaluatorForEngine : public QueryEvaluator {
+ public:
+  QueryEvaluatorForEngine(const QueryEngine& query_engine,
+                          const QueryContext& query_context)
+      : query_engine_(query_engine), query_context_(query_context) {}
+  ~QueryEvaluatorForEngine() override = default;
+
+  absl::StatusOr<std::unique_ptr<RowCursor>> Evaluate(
+      const std::string& query) override {
+    Query q{/*sql=*/query, /*declared_params=*/{}, /*undeclared_params=*/{}};
+
+    ZETASQL_ASSIGN_OR_RETURN(auto result, query_engine_.ExecuteSql(q, query_context_));
+    return std::move(result.rows);
+  }
+
+ private:
+  const QueryEngine& query_engine_;
+  const QueryContext& query_context_;
+};
+
 }  // namespace
 
 absl::StatusOr<std::string> QueryEngine::GetDmlTargetTable(
@@ -686,12 +708,13 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
                    MakeAnalyzerOptionsWithParameters(query.declared_params));
   analyzer_options.set_prune_unused_columns(true);
 
-  Catalog catalog{context.schema, &function_catalog_, type_factory_,
-                  analyzer_options, context.reader};
+  QueryEvaluatorForEngine view_evaluator(*this, context);
+  Catalog catalog{context.schema,   &function_catalog_, type_factory_,
+                  analyzer_options, context.reader,     &view_evaluator};
 
-  ZETASQL_ASSIGN_OR_RETURN(
-      auto analyzer_output,
-      Analyze(query.sql, &catalog, analyzer_options, type_factory_));
+  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
+    ZETASQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(query.sql, &catalog,
+                                              analyzer_options, type_factory_));
 
   ZETASQL_ASSIGN_OR_RETURN(auto params,
                    ExtractParameters(query, analyzer_output.get()));
@@ -709,10 +732,10 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
   } else {
     ZETASQL_RET_CHECK_NE(context.writer, nullptr);
     analyzer_options.set_prune_unused_columns(false);
-    ZETASQL_ASSIGN_OR_RETURN(
-        auto analyzer_output,
-        Analyze(query.sql, &catalog, analyzer_options, type_factory_));
-    ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
+      ZETASQL_ASSIGN_OR_RETURN(
+          analyzer_output,
+          Analyze(query.sql, &catalog, analyzer_options, type_factory_));
+    ZETASQL_ASSIGN_OR_RETURN(resolved_statement,
                      ExtractValidatedResolvedStatementAndOptions(
                          analyzer_output.get(), context.schema));
 
@@ -735,9 +758,10 @@ absl::Status QueryEngine::IsPartitionable(const Query& query,
   analyzer_options.set_prune_unused_columns(true);
   Catalog catalog{context.schema, &function_catalog_, type_factory_,
                   analyzer_options};
-  ZETASQL_ASSIGN_OR_RETURN(
-      auto analyzer_output,
-      Analyze(query.sql, &catalog, analyzer_options, type_factory_));
+
+  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
+    ZETASQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(query.sql, &catalog,
+                                              analyzer_options, type_factory_));
 
   QueryEngineOptions options;
   ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,

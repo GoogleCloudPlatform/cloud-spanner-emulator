@@ -264,8 +264,10 @@ absl::Status GetDatabaseDdl(RequestContext* ctx,
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Database> database,
                    GetDatabase(ctx, request->database()));
 
-  for (const auto& statement :
-       backend::PrintDDLStatements(database->backend()->GetLatestSchema())) {
+  absl::StatusOr<std::vector<std::string>> printed_statements =
+      backend::PrintDDLStatements(database->backend()->GetLatestSchema());
+  ZETASQL_RETURN_IF_ERROR(printed_statements.status());
+  for (const auto& statement : *printed_statements) {
     response->add_statements(statement);
   }
   return absl::OkStatus();

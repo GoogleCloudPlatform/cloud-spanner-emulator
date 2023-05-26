@@ -20,14 +20,17 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/substitute.h"
 #include "backend/common/case.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/check_constraint.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/parser/ddl_reserved_words.h"
 
 namespace google {
@@ -209,6 +212,23 @@ std::string PrintTable(const Table* table) {
   return table_string;
 }
 
+void TopologicalOrderViews(const View* view,
+                           absl::flat_hash_set<const SchemaNode*>* visited,
+                           std::vector<const View*>* views) {
+  if (visited->find(view) != visited->end()) {
+    return;
+  }
+  visited->insert(view);
+  for (auto dependency : view->dependencies()) {
+    auto view_dep = dependency->As<const View>();
+    if (view_dep == nullptr) {
+      continue;
+    }
+    TopologicalOrderViews(view_dep, visited, views);
+  }
+  views->push_back(view);
+}
+
 std::string PrintCheckConstraint(const CheckConstraint* check_constraint) {
   std::string out;
   if (!check_constraint->has_generated_name()) {
@@ -233,7 +253,8 @@ std::string PrintForeignKey(const ForeignKey* foreign_key) {
   return out;
 }
 
-std::vector<std::string> PrintDDLStatements(const Schema* schema) {
+absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
+    const Schema* schema) {
   std::vector<std::string> statements;
 
   // Print tables
@@ -254,9 +275,12 @@ std::vector<std::string> PrintDDLStatements(const Schema* schema) {
   }
 
   // Print views that depend on the tables/indexes.
-  // Views should already be in the topological order in this so dependencies
-  // should be printed before depending views.
+  absl::flat_hash_set<const SchemaNode*> visited;
+  std::vector<const View*> views;
   for (auto view : schema->views()) {
+    TopologicalOrderViews(view, &visited, &views);
+  }
+  for (auto view : views) {
     statements.push_back(PrintView(view));
   }
   return statements;

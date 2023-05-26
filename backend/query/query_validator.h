@@ -33,7 +33,8 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-// Implements ResolvedASTVisitor to validate various nodes in an AST.
+// Implements ResolvedASTVisitor to validate various nodes in an AST and
+// collect information of interest (such as index names).
 class QueryValidator : public zetasql::ResolvedASTVisitor {
  public:
   explicit QueryValidator(const Schema* schema,
@@ -44,6 +45,12 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
         language_options_(std::move(language_options)),
         sql_features_(SqlFeaturesView()),
         extracted_options_(extracted_options) {}
+
+  // Returns the list of indexes used by the query being validated. Must
+  // be called after the entire tree has been visited.
+  const absl::flat_hash_set<const Index*>& indexes_used() const {
+    return indexes_used_;
+  }
 
  protected:
   absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override;
@@ -69,7 +76,7 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
 
  private:
   // Validates the child hint nodes of `node`.
-  absl::Status ValidateHints(const zetasql::ResolvedNode* node) const;
+  absl::Status ValidateHints(const zetasql::ResolvedNode* node);
 
   // Returns an OK if `name` is a supported hint name for nodes with kind
   // `node_kind`; otherwise, returns an invalid argument error.
@@ -90,8 +97,7 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
   absl::Status CheckHintValue(
       absl::string_view name, const zetasql::Value& value,
       const zetasql::ResolvedNodeKind node_kind,
-      const absl::flat_hash_map<absl::string_view, zetasql::Value>& hint_map)
-      const;
+      const absl::flat_hash_map<absl::string_view, zetasql::Value>& hint_map);
 
   // Extracts query engine options from any Emulator-specific hints
   // 'node_hint_map' for a node.
@@ -104,6 +110,9 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
   const zetasql::LanguageOptions language_options_;
 
   const SqlFeaturesView sql_features_;
+
+  // List of indexes used by the query being validated.
+  absl::flat_hash_set<const Index*> indexes_used_;
 
   // Options for the query engine that are extracted through user-specified
   // hints.

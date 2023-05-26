@@ -122,56 +122,15 @@ absl::Status ValidateGeneratedColumnsNotPresent(
   return absl::OkStatus();
 }
 
-bool AreAllDependentColumnsPresent(const Column* column,
-                                   const std::vector<const Column*>& columns) {
-  // Checks if user has supplied values for all dependent columns of a key
-  // generated column.
-  ZETASQL_DCHECK(column->is_generated());
-  for (const Column* dep_col : column->dependent_columns()) {
-    // A generated dependent column should have all dependent columns on the
-    // generated column present.
-    // Non-generated dependent column should be specified by user.
-    if (dep_col->is_generated() &&
-        column->table()->FindKeyColumn(dep_col->Name()) != nullptr) {
-      if (!AreAllDependentColumnsPresent(dep_col, columns)) {
-        return false;
-      }
-    } else if (std::find(columns.begin(), columns.end(), dep_col) ==
-               columns.end()) {
-      return false;
-    }
-  }
-  return true;
-}
-
-// During update op, validate that all default primary keys are present,
-// and that all the generated key or the dependent columns are present.
-// During ops other than update (insert,insertorupdate,replace) validate that
-// all columns dependent on a generated key column are present.
-absl::Status ValidateDefaultAndGeneratedKeys(
-    const Table* table, const std::vector<const Column*>& columns,
-    MutationOpType op_type) {
+// Validate that all default primary keys are present in an UPDATE op.
+ABSL_ATTRIBUTE_UNUSED absl::Status ValidateDefaultKeysInUpdateOp(
+    const Table* table, const std::vector<const Column*>& columns) {
   for (const KeyColumn* key_column : table->primary_key()) {
     const Column* column = key_column->column();
-    bool user_supplied_value =
-        std::find(columns.begin(), columns.end(), column) != columns.end();
-    // For update mutations user should supply explicit value for default key
-    // columns.
-    if (column->has_default_value() && !user_supplied_value &&
-        op_type == MutationOpType::kUpdate) {
+    if (column->has_default_value() &&
+        std::find(columns.begin(), columns.end(), column) == columns.end()) {
+      // This key column has to be present in the column list of the op:
       return error::DefaultPKNeedsExplicitValue(column->FullName(), "UPDATE");
-    } else if (column->is_generated() && !user_supplied_value &&
-               !AreAllDependentColumnsPresent(column, columns)) {
-      // For update mutations user should either supply value for generated key
-      // columns or should supply values for all dependent columns on the key
-      // column.
-      if (op_type == MutationOpType::kUpdate) {
-        return error::GeneratedPKNeedsExplicitValue(column->FullName());
-      } else {
-        // For mutations other than update, user should supply value for all
-        // dependent columns on key column.
-        return error::NeedAllDependentColumnsForGpk(column->FullName());
-      }
     }
   }
   return absl::OkStatus();
@@ -298,9 +257,9 @@ absl::Status ValidateNonDeleteMutationOp(const MutationOp& mutation_op,
   ZETASQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
                    GetColumnsByName(table, mutation_op.columns));
 
-  ZETASQL_RETURN_IF_ERROR(
-      ValidateDefaultAndGeneratedKeys(table, columns, mutation_op.type));
-  if (mutation_op.type != MutationOpType::kUpdate) {
+    if (mutation_op.type == MutationOpType::kUpdate) {
+      ZETASQL_RETURN_IF_ERROR(ValidateDefaultKeysInUpdateOp(table, columns));
+    } else {
     // Insert, InsertOrUpdate and Replace mutation ops require that all
     // not-null columns be present in the mutation. Note: this check is
     // specifically done before InsertOrUpdate & Replace mutation ops are

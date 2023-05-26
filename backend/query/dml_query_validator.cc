@@ -19,6 +19,7 @@
 #include <string>
 
 #include "common/constants.h"
+#include "common/errors.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -35,6 +36,15 @@ absl::Status DMLQueryValidator::VisitResolvedFunctionCall(
   }
   // Check for other generally-available functions.
   return QueryValidator::VisitResolvedFunctionCall(node);
+}
+
+absl::Status DMLQueryValidator::VisitResolvedReturningClause(
+    const zetasql::ResolvedReturningClause* node) {
+  for (const auto& column : node->output_column_list()) {
+    if (column->column().type()->IsStruct())
+      return error::UnsupportedReturnStructAsColumn();
+  }
+  return absl::OkStatus();
 }
 
 }  // namespace backend

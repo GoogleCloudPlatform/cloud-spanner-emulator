@@ -101,6 +101,7 @@ cc_library(
         "schema_constructor.h",
     ],
     deps = [
+        ":scoped_feature_flags_setter",
         "//backend/schema/catalog:schema",
         "//backend/schema/updater:schema_updater",
         "@com_google_absl//absl/memory",
@@ -163,9 +164,11 @@ cc_library(
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googleapis//google/rpc:code_cc_proto",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_googlesource_code_re2//:re2",
     ],
 )
 

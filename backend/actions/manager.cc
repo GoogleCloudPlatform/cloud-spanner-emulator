@@ -147,12 +147,13 @@ void ActionRegistry::BuildActionRegistry() {
     }
 
     // A set containing key columns with default/generated values.
-    absl::flat_hash_set<std::string> default_or_generated_key_columns;
-    // Effector for primary key default and generated columns.
+    absl::flat_hash_set<std::string> default_key_columns;
+    // Effector for primary key default columns.
     for (const Column* column : table->columns()) {
-      if ((column->has_default_value() || column->is_generated()) &&
+      if ((column->has_default_value()
+           ) &&
           table->FindKeyColumn(column->Name()) != nullptr) {
-        default_or_generated_key_columns.insert(column->Name());
+        default_key_columns.insert(column->Name());
         table_generated_key_effectors_[table->Name()] =
             std::make_unique<GeneratedColumnEffector>(table, &catalog_,
                                                       /*for_keys=*/true);
@@ -162,7 +163,7 @@ void ActionRegistry::BuildActionRegistry() {
 
     // Effector for non-key generated and default columns.
     for (const Column* column : table->columns()) {
-      if (!default_or_generated_key_columns.contains(column->Name()) &&
+          if (!default_key_columns.contains(column->Name()) &&
           (column->is_generated() || column->has_default_value())) {
         table_effectors_[table].emplace_back(
             std::make_unique<GeneratedColumnEffector>(table, &catalog_));

@@ -300,6 +300,8 @@ CREATE TABLE Users (
   id INT64 NOT NULL,
   id_plus_one INT64 NOT NULL AS (id + 1) STORED,
 ) PRIMARY KEY(id_plus_one);
+--
+Generated column `Users.id_plus_one` cannot be part of the primary key.
 ==
 # Generated column definition has a simple cycle
 # --regex

@@ -103,8 +103,17 @@ class ViewDefinitionValidator : public QueryValidator {
         dependencies_(dependencies) {}
 
  private:
+  absl::Status VisitResolvedWithScan(
+      const zetasql::ResolvedWithScan* node) override {
+    return error::WithViewsAreNotSupported();
+  }
+
   absl::Status VisitResolvedTableScan(
       const zetasql::ResolvedTableScan* scan) override {
+    // Visit the entire tree for the scan first, validating it and collecting
+    // any references to indexes. Collect the references after the view query
+    // has been determined to be valid.
+    ZETASQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedTableScan(scan));
     // The 'catalog table' referenced in the resolved AST could be a table or a
     // view.
     auto catalog_table = scan->table();
@@ -119,6 +128,7 @@ class ViewDefinitionValidator : public QueryValidator {
       // should fail analaysis.
       ZETASQL_RET_CHECK_FAIL() << "Dependency not found: " << catalog_table->Name();
     }
+
     // Add the column dependencies for the view.
     // We analyze the view with prune_unused_columns=true. This should result
     // in the resolved scan containing only the columns that are referenced in
@@ -135,7 +145,14 @@ class ViewDefinitionValidator : public QueryValidator {
                                   ->wrapped_column());
       }
     }
-    return QueryValidator::VisitResolvedTableScan(scan);
+
+    // Also add any indexes used as dependencies
+    for (const auto* index : indexes_used()) {
+      ZETASQL_RET_CHECK_NE(index, nullptr);
+      dependencies_->insert(index);
+    }
+
+    return absl::OkStatus();
   }
 
  private:

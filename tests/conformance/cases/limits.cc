@@ -129,23 +129,22 @@ TEST_F(LimitsTest, DISABLED_MaxIndexesPerDatabase) {
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
-// TODO: re-enable this test once Spanner 27.6 is official
-// and the number of indexes allowed per table is stable.
-TEST_F(LimitsTest, DISABLED_MaxIndexPerTable) {
+TEST_F(LimitsTest, MaxIndexPerTable) {
   std::vector<std::string> statements = {R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
        string_col STRING(MAX),
      ) PRIMARY KEY(int64_col)
   )"};
-  for (int i = 0; i < 64; ++i) {
+  for (int i = 0; i < 128; ++i) {
     statements.emplace_back(
         absl::StrFormat("CREATE INDEX index_%d ON test_table(string_col)", i));
   }
   ZETASQL_EXPECT_OK(UpdateSchema(statements));
 
-  EXPECT_THAT(UpdateSchema({"CREATE INDEX index_64 ON test_table(string_col)"}),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+  EXPECT_THAT(
+      UpdateSchema({"CREATE INDEX index_too_many ON test_table(string_col)"}),
+      StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(LimitsTest, MaxColumnInIndexPrimaryKey) {

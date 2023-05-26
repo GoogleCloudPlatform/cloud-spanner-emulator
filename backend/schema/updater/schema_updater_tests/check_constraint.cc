@@ -14,9 +14,18 @@
 // limitations under the License.
 //
 
+#include "backend/schema/catalog/check_constraint.h"
+
+#include <iterator>
 #include <string>
 #include <vector>
 
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
+#include "absl/types/span.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 
@@ -82,6 +91,30 @@ TEST_F(CheckConstraintSchemaUpdaterTest, Basic) {
               testing::UnorderedElementsAreArray({"K", "V"}));
 }
 
+std::vector<std::string> SchemaForCaseSensitivityTests() {
+  return {
+      "CREATE TABLE T ("
+      "  K INT64,"
+      "  V INT64,"
+      "  CONSTRAINT C1 CHECK(K > 0)"
+      ") PRIMARY KEY (K)",
+  };
+}
+
+TEST_F(CheckConstraintSchemaUpdaterTest, ColumnNameIsCaseInsensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(),
+                         {"ALTER TABLE T ADD CONSTRAINT C2 CHECK(v > 0)"}));
+}
+
+TEST_F(CheckConstraintSchemaUpdaterTest, ConstraintNameIsCaseInsensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {"ALTER TABLE T DROP CONSTRAINT c1"}));
+}
 }  // namespace
 
 }  // namespace test

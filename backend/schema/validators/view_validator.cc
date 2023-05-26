@@ -125,6 +125,9 @@ absl::Status ValidateViewSignatureChange(absl::string_view modify_action,
 absl::Status ViewValidator::Validate(const View* view,
                                      SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!view->name_.empty());
+  for (const SchemaNode* dependency : view->dependencies()) {
+    ZETASQL_RET_CHECK(!dependency->is_deleted());
+  }
 
   return absl::OkStatus();
 }
@@ -132,8 +135,12 @@ absl::Status ViewValidator::Validate(const View* view,
 absl::Status ViewValidator::ValidateUpdate(const View* view,
                                            const View* old_view,
                                            SchemaValidationContext* context) {
-  // Name should not change during cloning.
-  ZETASQL_RET_CHECK_EQ(view->Name(), old_view->Name());
+  // During a REPLACE, the view name's case can change.
+  if (context->IsModifiedNode(view)) {
+    ZETASQL_RET_CHECK(absl::EqualsIgnoreCase(view->Name(), old_view->Name()));
+  } else {
+    ZETASQL_RET_CHECK_EQ(view->Name(), old_view->Name());
+  }
   if (view->is_deleted()) {
     context->global_names()->RemoveName(view->Name());
     return absl::OkStatus();
@@ -152,29 +159,39 @@ absl::Status ViewValidator::ValidateUpdate(const View* view,
           dependency = dep_table;
         }
       }
-      return error::InvalidDropDependentViews(
-          dependency->GetSchemaNameInfo().value().kind,
-          dependency->GetSchemaNameInfo().value().name, view->Name());
+      const auto& dep_info = dependency->GetSchemaNameInfo();
+      std::string dependency_type =
+          (dep_info->global ? absl::AsciiStrToUpper(dep_info->kind)
+                            : absl::AsciiStrToLower(dep_info->kind));
+      return error::InvalidDropDependentViews(dependency_type, dep_info->name,
+                                              view->Name());
     }
 
     // If a dependency was updated during the schema change then we need to
     // re-analyze *this.
     if (context->IsModifiedNode(dependency)) {
-      std::string modify_action, dependency_name;
+      const auto& dep_info = dependency->GetSchemaNameInfo();
+      std::string dependency_type =
+          (dep_info->global ? absl::AsciiStrToUpper(dep_info->kind)
+                            : absl::AsciiStrToLower(dep_info->kind));
+      std::string modify_action = absl::StrCat("alter ", dependency_type);
+      std::string dependency_name;
       if (auto dep_view = dependency->As<const View>(); dep_view != nullptr) {
+        // TODO : In case of dependency change due to alteration
+        // of a dependency view, the original name (and not the changed name)
+        // should be reported in the error message.
         dependency_name = dep_view->Name();
-        modify_action = "alter view";
       }
       if (auto dep_table = dependency->As<const Table>();
           dep_table != nullptr) {
         dependency_name = dep_table->Name();
-        modify_action = "alter table";
       }
       if (auto dep_column = dependency->As<const Column>();
           dep_column != nullptr) {
         dependency_name = dep_column->FullName();
-        modify_action = "alter column";
       }
+      // No need to check modifications on index dependencies as indexes
+      // cannot currently be altered.
       ZETASQL_RETURN_IF_ERROR(ValidateViewSignatureChange(
           modify_action, dependency_name, view, context->tmp_new_schema(),
           context->type_factory()));
