@@ -319,6 +319,94 @@ TEST_F(SchemaUpdaterTest, DropForeignKey) {
   EXPECT_EQ(t->referencing_foreign_keys().size(), 0);
 }
 
+std::vector<std::string> SchemaForCaseSensitivityTests() {
+  return {
+      R"sql(
+                CREATE TABLE T (
+                  X INT64,
+                ) PRIMARY KEY (X)
+            )sql",
+  };
+}
+
+TEST_F(SchemaUpdaterTest, TableNameIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      CREATE TABLE T2 (
+        A INT64,
+        CONSTRAINT C FOREIGN KEY (A) REFERENCES t (X),
+      ) PRIMARY KEY (A)
+    )"}),
+              StatusIs(error::TableNotFound("t")));
+}
+
+TEST_F(SchemaUpdaterTest, ReferencedColumnNameIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      CREATE TABLE T2 (
+        A INT64,
+        CONSTRAINT C FOREIGN KEY (A) REFERENCES T (x),
+      ) PRIMARY KEY (A)
+    )"}),
+              StatusIs(error::ForeignKeyColumnNotFound("x", "T", "C")));
+
+  // Validate referenced column case sensitivity for ALTER TABLE.
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      CREATE TABLE T2 (
+        A INT64,
+      ) PRIMARY KEY (A)
+    )",
+                                          R"(
+      ALTER TABLE T2 ADD CONSTRAINT C FOREIGN KEY (A) REFERENCES T (x)
+    )"}),
+              StatusIs(error::ForeignKeyColumnNotFound("x", "T", "C")));
+}
+
+TEST_F(SchemaUpdaterTest, ReferencingColumnNameIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      CREATE TABLE T2 (
+        A INT64,
+        CONSTRAINT C FOREIGN KEY (a) REFERENCES T (X),
+      ) PRIMARY KEY (A)
+    )"}),
+              StatusIs(error::ForeignKeyColumnNotFound("a", "T2", "C")));
+
+  // Validate referencing column case sensitivity for ALTER TABLE.
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      CREATE TABLE T2 (
+        A INT64,
+      ) PRIMARY KEY (A)
+    )",
+                                          R"(
+      ALTER TABLE T2 ADD CONSTRAINT C FOREIGN KEY (a) REFERENCES T (X)
+    )"}),
+              StatusIs(error::ForeignKeyColumnNotFound("a", "T2", "C")));
+}
+
+TEST_F(SchemaUpdaterTest, ConstraintNameIsCaseInsensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+      CREATE TABLE T2 (
+        A INT64,
+      ) PRIMARY KEY (A)
+    )",
+                                        R"(
+      ALTER TABLE T2 ADD CONSTRAINT C FOREIGN KEY (A) REFERENCES T (X)
+    )",
+                                        R"(
+      ALTER TABLE T2 DROP CONSTRAINT c
+    )"}));
+}
+
 }  // namespace
 
 }  // namespace test

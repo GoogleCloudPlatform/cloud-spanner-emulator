@@ -22,12 +22,16 @@
 #include <vector>
 
 #include "zetasql/base/logging.h"
+#include "google/rpc/code.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/flags/flag.h"
+#include "absl/status/status.h"
 #include "absl/strings/match.h"
+#include "absl/strings/strip.h"
+#include "re2/re2.h"
 #include "tools/cpp/runfiles/runfiles.h"
 
 namespace google {
@@ -54,6 +58,27 @@ std::vector<FileBasedTestCase> ReadTestCasesFromFile(
   ParserState state = ParserState::kReadingInput;
 
   auto add_test_case = [&]() {
+    bool expect_error = absl::StartsWith(test_case.expected.text, "ERROR:");
+    if (expect_error) {
+      // If the expected string also contains the status code then extract that
+      // separately.
+      absl::string_view expected_textv = test_case.expected.text;
+      ASSERT_TRUE(absl::ConsumePrefix(&expected_textv, "ERROR:"));
+      expected_textv = absl::StripLeadingAsciiWhitespace(expected_textv);
+      std::string status_message = std::string(expected_textv);
+
+      std::string status_code_str;
+      google::rpc::Code status_code;
+      if (RE2::Consume(&expected_textv, "([A-Z_]+):", &status_code_str) &&
+          google::rpc::Code_Parse(status_code_str, &status_code)) {
+        test_case.expected.status_code =
+            static_cast<absl::StatusCode>(status_code);
+        expected_textv = absl::StripLeadingAsciiWhitespace(expected_textv);
+        status_message = std::string(expected_textv);
+      }
+      // Re-attach the message prefix.
+      test_case.expected.text = "ERROR:" + status_message;
+    }
     test_cases.emplace_back(std::move(test_case));
     state = ParserState::kReadingInput;
     test_case = FileBasedTestCase(file, line_no + 1);

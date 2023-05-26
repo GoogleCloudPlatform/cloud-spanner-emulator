@@ -25,11 +25,11 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 ################################################################################
 # Bazel utility rules                                                          #
 ################################################################################
-_rules_pkg_version = "0.8.0"
+_rules_pkg_version = "0.9.0"
 
 http_archive(
     name = "rules_pkg",
-    sha256 = "eea0f59c28a9241156a47d7a8e32db9122f3d50b505fae0f33de6ce4d9b61834",
+    sha256 = "335632735e625d408870ec3e361e192e99ef7462315caa887417f4d88c4c8fb8",
     urls = [
         "https://mirror.bazel.build/github.com/bazelbuild/rules_pkg/releases/download/{0}/rules_pkg-{0}.tar.gz".format(_rules_pkg_version),
         "https://github.com/bazelbuild/rules_pkg/releases/download/{0}/rules_pkg-{0}.tar.gz".format(_rules_pkg_version),
@@ -65,11 +65,11 @@ switched_rules_by_language(
 ################################################################################
 # Go Build Support                                                             #
 ################################################################################
-_rules_go_version = "v0.37.0"
+_rules_go_version = "v0.39.1"
 
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "56d8c5a5c91e1af73eca71a6fab2ced959b67c86d12ba37feedb0a2dfea441a6",
+    sha256 = "6dc2da7ab4cf5d7bfc7c949776b1b7c733f05e56edc4bcd9022bb249d2e2a996",
     urls = [
         "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/{0}/rules_go-{0}.zip".format(_rules_go_version),
         "https://github.com/bazelbuild/rules_go/releases/download/{0}/rules_go-{0}.zip.format(_rules_go_version)",
@@ -78,13 +78,13 @@ http_archive(
 
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 
-go_register_toolchains(version = "1.19.8")
+go_register_toolchains(version = "1.20.4")
 
-_bazel_gazelle_version = "0.28.0"
+_bazel_gazelle_version = "0.30.0"
 
 http_archive(
     name = "bazel_gazelle",
-    sha256 = "448e37e0dbf61d6fa8f00aaa12d191745e14f07c31cabfa731f0c8e8a4f41b97",
+    sha256 = "727f3e4edd96ea20c29e8c2ca9e8d2af724d8c7778e7923a854b2c80952bc405",
     urls = [
         "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v{0}/bazel-gazelle-v{0}.tar.gz".format(_bazel_gazelle_version),
         "https://github.com/bazelbuild/bazel-gazelle/releases/download/v{0}/bazel-gazelle-v{0}.tar.gz".format(_bazel_gazelle_version),
@@ -109,18 +109,18 @@ go_repository(
 
 go_repository(
     name = "grpc_ecosystem_grpc_gateway",
+    build_file_proto_mode = "disable_global",
     importpath = "github.com/grpc-ecosystem/grpc-gateway/v2",
     sum = "h1:1JYBfzqrWPcCclBwxFCPAou9n+q86mfnu7NAeHfte7A=",
     version = "v2.15.0",
-    build_file_proto_mode = "disable_global",
 )
 
 go_repository(
     name = "org_golang_google_genproto",
     build_file_proto_mode = "disable_global",
     importpath = "google.golang.org/genproto",
-    sum = "h1:Kd6tRRHXw8z4TlPlWi+NaK10gsePL6GdZBQChptOLGA=",
-    version = "v0.0.0-20230327215041-6ac7f18bb9d5",
+    sum = "h1:KpwkzHKEF7B9Zxg18WzOa7djJ+Ha5DzthMyZYQfEn2A=",
+    version = "v0.0.0-20230410155749-daa745c078e1",
 )
 
 go_repository(
@@ -196,9 +196,9 @@ http_archive(
 
 http_archive(
     name = "com_googlesource_code_riegeli",
-    sha256 = "218dbf85957bd8f66f0f02770d26181b7368716b3d7503252ac21f75633ba62e",
-    strip_prefix = "riegeli-0d1dd32ae5a78120e45111f24d06fec22cb98480",
-    url = "https://github.com/google/riegeli/archive/0d1dd32ae5a78120e45111f24d06fec22cb98480.tar.gz",
+    sha256 = "603c4d35224cf00f1d4a68c45cc4c5ca598613886886f93e1cffbe49a18aa6ea",
+    strip_prefix = "riegeli-3966874f4ce0b05bb32ae184f1fb44411992e12d",
+    url = "https://github.com/google/riegeli/archive/3966874f4ce0b05bb32ae184f1fb44411992e12d.tar.gz",
 )
 
 http_archive(
@@ -221,9 +221,9 @@ http_archive(
 
 http_archive(
     name = "com_google_googletest",
-    sha256 = "81964fe578e9bd7c94dfdb09c8e4d6e6759e19967e397dbea48d1c10e45d0df2",
-    strip_prefix = "googletest-release-1.12.1",
-    urls = ["https://github.com/google/googletest/archive/release-1.12.1.tar.gz"],
+    sha256 = "ad7fdba11ea011c1d925b3289cf4af2c66a352e18d4c7264392fead75e919363",
+    strip_prefix = "googletest-1.13.0",
+    urls = ["https://github.com/google/googletest/archive/refs/tags/v1.13.0.tar.gz"],
 )
 
 http_archive(
@@ -249,9 +249,9 @@ http_archive(
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
     patches = ["//build/bazel:zetasql.patch"],
-    sha256 = "9aa01afab8defc7a30b157a5c1dd594b1291bb85e3bfacc9f765b4bc1479dd25",
-    strip_prefix = "zetasql-f764f4e986ac1516ab5ae95e6d6ce2f4416cc6ff",
-    url = "https://github.com/google/zetasql/archive/f764f4e986ac1516ab5ae95e6d6ce2f4416cc6ff.tar.gz",
+    sha256 = "fa5657684fc78eb4363c00d7a3c1c9243016e38cac92a800e519368518d05917",
+    strip_prefix = "zetasql-206e78c86a85053f2c0d75db6fa7b1998181263b",
+    url = "https://github.com/google/zetasql/archive/206e78c86a85053f2c0d75db6fa7b1998181263b.tar.gz",
 )
 
 http_archive(

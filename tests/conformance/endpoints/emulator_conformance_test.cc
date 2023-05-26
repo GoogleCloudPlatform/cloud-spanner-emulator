@@ -53,9 +53,12 @@ constexpr char kInstanceConfigName[] = "test-config";
 class EmulatorConformanceTestEnvironment : public testing::Environment {
  public:
   EmulatorConformanceTestEnvironment()
-      : feature_flags_({.enable_stored_generated_columns = true,
-                        .enable_check_constraint = true,
-                        .enable_column_default_values = true}) {}
+      : feature_flags_({
+            .enable_stored_generated_columns = true,
+            .enable_check_constraint = true,
+            .enable_column_default_values = true,
+            .enable_views = true,
+        }) {}
   void SetUp() override {
     // Setup emulator server.
     frontend::Server::Options options;

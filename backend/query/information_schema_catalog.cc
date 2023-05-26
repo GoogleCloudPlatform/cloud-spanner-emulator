@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/schema/printer/print_ddl.h"
 
 namespace google {
@@ -33,6 +34,7 @@ using ::zetasql::types::Int64Type;
 using ::zetasql::types::StringType;
 using ::zetasql::values::Bool;
 using ::zetasql::values::Int64;
+using zetasql::values::NullBytes;
 using ::zetasql::values::NullInt64;
 using ::zetasql::values::NullString;
 using ::zetasql::values::String;
@@ -126,6 +128,8 @@ static constexpr char kKeyColumnUsage[] = "KEY_COLUMN_USAGE";
 static constexpr char kConstraintColumnUsage[] = "CONSTRAINT_COLUMN_USAGE";
 static constexpr char kPositionInUniqueConstraint[] =
     "POSITION_IN_UNIQUE_CONSTRAINT";
+static constexpr char kViews[] = "VIEWS";
+static constexpr char kViewDefinition[] = "VIEW_DEFINITION";
 
 bool IsNullable(const ColumnsMetaEntry& column) {
   return std::string(column.is_nullable) == kYes;
@@ -209,6 +213,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
   auto* referential_constraints = AddReferentialConstraintsTable();
   auto* key_column_usage = AddKeyColumnUsageTable();
   auto* constraint_column_usage = AddConstraintColumnUsageTable();
+  auto* views = AddViewsTable();
 
   // These tables are populated only after all tables have been added to the
   // catalog (including meta tables) because they add rows based on the tables
@@ -224,16 +229,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
   FillReferentialConstraintsTable(referential_constraints);
   FillKeyColumnUsageTable(key_column_usage);
   FillConstraintColumnUsageTable(constraint_column_usage);
-}
-
-const std::vector<ColumnsMetaEntry>&
-InformationSchemaCatalog::ColumnsMetadata() {
-  return google::spanner::emulator::backend::ColumnsMetadata();
-}
-
-const std::vector<IndexColumnsMetaEntry>&
-InformationSchemaCatalog::IndexColumnsMetadata() {
-  return google::spanner::emulator::backend::IndexColumnsMetadata();
+  FillViewsTable(views);
 }
 
 void InformationSchemaCatalog::AddSchemataTable() {
@@ -331,6 +327,27 @@ void InformationSchemaCatalog::FillTablesTable(zetasql::SimpleTable* tables) {
     });
   }
 
+  for (const View* view : default_schema_->views()) {
+    rows.push_back({
+        // table_catalog
+        String(""),
+        // table_schema
+        String(""),
+        // table_type
+        String("VIEW"),
+        // table_name
+        String(view->Name()),
+        // parent_table_name
+        NullString(),
+        // on_delete_action
+        NullString(),
+        // spanner_state,
+        String(kCommitted),
+        // row_deletion_policy_expression
+        NullString(),
+    });
+  }
+
   for (const auto& table : this->tables()) {
     rows.push_back({
         // table_catalog
@@ -383,7 +400,7 @@ void InformationSchemaCatalog::FillColumnsTable(
     int pos = 1;
     for (const Column* column : table->columns()) {
       absl::string_view expression;
-      if (column->is_generated() || column->has_default_value()) {
+      if (column->is_generated()) {
         expression = column->expression().value();
         absl::ConsumePrefix(&expression, "(");
         absl::ConsumeSuffix(&expression, ")");
@@ -400,7 +417,8 @@ void InformationSchemaCatalog::FillColumnsTable(
           // ordinal_position
           Int64(pos++),
           // column_default,
-          column->has_default_value() ? String(expression) : NullString(),
+          column->has_default_value() ? String(column->expression().value())
+                                      : NullString(),
           // data_type,
           NullString(),
           // is_nullable
@@ -414,6 +432,41 @@ void InformationSchemaCatalog::FillColumnsTable(
           column->is_generated() ? String(expression) : NullString(),
           // is_stored
           column->is_generated() ? String(kYes) : NullString(),
+          // spanner_state
+          String(kCommitted),
+      });
+    }
+  }
+
+  // Add columns for views.
+  for (const View* view : default_schema_->views()) {
+    int pos = 1;
+    for (const View::Column& column : view->columns()) {
+      rows.push_back({
+          // table_catalog
+          String(""),
+          // table_schema
+          String(""),
+          // table_name
+          String(view->Name()),
+          // column_name
+          String(column.name),
+          // ordinal_position
+          Int64(pos++),
+          // column_default,
+          NullBytes(),
+          // data_type,
+          NullString(),
+          // is_nullable
+          String(kYes),
+          // spanner_type
+          String(ColumnTypeToString(column.type, 0)),
+          // is_generated
+          String(kNever),
+          // generation_expression
+          NullString(),
+          // is_stored
+          NullString(),
           // spanner_state
           String(kCommitted),
       });
@@ -1661,6 +1714,40 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
   }
 
   constraint_column_usage->SetContents(rows);
+}
+
+zetasql::SimpleTable* InformationSchemaCatalog::AddViewsTable() {
+  // Setup table schema.
+  auto views =
+      new zetasql::SimpleTable(kViews, {
+                                             {kTableCatalog, StringType()},
+                                             {kTableSchema, StringType()},
+                                             {kTableName, StringType()},
+                                             {kViewDefinition, StringType()},
+                                         });
+
+  // Add table to catalog.
+  AddOwnedTable(views);
+  return views;
+}
+
+void InformationSchemaCatalog::FillViewsTable(zetasql::SimpleTable* views) {
+  std::vector<std::vector<zetasql::Value>> rows;
+
+  for (const View* view : default_schema_->views()) {
+    rows.push_back({
+        // table_catalog
+        String(""),
+        // table_schema
+        String(""),
+        // table_name
+        String(view->Name()),
+        // view_definition
+        String(view->body()),
+    });
+  }
+
+  views->SetContents(rows);
 }
 
 }  // namespace backend

@@ -63,7 +63,8 @@ std::string ColumnTypeToString(const zetasql::Type* type,
                                std::optional<int64_t> max_length);
 
 // Prints the DDL statements for all tables and indexes within the given schema.
-std::vector<std::string> PrintDDLStatements(const Schema* schema);
+absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
+    const Schema* schema);
 
 }  // namespace backend
 }  // namespace emulator

@@ -496,6 +496,24 @@ TEST_F(DmlTest, DISABLED_ReturningGeneratedColumns) {
               IsOkAndHoldsRows({}));
 }
 
+TEST_F(DmlTest, ReturningStructValues) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_dml_returning = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  // Insert THEN RETURN
+  std::vector<ValueRow> result_for_insert;
+  EXPECT_THAT(
+      CommitDmlReturning(
+          {SqlStatement(
+              "INSERT INTO Users(ID, Name, Age) Values (1, 'Levin', 27) "
+              "THEN RETURN STRUCT< int64_f INT64 > (100) AS expr0;")},
+          result_for_insert),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               testing::HasSubstr(
+                   "A struct value cannot be returned as a column value.")));
+}
+
 }  // namespace
 
 }  // namespace test

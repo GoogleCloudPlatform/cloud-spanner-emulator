@@ -500,41 +500,87 @@ TEST_F(SchemaTest, ViewBuilder) {
 TEST_F(SchemaTest, PrintDDLStatementsTestOneTable) {
   std::unique_ptr<const Schema> schema =
       test::CreateSchemaWithOneTable(type_factory_.get());
-  std::vector<std::string> statements = PrintDDLStatements(schema.get());
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
 
-  EXPECT_EQ(statements[0],
-            R"(CREATE TABLE test_table (
+  EXPECT_THAT(
+      statements,
+      zetasql_base::testing::IsOkAndHolds(testing::ElementsAre(
+          R"(CREATE TABLE test_table (
   int64_col INT64 NOT NULL,
   string_col STRING(MAX),
-) PRIMARY KEY(int64_col))");
-  EXPECT_EQ(statements[1],
-            R"(CREATE UNIQUE INDEX test_index ON test_table(string_col DESC))");
+) PRIMARY KEY(int64_col))",
+          "CREATE UNIQUE INDEX test_index ON test_table(string_col DESC)")));
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestInterleaving) {
   std::unique_ptr<const Schema> schema =
       test::CreateSchemaWithInterleaving(type_factory_.get());
-  std::vector<std::string> statements = PrintDDLStatements(schema.get());
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
 
-  EXPECT_EQ(statements[0],
-            R"(CREATE TABLE Parent (
+  EXPECT_THAT(statements, zetasql_base::testing::IsOkAndHolds(testing::ElementsAre(
+                              R"(CREATE TABLE Parent (
   k1 INT64 NOT NULL,
   c1 STRING(MAX),
-) PRIMARY KEY(k1))");
-  EXPECT_EQ(statements[1],
-            R"(CREATE TABLE CascadeDeleteChild (
-  k1 INT64 NOT NULL,
-  k2 INT64 NOT NULL,
-  c1 STRING(MAX),
-) PRIMARY KEY(k1, k2),
-  INTERLEAVE IN PARENT Parent ON DELETE CASCADE)");
-  EXPECT_EQ(statements[2],
-            R"(CREATE TABLE NoActionDeleteChild (
+) PRIMARY KEY(k1))",
+                              R"(CREATE TABLE CascadeDeleteChild (
   k1 INT64 NOT NULL,
   k2 INT64 NOT NULL,
   c1 STRING(MAX),
 ) PRIMARY KEY(k1, k2),
-  INTERLEAVE IN PARENT Parent ON DELETE NO ACTION)");
+  INTERLEAVE IN PARENT Parent ON DELETE CASCADE)",
+                              R"(CREATE TABLE NoActionDeleteChild (
+  k1 INT64 NOT NULL,
+  k2 INT64 NOT NULL,
+  c1 STRING(MAX),
+) PRIMARY KEY(k1, k2),
+  INTERLEAVE IN PARENT Parent ON DELETE NO ACTION)")));
+}
+
+TEST_F(SchemaTest, PrintDDLStatementsTestForeignKey) {
+  std::unique_ptr<const Schema> schema =
+      test::CreateSchemaWithForeignKey(type_factory_.get());
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, zetasql_base::testing::IsOkAndHolds(
+                              testing::ElementsAre(R"(CREATE TABLE test_table (
+  int64_col INT64 NOT NULL,
+  string_col STRING(20),
+) PRIMARY KEY(int64_col))",
+                                                   R"(CREATE TABLE child_table (
+  child_int64_col INT64 NOT NULL,
+  child_string_col STRING(20),
+  CONSTRAINT C FOREIGN KEY(child_int64_col, child_string_col) REFERENCES test_table(int64_col, string_col),
+) PRIMARY KEY(child_int64_col))")));
+}
+
+TEST_F(SchemaTest, PrintDDLStatementsTestColumnDefault) {
+  std::string test_table =
+      R"(
+          CREATE TABLE test_table (
+            int64_col INT64 NOT NULL,
+            default_int64_col INT64 DEFAULT (10),
+            default_timestamp_col TIMESTAMP DEFAULT (CURRENT_TIMESTAMP())
+          ) PRIMARY KEY (int64_col)
+      )";
+  absl::StatusOr<std::unique_ptr<const backend::Schema>> schema =
+      test::CreateSchemaFromDDL(
+          {
+              test_table,
+          },
+          type_factory_.get());
+  ZETASQL_ASSERT_OK(schema);
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.value().get());
+
+  EXPECT_THAT(statements, zetasql_base::testing::IsOkAndHolds(
+                              testing::ElementsAre(R"(CREATE TABLE test_table (
+  int64_col INT64 NOT NULL,
+  default_int64_col INT64 DEFAULT (10),
+  default_timestamp_col TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()),
+) PRIMARY KEY(int64_col))")));
 }
 
 }  // namespace

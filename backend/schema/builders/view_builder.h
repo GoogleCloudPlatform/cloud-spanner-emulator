@@ -82,6 +82,7 @@ class View::Editor {
   // The only kind of 'edit' possible on a view is a complete
   // replacement of its definition.
   Editor& copy_from(const View* view) {
+    instance_->name_ = view->name_;
     instance_->columns_.clear();
     for (const auto& it : view->columns_) {
       instance_->columns_.push_back(it);

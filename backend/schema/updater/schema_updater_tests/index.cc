@@ -14,6 +14,9 @@
 // limitations under the License.
 //
 
+#include <string>
+#include <vector>
+
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
@@ -480,6 +483,57 @@ TEST_F(SchemaUpdaterTest, CreateIndex_JsonColumn) {
       CREATE INDEX Idx ON T(col2)
     )sql"}),
       StatusIs(error::CannotCreateIndexOnColumn("Idx", "col2", "JSON")));
+}
+
+std::vector<std::string> SchemaForCaseSensitivityTests() {
+  return {
+      R"sql(
+                CREATE TABLE T (
+                  k1 INT64 NOT NULL,
+                  k2 INT64 NOT NULL,
+                  c1 STRING(10),
+                ) PRIMARY KEY (k1)
+            )sql",
+      R"sql(
+                CREATE INDEX Idx1 ON T(c1))sql",
+  };
+}
+
+TEST_F(SchemaUpdaterTest, TableNameIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
+      CREATE INDEX Idx1 ON t(c1)
+    )sql"}),
+              StatusIs(error::TableNotFound("t")));
+}
+
+TEST_F(SchemaUpdaterTest, ColumnNameIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
+      CREATE INDEX Idx2 ON T(K2))sql"}),
+              StatusIs(error::IndexRefsNonExistentColumn("Idx2", "K2")));
+}
+
+TEST_F(SchemaUpdaterTest, StoringColumnNameIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
+      CREATE INDEX Idx2 ON T(k2) STORING(C1))sql"}),
+              StatusIs(error::IndexRefsNonExistentColumn("Idx2", "C1")));
+}
+
+TEST_F(SchemaUpdaterTest, DropIndexIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
+      DROP INDEX idx1)sql"}),
+              StatusIs(error::IndexNotFound("idx1")));
 }
 }  // namespace
 

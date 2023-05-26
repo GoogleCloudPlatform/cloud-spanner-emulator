@@ -57,6 +57,7 @@ constexpr absl::string_view kHintParameterSensitiveNever = "never";
 
 // Indexes
 constexpr absl::string_view kHintForceIndex = "force_index";
+constexpr absl::string_view kHintBaseTable = "_base_table";
 
 // Joins
 constexpr absl::string_view kHintJoinForceOrder = "force_join_order";
@@ -126,7 +127,7 @@ absl::Status CollectHintsForNode(
 }  // namespace
 
 absl::Status QueryValidator::ValidateHints(
-    const zetasql::ResolvedNode* node) const {
+    const zetasql::ResolvedNode* node) {
   std::vector<const zetasql::ResolvedNode*> child_nodes;
   node->GetChildNodes(&child_nodes);
   // Process the hints for each node, using maps to keep track of
@@ -222,8 +223,7 @@ absl::Status QueryValidator::CheckEmulatorHintName(
 absl::Status QueryValidator::CheckHintValue(
     absl::string_view name, const zetasql::Value& value,
     const zetasql::ResolvedNodeKind node_kind,
-    const absl::flat_hash_map<absl::string_view, zetasql::Value>& hint_map)
-    const {
+    const absl::flat_hash_map<absl::string_view, zetasql::Value>& hint_map) {
   static const auto* supported_hint_types =
       new absl::flat_hash_map<absl::string_view, const zetasql::Type*,
                               zetasql_base::StringViewCaseHash, zetasql_base::StringViewCaseEqual>{{
@@ -251,15 +251,19 @@ absl::Status QueryValidator::CheckHintValue(
     return error::InvalidHintValue(name, value.DebugString());
   }
   if (absl::EqualsIgnoreCase(name, kHintForceIndex)) {
-    const std::string& string_value = value.string_value();
-    // Statement-level FORCE_INDEX hints can only be '_BASE_TABLE'.
-    if (node_kind == zetasql::RESOLVED_QUERY_STMT &&
-        !absl::EqualsIgnoreCase(string_value, "_BASE_TABLE")) {
-      return error::InvalidStatementHintValue(name, value.DebugString());
-    }
-    if (schema_->FindIndex(string_value) == nullptr &&
-        !absl::EqualsIgnoreCase(string_value, "_BASE_TABLE")) {
-      return error::InvalidHintValue(name, value.DebugString());
+    const std::string& index_name = value.string_value();
+    bool base_table_hint = absl::EqualsIgnoreCase(index_name, kHintBaseTable);
+    if (!base_table_hint) {
+      // Statement-level FORCE_INDEX hints can only be '_BASE_TABLE'.
+      if (node_kind == zetasql::RESOLVED_QUERY_STMT) {
+        return error::InvalidStatementHintValue(name, value.DebugString());
+      }
+      const Index* index = schema_->FindIndex(index_name);
+      if (index == nullptr) {
+        return error::InvalidHintValue(name, value.DebugString());
+      } else {
+        indexes_used_.insert(index);
+      }
     }
   } else if (absl::EqualsIgnoreCase(name, kHintJoinMethod) ||
              absl::EqualsIgnoreCase(name, kHintJoinTypeDeprecated)) {

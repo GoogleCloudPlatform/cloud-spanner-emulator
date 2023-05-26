@@ -20,7 +20,12 @@
 #include <utility>
 #include <vector>
 
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
+#include "common/errors.h"
 #include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 
@@ -912,6 +917,112 @@ TEST_F(SchemaUpdaterTest, CreateTable_JsonAsPK) {
       ) PRIMARY KEY (k1)
     )"}),
               StatusIs(error::InvalidPrimaryKeyColumnType("T.k1", "JSON")));
+}
+
+std::vector<std::string> SchemaForCaseSensitivityTests() {
+  return {
+      R"sql(
+                CREATE TABLE T (
+                k1 INT64 NOT NULL,
+                c1 STRING(MAX)
+              ) PRIMARY KEY (k1)
+            )sql",
+      R"sql(
+                CREATE TABLE T1 (
+                  a INT64 NOT NULL,
+                ) PRIMARY KEY (a)
+            )sql",
+  };
+}
+
+TEST_F(SchemaUpdaterTest, PrimaryKeyIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      CREATE TABLE T2 (
+        k1 INT64 NOT NULL,
+        k2 INT64 NOT NULL,
+      ) PRIMARY KEY (K1)
+    )"}),
+              StatusIs(error::NonExistentKeyColumn("Table", "T2", "K1")));
+}
+
+TEST_F(SchemaUpdaterTest, TableNameIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      CREATE TABLE t (
+        k1 INT64 NOT NULL,
+      ) PRIMARY KEY (K1)
+    )"}),
+              StatusIs(error::SchemaObjectAlreadyExists("T", "t")));
+}
+
+TEST_F(SchemaUpdaterTest, InterleaveTableNameIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      CREATE TABLE Child (
+        k1 INT64 NOT NULL,
+        k2 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (k1, k2),
+        INTERLEAVE IN PARENT `t` ON DELETE CASCADE
+    )"}),
+              StatusIs(error::TableNotFound("t")));
+}
+
+TEST_F(SchemaUpdaterTest, AlterTableNameIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE t ADD COLUMN k2 BYTES(100)
+    )"}),
+              StatusIs(error::TableNotFound("t")));
+}
+
+TEST_F(SchemaUpdaterTest, AlterTableSetOptionsIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE t ALTER COLUMN c1 SET OPTIONS (
+        allow_commit_timestamp = false )
+    )"}),
+              StatusIs(error::TableNotFound("t")));
+}
+
+TEST_F(SchemaUpdaterTest, DropTableIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      DROP TABLE t)"}),
+              StatusIs(error::TableNotFound("t")));
+}
+
+TEST_F(SchemaUpdaterTest, AlterColumnIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T ALTER COLUMN K2 INT64 DEFAULT(0)
+    )"}),
+              StatusIs(error::ColumnNotFound("T", "K2")));
+}
+
+TEST_F(SchemaUpdaterTest, DropColumnIsCaseSensitive) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema(SchemaForCaseSensitivityTests()));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T DROP COLUMN K2
+    )"}),
+              StatusIs(error::ColumnNotFound("T", "K2")));
 }
 
 }  // namespace

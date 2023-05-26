@@ -26,13 +26,19 @@ namespace {
 TEST(InformationSchemaCatalogTest, ColumnsMetadataCount) {
   Schema schema;
   InformationSchemaCatalog catalog(&schema);
-  EXPECT_EQ(catalog.ColumnsMetadata().size(), 162);
+  EXPECT_EQ(ColumnsMetadata().size(), 162);
 }
 
 TEST(InformationSchemaCatalogTest, IndexColumnsMetadataCount) {
   Schema schema;
   InformationSchemaCatalog catalog(&schema);
-  EXPECT_EQ(catalog.IndexColumnsMetadata().size(), 101);
+  EXPECT_EQ(IndexColumnsMetadata().size(), 101);
+}
+
+TEST(InformationSchemaCatalogTest, SpannerSysColumnsMetadataCount) {
+  Schema schema;
+  InformationSchemaCatalog catalog(&schema);
+  EXPECT_EQ(SpannerSysColumnsMetadata().size(), 293);
 }
 
 }  // namespace

@@ -27,6 +27,8 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/string_view.h"
+#include "absl/strings/strip.h"
 #include "google/cloud/spanner/bytes.h"
 #include "google/cloud/spanner/mutations.h"
 #include "google/cloud/spanner/transaction.h"
@@ -54,9 +56,13 @@ const char kSchemaChangeTestDataDir[] = "tests/conformance/data/schema_changes";
 
 // List of schema change test files within the directory above.
 const char* kSchemaChangeTestFiles[] = {
-    "check_constraint.test", "column_default_values.test",
-    "combined.test",         "foreign_key.test",
-    "generated_column.test", "key_column_alteration.test",
+    "check_constraint.test",
+    "column_default_values.test",
+    "combined.test",
+    "foreign_key.test",
+    "generated_column.test",
+    "key_column_alteration.test",
+    "views.test",
 };
 
 constexpr std::array<char, 10> kBytesLiteral = {'\xd0', '\xb0', '\xd0', '\xb1',
@@ -97,14 +103,17 @@ class SchemaChangeTest
                           "Error in non-idempotent operation UpdateDatabase: ");
 
       // Return the expected error message.
-      return FileBasedTestCaseOutput{"ERROR: " + std::string(message) + "\n"};
+      return FileBasedTestCaseOutput{
+          .text = "ERROR: " + std::string(message) + "\n",
+          .status_code = status.code()};
     }
 
     // For the success case, we expect the output of GetDatabaseDdl to match.
     ZETASQL_ASSIGN_OR_RETURN(std::vector<std::string> output_statements,
                      GetDatabaseDdl());
-    return FileBasedTestCaseOutput{absl::StrJoin(output_statements, ";\n") +
-                                   ";\n"};
+    return FileBasedTestCaseOutput{
+        .text = absl::StrJoin(output_statements, ";\n") + ";\n",
+        .status_code = absl::StatusCode::kOk};
   }
 
   // Returns list of all schema change test files.
@@ -131,10 +140,25 @@ class SchemaChangeTest
 
 TEST_P(SchemaChangeTest, FileBasedTests) {
   const auto& input = GetParam().input;
+  const std::string input_line_message = absl::StrCat(
+      "for input at line number ", input.line_no, ":\n", input.text);
   const auto& expected = GetParam().expected;
+
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto actual, RunSchemaChangeTestCase(input));
-  std::string actual_text = actual.text;
+  ASSERT_TRUE(actual.status_code.has_value());
+
   std::string expected_text = expected.text;
+  std::string actual_text = actual.text;
+  bool expect_error = absl::StartsWith(expected.text, "ERROR:");
+
+  if (expect_error) {
+    // Match the status code if present.
+    if (expected.status_code.has_value()) {
+      EXPECT_THAT(actual.status_code, testing::Eq(*expected.status_code))
+          << input_line_message;
+    }
+  }
+
   auto normalize = [](std::string* text) {
     RE2::GlobalReplace(text, "\n", " ");
     RE2::GlobalReplace(text, R"(\\n)", " ");
@@ -144,12 +168,12 @@ TEST_P(SchemaChangeTest, FileBasedTests) {
   };
   normalize(&actual_text);
   normalize(&expected_text);
-  std::string message = absl::StrCat("for input at line number ", input.line_no,
-                                     ":\n", input.text);
   if (input.regex) {
-    EXPECT_THAT(actual_text, testing::MatchesRegex(expected_text)) << message;
+    EXPECT_THAT(actual_text, testing::MatchesRegex(expected_text))
+        << input_line_message;
   } else {
-    EXPECT_THAT(actual_text, testing::HasSubstr(expected_text)) << message;
+    EXPECT_THAT(actual_text, testing::HasSubstr(expected_text))
+        << input_line_message;
   }
 }
 

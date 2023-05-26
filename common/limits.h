@@ -72,7 +72,7 @@ constexpr int kMaxInterleavingDepth = 7;
 constexpr int kMaxIndexesPerDatabase = kMaxTablesPerDatabase * 2;
 
 // Maximum number of indexes per table.
-constexpr int kMaxIndexesPerTable = 64;
+constexpr int kMaxIndexesPerTable = 128;
 
 // Maximum number of sessions that can be created in a batch.
 constexpr int32_t kMaxBatchCreateSessionsCount = 100;

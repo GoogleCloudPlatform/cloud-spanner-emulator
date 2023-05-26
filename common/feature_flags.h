@@ -33,7 +33,7 @@ class EmulatorFeatureFlags {
     bool enable_stored_generated_columns = true;
     bool enable_check_constraint = true;
     bool enable_column_default_values = true;
-    bool enable_dml_returning = false;
+    bool enable_dml_returning = true;
     bool enable_views = false;
   };
 

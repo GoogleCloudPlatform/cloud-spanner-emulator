@@ -56,7 +56,8 @@ bool IsDMLQuery(const std::string& query);
 
 // QueryResult specifies the output of a query request.
 struct QueryResult {
-  // A row cursor containing the query result rows, null for DML requests.
+  // A row cursor containing the query result rows. It's null for DML requests
+  // with returning clause.
   std::unique_ptr<RowCursor> rows;
 
   // The number of modified rows.

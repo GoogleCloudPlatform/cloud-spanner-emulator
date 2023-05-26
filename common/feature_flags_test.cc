@@ -53,16 +53,16 @@ TEST(EmulatorFeatureFlags, Basic) {
 TEST(EmulatorFeatureFlags, DmlReturningFlag) {
   const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
 
-  EXPECT_FALSE(features.flags().enable_dml_returning);
+  EXPECT_TRUE(features.flags().enable_dml_returning);
 
   {
     EmulatorFeatureFlags::Flags flags;
-    flags.enable_dml_returning = true;
+    flags.enable_dml_returning = false;
     test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-    EXPECT_TRUE(features.flags().enable_dml_returning);
+    EXPECT_FALSE(features.flags().enable_dml_returning);
   }
 
-  EXPECT_FALSE(features.flags().enable_dml_returning);
+  EXPECT_TRUE(features.flags().enable_dml_returning);
 }
 
 }  // namespace

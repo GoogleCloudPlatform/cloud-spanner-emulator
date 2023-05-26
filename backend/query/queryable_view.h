@@ -35,10 +35,21 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-// A wrapper over View class which implements zetasql::Table.
+// Evaluating a view requires evaluating an arbitrary query. This interface
+// provides a way for a queryable view to compile and execute an arbitrary view
+// definition.
+class QueryEvaluator {
+ public:
+  virtual ~QueryEvaluator() = default;
+  virtual absl::StatusOr<std::unique_ptr<RowCursor>> Evaluate(
+      const std::string& query) = 0;
+};
+
+// A wrapper over View class which implements the zetasql::Table interface.
 class QueryableView : public zetasql::Table {
  public:
-  QueryableView(const backend::View* view);
+  QueryableView(const backend::View* view,
+                QueryEvaluator* query_evaluator = nullptr);
 
   std::string Name() const override { return wrapped_view_->Name(); }
 
@@ -71,6 +82,9 @@ class QueryableView : public zetasql::Table {
 
   // The columns in the view.
   std::vector<std::unique_ptr<const zetasql::SimpleColumn>> columns_;
+
+  // Holds an object which is used to evaluate the view definition.
+  QueryEvaluator* query_evaluator_;
 };
 
 }  // namespace backend

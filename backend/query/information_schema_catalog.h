@@ -54,9 +54,6 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
 
   explicit InformationSchemaCatalog(const Schema* default_schema);
 
-  const std::vector<ColumnsMetaEntry>& ColumnsMetadata();
-  const std::vector<IndexColumnsMetaEntry>& IndexColumnsMetadata();
-
  private:
   const Schema* default_schema_;
 
@@ -101,6 +98,9 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   zetasql::SimpleTable* AddConstraintColumnUsageTable();
   void FillConstraintColumnUsageTable(
       zetasql::SimpleTable* constraint_column_usage);
+
+  zetasql::SimpleTable* AddViewsTable();
+  void FillViewsTable(zetasql::SimpleTable* views);
 };
 
 }  // namespace backend

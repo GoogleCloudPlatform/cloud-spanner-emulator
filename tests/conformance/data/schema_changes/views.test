@@ -1,0 +1,205 @@
+# # # # --- Passing Test Cases --- # # # #
+# Create some value table views
+CREATE VIEW string_value SQL SECURITY INVOKER AS SELECT AS VALUE "abc";
+CREATE VIEW struct_value SQL SECURITY INVOKER AS SELECT AS STRUCT "abc" as a;
+--
+CREATE VIEW string_value SQL SECURITY INVOKER AS SELECT AS VALUE "abc";
+CREATE VIEW struct_value SQL SECURITY INVOKER AS SELECT AS STRUCT "abc" as a;
+==
+# Can drop a column when its not used by the view.
+CREATE TABLE t (c STRING(MAX), c1 INT64) PRIMARY KEY ();
+CREATE VIEW foo SQL SECURITY INVOKER
+  AS SELECT t.c1 AS a FROM t;
+ALTER TABLE t DROP COLUMN c;
+--
+CREATE TABLE t (
+  c1 INT64,
+) PRIMARY KEY();
+CREATE VIEW foo SQL SECURITY INVOKER AS SELECT t.c1 AS a FROM t;
+==
+# Alter view basics
+CREATE VIEW V0 SQL SECURITY INVOKER AS (SELECT 0 AS a);
+CREATE OR REPLACE VIEW V0 SQL SECURITY INVOKER AS (SELECT 1 AS a);
+CREATE OR REPLACE VIEW v0 SQL SECURITY INVOKER AS (SELECT 2 AS a);
+--
+CREATE VIEW v0 SQL SECURITY INVOKER AS (SELECT 2 AS a);
+==
+# Create a view without dependencies, then alter its output signature.
+CREATE VIEW V SQL SECURITY INVOKER AS (SELECT 1 a, "2" b, false c);
+CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS (SELECT "2" b, false c,  1 a);
+CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS (SELECT 1 C, "2" B, false A);
+--
+CREATE VIEW V SQL SECURITY INVOKER AS (SELECT 1 C, "2" B, false A);
+==
+# Alter mutually dependent views without breaking.
+CREATE VIEW V0 SQL SECURITY INVOKER AS SELECT 1 AS a;
+CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT V0.a FROM V0;
+CREATE OR REPLACE VIEW V0 SQL SECURITY INVOKER AS SELECT 2 AS a;
+CREATE VIEW V2 SQL SECURITY INVOKER AS SELECT 3 AS a;
+CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS SELECT V2.a FROM V2;
+CREATE OR REPLACE VIEW V0 SQL SECURITY INVOKER AS SELECT 2 AS b;
+--
+CREATE VIEW V0 SQL SECURITY INVOKER AS SELECT 2 AS b;
+CREATE VIEW V2 SQL SECURITY INVOKER AS SELECT 3 AS a;
+CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT V2.a FROM V2;
+==
+# Alter mutually dependent views with deep dependency.
+CREATE VIEW V0 SQL SECURITY INVOKER AS SELECT 1 AS a;
+CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT V0.a FROM V0;
+CREATE VIEW V2 SQL SECURITY INVOKER AS SELECT V1.a FROM V1;
+CREATE VIEW V3 SQL SECURITY INVOKER AS SELECT V2.a FROM V2;
+CREATE OR REPLACE VIEW V0 SQL SECURITY INVOKER AS SELECT 2 AS a;
+CREATE VIEW V4 SQL SECURITY INVOKER AS SELECT 3 AS a;
+CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS SELECT V4.a FROM V4;
+CREATE OR REPLACE VIEW V0 SQL SECURITY INVOKER AS SELECT 2 AS b;
+--
+CREATE VIEW V0 SQL SECURITY INVOKER AS SELECT 2 AS b;
+CREATE VIEW V4 SQL SECURITY INVOKER AS SELECT 3 AS a;
+CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT V4.a FROM V4;
+CREATE VIEW V2 SQL SECURITY INVOKER AS SELECT V1.a FROM V1;
+CREATE VIEW V3 SQL SECURITY INVOKER AS SELECT V2.a FROM V2;
+==
+# Create view with same name as built-in function.
+CREATE TABLE T (
+  K INT64 NOT NULL,
+) PRIMARY KEY(K);
+CREATE VIEW MOD SQL SECURITY INVOKER AS
+  SELECT T.K FROM T WHERE MOD(T.K, 5) = 0;
+CREATE VIEW V SQL SECURITY INVOKER AS
+  SELECT T.K FROM T WHERE MOD(T.K, 6) = 0;
+--
+CREATE TABLE T ( K INT64 NOT NULL, ) PRIMARY KEY(K);
+CREATE VIEW MOD SQL SECURITY INVOKER AS SELECT T.K FROM T WHERE MOD(T.K, 5) = 0;
+CREATE VIEW V SQL SECURITY INVOKER AS SELECT T.K FROM T WHERE MOD(T.K, 6) = 0;
+==
+# # # # --- Failure Test Cases --- # # # #
+# Cannot drop a table used by the view
+# --regex
+CREATE TABLE t (c STRING(MAX)) PRIMARY KEY ();
+CREATE VIEW v0
+  SQL SECURITY INVOKER AS SELECT 1 as a FROM t;
+DROP TABLE t;
+--
+ERROR:.* Cannot drop TABLE `t` on which there are dependent views: .*
+==
+# Cannot drop a table column used by a view.
+# --regex
+CREATE TABLE t (c STRING(MAX)) PRIMARY KEY ();
+CREATE VIEW foo
+  SQL SECURITY INVOKER AS SELECT t.c FROM t;
+ALTER TABLE t DROP COLUMN c;
+--
+ERROR: FAILED_PRECONDITION: .* Cannot drop column `c` on which there are dependent views: .*
+==
+# Cannot alter a table column when doing so would change the view's output
+# column signature.
+# --regex
+CREATE TABLE t (c STRING(MAX)) PRIMARY KEY ();
+CREATE VIEW foo
+  SQL SECURITY INVOKER AS SELECT t.c AS a FROM t;
+ALTER TABLE t ALTER COLUMN c BYTES(MAX);
+--
+ERROR:.* Action would implicitly change the type of an output column for VIEW `foo` from `STRING` to `BYTES`.
+Tip: Give explicit type to output columns in the VIEW definition before making this change by adding casts/conversions to the intended final output type.
+==
+# Cannot drop an index used by the view (hint)
+# --regex
+CREATE TABLE t (c STRING(MAX)) PRIMARY KEY ();
+CREATE INDEX tBYc ON t(c);
+CREATE VIEW v0
+  SQL SECURITY INVOKER AS SELECT 1 as a FROM t@{force_index=tBYc};
+DROP INDEX tBYc;
+--
+ERROR:.* Cannot drop INDEX `tBYc` on which there are dependent .*
+==
+# Cannot alter a column in such a way that breaks the view.
+# --regex
+CREATE TABLE t ( c STRING(MAX) ) PRIMARY KEY ();
+CREATE VIEW v SQL SECURITY INVOKER
+  AS SELECT CHAR_LENGTH(t.c) AS c FROM t;
+ALTER TABLE t ALTER COLUMN c BYTES(MAX);
+--
+ERROR: FAILED_PRECONDITION: .* Cannot alter column `t.c`. The new definition causes the definition of VIEW `v` to become invalid
+ with the following diagnostic message: No matching signature for function CHAR_LENGTH for argument types: BYTES. .*
+==
+# Cannot drop a view which does not exist.
+# --regex
+DROP VIEW V;
+--
+ERROR: NOT_FOUND: .* View not found: V
+==
+# Replace view to syntax error
+# --regex
+CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS a;
+CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS a FORM (SELECT 1);
+--
+ERROR:.* Cannot replace VIEW `V` because new definition is invalid with the following diagnostic message:
+
+.* Expected end of input but got identifier "FORM" .*
+==
+# Replace view to analysis error
+# --regex
+CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS a;
+CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS SELECT 1;
+--
+ERROR:.* Cannot replace VIEW `V` because new definition is invalid with the following diagnostic message:.*
+ CREATE VIEW columns must be named, but column 1 has no name .*
+==
+# Replace view to make it self referential
+# --regex
+CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS a;
+CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS a FROM V;
+--
+ERROR:.* Cannot replace VIEW `V` because new definition is recursive.
+==
+# Replace view to make dependency cycle.
+# --regex
+CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS a;
+CREATE VIEW V2 SQL SECURITY INVOKER AS SELECT 1 AS a FROM V;
+CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS a FROM V2;
+--
+ERROR:.* Cannot replace VIEW `V` because new definition is recursive.
+==
+# Replace view to break a view definition.
+# --regex
+CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS a;
+CREATE VIEW V2 SQL SECURITY INVOKER AS SELECT V.a FROM V;
+CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS b;
+--
+ERROR:.* Cannot (alter|replace) VIEW `V`. The new definition causes the definition of VIEW `V2` to become invalid with the following diagnostic message:.* Name a not found inside V .*
+==
+# Replace function to cascade function signature change.
+# --regex
+CREATE VIEW V SQL SECURITY INVOKER AS (SELECT 1 AS a);
+CREATE VIEW V2 SQL SECURITY INVOKER AS ((SELECT V.a FROM V));
+CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS (SELECT "abc" AS a);
+--
+ERROR:.* Cannot (alter|replace) VIEW `V`. Action would implicitly change the type of an output column for VIEW `V2` from `INT64` to `STRING`.
+Tip: Give explicit type to output columns in the VIEW definition before making this change by adding casts/conversions to the intended final output type.
+==
+# Changing a generated column is not allowed. It must be dropped and recreated.
+# A view with a dependency on a GC prevents any modifications to the GC.
+# --regex
+CREATE TABLE VBase (
+  k STRING(10),
+  g BYTES(MAX) AS (b"abc") STORED,
+) PRIMARY KEY (k);
+CREATE VIEW V SQL SECURITY INVOKER AS (SELECT vb.k, vb.g FROM VBase vb);
+ALTER TABLE VBase DROP COLUMN g;
+--
+ERROR: FAILED_PRECONDITION: .* Cannot drop column `g` on which there are dependent views: .*
+==
+# View definitions may not have a WITH clause.
+# --regex
+CREATE VIEW V1 SQL SECURITY INVOKER AS WITH WithTable AS (SELECT 1 as one) SELECT 2 AS two;
+--
+ERROR:.* Error parsing the definition of view `V1`: WITH clauses are unsupported in view definitions.
+==
+# CREATE OR REPLACE VIEW must preserve dependencies.
+# --regex
+CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT AS VALUE "abc";
+CREATE VIEW V2 SQL SECURITY INVOKER AS SELECT 1 AS A FROM V1;
+CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS SELECT AS VALUE "xyz";
+DROP VIEW V1;
+--
+ERROR:.* Cannot drop VIEW `V1` on which there are dependent .*

@@ -100,9 +100,15 @@ QueryableTable::QueryableTable(
   for (const auto* column : table->columns()) {
     std::unique_ptr<const zetasql::AnalyzerOutput> output = nullptr;
     if (options.has_value() && column->has_default_value()) {
+      // (b/270162778) Implicit cast default expressions to the destination
+      // column types so that explicit cast of non-primitive types is not
+      // required.
+      constexpr char kExpression[] = "CAST (($0) AS $1)";
+      std::string sql = absl::Substitute(
+          kExpression, column->expression().value(),
+          column->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL));
       absl::Status s = zetasql::AnalyzeExpression(
-          column->expression().value(), options.value(), catalog, type_factory,
-          &output);
+          sql, options.value(), catalog, type_factory, &output);
       ZETASQL_DCHECK(s.ok()) << "Failed to analyze default expression for column "
                      << column->FullName() << "\n";
     }

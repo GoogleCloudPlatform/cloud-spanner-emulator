@@ -34,6 +34,9 @@ class DMLQueryValidator : public QueryValidator {
  protected:
   absl::Status VisitResolvedFunctionCall(
       const zetasql::ResolvedFunctionCall* node) override;
+
+  absl::Status VisitResolvedReturningClause(
+      const zetasql::ResolvedReturningClause* node) override;
 };
 
 }  // namespace backend

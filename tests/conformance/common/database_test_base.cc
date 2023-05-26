@@ -80,12 +80,11 @@ void DatabaseTest::SetUp() {
       std::make_unique<cloud::spanner_admin::DatabaseAdminClient>(
           cloud::spanner_admin::MakeDatabaseAdminConnection(
               std::move(connection_options)));
-  ZETASQL_ASSERT_OK(ToUtilStatusOr(
-      database_client_
-          ->CreateDatabase(
-              database_->instance().FullName(),
-              absl::StrCat("CREATE DATABASE `", database_->database_id(), "`"))
-          .get()));
+  google::spanner::admin::database::v1::CreateDatabaseRequest request;
+  request.set_parent(database_->instance().FullName());
+  request.set_create_statement("CREATE DATABASE `" + database_->database_id() +
+                               "`");
+  ZETASQL_ASSERT_OK(ToUtilStatusOr(database_client_->CreateDatabase(request).get()));
 
   // Setup a client to interact with the database.
   client_ = std::make_unique<cloud::spanner::Client>(
@@ -116,13 +115,11 @@ absl::Status DatabaseTest::ResetDatabase() {
   database_ = std::make_unique<google::cloud::spanner::Database>(
       google::cloud::spanner::Instance(globals.project_id, globals.instance_id),
       absl::StrCat("test-database-", absl::ToUnixMicros(absl::Now())));
-  return ToUtilStatus(
-      database_client_
-          ->CreateDatabase(
-              database_->instance().FullName(),
-              absl::StrCat("CREATE DATABASE `", database_->database_id(), "`"))
-          .get()
-          .status());
+  google::spanner::admin::database::v1::CreateDatabaseRequest request;
+  request.set_parent(database_->instance().FullName());
+  request.set_create_statement("CREATE DATABASE `" + database_->database_id() +
+                               "`");
+  return ToUtilStatus(database_client_->CreateDatabase(request).get().status());
 }
 
 absl::Status DatabaseTest::SetSchema(const std::vector<std::string>& schema) {

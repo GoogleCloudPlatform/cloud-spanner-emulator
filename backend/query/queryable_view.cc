@@ -27,6 +27,7 @@
 #include "zetasql/public/simple_catalog.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/value.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -40,7 +41,72 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-QueryableView::QueryableView(const backend::View* view) : wrapped_view_(view) {
+namespace {
+
+// An implementation of EvaluatorTableIterator which wraps a RowCursor that
+// contains the result of executing the view definition.
+class ViewRowCursorEvaluatorTableIterator
+    : public zetasql::EvaluatorTableIterator {
+ public:
+  ViewRowCursorEvaluatorTableIterator(std::unique_ptr<RowCursor> cursor,
+                                      absl::Span<const int> column_idxs)
+      : cursor_(std::move(cursor)),
+        column_idxs_(column_idxs.begin(), column_idxs.end()) {
+    for (int i = 0; i < cursor_->NumColumns(); ++i) {
+      if (column_idxs_.find(i) != column_idxs_.end()) {
+        values_.push_back(zetasql::Value::Null(cursor_->ColumnType(i)));
+        column_names_.push_back(cursor_->ColumnName(i));
+      }
+    }
+  }
+
+  int NumColumns() const override { return values_.size(); }
+
+  std::string GetColumnName(int i) const override { return column_names_[i]; }
+
+  const zetasql::Type* GetColumnType(int i) const override {
+    return values_[i].type();
+  }
+
+  bool NextRow() override {
+    if (!cursor_->Next()) {
+      return false;
+    }
+
+    for (int i = 0, j = 0; i < cursor_->NumColumns(); ++i) {
+      if (column_idxs_.find(i) != column_idxs_.end()) {
+        values_[j++] = cursor_->ColumnValue(i);
+      }
+    }
+    return true;
+  }
+
+  const zetasql::Value& GetValue(int i) const override {
+    return values_.at(i);
+  }
+
+  absl::Status Status() const override { return cursor_->Status(); }
+  absl::Status Cancel() override { return absl::OkStatus(); }
+
+ private:
+  // The wrapped RowCursor.
+  std::unique_ptr<RowCursor> cursor_;
+
+  // The indexes of the columns in the original view's definition
+  // (and therefore its result) that the EvaluatorTableIterator must emit.
+  absl::flat_hash_set<int> column_idxs_;
+
+  // Names of the output columns of the EvaluatorTableIterator.
+  std::vector<std::string> column_names_;
+
+  // Values of the current row of the EvaluatorTableIterator.
+  std::vector<zetasql::Value> values_;
+};
+}  // namespace
+
+QueryableView::QueryableView(const backend::View* view,
+                             QueryEvaluator* query_evaluator)
+    : wrapped_view_(view), query_evaluator_(query_evaluator) {
   for (const View::Column& column : view->columns()) {
     columns_.push_back(std::make_unique<const zetasql::SimpleColumn>(
         view->Name(), column.name, column.type,
@@ -51,8 +117,11 @@ QueryableView::QueryableView(const backend::View* view) : wrapped_view_(view) {
 absl::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
 QueryableView::CreateEvaluatorTableIterator(
     absl::Span<const int> column_idxs) const {
-  // TODO : Implement querying on the view.
-  return nullptr;
+  ZETASQL_RET_CHECK_NE(query_evaluator_, nullptr);
+  ZETASQL_ASSIGN_OR_RETURN(auto cursor,
+                   query_evaluator_->Evaluate(wrapped_view_->body()));
+  return std::make_unique<ViewRowCursorEvaluatorTableIterator>(
+      std::move(cursor), column_idxs);
 }
 
 const zetasql::Column* QueryableView::FindColumnByName(

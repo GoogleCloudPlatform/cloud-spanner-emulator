@@ -77,6 +77,15 @@ const Index* Schema::FindIndex(const std::string& index_name) const {
   return itr->second;
 }
 
+const Index* Schema::FindIndexCaseSensitive(
+    const std::string& index_name) const {
+  auto index = FindIndex(index_name);
+  if (!index || index->Name() != index_name) {
+    return nullptr;
+  }
+  return index;
+}
+
 std::shared_ptr<const ChangeStream> Schema::FindChangeStream(
     const std::string& change_stream_name) const {
   auto itr = change_streams_map_.find(change_stream_name);
