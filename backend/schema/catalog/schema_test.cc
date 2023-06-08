@@ -46,6 +46,9 @@ namespace emulator {
 namespace backend {
 namespace {
 
+using ::testing::ElementsAre;
+using ::zetasql_base::testing::IsOkAndHolds;
+
 class SchemaTest : public testing::Test {
  public:
   SchemaTest()
@@ -505,7 +508,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestOneTable) {
 
   EXPECT_THAT(
       statements,
-      zetasql_base::testing::IsOkAndHolds(testing::ElementsAre(
+      IsOkAndHolds(ElementsAre(
           R"(CREATE TABLE test_table (
   int64_col INT64 NOT NULL,
   string_col STRING(MAX),
@@ -519,7 +522,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestInterleaving) {
   absl::StatusOr<std::vector<std::string>> statements =
       PrintDDLStatements(schema.get());
 
-  EXPECT_THAT(statements, zetasql_base::testing::IsOkAndHolds(testing::ElementsAre(
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
                               R"(CREATE TABLE Parent (
   k1 INT64 NOT NULL,
   c1 STRING(MAX),
@@ -544,8 +547,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestForeignKey) {
   absl::StatusOr<std::vector<std::string>> statements =
       PrintDDLStatements(schema.get());
 
-  EXPECT_THAT(statements, zetasql_base::testing::IsOkAndHolds(
-                              testing::ElementsAre(R"(CREATE TABLE test_table (
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(R"(CREATE TABLE test_table (
   int64_col INT64 NOT NULL,
   string_col STRING(20),
 ) PRIMARY KEY(int64_col))",
@@ -556,13 +558,15 @@ TEST_F(SchemaTest, PrintDDLStatementsTestForeignKey) {
 ) PRIMARY KEY(child_int64_col))")));
 }
 
-TEST_F(SchemaTest, PrintDDLStatementsTestColumnDefault) {
+TEST_F(SchemaTest, PrintDDLStatementsTestColumnExpressions) {
   std::string test_table =
       R"(
           CREATE TABLE test_table (
             int64_col INT64 NOT NULL,
+            string_col STRING(10),
             default_int64_col INT64 DEFAULT (10),
-            default_timestamp_col TIMESTAMP DEFAULT (CURRENT_TIMESTAMP())
+            default_timestamp_col TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()),
+            gen_col INT64 NOT NULL AS (int64_col + LENGTH(string_col)) STORED,
           ) PRIMARY KEY (int64_col)
       )";
   absl::StatusOr<std::unique_ptr<const backend::Schema>> schema =
@@ -575,12 +579,56 @@ TEST_F(SchemaTest, PrintDDLStatementsTestColumnDefault) {
   absl::StatusOr<std::vector<std::string>> statements =
       PrintDDLStatements(schema.value().get());
 
-  EXPECT_THAT(statements, zetasql_base::testing::IsOkAndHolds(
-                              testing::ElementsAre(R"(CREATE TABLE test_table (
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(R"(CREATE TABLE test_table (
   int64_col INT64 NOT NULL,
+  string_col STRING(10),
   default_int64_col INT64 DEFAULT (10),
   default_timestamp_col TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()),
+  gen_col INT64 NOT NULL AS (int64_col + LENGTH(string_col)) STORED,
 ) PRIMARY KEY(int64_col))")));
+}
+
+TEST_F(SchemaTest, PrintDDLStatementsTestAllowCommitTimestamp) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+                       test::CreateSchemaFromDDL(
+                           {
+                               R"(
+    CREATE TABLE T(
+      col1 INT64,
+      col2 TIMESTAMP OPTIONS(
+        allow_commit_timestamp = true
+      )
+    ) PRIMARY KEY(col1))",
+                           },
+                           type_factory_.get()));
+
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(R"(CREATE TABLE T (
+  col1 INT64,
+  col2 TIMESTAMP OPTIONS (
+    allow_commit_timestamp = true
+  ),
+) PRIMARY KEY(col1))")));
+}
+
+TEST_F(SchemaTest, PrintDDLStatementsTestCheckConstraints) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+                       test::CreateSchemaFromDDL(
+                           {R"(CREATE TABLE T (
+             K INT64,
+             V INT64,
+             CONSTRAINT C1 CHECK(K > 0)
+           ) PRIMARY KEY (K))",
+                            "ALTER TABLE T ADD CONSTRAINT C2 CHECK(K + V > 0)"},
+                           type_factory_.get()));
+
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(R"(CREATE TABLE T (
+  K INT64,
+  V INT64,
+  CONSTRAINT C1 CHECK(K > 0),
+  CONSTRAINT C2 CHECK(K + V > 0),
+) PRIMARY KEY(K))")));
 }
 
 }  // namespace

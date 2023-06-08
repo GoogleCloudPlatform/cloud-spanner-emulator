@@ -14,7 +14,9 @@
 # limitations under the License.
 #
 
-package(default_visibility = ["//:__subpackages__"])
+package(
+    default_visibility = ["//:__subpackages__"],
+)
 
 licenses(["unencumbered"])
 

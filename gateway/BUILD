@@ -17,7 +17,9 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//build/bazel:grpc_gateway.bzl", "generate_grpc_gateway")
 
-package(default_visibility = ["//:__subpackages__"])
+package(
+    default_visibility = ["//:__subpackages__"],
+)
 
 licenses(["unencumbered"])
 

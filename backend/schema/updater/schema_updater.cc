@@ -209,7 +209,8 @@ class SchemaUpdaterImpl {
 
   absl::Status AlterColumnSetDropDefault(
       const ddl::AlterTable::AlterColumn& alter_column, const Table* table,
-      const Column* column, Column::Editor* editor);
+      const Column* column,
+      Column::Editor* editor);
 
   absl::StatusOr<const Column*> CreateColumn(
       const ddl::ColumnDefinition& ddl_column, const Table* table,
@@ -602,7 +603,8 @@ absl::Status SchemaUpdaterImpl::AlterColumnDefinition(
 
 absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
     const ddl::AlterTable::AlterColumn& alter_column, const Table* table,
-    const Column* column, Column::Editor* editor) {
+    const Column* column,
+    Column::Editor* editor) {
   const ddl::AlterTable::AlterColumn::AlterColumnOp type =
       alter_column.operation();
   ZETASQL_RET_CHECK(type == ddl::AlterTable::AlterColumn::SET_DEFAULT ||
@@ -613,17 +615,17 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
     if (column->is_generated()) {
       return error::CannotSetDefaultValueOnGeneratedColumn(column->FullName());
     }
-    ZETASQL_RET_CHECK(new_column_def.has_column_default() &&
-              new_column_def.column_default().has_expression());
 
-    absl::Status s = AnalyzeColumnDefaultValue(
-        new_column_def.column_default().expression(), column->Name(),
-        column->GetType(), table, /*ddl_create_table=*/nullptr);
+    std::string expression = new_column_def.column_default().expression();
+    ZETASQL_RET_CHECK(new_column_def.has_column_default() && !expression.empty());
+    absl::Status s = AnalyzeColumnDefaultValue(expression, column->Name(),
+                                               column->GetType(), table,
+                                               /*ddl_create_table=*/nullptr);
     if (!s.ok()) {
       return error::ColumnDefaultValueParseError(table->Name(), column->Name(),
                                                  s.message());
     }
-    editor->set_expression(new_column_def.column_default().expression());
+    editor->set_expression(expression);
     editor->set_has_default_value(true);
   } else {
     if (!column->has_default_value()) {
@@ -741,11 +743,12 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
   modifier->set_type(column_type);
 
   if (ddl_column.has_column_default()) {
+    std::string expression = ddl_column.column_default().expression();
     has_default_value = true;
-    modifier->set_expression(ddl_column.column_default().expression());
-    absl::Status s = AnalyzeColumnDefaultValue(
-        ddl_column.column_default().expression(), ddl_column.column_name(),
-        column_type, table, ddl_create_table);
+    modifier->set_expression(expression);
+    absl::Status s =
+        AnalyzeColumnDefaultValue(expression, ddl_column.column_name(),
+                                  column_type, table, ddl_create_table);
     if (!s.ok()) {
       return error::ColumnDefaultValueParseError(
           table->Name(), ddl_column.column_name(), s.message());
@@ -756,12 +759,13 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
           ddl_column.column_name());
     }
 
+    std::string expression = ddl_column.generated_column().expression();
     is_generated = true;
-    modifier->set_expression(ddl_column.generated_column().expression());
+    modifier->set_expression(expression);
     absl::flat_hash_set<std::string> dependent_column_names;
     absl::Status s = AnalyzeGeneratedColumn(
-        ddl_column.generated_column().expression(), ddl_column.column_name(),
-        column_type, table, ddl_create_table, &dependent_column_names);
+        expression, ddl_column.column_name(), column_type, table,
+        ddl_create_table, &dependent_column_names);
     if (!s.ok()) {
       return error::GeneratedColumnDefinitionParseError(
           table->Name(), ddl_column.column_name(), s.message());
@@ -1216,7 +1220,6 @@ absl::Status SchemaUpdaterImpl::CreateCheckConstraint(
   builder.set_constraint_name(check_constraint_name);
   builder.has_generated_name(is_generated_name);
   builder.set_expression(ddl_check_constraint.expression());
-
   absl::flat_hash_set<std::string> dependent_column_names;
   absl::Status s = AnalyzeCheckConstraint(ddl_check_constraint.expression(),
                                           table, ddl_create_table,
@@ -1690,9 +1693,11 @@ absl::Status SchemaUpdaterImpl::AlterTable(
         ZETASQL_RETURN_IF_ERROR(
             AlterNode<Column>(column,
                               [this, &alter_column, &column,
-                               &table](Column::Editor* editor) -> absl::Status {
+                               &table
+        ](Column::Editor* editor) -> absl::Status {
                                 return AlterColumnSetDropDefault(
-                                    alter_column, table, column, editor);
+                                    alter_column, table, column,
+                                    editor);
                               }));
       } else {
         const auto& column_def = alter_column.column();
@@ -1796,7 +1801,6 @@ absl::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_table) {
   if (table == nullptr) {
     return error::TableNotFound(drop_table.table_name());
   }
-  // TODO : Error if any view depends on this table.
   return DropNode(table);
 }
 
@@ -1848,7 +1852,6 @@ absl::Status SchemaUpdaterImpl::DropFunction(
   if (view == nullptr) {
     return error::ViewNotFound(drop_function.function_name());
   }
-  // TODO : Error if any view depends on this view.
   return DropNode(view);
 }
 

@@ -19,7 +19,9 @@ load(
     "generate_javacc_parser",
 )
 
-package(default_visibility = ["//:__subpackages__"])
+package(
+    default_visibility = ["//:__subpackages__"],
+)
 
 licenses(["unencumbered"])
 

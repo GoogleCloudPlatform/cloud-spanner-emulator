@@ -34,7 +34,7 @@ class EmulatorFeatureFlags {
     bool enable_check_constraint = true;
     bool enable_column_default_values = true;
     bool enable_dml_returning = true;
-    bool enable_views = false;
+    bool enable_views = true;
   };
 
   static const EmulatorFeatureFlags& instance() {

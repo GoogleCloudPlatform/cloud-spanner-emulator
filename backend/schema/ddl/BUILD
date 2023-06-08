@@ -16,7 +16,9 @@
 
 # Build rules for the DDL statements API.
 
-package(default_visibility = ["//:__subpackages__"])
+package(
+    default_visibility = ["//:__subpackages__"],
+)
 
 licenses(["unencumbered"])
 

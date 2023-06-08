@@ -16,9 +16,9 @@
 
 # Build rules for some utilties used in schema processing.
 
-package(default_visibility = [
-    "//:__subpackages__",
-])
+package(
+    default_visibility = ["//:__subpackages__"],
+)
 
 licenses(["unencumbered"])
 

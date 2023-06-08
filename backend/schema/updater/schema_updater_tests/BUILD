@@ -16,9 +16,9 @@
 
 # Test cases for schema_updater_test.cc.
 
-package(default_visibility = [
-    "//:__subpackages__",
-])
+package(
+    default_visibility = ["//:__subpackages__"],
+)
 
 licenses(["unencumbered"])
 
