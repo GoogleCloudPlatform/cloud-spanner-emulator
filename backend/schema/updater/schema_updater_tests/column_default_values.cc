@@ -192,7 +192,6 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, SetDropDefault) {
   EXPECT_FALSE(col->has_default_value());
   EXPECT_FALSE(col->expression().has_value());
 }
-
 }  // namespace test
 }  // namespace backend
 }  // namespace emulator

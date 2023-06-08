@@ -189,9 +189,9 @@ go_repository(
 
 http_archive(
     name = "com_googlesource_code_re2",
-    sha256 = "ac855fb93dfa6878f88bc1c399b9a2743fdfcb3dc24b94ea9a568a1c990b1212",
-    strip_prefix = "re2-d1394506654e0a19a92f3d8921e26f7c3f4de969",
-    url = "https://github.com/google/re2/archive/d1394506654e0a19a92f3d8921e26f7c3f4de969.tar.gz",
+    sha256 = "ef516fb84824a597c4d5d0d6d330daedb18363b5a99eda87d027e6bdd9cba299",
+    strip_prefix = "re2-03da4fc0857c285e3a26782f6bc8931c4c950df4",
+    url = "https://github.com/google/re2/archive/03da4fc0857c285e3a26782f6bc8931c4c950df4.tar.gz",
 )
 
 http_archive(
