@@ -31,6 +31,7 @@
 #include "absl/strings/substitute.h"
 #include "backend/common/case.h"
 #include "backend/datamodel/types.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
@@ -64,7 +65,6 @@ const Index* Table::FindIndex(const std::string& index_name) const {
   }
   return *itr;
 }
-
 const Column* Table::FindColumnCaseSensitive(
     const std::string& column_name) const {
   auto column = FindColumn(column_name);
@@ -184,7 +184,6 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
       MarkDeleted();
     }
   }
-
   return absl::OkStatus();
 }
 

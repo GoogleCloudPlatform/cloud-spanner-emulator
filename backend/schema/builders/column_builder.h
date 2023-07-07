@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_COLUMN_BUILDER_H
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_COLUMN_BUILDER_H
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -24,6 +25,7 @@
 #include "zetasql/public/type.h"
 #include "absl/memory/memory.h"
 #include "backend/common/ids.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/validators/column_validator.h"
 
@@ -103,6 +105,11 @@ class Column::Builder {
     instance_->source_column_ = column;
     instance_->type_ = column->type_;
     instance_->declared_max_length_ = column->declared_max_length_;
+    return *this;
+  }
+
+  Builder& set_hidden(bool hidden) {
+    instance_->hidden_ = hidden;
     return *this;
   }
 

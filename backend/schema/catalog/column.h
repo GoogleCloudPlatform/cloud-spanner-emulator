@@ -114,6 +114,8 @@ class Column : public SchemaNode {
   // Returns the table containing the column.
   const Table* table() const { return table_; }
 
+  bool hidden() const { return hidden_; }
+
   // SchemaNode interface implementation.
   // ------------------------------------
 
@@ -200,6 +202,10 @@ class Column : public SchemaNode {
 
   // The table containing the column.
   const Table* table_ = nullptr;
+
+  // Indicate if the column is hidden. If true, the column will be excluded from
+  // star expansion (SELECT *).
+  bool hidden_ = false;
 };
 
 // KeyColumn is a single column that is part of the key of a table or an index.

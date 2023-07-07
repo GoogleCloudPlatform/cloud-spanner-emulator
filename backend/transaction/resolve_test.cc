@@ -59,7 +59,8 @@ class ResolveTest : public testing::Test {
                         )",
                         R"(
                           CREATE UNIQUE INDEX TestIndex ON TestTable(StringCol DESC)
-                        )"},
+                        )"
+                    },
                     type_factory_.get())
                     .value()),
         test_table_(schema_->FindTable("TestTable")),
@@ -67,7 +68,8 @@ class ResolveTest : public testing::Test {
         index_data_table_(index_->index_data_table()),
         int_col_(test_table_->FindColumn("Int64Col")),
         string_col_(test_table_->FindColumn("StringCol")),
-        index_string_col_(index_data_table_->FindColumn("StringCol")) {}
+        index_string_col_(index_data_table_->FindColumn("StringCol"))
+  {}
 
  protected:
   Clock clock_;

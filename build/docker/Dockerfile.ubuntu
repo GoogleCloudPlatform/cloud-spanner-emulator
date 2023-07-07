@@ -26,7 +26,8 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive"                         \
 # Unfortunately ZetaSQL has issues with clang (default bazel compiler), so
 # we install GCC. Also install make for rules_foreign_cc bazel rules.
 ENV GCC_VERSION=8
-RUN apt-get -qq install -y software-properties-common make rename  git
+RUN apt-get -qq update                                                      && \
+    apt-get -qq install -y software-properties-common make rename  git
 RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
     apt-get -qq update                                                      && \
     apt-get -qq install -y gcc-${GCC_VERSION} g++-${GCC_VERSION}            && \

@@ -528,6 +528,9 @@ void VisitColumnNode(const SimpleNode* node, ColumnDefinition* column,
   for (int i = 2; i < node->jjtGetNumChildren(); ++i) {
     SimpleNode* child = GetChildNode(node, i);
     switch (child->getId()) {
+      case JJTHIDDEN:
+        column->set_hidden(true);
+        break;
       case JJTNOT_NULL:
         column->set_not_null(true);
         break;
@@ -714,6 +717,12 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
   CheckNode(node, JJTCREATE_TABLE_STATEMENT);
 
   int offset = 0;
+  // We may have an optional IF NOT EXISTS node before the name.
+  if (GetChildNode(node, offset)->getId() == JJTIF_NOT_EXISTS) {
+    table->set_existence_modifier(IF_NOT_EXISTS);
+    offset++;
+  }
+
   table->set_table_name(
       GetQualifiedIdentifier(GetChildNode(node, offset, JJTNAME)));
   offset++;
@@ -800,6 +809,9 @@ void VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index,
         break;
       case JJTINDEX_INTERLEAVE_CLAUSE:
         VisitIndexInterleaveNode(child, index->mutable_interleave_in_table());
+        break;
+      case JJTIF_NOT_EXISTS:
+        index->set_existence_modifier(IF_NOT_EXISTS);
         break;
       default:
         ZETASQL_LOG(ERROR) << "Unexpected index info: " << child->toString();
@@ -1054,6 +1066,11 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
     switch (child->getId()) {
       case JJTADD_COLUMN: {
         int offset = 2;
+        if (GetChildNode(node, offset)->getId() == JJTIF_NOT_EXISTS) {
+          offset++;
+          alter_table->mutable_add_column()->set_existence_modifier(
+              IF_NOT_EXISTS);
+        }
         VisitColumnNode(GetChildNode(node, offset, JJTCOLUMN_DEF),
                         alter_table->mutable_add_column()->mutable_column(),
                         ddl_text, errors);
@@ -1143,9 +1160,15 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
           GetQualifiedIdentifier(GetFirstChildNode(stmt, JJTNAME));
       switch (drop_stmt->getId()) {
         case JJTTABLE:
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_table()->set_existence_modifier(IF_EXISTS);
+          }
           statement->mutable_drop_table()->set_table_name(name);
           break;
         case JJTINDEX:
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_index()->set_existence_modifier(IF_EXISTS);
+          }
           statement->mutable_drop_index()->set_index_name(name);
           break;
         case JJTCHANGE_STREAM:

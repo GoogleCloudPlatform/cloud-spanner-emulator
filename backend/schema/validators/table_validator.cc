@@ -303,7 +303,8 @@ absl::Status TableValidator::Validate(const Table* table,
   } else {
     bool ignore_nullability = table->owner_index() != nullptr &&
                               table->owner_index()->is_null_filtered();
-    ZETASQL_RET_CHECK(table->parent_table_->is_public());
+    ZETASQL_RET_CHECK(table->parent_table_->is_public()
+    );
     auto parent_pk = table->parent_table_->primary_key();
     for (int i = 0; i < parent_pk.size(); ++i) {
       // The child has fewer primary key parts than the parent.

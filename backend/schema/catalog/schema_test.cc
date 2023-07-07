@@ -16,6 +16,7 @@
 
 #include "backend/schema/catalog/schema.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -344,12 +345,11 @@ TEST_F(SchemaTest, TableBuilder) {
 }
 
 TEST_F(SchemaTest, ChangeStreamBuilderValid) {
-  auto c = change_stream_builder("C").build();
+  auto c = change_stream_builder("CS").build();
   ZETASQL_EXPECT_OK(c->Validate(&context_));
 }
 
 TEST_F(SchemaTest, ChangeStreamBuilderInvalid) {
-  ChangeStream::Builder cs = change_stream_builder("C1");
   const std::string change_stream_name(130, 'C');
   auto invalid_cs = change_stream_builder(change_stream_name).build();
   EXPECT_EQ(invalid_cs->Validate(&context_),
@@ -631,6 +631,46 @@ TEST_F(SchemaTest, PrintDDLStatementsTestCheckConstraints) {
 ) PRIMARY KEY(K))")));
 }
 
+TEST_F(SchemaTest, PrintDDLStatementsTestNoNameCheckConstraints) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+                       test::CreateSchemaFromDDL({R"(CREATE TABLE T (
+             K INT64,
+             V INT64,
+             CHECK(K > 0)
+           ) PRIMARY KEY (K))"},
+                                                 type_factory_.get()));
+
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(R"(CREATE TABLE T (
+  K INT64,
+  V INT64,
+  CHECK(K > 0),
+) PRIMARY KEY(K))")));
+}
+
+TEST_F(SchemaTest, PrintDDLStatementsTestViews) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+                       test::CreateSchemaFromDDL({R"(
+    CREATE TABLE T(
+      col1 INT64,
+      col2 STRING(MAX)
+    ) PRIMARY KEY(col1)
+  )",
+                                                  R"(
+    CREATE OR REPLACE VIEW `MyView` SQL SECURITY INVOKER AS
+    SELECT T.col1, T.col2 FROM T
+  )"},
+                                                 type_factory_.get()));
+
+  EXPECT_THAT(
+      PrintDDLStatements(schema.get()),
+      IsOkAndHolds(ElementsAre(R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+) PRIMARY KEY(col1))",
+                               "CREATE VIEW MyView SQL SECURITY INVOKER AS "
+                               "SELECT T.col1, T.col2 FROM T")));
+}
 }  // namespace
 }  // namespace backend
 }  // namespace emulator

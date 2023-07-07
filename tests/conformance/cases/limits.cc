@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "gmock/gmock.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
@@ -46,10 +47,6 @@ TEST_F(LimitsTest, MaxColumnsPerTable) {
   EXPECT_THAT(UpdateSchema({create_table_statement}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
 }
-
-// TODO: Add the tests for MaxTableNameLength,
-// MaxChangeStreamsPerTable, MaxChangeStreamsPerColumn, and
-// MaxChangeStreamsPerDatabase.
 
 TEST_F(LimitsTest, MaxTableNameLength) {
   std::string create_table_statement = absl::StrCat(
@@ -104,7 +101,6 @@ TEST_F(LimitsTest, DISABLED_MaxTablesPerDatabase) {
           "CREATE TABLE table_%d ( ID INT64 NOT NULL, ) PRIMARY KEY (ID)", i)}),
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
-
 // TODO: This test is timing out in the emulator.
 TEST_F(LimitsTest, DISABLED_MaxIndexesPerDatabase) {
   std::vector<std::string> statements;
@@ -146,7 +142,6 @@ TEST_F(LimitsTest, MaxIndexPerTable) {
       UpdateSchema({"CREATE INDEX index_too_many ON test_table(string_col)"}),
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
-
 TEST_F(LimitsTest, MaxColumnInIndexPrimaryKey) {
   std::string create_table_statement = "CREATE TABLE test_table (";
   for (int i = 0; i <= 16; ++i) {

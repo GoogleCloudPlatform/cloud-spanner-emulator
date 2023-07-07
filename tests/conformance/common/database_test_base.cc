@@ -37,6 +37,8 @@
 #include "google/cloud/spanner/retry_policy.h"
 #include "google/cloud/spanner/transaction.h"
 #include "google/cloud/status_or.h"
+#include "common/constants.h"
+#include "tests/common/file_based_schema_reader.h"
 #include "tests/conformance/common/environment.h"
 #include "absl/status/status.h"
 
@@ -82,8 +84,9 @@ void DatabaseTest::SetUp() {
               std::move(connection_options)));
   google::spanner::admin::database::v1::CreateDatabaseRequest request;
   request.set_parent(database_->instance().FullName());
-  request.set_create_statement("CREATE DATABASE `" + database_->database_id() +
-                               "`");
+  std::string quote = kGSQLQuote;
+  request.set_create_statement("CREATE DATABASE " + quote +
+                               database_->database_id() + quote);
   ZETASQL_ASSERT_OK(ToUtilStatusOr(database_client_->CreateDatabase(request).get()));
 
   // Setup a client to interact with the database.
@@ -129,6 +132,22 @@ absl::Status DatabaseTest::SetSchema(const std::vector<std::string>& schema) {
     return ToUtilStatus(status_or.status());
   }
   return absl::OkStatus();
+}
+
+absl::Status DatabaseTest::SetSchemaFromFile(const std::string& file_name) {
+  const std::string root_dir = GetRunfilesDir(kSchemaTestDataDir);
+  const std::string file_path = absl::StrCat(root_dir, "/", file_name);
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto schema_set,
+      ReadSchemaSetFromFile(file_path, FileBasedSchemaSetOptions{}));
+
+  // Split the input into individual DDL statements.
+  std::string text = schema_set.schemas[dialect_];
+  absl::StripAsciiWhitespace(&text);
+  std::vector<std::string> input_statements =
+      absl::StrSplit(text, ';', absl::SkipEmpty());
+  return SetSchema(input_statements);
 }
 
 absl::StatusOr<DatabaseTest::UpdateDatabaseDdlMetadata>

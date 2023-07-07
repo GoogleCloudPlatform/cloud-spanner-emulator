@@ -17,14 +17,18 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_CHANGE_STREAM_BUILDER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_CHANGE_STREAM_BUILDER_H_
 
+#include <cerrno>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/memory/memory.h"
+#include "absl/strings/string_view.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/change_stream.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"

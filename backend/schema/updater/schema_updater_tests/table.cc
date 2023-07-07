@@ -16,14 +16,11 @@
 
 #include <algorithm>
 #include <iterator>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
-#include "tests/common/proto_matchers.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
@@ -39,7 +36,7 @@ namespace types = zetasql::types;
 
 namespace {
 
-TEST_F(SchemaUpdaterTest, CreateTable_SingleKey) {
+TEST_P(SchemaUpdaterTest, CreateTable_SingleKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
@@ -60,12 +57,13 @@ TEST_F(SchemaUpdaterTest, CreateTable_SingleKey) {
   EXPECT_THAT(col2, testing::Not(IsKeyColumnOf(t, "ASC")));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_MultiKey) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
-    CREATE TABLE T(
-      col1 INT64,
-      col2 STRING(MAX)
-    ) PRIMARY KEY(col1 DESC, col2))"}));
+TEST_P(SchemaUpdaterTest, CreateTable_MultiKey) {
+  std::unique_ptr<const Schema> schema;
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      CREATE TABLE T(
+        col1 INT64,
+        col2 STRING(MAX)
+      ) PRIMARY KEY(col1 DESC, col2))"}));
 
   auto t = schema->FindTable("T");
   EXPECT_NE(t, nullptr);
@@ -74,14 +72,14 @@ TEST_F(SchemaUpdaterTest, CreateTable_MultiKey) {
 
   auto col1 = t->columns()[0];
   EXPECT_THAT(col1, ColumnIs("col1", types::Int64Type()));
-  EXPECT_THAT(col1, IsKeyColumnOf(t, "DESC"));
+    EXPECT_THAT(col1, IsKeyColumnOf(t, "DESC"));
 
   auto col2 = t->columns()[1];
   EXPECT_THAT(col2, ColumnIs("col2", types::StringType()));
   EXPECT_THAT(col2, IsKeyColumnOf(t, "ASC"));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_NoKey) {
+TEST_P(SchemaUpdaterTest, CreateTable_NoKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64
@@ -97,7 +95,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_NoKey) {
   EXPECT_THAT(col1, testing::Not(IsKeyColumnOf(t, "ASC")));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_NoColumns) {
+TEST_P(SchemaUpdaterTest, CreateTable_NoColumns) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
     ) PRIMARY KEY())"}));
@@ -108,7 +106,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_NoColumns) {
   EXPECT_EQ(t->primary_key().size(), 0);
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_ColumnLength) {
+TEST_P(SchemaUpdaterTest, CreateTable_ColumnLength) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 BYTES(10)
@@ -133,14 +131,15 @@ TEST_F(SchemaUpdaterTest, CreateTable_ColumnLength) {
   EXPECT_FALSE(col1->declared_max_length().has_value());
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
-    CREATE TABLE T(
-      col1 INT64,
-      col2 TIMESTAMP OPTIONS(
-        allow_commit_timestamp = true
-      )
-    ) PRIMARY KEY(col1))"}));
+TEST_P(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
+  std::unique_ptr<const Schema> schema;
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      CREATE TABLE T(
+        col1 INT64,
+        col2 TIMESTAMP OPTIONS(
+          allow_commit_timestamp = true
+        )
+      ) PRIMARY KEY(col1))"}));
 
   auto t = schema->FindTable("T");
   auto col2 = t->columns()[1];
@@ -173,7 +172,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
   EXPECT_FALSE(col2->allows_commit_timestamp());
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_InvalidColumnLength) {
+TEST_P(SchemaUpdaterTest, CreateTable_InvalidColumnLength) {
   EXPECT_THAT(CreateSchema({R"(
     CREATE TABLE T(
       col1 BYTES(1000000000)
@@ -182,7 +181,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_InvalidColumnLength) {
                   "T.col1", 1000000000, 1, limits::kMaxBytesColumnLength)));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_DuplicateKeys) {
+TEST_P(SchemaUpdaterTest, CreateTable_DuplicateKeys) {
   EXPECT_THAT(CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
@@ -191,7 +190,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_DuplicateKeys) {
               StatusIs(error::MultipleRefsToKeyColumn("Table", "T", "col1")));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_DuplicateColumns) {
+TEST_P(SchemaUpdaterTest, CreateTable_DuplicateColumns) {
   EXPECT_THAT(CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
@@ -200,7 +199,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_DuplicateColumns) {
               StatusIs(error::DuplicateColumnName("T.col1")));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_ColumnNullability) {
+TEST_P(SchemaUpdaterTest, CreateTable_ColumnNullability) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64 NOT NULL,
@@ -218,7 +217,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_ColumnNullability) {
   EXPECT_FALSE(col2->is_nullable());
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_ColumnNotFound) {
+TEST_P(SchemaUpdaterTest, CreateTable_ColumnNotFound) {
   EXPECT_THAT(CreateSchema({R"(
         CREATE TABLE T(
           col1 INT64
@@ -226,7 +225,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_ColumnNotFound) {
               StatusIs(error::NonExistentKeyColumn("Table", "T", "col2")));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_AlreadyExists) {
+TEST_P(SchemaUpdaterTest, CreateTable_AlreadyExists) {
   EXPECT_THAT(CreateSchema({
                   R"(
       CREATE TABLE T(
@@ -249,7 +248,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_AlreadyExists) {
               StatusIs(error::SchemaObjectAlreadyExists("Table", "T")));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_Interleave) {
+TEST_P(SchemaUpdaterTest, CreateTable_Interleave) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE `Parent` (
         k1 INT64 NOT NULL,
@@ -272,7 +271,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_Interleave) {
   EXPECT_THAT(c, IsInterleavedIn(p, Table::OnDeleteAction::kCascade));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_InterleaveMismatch) {
+TEST_P(SchemaUpdaterTest, CreateTable_InterleaveMismatch) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE `Parent` (
         k1 INT64 NOT NULL,
@@ -313,7 +312,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_InterleaveMismatch) {
                                                      "STRING", "INT64")));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_InterleaveDepth) {
+TEST_P(SchemaUpdaterTest, CreateTable_InterleaveDepth) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T0 (
         k0 INT64,
@@ -342,7 +341,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_InterleaveDepth) {
                                           limits::kMaxInterleavingDepth)));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_ParentNotFound) {
+TEST_P(SchemaUpdaterTest, CreateTable_ParentNotFound) {
   EXPECT_THAT(CreateSchema({
                   R"(
       CREATE TABLE `Parent` (
@@ -361,7 +360,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_ParentNotFound) {
               StatusIs(error::TableNotFound("NoParent")));
 }
 
-TEST_F(SchemaUpdaterTest, AlterTable_AddColumn) {
+TEST_P(SchemaUpdaterTest, AlterTable_AddColumn) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -385,7 +384,45 @@ TEST_F(SchemaUpdaterTest, AlterTable_AddColumn) {
   EXPECT_EQ(c2->declared_max_length(), 100);
 }
 
-TEST_F(SchemaUpdaterTest, AlterTable_AddColumn_AlreadyExists) {
+TEST_P(SchemaUpdaterTest, AlterTableAddColumnIfNotExists) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 INT64,
+      ) PRIMARY KEY (k1)
+    )"}));
+
+  auto t_old = schema->FindTable("T");
+  EXPECT_EQ(t_old->FindColumn("c2"), nullptr);
+
+  // Add a column, make sure it goes in right.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T ADD COLUMN c2 BYTES(100)
+    )"}));
+
+  auto t_new = new_schema->FindTable("T");
+  EXPECT_NE(t_old, t_new);
+  auto c2 = t_new->FindColumn("c2");
+  EXPECT_NE(c2, nullptr);
+  EXPECT_THAT(c2, ColumnIs("c2", types::BytesType()));
+  EXPECT_TRUE(c2->is_nullable());
+  EXPECT_EQ(c2->declared_max_length(), 100);
+
+  // Add the same column again and make sure we didn't change anything.
+  ZETASQL_ASSERT_OK(UpdateSchema(new_schema.get(), {R"(
+      ALTER TABLE T ADD COLUMN IF NOT EXISTS c2 INT64
+    )"}));
+
+  t_new = new_schema->FindTable("T");
+  EXPECT_NE(t_old, t_new);
+  c2 = t_new->FindColumn("c2");
+  EXPECT_NE(c2, nullptr);
+  EXPECT_THAT(c2, ColumnIs("c2", types::BytesType()));
+  EXPECT_TRUE(c2->is_nullable());
+  EXPECT_EQ(c2->declared_max_length(), 100);
+}
+
+TEST_P(SchemaUpdaterTest, AlterTable_AddColumnAlreadyExists) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -399,7 +436,7 @@ TEST_F(SchemaUpdaterTest, AlterTable_AddColumn_AlreadyExists) {
               StatusIs(error::DuplicateColumnName("T.c1")));
 }
 
-TEST_F(SchemaUpdaterTest, AlterColumn_ChangeColumnType_StaticCheckValid) {
+TEST_P(SchemaUpdaterTest, AlterColumn_ChangeColumnType_StaticCheckValid) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -422,7 +459,7 @@ TEST_F(SchemaUpdaterTest, AlterColumn_ChangeColumnType_StaticCheckValid) {
   EXPECT_EQ(c1->declared_max_length(), 400);
 }
 
-TEST_F(SchemaUpdaterTest, AlterColumn_ChangeColumnType_Invalid) {
+TEST_P(SchemaUpdaterTest, AlterColumn_ChangeColumnType_Invalid) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -441,7 +478,7 @@ TEST_F(SchemaUpdaterTest, AlterColumn_ChangeColumnType_Invalid) {
               StatusIs(error::CannotChangeColumnType("c1", "STRING", "INT64")));
 }
 
-TEST_F(SchemaUpdaterTest, AlterColumn_ChangeNonArrayToArray) {
+TEST_P(SchemaUpdaterTest, AlterColumn_ChangeNonArrayToArray) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -462,7 +499,7 @@ TEST_F(SchemaUpdaterTest, AlterColumn_ChangeNonArrayToArray) {
       StatusIs(error::CannotChangeColumnType("c1", "STRING", "ARRAY<BYTES>")));
 }
 
-TEST_F(SchemaUpdaterTest, AlterColumn_NotNullToNullable) {
+TEST_P(SchemaUpdaterTest, AlterColumn_NotNullToNullable) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -485,7 +522,7 @@ TEST_F(SchemaUpdaterTest, AlterColumn_NotNullToNullable) {
   EXPECT_TRUE(c2->is_nullable());
 }
 
-TEST_F(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnType) {
+TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnType) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -518,7 +555,7 @@ TEST_F(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnType) {
   EXPECT_THAT(c1_idx_new->column(), SourceColumnIs(c1_new));
 }
 
-TEST_F(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnNullability) {
+TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnNullability) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -557,7 +594,7 @@ TEST_F(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnNullability) {
   EXPECT_THAT(idx2->key_columns()[0]->column(), SourceColumnIs(c2));
 }
 
-TEST_F(SchemaUpdaterTest, AlterColumn_KeyColumnType) {
+TEST_P(SchemaUpdaterTest, AlterColumn_KeyColumnType) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 STRING(100) NOT NULL,
@@ -574,7 +611,7 @@ TEST_F(SchemaUpdaterTest, AlterColumn_KeyColumnType) {
   EXPECT_FALSE(c1->declared_max_length().has_value());
 }
 
-TEST_F(SchemaUpdaterTest, AlterColumn_KeyColumnNullability) {
+TEST_P(SchemaUpdaterTest, AlterColumn_KeyColumnNullability) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64 NOT NULL,
@@ -588,7 +625,7 @@ TEST_F(SchemaUpdaterTest, AlterColumn_KeyColumnNullability) {
       StatusIs(error::CannotChangeKeyColumn("T.k1", "from NOT NULL to NULL")));
 }
 
-TEST_F(SchemaUpdaterTest, AlterTable_UnsetAllowCommitTimestamp) {
+TEST_P(SchemaUpdaterTest, AlterTable_UnsetAllowCommitTimestamp) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -611,7 +648,7 @@ TEST_F(SchemaUpdaterTest, AlterTable_UnsetAllowCommitTimestamp) {
   EXPECT_FALSE(c1_new->allows_commit_timestamp());
 }
 
-TEST_F(SchemaUpdaterTest, AlterTable_DropColumn) {
+TEST_P(SchemaUpdaterTest, AlterTable_DropColumn) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -628,7 +665,7 @@ TEST_F(SchemaUpdaterTest, AlterTable_DropColumn) {
   EXPECT_EQ(c1, nullptr);
 }
 
-TEST_F(SchemaUpdaterTest, AlterTable_InvalidDropKeyColumn) {
+TEST_P(SchemaUpdaterTest, AlterTable_InvalidDropKeyColumn) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -642,7 +679,7 @@ TEST_F(SchemaUpdaterTest, AlterTable_InvalidDropKeyColumn) {
               StatusIs(error::InvalidDropKeyColumn("k1", "T")));
 }
 
-TEST_F(SchemaUpdaterTest, AlterTable_InvalidDropIndexedColumn) {
+TEST_P(SchemaUpdaterTest, AlterTable_InvalidDropIndexedColumn) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -668,7 +705,7 @@ TEST_F(SchemaUpdaterTest, AlterTable_InvalidDropIndexedColumn) {
       StatusIs(error::InvalidDropColumnWithDependency("c2", "T", "Idx1")));
 }
 
-TEST_F(SchemaUpdaterTest, AlterTable_ChangeOnDelete) {
+TEST_P(SchemaUpdaterTest, AlterTable_ChangeOnDelete) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T1 (
@@ -707,7 +744,73 @@ TEST_F(SchemaUpdaterTest, AlterTable_ChangeOnDelete) {
   EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kNoAction);
 }
 
-TEST_F(SchemaUpdaterTest, DropTable) {
+TEST_P(SchemaUpdaterTest, DropTableNonexistentIfExists) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T1 (
+        k1 INT64,
+        c1 STRING(10),
+      ) PRIMARY KEY (k1)
+    )",
+                                                  R"(
+      CREATE TABLE T2 (
+        k2 INT64,
+        c2 STRING(MAX),
+      ) PRIMARY KEY (k2)
+    )"}));
+
+  auto t1 = schema->FindTable("T1");
+  EXPECT_NE(t1, nullptr);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      DROP TABLE T1
+    )"}));
+
+  // Dropped table and its dependent nodes like columns, key columns etc.
+  // are deleted.
+  t1 = new_schema->FindTable("T1");
+  EXPECT_EQ(t1, nullptr);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(schema.get(), {R"(
+      DROP TABLE IF EXISTS T1
+    )"}));
+
+  // Make sure it's still gone
+  t1 = new_schema2->FindTable("T1");
+  EXPECT_EQ(t1, nullptr);
+
+  // Make sure the other table is still there.
+  auto t2 = new_schema2->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+}
+
+TEST_P(SchemaUpdaterTest, DropTableIfExists) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T1 (
+        k1 INT64,
+        c1 STRING(10),
+      ) PRIMARY KEY (k1)
+    )",
+                                                  R"(
+      CREATE TABLE T2 (
+        k2 INT64,
+        c2 STRING(MAX),
+      ) PRIMARY KEY (k2)
+    )"}));
+
+  auto t1 = schema->FindTable("T1");
+  EXPECT_NE(t1, nullptr);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      DROP TABLE IF EXISTS T1
+    )"}));
+
+  // Dropped table and its dependent nodes like columns, key columns etc.
+  // are deleted.
+  t1 = new_schema->FindTable("T1");
+  EXPECT_EQ(t1, nullptr);
+}
+
+TEST_P(SchemaUpdaterTest, DropTable) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
@@ -740,7 +843,7 @@ TEST_F(SchemaUpdaterTest, DropTable) {
   EXPECT_NE(t2, nullptr);
 }
 
-TEST_F(SchemaUpdaterTest, DropTable_CanDropChildTable) {
+TEST_P(SchemaUpdaterTest, DropTable_CanDropChildTable) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
@@ -771,7 +874,7 @@ TEST_F(SchemaUpdaterTest, DropTable_CanDropChildTable) {
   EXPECT_EQ(new_schema->FindTable("T2"), nullptr);
 }
 
-TEST_F(SchemaUpdaterTest, DropTable_CanDropChildAndParentTogether) {
+TEST_P(SchemaUpdaterTest, DropTable_CanDropChildAndParentTogether) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
@@ -794,7 +897,7 @@ TEST_F(SchemaUpdaterTest, DropTable_CanDropChildAndParentTogether) {
   EXPECT_TRUE(new_schema->tables().empty());
 }
 
-TEST_F(SchemaUpdaterTest, DropTable_Recreate) {
+TEST_P(SchemaUpdaterTest, DropTable_Recreate) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
@@ -819,7 +922,7 @@ TEST_F(SchemaUpdaterTest, DropTable_Recreate) {
   EXPECT_NE(t1, nullptr);
 }
 
-TEST_F(SchemaUpdaterTest, ChangeKeyColumn) {
+TEST_P(SchemaUpdaterTest, ChangeKeyColumn) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T1 (
@@ -841,7 +944,7 @@ TEST_F(SchemaUpdaterTest, ChangeKeyColumn) {
               StatusIs(error::AlteringParentColumn("T2.k1")));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_NumericColumns) {
+TEST_P(SchemaUpdaterTest, CreateTable_NumericColumns) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
@@ -865,7 +968,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_NumericColumns) {
   EXPECT_THAT(col3, ColumnIs("col3", types::NumericArrayType()));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_NumericAsPK) {
+TEST_P(SchemaUpdaterTest, CreateTable_NumericAsPK) {
   EmulatorFeatureFlags::Flags flags;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
@@ -882,7 +985,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_NumericAsPK) {
   EXPECT_THAT(t->columns()[0], ColumnIs("k1", types::NumericType()));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_JsonColumns) {
+TEST_P(SchemaUpdaterTest, CreateTable_JsonColumns) {
   EmulatorFeatureFlags::Flags flags;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
@@ -908,7 +1011,7 @@ TEST_F(SchemaUpdaterTest, CreateTable_JsonColumns) {
   EXPECT_THAT(col3, ColumnIs("col3", types::JsonArrayType()));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTable_JsonAsPK) {
+TEST_P(SchemaUpdaterTest, CreateTable_JsonAsPK) {
   EmulatorFeatureFlags::Flags flags;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(CreateSchema({R"(
@@ -935,7 +1038,7 @@ std::vector<std::string> SchemaForCaseSensitivityTests() {
   };
 }
 
-TEST_F(SchemaUpdaterTest, PrimaryKeyIsCaseSensitive) {
+TEST_P(SchemaUpdaterTest, PrimaryKeyIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -948,7 +1051,7 @@ TEST_F(SchemaUpdaterTest, PrimaryKeyIsCaseSensitive) {
               StatusIs(error::NonExistentKeyColumn("Table", "T2", "K1")));
 }
 
-TEST_F(SchemaUpdaterTest, TableNameIsCaseSensitive) {
+TEST_P(SchemaUpdaterTest, TableNameIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -960,7 +1063,7 @@ TEST_F(SchemaUpdaterTest, TableNameIsCaseSensitive) {
               StatusIs(error::SchemaObjectAlreadyExists("T", "t")));
 }
 
-TEST_F(SchemaUpdaterTest, InterleaveTableNameIsCaseSensitive) {
+TEST_P(SchemaUpdaterTest, InterleaveTableNameIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -975,7 +1078,7 @@ TEST_F(SchemaUpdaterTest, InterleaveTableNameIsCaseSensitive) {
               StatusIs(error::TableNotFound("t")));
 }
 
-TEST_F(SchemaUpdaterTest, AlterTableNameIsCaseSensitive) {
+TEST_P(SchemaUpdaterTest, AlterTableNameIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -985,7 +1088,7 @@ TEST_F(SchemaUpdaterTest, AlterTableNameIsCaseSensitive) {
               StatusIs(error::TableNotFound("t")));
 }
 
-TEST_F(SchemaUpdaterTest, AlterTableSetOptionsIsCaseSensitive) {
+TEST_P(SchemaUpdaterTest, AlterTableSetOptionsIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -996,7 +1099,7 @@ TEST_F(SchemaUpdaterTest, AlterTableSetOptionsIsCaseSensitive) {
               StatusIs(error::TableNotFound("t")));
 }
 
-TEST_F(SchemaUpdaterTest, DropTableIsCaseSensitive) {
+TEST_P(SchemaUpdaterTest, DropTableIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -1005,7 +1108,7 @@ TEST_F(SchemaUpdaterTest, DropTableIsCaseSensitive) {
               StatusIs(error::TableNotFound("t")));
 }
 
-TEST_F(SchemaUpdaterTest, AlterColumnIsCaseSensitive) {
+TEST_P(SchemaUpdaterTest, AlterColumnIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -1015,7 +1118,7 @@ TEST_F(SchemaUpdaterTest, AlterColumnIsCaseSensitive) {
               StatusIs(error::ColumnNotFound("T", "K2")));
 }
 
-TEST_F(SchemaUpdaterTest, DropColumnIsCaseSensitive) {
+TEST_P(SchemaUpdaterTest, DropColumnIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -1023,6 +1126,27 @@ TEST_F(SchemaUpdaterTest, DropColumnIsCaseSensitive) {
       ALTER TABLE T DROP COLUMN K2
     )"}),
               StatusIs(error::ColumnNotFound("T", "K2")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateTableIfNotExists) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    CREATE TABLE T(
+      col1 INT64,
+      col2 STRING(MAX)
+    ) PRIMARY KEY(col1 DESC, col2))"}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+    CREATE TABLE IF NOT EXISTS T(
+      col1 STRING(MAX),
+      col3 INT64
+    ) PRIMARY KEY(col3))"}));
+  auto t = new_schema->FindTable("T");
+  // If the new table was *not* created (it shouldn't be) then this will be
+  // null.
+  ASSERT_EQ(t->FindColumn("col3"), nullptr);
+  // If the new table wasn't created (it shouldn't be) then this *won't* be
+  // null.
+  ASSERT_NE(t->FindColumn("col2"), nullptr);
 }
 
 }  // namespace

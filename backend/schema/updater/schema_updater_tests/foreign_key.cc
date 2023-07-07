@@ -206,7 +206,7 @@ MATCHER_P2(IsForeignKeyOf, table, expected, Print(expected)) {
   return match;
 }
 
-TEST_F(SchemaUpdaterTest, CreateTableWithForeignKey) {
+TEST_P(SchemaUpdaterTest, CreateTableWithForeignKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -231,7 +231,7 @@ TEST_F(SchemaUpdaterTest, CreateTableWithForeignKey) {
                               "IDX_T_X_Y_U_5AD6E41B495C5BB9")));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTableWithUnnamedForeignKey) {
+TEST_P(SchemaUpdaterTest, CreateTableWithUnnamedForeignKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -254,7 +254,7 @@ TEST_F(SchemaUpdaterTest, CreateTableWithUnnamedForeignKey) {
   EXPECT_THAT(c, IsForeignKeyOf(u, expected));
 }
 
-TEST_F(SchemaUpdaterTest, CreateTableWithSelfReferencingForeignKey) {
+TEST_P(SchemaUpdaterTest, CreateTableWithSelfReferencingForeignKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE U (
@@ -271,7 +271,7 @@ TEST_F(SchemaUpdaterTest, CreateTableWithSelfReferencingForeignKey) {
                                                  "U", {"A"}, "")));
 }
 
-TEST_F(SchemaUpdaterTest, AddForeignKey) {
+TEST_P(SchemaUpdaterTest, AddForeignKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -295,7 +295,7 @@ TEST_F(SchemaUpdaterTest, AddForeignKey) {
                                          {"Y"}, "IDX_T_Y_U_3E1CA8A966CF5C7A")));
 }
 
-TEST_F(SchemaUpdaterTest, DropForeignKey) {
+TEST_P(SchemaUpdaterTest, DropForeignKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -329,7 +329,7 @@ std::vector<std::string> SchemaForCaseSensitivityTests() {
   };
 }
 
-TEST_F(SchemaUpdaterTest, TableNameIsCaseSensitive) {
+TEST_P(SchemaUpdaterTest, TableNameIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -342,7 +342,7 @@ TEST_F(SchemaUpdaterTest, TableNameIsCaseSensitive) {
               StatusIs(error::TableNotFound("t")));
 }
 
-TEST_F(SchemaUpdaterTest, ReferencedColumnNameIsCaseSensitive) {
+TEST_P(SchemaUpdaterTest, ReferencedColumnNameIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -366,7 +366,7 @@ TEST_F(SchemaUpdaterTest, ReferencedColumnNameIsCaseSensitive) {
               StatusIs(error::ForeignKeyColumnNotFound("x", "T", "C")));
 }
 
-TEST_F(SchemaUpdaterTest, ReferencingColumnNameIsCaseSensitive) {
+TEST_P(SchemaUpdaterTest, ReferencingColumnNameIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -390,7 +390,7 @@ TEST_F(SchemaUpdaterTest, ReferencingColumnNameIsCaseSensitive) {
               StatusIs(error::ForeignKeyColumnNotFound("a", "T2", "C")));
 }
 
-TEST_F(SchemaUpdaterTest, ConstraintNameIsCaseInsensitive) {
+TEST_P(SchemaUpdaterTest, ConstraintNameIsCaseInsensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 

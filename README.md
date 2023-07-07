@@ -51,7 +51,7 @@ images are also tagged with version numbers, so you can run a specific version
 with:
 
 ```shell
-VERSION=1.5.2
+VERSION=1.5.6
 docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator:$VERSION
 ```
 Works on x86 and arm64 architectures.
@@ -62,10 +62,12 @@ The emulator is also distributed as a standalone linux binary. Note that this
 binary is not fully static, but has been tested on Ubuntu 18.04+, CentOS
 7+, RHEL 8+ and Debian 10+.
 
+Set `ARCHITECTURE` to `arm64` in following command if you are working on arm machine.
 ```shell
-VERSION=1.5.2
-wget https://storage.googleapis.com/cloud-spanner-emulator/releases/${VERSION}/cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
-tar zxvf cloud-spanner-emulator_linux_amd64-${VERSION}.tar.gz
+VERSION=1.5.6
+ARCHITECTURE=amd64
+wget https://storage.googleapis.com/cloud-spanner-emulator/releases/${VERSION}/cloud-spanner-emulator_linux_${ARCHITECTURE}-${VERSION}.tar.gz
+tar xvf cloud-spanner-emulator_linux_${ARCHITECTURE}-${VERSION}.tar.gz
 chmod u+x gateway_main emulator_main
 ```
 
@@ -165,10 +167,6 @@ Notable supported features:
 - Check constraint
 
 - Dataflow templates
-
-Features not currently available:
-
-- Views
 
 Notable limitations:
 

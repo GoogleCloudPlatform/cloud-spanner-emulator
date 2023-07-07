@@ -191,8 +191,9 @@ Key ComputeKey(const ValueList& row,
 
 absl::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
                                                const Schema* schema) {
-  // Find the table to read from schema.
-  auto read_table = schema->FindTable(read_arg.table);
+  // Find the table to read from schema or from change stream.
+  const Table* read_table;
+    read_table = schema->FindTable(read_arg.table);
   if (read_table == nullptr) {
     return error::TableNotFound(read_arg.table);
   }

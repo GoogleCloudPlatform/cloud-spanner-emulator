@@ -14,8 +14,10 @@
 // limitations under the License.
 //
 
+#include <memory>
+
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
-#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -23,28 +25,18 @@ namespace emulator {
 namespace backend {
 namespace test {
 
-using google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
-
-class ColumnDefaultValueSchemaUpdaterTest : public SchemaUpdaterTest {
- public:
-  ColumnDefaultValueSchemaUpdaterTest()
-      : feature_flags_({.enable_column_default_values = true}) {}
-
- private:
-  ScopedEmulatorFeatureFlagsSetter feature_flags_;
-};
-
-TEST_F(ColumnDefaultValueSchemaUpdaterTest, NonKeyColumns) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      auto schema,
-      CreateSchema({R"(
-        CREATE TABLE T (
-          K INT64 NOT NULL,
-          V STRING(10),
-          D1 INT64 NOT NULL DEFAULT (1),
-        ) PRIMARY KEY (K)
-      )",
-                    "ALTER TABLE T ADD COLUMN D2 INT64 DEFAULT (2)"}));
+TEST_P(SchemaUpdaterTest, NonKeyColumns) {
+  std::unique_ptr<const Schema> schema;
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        CreateSchema({R"(
+          CREATE TABLE T (
+            K INT64 NOT NULL,
+            V STRING(10),
+            D1 INT64 NOT NULL DEFAULT (1),
+          ) PRIMARY KEY (K)
+        )",
+                      "ALTER TABLE T ADD COLUMN D2 INT64 DEFAULT (2)"}));
 
   const Table* table = schema->FindTable("T");
   ASSERT_NE(table, nullptr);
@@ -78,13 +70,14 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, NonKeyColumns) {
   EXPECT_EQ(col->dependent_columns().size(), 0);
 }
 
-TEST_F(ColumnDefaultValueSchemaUpdaterTest, FunctionAsDefault) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
-        CREATE TABLE T (
-          K INT64 NOT NULL,
-          V TIMESTAMP DEFAULT (CURRENT_TIMESTAMP())
-        ) PRIMARY KEY(K)
-      )"}));
+TEST_P(SchemaUpdaterTest, FunctionAsDefault) {
+  std::unique_ptr<const Schema> schema;
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+          CREATE TABLE T (
+            K INT64 NOT NULL,
+            V TIMESTAMP DEFAULT (CURRENT_TIMESTAMP())
+          ) PRIMARY KEY(K)
+        )"}));
 
   const Table* table = schema->FindTable("T");
   ASSERT_NE(table, nullptr);
@@ -97,18 +90,19 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, FunctionAsDefault) {
   EXPECT_EQ(col->expression().value(), "CURRENT_TIMESTAMP()");
 }
 
-TEST_F(ColumnDefaultValueSchemaUpdaterTest, KeyColumn) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      auto schema,
-      CreateSchema({R"(
-      CREATE TABLE T (
-        K1 INT64 NOT NULL,
-        K2 INT64 DEFAULT (20),
-        K3 INT64,
-        V STRING(10),
-      ) PRIMARY KEY (K1, K2, K3)
-    )",
-                    "ALTER TABLE T ALTER COLUMN K3 INT64 DEFAULT (30)"}));
+TEST_P(SchemaUpdaterTest, KeyColumn) {
+  std::unique_ptr<const Schema> schema;
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        CreateSchema({R"(
+        CREATE TABLE T (
+          K1 INT64 NOT NULL,
+          K2 INT64 DEFAULT (20),
+          K3 INT64,
+          V STRING(10),
+        ) PRIMARY KEY (K1, K2, K3)
+      )",
+                      "ALTER TABLE T ALTER COLUMN K3 INT64 DEFAULT (30)"}));
 
   const Table* table = schema->FindTable("T");
   ASSERT_NE(table, nullptr);
@@ -140,20 +134,20 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, KeyColumn) {
   EXPECT_EQ(col->dependent_columns().size(), 0);
 }
 
-TEST_F(ColumnDefaultValueSchemaUpdaterTest, SetDropDefault) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      auto schema,
-      CreateSchema({R"(
-      CREATE TABLE T (
-        K1 INT64 NOT NULL,
-        K2 INT64 DEFAULT (20),
-        K3 INT64,
-        V STRING(10) DEFAULT ("Hello"),
-      ) PRIMARY KEY (K1, K2, K3)
-    )",
-                    "ALTER TABLE T ALTER COLUMN K3 SET DEFAULT (30)",
-                    "ALTER TABLE T ALTER COLUMN K2 SET DEFAULT (2)",
-                    "ALTER TABLE T ALTER V DROP DEFAULT"}));
+TEST_P(SchemaUpdaterTest, SetDropDefault) {
+  std::unique_ptr<const Schema> schema;
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema, CreateSchema({R"(
+        CREATE TABLE T (
+          K1 INT64 NOT NULL,
+          K2 INT64 DEFAULT (20),
+          K3 INT64,
+          V STRING(10) DEFAULT ("Hello"),
+        ) PRIMARY KEY (K1, K2, K3)
+      )",
+                              "ALTER TABLE T ALTER COLUMN K3 SET DEFAULT (30)",
+                              "ALTER TABLE T ALTER COLUMN K2 SET DEFAULT (2)",
+                              "ALTER TABLE T ALTER V DROP DEFAULT"}));
 
   const Table* table = schema->FindTable("T");
   ASSERT_NE(table, nullptr);
@@ -192,6 +186,7 @@ TEST_F(ColumnDefaultValueSchemaUpdaterTest, SetDropDefault) {
   EXPECT_FALSE(col->has_default_value());
   EXPECT_FALSE(col->expression().has_value());
 }
+
 }  // namespace test
 }  // namespace backend
 }  // namespace emulator

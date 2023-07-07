@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERY_ENGINE_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "google/protobuf/struct.pb.h"

@@ -146,7 +146,9 @@ const T* AssertNotNull(const T* value, const char* file, int line) {
   return value;
 }
 
-class SchemaUpdaterTest : public testing::Test {
+class SchemaUpdaterTest
+    : public testing::Test,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
       absl::Span<const std::string> statements
@@ -162,6 +164,14 @@ class SchemaUpdaterTest : public testing::Test {
   TableIDGenerator table_id_generator_;
   ColumnIDGenerator column_id_generator_;
 };
+
+INSTANTIATE_TEST_SUITE_P(
+    SchemaUpdaterPerDialectTests, SchemaUpdaterTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
+                    ),
+    [](const testing::TestParamInfo<SchemaUpdaterTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
 
 }  // namespace test
 }  // namespace backend

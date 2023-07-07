@@ -153,6 +153,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "FOREIGN",
     "FUNCTION",
     "GRANT",
+    "HIDDEN",
     "INDEX",
     "INSERT",
     "INT64",

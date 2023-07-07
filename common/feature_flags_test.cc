@@ -31,21 +31,17 @@ namespace {
 TEST(EmulatorFeatureFlags, Basic) {
   const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
 
-  EXPECT_TRUE(features.flags().enable_stored_generated_columns);
   EXPECT_TRUE(features.flags().enable_check_constraint);
   EXPECT_TRUE(features.flags().enable_column_default_values);
 
   {
     EmulatorFeatureFlags::Flags flags;
-    flags.enable_stored_generated_columns = false;
     flags.enable_check_constraint = false;
     flags.enable_column_default_values = false;
     test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-    EXPECT_FALSE(features.flags().enable_stored_generated_columns);
     EXPECT_FALSE(features.flags().enable_check_constraint);
     EXPECT_FALSE(features.flags().enable_column_default_values);
   }
-  EXPECT_TRUE(features.flags().enable_stored_generated_columns);
   EXPECT_TRUE(features.flags().enable_check_constraint);
   EXPECT_TRUE(features.flags().enable_column_default_values);
 }

@@ -26,7 +26,7 @@ namespace test {
 
 namespace {
 
-TEST_F(SchemaUpdaterTest, CreationOrder) {
+TEST_P(SchemaUpdaterTest, CreationOrder) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T1 (

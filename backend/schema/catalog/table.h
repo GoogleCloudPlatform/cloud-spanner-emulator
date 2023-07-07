@@ -27,6 +27,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "absl/strings/match.h"
 #include "absl/strings/substitute.h"
 #include "absl/types/span.h"
 #include "backend/common/case.h"
@@ -110,7 +111,7 @@ class Table : public SchemaNode {
   // Returns the list of all indexes on this table.
   absl::Span<const Index* const> indexes() const { return indexes_; }
 
-  // Returns the list of all change streams on this table.
+  // Returns the list of all change streams tracking this table.
   absl::Span<const ChangeStream* const> change_streams() const {
     return change_streams_;
   }
@@ -122,7 +123,10 @@ class Table : public SchemaNode {
 
   // Returns true if the Table is publicly visible, i.e. can be accessed
   // directly by a user request.
-  bool is_public() const { return owner_index_ == nullptr; }
+  bool is_public() const {
+    return
+        owner_index_ == nullptr;
+  }
 
   // Finds a column by its name. Returns a const pointer to the column, or
   // nullptr if the column is not found. Name comparison is case-insensitive.
@@ -228,14 +232,14 @@ class Table : public SchemaNode {
   // by the Table.
   std::vector<const Index*> indexes_;
 
-  // List of change streams referring to this table. These are owned by the
+  // List of change streams tracking this table. These are owned by the
   // Schema, not by the Table.
   std::vector<const ChangeStream*> change_streams_;
 
   // The Index that owns this table if one exists.
   const Index* owner_index_ = nullptr;
 
-  // A map of case-insensitive column names to their backend::Colum* pointers.
+  // A map of case-insensitive column names to their backend::Column* pointers.
   CaseInsensitiveStringMap<const Column*> columns_map_;
 
   // primary_key_ defines the primary key columns of a table. Order of the

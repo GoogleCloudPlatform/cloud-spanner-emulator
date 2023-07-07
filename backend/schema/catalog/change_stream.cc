@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <string>
+#include <vector>
 
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.pb.h"

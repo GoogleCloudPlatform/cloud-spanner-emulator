@@ -104,9 +104,10 @@ absl::Status CreateDatabase(RequestContext* ctx,
   }
 
   // Extract database name from create statement.
-  backend::ddl::DDLStatement stmt;
-  ZETASQL_RETURN_IF_ERROR(
-      backend::ddl::ParseDDLStatement(request->create_statement(), &stmt));
+  ZETASQL_ASSIGN_OR_RETURN(
+      backend::ddl::DDLStatement stmt,
+      backend::ParseDDLByDialect(request->create_statement()
+                                 ));
   std::string database_name = stmt.create_database().db_name();
 
   // Validate database name.

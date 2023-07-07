@@ -26,8 +26,8 @@ cc_library(
     srcs = ["environment.cc"],
     hdrs = ["environment.h"],
     deps = [
+        "@com_github_googleapis_google_cloud_cpp//:common",
         "@com_github_googleapis_google_cloud_cpp//:spanner",
-        "@com_github_googleapis_google_cloud_cpp//google/cloud:google_cloud_cpp_common",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
     ],
@@ -40,10 +40,12 @@ cc_library(
     hdrs = ["database_test_base.h"],
     deps = [
         ":environment",
+        "//common:constants",
         "//frontend/server",
+        "//tests/common:file_based_schema_reader",
         "//tests/common:proto_matchers",
+        "@com_github_googleapis_google_cloud_cpp//:common",
         "@com_github_googleapis_google_cloud_cpp//:spanner",
-        "@com_github_googleapis_google_cloud_cpp//google/cloud:google_cloud_cpp_common",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",

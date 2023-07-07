@@ -77,4 +77,6 @@ constexpr char kInstanceResourceType[] =
 // The default timezone used by the query engine.
 constexpr char kDefaultTimeZone[] = "America/Los_Angeles";
 
+// Quotes used by different dialects of Spanner in DDL statements.
+static constexpr char kGSQLQuote[] = "`";
 #endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_CONSTANTS_H_

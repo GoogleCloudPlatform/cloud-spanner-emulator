@@ -86,7 +86,7 @@ const Index* Schema::FindIndexCaseSensitive(
   return index;
 }
 
-std::shared_ptr<const ChangeStream> Schema::FindChangeStream(
+const ChangeStream* Schema::FindChangeStream(
     const std::string& change_stream_name) const {
   auto itr = change_streams_map_.find(change_stream_name);
   if (itr == change_streams_map_.end()) {
@@ -124,8 +124,6 @@ Schema::Schema(const SchemaGraph* graph
   tables_.clear();
   tables_map_.clear();
   index_map_.clear();
-
-  // TODO: clear change_streams_map_
   for (const SchemaNode* node : graph_->GetSchemaNodes()) {
     const View* view = node->As<const View>();
     if (view != nullptr) {
@@ -147,8 +145,7 @@ Schema::Schema(const SchemaGraph* graph
       continue;
     }
 
-    std::shared_ptr<const ChangeStream> change_stream =
-        std::shared_ptr<const ChangeStream>(node->As<ChangeStream>());
+    const ChangeStream* change_stream = node->As<ChangeStream>();
     if (change_stream != nullptr) {
       change_streams_.push_back(change_stream);
       change_streams_map_[change_stream->Name()] = change_stream;

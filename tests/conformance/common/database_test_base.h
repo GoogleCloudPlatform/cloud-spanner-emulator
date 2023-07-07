@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "google/longrunning/operations.grpc.pb.h"
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.grpc.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
@@ -62,6 +63,9 @@ namespace test {
 namespace database_api = ::google::spanner::admin::database::v1;
 namespace operations_api = ::google::longrunning;
 namespace spanner_api = ::google::spanner::v1;
+
+// Directory containing schema configurations for tests.
+const char kSchemaTestDataDir[] = "tests/conformance/data/schemas";
 
 // Base fixture for conformance testing of Cloud Spanner.
 //
@@ -192,6 +196,10 @@ class DatabaseTest : public ::testing::Test {
 
   // Sets the schema on the database created for this test.
   virtual absl::Status SetSchema(const std::vector<std::string>& schema);
+
+  // Sets the schema on the database created for this test using a schema
+  // defined in a file.
+  virtual absl::Status SetSchemaFromFile(const std::string& file);
 
   // Updates the schema of the database created for this test. Returning the
   // result in an `UpdateDatabaseDdlMetadata` message.
@@ -678,6 +686,9 @@ class DatabaseTest : public ::testing::Test {
     read_result.values = values;
     return read_result;
   }
+
+  database_api::DatabaseDialect dialect_ =
+      database_api::DatabaseDialect::GOOGLE_STANDARD_SQL;
 
  private:
   // The database used in this test (a new one is created for each test case).

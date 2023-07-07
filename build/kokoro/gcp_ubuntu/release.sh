@@ -61,7 +61,7 @@ else
   builder_name=$(docker buildx create)
   docker buildx use "$builder_name"
   docker buildx inspect --bootstrap
-  docker buildx build . -t "${IMAGE_LOCAL_TAG}" -f build/docker/Dockerfile.ubuntu --platform=linux/amd64 --load
+  docker buildx build . -t "${IMAGE_LOCAL_TAG}" -f build/docker/Dockerfile.ubuntu --platform=linux/${CLOUD_SPANNER_EMULATOR_MACHINE_ARCH} --load
 fi
 
 # We need the image tar file to be in a directory of its own.
@@ -74,5 +74,5 @@ docker cp "$container_id":/gateway_main $OUTPUT_DIR
 docker cp "$container_id":/emulator_main $OUTPUT_DIR
 docker rm "$container_id"
 
-tar -C "${OUTPUT_DIR}" -czf "${OUTPUT_DIR}"/cloud-spanner-emulator_linux_amd64-"${EMULATOR_VERSION}".tar.gz gateway_main emulator_main
+tar -C "${OUTPUT_DIR}" -czf "${OUTPUT_DIR}"/cloud-spanner-emulator_linux_${CLOUD_SPANNER_EMULATOR_MACHINE_ARCH}-"${EMULATOR_VERSION}".tar.gz gateway_main emulator_main
 

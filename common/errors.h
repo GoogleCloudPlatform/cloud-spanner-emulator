@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_ERRORS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_ERRORS_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -196,9 +197,6 @@ absl::Status TooManyTablesPerDatabase(absl::string_view table_name,
                                       int64_t limit);
 absl::Status TooManyChangeStreamsPerDatabase(
     absl::string_view change_stream_name, int64_t limit);
-absl::Status TooManyChangeStreamsTrackingSameObject(
-    absl::string_view change_stream_name, int64_t limit,
-    absl::string_view object_name_string);
 absl::Status TooManyIndicesPerDatabase(absl::string_view index_name,
                                        int64_t limit);
 absl::Status TooManyColumns(absl::string_view object_type,
@@ -277,7 +275,6 @@ absl::Status TableNotFound(absl::string_view table_name);
 absl::Status TableNotFoundAtTimestamp(absl::string_view table_name,
                                       absl::Time timestamp);
 absl::Status IndexNotFound(absl::string_view index_name);
-absl::Status ChangeStreamNotFound(absl::string_view change_stream_name);
 absl::Status DropForeignKeyManagedIndex(absl::string_view index_name,
                                         absl::string_view foreign_key_names);
 absl::Status ColumnNotFound(absl::string_view table_name,

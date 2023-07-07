@@ -53,6 +53,7 @@ cc_test(
         ":databases",
         "//backend/database",
         "//backend/schema/printer:print_ddl",
+        "//common:constants",
         "//common:limits",
         "//frontend/common:uris",
         "//tests/common:proto_matchers",
