@@ -16,6 +16,7 @@
 
 #include "backend/schema/verifiers/column_value_verifiers.h"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>

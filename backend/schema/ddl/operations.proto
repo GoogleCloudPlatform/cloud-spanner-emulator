@@ -97,6 +97,10 @@ message ColumnDefinition {
 
   optional ColumnDefinition array_subtype = 9;  // Set iff type == ARRAY.
 
+  // True if the column is marked as hidden. Hidden columns won't show up in
+  // SELECT * queries.
+  optional bool hidden = 10;
+
   // Stores information about generated columns.
   message GeneratedColumnDefinition {
     // Googlesql string for the generated column.

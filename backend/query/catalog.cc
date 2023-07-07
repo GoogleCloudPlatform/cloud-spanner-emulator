@@ -178,7 +178,6 @@ zetasql::Catalog* Catalog::GetNetFunctionsCatalog() const {
   }
   return net_catalog_.get();
 }
-
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

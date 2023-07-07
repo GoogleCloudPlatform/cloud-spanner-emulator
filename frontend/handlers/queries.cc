@@ -15,6 +15,7 @@
 //
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <variant>
@@ -351,7 +352,7 @@ absl::Status ExecuteStreamingSql(
                    session->FindOrInitTransaction(request->transaction()));
 
   // Wrap all operations on this transaction so they are atomic.
-  return txn->GuardedCall(
+  absl::Status status = txn->GuardedCall(
       is_dml_query ? Transaction::OpType::kDml : Transaction::OpType::kSql,
       [&]() -> absl::Status {
         // Register DML request and check for status replay.
@@ -400,7 +401,6 @@ absl::Status ExecuteStreamingSql(
           ZETASQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
               read_timestamp, ctx->env()->clock()->Now()));
         }
-
         // Convert and execute provided SQL statement.
         ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
                          QueryFromProto(request->sql(), request->params(),
@@ -491,6 +491,7 @@ absl::Status ExecuteStreamingSql(
         }
         return absl::OkStatus();
       });
+  return status;
 }
 REGISTER_GRPC_HANDLER(Spanner, ExecuteStreamingSql);
 

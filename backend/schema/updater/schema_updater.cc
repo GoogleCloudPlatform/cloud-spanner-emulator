@@ -41,11 +41,13 @@
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/log.h"
 #include "absl/meta/type_traits.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/time.h"
@@ -228,7 +230,6 @@ class SchemaUpdaterImpl {
   absl::Status CreateInterleaveConstraint(const Table* parent,
                                           Table::OnDeleteAction on_delete,
                                           Table::Builder* builder);
-
   absl::StatusOr<const Table*> GetInterleaveConstraintTable(
       const std::string& interleave_in_table_name,
       const Table::Builder& builder) const;
@@ -285,7 +286,6 @@ class SchemaUpdaterImpl {
 
   absl::StatusOr<const ChangeStream*> CreateChangeStream(
       const ddl::CreateChangeStream& ddl_change_stream);
-
   absl::StatusOr<const Index*> CreateIndexHelper(
       const std::string& index_name, const std::string& index_base_name,
       bool is_unique, bool is_null_filtered,
@@ -450,8 +450,9 @@ SchemaUpdaterImpl::ApplyDDLStatement(
   }
 
   ZETASQL_RET_CHECK(!editor_->HasModifications());
-  ddl::DDLStatement ddl_statement;
-    ZETASQL_RETURN_IF_ERROR(ddl::ParseDDLStatement(statement, &ddl_statement));
+  ZETASQL_ASSIGN_OR_RETURN(ddl::DDLStatement ddl_statement,
+                   ParseDDLByDialect(statement
+                                     ));
   ZETASQL_RETURN_IF_ERROR(ValidateDdlStatement(ddl_statement));
 
   // Apply the statement to the schema graph.
@@ -467,6 +468,11 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       break;
     }
     case ddl::DDLStatement::kCreateIndex: {
+      if (global_names_.HasName(ddl_statement.create_index().index_name()) &&
+          ddl_statement.create_index().existence_modifier() ==
+              ddl::IF_NOT_EXISTS) {
+        break;
+      }
       ZETASQL_RETURN_IF_ERROR(CreateIndex(ddl_statement.create_index()).status());
       break;
     }
@@ -593,7 +599,6 @@ absl::Status SchemaUpdaterImpl::SetColumnOptions(
   modifier->set_allow_commit_timestamp(allows_commit_timestamp);
   return absl::OkStatus();
 }
-
 absl::Status SchemaUpdaterImpl::AlterColumnDefinition(
     const ddl::ColumnDefinition& ddl_column, const Table* table,
     Column::Editor* editor) {
@@ -659,7 +664,6 @@ absl::Status SchemaUpdaterImpl::InitColumnNameAndTypesFromTable(
   }
   return absl::OkStatus();
 }
-
 
 absl::Status SchemaUpdaterImpl::AnalyzeGeneratedColumn(
     absl::string_view expression, const std::string& column_name,
@@ -815,6 +819,7 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
       .set_name(column_name);
   ZETASQL_RETURN_IF_ERROR(SetColumnDefinition(ddl_column, table, ddl_table,
                                       &builder));
+  builder.set_hidden(ddl_column.has_hidden() && ddl_column.hidden());
   const Column* column = builder.get();
   builder.set_table(table);
   if (column->is_generated() || column->has_default_value()) {
@@ -1257,6 +1262,11 @@ absl::Status SchemaUpdaterImpl::CreateTable(
                                            limits::kMaxTablesPerDatabase);
   }
 
+  if (global_names_.HasName(ddl_table.table_name()) &&
+      ddl_table.existence_modifier() == ddl::IF_NOT_EXISTS) {
+    return absl::OkStatus();
+  }
+
   ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", ddl_table.table_name()));
 
   Table::Builder builder;
@@ -1300,7 +1310,6 @@ absl::Status SchemaUpdaterImpl::CreateTable(
     ZETASQL_RETURN_IF_ERROR(
         CreateRowDeletionPolicy(ddl_table.row_deletion_policy(), &builder));
   }
-
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return absl::OkStatus();
 }
@@ -1451,6 +1460,14 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
       ddl_index.key().begin(), ddl_index.key().end());
   bool is_unique = ddl_index.unique();
   bool is_null_filtered = ddl_index.null_filtered();
+
+  const Index* index =
+      latest_schema_->FindIndexCaseSensitive(ddl_index.index_name());
+  if (index != nullptr &&
+      ddl_index.existence_modifier() == ddl::IF_NOT_EXISTS) {
+    return index;
+  }
+
   return CreateIndexHelper(ddl_index.index_name(), ddl_index.index_base_name(),
                            is_unique, is_null_filtered, interleave_in_table,
                            index_pk, ddl_index.stored_column_definition(),
@@ -1466,12 +1483,12 @@ absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
         limits::kMaxChangeStreamsPerDatabase);
   }
 
+  // Validate the change stream name in global_names_
   ZETASQL_RETURN_IF_ERROR(global_names_.AddName(
       "Change Stream", ddl_change_stream.change_stream_name()));
 
   ChangeStream::Builder builder;
   builder.set_name(ddl_change_stream.change_stream_name());
-
   const ChangeStream* change_stream = builder.get();
   return change_stream;
 }
@@ -1631,7 +1648,6 @@ absl::Status SchemaUpdaterImpl::AlterRowDeletionPolicy(
   });
 }
 
-// TODO: Implement AlterChangeStream.
 absl::Status SchemaUpdaterImpl::AlterChangeStream(
     const ddl::AlterChangeStream& alter_change_stream) {
   return absl::OkStatus();
@@ -1667,6 +1683,11 @@ absl::Status SchemaUpdaterImpl::AlterTable(
     }
     case ddl::AlterTable::kAddColumn: {
       const auto& column_def = alter_table.add_column().column();
+      // If the column exists but IF_NOT_EXISTS is set then we're fine.
+      if (table->FindColumn(column_def.column_name()) != nullptr &&
+          alter_table.add_column().existence_modifier() == ddl::IF_NOT_EXISTS) {
+        return absl::OkStatus();
+      }
       ZETASQL_ASSIGN_OR_RETURN(const Column* new_column,
                        CreateColumn(column_def, table, /*ddl_table=*/
                                     nullptr
@@ -1799,8 +1820,13 @@ absl::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_table) {
   const Table* table =
       latest_schema_->FindTableCaseSensitive(drop_table.table_name());
   if (table == nullptr) {
+    if (drop_table.existence_modifier() == ddl::IF_EXISTS) {
+      return absl::OkStatus();
+    }
     return error::TableNotFound(drop_table.table_name());
   }
+
+  // TODO : Error if any view depends on this table.
   return DropNode(table);
 }
 
@@ -1808,12 +1834,14 @@ absl::Status SchemaUpdaterImpl::DropIndex(const ddl::DropIndex& drop_index) {
   const Index* index =
       latest_schema_->FindIndexCaseSensitive(drop_index.index_name());
   if (index == nullptr) {
+    if (drop_index.existence_modifier() == ddl::IF_EXISTS) {
+      return absl::OkStatus();
+    }
     return error::IndexNotFound(drop_index.index_name());
   }
   return DropNode(index);
 }
 
-// TODO: Implement DropChangeStream.
 absl::Status SchemaUpdaterImpl::DropChangeStream(
     const ddl::DropChangeStream& drop_change_stream) {
   return absl::OkStatus();
@@ -1935,6 +1963,14 @@ SchemaUpdater::CreateSchemaFromDDL(
       UpdateSchemaFromDDL(EmptySchema(), schema_change_operation, context));
   ZETASQL_RETURN_IF_ERROR(result.backfill_status);
   return std::move(result.updated_schema);
+}
+
+absl::StatusOr<ddl::DDLStatement> ParseDDLByDialect(
+    absl::string_view statement
+) {
+  ddl::DDLStatement ddl_statement;
+  ZETASQL_RETURN_IF_ERROR(ddl::ParseDDLStatement(statement, &ddl_statement));
+  return ddl_statement;
 }
 
 }  // namespace backend

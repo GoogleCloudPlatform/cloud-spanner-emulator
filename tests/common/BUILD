@@ -160,17 +160,71 @@ cc_library(
     srcs = ["file_based_test_runner.cc"],
     hdrs = ["file_based_test_runner.h"],
     deps = [
+        ":file_based_test_util",
+        ":proto_matchers",
+        "@bazel_tools//tools/cpp/runfiles",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googleapis//google/rpc:code_cc_proto",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_googlesource_code_re2//:re2",
+    ],
+)
+
+cc_library(
+    name = "file_based_test_util",
+    testonly = 1,
+    srcs = ["file_based_test_util.cc"],
+    hdrs = ["file_based_test_util.h"],
+    deps = [
         ":proto_matchers",
         "@bazel_tools//tools/cpp/runfiles",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@com_google_googleapis//google/rpc:code_cc_proto",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_googlesource_code_re2//:re2",
+    ],
+)
+
+cc_library(
+    name = "file_based_schema_reader",
+    testonly = 1,
+    srcs = ["file_based_schema_reader.cc"],
+    hdrs = ["file_based_schema_reader.h"],
+    deps = [
+        ":file_based_test_util",
+        ":proto_matchers",
+        "@bazel_tools//tools/cpp/runfiles",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_grpc",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "file_based_schema_reader_test",
+    testonly = 1,
+    srcs = ["file_based_schema_reader_test.cc"],
+    data = [
+        "//tests/common/testdata:test_files",
+    ],
+    deps = [
+        ":file_based_schema_reader",
+        ":proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 

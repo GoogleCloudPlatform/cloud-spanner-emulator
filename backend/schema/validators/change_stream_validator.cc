@@ -22,11 +22,14 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/status/status.h"
 #include "backend/common/case.h"
 #include "backend/common/ids.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/change_stream.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
 #include "common/limits.h"
@@ -44,10 +47,9 @@ namespace {}  // namespace
 absl::Status ChangeStreamValidator::Validate(const ChangeStream* change_stream,
                                              SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!change_stream->name_.empty());
-  ZETASQL_RET_CHECK(!change_stream->id_.empty());
   ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName("Change Stream",
                                                         change_stream->name_));
-
+  // TODO: Validate TVF name.
   return absl::OkStatus();
 }
 
@@ -55,61 +57,7 @@ absl::Status ChangeStreamValidator::Validate(const ChangeStream* change_stream,
 absl::Status ChangeStreamValidator::ValidateUpdate(
     const ChangeStream* change_stream, const ChangeStream* old_change_stream,
     SchemaValidationContext* context) {
-  return absl::OkStatus();
-}
-
-// TODO: Return error when too many change streams tracking the
-// same column.
-absl::Status ChangeStreamValidator::ValidateLimits() {
-  if (create_.for_clause().all()) {
-    int all_count = 1;
-    for (const std::shared_ptr<const ChangeStream>& change_stream :
-         schema_.change_streams()) {
-      if (change_stream->Name() != create_.change_stream_name() &&
-          change_stream->for_clause()->all()) {
-        ++all_count;
-        // Number of change streams tracking ALL should not exceed the limit.
-        if (all_count > limits::kMaxChangeStreamsTrackingATableOrColumn) {
-          return error::TooManyChangeStreamsTrackingSameObject(
-              create_.change_stream_name(),
-              limits::kMaxChangeStreamsTrackingATableOrColumn, "ALL");
-        }
-      }
-    }
-  }
-
-  // Checks the number of change streams tracking the same table.
-  auto validate_table = [this](Table* table) {
-    absl::flat_hash_set<std::string> all_change_streams;
-    all_change_streams.reserve(table->change_streams().size());
-    for (const auto& change_stream : table->change_streams()) {
-      all_change_streams.insert(change_stream->Name());
-    }
-
-    int change_stream_count = table->change_streams().size();
-    if (!all_change_streams.contains(create_.change_stream_name())) {
-      ++change_stream_count;
-    }
-    if (change_stream_count > limits::kMaxChangeStreamsTrackingATableOrColumn) {
-      return error::TooManyChangeStreamsTrackingSameObject(
-          create_.change_stream_name(),
-          limits::kMaxChangeStreamsTrackingATableOrColumn, table->Name());
-    }
-    return absl::OkStatus();
-  };
-
-  ZETASQL_RETURN_IF_ERROR(ForEachTrackedObject(create_, schema_, validate_table));
-  return absl::OkStatus();
-}
-
-// TODO: Implement ForEachTrackedObject.
-absl::Status ChangeStreamValidator::ForEachTrackedObject(
-    const ddl::CreateChangeStream& create, Schema& schema,
-    absl::FunctionRef<absl::Status(Table*)> table_cb) {
-  return absl::OkStatus();
-}
-
-absl::Status ChangeStreamValidator::ValidateForClause() {
+  ZETASQL_RET_CHECK_EQ(change_stream->Name(), old_change_stream->Name());
   return absl::OkStatus();
 }
 

@@ -21,18 +21,15 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/base/logging.h"
 #include "google/rpc/code.pb.h"
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/strip.h"
+#include "tests/common/file_based_test_util.h"
 #include "re2/re2.h"
-#include "tools/cpp/runfiles/runfiles.h"
 
 namespace google {
 namespace spanner {
@@ -127,13 +124,7 @@ std::vector<FileBasedTestCase> ReadTestCasesFromFile(
 }
 
 std::string GetRunfilesDir(const std::string& dir) {
-  std::string error;
-  auto runfiles = bazel::tools::cpp::runfiles::Runfiles::CreateForTest(&error);
-  if (!error.empty()) {
-    ZETASQL_LOG(WARNING) << "Error when fetching runfiles: " << error;
-    return "";
-  }
-  return runfiles->Rlocation(
+  return GetTestFileDir(
       absl::StrCat("com_google_cloud_spanner_emulator", "/", dir));
 }
 

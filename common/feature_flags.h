@@ -30,7 +30,6 @@ namespace emulator {
 class EmulatorFeatureFlags {
  public:
   struct Flags {
-    bool enable_stored_generated_columns = true;
     bool enable_check_constraint = true;
     bool enable_column_default_values = true;
     bool enable_dml_returning = true;

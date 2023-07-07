@@ -16,10 +16,12 @@
 
 #include <algorithm>
 #include <iterator>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -39,6 +41,7 @@ namespace backend {
 namespace test {
 
 using ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
+using ::testing::StrEq;
 
 namespace {
 
@@ -51,17 +54,27 @@ class ViewsTest : public SchemaUpdaterTest {
   const ScopedEmulatorFeatureFlagsSetter flag_setter_;
 };
 
-TEST_F(ViewsTest, Basic) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
-    CREATE TABLE T(
-      col1 INT64,
-      col2 STRING(MAX)
-    ) PRIMARY KEY(col1)
-  )",
-                                                  R"(
-    CREATE OR REPLACE VIEW `MyView` SQL SECURITY INVOKER AS
-    SELECT T.col1, T.col2 FROM T
-  )"}));
+INSTANTIATE_TEST_SUITE_P(
+    SchemaUpdaterPerDialectTests, ViewsTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
+                    ),
+    [](const testing::TestParamInfo<ViewsTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(ViewsTest, Basic) {
+  std::unique_ptr<const Schema> schema;
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      CREATE TABLE T(
+        col1 INT64,
+        col2 STRING(MAX)
+      ) PRIMARY KEY(col1)
+    )",
+                                               R"(
+      CREATE OR REPLACE VIEW `MyView` SQL SECURITY INVOKER AS
+      SELECT T.col1, T.col2 FROM T
+    )"}));
+
   auto t = schema->FindTable("T");
   ASSERT_NE(t, nullptr);
 
@@ -71,8 +84,8 @@ TEST_F(ViewsTest, Basic) {
   EXPECT_THAT(schema->views(), testing::ElementsAreArray({v}));
   EXPECT_EQ(v->Name(), "MyView");
   EXPECT_EQ(v->columns().size(), 2);
-  EXPECT_THAT(absl::StripAsciiWhitespace(v->body()),
-              testing::StrEq("SELECT T.col1, T.col2 FROM T"));
+    EXPECT_THAT(absl::StripAsciiWhitespace(v->body()),
+                StrEq("SELECT T.col1, T.col2 FROM T"));
   EXPECT_THAT(
       v->dependencies(),
       testing::UnorderedElementsAreArray((std::vector<const SchemaNode*>{
@@ -80,7 +93,7 @@ TEST_F(ViewsTest, Basic) {
   EXPECT_THAT(v->security(), testing::Eq(View::SqlSecurity::INVOKER));
 }
 
-TEST_F(ViewsTest, IndexDependency) {
+TEST_P(ViewsTest, IndexDependency) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
@@ -112,7 +125,7 @@ TEST_F(ViewsTest, IndexDependency) {
   EXPECT_THAT(v->security(), testing::Eq(View::SqlSecurity::INVOKER));
 }
 
-TEST_F(ViewsTest, MultipleTableDependencies) {
+TEST_P(ViewsTest, MultipleTableDependencies) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -141,7 +154,7 @@ TEST_F(ViewsTest, MultipleTableDependencies) {
               }));
 }
 
-TEST_F(ViewsTest, ViewDependsOnView) {
+TEST_P(ViewsTest, ViewDependsOnView) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -169,19 +182,19 @@ TEST_F(ViewsTest, ViewDependsOnView) {
               testing::StrEq("SELECT V1.k1 AS k2 FROM V1"));
 }
 
-TEST_F(ViewsTest, ViewRequiresInvokerSecurity) {
+TEST_P(ViewsTest, ViewRequiresInvokerSecurity) {
   EXPECT_THAT(CreateSchema({"CREATE VIEW V AS SELECT 1"}),
               StatusIs(error::ViewRequiresInvokerSecurity("V")));
 }
 
-TEST_F(ViewsTest, MissingDependency) {
+TEST_P(ViewsTest, MissingDependency) {
   EXPECT_THAT(
       CreateSchema({"CREATE VIEW V SQL SECURITY INVOKER AS SELECT * FROM T"}),
       ::zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
                                   testing::HasSubstr("Table not found: T")));
 }
 
-TEST_F(ViewsTest, ViewAnalysisError_UnsupportedFunction) {
+TEST_P(ViewsTest, ViewAnalysisError_UnsupportedFunction) {
   EXPECT_THAT(CreateSchema({R"(
         CREATE TABLE T(
           k1 INT64,
@@ -198,7 +211,7 @@ TEST_F(ViewsTest, ViewAnalysisError_UnsupportedFunction) {
                       "Unsupported built-in function: APPROX_COUNT_DISTINCT")));
 }
 
-TEST_F(ViewsTest, ViewAnalysisError_UnsupportedFunction_PrunedColumn) {
+TEST_P(ViewsTest, ViewAnalysisError_UnsupportedFunction_PrunedColumn) {
   EXPECT_THAT(CreateSchema({R"(
         CREATE TABLE T(
           k1 INT64,
@@ -216,7 +229,7 @@ TEST_F(ViewsTest, ViewAnalysisError_UnsupportedFunction_PrunedColumn) {
                       "Unsupported built-in function: APPROX_COUNT_DISTINCT")));
 }
 
-TEST_F(ViewsTest, ViewReplace) {
+TEST_P(ViewsTest, ViewReplace) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -247,7 +260,7 @@ TEST_F(ViewsTest, ViewReplace) {
   EXPECT_EQ(new_view->columns()[0].type, zetasql::types::StringType());
 }
 
-TEST_F(ViewsTest, ViewReplace_NoCircularDependency) {
+TEST_P(ViewsTest, ViewReplace_NoCircularDependency) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 1 AS k1
@@ -269,7 +282,7 @@ TEST_F(ViewsTest, ViewReplace_NoCircularDependency) {
                              "is recursive.")));
 }
 
-TEST_F(ViewsTest, ViewReplaceDependentViewInvalidDefinition) {
+TEST_P(ViewsTest, ViewReplaceDependentViewInvalidDefinition) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 1 AS k1, 2 AS k2
@@ -293,7 +306,7 @@ TEST_F(ViewsTest, ViewReplaceDependentViewInvalidDefinition) {
               "following diagnostic message: Name k2 not found inside V1")));
 }
 
-TEST_F(ViewsTest, ViewReplaceDependentViewIncompatibleTypeChange) {
+TEST_P(ViewsTest, ViewReplaceDependentViewIncompatibleTypeChange) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 1 AS k1, 2 AS k2
@@ -332,7 +345,7 @@ TEST_F(ViewsTest, ViewReplaceDependentViewIncompatibleTypeChange) {
                       "`BYTES`")));
 }
 
-TEST_F(ViewsTest, ViewReplace_DependentViewCompatibleTypeChange) {
+TEST_P(ViewsTest, ViewReplace_DependentViewCompatibleTypeChange) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 'a' AS k1
@@ -363,7 +376,7 @@ TEST_F(ViewsTest, ViewReplace_DependentViewCompatibleTypeChange) {
   EXPECT_EQ(v2->columns()[1].type, zetasql::types::StringType());
 }
 
-TEST_F(ViewsTest, StrictNameResolutionMode) {
+TEST_P(ViewsTest, StrictNameResolutionMode) {
   EXPECT_THAT(CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -379,7 +392,7 @@ TEST_F(ViewsTest, StrictNameResolutionMode) {
                   testing::HasSubstr("SELECT * is not allowed")));
 }
 
-TEST_F(ViewsTest, DropViewBasic) {
+TEST_P(ViewsTest, DropViewBasic) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -398,7 +411,7 @@ TEST_F(ViewsTest, DropViewBasic) {
   EXPECT_NE(new_chema->FindTable("T1"), nullptr);
 }
 
-TEST_F(ViewsTest, UnnamedColumnView) {
+TEST_P(ViewsTest, UnnamedColumnView) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       auto schema, CreateSchema({
                        "CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS c",
@@ -409,7 +422,7 @@ TEST_F(ViewsTest, UnnamedColumnView) {
   EXPECT_EQ(v->columns()[0].name, "c");
 }
 
-TEST_F(ViewsTest, ViewNotFound) {
+TEST_P(ViewsTest, ViewNotFound) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       auto schema, CreateSchema({
                        "CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS c",
@@ -422,7 +435,7 @@ TEST_F(ViewsTest, ViewNotFound) {
                                   testing::HasSubstr("View not found: V")));
 }
 
-TEST_F(ViewsTest, PrintViewBasic) {
+TEST_P(ViewsTest, PrintViewBasic) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -440,7 +453,7 @@ TEST_F(ViewsTest, PrintViewBasic) {
            "CREATE VIEW V SQL SECURITY INVOKER AS SELECT T1.col1 FROM T1"})));
 }
 
-TEST_F(ViewsTest, DropView_Dependencies) {
+TEST_P(ViewsTest, DropView_Dependencies) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
     CREATE TABLE T1(
@@ -476,7 +489,7 @@ TEST_F(ViewsTest, DropView_Dependencies) {
                                      "are dependent views: V1.")));
 }
 
-TEST_F(ViewsTest, DropViewIsCaseSensitive) {
+TEST_P(ViewsTest, DropViewIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,

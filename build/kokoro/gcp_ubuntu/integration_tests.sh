@@ -66,6 +66,7 @@ function emulator::run_integration_tests() {
   elif [[ $client == "cpp" ]]; then
     cd "cpp/google/cloud/spanner/"
     bazel test --test_env=SPANNER_EMULATOR_HOST=localhost:9010 \
+      --test_env=SPANNER_EMULATOR_REST_HOST=http://localhost:9020 \
       --test_env=GOOGLE_CLOUD_PROJECT=test-project \
       --test_env=GOOGLE_CLOUD_CPP_SPANNER_TEST_INSTANCE_ID=test-instance-a \
       --test_env=GOOGLE_CLOUD_CPP_AUTO_RUN_EXAMPLES=yes \

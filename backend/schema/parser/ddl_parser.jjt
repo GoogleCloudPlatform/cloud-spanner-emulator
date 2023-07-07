@@ -124,6 +124,7 @@ void create_table_statement() :
 {}
 {
   <TABLE>
+  [ if_not_exists() ]
   qualified_identifier() #name
   "(" [ table_element() ( LOOKAHEAD(2) "," table_element() )* [ "," ] ] ")"
   primary_key()
@@ -146,6 +147,7 @@ void column_def() :
   column_type()
   [ <NOT> <NULLL> #not_null ]
   [ generation_clause() | column_default_clause() ]
+  [ <HIDDEN> #hidden ]
   [ options_clause() ]
 }
 
@@ -273,6 +275,7 @@ void create_index_statement() :
   [ <UNIQUE> #unique_index ]
   [ <NULL_FILTERED> #null_filtered ]
   <INDEX>
+  [ if_not_exists() ]
   qualified_identifier() #name
   <ON> qualified_identifier() #table
   key() #columns
@@ -406,13 +409,27 @@ void statement_tokens() :
   | ")" )+
 }
 
+void if_not_exists() :
+{}
+{
+  <IF> <NOT> <EXISTS>
+}
+
+void if_exists() :
+{}
+{
+  <IF> <EXISTS>
+}
+
 void drop_statement() :
 {}
 {
   <DROP>
 
     ( <TABLE> #table
+      [ if_exists() ]
     | <INDEX> #index
+      [ if_exists() ]
     | <VIEW> #view
     | <CHANGE> <STREAM> #change_stream
   ) qualified_identifier() #name
@@ -447,7 +464,8 @@ void alter_table_statement() :
     | LOOKAHEAD(4) <ADD> check_constraint()
     | LOOKAHEAD(4) <ADD> row_deletion_policy_clause() #add_row_deletion_policy
     | LOOKAHEAD(1) <ADD> #add_column [LOOKAHEAD(6) <COLUMN>
-      ] column_def()
+      [ if_not_exists() ]
+    ] column_def()
     | <REPLACE> row_deletion_policy_clause() #replace_row_deletion_policy
   )
 }

@@ -38,8 +38,10 @@ cc_library(
         "//backend/schema/graph:schema_node",
         "//backend/schema/updater:schema_validation_context",
         "//backend/schema/validators:schema_validators",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )

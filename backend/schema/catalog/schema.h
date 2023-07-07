@@ -81,15 +81,16 @@ class Schema {
   // Finds a change stream by its name. Returns a const pointer of the change
   // stream, or nullptr if the change stream is not found. Name comparison is
   // case-insensitive.
-  std::shared_ptr<const ChangeStream> FindChangeStream(
+  const ChangeStream* FindChangeStream(
       const std::string& change_stream_name) const;
 
   // List all the user-visible tables in this schema.
   absl::Span<const Table* const> tables() const { return tables_; }
+
   absl::Span<const View* const> views() const { return views_; }
 
   // List all the user-visible change streams in this schema.
-  absl::Span<const std::shared_ptr<const ChangeStream>> change_streams() const {
+  absl::Span<const ChangeStream* const> change_streams() const {
     return change_streams_;
   }
 
@@ -129,12 +130,11 @@ class Schema {
   CaseInsensitiveStringMap<const Table*> tables_map_;
 
   // A vector that maintains the original order of change streams in the DDL.
-  std::vector<std::shared_ptr<const ChangeStream>> change_streams_;
+  std::vector<const ChangeStream*> change_streams_;
 
   // A map that owns all the change streams. Key is the name of the change
   // stream. Hash and comparison on the keys are case-insensitive.
-  CaseInsensitiveStringMap<std::shared_ptr<const ChangeStream>>
-      change_streams_map_;
+  CaseInsensitiveStringMap<const ChangeStream*> change_streams_map_;
 
   // A map that owns all of the indexes. Key is the name of the index. Hash and
   // comparison on the keys are case-insensitive.

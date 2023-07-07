@@ -45,8 +45,7 @@ using zetasql_base::testing::StatusIs;
 class CheckConstraintVerifiersTest : public ::testing::Test {
  public:
   CheckConstraintVerifiersTest()
-      : feature_flags_({.enable_stored_generated_columns = true,
-                        .enable_check_constraint = true}) {}
+      : feature_flags_({.enable_check_constraint = true}) {}
 
  protected:
   void SetUp() override {

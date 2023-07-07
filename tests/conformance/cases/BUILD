@@ -71,9 +71,11 @@ cc_library(
     ],
     data = [
         "//tests/conformance/data/schema_changes:test_files",
+        "//tests/conformance/data/schemas:schema_files",
     ],
     deps = [
         "//common:feature_flags",
+        "//tests/common:file_based_schema_reader",
         "//tests/common:file_based_test_runner",
         "//tests/common:proto_matchers",
         "//tests/common:scoped_feature_flags_setter",

@@ -30,24 +30,11 @@ namespace backend {
 // Implementation of ChangeStream::Validate().
 class ChangeStreamValidator {
  public:
-  ChangeStreamValidator(const ddl::CreateChangeStream& create, Schema& schema)
-      : create_(create), schema_(schema) {}
   static absl::Status Validate(const ChangeStream* change_stream,
                                SchemaValidationContext* context);
-  static absl::Status ValidateForClause();
-  // Validates the limit on the max number of change streams tracking the same
-  // table or non-key column.
-  absl::Status ValidateLimits();
-  absl::Status ForEachTrackedObject(
-      const ddl::CreateChangeStream& create, Schema& schema,
-      absl::FunctionRef<absl::Status(Table*)> table_cb);
   static absl::Status ValidateUpdate(const ChangeStream* change_stream,
                                      const ChangeStream* old_change_stream,
                                      SchemaValidationContext* context);
-
- private:
-  const ddl::CreateChangeStream& create_;
-  Schema& schema_;
 };
 
 }  // namespace backend

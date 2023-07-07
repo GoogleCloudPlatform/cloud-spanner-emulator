@@ -17,11 +17,14 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_CHANGE_STREAM_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_CHANGE_STREAM_H_
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "zetasql/public/type.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/substitute.h"
@@ -35,13 +38,11 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 class Table;
-
+class Column;
 class ChangeStream : public SchemaNode {
  public:
   // Returns the name of this change stream.
   std::string Name() const { return name_; }
-
-  const std::shared_ptr<Schema> schema() const { return schema_; }
 
   const ddl::ChangeStreamForClause* for_clause() const { return for_clause_; }
 
@@ -90,18 +91,31 @@ class ChangeStream : public SchemaNode {
   // Name of this change stream.
   std::string name_;
 
+  // Name of this change stream's table valued function.
+  std::string tvf_name_;
+
   // TODO: assign the ID during change stream creation
   // A unique ID for identifying this change stream in the schema that owns this
   // change stream.
   ChangeStreamID id_;
 
-  std::shared_ptr<Schema> schema_ = nullptr;
+  // Parsed retention period in seconds, use for query timestamp validation,
+  // default is 1 day in seconds
+  int64_t parsed_retention_period_ = 24 * 60 * 60;
+
+  // Timestamp which this change stream is created, use for prevent querying
+  // change stream before creation
+  absl::Time creation_time_;
+
   const ddl::ChangeStreamForClause* for_clause_ = nullptr;
 
   const ddl::SetOption* options_ = nullptr;
 
   // The backing table that stores the change stream data.
   const Table* change_stream_data_table_;
+
+  // The table that stores the partition data.
+  const Table* change_stream_partition_table_;
 };
 }  // namespace backend
 }  // namespace emulator

@@ -64,7 +64,7 @@ struct SchemaNameInfo {
 // -  Deletions: When a node is marked for deletion, it will return true from
 //    is_deleted(). Deletions may result in cascading deletions. If a node n1
 //    depends on node n2 (i.e. it should be deleted if n2 is deleted), then it
-//    must hold a pointer to n2 and must call this->MarkDelete() while
+//    must hold a pointer to n2 and must call this->MarkDeleted() while
 //    DeepClone()ing itself in response to a is_deleted() on n2. A node may
 //    chose to ignore or check validation errors on deletion inside the
 //    ValidateUpdate() methods. For e.g. if a node does not expect itself or
@@ -95,7 +95,7 @@ class SchemaNode {
   //   invalid DDL statement should be reported as user-visible, properly
   //   formatted errors.
 
-  // Returns absl::OkStatus() if the node's state is self-conistent.
+  // Returns absl::OkStatus() if the node's state is self-consistent.
   virtual absl::Status Validate(SchemaValidationContext* context) const = 0;
 
   // Validates that the state of the cloned node after deep-cloning is
@@ -106,11 +106,13 @@ class SchemaNode {
   // Returns a debug string for uniquely identifying a node in a SchemaGraph.
   virtual std::string DebugString() const = 0;
 
-  // Returns true if this node is marked for deletion.
+  // Returns true if this node is marked for deletion. Note: it is only valid to
+  // call from `DeepClone` and `ValidateUpdate`. Outside of these methods it
+  // will always return true.
   bool is_deleted() const { return is_deleted_; }
 
  protected:
-  // Marks a node as deleted.
+  // Marks a node as deleted. Only valid to call from `SchemaNode::DeepClone`.
   void MarkDeleted() { is_deleted_ = true; }
 
  private:

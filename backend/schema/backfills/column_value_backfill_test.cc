@@ -55,8 +55,7 @@ using zetasql::values::String;
 class ColumnValueBackfillTest : public ::testing::Test {
  public:
   ColumnValueBackfillTest()
-      : emulator_feature_flags_({.enable_stored_generated_columns = true,
-                                 .enable_column_default_values = true}) {}
+      : emulator_feature_flags_({.enable_column_default_values = true}) {}
 
  protected:
   void SetUp() override {

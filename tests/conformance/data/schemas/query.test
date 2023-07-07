@@ -1,0 +1,72 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE users(
+  user_id    INT64 NOT NULL,
+  name       STRING(MAX),
+  age        INT64,
+) PRIMARY KEY (user_id);
+CREATE TABLE threads (
+  user_id     INT64 NOT NULL,
+  thread_id   INT64 NOT NULL,
+  starred    BOOL,
+) PRIMARY KEY (user_id, thread_id),
+INTERLEAVE IN PARENT users ON DELETE CASCADE;
+CREATE TABLE messages (
+  user_id     INT64 NOT NULL,
+  thread_id   INT64 NOT NULL,
+  message_id  INT64 NOT NULL,
+  subject     STRING(MAX),
+) PRIMARY KEY (user_id, thread_id, message_id),
+INTERLEAVE IN PARENT threads ON DELETE CASCADE;
+CREATE TABLE scalar_types_table (
+  int_val INT64 NOT NULL,
+  bool_val BOOL,
+  bytes_val BYTES(MAX),
+  date_val DATE,
+  float_val FLOAT64,
+  string_val STRING(MAX),
+  numeric_val NUMERIC,
+  timestamp_val TIMESTAMP,
+  json_val JSON,
+) PRIMARY KEY(int_val);
+CREATE TABLE numeric_table(
+  key     NUMERIC,
+  val     INT64,
+) PRIMARY KEY (key);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE users(
+  user_id    bigint NOT NULL PRIMARY KEY,
+  Name       varchar,
+  Age        bigint
+);
+CREATE TABLE threads (
+  user_id     bigint NOT NULL,
+  thread_id   bigint NOT NULL,
+  starred     bool,
+  PRIMARY KEY (user_id, thread_id)
+) INTERLEAVE IN PARENT users ON DELETE CASCADE;
+CREATE TABLE messages (
+  user_id     bigint NOT NULL,
+  thread_id   bigint NOT NULL,
+  message_id  bigint NOT NULL,
+  subject     varchar,
+  PRIMARY KEY (user_id, thread_id, message_id)
+) INTERLEAVE IN PARENT threads ON DELETE CASCADE;
+CREATE TABLE scalar_types_table (
+  int_val bigint NOT NULL PRIMARY KEY,
+  bool_val bool,
+  bytes_val bytea,
+  date_val date,
+  float_val float8,
+  string_val varchar,
+  -- PG.NUMERIC is currently unsupported in the emulator.
+  -- numeric_val numeric,
+  timestamp_val timestamptz
+  -- PG.JSONB is currently unsupported in the emulator.
+  -- json_val jsonb
+);
+# PG.NUMERIC is currently unsupported in the emulator.
+# CREATE TABLE numeric_table (
+#   key     numeric,
+#   val     bigint NOT NULL PRIMARY KEY,
+# );

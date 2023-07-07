@@ -72,7 +72,6 @@ class Catalog : public zetasql::EnumerableCatalog {
   absl::Status GetFunction(const std::string& name,
                            const zetasql::Function** function,
                            const FindOptions& options) final;
-
   // Implementation of the zetasql::EnumerableCatalog interface.
   absl::Status GetCatalogs(
       absl::flat_hash_set<const zetasql::Catalog*>* output) const final;

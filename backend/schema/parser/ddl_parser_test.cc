@@ -686,6 +686,25 @@ TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
    : Only OLDER_THAN is supported.)"));
 }
 
+TEST(ParseCreateTable, CanParseCreateTableWithHiddenColumn) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE TABLE Users (
+                      Id INT64,
+                      Name STRING(MAX) HIDDEN,
+                    ) PRIMARY KEY (Id)
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Users"
+                      column { column_name: "Id" type: INT64 }
+                      column { column_name: "Name" type: STRING hidden: true }
+                      primary_key { key_name: "Id" }
+                    }
+                  )pb")));
+}
+
 // CREATE INDEX
 
 TEST(ParseCreateIndex, CanParseCreateIndexBasicImplicitlyGlobal) {
@@ -1573,8 +1592,7 @@ TEST(ParseToken, CannotParseIllegalBytesEscape) {
 
 class GeneratedColumns : public ::testing::Test {
  public:
-  GeneratedColumns()
-      : feature_flags_({.enable_stored_generated_columns = true}) {}
+  GeneratedColumns() : feature_flags_({}) {}
 
  private:
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
@@ -1875,8 +1893,7 @@ TEST_F(ColumnDefaultValues, InvalidSetDefault) {
 
 class CheckConstraint : public ::testing::Test {
  public:
-  CheckConstraint()
-      : feature_flags_({.enable_stored_generated_columns = true}) {}
+  CheckConstraint() : feature_flags_({}) {}
 
  private:
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
@@ -2165,8 +2182,7 @@ TEST(CreateChangeStream, CanParseCreateChangeStreamForExplicitTablePkOnly) {
                 })pb")));
 }
 
-TEST(CreateChangeStream,
-     CanParseCreateChangeStreamForExplicitTableExplicitColumn) {
+TEST(CreateChangeStream, CanParseCreateChangeStreamForExplicitColumn) {
   EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
       TestTable(TestCol))sql"),
               IsOkAndHolds(test::EqualsProto(R"pb(
@@ -2187,12 +2203,12 @@ TEST(CreateChangeStream,
      CanParseCreateChangeStreamSetOptionsDataRetentionPeriod) {
   EXPECT_THAT(
       ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
-      ALL OPTIONS ( retention_period = '36h' ))sql"),
+      ALL OPTIONS ( retention_period = '168h' ))sql"),
       IsOkAndHolds(test::EqualsProto(R"pb(
         create_change_stream {
           change_stream_name: "ChangeStream"
           for_clause { all: true }
-          set_options { option_name: "retention_period" string_value: "36h" }
+          set_options { option_name: "retention_period" string_value: "168h" }
         })pb")));
 }
 

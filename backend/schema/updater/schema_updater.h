@@ -34,8 +34,11 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
-
 static constexpr char kIndexDataTablePrefix[] = "_index_data_table_";
+static constexpr const char kValueCaptureTypeOldAndNewValues[] =
+    "OLD_AND_NEW_VALUES";
+static constexpr const char kValueCaptureTypeNewRow[] = "NEW_ROW";
+static constexpr const char kValueCaptureTypeNewValues[] = "NEW_VALUES";
 
 // Container holding all the required inputs for processing a schema change.
 struct SchemaChangeOperation {
@@ -74,6 +77,12 @@ struct SchemaChangeResult {
   // that failed. absl::OkStatus() if all schema actions successfully applied.
   absl::Status backfill_status;
 };
+
+// Parses the given statement based on the dialect. The resulting DDL statement
+// is returned in the provided ddl_statement.
+absl::StatusOr<ddl::DDLStatement> ParseDDLByDialect(
+    absl::string_view statement
+);
 
 class SchemaUpdater {
  public:

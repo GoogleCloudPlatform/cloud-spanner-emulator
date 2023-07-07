@@ -106,65 +106,6 @@ class GCloudReadWriteTest(emulator.TestCase):
         self.JoinLines('a  b', '1  1'),
     )
 
-  # TODO: Test returned strings from ddl.
-  def testUpdateDDLChangeStream(self):
-    # Create an instance.
-    self.RunGCloud(
-        'spanner',
-        'instances',
-        'create',
-        'test-instance',
-        '--config=emulator-config',
-        '--description=Test Instance',
-        '--nodes',
-        '3',
-    )
-    # Create the database.
-    self.assertEqual(
-        self.RunGCloud(
-            'spanner',
-            'databases',
-            'create',
-            'test-database',
-            '--instance=test-instance',
-            '--ddl=CREATE TABLE mytable (a INT64, b INT64) PRIMARY KEY(a)',
-        ),
-        self.JoinLines(''),
-    )
-    # Perform an update to create a change stream.
-    self.RunGCloud(
-        'spanner',
-        'databases',
-        'ddl',
-        'update',
-        'test-database',
-        '--instance=test-instance',
-        '--ddl=CREATE CHANGE STREAM myChangeStream FOR ALL',
-    )
-    # Perform an update to alter a change stream.
-    self.RunGCloud(
-        'spanner',
-        'databases',
-        'ddl',
-        'update',
-        'test-database',
-        '--instance=test-instance',
-        (
-            '--ddl=ALTER CHANGE STREAM myChangeStream SET OPTIONS ('
-            " value_capture_type = 'NEW_VALUES' )"
-        ),
-    )
-    # Perform an update to drop a change stream.
-    self.RunGCloud(
-        'spanner',
-        'databases',
-        'ddl',
-        'update',
-        'test-database',
-        '--instance=test-instance',
-        '--ddl=DROP CHANGE STREAM myChangeStream',
-    )
-
   def testUpdate(self):
     # Create an instance.
     self.RunGCloud(

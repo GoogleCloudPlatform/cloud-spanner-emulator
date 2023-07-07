@@ -17,9 +17,11 @@
 #include "backend/schema/catalog/check_constraint.h"
 
 #include <iterator>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -27,7 +29,6 @@
 #include "absl/types/span.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
-#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -37,27 +38,18 @@ namespace test {
 
 namespace {
 
-using ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
-
-class CheckConstraintSchemaUpdaterTest : public SchemaUpdaterTest {
- public:
-  CheckConstraintSchemaUpdaterTest()
-      : feature_flags_({.enable_stored_generated_columns = true,
-                        .enable_check_constraint = true}) {}
-
- private:
-  ScopedEmulatorFeatureFlagsSetter feature_flags_;
-};
-
-TEST_F(CheckConstraintSchemaUpdaterTest, Basic) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      auto schema,
-      CreateSchema({"CREATE TABLE T ("
-                    "  K INT64,"
-                    "  V INT64,"
-                    "  CONSTRAINT C1 CHECK(K > 0)"
-                    ") PRIMARY KEY (K)",
-                    "ALTER TABLE T ADD CONSTRAINT C2 CHECK(K + V > 0)"}));
+TEST_P(SchemaUpdaterTest, CheckConstraintBasic) {
+  std::unique_ptr<const Schema> schema;
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        CreateSchema({
+            "CREATE TABLE T ("
+            "  K INT64,"
+            "  V INT64,"
+            "  CONSTRAINT C1 CHECK(K > 0)"  // Crash OK
+            ") PRIMARY KEY (K)",
+            "ALTER TABLE T ADD CONSTRAINT C2 CHECK(K + V > 0)"  // Crash OK
+        }));
 
   const Table* table = ASSERT_NOT_NULL(schema->FindTable("T"));
   const CheckConstraint* check1 =
@@ -70,7 +62,7 @@ TEST_F(CheckConstraintSchemaUpdaterTest, Basic) {
 
   EXPECT_EQ(check2->Name(), "C2");
   EXPECT_EQ(check2->table()->Name(), "T");
-  EXPECT_EQ(check2->expression(), "K + V > 0");
+    EXPECT_EQ(check2->expression(), "K + V > 0");
 
   auto get_column_names = [](absl::Span<const Column* const> columns,
                              std::vector<std::string>* column_names) {
@@ -91,30 +83,36 @@ TEST_F(CheckConstraintSchemaUpdaterTest, Basic) {
               testing::UnorderedElementsAreArray({"K", "V"}));
 }
 
-std::vector<std::string> SchemaForCaseSensitivityTests() {
+std::vector<std::string> SchemaForCaseSensitivityTests(
+) {
   return {
       "CREATE TABLE T ("
       "  K INT64,"
       "  V INT64,"
-      "  CONSTRAINT C1 CHECK(K > 0)"
+      "  CONSTRAINT C1 CHECK(K > 0)"  // Crash OK
       ") PRIMARY KEY (K)",
   };
 }
 
-TEST_F(CheckConstraintSchemaUpdaterTest, ColumnNameIsCaseInsensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
-                       CreateSchema(SchemaForCaseSensitivityTests()));
-
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(),
-                         {"ALTER TABLE T ADD CONSTRAINT C2 CHECK(v > 0)"}));
+TEST_P(SchemaUpdaterTest, CheckConstraintColumnNameIsCaseInsensitive) {
+  std::string add_constraint_ddl =
+      "ALTER TABLE T ADD CONSTRAINT C2 CHECK(v > 0)";  // Crash OK
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        auto schema,
+        CreateSchema(SchemaForCaseSensitivityTests(
+            )));
+    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {add_constraint_ddl}));
 }
 
-TEST_F(CheckConstraintSchemaUpdaterTest, ConstraintNameIsCaseInsensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
-                       CreateSchema(SchemaForCaseSensitivityTests()));
-
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {"ALTER TABLE T DROP CONSTRAINT c1"}));
+TEST_P(SchemaUpdaterTest, CheckConstraintConstraintNameIsCaseInsensitive) {
+  std::string drop_constraint_ddl = "ALTER TABLE T DROP CONSTRAINT c1";
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        auto schema,
+        CreateSchema(SchemaForCaseSensitivityTests(
+            )));
+    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {drop_constraint_ddl}));
 }
+
 }  // namespace
 
 }  // namespace test

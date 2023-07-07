@@ -30,6 +30,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/database/database.h"
 #include "backend/schema/printer/print_ddl.h"
+#include "common/constants.h"
 #include "common/limits.h"
 #include "frontend/common/uris.h"
 #include "tests/common/test_env.h"
@@ -72,8 +73,9 @@ class DatabaseApiTest : public test::ServerTest {
     grpc::ClientContext context;
     database_api::CreateDatabaseRequest request;
     request.set_parent(instance_uri);
+    std::string quote = kGSQLQuote;
     request.set_create_statement(
-        absl::StrCat("CREATE DATABASE `", database_name, "`"));
+        absl::StrCat("CREATE DATABASE ", quote, database_name, quote));
     for (auto extra_statement : extra_statements) {
       request.add_extra_statements(extra_statement);
     }

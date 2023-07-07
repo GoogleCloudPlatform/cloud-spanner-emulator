@@ -83,7 +83,7 @@ TEST_F(AnalyzeStatementTest, SelectNonexistentColumnReturnsError) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(AnalyzeStatementTest, SelectNestedCatalogFunctions) {
+TEST_F(AnalyzeStatementTest, SelectNestedCatalogNetFunctions) {
   ZETASQL_EXPECT_OK(
       AnalyzeStatement("SELECT "
                        "NET.IPV4_TO_INT64(b\"\\x00\\x00\\x00\\x00\")"));

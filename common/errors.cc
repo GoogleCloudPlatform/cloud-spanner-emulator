@@ -822,7 +822,6 @@ absl::Status TooManyTablesPerDatabase(absl::string_view table_name,
                                        "(limit $1 per database).",
                                        table_name, limit));
 }
-
 absl::Status TooManyChangeStreamsPerDatabase(
     absl::string_view change_stream_name, int64_t limit) {
   return absl::Status(absl::StatusCode::kFailedPrecondition,
@@ -831,18 +830,6 @@ absl::Status TooManyChangeStreamsPerDatabase(
                                        "of Change Streams per Database "
                                        "(limit $1) has been reached.",
                                        change_stream_name, limit));
-}
-
-absl::Status TooManyChangeStreamsTrackingSameObject(
-    absl::string_view change_stream_name, int64_t limit,
-    absl::string_view object_name_string) {
-  return absl::Status(
-      absl::StatusCode::kFailedPrecondition,
-      absl::Substitute("Failed to create or alter Change Stream $0 : "
-                       "because it is not allowed to have more than "
-                       "$1 Change Streams tracking the same table or "
-                       "non-key column or ALL: $2.",
-                       change_stream_name, limit, object_name_string));
 }
 
 absl::Status TooManyIndicesPerDatabase(absl::string_view index_name,
@@ -875,7 +862,6 @@ absl::Status DropTableWithDependentIndices(absl::string_view table_name,
                       absl::Substitute("Cannot drop table $0 with indices: $1.",
                                        table_name, indexes));
 }
-
 absl::Status SetOnDeleteWithoutInterleaving(absl::string_view table_name) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
@@ -1090,13 +1076,6 @@ absl::Status IndexNotFound(absl::string_view index_name) {
   return absl::Status(absl::StatusCode::kNotFound,
                       absl::Substitute("Index not found: $0", index_name));
 }
-
-absl::Status ChangeStreamNotFound(absl::string_view change_stream_name) {
-  return absl::Status(
-      absl::StatusCode::kNotFound,
-      absl::StrCat("Change Stream not found: ", change_stream_name));
-}
-
 absl::Status DropForeignKeyManagedIndex(absl::string_view index_name,
                                         absl::string_view foreign_key_names) {
   return absl::Status(
@@ -2041,14 +2020,12 @@ absl::Status UnsupportedTablesampleSystem() {
   return absl::Status(absl::StatusCode::kInvalidArgument,
                       "SYSTEM sampling is not supported");
 }
-
 absl::Status ToJsonStringNonJsonTypeNotSupported(absl::string_view type_name) {
   return absl::Status(
       absl::StatusCode::kUnimplemented,
       absl::Substitute("TO_JSON_STRING is not supported on values of type $0",
                        type_name));
 }
-
 absl::Status TooManyFunctions(int max_function_nodes) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,

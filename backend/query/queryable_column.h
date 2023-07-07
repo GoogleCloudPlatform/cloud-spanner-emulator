@@ -58,6 +58,8 @@ class QueryableColumn : public zetasql::Column {
     return !wrapped_column_->is_generated();
   }
 
+  bool IsPseudoColumn() const override { return wrapped_column_->hidden(); }
+
   bool HasDefaultValue() const override {
     return wrapped_column_->has_default_value();
   }

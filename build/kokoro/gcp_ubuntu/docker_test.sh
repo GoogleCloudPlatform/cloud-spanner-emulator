@@ -15,15 +15,15 @@
 #
 
 #!/bin/bash
-base_SHA=71038cf075f2c62edacd4ed7673770e79d6d5072924ec761b789bb817e602d60
-cpp_SHA=043493e2a9f80039e2699d63784c455e8d8e34c82e3faaa6981f0ed68dfbb41c
-csharp_SHA=c38cc0de3f8f7a2b54dda81b4c72cd5c673203a6d505879f71165709245350d0
-go_SHA=25f586c611d6a223e38fae22e4a8eee8253824b043a16d6f553479612f01c36c
-java_SHA=6880a6a88eaa7d4542657c02aaceb553823ab9add8d6f568673007d6109cfd39
-nodejs_SHA=40144436e1d271e2b0e7411902ab094db42b21cad63d663f8ec8b3d4d02f08d9
-php_SHA=c9dee8678e15e12df2f30ccc420f23331869d4fd8605661ae56bd1731c07a460
-py_SHA=b331186119403fe921295dfa6096f0f2e6c9b308f50d7c53c56c6b7f93f1dd16
-ruby_SHA=beaf6ac7f8de0d74494ccae93b78a55bb2703e66c0967afab49715ec7c8e826f
+base_SHA=681cd1ca7d58537496a25fe569ed9b28dfa0ed071dd2206027c184b04c82011f
+cpp_SHA=a4bdfa9fad8f620f2f1abeaf9fe13a80631e914639dcd96ae9d9d8d805dee092
+csharp_SHA=1fa2995e123b944da1e527afd1866b82cd7bca6f7395c69fdbc4f3f0c7991a28
+go_SHA=a20ba6aa5607987435b13a4239b3e9f89dbf7e7d0367f5d5aa47efeb4b2ec5c1
+java_SHA=96b4ed4ff736339cf41a9c32d340114d33e6d71896bd19fde97eb471ec945f8f
+nodejs_SHA=16885025abc23f9f645e4bfaa8c39c71200d79a5a77bf8225a3f3636197c5898
+php_SHA=99a92059ecd16a839b11dbaef60863dd373d004cf940308a275033cc38aa5a6c
+py_SHA=b023a38fa6f10b8800d43e059c43442ffe04c5f2d2f324c6341bb29a0679851c
+ruby_SHA=0af4808cbc4e72e359e150129e4f8617c93a62f05b0b8103fbb9de32b738d2e5
 
 if [[ "$#" -eq 0 ]]; then
   echo "Running client library integration tests."
@@ -94,7 +94,7 @@ REMOTE_CACHE="https://storage.googleapis.com/${CACHE_BUCKET}/${BASE_DOCKER_IMAGE
 container_id=$(docker create $DOCKER_ARGS \
     --env CC="/usr/bin/gcc" \
     --env CXX="/usr/bin/g++" \
-    --env GCLOUD_DIR="/usr/local/gcloud/google-cloud-sdk/bin" \
+    --env GCLOUD_DIR="/usr/bin" \
     --env CLIENT_LIB_DIR="/root/clients" \
     --env COPY_LOGS_TO="/logs" \
     --env REMOTE_CACHE="${REMOTE_CACHE}" \
@@ -139,7 +139,7 @@ for client in $CLIENT_INTEGRATION_TESTS
     docker run $DOCKER_ARGS \
       --env CC="/usr/bin/gcc" \
       --env CXX="/usr/bin/g++" \
-      --env GCLOUD_DIR="/usr/local/gcloud/google-cloud-sdk/bin" \
+      --env GCLOUD_DIR="/usr/bin" \
       --env CLIENT_LIB_DIR="/root/clients" \
       --env COPY_LOGS_TO="/logs" \
       --env KOKORO_ARTIFACTS_DIR="${KOKORO_ARTIFACTS_DIR}" \

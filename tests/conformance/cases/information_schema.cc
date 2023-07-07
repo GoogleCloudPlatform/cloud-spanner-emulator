@@ -120,7 +120,8 @@ class InformationSchemaTest : public DatabaseTest {
                                 "ROLE_TABLE_GRANTS",
                                 "ROLE_COLUMN_GRANTS",
                                 "ROLE_CHANGE_STREAM_GRANTS",
-                                "ROLE_ROUTINE_GRANTS"})};
+                                "ROLE_ROUTINE_GRANTS",
+                                "TABLE_SYNONYMS"})};
 
   // Information schema columns not yet supported.
   const std::pair<std::string, Value> kUnsupportedColumns{

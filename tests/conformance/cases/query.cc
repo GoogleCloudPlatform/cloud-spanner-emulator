@@ -26,6 +26,7 @@
 #include "absl/time/time.h"
 #include "google/cloud/spanner/json.h"
 #include "google/cloud/spanner/numeric.h"
+#include "tests/common/file_based_schema_reader.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -39,79 +40,54 @@ namespace {
 using cloud::spanner::Bytes;
 using zetasql_base::testing::StatusIs;
 
-class QueryTest : public DatabaseTest {
+class QueryTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
   absl::Status SetUpDatabase() override {
     EmulatorFeatureFlags::Flags flags;
     emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-
-    return SetSchema({
-        R"(
-          CREATE TABLE Users(
-            UserId     INT64 NOT NULL,
-            Name       STRING(MAX),
-            Age        INT64,
-          ) PRIMARY KEY (UserId)
-        )",
-        R"(
-          CREATE TABLE Threads (
-            UserId     INT64 NOT NULL,
-            ThreadId   INT64 NOT NULL,
-            Starred    BOOL,
-          ) PRIMARY KEY (UserId, ThreadId),
-          INTERLEAVE IN PARENT Users ON DELETE CASCADE
-        )",
-        R"(
-          CREATE TABLE Messages (
-            UserId     INT64 NOT NULL,
-            ThreadId   INT64 NOT NULL,
-            MessageId  INT64 NOT NULL,
-            Subject    STRING(MAX),
-          ) PRIMARY KEY (UserId, ThreadId, MessageId),
-          INTERLEAVE IN PARENT Threads ON DELETE CASCADE
-        )",
-        R"(
-          CREATE TABLE ScalarTypesTable (
-            intVal INT64 NOT NULL,
-            boolVal BOOL,
-            bytesVal BYTES(MAX),
-            dateVal DATE,
-            floatVal FLOAT64,
-            stringVal STRING(MAX),
-            numericVal NUMERIC,
-            timestampVal TIMESTAMP,
-            jsonVal JSON,
-          ) PRIMARY KEY(intVal)
-        )",
-        R"(
-          CREATE TABLE NumericTable(
-            key     NUMERIC,
-            val     INT64,
-          ) PRIMARY KEY (key)
-        )",
-    });
+    return SetSchemaFromFile("query.test");
   }
 
  protected:
   void PopulateScalarTypesTable() {
-    ZETASQL_EXPECT_OK(MultiInsert(
-        "ScalarTypesTable",
-        {"intVal", "boolVal", "bytesVal", "dateVal", "floatVal", "stringVal",
-         "numericVal", "timestampVal", "jsonVal"},
-        {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
-          Null<std::string>(), Null<Numeric>(), Null<Timestamp>(),
-          Null<Json>()},
-         {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
-          cloud::spanner::MakeNumeric("123.456789").value(), Timestamp(),
-          Json("{\"key\":123}")}}));
+    // TODO: Remove check once PG.NUMERIC and PG.JSONB are
+    // supported.
+    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+      ZETASQL_EXPECT_OK(
+          MultiInsert("scalar_types_table",
+                      {"int_val", "bool_val", "bytes_val", "date_val",
+                       "float_val", "string_val", "timestamp_val"},
+                      {{0, Null<bool>(), Null<Bytes>(), Null<Date>(),
+                        Null<double>(), Null<std::string>(), Null<Timestamp>()},
+                       {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123,
+                        "stringValue", Timestamp()}}));
+    } else {
+      ZETASQL_EXPECT_OK(MultiInsert(
+          "scalar_types_table",
+          {"int_val", "bool_val", "bytes_val", "date_val", "float_val",
+           "string_val", "numeric_val", "timestamp_val", "json_val"},
+          {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
+            Null<std::string>(), Null<Numeric>(), Null<Timestamp>(),
+            Null<Json>()},
+           {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
+            cloud::spanner::MakeNumeric("123.456789").value(), Timestamp(),
+            Json("{\"key\":123}")}}));
+    }
   }
 
   void PopulateDatabase() {
     ZETASQL_EXPECT_OK(MultiInsert(
-        "Users", {"UserId", "Name"},
+        "users", {"user_id", "name"},
         {{1, "Douglas Adams"}, {2, "Suzanne Collins"}, {3, "J.R.R. Tolkien"}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert("Threads", {"UserId", "ThreadId", "Starred"},
+    ZETASQL_EXPECT_OK(MultiInsert("threads", {"user_id", "thread_id", "starred"},
                           {{1, 1, true},
                            {1, 2, true},
                            {1, 3, true},
@@ -120,8 +96,8 @@ class QueryTest : public DatabaseTest {
                            {2, 2, true},
                            {3, 1, false}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert("Messages",
-                          {"UserId", "ThreadId", "MessageId", "Subject"},
+    ZETASQL_EXPECT_OK(MultiInsert("messages",
+                          {"user_id", "thread_id", "message_id", "subject"},
                           {{1, 1, 1, "a code review"},
                            {1, 1, 2, "Re: a code review"},
                            {1, 2, 1, "Congratulations Douglas"},
@@ -133,107 +109,168 @@ class QueryTest : public DatabaseTest {
 
     PopulateScalarTypesTable();
 
-    ZETASQL_EXPECT_OK(MultiInsert("NumericTable", {"key", "val"},
-                          {{Null<Numeric>(), Null<std::int64_t>()},
-                           {cloud::spanner::MakeNumeric("-12.3").value(), -1},
-                           {cloud::spanner::MakeNumeric("0").value(), 0},
-                           {cloud::spanner::MakeNumeric("12.3").value(), 1}}));
+    // TODO: Remove check once PG.NUMERIC is supported.
+    if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+      ZETASQL_EXPECT_OK(
+          MultiInsert("numeric_table", {"key", "val"},
+                      {{Null<Numeric>(), Null<std::int64_t>()},
+                       {cloud::spanner::MakeNumeric("-12.3").value(), -1},
+                       {cloud::spanner::MakeNumeric("0").value(), 0},
+                       {cloud::spanner::MakeNumeric("12.3").value(), 1}}));
+    }
   }
 };
 
-TEST_F(QueryTest, CanReadScalarTypes) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectQueryTests, QueryTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
+                    ),
+    [](const testing::TestParamInfo<QueryTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(QueryTest, CanReadScalarTypes) {
   PopulateDatabase();
-  EXPECT_THAT(
-      Query("SELECT * FROM ScalarTypesTable ORDER BY intVal ASC"),
-      IsOkAndHoldsRows(
-          {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
-            Null<std::string>(), Null<Numeric>(), Null<Timestamp>(),
-            Null<Json>()},
-           {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
-            cloud::spanner::MakeNumeric("123.456789").value(), Timestamp(),
-            Json("{\"key\":123}")}}));
+  auto query = Query("SELECT * FROM scalar_types_table ORDER BY int_val ASC");
+  // TODO: Remove check once PG.NUMERIC and PG.JSONB are
+  // supported.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(query,
+                IsOkAndHoldsRows(
+                    {{0, Null<bool>(), Null<Bytes>(), Null<Date>(),
+                      Null<double>(), Null<std::string>(), Null<Timestamp>()},
+                     {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123,
+                      "stringValue", Timestamp()}}));
+  } else {
+    EXPECT_THAT(query, IsOkAndHoldsRows(
+                           {{0, Null<bool>(), Null<Bytes>(), Null<Date>(),
+                             Null<double>(), Null<std::string>(),
+                             Null<Numeric>(), Null<Timestamp>(), Null<Json>()},
+                            {1, true, Bytes("bytes"), Date(2020, 12, 1),
+                             345.123, "stringValue",
+                             cloud::spanner::MakeNumeric("123.456789").value(),
+                             Timestamp(), Json("{\"key\":123}")}}));
+  }
 }
 
-TEST_F(QueryTest, CanCastScalarTypes) {
-  EXPECT_THAT(Query(R"(
-    SELECT true                     bool_field,
-           CAST('abc'  AS STRING)   string_field,
-           CAST(-1     AS INT64)    int64_field,
-           CAST(1.1    AS FLOAT64)  float64_field)"),
-              IsOkAndHoldsRows({{true, "abc", -1, 1.1}}));
+TEST_P(QueryTest, CanCastScalarTypes) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // TODO: Once PG.NUMERIC is supported, convert double precision
+    // value to 1.1. Currently, if you specify 1.1, it gets interpreted as a
+    // numeric value and we get an UNIMPLEMENTED error.
+    EXPECT_THAT(Query(R"(
+      SELECT true                     bool_field,
+             CAST('abc'  AS varchar)  string_field,
+             CAST(-1     AS bigint)   bigint_field,
+             CAST(1      AS float8)   double_field)"),
+                IsOkAndHoldsRows({{true, "abc", -1, 1.0}}));
+  } else {
+    EXPECT_THAT(Query(R"(
+      SELECT true                     bool_field,
+             CAST('abc'  AS STRING)   string_field,
+             CAST(-1     AS INT64)    int64_field,
+             CAST(1.1    AS FLOAT64)  float64_field)"),
+                IsOkAndHoldsRows({{true, "abc", -1, 1.1}}));
+  }
 }
 
-TEST_F(QueryTest, CanExecuteBasicSelectStatement) {
+TEST_P(QueryTest, CanExecuteBasicSelectStatement) {
   PopulateDatabase();
 
-  EXPECT_THAT(Query("SELECT t.ThreadId, t.Starred "
-                    "FROM Users, Threads t "
-                    "WHERE Users.UserId = t.UserId "
-                    "AND Users.UserId=1 AND t.ThreadId=4"),
+  EXPECT_THAT(Query("SELECT t.thread_id, t.starred "
+                    "FROM users, threads t "
+                    "WHERE users.user_id = t.user_id "
+                    "AND users.user_id=1 AND t.thread_id=4"),
               IsOkAndHoldsRows({{4, false}}));
 }
 
-TEST_F(QueryTest, CanExecuteNestedSelectStatement) {
+TEST_P(QueryTest, CanExecuteNestedSelectStatement) {
+  // Spanner PG dialect doesn't support STRUCT and array subquery expressions.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   PopulateDatabase();
 
   using StructType = std::tuple<std::pair<std::string, std::string>>;
   std::vector<StructType> struct_arr{
-      StructType{{"Subject", "Re: a code review"}},
-      StructType{{"Subject", "a code review"}}};
+      StructType{{"subject", "Re: a code review"}},
+      StructType{{"subject", "a code review"}}};
 
-  EXPECT_THAT(Query("SELECT Threads.ThreadId, Threads.Starred,"
-                    "       ARRAY(SELECT AS STRUCT Messages.Subject "
-                    "             FROM Messages"
-                    "             WHERE Messages.UserId = Threads.UserId AND"
-                    "                   Messages.ThreadId = Threads.ThreadId "
-                    "             ORDER BY Messages.Subject ASC) Messages "
-                    "FROM Users JOIN Threads ON Users.UserId = Threads.UserId "
-                    "WHERE Users.UserId=1 AND Threads.ThreadId=1 "
-                    "ORDER BY Threads.ThreadId, Threads.Starred"),
-              IsOkAndHoldsRows({{1, true, Value(struct_arr)}}));
+  EXPECT_THAT(
+      Query("SELECT threads.thread_id, threads.starred,"
+            "       ARRAY(SELECT AS STRUCT messages.subject "
+            "             FROM messages"
+            "             WHERE messages.user_id = threads.user_id AND"
+            "                   messages.thread_id = threads.thread_id "
+            "             ORDER BY messages.subject ASC) messages "
+            "FROM users JOIN threads ON users.user_id = threads.user_id "
+            "WHERE users.user_id=1 AND threads.thread_id=1 "
+            "ORDER BY threads.thread_id, threads.starred"),
+      IsOkAndHoldsRows({{1, true, Value(struct_arr)}}));
 }
 
-TEST_F(QueryTest, CanExecuteEmptySelectStatement) {
+TEST_P(QueryTest, CanExecuteEmptySelectStatement) {
   PopulateDatabase();
 
-  EXPECT_THAT(Query("SELECT t.ThreadId, t.Starred "
-                    "FROM Users, Threads t "
-                    "WHERE Users.UserId = t.UserId "
-                    "AND Users.UserId=10 AND t.ThreadId=40"),
+  EXPECT_THAT(Query("SELECT t.thread_id, t.starred "
+                    "FROM users, threads t "
+                    "WHERE users.user_id = t.user_id "
+                    "AND users.user_id=10 AND t.thread_id=40"),
               IsOkAndHoldsRows({}));
 }
 
-TEST_F(QueryTest, CannotExecuteInvalidSelectStatement) {
+TEST_P(QueryTest, CannotExecuteInvalidSelectStatement) {
   PopulateDatabase();
 
   EXPECT_THAT(Query("SELECT invalid-identifier "
-                    "FROM Users, Threads t "
-                    "WHERE Users.UserId = t.UserId "
-                    "AND Users.UserId=10 AND t.ThreadId=40"),
+                    "FROM users, threads t "
+                    "WHERE users.user_id = t.user_id "
+                    "AND users.user_id=10 AND t.thread_id=40"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(QueryTest, InvalidSelectStructColumns) {
+TEST_P(QueryTest, InvalidSelectStructColumns) {
+  // Spanner PG dialect doesn't support STRUCT and array subquery expressions.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   PopulateDatabase();
 
   EXPECT_THAT(
       Query("SELECT STRUCT< int64_f INT64 > (100) AS expr0 "
-            "FROM Users "
-            "WHERE Users.UserId = 10 "),
+            "FROM users "
+            "WHERE users.user_id = 10 "),
       StatusIs(absl::StatusCode::kUnimplemented,
                testing::HasSubstr(
                    "A struct value cannot be returned as a column value.")));
 }
 
-TEST_F(QueryTest, HashFunctions) {
-  const char hash[] = {'\xb1', '\n', '\x8d', '\xb1', 'd',    '\xe0',
-                       'u',    'A',  '\x05', '\xb7', '\xa9', '\x9b',
-                       '\xe7', '.',  '?',    '\xe5'};
-  EXPECT_THAT(Query("SELECT MD5(\"Hello World\") as md5"),
-              IsOkAndHoldsRow({Value(Bytes(hash))}));
+TEST_P(QueryTest, HashFunctions) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    const char hash[] = {'\xa5', '\x91', '\xa6', '\xd4', '\x0b', '\xf4', ' ',
+                         '@',    'J',    '\x01', '\x17', '3',    '\xcf', '\xb7',
+                         '\xb1', '\x90', '\xd6', ',',    'e',    '\xbf', '\x0b',
+                         '\xcd', '\xa3', '+',    'W',    '\xb2', 'w',    '\xd9',
+                         '\xad', '\x9f', '\x14', 'n'};
+    EXPECT_THAT(Query("SELECT sha256('Hello World'::bytea) as sha256_hash"),
+                IsOkAndHoldsRow({Value(Bytes(hash))}));
+  } else {
+    const char hash[] = {'\xb1', '\n', '\x8d', '\xb1', 'd',    '\xe0',
+                         'u',    'A',  '\x05', '\xb7', '\xa9', '\x9b',
+                         '\xe7', '.',  '?',    '\xe5'};
+    EXPECT_THAT(Query("SELECT MD5(\"Hello World\") as md5"),
+                IsOkAndHoldsRow({Value(Bytes(hash))}));
+  }
 }
 
-TEST_F(QueryTest, JSONFunctions) {
+TEST_P(QueryTest, JSONFunctions) {
+  // TODO: Remove skip once PG.JSONB is supported.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   EXPECT_THAT(Query(R"(SELECT JSON_QUERY(JSON '{"a":"str", "b":2}', '$.a'))"),
               IsOkAndHoldsRow({Value(Json(R"("str")"))}));
   EXPECT_THAT(Query(R"(SELECT JSON_QUERY('{"a":"str", "b":2}', '$.a'))"),
@@ -322,7 +359,11 @@ TEST_F(QueryTest, JSONFunctions) {
               IsOkAndHoldsRow({Value(Null<Json>())}));
 }
 
-TEST_F(QueryTest, FormatFunction) {
+TEST_P(QueryTest, FormatFunction) {
+  // Spanner PG dialect doesn't support the PG format function.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
   EXPECT_THAT(Query(R"(SELECT FORMAT('%s %s', 'hello', 'world'))"),
               IsOkAndHoldsRow({Value("hello world")}));
 
@@ -330,7 +371,14 @@ TEST_F(QueryTest, FormatFunction) {
               IsOkAndHoldsRow({Value("hello world")}));
 }
 
-TEST_F(QueryTest, DateTimestampArithmeticFunctions) {
+TEST_P(QueryTest, DateTimestampArithmeticFunctions) {
+  // Spanner PG dialect doesn't support these date/time functions.
+  // TODO: Consider unskipping some of these after PG scalar
+  // functions are supported.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   EXPECT_THAT(Query(R"(SELECT DATE_ADD(DATE '2020-12-25', INTERVAL 5 DAY))"),
               IsOkAndHoldsRow({Value(absl::CivilDay(2020, 12, 30))}));
 
@@ -386,7 +434,11 @@ TEST_F(QueryTest, DateTimestampArithmeticFunctions) {
               IsOkAndHoldsRow({Value(15)}));
 }
 
-TEST_F(QueryTest, NETFunctions) {
+TEST_P(QueryTest, NETFunctions) {
+  // Spanner PG dialect doesn't support the NET functions.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
   EXPECT_THAT(Query(R"(SELECT NET.IPV4_TO_INT64(b"\x00\x00\x00\x00"))"),
               IsOkAndHoldsRow({0}));
   EXPECT_THAT(Query(R"(SELECT NET.IP_FROM_STRING("0.0.0.0"),
@@ -402,7 +454,11 @@ TEST_F(QueryTest, NETFunctions) {
               zetasql_base::testing::IsOk());
 }
 
-TEST_F(QueryTest, CanReturnArrayOfStructTypedColumns) {
+TEST_P(QueryTest, CanReturnArrayOfStructTypedColumns) {
+  // Spanner PG dialect doesn't support STRUCT and array subquery expressions.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
   using EmptyStruct = std::tuple<>;
   EXPECT_THAT(
       Query("SELECT ARRAY(SELECT STRUCT<>())"),
@@ -414,35 +470,79 @@ TEST_F(QueryTest, CanReturnArrayOfStructTypedColumns) {
       IsOkAndHoldsRow({Value(std::vector<SimpleStruct>{SimpleStruct{1}})}));
 }
 
-TEST_F(QueryTest, CannotQueryArrayOfEmptyStruct) {
-  EXPECT_THAT(
-      Query("SELECT ARRAY<STRUCT<int64_val INT64>>[]"),
-      StatusIs(
-          absl::StatusCode::kUnimplemented,
-          "Unsupported query shape: Spanner does not support array constructor "
-          "syntax for an empty array where array elements are Structs."));
+TEST_P(QueryTest, CannotQueryArrayOfEmptyStruct) {
+  // Spanner PG dialect doesn't support STRUCT.
+  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(
+        Query("SELECT ARRAY<STRUCT<int64_val INT64>>[]"),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            "Unsupported query shape: Spanner does not support array "
+            "constructor "
+            "syntax for an empty array where array elements are Structs."));
+  }
 
-  EXPECT_THAT(Query("SELECT ARRAY<INT64>[]"),
-              IsOkAndHoldsRow({Value(std::vector<int64_t>{})}));
+  auto query = Query("SELECT ARRAY<INT64>[]");
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = Query("SELECT '{}'::bigint[]");
+  }
+  EXPECT_THAT(query, IsOkAndHoldsRow({Value(std::vector<int64_t>{})}));
 }
 
-TEST_F(QueryTest, QueryColumnCannotBeStruct) {
+TEST_P(QueryTest, QueryColumnCannotBeStruct) {
+  // Spanner PG dialect doesn't support STRUCT.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
   EXPECT_THAT(Query("SELECT STRUCT<INT64>(1)"),
               StatusIs(absl::StatusCode::kUnimplemented));
 }
 
-TEST_F(QueryTest, FunctionAliasesAreAvailable) {
-  EXPECT_THAT(Query("SELECT CHARACTER_LENGTH('abc')"), IsOkAndHoldsRow({3}));
-  EXPECT_THAT(Query("SELECT CHAR_LENGTH('abc')"), IsOkAndHoldsRow({3}));
+TEST_P(QueryTest, CharLengthFunctionAliasesAreAvailable) {
+  auto query = Query("SELECT CHARACTER_LENGTH('abc')");
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = Query("SELECT length('abc')");
+  }
+  EXPECT_THAT(query, IsOkAndHoldsRow({3}));
 
-  EXPECT_THAT(Query("SELECT POWER(2,2)"), IsOkAndHoldsRow({4.0}));
-  EXPECT_THAT(Query("SELECT POW(2,2)"), IsOkAndHoldsRow({4.0}));
-
-  EXPECT_THAT(Query("SELECT CEILING(1.6)"), IsOkAndHoldsRow({2.0}));
-  EXPECT_THAT(Query("SELECT CEIL(1.6)"), IsOkAndHoldsRow({2.0}));
+  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(Query("SELECT CHAR_LENGTH('abc')"), IsOkAndHoldsRow({3}));
+  }
 }
 
-TEST_F(QueryTest, DefaultTimeZoneIsPacificTime) {
+TEST_P(QueryTest, PowerFunctionAliasesAreAvailable) {
+  auto query = Query("SELECT POWER(2,2)");
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = Query("SELECT power('2.0'::float8, '2.0'::float8)");
+  }
+  EXPECT_THAT(query, IsOkAndHoldsRow({4.0}));
+
+  query = Query("SELECT POWER(2,2)");
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = Query("SELECT pow('2.0'::float8, '2.0'::float8)");
+  }
+  EXPECT_THAT(query, IsOkAndHoldsRow({4.0}));
+}
+
+TEST_P(QueryTest, CeilingFunctionAliasesAreAvailable) {
+  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(Query("SELECT CEILING(1.6)"), IsOkAndHoldsRow({2.0}));
+  }
+
+  auto query = Query("SELECT CEIL(1.6)");
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = Query("SELECT ceil('1.6'::float8)");
+  }
+  EXPECT_THAT(query, IsOkAndHoldsRow({2.0}));
+}
+
+TEST_P(QueryTest, DefaultTimeZoneIsPacificTime) {
+  // Spanner PG doesn't support timestamp without explicitly specifying the time
+  // zone.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   absl::TimeZone time_zone;
   ASSERT_TRUE(absl::LoadTimeZone("America/Los_Angeles", &time_zone));
   EXPECT_THAT(Query("SELECT TIMESTAMP '2020-12-01'"),
@@ -450,14 +550,15 @@ TEST_F(QueryTest, DefaultTimeZoneIsPacificTime) {
                   absl::FromCivil(absl::CivilDay(2020, 12, 1), time_zone))))}));
 }
 
-TEST_F(QueryTest, CheckQuerySizeLimitsAreEnforced) {
+TEST_P(QueryTest, CheckQuerySizeLimitsAreEnforced) {
   // Check that the query size limits enforcement is in place.
   auto many_joins_query = [](int num_joins) {
-    std::string join_query = "SELECT t0.UserId FROM Users AS t0";
+    std::string join_query = "SELECT t0.user_id FROM users AS t0";
     for (int i = 1; i <= num_joins; ++i) {
-      join_query = join_query + "\n" +
-                   absl::StrFormat("JOIN Users AS t%d ON t%d.UserId = t%d.Age ",
-                                   i, i - 1, i);
+      join_query =
+          join_query + "\n" +
+          absl::StrFormat("JOIN users AS t%d ON t%d.user_id = t%d.age ", i,
+                          i - 1, i);
     }
     return join_query;
   };
@@ -466,65 +567,98 @@ TEST_F(QueryTest, CheckQuerySizeLimitsAreEnforced) {
                        testing::HasSubstr("joins exceeds")));
 }
 
-TEST_F(QueryTest, QueryStringSizeLimit) {
-  auto query = absl::Substitute("SELECT \"$0\"", std::string(1024 * 1024, 'a'));
+TEST_P(QueryTest, QueryStringSizeLimit) {
+  // TODO: Need to figure out why query length limit is not enforced.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  auto query = absl::Substitute("SELECT '$0'", std::string(1024 * 1024, 'a'));
   EXPECT_THAT(Query(query),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        testing::HasSubstr("Query string length")));
 }
 
-TEST_F(QueryTest, NumericKey) {
+TEST_P(QueryTest, NumericKey) {
+  // TODO: Remove skip once PG.NUMERIC is supported.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   PopulateDatabase();
 
-  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key < 0"),
+  EXPECT_THAT(Query("SELECT t.val FROM numeric_table t WHERE t.key < 0"),
               IsOkAndHoldsRows({{-1}}));
 
-  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key = 0"),
+  EXPECT_THAT(Query("SELECT t.val FROM numeric_table t WHERE t.key = 0"),
               IsOkAndHoldsRows({{0}}));
 
-  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key > 0"),
+  EXPECT_THAT(Query("SELECT t.val FROM numeric_table t WHERE t.key > 0"),
               IsOkAndHoldsRows({{1}}));
 
-  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key IS NOT NULL "
+  EXPECT_THAT(Query("SELECT t.val FROM numeric_table t WHERE t.key IS NOT NULL "
                     "ORDER BY t.key ASC"),
               IsOkAndHoldsRows({{-1}, {0}, {1}}));
 
-  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key IS NULL"),
+  EXPECT_THAT(Query("SELECT t.val FROM numeric_table t WHERE t.key IS NULL"),
               IsOkAndHoldsRows({{Null<std::int64_t>()}}));
 
-  EXPECT_THAT(Query("SELECT t.val FROM NumericTable t WHERE t.key < -12.1 OR "
+  EXPECT_THAT(Query("SELECT t.val FROM numeric_table t WHERE t.key < -12.1 OR "
                     "t.key > 12.2 ORDER BY t.key ASC"),
               IsOkAndHoldsRows({{-1}, {1}}));
 }
 
-TEST_F(QueryTest, SelectStarExcept) {
+TEST_P(QueryTest, SelectStarExcept) {
+  // PostgreSQL doesn't support select all columns except some.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   PopulateDatabase();
+  EXPECT_THAT(Query("SELECT * EXCEPT (bool_val, bytes_val, date_val, "
+                    "float_val, string_val, "
+                    "                 numeric_val, timestamp_val, json_val)"
+                    "FROM scalar_types_table ORDER BY int_val"),
+              IsOkAndHoldsRows({{0}, {1}}));
+}
+
+TEST_P(QueryTest, StddevAndVariance) {
+  // Spanner PG doesn't support standard deviation and variance functions.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  PopulateDatabase();
+  EXPECT_THAT(Query(R"(SELECT stddev(int_val) > .6 FROM scalar_types_table)"),
+              IsOkAndHoldsRows({{true}}));
   EXPECT_THAT(
-      Query("SELECT * EXCEPT (boolVal, bytesVal, dateVal, floatVal, stringVal, "
-            "                 numericVal, timestampVal, jsonVal)"
-            "FROM ScalarTypesTable ORDER BY intVal"),
-      IsOkAndHoldsRows({{0}, {1}}));
+      Query(R"(SELECT stddev_samp(int_val) > .6 FROM scalar_types_table)"),
+      IsOkAndHoldsRows({{true}}));
+
+  EXPECT_THAT(
+      Query(R"(SELECT var_samp(int_val) > 0.4 FROM scalar_types_table)"),
+      IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(
+      Query(R"(SELECT variance(int_val) > 0.4 FROM scalar_types_table)"),
+      IsOkAndHoldsRows({{true}}));
 }
 
-TEST_F(QueryTest, StddevAndVariance) {
-  PopulateDatabase();
-  EXPECT_THAT(Query(R"(SELECT stddev(intval) > .6 FROM ScalarTypesTable)"),
-              IsOkAndHoldsRows({{true}}));
-  EXPECT_THAT(Query(R"(SELECT stddev_samp(intval) > .6 FROM ScalarTypesTable)"),
-              IsOkAndHoldsRows({{true}}));
+TEST_P(QueryTest, RegexString) {
+  // Spanner PG doesn't support something equivalent from PG like regexp_like.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
 
-  EXPECT_THAT(Query(R"(SELECT var_samp(intval) > 0.4 FROM ScalarTypesTable)"),
-              IsOkAndHoldsRows({{true}}));
-  EXPECT_THAT(Query(R"(SELECT variance(intval) > 0.4 FROM ScalarTypesTable)"),
-              IsOkAndHoldsRows({{true}}));
-}
-
-TEST_F(QueryTest, RegexString) {
   EXPECT_THAT(Query(R"_(SELECT SAFE.REGEXP_CONTAINS("s", ")"))_"),
               IsOkAndHoldsRows({{Null<bool>()}}));
 }
 
-TEST_F(QueryTest, NamedArguments) {
+TEST_P(QueryTest, NamedArguments) {
+  // Spanner PG doesn't yet support function named parameters.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   EXPECT_THAT(
       Query(
           R"_(SELECT PARSE_JSON('{"id":123}', wide_number_mode => 'exact'))_"),

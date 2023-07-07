@@ -95,7 +95,7 @@ CreateSchemaWithOneTableAndOneChangeStream(
               ) PRIMARY KEY (int64_col)
             )",
           R"(
-              CREATE CHANGE STREAM change_stream_test_table FOR test_table
+              CREATE CHANGE STREAM change_stream_test_table FOR ALL
             )",
       },
       type_factory);

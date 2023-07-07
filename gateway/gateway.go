@@ -39,13 +39,14 @@ import (
 
 // Options encapsulates options for the emulator gateway.
 type Options struct {
-	GatewayAddress       string
-	FrontendBinary       string
-	FrontendAddress      string
-	CopyEmulatorStdout   bool
-	CopyEmulatorStderr   bool
-	LogRequests          bool
-	EnableFaultInjection bool
+	GatewayAddress                     string
+	FrontendBinary                     string
+	FrontendAddress                    string
+	CopyEmulatorStdout                 bool
+	CopyEmulatorStderr                 bool
+	LogRequests                        bool
+	EnableFaultInjection               bool
+	DisableQueryNullFilteredIndexCheck bool
 }
 
 // Gateway implements the emulator gateway server.
@@ -70,6 +71,9 @@ func (gw *Gateway) Run() {
 	}
 	if gw.opts.EnableFaultInjection {
 		emulatorArgs = append(emulatorArgs, "--enable_fault_injection")
+	}
+	if gw.opts.DisableQueryNullFilteredIndexCheck {
+		emulatorArgs = append(emulatorArgs, "--disable_query_null_filtered_index_check")
 	}
 
 	cmd := exec.Command(gw.opts.FrontendBinary, emulatorArgs...)

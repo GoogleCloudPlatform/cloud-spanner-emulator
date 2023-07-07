@@ -51,6 +51,8 @@ var (
 	enableFaultInjection = flag.Bool("enable_fault_injection", false,
 		"If true, the emulator will inject faults at runtime (e.g. randomly abort commit "+
 			"requests to allow testing application abort-retry behavior).")
+	disableQueryNullFilteredIndexCheck = flag.Bool("disable_query_null_filtered_index_check", false,
+		"If true, then queries that use NULL_FILTERED indexes will be answered.")
 )
 
 // resolveGRPCBinary figures out the full path to the grpc binary from the --grpc_binary flag.
@@ -92,13 +94,14 @@ func main() {
 	// Start the gateway http server. This will run the emulator grpc server as a subprocess and
 	// proxy http/json requests into grpc requests.
 	gwopts := gateway.Options{
-		GatewayAddress:       fmt.Sprintf("%s:%d", *hostname, *httpPort),
-		FrontendBinary:       resolveGRPCBinary(),
-		FrontendAddress:      fmt.Sprintf("%s:%d", *hostname, *grpcPort),
-		CopyEmulatorStdout:   *copyEmulatorStdout,
-		CopyEmulatorStderr:   *copyEmulatorStderr,
-		LogRequests:          *logRequests,
-		EnableFaultInjection: *enableFaultInjection,
+		GatewayAddress:                     fmt.Sprintf("%s:%d", *hostname, *httpPort),
+		FrontendBinary:                     resolveGRPCBinary(),
+		FrontendAddress:                    fmt.Sprintf("%s:%d", *hostname, *grpcPort),
+		CopyEmulatorStdout:                 *copyEmulatorStdout,
+		CopyEmulatorStderr:                 *copyEmulatorStderr,
+		LogRequests:                        *logRequests,
+		EnableFaultInjection:               *enableFaultInjection,
+		DisableQueryNullFilteredIndexCheck: *disableQueryNullFilteredIndexCheck,
 	}
 	gw := gateway.New(gwopts)
 	gw.Run()
