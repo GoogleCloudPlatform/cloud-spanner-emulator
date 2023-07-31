@@ -120,8 +120,9 @@ absl::Status DatabaseTest::ResetDatabase() {
       absl::StrCat("test-database-", absl::ToUnixMicros(absl::Now())));
   google::spanner::admin::database::v1::CreateDatabaseRequest request;
   request.set_parent(database_->instance().FullName());
-  request.set_create_statement("CREATE DATABASE `" + database_->database_id() +
-                               "`");
+  std::string quote = kGSQLQuote;
+  request.set_create_statement("CREATE DATABASE " + quote +
+                               database_->database_id() + quote);
   return ToUtilStatus(database_client_->CreateDatabase(request).get().status());
 }
 

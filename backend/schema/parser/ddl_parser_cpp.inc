@@ -20,7 +20,6 @@ options {
   IGNORE_CASE = true;
   NODE_SCOPE_HOOK = true;
   VISITOR = true;
-  NODE_INCLUDES = "backend/schema/parser/ddl_node_base.h";
   TOKEN_MANAGER_INCLUDES =
       "backend/schema/parser/ddl_token_validation.h";
   USER_CHAR_STREAM = true;

@@ -43,8 +43,12 @@ class QueryableColumn : public zetasql::Column {
       : wrapped_column_(column) {}
 
   QueryableColumn(const backend::Column* column,
-                  std::unique_ptr<const zetasql::AnalyzerOutput> output)
-      : wrapped_column_(column), output_(std::move(output)) {}
+                  std::unique_ptr<const zetasql::AnalyzerOutput> output,
+                  std::optional<const zetasql::Column::ExpressionAttributes>
+                      expression_attributes)
+      : wrapped_column_(column),
+        output_(std::move(output)),
+        column_expression_(expression_attributes) {}
 
   std::string Name() const override { return wrapped_column_->Name(); }
 
@@ -60,17 +64,11 @@ class QueryableColumn : public zetasql::Column {
 
   bool IsPseudoColumn() const override { return wrapped_column_->hidden(); }
 
-  bool HasDefaultValue() const override {
-    return wrapped_column_->has_default_value();
-  }
-
-  std::optional<std::string> ExpressionString() const override {
-    return wrapped_column_->expression();
-  }
-
-  const zetasql::ResolvedExpr* Expression() const override {
-    if (!HasDefaultValue() || output_ == nullptr) return nullptr;
-    return output_->resolved_expr();
+  // Returns optional ExpressionAttributes if a column has default or generated
+  // Expression.
+  std::optional<const zetasql::Column::ExpressionAttributes> GetExpression()
+      const override {
+    return column_expression_;
   }
 
   const backend::Column* wrapped_column() const { return wrapped_column_; }
@@ -81,6 +79,9 @@ class QueryableColumn : public zetasql::Column {
   // The AnalyzerOutput that holds the column's ResolvedExpr, representing
   // default value expression.
   const std::unique_ptr<const zetasql::AnalyzerOutput> output_ = nullptr;
+  // Column Expression for generated or default columns.
+  std::optional<const zetasql::Column::ExpressionAttributes>
+      column_expression_;
 };
 
 }  // namespace backend

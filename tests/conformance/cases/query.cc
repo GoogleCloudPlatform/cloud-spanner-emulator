@@ -372,9 +372,8 @@ TEST_P(QueryTest, FormatFunction) {
 }
 
 TEST_P(QueryTest, DateTimestampArithmeticFunctions) {
-  // Spanner PG dialect doesn't support these date/time functions.
-  // TODO: Consider unskipping some of these after PG scalar
-  // functions are supported.
+  // Spanner PG dialect doesn't support these date/time interval related
+  // functions.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }

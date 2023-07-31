@@ -450,55 +450,55 @@ SchemaUpdaterImpl::ApplyDDLStatement(
   }
 
   ZETASQL_RET_CHECK(!editor_->HasModifications());
-  ZETASQL_ASSIGN_OR_RETURN(ddl::DDLStatement ddl_statement,
+  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<ddl::DDLStatement> ddl_statement,
                    ParseDDLByDialect(statement
                                      ));
-  ZETASQL_RETURN_IF_ERROR(ValidateDdlStatement(ddl_statement));
+  ZETASQL_RETURN_IF_ERROR(ValidateDdlStatement(*ddl_statement));
 
   // Apply the statement to the schema graph.
-  switch (ddl_statement.statement_case()) {
+  switch (ddl_statement->statement_case()) {
     case ddl::DDLStatement::kCreateTable: {
-      ZETASQL_RETURN_IF_ERROR(CreateTable(ddl_statement.create_table()
+      ZETASQL_RETURN_IF_ERROR(CreateTable(ddl_statement->create_table()
                                   ));
       break;
     }
     case ddl::DDLStatement::kCreateChangeStream: {
       ZETASQL_RETURN_IF_ERROR(
-          CreateChangeStream(ddl_statement.create_change_stream()).status());
+          CreateChangeStream(ddl_statement->create_change_stream()).status());
       break;
     }
     case ddl::DDLStatement::kCreateIndex: {
-      if (global_names_.HasName(ddl_statement.create_index().index_name()) &&
-          ddl_statement.create_index().existence_modifier() ==
+      if (global_names_.HasName(ddl_statement->create_index().index_name()) &&
+          ddl_statement->create_index().existence_modifier() ==
               ddl::IF_NOT_EXISTS) {
         break;
       }
-      ZETASQL_RETURN_IF_ERROR(CreateIndex(ddl_statement.create_index()).status());
+      ZETASQL_RETURN_IF_ERROR(CreateIndex(ddl_statement->create_index()).status());
       break;
     }
     case ddl::DDLStatement::kCreateFunction: {
-      ZETASQL_RETURN_IF_ERROR(CreateFunction(ddl_statement.create_function()));
+      ZETASQL_RETURN_IF_ERROR(CreateFunction(ddl_statement->create_function()));
       break;
     }
     case ddl::DDLStatement::kAlterTable: {
-      ZETASQL_RETURN_IF_ERROR(AlterTable(ddl_statement.alter_table()
+      ZETASQL_RETURN_IF_ERROR(AlterTable(ddl_statement->alter_table()
                                  ));
       break;
     }
     case ddl::DDLStatement::kAlterChangeStream: {
-      ZETASQL_RETURN_IF_ERROR(AlterChangeStream(ddl_statement.alter_change_stream()));
+      ZETASQL_RETURN_IF_ERROR(AlterChangeStream(ddl_statement->alter_change_stream()));
       break;
     }
     case ddl::DDLStatement::kDropTable: {
-      ZETASQL_RETURN_IF_ERROR(DropTable(ddl_statement.drop_table()));
+      ZETASQL_RETURN_IF_ERROR(DropTable(ddl_statement->drop_table()));
       break;
     }
     case ddl::DDLStatement::kDropIndex: {
-      ZETASQL_RETURN_IF_ERROR(DropIndex(ddl_statement.drop_index()));
+      ZETASQL_RETURN_IF_ERROR(DropIndex(ddl_statement->drop_index()));
       break;
     }
     case ddl::DDLStatement::kDropChangeStream: {
-      ZETASQL_RETURN_IF_ERROR(DropChangeStream(ddl_statement.drop_change_stream()));
+      ZETASQL_RETURN_IF_ERROR(DropChangeStream(ddl_statement->drop_change_stream()));
       break;
     }
     case ddl::DDLStatement::kAnalyze:
@@ -506,15 +506,15 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       break;
     case ddl::DDLStatement::kSetColumnOptions:
       ZETASQL_RETURN_IF_ERROR(ApplyImplSetColumnOptions(
-          ddl_statement.set_column_options()
+          ddl_statement->set_column_options()
           ));
       break;
     case ddl::DDLStatement::kDropFunction:
-      ZETASQL_RETURN_IF_ERROR(DropFunction(ddl_statement.drop_function()));
+      ZETASQL_RETURN_IF_ERROR(DropFunction(ddl_statement->drop_function()));
       break;
     default:
       ZETASQL_RET_CHECK(false) << "Unsupported ddl statement: "
-                       << ddl_statement.statement_case();
+                       << ddl_statement->statement_case();
   }
   ZETASQL_ASSIGN_OR_RETURN(auto new_schema_graph, editor_->CanonicalizeGraph());
   return std::make_unique<const OwningSchema>(
@@ -898,7 +898,6 @@ absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
     const ddl::KeyPartClause& ddl_key_part, const Table* table) {
   KeyColumn::Builder builder;
   const std::string& key_column_name = ddl_key_part.key_name();
-  bool is_descending = (ddl_key_part.order() == ddl::KeyPartClause::DESC);
 
   // References to columns in primary key clause are case-sensitive.
   const Column* column = table->FindColumnCaseSensitive(key_column_name);
@@ -906,7 +905,9 @@ absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
     return error::NonExistentKeyColumn(
         OwningObjectType(table), OwningObjectName(table), key_column_name);
   }
-  builder.set_column(column).set_descending(is_descending);
+  builder.set_column(column);
+    bool is_descending = (ddl_key_part.order() == ddl::KeyPartClause::DESC);
+    builder.set_descending(is_descending);
   const KeyColumn* key_col = builder.get();
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return key_col;
@@ -1167,8 +1168,11 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateForeignKeyIndex(
       auto* key_part = ddl_index.add_key();
       key_part->set_key_name(column_name);
       const auto* key_column = table->FindKeyColumn(column_name);
-      if (key_column != nullptr && key_column->is_descending()) {
-        key_part->set_order(ddl::KeyPartClause::DESC);
+      if (key_column != nullptr) {
+        if (key_column->is_descending()
+        ) {
+          key_part->set_order(ddl::KeyPartClause::DESC);
+        }
       }
     }
     if (CanInterleaveForeignKeyIndex(table, column_names)) {
@@ -1411,7 +1415,8 @@ SchemaUpdaterImpl::CreateIndexDataTable(
       // Add to the PK specification.
       ddl::KeyPartClause key_part;
       key_part.set_key_name(key_col_name);
-      if (key_col->is_descending()) {
+      if (key_col->is_descending()
+      ) {
         key_part.set_order(ddl::KeyPartClause::DESC);
       }
       data_table_pk.push_back(key_part);
@@ -1965,12 +1970,12 @@ SchemaUpdater::CreateSchemaFromDDL(
   return std::move(result.updated_schema);
 }
 
-absl::StatusOr<ddl::DDLStatement> ParseDDLByDialect(
+absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
     absl::string_view statement
 ) {
-  ddl::DDLStatement ddl_statement;
-  ZETASQL_RETURN_IF_ERROR(ddl::ParseDDLStatement(statement, &ddl_statement));
-  return ddl_statement;
+  auto ddl_statement = std::make_unique<ddl::DDLStatement>();
+  ZETASQL_RETURN_IF_ERROR(ddl::ParseDDLStatement(statement, ddl_statement.get()));
+  return std::move(ddl_statement);
 }
 
 }  // namespace backend

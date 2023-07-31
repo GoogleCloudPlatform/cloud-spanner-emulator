@@ -31,13 +31,19 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+constexpr char kCloudSpannerEmulatorFunctionCatalog[] =
+    "CloudSpannerEmulatorCatalog";
+
 // A catalog of all SQL functions.
 //
 // The FunctionCatalog supports looking up a function by name and emunerating
 // all existing functions.
 class FunctionCatalog {
  public:
-  explicit FunctionCatalog(zetasql::TypeFactory* type_factory);
+  // catalog_name allows tests to override the catalog name.
+  explicit FunctionCatalog(
+      zetasql::TypeFactory* type_factory,
+      const std::string& catalog_name = kCloudSpannerEmulatorFunctionCatalog);
   void GetFunction(const std::string& name,
                    const zetasql::Function** output) const;
   void GetFunctions(
@@ -51,6 +57,7 @@ class FunctionCatalog {
   void AddFunctionAliases();
 
   CaseInsensitiveStringMap<std::unique_ptr<zetasql::Function>> functions_;
+  const std::string catalog_name_;
 };
 
 }  // namespace backend

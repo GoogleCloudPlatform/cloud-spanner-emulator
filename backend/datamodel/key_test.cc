@@ -95,12 +95,13 @@ TEST(Key, SortsNullsCorrectly) {
   Key null({String("prefix"), Null(Int64Type())});
   Key one({String("prefix"), Int64(1)});
 
+  // ASC_NULLS_FIRST by default
   EXPECT_GT(one, null);
   EXPECT_LT(null, one);
 
+  // DESC_NULLS_LAST
   null.SetColumnDescending(1, true);
   one.SetColumnDescending(1, true);
-
   EXPECT_GT(null, one);
   EXPECT_LT(one, null);
 }

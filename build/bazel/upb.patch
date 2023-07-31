@@ -1,0 +1,12 @@
+diff --git a/bazel/build_defs.bzl b/bazel/build_defs.bzl
+index e4212b3c..c4c19529 100644
+--- a/bazel/build_defs.bzl
++++ b/bazel/build_defs.bzl
+@@ -35,6 +35,7 @@ _DEFAULT_CPPOPTS.extend([
+     "-Werror",
+     "-Wno-unused-parameter",
+     "-Wno-long-long",
++    "-Wno-array-bounds",
+ ])
+ _DEFAULT_COPTS.extend([
+     "-std=c99",

@@ -30,6 +30,7 @@
 #include "zetasql/public/value.h"
 #include "absl/memory/memory.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "absl/types/span.h"
 #include "backend/access/read.h"
 #include "backend/query/queryable_column.h"
@@ -112,8 +113,20 @@ QueryableTable::QueryableTable(
       ZETASQL_DCHECK(s.ok()) << "Failed to analyze default expression for column "
                      << column->FullName() << "\n";
     }
-    columns_.push_back(
-        std::make_unique<const QueryableColumn>(column, std::move(output)));
+    if (column->has_default_value()) {
+      zetasql::Column::ExpressionAttributes::ExpressionKind expression_kind =
+          zetasql::Column::ExpressionAttributes::ExpressionKind::DEFAULT;
+      zetasql::Column::ExpressionAttributes expression_attributes =
+          zetasql::Column::ExpressionAttributes(expression_kind,
+                                                  column->expression().value(),
+                                                  output->resolved_expr());
+      columns_.push_back(std::make_unique<const QueryableColumn>(
+          column, std::move(output),
+          std::make_optional(expression_attributes)));
+    } else {
+      columns_.push_back(std::make_unique<const QueryableColumn>(
+          column, std::move(output), std::nullopt));
+    }
   }
 
   // Populate primary_key_column_indexes_.

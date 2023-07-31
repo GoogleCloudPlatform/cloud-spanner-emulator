@@ -27,6 +27,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "google/cloud/spanner/bytes.h"
@@ -47,7 +48,6 @@ namespace {
 using cloud::spanner::Bytes;
 using cloud::spanner::InsertMutationBuilder;
 using zetasql_base::testing::StatusIs;
-
 template <class T>
 using optional = google::cloud::optional<T>;
 
@@ -55,7 +55,7 @@ using optional = google::cloud::optional<T>;
 const char kSchemaChangeTestDataDir[] = "tests/conformance/data/schema_changes";
 
 // List of schema change test files within the directory above.
-const char* kSchemaChangeTestFiles[] = {
+const absl::string_view kSchemaChangeTestFiles[] = {
     "check_constraint.test",
     "column_default_values.test",
     "combined.test",
@@ -105,6 +105,7 @@ class SchemaChangeTest
       // Return the expected error message.
       return FileBasedTestCaseOutput{
           .text = "ERROR: " + std::string(message) + "\n",
+          .expect_error = true,
           .status_code = status.code()};
     }
 
@@ -117,23 +118,28 @@ class SchemaChangeTest
   }
 
   // Returns list of all schema change test files.
-  static std::vector<std::string> GetAllTestFiles() {
+  static std::vector<std::string> GetAllTestFiles(
+  ) {
     std::vector<std::string> result;
     std::string root_dir = GetRunfilesDir(kSchemaChangeTestDataDir);
-    for (const char* filename : kSchemaChangeTestFiles) {
-      result.push_back(absl::StrCat(root_dir, "/", filename));
-    }
+      for (absl::string_view filename : kSchemaChangeTestFiles) {
+        result.push_back(absl::StrCat(root_dir, "/", filename));
+      }
     return result;
   }
 
   // Returns list of all test cases from all the test case files.
   static std::vector<FileBasedTestCase> GetAllTestCases() {
     std::vector<FileBasedTestCase> test_cases;
-    for (const auto& file : GetAllTestFiles()) {
-      const auto file_cases =
-          ReadTestCasesFromFile(file, FileBasedTestOptions{});
-      test_cases.insert(test_cases.end(), file_cases.begin(), file_cases.end());
-    }
+      for (const auto& file : GetAllTestFiles(
+               )) {
+        const auto file_cases = ReadTestCasesFromFile(
+            file,
+            FileBasedTestOptions{}
+        );
+        test_cases.insert(test_cases.end(), file_cases.begin(),
+                          file_cases.end());
+      }
     return test_cases;
   }
 };
@@ -149,9 +155,8 @@ TEST_P(SchemaChangeTest, FileBasedTests) {
 
   std::string expected_text = expected.text;
   std::string actual_text = actual.text;
-  bool expect_error = absl::StartsWith(expected.text, "ERROR:");
 
-  if (expect_error) {
+  if (expected.expect_error) {
     // Match the status code if present.
     if (expected.status_code.has_value()) {
       EXPECT_THAT(actual.status_code, testing::Eq(*expected.status_code))
@@ -184,8 +189,10 @@ INSTANTIATE_TEST_SUITE_P(
       const auto& input = info.param.input;
       int start = input.file_name.find_last_of('/') + 1;
       int limit = input.file_name.find_last_of('.');
-      return absl::StrCat(input.file_name.substr(start, limit - start), "_",
-                          input.line_no);
+      return absl::StrReplaceAll(
+          absl::StrCat(input.file_name.substr(start, limit - start), "_",
+                       input.line_no),
+          {{".", "_"}});
     });
 
 TEST_F(SchemaChangeTest, NoStatements) {

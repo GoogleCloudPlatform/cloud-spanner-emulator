@@ -98,6 +98,13 @@ genrule(
     tools = [":ddl_keywords"],
 )
 
+genrule(
+    name = "copy_node_base_header",
+    srcs = ["ddl_node_base.h"],
+    outs = ["NodeBase.h"],
+    cmd = "cat $(SRCS) > $(OUTS)",
+)
+
 generate_javacc_parser(
     name = "javacc_ddl_parser",
     # Do not sort: "ddl_parser_cpp.inc" must come before ".jjt".
@@ -122,6 +129,7 @@ generate_javacc_parser(
     extra_srcs = [
         "ddl_token_validation.cc",
         "ddl_token_validation_utils.cc",
+        "NodeBase.h",
     ],
     parser_class_name = "DDLParser",
 )

@@ -30,7 +30,7 @@ import (
 	"google.golang.org/grpc"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 
-	instancepb "google.golang.org/genproto/googleapis/spanner/admin/instance/v1"
+	instancepb "cloud.google.com/go/spanner/admin/instance/apiv1/instancepb"
 	lrgw "cloud_spanner_emulator/gateway/longrunning_operations_gateway"
 	dagw "cloud_spanner_emulator/gateway/spanner_admin_database_gateway"
 	spgw "cloud_spanner_emulator/gateway/spanner_gateway"

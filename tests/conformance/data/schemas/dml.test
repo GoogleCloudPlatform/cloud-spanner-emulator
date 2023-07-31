@@ -1,0 +1,73 @@
+# Note that PG databases by default have lower case table and column names. To
+# use uppercase names, you have to quote them. But the GSQL and PG quoting
+# syntax is incompatible so we use lower-case names in both schemas to avoid
+# having to maintain two copies of each query.
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE users(
+  id       INT64 NOT NULL,
+  name     STRING(MAX),
+  age      INT64,
+  updated  TIMESTAMP,
+) PRIMARY KEY (id);
+CREATE TABLE nullable(
+  key      INT64,
+  value    STRING(MAX),
+) PRIMARY KEY (key);
+CREATE TABLE singleton(
+  col1     STRING(MAX),
+  col2     STRING(MAX),
+) PRIMARY KEY ();
+CREATE TABLE arrayfields(
+  key      INT64,
+  arraycol ARRAY<INT64>,
+) PRIMARY KEY(key);
+CREATE TABLE numerictable(
+  key    NUMERIC,
+  val    INT64,
+) PRIMARY KEY(key);
+CREATE TABLE jsontable(
+  id     INT64 NOT NULL,
+  val    JSON,
+) PRIMARY KEY(id);
+CREATE TABLE tablegen(
+  k      INT64,
+  v1     INT64,
+  v2     INT64,
+  g1     INT64 AS (g2 + 1) STORED,
+  g2     INT64 NOT NULL AS (v1 + v2) STORED,
+  g3     INT64 AS (g1) STORED,
+  v3     INT64 NOT NULL DEFAULT (2),
+) PRIMARY KEY (k);
+CREATE INDEX nullableindex ON nullable(value);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE users(
+  id       bigint NOT NULL PRIMARY KEY,
+  name     varchar,
+  age      bigint,
+  updated  timestamptz
+);
+CREATE TABLE arrayfields(
+  key      bigint PRIMARY KEY,
+  arraycol bigint[]
+);
+# TODO: Uncomment after PG extended type support is added.
+# PG.NUMERIC is currently unsupported in the emulator.
+# CREATE TABLE numerictable(
+#   key    numeric PRIMARY KEY,
+#   val    bigint,
+# ) PRIMARY KEY(key);
+# PG.JSONB is currently unsupported in the emulator.
+# CREATE TABLE jsontable(
+#   id     bigint NOT NULL PRIMARY KEY,
+#   val    jsonb,
+# );
+CREATE TABLE tablegen(
+  k      bigint PRIMARY KEY,
+  v1     bigint,
+  v2     bigint,
+  g1     bigint GENERATED ALWAYS AS (g2 + 1) STORED,
+  g2     bigint NOT NULL GENERATED ALWAYS AS (v1 + v2) STORED,
+  g3     bigint GENERATED ALWAYS AS (g1) STORED,
+  v3     bigint NOT NULL DEFAULT (2)
+);

@@ -30,70 +30,17 @@ namespace test {
 
 namespace {
 
-class InformationSchemaTest : public DatabaseTest {
+class InformationSchemaTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
   absl::Status SetUpDatabase() override {
-    // clang-format off
-    return SetSchema({
-      "CREATE TABLE Base ("
-         "  Key1 INT64,"
-         "  Key2 STRING(256),"
-         "  BoolValue BOOL,"
-         "  IntValue INT64 NOT NULL,"
-         "  DoubleValue FLOAT64,"
-         "  StrValue STRING(MAX),"
-         "  ByteValue BYTES(256),"
-         "  TimestampValue TIMESTAMP options (allow_commit_timestamp = true),"
-         "  DateValue DATE,"
-         "  BoolArray ARRAY<BOOL> NOT NULL,"
-         "  IntArray ARRAY<INT64>,"
-         "  DoubleArray ARRAY<FLOAT64>,"
-         "  StrArray ARRAY<STRING(256)>,"
-         "  ByteArray ARRAY<BYTES(MAX)>,"
-         "  TimestampArray ARRAY<TIMESTAMP>,"
-         "  DateArray ARRAY<DATE>,"
-         "  GenValue INT64 AS (Key1 + 1) STORED,"
-         "  GenFunctionValue INT64 AS (LENGTH(Key2)) STORED,"
-         "  DefaultColValue INT64 DEFAULT (100),"
-         "  DefaultTimestampColValue TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()),"
-         "  CONSTRAINT CheckConstraintName CHECK(IntValue > 0),"
-         "  CHECK(IntValue > 0),"
-         ") PRIMARY KEY (Key1, Key2 DESC)",
-    R"(
-      CREATE TABLE CascadeChild (
-        Key1 INT64,
-        Key2 STRING(256),
-        ChildKey BOOL,
-        Value1 STRING(MAX) NOT NULL,
-        Value2 BOOL,
-        CreatedAt TIMESTAMP,
-      ) PRIMARY KEY (Key1, Key2 DESC, ChildKey ASC),
-        INTERLEAVE IN PARENT Base ON DELETE CASCADE
-    )", R"(
-      CREATE TABLE NoActionChild (
-        Key1 INT64,
-        Key2 STRING(256),
-        ChildKey BOOL,
-        Value  STRING(MAX)
-      ) PRIMARY KEY (Key1, Key2 DESC, ChildKey ASC),
-        INTERLEAVE IN PARENT Base ON DELETE NO ACTION
-    )", R"(
-      CREATE UNIQUE NULL_FILTERED INDEX CascadeChildByValue
-      ON CascadeChild(Key1, Key2 DESC, Value2 ASC)
-      STORING(Value1), INTERLEAVE IN Base
-    )", R"(
-      CREATE INDEX NoActionChildByValue ON NoActionChild(Value ASC)
-    )", R"(
-      ALTER TABLE Base ADD CONSTRAINT FKBaseCascadeChild
-          FOREIGN KEY(BoolValue, Key2)
-          REFERENCES CascadeChild(ChildKey, Value1)
-    )", R"(
-      CREATE TABLE RowDeletionPolicy (
-        Key INT64,
-        CreatedAt TIMESTAMP,
-      ) PRIMARY KEY (Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
-    )"});
-    // clang-format on
+    return SetSchemaFromFile("information_schema.test");
   }
 
   // Information schema tables not yet supported.
@@ -180,7 +127,15 @@ class InformationSchemaTest : public DatabaseTest {
   cloud::spanner::Value Ni() { return Null<std::int64_t>(); }
 };
 
-TEST_F(InformationSchemaTest, Schemata) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectInformationSchemaTests, InformationSchemaTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
+                    ),
+    [](const testing::TestParamInfo<InformationSchemaTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(InformationSchemaTest, Schemata) {
   auto results = Query(R"(
       select
         s.catalog_name,
@@ -193,11 +148,26 @@ TEST_F(InformationSchemaTest, Schemata) {
       limit 2
     )");
   LogResults(results);
-  auto expected = std::vector<ValueRow>({{"", ""}, {"", "INFORMATION_SCHEMA"}});
-  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    ZETASQL_EXPECT_OK(results);
+    EXPECT_GT((*results).size(), 0);
+    ValueRow row = (*results)[0];
+    Value schema_name = row.values()[1];
+    EXPECT_THAT(*schema_name.get<std::string>(), "information_schema");
+  } else {
+    auto expected =
+        std::vector<ValueRow>({{"", ""}, {"", "INFORMATION_SCHEMA"}});
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
 }
 
-TEST_F(InformationSchemaTest, MetaTables) {
+TEST_P(InformationSchemaTest, MetaTables) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   // The documented set of tables that should be returned is at:
   // https://cloud.google.com/spanner/docs/information-schema#information_schemadatabase_options.
   //
@@ -245,7 +215,12 @@ TEST_F(InformationSchemaTest, MetaTables) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, MetaColumns) {
+TEST_P(InformationSchemaTest, MetaColumns) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   // The tables and columns filtered out by the WHERE clause are not currently
   // available in the emulator. This test should not need to filter on
   // table_name.
@@ -400,7 +375,12 @@ TEST_F(InformationSchemaTest, MetaColumns) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, MetaIndexes) {
+TEST_P(InformationSchemaTest, MetaIndexes) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = QueryWithParams(R"(
       select
         t.table_catalog,
@@ -445,7 +425,12 @@ TEST_F(InformationSchemaTest, MetaIndexes) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, MetaIndexColumns) {
+TEST_P(InformationSchemaTest, MetaIndexColumns) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = QueryWithParams(R"(
       select
         t.table_schema,
@@ -535,7 +520,12 @@ TEST_F(InformationSchemaTest, MetaIndexColumns) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, MetaTableConstraints) {
+TEST_P(InformationSchemaTest, MetaTableConstraints) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = QueryWithParams(R"(
       select
         t.constraint_catalog,
@@ -673,7 +663,12 @@ TEST_F(InformationSchemaTest, MetaTableConstraints) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, MetaCheckConstraints) {
+TEST_P(InformationSchemaTest, MetaCheckConstraints) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = QueryWithParams(R"(
       select
         t.constraint_catalog,
@@ -804,7 +799,12 @@ TEST_F(InformationSchemaTest, MetaCheckConstraints) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, MetaConstraintTableUsage) {
+TEST_P(InformationSchemaTest, MetaConstraintTableUsage) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = QueryWithParams(R"(
       select
         t.table_catalog,
@@ -939,7 +939,12 @@ TEST_F(InformationSchemaTest, MetaConstraintTableUsage) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, MetaReferentialConstraints) {
+TEST_P(InformationSchemaTest, MetaReferentialConstraints) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.constraint_catalog,
@@ -961,7 +966,12 @@ TEST_F(InformationSchemaTest, MetaReferentialConstraints) {
   EXPECT_THAT(results, IsOkAndHoldsRows({}));
 }
 
-TEST_F(InformationSchemaTest, MetaKeyColumnUsage) {
+TEST_P(InformationSchemaTest, MetaKeyColumnUsage) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = QueryWithParams(R"(
       select
         t.constraint_catalog,
@@ -1052,7 +1062,12 @@ TEST_F(InformationSchemaTest, MetaKeyColumnUsage) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, MetaConstraintColumnUsage) {
+TEST_P(InformationSchemaTest, MetaConstraintColumnUsage) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = QueryWithParams(R"(
       select
         t.table_catalog,
@@ -1233,7 +1248,12 @@ TEST_F(InformationSchemaTest, MetaConstraintColumnUsage) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, DefaultTables) {
+TEST_P(InformationSchemaTest, DefaultTables) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.table_type,
@@ -1254,16 +1274,21 @@ TEST_F(InformationSchemaTest, DefaultTables) {
   LogResults(results);
   // clang-format off
   auto expected = std::vector<ValueRow>({
-    {"BASE TABLE", "Base", Ns(), Ns(), Ns()},
-    {"BASE TABLE", "CascadeChild", "Base", "CASCADE", Ns()}, // NOLINT
-    {"BASE TABLE", "NoActionChild", "Base", "NO ACTION", Ns()},
-    {"BASE TABLE", "RowDeletionPolicy", Ns(), Ns(), "OLDER_THAN(CreatedAt, INTERVAL 7 DAY)"}, // NOLINT
+    {"BASE TABLE", "base", Ns(), Ns(), Ns()},
+    {"BASE TABLE", "cascade_child", "base", "CASCADE", Ns()}, // NOLINT
+    {"BASE TABLE", "no_action_child", "base", "NO ACTION", Ns()},
+    {"BASE TABLE", "row_deletion_policy", Ns(), Ns(), "OLDER_THAN(created_at, INTERVAL 7 DAY)"}, // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, DefaultColumns) {
+TEST_P(InformationSchemaTest, DefaultColumns) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.table_catalog,
@@ -1291,44 +1316,49 @@ TEST_F(InformationSchemaTest, DefaultColumns) {
   LogResults(results);
   // clang-format off
   auto expected = std::vector<ValueRow>({
-    {"", "", "Base", "Key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "Key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "BoolValue", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "IntValue", 4, Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "DoubleValue", 5, Ns(), Ns(), "YES", "FLOAT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "StrValue", 6, Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "ByteValue", 7, Ns(), Ns(), "YES", "BYTES(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "TimestampValue", 8, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "DateValue", 9, Ns(), Ns(), "YES", "DATE", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "BoolArray", 10, Ns(), Ns(), "NO", "ARRAY<BOOL>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "IntArray", 11, Ns(), Ns(), "YES", "ARRAY<INT64>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "DoubleArray", 12, Ns(), Ns(), "YES", "ARRAY<FLOAT64>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "StrArray", 13, Ns(), Ns(), "YES", "ARRAY<STRING(256)>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "ByteArray", 14, Ns(), Ns(), "YES", "ARRAY<BYTES(MAX)>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "TimestampArray", 15, Ns(), Ns(), "YES", "ARRAY<TIMESTAMP>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "DateArray", 16, Ns(), Ns(), "YES", "ARRAY<DATE>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "GenValue", 17, Ns(), Ns(), "YES", "INT64", "ALWAYS", "Key1 + 1", "YES", "COMMITTED"},  // NOLINT
-    {"", "", "Base", "GenFunctionValue", 18, Ns(), Ns(), "YES", "INT64", "ALWAYS", "LENGTH(Key2)", "YES", "COMMITTED"},  // NOLINT
-    {"", "", "Base", "DefaultColValue", 19, "100", Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "Base", "DefaultTimestampColValue", 20, "CURRENT_TIMESTAMP()", Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "CascadeChild", "Key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "CascadeChild", "Key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "CascadeChild", "ChildKey", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "CascadeChild", "Value1", 4, Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "CascadeChild", "Value2", 5, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "CascadeChild", "CreatedAt", 6, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"}, // NOLINT
-    {"", "", "NoActionChild", "Key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "NoActionChild", "Key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "NoActionChild", "ChildKey", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "NoActionChild", "Value", 4, Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "RowDeletionPolicy", "Key", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "RowDeletionPolicy", "CreatedAt", 2, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "bool_value", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "int_value", 4, Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "double_value", 5, Ns(), Ns(), "YES", "FLOAT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "str_value", 6, Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "byte_value", 7, Ns(), Ns(), "YES", "BYTES(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "timestamp_value", 8, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "date_value", 9, Ns(), Ns(), "YES", "DATE", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "bool_array", 10, Ns(), Ns(), "NO", "ARRAY<BOOL>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "int_array", 11, Ns(), Ns(), "YES", "ARRAY<INT64>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "double_array", 12, Ns(), Ns(), "YES", "ARRAY<FLOAT64>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "str_array", 13, Ns(), Ns(), "YES", "ARRAY<STRING(256)>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "byte_array", 14, Ns(), Ns(), "YES", "ARRAY<BYTES(MAX)>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "TimestampArray", 15, Ns(), Ns(), "YES", "ARRAY<TIMESTAMP>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "date_array", 16, Ns(), Ns(), "YES", "ARRAY<DATE>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "gen_value", 17, Ns(), Ns(), "YES", "INT64", "ALWAYS", "key1 + 1", "YES", "COMMITTED"},  // NOLINT
+    {"", "", "base", "gen_function_value", 18, Ns(), Ns(), "YES", "INT64", "ALWAYS", "LENGTH(key2)", "YES", "COMMITTED"},  // NOLINT
+    {"", "", "base", "default_col_value", 19, "100", Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "default_timestamp_col_value", 20, "CURRENT_TIMESTAMP()", Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "cascade_child", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "cascade_child", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "cascade_child", "child_key", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "cascade_child", "value1", 4, Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "cascade_child", "value2", 5, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "cascade_child", "created_at", 6, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"}, // NOLINT
+    {"", "", "no_action_child", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "no_action_child", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "no_action_child", "child_key", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "no_action_child", "value", 4, Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "row_deletion_policy", "key", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "row_deletion_policy", "created_at", 2, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, DefaultIndexes) {
+TEST_P(InformationSchemaTest, DefaultIndexes) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.table_catalog,
@@ -1353,20 +1383,25 @@ TEST_F(InformationSchemaTest, DefaultIndexes) {
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
-    {"", "", "Base", "IDX_Base_BoolValue_Key2_N_\\w{16}", "INDEX", "", false, true, "READ_WRITE", true},  // NOLINT
-    {"", "", "Base", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-    {"", "", "CascadeChild", "CascadeChildByValue", "INDEX", "Base", true, true, "READ_WRITE", false},  // NOLINT
-    {"", "", "CascadeChild", "IDX_CascadeChild_ChildKey_Value1_U_\\w{16}", "INDEX", "", true, true, "READ_WRITE", true},  // NOLINT
-    {"", "", "CascadeChild", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-    {"", "", "NoActionChild", "NoActionChildByValue", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
-    {"", "", "NoActionChild", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-    {"", "", "RowDeletionPolicy", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+    {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", false, true, "READ_WRITE", true},  // NOLINT
+    {"", "", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+    {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", true, true, "READ_WRITE", true},  // NOLINT
+    {"", "", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+    {"", "", "cascade_child", "cascade_child_by_value", "INDEX", "base", true, true, "READ_WRITE", false},  // NOLINT
+    {"", "", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+    {"", "", "no_action_child", "no_action_child_by_value", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
+    {"", "", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, DefaultIndexColumns) {
+TEST_P(InformationSchemaTest, DefaultIndexColumns) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.table_catalog,
@@ -1391,30 +1426,60 @@ TEST_F(InformationSchemaTest, DefaultIndexColumns) {
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
-    {"", "", "Base", "IDX_Base_BoolValue_Key2_N_\\w{16}", "BoolValue", 1, "ASC", "NO", "BOOL"},  // NOLINT
-    {"", "", "Base", "IDX_Base_BoolValue_Key2_N_\\w{16}", "Key2", 2, "DESC", "NO", "STRING(256)"},  // NOLINT
-    {"", "", "Base", "PRIMARY_KEY", "Key1", 1, "ASC", "YES", "INT64"},  // NOLINT
-    {"", "", "Base", "PRIMARY_KEY", "Key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
-    {"", "", "CascadeChild", "CascadeChildByValue", "Value1", Ni(), Ns(), "NO", "STRING(MAX)"},  // NOLINT
-    {"", "", "CascadeChild", "CascadeChildByValue", "Key1", 1, "ASC", "NO", "INT64"},  // NOLINT
-    {"", "", "CascadeChild", "CascadeChildByValue", "Key2", 2, "DESC", "NO", "STRING(256)"},  // NOLINT
-    {"", "", "CascadeChild", "CascadeChildByValue", "Value2", 3, "ASC", "NO", "BOOL"},  // NOLINT
-    {"", "", "CascadeChild", "IDX_CascadeChild_ChildKey_Value1_U_\\w{16}", "ChildKey", 1, "ASC", "NO", "BOOL"},  // NOLINT
-    {"", "", "CascadeChild", "IDX_CascadeChild_ChildKey_Value1_U_\\w{16}", "Value1", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
-    {"", "", "CascadeChild", "PRIMARY_KEY", "Key1", 1, "ASC", "YES", "INT64"},  // NOLINT
-    {"", "", "CascadeChild", "PRIMARY_KEY", "Key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
-    {"", "", "CascadeChild", "PRIMARY_KEY", "ChildKey", 3, "ASC", "YES", "BOOL"},  // NOLINT
-    {"", "", "NoActionChild", "NoActionChildByValue", "Value", 1, "ASC", "YES", "STRING(MAX)"},  // NOLINT
-    {"", "", "NoActionChild", "PRIMARY_KEY", "Key1", 1, "ASC", "YES", "INT64"},  // NOLINT
-    {"", "", "NoActionChild", "PRIMARY_KEY", "Key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
-    {"", "", "NoActionChild", "PRIMARY_KEY", "ChildKey", 3, "ASC", "YES", "BOOL"},  // NOLINT
-    {"", "", "RowDeletionPolicy", "PRIMARY_KEY", "Key", 1, "ASC", "YES", "INT64"},  // NOLINT
+    {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "bool_value", 1, "ASC", "NO", "BOOL"},  // NOLINT
+    {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "key2", 2, "DESC", "NO", "STRING(256)"},  // NOLINT
+    {"", "", "base", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
+    {"", "", "base", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
+    {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", 1, "ASC", "NO", "BOOL"},  // NOLINT
+    {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+    {"", "", "cascade_child", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
+    {"", "", "cascade_child", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
+    {"", "", "cascade_child", "PRIMARY_KEY", "child_key", 3, "ASC", "YES", "BOOL"},  // NOLINT
+    {"", "", "cascade_child", "cascade_child_by_value", "value1", Ni(), Ns(), "NO", "STRING(MAX)"},  // NOLINT
+    {"", "", "cascade_child", "cascade_child_by_value", "key1", 1, "ASC", "NO", "INT64"},  // NOLINT
+    {"", "", "cascade_child", "cascade_child_by_value", "key2", 2, "DESC", "NO", "STRING(256)"},  // NOLINT
+    {"", "", "cascade_child", "cascade_child_by_value", "value2", 3, "ASC", "NO", "BOOL"},  // NOLINT
+    {"", "", "no_action_child", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
+    {"", "", "no_action_child", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
+    {"", "", "no_action_child", "PRIMARY_KEY", "child_key", 3, "ASC", "YES", "BOOL"},  // NOLINT
+    {"", "", "no_action_child", "no_action_child_by_value", "value", 1, "ASC", "YES", "STRING(MAX)"},  // NOLINT
+    {"", "", "row_deletion_policy", "PRIMARY_KEY", "key", 1, "ASC", "YES", "INT64"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, DefaultColumnOptions) {
+TEST_P(InformationSchemaTest, DefaultDatabaseOptions) {
+  auto results = Query(R"(
+      select
+        t.option_name,
+        t.option_type,
+        t.option_value
+      from
+        information_schema.database_options AS t
+      where
+        t.option_name = 'database_dialect'
+      order by
+        t.option_name
+    )");
+  LogResults(results);
+  std::string type = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+                         ? "character varying"
+                         : "STRING";
+  // clang-format off
+  auto expected = std::vector<ValueRow>({
+    {"database_dialect", type, database_api::DatabaseDialect_Name(GetParam())},  // NOLINT
+  });
+  // clang-format on
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+}
+
+TEST_P(InformationSchemaTest, DefaultColumnOptions) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.table_catalog,
@@ -1437,13 +1502,18 @@ TEST_F(InformationSchemaTest, DefaultColumnOptions) {
   LogResults(results);
   // clang-format off
   auto expected = std::vector<ValueRow>({
-    {"", "", "Base", "TimestampValue", "allow_commit_timestamp", "BOOL", "TRUE"},  // NOLINT
+    {"", "", "base", "timestamp_value", "allow_commit_timestamp", "BOOL", "TRUE"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, DefaultTableConstraints) {
+TEST_P(InformationSchemaTest, DefaultTableConstraints) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.constraint_catalog,
@@ -1467,23 +1537,28 @@ TEST_F(InformationSchemaTest, DefaultTableConstraints) {
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
-    {"", "", "CK_Base_\\w{16}_1", "", "", "Base", "CHECK", "NO", "NO", "YES"},  // NOLINT
-    {"", "", "CK_IS_NOT_NULL_Base_BoolArray", "", "", "Base", "CHECK", "NO", "NO", "YES"},  // NOLINT
-    {"", "", "CK_IS_NOT_NULL_Base_IntValue", "", "", "Base", "CHECK", "NO", "NO", "YES"},  // NOLINT
-    {"", "", "CK_IS_NOT_NULL_CascadeChild_Value1", "", "", "CascadeChild", "CHECK", "NO", "NO", "YES"},  // NOLINT
-    {"", "", "CheckConstraintName", "", "", "Base", "CHECK", "NO", "NO", "YES"},  // NOLINT
-    {"", "", "FKBaseCascadeChild", "", "", "Base", "FOREIGN KEY", "NO", "NO", "YES"},  // NOLINT
-    {"", "", "IDX_CascadeChild_ChildKey_Value1_U_\\w{16}", "", "", "CascadeChild", "UNIQUE", "NO", "NO", "YES"},  // NOLINT
-    {"", "", "PK_Base", "", "", "Base", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
-    {"", "", "PK_CascadeChild", "", "", "CascadeChild", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
-    {"", "", "PK_NoActionChild", "", "", "NoActionChild", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
-    {"", "", "PK_RowDeletionPolicy", "", "", "RowDeletionPolicy", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "CK_IS_NOT_NULL_base_bool_array", "", "", "base", "CHECK", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "CK_IS_NOT_NULL_base_int_value", "", "", "base", "CHECK", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "CK_IS_NOT_NULL_cascade_child_value1", "", "", "cascade_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "CK_base_\\w{16}_1", "", "", "base", "CHECK", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "IDX_cascade_child_child_key_value1_U_\\w{16}", "", "", "cascade_child", "UNIQUE", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "PK_base", "", "", "base", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "PK_cascade_child", "", "", "cascade_child", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "PK_no_action_child", "", "", "no_action_child", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "PK_row_deletion_policy", "", "", "row_deletion_policy", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "check_constraint_name", "", "", "base", "CHECK", "NO", "NO", "YES"},  // NOLINT
+    {"", "", "fk_base_cascade_child", "", "", "base", "FOREIGN KEY", "NO", "NO", "YES"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, DefaultConstraintTableUsage) {
+TEST_P(InformationSchemaTest, DefaultConstraintTableUsage) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.table_catalog,
@@ -1504,23 +1579,28 @@ TEST_F(InformationSchemaTest, DefaultConstraintTableUsage) {
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
-    {"", "", "Base", "", "", "CK_Base_\\w{16}_1"},  // NOLINT
-    {"", "", "Base", "", "", "CK_IS_NOT_NULL_Base_BoolArray"},  // NOLINT
-    {"", "", "Base", "", "", "CK_IS_NOT_NULL_Base_IntValue"},  // NOLINT
-    {"", "", "Base", "", "", "CheckConstraintName"},  // NOLINT
-    {"", "", "Base", "", "", "PK_Base"},  // NOLINT
-    {"", "", "CascadeChild", "", "", "CK_IS_NOT_NULL_CascadeChild_Value1"},  // NOLINT
-    {"", "", "CascadeChild", "", "", "FKBaseCascadeChild"},  // NOLINT
-    {"", "", "CascadeChild", "", "", "IDX_CascadeChild_ChildKey_Value1_U_\\w{16}"},  // NOLINT
-    {"", "", "CascadeChild", "", "", "PK_CascadeChild"},  // NOLINT
-    {"", "", "NoActionChild", "", "", "PK_NoActionChild"},  // NOLINT
-    {"", "", "RowDeletionPolicy", "", "", "PK_RowDeletionPolicy"},  // NOLINT
+    {"", "", "base", "", "", "CK_IS_NOT_NULL_base_bool_array"},  // NOLINT
+    {"", "", "base", "", "", "CK_IS_NOT_NULL_base_int_value"},  // NOLINT
+    {"", "", "base", "", "", "CK_base_\\w{16}_1"},  // NOLINT
+    {"", "", "base", "", "", "PK_base"},  // NOLINT
+    {"", "", "base", "", "", "check_constraint_name"},  // NOLINT
+    {"", "", "cascade_child", "", "", "CK_IS_NOT_NULL_cascade_child_value1"},  // NOLINT
+    {"", "", "cascade_child", "", "", "IDX_cascade_child_child_key_value1_U_\\w{16}"},  // NOLINT
+    {"", "", "cascade_child", "", "", "PK_cascade_child"},  // NOLINT
+    {"", "", "cascade_child", "", "", "fk_base_cascade_child"},  // NOLINT
+    {"", "", "no_action_child", "", "", "PK_no_action_child"},  // NOLINT
+    {"", "", "row_deletion_policy", "", "", "PK_row_deletion_policy"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, DefaultReferentialConstraints) {
+TEST_P(InformationSchemaTest, DefaultReferentialConstraints) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.constraint_catalog,
@@ -1543,16 +1623,21 @@ TEST_F(InformationSchemaTest, DefaultReferentialConstraints) {
   )");
   LogResults(results);
   auto cascade_index =
-      FindString(results, 5, R"(IDX_CascadeChild_ChildKey_Value1_U_\w{16})");
+      FindString(results, 5, R"(IDX_cascade_child_child_key_value1_U_\w{16})");
   // clang-format off
   auto expected = std::vector<ValueRow>({
-      {"", "", "FKBaseCascadeChild", "", "", cascade_index, "SIMPLE", "NO ACTION", "NO ACTION", "COMMITTED"},  // NOLINT
+      {"", "", "fk_base_cascade_child", "", "", cascade_index, "SIMPLE", "NO ACTION", "NO ACTION", "COMMITTED"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, DefaultKeyColumnUsage) {
+TEST_P(InformationSchemaTest, DefaultKeyColumnUsage) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.constraint_catalog,
@@ -1577,25 +1662,30 @@ TEST_F(InformationSchemaTest, DefaultKeyColumnUsage) {
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
-    {"", "", "FKBaseCascadeChild", "", "", "Base", "BoolValue", 1, 1},  // NOLINT
-    {"", "", "FKBaseCascadeChild", "", "", "Base", "Key2", 2, 2},  // NOLINT
-    {"", "", "IDX_CascadeChild_ChildKey_Value1_U_\\w{16}", "", "", "CascadeChild", "ChildKey", 1, Ni()},  // NOLINT
-    {"", "", "IDX_CascadeChild_ChildKey_Value1_U_\\w{16}", "", "", "CascadeChild", "Value1", 2, Ni()},  // NOLINT
-    {"", "", "PK_Base", "", "", "Base", "Key1", 1, Ni()},  // NOLINT
-    {"", "", "PK_Base", "", "", "Base", "Key2", 2, Ni()},  // NOLINT
-    {"", "", "PK_CascadeChild", "", "", "CascadeChild", "Key1", 1, Ni()},  // NOLINT
-    {"", "", "PK_CascadeChild", "", "", "CascadeChild", "Key2", 2, Ni()},  // NOLINT
-    {"", "", "PK_CascadeChild", "", "", "CascadeChild", "ChildKey", 3, Ni()},  // NOLINT
-    {"", "", "PK_NoActionChild", "", "", "NoActionChild", "Key1", 1, Ni()},  // NOLINT
-    {"", "", "PK_NoActionChild", "", "", "NoActionChild", "Key2", 2, Ni()},  // NOLINT
-    {"", "", "PK_NoActionChild", "", "", "NoActionChild", "ChildKey", 3, Ni()},  // NOLINT
-    {"", "", "PK_RowDeletionPolicy", "", "", "RowDeletionPolicy", "Key", 1, Ni()},  // NOLINT
+    {"", "", "IDX_cascade_child_child_key_value1_U_\\w{16}", "", "", "cascade_child", "child_key", 1, Ni()},  // NOLINT
+    {"", "", "IDX_cascade_child_child_key_value1_U_\\w{16}", "", "", "cascade_child", "value1", 2, Ni()},  // NOLINT
+    {"", "", "PK_base", "", "", "base", "key1", 1, Ni()},  // NOLINT
+    {"", "", "PK_base", "", "", "base", "key2", 2, Ni()},  // NOLINT
+    {"", "", "PK_cascade_child", "", "", "cascade_child", "key1", 1, Ni()},  // NOLINT
+    {"", "", "PK_cascade_child", "", "", "cascade_child", "key2", 2, Ni()},  // NOLINT
+    {"", "", "PK_cascade_child", "", "", "cascade_child", "child_key", 3, Ni()},  // NOLINT
+    {"", "", "PK_no_action_child", "", "", "no_action_child", "key1", 1, Ni()},  // NOLINT
+    {"", "", "PK_no_action_child", "", "", "no_action_child", "key2", 2, Ni()},  // NOLINT
+    {"", "", "PK_no_action_child", "", "", "no_action_child", "child_key", 3, Ni()},  // NOLINT
+    {"", "", "PK_row_deletion_policy", "", "", "row_deletion_policy", "key", 1, Ni()},  // NOLINT
+    {"", "", "fk_base_cascade_child", "", "", "base", "bool_value", 1, 1},  // NOLINT
+    {"", "", "fk_base_cascade_child", "", "", "base", "key2", 2, 2},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(InformationSchemaTest, DefaultConstraintColumnUsage) {
+TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.table_catalog,
@@ -1618,24 +1708,24 @@ TEST_F(InformationSchemaTest, DefaultConstraintColumnUsage) {
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
-    {"", "", "Base", "BoolArray", "", "", "CK_IS_NOT_NULL_Base_BoolArray"},  // NOLINT
-    {"", "", "Base", "IntValue", "", "", "CK_Base_\\w{16}_1"},  // NOLINT
-    {"", "", "Base", "IntValue", "", "", "CK_IS_NOT_NULL_Base_IntValue"},  // NOLINT
-    {"", "", "Base", "IntValue", "", "", "CheckConstraintName"},  // NOLINT
-    {"", "", "Base", "Key1", "", "", "PK_Base"},  // NOLINT
-    {"", "", "Base", "Key2", "", "", "PK_Base"},  // NOLINT
-    {"", "", "CascadeChild", "ChildKey", "", "", "FKBaseCascadeChild"},  // NOLINT
-    {"", "", "CascadeChild", "ChildKey", "", "", "IDX_CascadeChild_ChildKey_Value1_U_\\w{16}"},  // NOLINT
-    {"", "", "CascadeChild", "ChildKey", "", "", "PK_CascadeChild"},  // NOLINT
-    {"", "", "CascadeChild", "Key1", "", "", "PK_CascadeChild"},  // NOLINT
-    {"", "", "CascadeChild", "Key2", "", "", "PK_CascadeChild"},  // NOLINT
-    {"", "", "CascadeChild", "Value1", "", "", "CK_IS_NOT_NULL_CascadeChild_Value1"},  // NOLINT
-    {"", "", "CascadeChild", "Value1", "", "", "FKBaseCascadeChild"},  // NOLINT
-    {"", "", "CascadeChild", "Value1", "", "", "IDX_CascadeChild_ChildKey_Value1_U_\\w{16}"},  // NOLINT
-    {"", "", "NoActionChild", "ChildKey", "", "", "PK_NoActionChild"},  // NOLINT
-    {"", "", "NoActionChild", "Key1", "", "", "PK_NoActionChild"},  // NOLINT
-    {"", "", "NoActionChild", "Key2", "", "", "PK_NoActionChild"},  // NOLINT
-    {"", "", "RowDeletionPolicy", "Key", "", "", "PK_RowDeletionPolicy"},  // NOLINT
+    {"", "", "base", "bool_array", "", "", "CK_IS_NOT_NULL_base_bool_array"},  // NOLINT
+    {"", "", "base", "int_value", "", "", "CK_IS_NOT_NULL_base_int_value"},  // NOLINT
+    {"", "", "base", "int_value", "", "", "CK_base_\\w{16}_1"},  // NOLINT
+    {"", "", "base", "int_value", "", "", "check_constraint_name"},  // NOLINT
+    {"", "", "base", "key1", "", "", "PK_base"},  // NOLINT
+    {"", "", "base", "key2", "", "", "PK_base"},  // NOLINT
+    {"", "", "cascade_child", "child_key", "", "", "IDX_cascade_child_child_key_value1_U_\\w{16}"},  // NOLINT
+    {"", "", "cascade_child", "child_key", "", "", "PK_cascade_child"},  // NOLINT
+    {"", "", "cascade_child", "child_key", "", "", "fk_base_cascade_child"},  // NOLINT
+    {"", "", "cascade_child", "key1", "", "", "PK_cascade_child"},  // NOLINT
+    {"", "", "cascade_child", "key2", "", "", "PK_cascade_child"},  // NOLINT
+    {"", "", "cascade_child", "value1", "", "", "CK_IS_NOT_NULL_cascade_child_value1"},  // NOLINT
+    {"", "", "cascade_child", "value1", "", "", "IDX_cascade_child_child_key_value1_U_\\w{16}"},  // NOLINT
+    {"", "", "cascade_child", "value1", "", "", "fk_base_cascade_child"},  // NOLINT
+    {"", "", "no_action_child", "child_key", "", "", "PK_no_action_child"},  // NOLINT
+    {"", "", "no_action_child", "key1", "", "", "PK_no_action_child"},  // NOLINT
+    {"", "", "no_action_child", "key2", "", "", "PK_no_action_child"},  // NOLINT
+    {"", "", "row_deletion_policy", "key", "", "", "PK_row_deletion_policy"},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -1657,7 +1747,22 @@ class ColumnColumnUsageInformationSchemaTest : public InformationSchemaTest {
   }
 };
 
-TEST_F(ColumnColumnUsageInformationSchemaTest, DefaultColumnColumnUsage) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectColumnColumnUsageInformationSchemaTests,
+    ColumnColumnUsageInformationSchemaTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
+                    ),
+    [](const testing::TestParamInfo<
+        ColumnColumnUsageInformationSchemaTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(ColumnColumnUsageInformationSchemaTest, DefaultColumnColumnUsage) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.table_name,
@@ -1707,7 +1812,19 @@ class ForeignKeyInformationSchemaTest : public InformationSchemaTest {
   }
 };
 
-TEST_F(ForeignKeyInformationSchemaTest, DefaultTableConstraints) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectForeignKeyInformationSchemaTests, ForeignKeyInformationSchemaTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
+                    ),
+    [](const testing::TestParamInfo<ForeignKeyInformationSchemaTest::ParamType>&
+           info) { return database_api::DatabaseDialect_Name(info.param); });
+
+TEST_P(ForeignKeyInformationSchemaTest, DefaultTableConstraints) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.constraint_name,
@@ -1737,7 +1854,12 @@ TEST_F(ForeignKeyInformationSchemaTest, DefaultTableConstraints) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(ForeignKeyInformationSchemaTest, DefaultConstraintTableUsage) {
+TEST_P(ForeignKeyInformationSchemaTest, DefaultConstraintTableUsage) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.table_name,
@@ -1767,7 +1889,12 @@ TEST_F(ForeignKeyInformationSchemaTest, DefaultConstraintTableUsage) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(ForeignKeyInformationSchemaTest, DefaultKeyColumnUsage) {
+TEST_P(ForeignKeyInformationSchemaTest, DefaultKeyColumnUsage) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.constraint_name,
@@ -1796,7 +1923,12 @@ TEST_F(ForeignKeyInformationSchemaTest, DefaultKeyColumnUsage) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(ForeignKeyInformationSchemaTest, DefaultReferentialConstraints) {
+TEST_P(ForeignKeyInformationSchemaTest, DefaultReferentialConstraints) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.constraint_name,
@@ -1818,7 +1950,12 @@ TEST_F(ForeignKeyInformationSchemaTest, DefaultReferentialConstraints) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_F(ForeignKeyInformationSchemaTest, DefaultConstraintColumnUsage) {
+TEST_P(ForeignKeyInformationSchemaTest, DefaultConstraintColumnUsage) {
+  // Currently unsupported for PG in the emulator information schema.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto results = Query(R"(
       select
         t.table_name,

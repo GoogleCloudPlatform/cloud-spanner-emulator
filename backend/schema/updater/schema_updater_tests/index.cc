@@ -14,9 +14,11 @@
 // limitations under the License.
 //
 
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
@@ -161,6 +163,25 @@ TEST_P(SchemaUpdaterTest, CreateIndex_DescKeys) {
   EXPECT_EQ(idx->key_columns().size(), 2);
   EXPECT_TRUE(idx->key_columns()[0]->is_descending());
   EXPECT_TRUE(idx->key_columns()[1]->is_descending());
+}
+
+TEST_P(SchemaUpdaterTest, CreateIndex_AscKeys) {
+  std::unique_ptr<const Schema> schema;
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"sql(
+        CREATE TABLE T (
+          k1 INT64,
+          c1 INT64
+        ) PRIMARY KEY (k1 ASC)
+      )sql",
+                                               R"sql(
+        CREATE INDEX Idx ON T(c1, k1)
+      )sql"}));
+
+  auto idx = schema->FindIndex("Idx");
+  EXPECT_NE(idx, nullptr);
+  EXPECT_EQ(idx->key_columns().size(), 2);
+  EXPECT_FALSE(idx->key_columns()[0]->is_descending());
+  EXPECT_FALSE(idx->key_columns()[1]->is_descending());
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_SharedPK) {

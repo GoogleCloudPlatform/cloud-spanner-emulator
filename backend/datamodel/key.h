@@ -51,7 +51,9 @@ class Key {
   explicit Key(std::vector<zetasql::Value> columns);
 
   // Adds a column to the key.
-  void AddColumn(zetasql::Value value, bool desc = false);
+  void AddColumn(zetasql::Value value,
+                 bool desc = false
+  );
 
   // Returns the number of columns in a key.
   int NumColumns() const;
@@ -108,6 +110,8 @@ class Key {
   bool is_infinity_ = false;
   bool is_prefix_limit_ = false;
 
+  // TODO: We may refactor this by creating an immutable class which
+  // has both the ordering and null handling.
   // Column metadata.
   std::vector<bool> is_descending_;
 

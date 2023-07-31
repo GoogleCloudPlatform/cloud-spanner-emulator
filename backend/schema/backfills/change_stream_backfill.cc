@@ -63,15 +63,11 @@ std::vector<zetasql::Value> CreateInitialBackfillPartitions(
   // Specify end_time
   row_values.push_back(zetasql::Value::Timestamp(end_time));
   // Specify parents
-  std::vector<zetasql::Value> parents_values;
-  parents_values.push_back(zetasql::Value::NullString());
-  row_values.push_back(zetasql::Value::Array(
-      zetasql::types::StringArrayType(), parents_values));
+  row_values.push_back(
+      zetasql::Value::EmptyArray(zetasql::types::StringArrayType()));
   // Specify children
-  std::vector<zetasql::Value> children_values;
-  children_values.push_back(zetasql::Value::NullString());
-  row_values.push_back(zetasql::Value::Array(
-      zetasql::types::StringArrayType(), children_values));
+  row_values.push_back(
+      zetasql::Value::EmptyArray(zetasql::types::StringArrayType()));
   return row_values;
 }
 
@@ -108,7 +104,7 @@ absl::Status BackfillChangeStreamPartition(
   std::vector<zetasql::Value> initial_row_values;
   initial_row_values.reserve(change_stream_partition_table_columns.size());
   initial_row_values = CreateInitialBackfillPartitions(
-      initial_row_values, partition_token_str, absl::UnixEpoch(),
+      initial_row_values, partition_token_str, change_stream->creation_time(),
       absl::FromUnixMicros(zetasql::types::kTimestampMax));
   // Create Key for the change stream partition table
   ZETASQL_ASSIGN_OR_RETURN(

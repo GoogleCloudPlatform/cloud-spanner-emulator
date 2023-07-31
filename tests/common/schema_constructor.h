@@ -205,17 +205,20 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKey(
   std::string test_table =
       R"(
           CREATE TABLE test_table (
-            int64_col INT64 NOT NULL,
-            string_col STRING(20)
-          ) PRIMARY KEY (int64_col)
+            k1 INT64 NOT NULL,
+            c1 STRING(20),
+            c2 STRING(20),
+          ) PRIMARY KEY (k1)
         )";
   std::string child_table =
       R"(
           CREATE TABLE child_table (
-            child_int64_col INT64 NOT NULL,
-            child_string_col STRING(20),
-            CONSTRAINT C FOREIGN KEY (child_int64_col, child_string_col) REFERENCES test_table (int64_col, string_col),
-          ) PRIMARY KEY (child_int64_col)
+            child_k1 INT64 NOT NULL,
+            child_c1 STRING(20),
+            child_c2 STRING(20),
+            CONSTRAINT C FOREIGN KEY (child_k1, child_c1) REFERENCES test_table (k1, c1),
+            FOREIGN KEY (child_c2) REFERENCES test_table (c2),
+          ) PRIMARY KEY (child_k1)
         )";
   absl::StatusOr<std::unique_ptr<const backend::Schema>> schema =
       CreateSchemaFromDDL(

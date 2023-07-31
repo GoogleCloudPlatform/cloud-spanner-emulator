@@ -188,7 +188,6 @@ class KeyColumn::Builder {
     instance_->is_descending_ = desceding;
     return *this;
   }
-
  private:
   std::unique_ptr<KeyColumn> instance_;
 };

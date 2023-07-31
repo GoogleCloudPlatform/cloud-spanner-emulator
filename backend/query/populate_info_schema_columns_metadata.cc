@@ -19,12 +19,14 @@
 
 #include "absl/flags/parse.h"
 #include "zetasql/base/logging.h"
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
 #include "riegeli/bytes/cfile_reader.h"
 #include "riegeli/csv/csv_reader.h"
 #include "riegeli/csv/csv_record.h"
 
+using ::google::spanner::admin::database::v1::DatabaseDialect;
 using ::riegeli::CsvReader;
 using ::riegeli::CsvReaderBase;
 using ::riegeli::CsvRecord;
@@ -32,34 +34,50 @@ using ::riegeli::CFileReader;
 
 static constexpr char kCsvSeparator = ',';
 
+std::string GetMetadataFileByDialect(const DatabaseDialect& dialect,
+                                     absl::string_view gsql_file
+) {
+  std::string metadata_file;
+  switch (dialect) {
+    case DatabaseDialect::DATABASE_DIALECT_UNSPECIFIED:
+    case DatabaseDialect::GOOGLE_STANDARD_SQL:
+      metadata_file = gsql_file;
+      break;
+    default:
+      // Should never get here.
+      break;
+  }
+
+  constexpr absl::string_view kInfoSchemaColumnsMetadataPath =
+      "backend/query/";
+  return absl::StrCat(kInfoSchemaColumnsMetadataPath, metadata_file);
+}
+
 // This is used to create c++ code which are used to populate information
 // schema. It reads information schema data from csv files and
 // populates a header file with a static vector.
 
-std::string PopulateInfoSchemaColumnsMetadata() {
-  std::string metadata_code =
-      R"(struct ColumnsMetaEntry {
-  const char* table_name;
-  const char* column_name;
-  const char* is_nullable;
-  const char* spanner_type;
-};
-
-inline const std::vector<ColumnsMetaEntry>& ColumnsMetadata() {
+std::string PopulateInfoSchemaColumnsMetadata(const DatabaseDialect& dialect) {
+  std::string prefix = "";
+  std::string metadata_code = absl::Substitute(
+      R"(inline const std::vector<ColumnsMetaEntry>& $0ColumnsMetadata() {
   // clang-format off
   static const zetasql_base::NoDestructor<std::vector<ColumnsMetaEntry>>
       kColumnsMetadata({
-)";
+)",
+      prefix);
 
-  // clang-format off
-  constexpr absl::string_view kInfoSchemaColumnsMetadata =
-      "backend/query/info_schema_columns_metadata.csv"; // NOLINT
-  // clang-format on
+  constexpr absl::string_view kGSQLInfoSchemaColumnsMetadata =
+      "info_schema_columns_metadata.csv";
+  std::string metadata_file =
+      GetMetadataFileByDialect(dialect,
+                               kGSQLInfoSchemaColumnsMetadata
+      );
   CsvReaderBase::Options options;
   options.set_field_separator(kCsvSeparator);
   options.set_required_header(
       {"table_name", "column_name", "is_nullable", "spanner_type"});
-  CFileReader file_reader = CFileReader(kInfoSchemaColumnsMetadata);
+  CFileReader file_reader = CFileReader(metadata_file);
   CsvReader csv_reader(&file_reader, options);
   ZETASQL_CHECK(csv_reader.status().ok())
       << "Error reading csv file:" << csv_reader.status();
@@ -83,33 +101,29 @@ inline const std::vector<ColumnsMetaEntry>& ColumnsMetadata() {
   return metadata_code;
 }
 
-std::string PopulateInfoSchemaColumnsMetadataForIndex() {
-  std::string metadata_for_index_code =
-      R"(struct IndexColumnsMetaEntry {
-  const char* table_name;
-  const char* column_name;
-  const char* is_nullable;
-  const char* column_ordering;
-  const char* spanner_type;
-  int primary_key_ordinal = 0;
-};
-
-inline const std::vector<IndexColumnsMetaEntry>& IndexColumnsMetadata() {
+std::string PopulateInfoSchemaColumnsMetadataForIndex(
+    const DatabaseDialect& dialect) {
+  std::string prefix = "";
+  std::string metadata_for_index_code = absl::Substitute(
+      R"(inline const std::vector<IndexColumnsMetaEntry>& $0IndexColumnsMetadata() {
   // clang-format off
   static const zetasql_base::NoDestructor<std::vector<IndexColumnsMetaEntry>>
       kColumnsMetadataForIndex({
-)";
+)",
+      prefix);
 
-  // clang-format off
-  constexpr absl::string_view kInfoSchemaColumnsMetadataForIndex =
-      "backend/query/info_schema_columns_metadata_for_index.csv"; // NOLINT
-  // clang-format on
+  constexpr absl::string_view kGSQLInfoSchemaColumnsMetadataForIndex =
+      "info_schema_columns_metadata_for_index.csv";
+  std::string metadata_file =
+      GetMetadataFileByDialect(dialect,
+                               kGSQLInfoSchemaColumnsMetadataForIndex
+      );
   CsvReaderBase::Options options;
   options.set_field_separator(kCsvSeparator);
   options.set_required_header({"table_name", "column_name", "is_nullable",
                                "column_ordering", "spanner_type",
                                "ordinal_position"});
-  CFileReader file_reader = CFileReader(kInfoSchemaColumnsMetadataForIndex);
+  CFileReader file_reader = CFileReader(metadata_file);
   CsvReader csv_reader(&file_reader, options);
   ZETASQL_CHECK(csv_reader.status().ok())
       << "Error reading csv file:" << csv_reader.status();
@@ -210,6 +224,22 @@ int main(int argc, char* argv[]) {
 
 namespace google::spanner::emulator::backend {
 
+struct ColumnsMetaEntry {
+  const char* table_name;
+  const char* column_name;
+  const char* is_nullable;
+  const char* spanner_type;
+};
+
+struct IndexColumnsMetaEntry {
+  const char* table_name;
+  const char* column_name;
+  const char* is_nullable;
+  const char* column_ordering;
+  const char* spanner_type;
+  int primary_key_ordinal = 0;
+};
+
 $1
 $2
 $3
@@ -222,8 +252,9 @@ $3
   std::cout << absl::Substitute(
       kTemplate,
       "THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_INFO_SCHEMA_",
-      PopulateInfoSchemaColumnsMetadata(),
-      PopulateInfoSchemaColumnsMetadataForIndex(),
+      PopulateInfoSchemaColumnsMetadata(DatabaseDialect::GOOGLE_STANDARD_SQL),
+      PopulateInfoSchemaColumnsMetadataForIndex(
+          DatabaseDialect::GOOGLE_STANDARD_SQL),
       PopulateSpannerSysColumnsMetadata());
   return 0;
 }

@@ -1,18 +1,47 @@
---- BUILD
-+++ BUILD
-@@ -4106,1 +4106,4 @@
--)
-+    external_deps = [
+diff --git a/BUILD b/BUILD
+index 3b5d7e5e3c..c5d61e6e4c 100644
+--- a/BUILD
++++ b/BUILD
+@@ -544,6 +544,7 @@ grpc_cc_library(
+     defines = ["GRPC_NO_XDS"],
+     external_deps = [
+         "absl/base:core_headers",
 +        "absl/status",
-+    ]
-+)
-
---- include/grpcpp/impl/codegen/status.h
-+++ include/grpcpp/impl/codegen/status.h
-@@ -25,0 +25,1 @@
+     ],
+     language = "c++",
+     public_hdrs = GRPC_PUBLIC_HDRS,
+diff --git a/bazel/grpc_extra_deps.bzl b/bazel/grpc_extra_deps.bzl
+index 4d8afa3131..b0900364f8 100644
+--- a/bazel/grpc_extra_deps.bzl
++++ b/bazel/grpc_extra_deps.bzl
+@@ -53,7 +53,6 @@ def grpc_extra_deps(ignore_version_differences = False):
+     api_dependencies()
+ 
+     go_rules_dependencies()
+-    go_register_toolchains(version = "1.18")
+     gazelle_dependencies()
+ 
+     # Pull-in the go 3rd party dependencies for protoc_gen_validate, which is
+diff --git a/include/grpcpp/impl/status.h b/include/grpcpp/impl/status.h
+index 95436ab8fb..fe9f44adf0 100644
+--- a/include/grpcpp/impl/status.h
++++ b/include/grpcpp/impl/status.h
+@@ -23,6 +23,7 @@
+ 
+ #include <grpc/support/port_platform.h>
+ 
 +#include "absl/status/status.h"
-@@ -104,0 +104,4 @@
+ #include <grpc/status.h>
+ #include <grpcpp/support/config.h>
+ #include <grpcpp/support/status_code_enum.h>
+@@ -99,6 +100,10 @@ class GRPC_MUST_USE_RESULT_WHEN_USE_STRICT_WARNING Status {
+   Status(StatusCode code, const std::string& error_message)
+       : code_(code), error_message_(error_message) {}
+ 
 +  operator absl::Status() const& {
 +    return absl::Status(static_cast<absl::StatusCode>(code_), error_message_);
 +  }
 +
+   /// Construct an instance with \a code,  \a error_message and
+   /// \a error_details. It is an error to construct an OK status with non-empty
+   /// \a error_message and/or \a error_details.

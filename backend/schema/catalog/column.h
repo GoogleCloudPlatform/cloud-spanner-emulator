@@ -226,8 +226,12 @@ class KeyColumn : public SchemaNode {
                               SchemaValidationContext* context) const override;
 
   std::string DebugString() const override {
-    return absl::Substitute("PK:$0(desc:$1)", column_->DebugString(),
-                            is_descending_);
+    return absl::Substitute(
+        "PK:$0(desc:$1"
+        ")",
+        column_->DebugString(),
+        is_descending_
+    );
   }
 
   class Builder;

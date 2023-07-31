@@ -47,16 +47,21 @@ enum class ParserState {
 }  // namespace
 
 std::vector<FileBasedTestCase> ReadTestCasesFromFile(
-    const std::string& file, const FileBasedTestOptions& options) {
+    const std::string& file,
+    const FileBasedTestOptions& options
+) {
   std::vector<FileBasedTestCase> test_cases;
-  FileBasedTestCase test_case(file, 1);
+  FileBasedTestCase test_case(file,
+                              1
+  );
   std::string line;
   int line_no = 0;
   ParserState state = ParserState::kReadingInput;
 
   auto add_test_case = [&]() {
-    bool expect_error = absl::StartsWith(test_case.expected.text, "ERROR:");
-    if (expect_error) {
+    test_case.expected.expect_error =
+        absl::StartsWith(test_case.expected.text, "ERROR:");
+    if (test_case.expected.expect_error) {
       // If the expected string also contains the status code then extract that
       // separately.
       absl::string_view expected_textv = test_case.expected.text;
@@ -74,11 +79,13 @@ std::vector<FileBasedTestCase> ReadTestCasesFromFile(
         status_message = std::string(expected_textv);
       }
       // Re-attach the message prefix.
-      test_case.expected.text = "ERROR:" + status_message;
+      test_case.expected.text = status_message;
     }
     test_cases.emplace_back(std::move(test_case));
     state = ParserState::kReadingInput;
-    test_case = FileBasedTestCase(file, line_no + 1);
+    test_case = FileBasedTestCase(file,
+                                  line_no + 1
+    );
   };
 
   // Process the input file a line at a time.

@@ -17,6 +17,9 @@
 #include <memory>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 
 namespace google {

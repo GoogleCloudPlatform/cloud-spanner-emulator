@@ -80,7 +80,8 @@ class NetCatalog : public zetasql::Catalog {
 Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
                  zetasql::TypeFactory* type_factory,
                  const zetasql::AnalyzerOptions& options, RowReader* reader,
-                 QueryEvaluator* query_evaluator)
+                 QueryEvaluator* query_evaluator
+                 )
     : schema_(schema),
       function_catalog_(function_catalog),
       type_factory_(type_factory) {
@@ -165,8 +166,8 @@ absl::Status Catalog::GetFunctions(
 zetasql::Catalog* Catalog::GetInformationSchemaCatalog() const {
   absl::MutexLock lock(&mu_);
   if (!information_schema_catalog_) {
-    information_schema_catalog_ =
-        std::make_unique<InformationSchemaCatalog>(schema_);
+    information_schema_catalog_ = std::make_unique<InformationSchemaCatalog>(
+        InformationSchemaCatalog::kName, schema_);
   }
   return information_schema_catalog_.get();
 }
