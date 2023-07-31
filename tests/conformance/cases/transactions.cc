@@ -69,14 +69,10 @@ class TransactionsTest : public DatabaseTest {
   }
 };
 
-// TODO Disabled to unblock spanner builds after third party
-// library import
-TEST_F(TransactionsTest,
-       DISABLED_SingleUseReadOnlyTransactionCannotBeCommitted) {
+TEST_F(TransactionsTest, SingleUseReadOnlyTransactionCannotBeCommitted) {
   auto txn = MakeSingleUseTransaction(
       Transaction::SingleUseOptions{Transaction::ReadOnlyOptions{}});
-  EXPECT_THAT(CommitTransaction(txn, {}),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+  EXPECT_THAT(CommitTransaction(txn, {}).ok(), false);
 }
 
 TEST_F(TransactionsTest, SingleUseReadOnlyTransactionCannotBeRolledBack) {

@@ -22,5 +22,5 @@ licenses(["unencumbered"])
 
 filegroup(
     name = "test_files",
-    srcs = glob(["*.test"]),
+    srcs = glob(["**/*.test"]),
 )

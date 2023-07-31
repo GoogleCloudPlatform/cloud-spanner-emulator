@@ -55,6 +55,9 @@ const char kCommitTimestampOptionName[] = "allow_commit_timestamp";
 const char kPGCommitTimestampOptionName[] = "commit_timestamp";
 const char kChangeStreamValueCaptureTypeOptionName[] = "value_capture_type";
 const char kChangeStreamRetentionPeriodOptionName[] = "retention_period";
+const char kSearchIndexOptionSortOrderShardingName[] = "sort_order_sharding";
+const char kSearchIndexOptionsDisableAutomaticUidName[] =
+    "disable_automatic_uid_column";
 
 namespace {
 
@@ -142,9 +145,8 @@ class CloudDDLErrorHandler : public ErrorHandler {
   // expected_kind - token kind that the parser was trying to consume.
   // expected_token - the image of the token - tokenImages[expected_kind].
   // actual - the actual token that the parser got instead.
-  void handleUnexpectedToken(int expected_kind,
-                             JAVACC_STRING_TYPE expected_token, Token* actual,
-                             DDLParser* parser) override {
+  void handleUnexpectedToken(int expected_kind, const JJString& expected_token,
+                             Token* actual, DDLParser* parser) override {
     if (ignore_further_errors_) return;
 
     // expected_kind is -1 when the next token is not expected, when choosing
@@ -171,7 +173,7 @@ class CloudDDLErrorHandler : public ErrorHandler {
   // unexpected - the token at which the error occurs.
   // production - the production in which this error occurs.
   void handleParseError(Token* last, Token* unexpected,
-                        JAVACC_STRING_TYPE production,
+                        const JJSimpleString& production,
                         DDLParser* parser) override {
     if (ignore_further_errors_) return;
     ignore_further_errors_ = true;
@@ -1221,12 +1223,14 @@ absl::Status UnvalidatedParseCloudDDLStatement(absl::string_view ddl,
     return error::EmptyDDLStatement();
   }
 
-  // The parser owns the token manager and character streams.
-  DDLParser parser(new DDLParserTokenManager(new DDLCharStream(ddl)));
+  // Create the JavaCC generated parser.
+  DDLCharStream char_stream(ddl);
+  DDLParserTokenManager token_manager(&char_stream);
+  DDLParser parser(&token_manager);
 
   std::vector<std::string> errors;
-  CloudDDLErrorHandler error_handler(&errors);
-  parser.setErrorHandler(&error_handler);
+  // The parser owns the error handler and deletes it.
+  parser.setErrorHandler(new CloudDDLErrorHandler(&errors));
 
   SimpleNode* node = parser.ParseDDL();
   if (node == nullptr) {

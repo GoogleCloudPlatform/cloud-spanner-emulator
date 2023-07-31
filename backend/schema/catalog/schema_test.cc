@@ -548,14 +548,17 @@ TEST_F(SchemaTest, PrintDDLStatementsTestForeignKey) {
       PrintDDLStatements(schema.get());
 
   EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(R"(CREATE TABLE test_table (
-  int64_col INT64 NOT NULL,
-  string_col STRING(20),
-) PRIMARY KEY(int64_col))",
+  k1 INT64 NOT NULL,
+  c1 STRING(20),
+  c2 STRING(20),
+) PRIMARY KEY(k1))",
                                                    R"(CREATE TABLE child_table (
-  child_int64_col INT64 NOT NULL,
-  child_string_col STRING(20),
-  CONSTRAINT C FOREIGN KEY(child_int64_col, child_string_col) REFERENCES test_table(int64_col, string_col),
-) PRIMARY KEY(child_int64_col))")));
+  child_k1 INT64 NOT NULL,
+  child_c1 STRING(20),
+  child_c2 STRING(20),
+  CONSTRAINT C FOREIGN KEY(child_k1, child_c1) REFERENCES test_table(k1, c1),
+  FOREIGN KEY(child_c2) REFERENCES test_table(c2),
+) PRIMARY KEY(child_k1))")));
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestColumnExpressions) {
@@ -670,6 +673,32 @@ TEST_F(SchemaTest, PrintDDLStatementsTestViews) {
 ) PRIMARY KEY(col1))",
                                "CREATE VIEW MyView SQL SECURITY INVOKER AS "
                                "SELECT T.col1, T.col2 FROM T")));
+}
+
+TEST_F(SchemaTest, PrintDDLStatementsTestStoredIndex) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(
+    CREATE TABLE T(
+      col1 INT64,
+      col2 STRING(MAX),
+      col3 STRING(MAX),
+      col4 INT64,
+    ) PRIMARY KEY(col1)
+  )",
+           "CREATE INDEX col2_idx ON T(col2) STORING (col3, col4)"},
+          type_factory_.get()));
+
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(
+                  R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+  col3 STRING(MAX),
+  col4 INT64,
+) PRIMARY KEY(col1))",
+                  "CREATE INDEX col2_idx ON T(col2) STORING (col3, col4)")));
 }
 }  // namespace
 }  // namespace backend

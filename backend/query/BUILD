@@ -220,6 +220,7 @@ cc_binary(
     deps = [
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings",
+        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_grpc",
         "@com_google_zetasql//zetasql/base",
         "@com_googlesource_code_riegeli//riegeli/bytes:cfile_reader",
         "@com_googlesource_code_riegeli//riegeli/csv:csv_reader",
@@ -249,8 +250,11 @@ cc_library(
     deps = [
         "//backend/schema/catalog:schema",
         "//backend/schema/printer:print_ddl",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:variant",
+        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_grpc",
         "@com_google_zetasql//zetasql/base:no_destructor",  # buildcleaner: keep
         "@com_google_zetasql//zetasql/public:simple_catalog",
     ],
@@ -260,10 +264,11 @@ cc_test(
     name = "information_schema_catalog_test",
     srcs = ["information_schema_catalog_test.cc"],
     deps = [
-        "information_schema_catalog",
+        ":information_schema_catalog",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base:no_destructor",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

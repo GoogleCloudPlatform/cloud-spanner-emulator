@@ -16,8 +16,14 @@
 
 #include "backend/query/information_schema_catalog.h"
 
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "zetasql/base/no_destructor.h"
 
 namespace google::spanner::emulator::backend {
 
@@ -25,20 +31,97 @@ namespace {
 
 TEST(InformationSchemaCatalogTest, ColumnsMetadataCount) {
   Schema schema;
-  InformationSchemaCatalog catalog(&schema);
-  EXPECT_EQ(ColumnsMetadata().size(), 162);
+  InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema);
+  EXPECT_EQ(ColumnsMetadata().size(), 238);
 }
 
 TEST(InformationSchemaCatalogTest, IndexColumnsMetadataCount) {
   Schema schema;
-  InformationSchemaCatalog catalog(&schema);
-  EXPECT_EQ(IndexColumnsMetadata().size(), 101);
+  InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema);
+  EXPECT_EQ(IndexColumnsMetadata().size(), 156);
 }
 
 TEST(InformationSchemaCatalogTest, SpannerSysColumnsMetadataCount) {
   Schema schema;
-  InformationSchemaCatalog catalog(&schema);
+  InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema);
   EXPECT_EQ(SpannerSysColumnsMetadata().size(), 293);
+}
+
+TEST(AddTablesFromMetadata, EmptyMetadata) {
+  std::vector<ColumnsMetaEntry> metadata;
+  absl::flat_hash_map<std::string, const zetasql::Type*> type_map;
+  absl::flat_hash_set<std::string> supported_tables;
+
+  EXPECT_EQ(AddTablesFromMetadata(metadata, type_map, supported_tables).size(),
+            0);
+}
+
+static const zetasql_base::NoDestructor<std::vector<ColumnsMetaEntry>> kMetadata({
+    {"SCHEMATA", "CATALOG_NAME", "NO", "STRING(MAX)"},
+    {"SCHEMATA", "SCHEMA_NAME", "NO", "STRING(MAX)"},
+    {"SCHEMATA", "EFFECTIVE_TIMESTAMP", "YES", "INT64"},
+    {"SPANNER_STATISTICS", "CATALOG_NAME", "NO", "STRING(MAX)"},
+    {"SPANNER_STATISTICS", "SCHEMA_NAME", "NO", "STRING(MAX)"},
+    {"SPANNER_STATISTICS", "ALLOW_GC", "NO", "BOOL"},
+    {"TABLES", "TABLE_CATALOG", "NO", "STRING(MAX)"},
+    {"TABLES", "TABLE_SCHEMA", "NO", "STRING(MAX)"},
+    {"TABLES", "TABLE_NAME", "NO", "STRING(MAX)"},
+});
+
+static const zetasql_base::NoDestructor<
+    absl::flat_hash_map<std::string, const zetasql::Type*>>
+    kTypeMap{{
+        {"BOOL", zetasql::types::BoolType()},
+        {"INT64", zetasql::types::Int64Type()},
+        {"STRING(MAX)", zetasql::types::StringType()},
+    }};
+
+static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+    kSupportedTables{{
+        "SCHEMATA",
+        "SPANNER_STATISTICS",
+        "TABLES",
+    }};
+
+TEST(AddTablesFromMetadata, AllTablesSupported) {
+  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+      result = AddTablesFromMetadata(*kMetadata, *kTypeMap, *kSupportedTables);
+  absl::flat_hash_set<std::string> result_table_names;
+  for (auto it = result.begin(); it != result.end(); ++it) {
+    result_table_names.insert(it->first);
+  }
+  EXPECT_THAT(result_table_names, *kSupportedTables);
+}
+
+class AddTablesFromMetadataForSomeTables
+    : public testing::TestWithParam<absl::string_view> {};
+
+TEST_P(AddTablesFromMetadataForSomeTables, SomeTablesSupported) {
+  absl::flat_hash_set<std::string> supported_tables{std::string(GetParam())};
+  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+      result = AddTablesFromMetadata(*kMetadata, *kTypeMap, supported_tables);
+  absl::flat_hash_set<std::string> result_table_names;
+  for (auto it = result.begin(); it != result.end(); ++it) {
+    result_table_names.insert(it->first);
+  }
+  EXPECT_THAT(result_table_names, supported_tables);
+}
+
+INSTANTIATE_TEST_SUITE_P(SupportedTables, AddTablesFromMetadataForSomeTables,
+                         testing::Values("SCHEMATA", "SPANNER_STATISTICS",
+                                         "TABLES"));
+
+TEST(AddTablesFromMetadata, InvalidMetadata) {
+  std::vector<ColumnsMetaEntry> metadata{
+      {"SCHEMATA", "CATALOG_NAME", "NO", "STRING(MAX)"},
+      {"SCHEMATA", "SCHEMA_NAME", "NO", "STRING(MAX)"},
+      {"SPANNER_STATISTICS", "CATALOG_NAME", "NO", "STRING(MAX)"},
+      {"SPANNER_STATISTICS", "SCHEMA_NAME", "NO", "STRING(MAX)"},
+      {"SCHEMATA", "EFFECTIVE_TIMESTAMP", "YES", "INT64"},
+      {"SPANNER_STATISTICS", "ALLOW_GC", "NO", "BOOL"},
+  };
+  ASSERT_DEATH(AddTablesFromMetadata(metadata, *kTypeMap, *kSupportedTables),
+               "invalid metadata");
 }
 
 }  // namespace

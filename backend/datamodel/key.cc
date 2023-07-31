@@ -67,9 +67,13 @@ int64_t LogicalBytesInternal(const zetasql::Value& value) {
 Key::Key() = default;
 
 Key::Key(std::vector<zetasql::Value> columns)
-    : columns_(std::move(columns)), is_descending_(columns_.size()) {}
+    : columns_(std::move(columns)),
+      is_descending_(columns_.size())
+{}
 
-void Key::AddColumn(zetasql::Value value, bool desc) {
+void Key::AddColumn(zetasql::Value value,
+                    bool desc
+) {
   columns_.emplace_back(std::move(value));
   is_descending_.push_back(desc);
 }
@@ -101,7 +105,6 @@ int Key::Compare(const Key& other) const {
       // If we reached here, other is a prefix of *this.
       return other.is_prefix_limit_ ? -1 : 1;
     }
-
     if (columns_[i].LessThan(other.columns_[i])) {
       return is_descending_[i] ? 1 : -1;
     }

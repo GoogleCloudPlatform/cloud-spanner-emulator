@@ -17,6 +17,7 @@
 #include "backend/query/query_engine.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 

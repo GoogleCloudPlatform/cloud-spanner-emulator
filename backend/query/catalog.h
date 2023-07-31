@@ -49,12 +49,14 @@ class Catalog : public zetasql::EnumerableCatalog {
  public:
   // 'reader' can be nullptr unless CreateEvaluatorTableIterator is called
   // on tables in the catalog.
-  Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
-          zetasql::TypeFactory* type_factory,
-          const zetasql::AnalyzerOptions& options =
-              MakeGoogleSqlAnalyzerOptions(),
-          RowReader* reader = nullptr,
-          QueryEvaluator* query_evaluator = nullptr);
+  Catalog(
+      const Schema* schema, const FunctionCatalog* function_catalog,
+      zetasql::TypeFactory* type_factory,
+      const zetasql::AnalyzerOptions& options =
+          MakeGoogleSqlAnalyzerOptions(),
+      RowReader* reader = nullptr,
+      QueryEvaluator* query_evaluator = nullptr
+  );
 
   std::string FullName() const final {
     // The name of the root catalog is "".

@@ -16,11 +16,13 @@
 
 #include "backend/query/information_schema_catalog.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/schema/printer/print_ddl.h"
+#include "zetasql/base/no_destructor.h"
 
 namespace google {
 namespace spanner {
@@ -29,6 +31,7 @@ namespace backend {
 
 namespace {
 
+using ::google::spanner::admin::database::v1::DatabaseDialect;
 using ::zetasql::types::BoolType;
 using ::zetasql::types::Int64Type;
 using ::zetasql::types::StringType;
@@ -38,6 +41,7 @@ using zetasql::values::NullBytes;
 using ::zetasql::values::NullInt64;
 using ::zetasql::values::NullString;
 using ::zetasql::values::String;
+using ::zetasql::values::Timestamp;
 
 static constexpr char kInformationSchema[] = "INFORMATION_SCHEMA";
 static constexpr char kTableCatalog[] = "TABLE_CATALOG";
@@ -54,10 +58,7 @@ static constexpr char kIsStored[] = "IS_STORED";
 static constexpr char kGenerationExpression[] = "GENERATION_EXPRESSION";
 static constexpr char kSpannerState[] = "SPANNER_STATE";
 static constexpr char kColumns[] = "COLUMNS";
-static constexpr char kCatalogName[] = "CATALOG_NAME";
 static constexpr char kSchemaName[] = "SCHEMA_NAME";
-static constexpr char kPackageName[] = "PACKAGE_NAME";
-static constexpr char kAllowGC[] = "ALLOW_GC";
 static constexpr char kSchemata[] = "SCHEMATA";
 static constexpr char kSpannerStatistics[] = "SPANNER_STATISTICS";
 static constexpr char kDatabaseOptions[] = "DATABASE_OPTIONS";
@@ -72,7 +73,8 @@ static constexpr char kRowDeletionPolicyExpression[] =
 static constexpr char kTables[] = "TABLES";
 static constexpr char kDatabaseDialect[] = "database_dialect";
 static constexpr char kString[] = "STRING";
-static constexpr char kGoogleStandardSql[] = "GOOGLE_STANDARD_SQL";
+static constexpr char kCharacterVarying[] = "character varying";
+static constexpr char kPublic[] = "public";
 static constexpr char kBaseTable[] = "BASE TABLE";
 static constexpr char kCommitted[] = "COMMITTED";
 static constexpr char kView[] = "VIEW";
@@ -131,6 +133,25 @@ static constexpr char kPositionInUniqueConstraint[] =
 static constexpr char kViews[] = "VIEWS";
 static constexpr char kViewDefinition[] = "VIEW_DEFINITION";
 
+static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+    // For now, this is a set of tables that are created from metadata. Once the
+    // migration to auto-create tables is complete, it'll be the tables from
+    // https://cloud.google.com/spanner/docs/information-schema.
+    kSupportedGSQLTables{{
+        kDatabaseOptions,
+        kSchemata,
+        kSpannerStatistics,
+    }};
+
+static const zetasql_base::NoDestructor<
+    absl::flat_hash_map<zetasql::TypeKind, zetasql::Value>>
+    kGSQLTypeKindToDefaultValue{{
+        {zetasql::TypeKind::TYPE_STRING, String("")},
+        {zetasql::TypeKind::TYPE_INT64, Int64(0)},
+        {zetasql::TypeKind::TYPE_BOOL, Bool(false)},
+        {zetasql::TypeKind::TYPE_TIMESTAMP, Timestamp(absl::UnixEpoch())},
+    }};
+
 bool IsNullable(const ColumnsMetaEntry& column) {
   return std::string(column.is_nullable) == kYes;
 }
@@ -151,12 +172,13 @@ typename std::vector<T>::const_iterator FindMetadata(
 
 // Returns a reference to an information schema column's metadata. The column's
 // metadata must exist; otherwise, the process crashes with a fatal message.
-const ColumnsMetaEntry& GetColumnMetadata(const zetasql::Table* table,
+const ColumnsMetaEntry& GetColumnMetadata(const DatabaseDialect& dialect,
+                                          const zetasql::Table* table,
                                           const zetasql::Column* column) {
+  std::string error = "Missing metadata for column ";
   auto m = FindMetadata(ColumnsMetadata(), table->Name(), column->Name());
   if (m == ColumnsMetadata().end()) {
-    ZETASQL_LOG(DFATAL) << "Missing metadata for column " << table->Name() << "."
-                << column->Name();
+    ZETASQL_LOG(DFATAL) << error << table->Name() << "." << column->Name();
   }
   return *m;
 }
@@ -164,7 +186,8 @@ const ColumnsMetaEntry& GetColumnMetadata(const zetasql::Table* table,
 // Returns a pointer to an information schema key column's metadata. Returns
 // nullptr if not found.
 const IndexColumnsMetaEntry* FindKeyColumnMetadata(
-    const zetasql::Table* table, const zetasql::Column* column) {
+    const DatabaseDialect& dialect, const zetasql::Table* table,
+    const zetasql::Column* column) {
   auto m = FindMetadata(IndexColumnsMetadata(), table->Name(), column->Name());
   return m == IndexColumnsMetadata().end() ? nullptr : &*m;
 }
@@ -193,14 +216,162 @@ std::string ForeignKeyReferencedIndexName(const ForeignKey* foreign_key) {
              : PrimaryKeyName(foreign_key->referenced_table());
 }
 
+// Returns a table row of default values as key-values where the key is the
+// column name and the value is the default value for that column type.
+//
+// Example: Given the following table schema:
+//
+// CREATE TABLE users(
+//   user_id    INT64,
+//   name       STRING(MAX),
+//   verified   BOOL,
+// ) PRIMARY KEY (user_id);
+//
+// this function will return the following key-value pairs:
+//
+// {
+//   {"user_id", zetasql::values::Int64(0)},
+//   {"name", zetasql::values::String("")},
+//   {"verified", zetasql::values::Bool(false)},
+// }
+absl::flat_hash_map<std::string, zetasql::Value> GetColumnsWithDefault(
+    const zetasql::Table* table) {
+  absl::flat_hash_map<std::string, zetasql::Value> row;
+  for (int i = 0; i < table->NumColumns(); ++i) {
+    auto column = table->GetColumn(i);
+    row[column->Name()] =
+        kGSQLTypeKindToDefaultValue->at(column->GetType()->kind());
+  }
+  return row;
+}
+
+// Returns a row to be inserted into a zetasql::SimpleTable that's constructed
+// using the given specific key-value pairs. If a specific value for a column is
+// not provided, the default value for that type is assigned.
+//
+// Example: Given the following table schema:
+//
+// CREATE TABLE users(
+//   user_id    INT64,
+//   name       STRING(MAX),
+//   verified   BOOL,
+// ) PRIMARY KEY (user_id);
+//
+// and the following key-value pairs of specific values for certain columns:
+//
+// {
+//   {"user_id", zetasql::values::Int64(1234)},
+//   {"name", zetasql::values::String("Spanner User")},
+// }
+//
+// this function will return the following row of values:
+//
+// {
+//   zetasql::values::Int64(1234),
+//   zetasql::values::String("Spanner User"),
+//   zetasql::values::Bool(false),
+// }
+//
+// where the first two values are taken from row_kvs and the last value is a
+// default value.
+std::vector<zetasql::Value> GetRowFromRowKVs(
+    const zetasql::Table* table,
+    const absl::flat_hash_map<std::string, zetasql::Value>& row_kvs) {
+  auto default_row_kvs = GetColumnsWithDefault(table);
+  std::vector<zetasql::Value> row;
+  row.reserve(table->NumColumns());
+  for (int i = 0; i < table->NumColumns(); ++i) {
+    auto column = table->GetColumn(i);
+    if (auto kv = row_kvs.find(column->Name()); kv != row_kvs.end()) {
+      row.push_back(kv->second);
+    } else {
+      row.push_back(default_row_kvs.at(column->Name()));
+    }
+  }
+  return row;
+}
+
 }  // namespace
 
-InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
-    : zetasql::SimpleCatalog(kInformationSchema),
-      default_schema_(default_schema) {
-  AddSchemataTable();
-  AddSpannerStatisticsTable();
-  AddDatabaseOptionsTable();
+absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+AddTablesFromMetadata(
+    const std::vector<ColumnsMetaEntry>& metadata_entries,
+    const absl::flat_hash_map<std::string, const zetasql::Type*>&
+        spanner_to_gsql_type,
+    const absl::flat_hash_set<std::string>& supported_tables) {
+  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+      tables_by_name;
+  if (metadata_entries.empty()) {
+    // No tables to create.
+    return tables_by_name;
+  }
+
+  std::string table_name = "";
+  std::vector<zetasql::SimpleTable::NameAndType> columns;
+  for (auto it = metadata_entries.cbegin(); it != metadata_entries.cend();
+       ++it) {
+    // This is a table we're in the process of creating so add the next
+    // column.
+    if (!table_name.empty() && it->table_name == table_name) {
+      columns.push_back(
+          {it->column_name, spanner_to_gsql_type.at(it->spanner_type)});
+      continue;
+    }
+
+    // It's a new table so if there was an existing table that we were in the
+    // process of creating, create the table.
+    if (!table_name.empty()) {
+      tables_by_name[table_name] =
+          std::make_unique<zetasql::SimpleTable>(table_name, columns);
+
+      // Clear the table name and columns for the next table.
+      table_name = "";
+      columns.clear();
+    }
+
+    // We need to check if the new table is one that we support.
+    auto supported_tables_it = supported_tables.find(it->table_name);
+    if (supported_tables_it != supported_tables.end()) {
+      // If we've seen this table before, then the metadata is not ordered by
+      // the table name so we have to crash.
+      ZETASQL_CHECK(  // crash ok
+          tables_by_name.find(it->table_name) == tables_by_name.end())
+          << "invalid metadata";
+      table_name = it->table_name;
+      columns.push_back(
+          {it->column_name, spanner_to_gsql_type.at(it->spanner_type)});
+    }
+  }
+  // If the last supported table hasn't been created yet, create it now.
+  if (!table_name.empty()) {
+    tables_by_name[table_name] =
+        std::make_unique<zetasql::SimpleTable>(table_name, columns);
+  }
+
+  return tables_by_name;
+}
+
+InformationSchemaCatalog::InformationSchemaCatalog(
+    const std::string& catalog_name, const Schema* default_schema)
+    : zetasql::SimpleCatalog(catalog_name),
+      default_schema_(default_schema),
+      // clang-format off
+      dialect_(DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  // clang-format on
+
+  // Create a subset of tables using columns metadata.
+    tables_by_name_ = AddTablesFromMetadata(
+        ColumnsMetadata(), *kSpannerTypeToGSQLType, *kSupportedGSQLTables);
+
+  for (auto& [name, table] : tables_by_name_) {
+    AddTable(table.get());
+  }
+
+  FillSchemataTable();
+  // kSpannerStatistics currently has no rows in the emulator so we don't call a
+  // function to fill the table.
+  FillDatabaseOptionsTable();
+
   auto* tables = AddTablesTable();
   auto* columns = AddColumnsTable();
   auto* column_column_usage = AddColumnColumnUsageTable();
@@ -232,54 +403,57 @@ InformationSchemaCatalog::InformationSchemaCatalog(const Schema* default_schema)
   FillViewsTable(views);
 }
 
-void InformationSchemaCatalog::AddSchemataTable() {
-  // Setup table schema.
-  auto schemata = new zetasql::SimpleTable(
-      kSchemata, {{kCatalogName, StringType()}, {kSchemaName, StringType()}});
-
-  // Add table rows.
-  std::vector<std::vector<zetasql::Value>> rows;
-  rows.push_back({String(""), String("")});
-  rows.push_back({String(""), String(kInformationSchema)});
-
-  // Add table to catalog.
-  schemata->SetContents(rows);
-  AddOwnedTable(schemata);
+inline std::string InformationSchemaCatalog::GetNameForDialect(
+    absl::string_view name) {
+  // The system tables and associated columns are all defined in lowercase for
+  // the PG dialect. The constants defined for the InformationSchema are for the
+  // ZetaSQL dialect which are all uppercase. So we lowercase them here for
+  // PG.
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    return absl::AsciiStrToLower(name);
+  }
+  return std::string(name);
 }
 
-void InformationSchemaCatalog::AddSpannerStatisticsTable() {
-  // Setup table schema.
-  auto spanner_statistics = new zetasql::SimpleTable(
-      kSpannerStatistics, {{kCatalogName, StringType()},
-                           {kSchemaName, StringType()},
-                           {kPackageName, StringType()},
-                           {kAllowGC, BoolType()}});
-
-  // Skip statistics rows in emulator.
+void InformationSchemaCatalog::FillSchemataTable() {
+  auto table = tables_by_name_.at(GetNameForDialect(kSchemata)).get();
   std::vector<std::vector<zetasql::Value>> rows;
 
-  // Add table to catalog.
-  spanner_statistics->SetContents(rows);
-  AddOwnedTable(spanner_statistics);
+  // Row for the unnamed default schema. This is an empty string in GSQL and
+  // kPublic in PG.
+  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+  std::string schema_name = GetNameForDialect(kSchemaName);
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    specific_kvs[schema_name] = String(kPublic);
+  }
+  rows.push_back(GetRowFromRowKVs(table, specific_kvs));
+
+  // Row for the information schema.
+  specific_kvs.clear();
+  specific_kvs[schema_name] = String(GetNameForDialect(kInformationSchema));
+  rows.push_back(GetRowFromRowKVs(table, specific_kvs));
+
+  table->SetContents(rows);
 }
 
-void InformationSchemaCatalog::AddDatabaseOptionsTable() {
-  // Setup table schema.
-  auto database_options = new zetasql::SimpleTable(
-      kDatabaseOptions, {{kCatalogName, StringType()},
-                         {kSchemaName, StringType()},
-                         {kOptionName, StringType()},
-                         {kOptionType, StringType()},
-                         {kOptionValue, StringType()}});
+void InformationSchemaCatalog::FillDatabaseOptionsTable() {
+  auto table = tables_by_name_.at(GetNameForDialect(kDatabaseOptions)).get();
 
-  // Add table to catalog.
-  AddOwnedTable(database_options);
+  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    specific_kvs[GetNameForDialect(kSchemaName)] = String(kPublic);
+    specific_kvs[GetNameForDialect(kOptionType)] = String(kCharacterVarying);
+  } else {
+    specific_kvs[GetNameForDialect(kOptionType)] = String(kString);
+  }
+  specific_kvs[GetNameForDialect(kOptionName)] = String(kDatabaseDialect);
+  specific_kvs[GetNameForDialect(kOptionValue)] =
+      String(DatabaseDialect_Name(dialect_));
 
   std::vector<std::vector<zetasql::Value>> rows;
-  rows.push_back({String(""), String(""), String(kDatabaseDialect),
-                  String(kString), String(kGoogleStandardSql)});
+  rows.push_back(GetRowFromRowKVs(table, specific_kvs));
 
-  database_options->SetContents(rows);
+  table->SetContents(rows);
 }
 
 zetasql::SimpleTable* InformationSchemaCatalog::AddTablesTable() {
@@ -478,7 +652,7 @@ void InformationSchemaCatalog::FillColumnsTable(
     int pos = 1;
     for (int i = 0; i < table->NumColumns(); ++i) {
       const auto* column = table->GetColumn(i);
-      const auto& metadata = GetColumnMetadata(table, column);
+      const auto& metadata = GetColumnMetadata(dialect_, table, column);
       rows.push_back({
           // table_catalog
           String(""),
@@ -785,7 +959,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
     int primary_key_ordinal = 1;
     for (int i = 0; i < table->NumColumns(); ++i) {
       const auto* column = table->GetColumn(i);
-      const auto* metadata = FindKeyColumnMetadata(table, column);
+      const auto* metadata = FindKeyColumnMetadata(dialect_, table, column);
       if (metadata == nullptr) {
         continue;  // Not a primary key column.
       }
@@ -1044,7 +1218,7 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
     // Add the NOT NULL check constraints.
     for (int i = 0; i < table->NumColumns(); ++i) {
       const auto* column = table->GetColumn(i);
-      const auto& metadata = GetColumnMetadata(table, column);
+      const auto& metadata = GetColumnMetadata(dialect_, table, column);
       if (IsNullable(metadata)) {
         continue;
       }
@@ -1139,7 +1313,7 @@ void InformationSchemaCatalog::FillCheckConstraintsTable(
     // Add the NOT NULL check constraints.
     for (int i = 0; i < table->NumColumns(); ++i) {
       const auto* column = table->GetColumn(i);
-      const auto& metadata = GetColumnMetadata(table, column);
+      const auto& metadata = GetColumnMetadata(dialect_, table, column);
       if (IsNullable(metadata)) {
         continue;
       }
@@ -1297,7 +1471,7 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable(
     // Add the NOT NULL check constraints.
     for (int i = 0; i < table->NumColumns(); ++i) {
       const auto* column = table->GetColumn(i);
-      const auto& metadata = GetColumnMetadata(table, column);
+      const auto& metadata = GetColumnMetadata(dialect_, table, column);
       if (IsNullable(metadata)) {
         continue;
       }
@@ -1491,7 +1665,7 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable(
     int primary_key_ordinal = 1;
     for (int i = 0; i < table->NumColumns(); ++i) {
       const auto* column = table->GetColumn(i);
-      const auto* metadata = FindKeyColumnMetadata(table, column);
+      const auto* metadata = FindKeyColumnMetadata(dialect_, table, column);
       if (metadata == nullptr) {
         continue;  // Not a primary key column.
       }
@@ -1663,7 +1837,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
   for (const auto& table : this->tables()) {
     for (int i = 0; i < table->NumColumns(); ++i) {
       const auto* column = table->GetColumn(i);
-      const auto* metadata = FindKeyColumnMetadata(table, column);
+      const auto* metadata = FindKeyColumnMetadata(dialect_, table, column);
       if (metadata == nullptr) {
         continue;  // Not a primary key column.
       }
@@ -1690,7 +1864,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
   for (const auto& table : this->tables()) {
     for (int i = 0; i < table->NumColumns(); ++i) {
       const auto* column = table->GetColumn(i);
-      const auto& metadata = GetColumnMetadata(table, column);
+      const auto& metadata = GetColumnMetadata(dialect_, table, column);
       if (IsNullable(metadata)) {
         continue;
       }

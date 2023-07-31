@@ -48,9 +48,9 @@ http_archive(
     build_file = "@//build/bazel:googleapis.BUILD",
     patch_args = ["-p1"],
     patches = ["//build/bazel:googleapis.patch"],
-    sha256 = "dcafbafe1455816bd3c208041f024ea07bc843efa6181412cb0dbbee7222578b",
-    strip_prefix = "googleapis-9f7c0ffdaa8ceb2f27982bad713a03306157a4d2",
-    url = "https://github.com/googleapis/googleapis/archive/9f7c0ffdaa8ceb2f27982bad713a03306157a4d2.tar.gz",
+    sha256 = "64080665f3c74998ff7d18f998713a9428c83f94400b0507d7469e8513fcaaa0",
+    strip_prefix = "googleapis-5096eae6a449e0ee66b68cfd2634cac97b682e88",
+    url = "https://github.com/googleapis/googleapis/archive/5096eae6a449e0ee66b68cfd2634cac97b682e88.tar.gz",
 )
 
 load("@com_google_googleapis//:repository_rules.bzl", "switched_rules_by_language")
@@ -78,7 +78,7 @@ http_archive(
 
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 
-go_register_toolchains(version = "1.20.5")
+go_register_toolchains(version = "1.20.6")
 
 _bazel_gazelle_version = "0.31.1"
 
@@ -203,9 +203,9 @@ http_archive(
 
 http_archive(
     name = "com_google_protobuf",
-    sha256 = "9c0fd39c7a08dff543c643f0f4baf081988129a411b977a07c46221793605638",
-    strip_prefix = "protobuf-3.20.3",
-    url = "https://github.com/protocolbuffers/protobuf/archive/v3.20.3.tar.gz",
+    sha256 = "21fcb4b0df6a8e6279e5843af8c9f2245919cf0d3ec2021c76fccc4fc4bf9aca",
+    strip_prefix = "protobuf-4.23.3",
+    url = "https://github.com/protocolbuffers/protobuf/archive/v4.23.3.tar.gz",
 )
 
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
@@ -214,9 +214,9 @@ protobuf_deps()
 
 http_archive(
     name = "com_google_absl",
-    sha256 = "61d0af0262a0131bb8917fcb883e5e831ee5ad1535433f2f13f85906d1607f81",
-    strip_prefix = "abseil-cpp-20230125.1",
-    url = "https://github.com/abseil/abseil-cpp/archive/refs/tags/20230125.1.zip",
+    sha256 = "3439843ac7d7b9cc354dd6735b6790fa7589b73429bbda77976e0db61e92f1fd",
+    url = "https://github.com/abseil/abseil-cpp/archive/0697762c62cdb51ead8d9c2f0d299c5d4a4ff9db.tar.gz",
+    strip_prefix = "abseil-cpp-0697762c62cdb51ead8d9c2f0d299c5d4a4ff9db",
 )
 
 http_archive(
@@ -230,10 +230,20 @@ http_archive(
     name = "com_github_grpc_grpc",
     # Patches applied:
     # - Adding implicit conversion between grpc::Status and absl::Status
+    patch_args = ["-p1"],
     patches = ["//build/bazel:grpc.patch"],
-    sha256 = "9647220c699cea4dafa92ec0917c25c7812be51a18143af047e20f3fb05adddc",
-    strip_prefix = "grpc-1.43.0",
-    urls = ["https://github.com/grpc/grpc/archive/v1.43.0.tar.gz"],
+    sha256 = "e034992a0b464042021f6d440f2090acc2422c103a322b0844e3921ccea981dc",
+    strip_prefix = "grpc-1.56.0",
+    urls = ["https://github.com/grpc/grpc/archive/v1.56.0.tar.gz"],
+)
+
+http_archive(
+    name = "upb",
+    patch_args = ["-p1"],
+    patches = ["//build/bazel:upb.patch"],
+    urls = ["https://github.com/protocolbuffers/upb/archive/0ea9f73be35e35db242ccc65aa9c87487b792324.tar.gz"],
+    sha256 = "046b5f134523eaad9265a41a2ec0701cc45973841070af2772e3578a9f3bfed0",
+    strip_prefix = "upb-0ea9f73be35e35db242ccc65aa9c87487b792324",
 )
 
 load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps")
@@ -248,10 +258,11 @@ http_archive(
     name = "com_google_zetasql",
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
+    sha256 = "02d2ae94c7ed597ae40930635d55f2090094ea8bf02dfcdc77c6b6d22ace9b8b",
+    patch_args = ["-p1"],
     patches = ["//build/bazel:zetasql.patch"],
-    sha256 = "fa5657684fc78eb4363c00d7a3c1c9243016e38cac92a800e519368518d05917",
-    strip_prefix = "zetasql-206e78c86a85053f2c0d75db6fa7b1998181263b",
-    url = "https://github.com/google/zetasql/archive/206e78c86a85053f2c0d75db6fa7b1998181263b.tar.gz",
+    strip_prefix = "zetasql-5133c6e373a3f67f7f40b0619a2913c3fcab8171",
+    url = "https://github.com/google/zetasql/archive/5133c6e373a3f67f7f40b0619a2913c3fcab8171.tar.gz",
 )
 
 http_archive(
@@ -264,9 +275,9 @@ http_archive(
 # gRPC Java
 http_archive(
     name = "io_grpc_grpc_java",
-    sha256 = "b6cfc524647cc680e66989ab22a10b66dc5de8c6d8499f91a7e633634c594c61",
-    strip_prefix = "grpc-java-1.51.1",
-    url = "https://github.com/grpc/grpc-java/archive/v1.51.1.tar.gz",
+    url = "https://github.com/grpc/grpc-java/archive/v1.56.0.tar.gz",
+    strip_prefix = "grpc-java-1.56.0",
+    sha256 = "4af5ecbaed16455fcda9fdab36e131696f5092858dd130f026069fcf11817a21",
 )
 
 load("@rules_jvm_external//:repositories.bzl", "rules_jvm_external_deps")
@@ -281,7 +292,7 @@ load("@rules_jvm_external//:defs.bzl", "maven_install")
 
 maven_install(
     artifacts = [
-        "net.java.dev.javacc:javacc:jar:6.1.2",
+        "net.java.dev.javacc:javacc:jar:7.0.3",
     ],
     maven_install_json = "@//:maven_install.json",
     repositories = [
@@ -319,11 +330,12 @@ load("@com_google_zetasql//bazel:zetasql_deps_step_4.bzl", "zetasql_deps_step_4"
 
 zetasql_deps_step_4()
 
+google_cloud_cpp_version = "2.12.0"
 http_archive(
     name = "com_github_googleapis_google_cloud_cpp",
-    sha256 = "e8d904bbff788a26aa9cd67d6c0725f9798448fcf73ab809ec2d7b80f89a1dc5",
-    strip_prefix = "google-cloud-cpp-2.2.0",
-    url = "https://github.com/googleapis/google-cloud-cpp/archive/v2.2.0.tar.gz",
+    sha256 = "8cda870803925c62de8716a765e03eb9d34249977e5cdb7d0d20367e997a55e2",
+    strip_prefix = "google-cloud-cpp-{0}".format(google_cloud_cpp_version),
+    url = "https://github.com/googleapis/google-cloud-cpp/archive/v{0}.tar.gz".format(google_cloud_cpp_version),
 )
 
 load("@com_github_googleapis_google_cloud_cpp//bazel:google_cloud_cpp_deps.bzl", "google_cloud_cpp_deps")

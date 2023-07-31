@@ -43,9 +43,6 @@ namespace backend {
 
 namespace {
 
-constexpr char kCloudSpannerEmulatorFunctionCatalog[] =
-    "CloudSpannerEmulatorCatalog";
-
 absl::StatusOr<zetasql::Value> EvalPendingCommitTimestamp(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.empty());
@@ -57,13 +54,14 @@ absl::StatusOr<zetasql::Value> EvalPendingCommitTimestamp(
   return zetasql::Value::Timestamp(zetasql::types::TimestampMinBaseTime());
 }
 
-std::unique_ptr<zetasql::Function> PendingCommitTimestampFunction() {
+std::unique_ptr<zetasql::Function> PendingCommitTimestampFunction(
+    const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
       zetasql::FunctionEvaluator(EvalPendingCommitTimestamp));
 
   return std::make_unique<zetasql::Function>(
-      kPendingCommitTimestampFunctionName, kCloudSpannerEmulatorFunctionCatalog,
+      kPendingCommitTimestampFunctionName, catalog_name,
       zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
           zetasql::types::TimestampType(), {}, nullptr}},
@@ -71,7 +69,9 @@ std::unique_ptr<zetasql::Function> PendingCommitTimestampFunction() {
 }
 }  // namespace
 
-FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory) {
+FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory,
+                                 const std::string& catalog_name)
+    : catalog_name_(catalog_name) {
   // Add the subset of ZetaSQL built-in functions supported by Cloud Spanner.
   AddZetaSQLBuiltInFunctions(type_factory);
   // Add Cloud Spanner specific functions.
@@ -97,7 +97,7 @@ void FunctionCatalog::AddZetaSQLBuiltInFunctions(
 
 void FunctionCatalog::AddSpannerFunctions() {
   // Add pending commit timestamp function to the list of known functions.
-  auto pending_commit_ts_func = PendingCommitTimestampFunction();
+  auto pending_commit_ts_func = PendingCommitTimestampFunction(catalog_name_);
   functions_[pending_commit_ts_func->Name()] =
       std::move(pending_commit_ts_func);
 }

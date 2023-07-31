@@ -710,8 +710,14 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
   analyzer_options.set_prune_unused_columns(true);
 
   QueryEvaluatorForEngine view_evaluator(*this, context);
-  Catalog catalog{context.schema,   &function_catalog_, type_factory_,
-                  analyzer_options, context.reader,     &view_evaluator};
+  Catalog catalog{
+      context.schema,
+      &function_catalog_,
+      type_factory_,
+      analyzer_options,
+      context.reader,
+      &view_evaluator
+  };
 
   std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
     ZETASQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(query.sql, &catalog,

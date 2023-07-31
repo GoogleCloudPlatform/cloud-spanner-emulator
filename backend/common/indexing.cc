@@ -46,7 +46,8 @@ absl::StatusOr<Key> ComputeIndexKey(const Row& base_row, const Index* index) {
   for (const auto& key_column : index->index_data_table()->primary_key()) {
     key.AddColumn(
         GetColumnValueOrNull(base_row, key_column->column()->source_column()),
-        key_column->is_descending());
+        key_column->is_descending()
+    );
   }
   ZETASQL_RETURN_IF_ERROR(ValidateKeySizeForIndex(index, key));
   return key;

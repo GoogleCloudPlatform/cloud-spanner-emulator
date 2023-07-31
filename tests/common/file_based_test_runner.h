@@ -46,8 +46,12 @@ struct FileBasedTestOptions {
 
 // Input for a file based test case.
 struct FileBasedTestCaseInput {
-  FileBasedTestCaseInput(absl::string_view file_name, int line_no)
-      : file_name(file_name), line_no(line_no) {}
+  FileBasedTestCaseInput(absl::string_view file_name,
+                         int line_no
+                         )
+      : file_name(file_name),
+        line_no(line_no)
+  {}
   std::string text;
   bool regex = false;
   std::string file_name;
@@ -57,20 +61,27 @@ struct FileBasedTestCaseInput {
 // Output for a file based test case.
 struct FileBasedTestCaseOutput {
   std::string text;
+  bool expect_error;
   std::optional<absl::StatusCode> status_code;
 };
 
 // Container for input and exected result of a file-based test case.
 struct FileBasedTestCase {
-  FileBasedTestCase(absl::string_view file_name, int line_no)
-      : input(file_name, line_no) {}
+  FileBasedTestCase(absl::string_view file_name,
+                    int line_no
+                    )
+      : input(file_name,
+              line_no
+        ) {}
   FileBasedTestCaseInput input;
   FileBasedTestCaseOutput expected;
 };
 
 // Reads and returns all testcases in `file`.
 std::vector<FileBasedTestCase> ReadTestCasesFromFile(
-    const std::string& file, const FileBasedTestOptions& options);
+    const std::string& file,
+    const FileBasedTestOptions& options
+);
 
 // Returns the runfiles directory for the given source-root relative directory.
 std::string GetRunfilesDir(const std::string& dir);

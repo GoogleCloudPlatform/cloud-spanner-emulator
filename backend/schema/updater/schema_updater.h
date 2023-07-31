@@ -78,9 +78,9 @@ struct SchemaChangeResult {
   absl::Status backfill_status;
 };
 
-// Parses the given statement based on the dialect. The resulting DDL statement
-// is returned in the provided ddl_statement.
-absl::StatusOr<ddl::DDLStatement> ParseDDLByDialect(
+// Parses the given statement based on the dialect and returns the DDL
+// statement.
+absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
     absl::string_view statement
 );
 

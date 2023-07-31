@@ -42,14 +42,16 @@ def generate_javacc_parser(name, srcs, parser_class_name, extra_deps, extra_head
 
     # Generate abstract syntax tree definition files and grammar file as
     # understood by javacc parser from grammar definition file created above.
+    # This is the same as SCHEMA_AST_GENFILES in google3/spanner/schema/cloud_ddl_parser/BUILD.
     schema_ast_genfiles = [
-        "Node.h",
         parser_class_name + "Tree.h",
-        parser_class_name + "Tree.cc",
         parser_class_name + "TreeConstants.h",
         parser_class_name + "Visitor.h",
-        "JJT" + parser_class_name + "State.h",
         "JJT" + parser_class_name + "State.cc",
+        "JJT" + parser_class_name + "State.h",
+        "Node.h",
+        "SimpleNode.cc",
+        "SimpleNode.h",
     ]
     schema_grammar_file = parser_class_name + ".jj"
     native.genrule(
@@ -58,7 +60,7 @@ def generate_javacc_parser(name, srcs, parser_class_name, extra_deps, extra_head
         outs = schema_ast_genfiles + [schema_grammar_file],
         cmd = (
             "$(location @local_jdk//:bin/java) -cp $(location @maven//:net_java_dev_javacc_javacc) jjtree  " +
-            "-OUTPUT_LANGUAGE=c++ -OUTPUT_DIRECTORY=$(@D) " +
+            "-OUTPUT_DIRECTORY=$(@D) " +
             "-OUTPUT_FILE=" + schema_grammar_file + " $(SRCS) "
         ),
         tools = ["@maven//:net_java_dev_javacc_javacc", "@local_jdk//:bin/jar", "@local_jdk//:bin/java"],
@@ -90,7 +92,7 @@ def generate_javacc_parser(name, srcs, parser_class_name, extra_deps, extra_head
         outs = schema_parser_genfiles,
         cmd = (
             "$(location @local_jdk//:bin/java) -cp $(location @maven//:net_java_dev_javacc_javacc) javacc  " +
-            "-OUTPUT_LANGUAGE=c++ -OUTPUT_DIRECTORY=$(@D) $(SRCS) "
+            "-OUTPUT_DIRECTORY=$(@D) $(SRCS) "
         ),
         tools = ["@maven//:net_java_dev_javacc_javacc", "@local_jdk//:bin/jar", "@local_jdk//:bin/java"],
     )

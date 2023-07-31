@@ -1,0 +1,122 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE base (
+  key1 INT64,
+  key2 STRING(256),
+  bool_value BOOL,
+  int_value INT64 NOT NULL,
+  double_value FLOAT64,
+  str_value STRING(MAX),
+  byte_value BYTES(256),
+  timestamp_value TIMESTAMP options (allow_commit_timestamp = true),
+  date_value DATE,
+  bool_array ARRAY<BOOL> NOT NULL,
+  int_array ARRAY<INT64>,
+  double_array ARRAY<FLOAT64>,
+  str_array ARRAY<STRING(256)>,
+  byte_array ARRAY<BYTES(MAX)>,
+  TimestampArray ARRAY<TIMESTAMP>,
+  date_array ARRAY<DATE>,
+  gen_value INT64 AS (key1 + 1) STORED,
+  gen_function_value INT64 AS (LENGTH(key2)) STORED,
+  default_col_value INT64 DEFAULT (100),
+  default_timestamp_col_value TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()),
+  CONSTRAINT check_constraint_name CHECK(int_value > 0),
+  CHECK(int_value > 0),
+) PRIMARY KEY (key1, key2 DESC);
+CREATE TABLE cascade_child (
+  key1 INT64,
+  key2 STRING(256),
+  child_key BOOL,
+  value1 STRING(MAX) NOT NULL,
+  value2 BOOL,
+  created_at TIMESTAMP,
+) PRIMARY KEY (key1, key2 DESC, child_key ASC),
+  INTERLEAVE IN PARENT base ON DELETE CASCADE;
+CREATE TABLE no_action_child (
+  key1 INT64,
+  key2 STRING(256),
+  child_key BOOL,
+  value  STRING(MAX)
+) PRIMARY KEY (key1, key2 DESC, child_key ASC),
+  INTERLEAVE IN PARENT base ON DELETE NO ACTION;
+CREATE UNIQUE NULL_FILTERED INDEX cascade_child_by_value
+  ON cascade_child(key1, key2 DESC, value2 ASC)
+  STORING(value1), INTERLEAVE IN base;
+CREATE INDEX no_action_child_by_value ON no_action_child(value ASC);
+ALTER TABLE base ADD CONSTRAINT fk_base_cascade_child
+  FOREIGN KEY(bool_value, key2)
+  REFERENCES cascade_child(child_key, value1);
+CREATE TABLE row_deletion_policy (
+  key INT64,
+  created_at TIMESTAMP,
+) PRIMARY KEY (key), ROW DELETION POLICY (OLDER_THAN(created_at, INTERVAL 7 DAY));
+===
+@Dialect=POSTGRESQL
+CREATE TABLE base (
+  key1 bigint,
+  key2 varchar(256),
+  bool_value bool,
+  int_value bigint NOT NULL,
+  double_value float8,
+  str_value varchar,
+  byte_value bytea,
+  timestamp_value spanner.commit_timestamp,
+  date_value date,
+  bool_array bool[] NOT NULL,
+  int_array bigint[],
+  double_array float8[],
+  str_array varchar(256)[],
+  byte_array bytea[],
+  TimestampArray timestamptz[],
+  date_array date[],
+  gen_value bigint GENERATED ALWAYS AS (key1 + 1) STORED,
+  gen_function_value bigint GENERATED ALWAYS AS (LENGTH(key2)) STORED,
+  default_col_value bigint DEFAULT (100),
+  default_timestamp_col_value timestamptz DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT check_constraint_name CHECK(int_value > 0),
+  CHECK(int_value > 0),
+  -- PostgreSQL doesn't support creating an index backed by a primary key in
+  -- descending order so this primary key is different to the GSQL version
+  -- above.
+  PRIMARY KEY (key1, key2)
+);
+CREATE TABLE cascade_child (
+  key1 bigint,
+  key2 varchar(256),
+  child_key bool,
+  value1 varchar NOT NULL,
+  value2 bool,
+  created_at timestamptz,
+  -- PostgreSQL doesn't support creating an index backed by a primary key
+  -- that specifies an order so this primary key is different to the GSQL
+  -- version above.
+  PRIMARY KEY (key1, key2, child_key)
+) INTERLEAVE IN PARENT base ON DELETE CASCADE;
+CREATE TABLE no_action_child (
+  key1 bigint,
+  key2 varchar(256),
+  child_key bool,
+  value varchar,
+  -- PostgreSQL doesn't support creating an index backed by a primary key
+  -- that specifies an order so this primary key is different to the GSQL
+  -- version above.
+  PRIMARY KEY (key1, key2, child_key)
+) INTERLEAVE IN PARENT base ON DELETE NO ACTION;
+CREATE UNIQUE INDEX cascade_child_by_value
+  -- Note that key2 can't have a DESC order because we can't define the
+  -- ordering of the primary key in PG as stated above.
+  ON cascade_child(key1, key2, value2 ASC)
+  INCLUDE(value1)
+  INTERLEAVE IN base
+  WHERE key1 IS NOT NULL
+  AND key2 IS NOT NULL
+  AND value2 IS NOT NULL;
+CREATE INDEX no_action_child_by_value ON no_action_child(value ASC);
+ALTER TABLE base ADD CONSTRAINT fk_base_cascade_child
+  FOREIGN KEY(bool_value, key2)
+  REFERENCES cascade_child(child_key, value1);
+CREATE TABLE row_deletion_policy (
+  key bigint,
+  created_at timestamptz,
+  PRIMARY KEY (key)
+) TTL INTERVAL '7 days' on created_at;

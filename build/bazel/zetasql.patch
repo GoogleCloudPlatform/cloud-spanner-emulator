@@ -1,11 +1,499 @@
---- zetasql/base/BUILD
-+++ zetasql/base/BUILD
-@@ -20,1 +20,1 @@
--    default_visibility = [":zetasql_implementation"],
-+    default_visibility = ["//visibility:public"],
+diff --git a/zetasql/public/catalog.h b/zetasql/public/catalog.h
+index 1ffa659..07a1fd2 100644
+--- a/zetasql/public/catalog.h
++++ b/zetasql/public/catalog.h
+@@ -936,15 +936,74 @@
+   // See: (broken link).
+   virtual bool CanUpdateUnwritableToDefault() const { return false; }
+ 
++  // The class defines the attributes of generated or default expression of a
++  // column if they exist. It provides
++  // 1. The kind of expression as default or generated.
++  // 2. The string representation of the expression.
++  // 3. The analyzed expression.
++  class ExpressionAttributes {
++   public:
++    enum class ExpressionKind {
++      DEFAULT,
++      GENERATED,
++    };
++    ExpressionAttributes(const ExpressionKind expression_kind,
++                         const std::string& expression_string,
++                         const ResolvedExpr* resolved_expression)
++        : expression_kind_(expression_kind),
++          expression_string_(expression_string),
++          resolved_expression_(resolved_expression) {}
++    ExpressionKind GetExpressionKind() const { return expression_kind_; }
++    const std::string& GetExpressionString() const {
++      return expression_string_;
++    }
++    const ResolvedExpr* GetResolvedExpression() const {
++      ZETASQL_DCHECK(resolved_expression_ != nullptr);
++      return resolved_expression_;
++    }
++
++   private:
++    // This class uses implicitly defined copy assignment operator. Hence, the
++    // members are not declared as consts.
++    ExpressionKind expression_kind_;
++    std::string expression_string_;
++    const ResolvedExpr* resolved_expression_;  // not owned
++  };
++
++  // Returns ExpressionAttributes if a column has default or generated
++  // Expression.
++  virtual std::optional<const ExpressionAttributes> GetExpression() const {
++    return std::nullopt;
++  }
++
++  // Returns true if the column has a default expression, false otherwise.
++  bool HasDefaultExpression() const {
++    const auto& expression = GetExpression();
++    if (!expression.has_value()) return false;
++    return expression->GetExpressionKind() ==
++           ExpressionAttributes::ExpressionKind::DEFAULT;
++  }
++
++  // Returns true if the column has a generated expression, false otherwise.
++  bool HasGeneratedExpression() const {
++    const auto& expression = GetExpression();
++    if (!expression.has_value()) return false;
++    return expression->GetExpressionKind() ==
++           ExpressionAttributes::ExpressionKind::GENERATED;
++  }
++
++  // TODO : Remove this API in subsequent child cls.
+   // Returns true if the column has a default value, false otherwise.
+   virtual bool HasDefaultValue() const { return false; }
+ 
++  // TODO : Remove this API in subsequent child cls.
+   // Returns a string representation of the default expression if the column has
+   // a default value.
+   virtual std::optional<std::string> ExpressionString() const {
+     return std::nullopt;
+   }
+ 
++  // TODO : Remove this API in subsequent child cls.
+   // Returns the analyzed default expression if the column has a default value.
+   // The pointer is not owned by the column, ownership is not transferred
+   // through this function.
 
---- zetasql/base/testing/BUILD
-+++ zetasql/base/testing/BUILD
-@@ -19,1 +19,1 @@
+diff --git a/zetasql/analyzer/resolver_dml.cc b/zetasql/analyzer/resolver_dml.cc
+index 07fa583..f50bf6a 100644
+--- a/zetasql/analyzer/resolver_dml.cc
++++ b/zetasql/analyzer/resolver_dml.cc
+@@ -448,7 +448,10 @@
+     for (auto const& [resolved_column, catalog_column] :
+          resolved_columns_from_table_scans_) {
+       if (catalog_column->IsWritableColumn() &&
+-          catalog_column->HasDefaultValue()) {
++          // TODO: [start]remove this condition in subsequent cls.
++          (catalog_column->HasDefaultValue()
++           // TODO: [end]
++           || catalog_column->HasDefaultExpression())) {
+         RecordColumnAccess(resolved_column, ResolvedStatement::WRITE);
+       }
+     }
+diff --git a/zetasql/public/evaluator_test.cc b/zetasql/public/evaluator_test.cc
+index 62d4bb9..5d7a3ec 100644
+--- a/zetasql/public/evaluator_test.cc
++++ b/zetasql/public/evaluator_test.cc
+@@ -3384,14 +3384,13 @@
+     ZETASQL_CHECK_OK(AnalyzeExpression(default_expr, analyzer_options_, &catalog_,
+                                catalog_.type_factory(), &output_));
+ 
+-    SimpleColumn::ExpressionAttributes expr_attributes{
+-        .expression_string = default_expr,
+-        .resolved_expr = output_->resolved_expr()};
++    SimpleColumn::ExpressionAttributes expr_attributes(
++        SimpleColumn::ExpressionAttributes::ExpressionKind::DEFAULT,
++        default_expr, output_->resolved_expr());
+ 
+     ZETASQL_ASSERT_OK(test_table->AddColumn(
+-        new SimpleColumn(
+-            test_table->Name(), "d", types::Int64Type(),
+-            {.has_default_value = true, .column_expression = expr_attributes}),
++        new SimpleColumn(test_table->Name(), "d", types::Int64Type(),
++                         {.column_expression = expr_attributes}),
+         /*is_owned=*/true));
+ 
+     test_table->SetContents({{Int64(1), Int64(1)}, {Int64(2), Int64(2)}});
+diff --git a/zetasql/public/simple_catalog.cc b/zetasql/public/simple_catalog.cc
+index d1433d1..5483af8 100644
+--- a/zetasql/public/simple_catalog.cc
++++ b/zetasql/public/simple_catalog.cc
+@@ -1723,11 +1723,18 @@
+     proto->set_can_update_unwritable_to_default(true);
+   }
+ 
+-  proto->set_has_default_value(HasDefaultValue());
+-  if (HasDefaultValue()) {
++  // TODO: To be deprecated in later versions.
++  proto->set_has_default_value(HasDefaultExpression());
++
++  if (HasDefaultExpression() || HasGeneratedExpression()) {
+     // The ResolvedExpr form of the expression is not serialized.
+     proto->mutable_column_expression()->set_expression_string(
+-        ExpressionString().value());
++        GetExpression()->GetExpressionString());
++    proto->mutable_column_expression()->set_expression_kind(
++        (GetExpression()->GetExpressionKind() ==
++         Column::ExpressionAttributes::ExpressionKind::DEFAULT)
++            ? ExpressionAttributeProto::DEFAULT
++            : ExpressionAttributeProto::GENERATED);
+   }
+   return absl::OkStatus();
+ }
+@@ -1742,19 +1749,23 @@
+     ZETASQL_RETURN_IF_ERROR(type_deserializer.type_factory()->DeserializeAnnotationMap(
+         proto.annotation_map(), &annotation_map));
+   }
+-  SimpleColumn::ExpressionAttributes expression_attributes;
+-  if (proto.has_default_value()) {
+-    expression_attributes.expression_string =
+-        proto.column_expression().expression_string();
+-  }
+ 
+   SimpleColumn::Attributes attributes{
+       .is_pseudo_column = proto.is_pseudo_column(),
+       .is_writable_column = proto.is_writable_column(),
+       .can_update_unwritable_to_default =
+-          proto.can_update_unwritable_to_default(),
+-      .has_default_value = proto.has_default_value(),
+-      .column_expression = expression_attributes};
++          proto.can_update_unwritable_to_default()};
++
++  if (proto.has_column_expression()) {
++    ExpressionAttributes::ExpressionKind expression_kind =
++        (proto.column_expression().expression_kind() ==
++         ExpressionAttributeProto::DEFAULT)
++            ? ExpressionAttributes::ExpressionKind::DEFAULT
++            : ExpressionAttributes::ExpressionKind::GENERATED;
++    attributes.column_expression = SimpleColumn::ExpressionAttributes(
++        expression_kind, proto.column_expression().expression_string(),
++        nullptr);
++  }
+ 
+   return std::make_unique<SimpleColumn>(table_name, proto.name(),
+                                         AnnotatedType(type, annotation_map),
+diff --git a/zetasql/public/simple_catalog.h b/zetasql/public/simple_catalog.h
+index d9704e2..7d306f2 100644
+--- a/zetasql/public/simple_catalog.h
++++ b/zetasql/public/simple_catalog.h
+@@ -972,14 +972,6 @@
+ // SimpleColumn is a concrete implementation of the Column interface.
+ class SimpleColumn : public Column {
+  public:
+-  // Optional column expression attributes.
+-  // Used to store the string and ResolvedExpr versions of default value
+-  // expressions.
+-  struct ExpressionAttributes {
+-    std::string expression_string;
+-    const ResolvedExpr* resolved_expr = nullptr;
+-  };
+-
+   // Optional column attributes.
+   //
+   // Example use:
+@@ -998,9 +990,6 @@
+     // statement.
+     bool can_update_unwritable_to_default = false;
+ 
+-    // Whether the column has a default value.
+-    bool has_default_value = false;
+-
+     // An optional attribute for column expression;
+     std::optional<ExpressionAttributes> column_expression = std::nullopt;
+   };
+@@ -1054,30 +1043,8 @@
+     return attributes_.can_update_unwritable_to_default;
+   }
+ 
+-  bool HasDefaultValue() const override {
+-    // The ResolvedExpr may not be analyzed yet.
+-    return attributes_.has_default_value &&
+-           attributes_.column_expression.has_value();
+-  }
+-
+-  const ResolvedExpr* Expression() const override {
+-    if (!attributes_.has_default_value) {
+-      return nullptr;
+-    }
+-    if (attributes_.column_expression == std::nullopt) {
+-      return nullptr;
+-    }
+-    return attributes_.column_expression->resolved_expr;
+-  }
+-
+-  std::optional<std::string> ExpressionString() const override {
+-    if (!attributes_.has_default_value) {
+-      return std::nullopt;
+-    }
+-    if (attributes_.column_expression == std::nullopt) {
+-      return std::nullopt;
+-    }
+-    return attributes_.column_expression->expression_string;
++  std::optional<const ExpressionAttributes> GetExpression() const override {
++    return attributes_.column_expression;
+   }
+ 
+   // Serialize this column into protobuf, the provided map is used to store
+diff --git a/zetasql/public/simple_table.proto b/zetasql/public/simple_table.proto
+index af17355..8829c63 100644
+--- a/zetasql/public/simple_table.proto
++++ b/zetasql/public/simple_table.proto
+@@ -53,6 +53,11 @@
+ 
+ message ExpressionAttributeProto {
+   optional string expression_string = 8;
++  enum ExpressionKind {
++    DEFAULT = 0;
++    GENERATED = 1;
++  }
++  optional ExpressionKind expression_kind = 9;
+ }
+ 
+ message SimpleColumnProto {
+@@ -62,6 +67,9 @@
+   optional bool is_writable_column = 4 [default = true];
+   optional bool can_update_unwritable_to_default = 6;
+   optional AnnotationMapProto annotation_map = 5;
++  // TODO: To be deprecated in later versions. Do not add use case
++  // for has_default_value. Instead set ExpressionKind in
++  // ExpressionAttributeProto
+   optional bool has_default_value = 7 [default = false];
+   optional ExpressionAttributeProto column_expression = 8;
+ }
+diff --git a/zetasql/reference_impl/algebrizer.cc b/zetasql/reference_impl/algebrizer.cc
+index ef0e4ca..5a4de76 100644
+--- a/zetasql/reference_impl/algebrizer.cc
++++ b/zetasql/reference_impl/algebrizer.cc
+@@ -5336,6 +5336,7 @@
+   for (int i = 0; i < table_scan->column_index_list_size(); ++i) {
+     const Column* column = table->GetColumn(table_scan->column_index_list(i));
+     const ResolvedColumn& resolved_column = table_scan->column_list(i);
++    // TODO: [start] remove this in subsequent child cls.
+     if (column->HasDefaultValue() && column->Expression() != nullptr) {
+       ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<ValueExpr> value_expr,
+                        AlgebrizeExpression(column->Expression()));
+@@ -5343,6 +5344,15 @@
+                                                 std::move(value_expr));
+       ZETASQL_RET_CHECK(ret.second);
+     }
++    // TODO: [end]
++    if (column->HasDefaultExpression()) {
++      ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<ValueExpr> value_expr,
++                       AlgebrizeExpression(
++                           column->GetExpression()->GetResolvedExpression()));
++      const auto& [iterator, is_inserted] = column_expr_map->emplace(
++          resolved_column.column_id(), std::move(value_expr));
++      ZETASQL_RET_CHECK(is_inserted);
++    }
+   }
+ 
+   return absl::OkStatus();
+diff --git a/zetasql/testdata/sample_catalog.cc b/zetasql/testdata/sample_catalog.cc
+index 5513a8f..24112e9 100644
+--- a/zetasql/testdata/sample_catalog.cc
++++ b/zetasql/testdata/sample_catalog.cc
+@@ -662,13 +662,13 @@
+   ZETASQL_CHECK_OK(AnalyzeExpression(default_expr, analyzer_options, catalog_.get(),
+                              catalog_->type_factory(), &output));
+ 
+-  SimpleColumn::ExpressionAttributes expr_attributes{
+-      .expression_string = default_expr,
+-      .resolved_expr = output->resolved_expr()};
++  SimpleColumn::ExpressionAttributes expr_attributes(
++      SimpleColumn::ExpressionAttributes::ExpressionKind::DEFAULT, default_expr,
++      output->resolved_expr());
+   ZETASQL_CHECK_OK(table_with_default_column->AddColumn(
+-      new SimpleColumn(
+-          table_with_default_column->Name(), "default_col", types_->get_int64(),
+-          {.has_default_value = true, .column_expression = expr_attributes}),
++      new SimpleColumn(table_with_default_column->Name(), "default_col",
++                       types_->get_int64(),
++                       {.column_expression = expr_attributes}),
+       /*is_owned=*/true));
+ 
+   sql_object_artifacts_.emplace_back(std::move(output));
+
+diff --git a/zetasql/base/BUILD b/zetasql/base/BUILD
+index 8528859..2d04ac1 100644
+--- a/zetasql/base/BUILD
++++ b/zetasql/base/BUILD
+@@ -16,7 +16,7 @@
+ 
+ licenses(["notice"])
+ 
+-package(default_visibility = [":zetasql_implementation"])
++package(default_visibility = ["//visibility:public"])
+ 
+ package_group(
+     name = "zetasql_implementation",
+diff --git a/zetasql/base/testing/BUILD b/zetasql/base/testing/BUILD
+index b88b3aa..df9d6ea 100644
+--- a/zetasql/base/testing/BUILD
++++ b/zetasql/base/testing/BUILD
+@@ -16,7 +16,7 @@
+ 
+ licenses(["notice"])
+ 
 -package(default_visibility = ["//zetasql/base:zetasql_implementation"])
 +package(default_visibility = ["//visibility:public"])
+ 
+ # A drop in replacement for gtest_main that parsers absl flags
+ cc_library(
+diff --git a/zetasql/common/internal_value.h b/zetasql/common/internal_value.h
+index 9d91e28..38e654c 100644
+--- a/zetasql/common/internal_value.h
++++ b/zetasql/common/internal_value.h
+@@ -105,7 +105,7 @@ class InternalValue {
+   static std::string FormatInternal(const Value& x,
+                                     bool include_array_ordereness) {
+     return x.FormatInternal(
+-        {.force_type_at_top_level = true,
++        Type::FormatValueContentOptions{.force_type_at_top_level = true,
+          .include_array_ordereness = include_array_ordereness,
+          .indent = 0});
+   }
+diff --git a/zetasql/public/types/type.h b/zetasql/public/types/type.h
+index 235a1ce..3e5b70a 100644
+--- a/zetasql/public/types/type.h
++++ b/zetasql/public/types/type.h
+@@ -555,46 +555,7 @@ class Type {
+     // error.
+     std::optional<int64_t> file_descriptor_sets_max_size_bytes = std::nullopt;
+   };
+-
+- protected:
+-  // Types can only be created and destroyed by TypeFactory.
+-  Type(const TypeFactory* factory, TypeKind kind);
+-  virtual ~Type();
+-
+-  bool EqualsImpl(const Type* other_type, bool equivalent) const {
+-    if (this == other_type) {
+-      return true;
+-    }
+-    if (kind() != other_type->kind()) {
+-      return false;
+-    }
+-    return EqualsForSameKind(other_type, equivalent);
+-  }
+-
+-  // Hashes the type. Hash is generated based on a type's kind and (if type is
+-  // not built-in simple type) on a type's parameter.
+-  absl::HashState Hash(absl::HashState state) const;
+-
+-  // Hashes the type's parameter of non-simple (parameterized) types. Simple
+-  // built-in types should not update the hash state.
+-  virtual absl::HashState HashTypeParameter(absl::HashState state) const = 0;
+-
+-  // Internal implementation for Serialize methods.  This will append
+-  // Type information to <type_proto>, so the caller should make sure
+-  // that <type_proto> has been initialized properly before invoking.
+-  // <options> controls whether FileDescriptors are deep-scanned and
+-  // FileDescriptorSets are generated, and also whether there are any limits
+-  // placed on the size of the FileDescriptorSets.
+-  virtual absl::Status SerializeToProtoAndDistinctFileDescriptorsImpl(
+-      const BuildFileDescriptorSetMapOptions& options, TypeProto* type_proto,
+-      FileDescriptorSetMap* file_descriptor_set_map) const = 0;
+-
+-  // Returns estimated size of memory owned by this type. Note: type can never
+-  // own another type, only reference (all types are owned by TypeFactory). So,
+-  // this function never calls GetEstimatedOwnedMemoryBytesSize for other types
+-  // (such as element types of arrays or field types of structs).
+-  virtual int64_t GetEstimatedOwnedMemoryBytesSize() const = 0;
+-
++  
+   // Formatting options that can be provided to FormatValueContent.
+   struct FormatValueContentOptions {
+     enum class Mode {
+@@ -637,6 +598,45 @@ class Type {
+     static const int kIndentStep = 2;
+   };
+ 
++ protected:
++  // Types can only be created and destroyed by TypeFactory.
++  Type(const TypeFactory* factory, TypeKind kind);
++  virtual ~Type();
++
++  bool EqualsImpl(const Type* other_type, bool equivalent) const {
++    if (this == other_type) {
++      return true;
++    }
++    if (kind() != other_type->kind()) {
++      return false;
++    }
++    return EqualsForSameKind(other_type, equivalent);
++  }
++
++  // Hashes the type. Hash is generated based on a type's kind and (if type is
++  // not built-in simple type) on a type's parameter.
++  absl::HashState Hash(absl::HashState state) const;
++
++  // Hashes the type's parameter of non-simple (parameterized) types. Simple
++  // built-in types should not update the hash state.
++  virtual absl::HashState HashTypeParameter(absl::HashState state) const = 0;
++
++  // Internal implementation for Serialize methods.  This will append
++  // Type information to <type_proto>, so the caller should make sure
++  // that <type_proto> has been initialized properly before invoking.
++  // <options> controls whether FileDescriptors are deep-scanned and
++  // FileDescriptorSets are generated, and also whether there are any limits
++  // placed on the size of the FileDescriptorSets.
++  virtual absl::Status SerializeToProtoAndDistinctFileDescriptorsImpl(
++      const BuildFileDescriptorSetMapOptions& options, TypeProto* type_proto,
++      FileDescriptorSetMap* file_descriptor_set_map) const = 0;
++
++  // Returns estimated size of memory owned by this type. Note: type can never
++  // own another type, only reference (all types are owned by TypeFactory). So,
++  // this function never calls GetEstimatedOwnedMemoryBytesSize for other types
++  // (such as element types of arrays or field types of structs).
++  virtual int64_t GetEstimatedOwnedMemoryBytesSize() const = 0;
++
+   // List of DebugStringImpl outputs. Used to serve as a stack in
+   // DebugStringImpl to protect from stack overflows.
+   // Note: SWIG will fail to process this file if we remove a white space
+diff --git a/zetasql/public/value.cc b/zetasql/public/value.cc
+index 50deb34..2070935 100644
+--- a/zetasql/public/value.cc
++++ b/zetasql/public/value.cc
+@@ -909,7 +909,7 @@ std::string Value::DebugString(bool verbose) const {
+ 
+ // Format will wrap arrays and structs.
+ std::string Value::Format(bool print_top_level_type) const {
+-  return FormatInternal(
++  return FormatInternal(Type::FormatValueContentOptions
+       {.force_type_at_top_level = print_top_level_type, .indent = 0});
+ }
+ 
+@@ -1169,7 +1169,7 @@ std::string Value::FormatInternal(
+     std::vector<std::string> element_strings(elements().size());
+     for (int i = 0; i < elements().size(); ++i) {
+       element_strings[i] =
+-          elements()[i].FormatInternal(options.IncreaseIndent());
++          elements()[i].FormatInternal(Type::FormatValueContentOptions{options.IncreaseIndent()});
+     }
+     // Sanitize any '$' characters before creating substitution template. "$$"
+     // is replaced by "$" in the output from absl::Substitute.
+@@ -1211,7 +1211,7 @@ std::string Value::FormatInternal(
+     const StructType* struct_type = type()->AsStruct();
+     std::vector<std::string> field_strings(struct_type->num_fields());
+     for (int i = 0; i < struct_type->num_fields(); i++) {
+-      field_strings[i] = fields()[i].FormatInternal(options.IncreaseIndent());
++      field_strings[i] = fields()[i].FormatInternal(Type::FormatValueContentOptions{options.IncreaseIndent()});
+     }
+     // Sanitize any '$' characters before creating substitution template. "$$"
+     // is replaced by "$" in the output from absl::Substitute.
+@@ -1257,9 +1257,9 @@ std::string Value::FormatInternal(
+     }
+     std::vector<std::string> boundaries_strings;
+     boundaries_strings.push_back(
+-        start().FormatInternal(options.IncreaseIndent()));
++        start().FormatInternal(Type::FormatValueContentOptions{options.IncreaseIndent()}));
+     boundaries_strings.push_back(
+-        end().FormatInternal(options.IncreaseIndent()));
++        end().FormatInternal(Type::FormatValueContentOptions{options.IncreaseIndent()}));
+     // Sanitize any '$' characters before creating substitution template. "$$"
+     // is replaced by "$" in the output from absl::Substitute.
+     std::string templ =

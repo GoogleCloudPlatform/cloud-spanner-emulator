@@ -184,19 +184,20 @@ Key ComputeKey(const ValueList& row,
         key_indices[i].has_value()
             ? row[key_indices[i].value()]
             : zetasql::Value::Null(primary_key[i]->column()->GetType()),
-        primary_key[i]->is_descending());
+        primary_key[i]->is_descending()
+    );
   }
   return key;
 }
 
 absl::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
                                                const Schema* schema) {
-  // Find the table to read from schema or from change stream.
   const Table* read_table;
+    // Find the table to read from schema.
     read_table = schema->FindTable(read_arg.table);
-  if (read_table == nullptr) {
-    return error::TableNotFound(read_arg.table);
-  }
+    if (read_table == nullptr) {
+      return error::TableNotFound(read_arg.table);
+    }
 
   // Check if index should be read from instead.
   const Index* index = nullptr;
