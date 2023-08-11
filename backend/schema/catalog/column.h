@@ -26,7 +26,9 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
+#include "backend/common/case.h"
 #include "backend/common/ids.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/graph/schema_node.h"
 #include "common/limits.h"
 #include "absl/status/status.h"
@@ -37,6 +39,7 @@ namespace emulator {
 namespace backend {
 
 class Table;
+class ChangeStream;
 
 // Column represents a column in a Table.
 class Column : public SchemaNode {
@@ -113,6 +116,18 @@ class Column : public SchemaNode {
 
   // Returns the table containing the column.
   const Table* table() const { return table_; }
+
+  // Returns the list of all change streams on this column.
+  absl::Span<const ChangeStream* const> change_streams() const {
+    return change_streams_;
+  }
+
+  bool is_trackable_by_change_stream() const { return !is_generated(); }
+
+  // Finds a change stream on the column by its name. Name comparison is
+  // case-insensitive.
+  const ChangeStream* FindChangeStream(
+      const std::string& change_stream_name) const;
 
   bool hidden() const { return hidden_; }
 
@@ -202,6 +217,10 @@ class Column : public SchemaNode {
 
   // The table containing the column.
   const Table* table_ = nullptr;
+
+  // List of change streams referring to this column. These are owned by the
+  // Schema, not by the Column.
+  std::vector<const ChangeStream*> change_streams_;
 
   // Indicate if the column is hidden. If true, the column will be excluded from
   // star expansion (SELECT *).

@@ -148,6 +148,23 @@ class Column::Editor {
     return *this;
   }
 
+  Editor& add_change_stream(const ChangeStream* change_stream) {
+    instance_->change_streams_.push_back(change_stream);
+    return *this;
+  }
+
+  Editor& remove_change_stream(const ChangeStream* change_stream) {
+    auto itr = std::find_if(
+        instance_->change_streams_.begin(), instance_->change_streams_.end(),
+        [change_stream](const auto& change_stream_element) {
+          return absl::EqualsIgnoreCase(change_stream->Name(),
+                                        change_stream_element->Name());
+        });
+    ZETASQL_DCHECK(itr != instance_->change_streams_.end());
+    instance_->change_streams_.erase(itr);
+    return *this;
+  }
+
   Editor& add_dependent_column_name(const std::string& column_name) {
     instance_->dependent_column_names_.push_back(column_name);
     return *this;

@@ -210,6 +210,7 @@ cc_library(
     deps = [
         "//backend/access:read",
         "//backend/query:query_engine",
+        "//backend/query/change_stream:change_stream_query_validator",
         "//common:constants",
         "//common:errors",
         "//frontend/common:protos",
@@ -220,6 +221,7 @@ cc_library(
         "//frontend/converters:values",
         "//frontend/entities:session",
         "//frontend/entities:transaction",
+        "//frontend/handlers:change_streams",
         "//frontend/proto:partition_token_cc_proto",
         "//frontend/server:handler",
         "//frontend/server:request_context",
@@ -382,6 +384,52 @@ cc_test(
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
         "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
+    name = "change_streams",
+    srcs = ["change_streams.cc"],
+    hdrs = ["change_streams.h"],
+    deps = [
+        "//backend/query/change_stream:change_stream_query_validator",
+        "//backend/schema/catalog:schema",
+        "//common:clock",
+        "//common:errors",
+        "//frontend/converters:change_streams",
+        "//frontend/converters:time",
+        "//frontend/server:handler",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_zetasql//zetasql/base:time_proto_util",
+    ],
+    alwayslink = 1,
+)
+
+cc_test(
+    name = "change_streams_test",
+    srcs = ["change_streams_test.cc"],
+    deps = [
+        ":change_streams",
+        "//backend/schema/updater:schema_updater",
+        "//common:clock",
+        "//tests/common:change_streams",
+        "//tests/common:chunking",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_env",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

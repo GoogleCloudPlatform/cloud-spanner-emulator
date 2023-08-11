@@ -65,6 +65,10 @@ using TableIDGenerator = UniqueIdGenerator<TableID>;
 // guaranteed to be unique within a single database.
 using ChangeStreamID = std::string;
 
+// A ChangeStreamID generator. Each database has a single
+// ChangeStreamIDGenerator.
+using ChangeStreamIDGenerator = UniqueIdGenerator<ChangeStreamID>;
+
 // Unique identifier associated with a column. ColumnID is guaranteed to be
 // unique within a single table.
 using ColumnID = std::string;

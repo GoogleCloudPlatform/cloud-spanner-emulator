@@ -29,6 +29,7 @@
 #include "absl/types/variant.h"
 #include "backend/actions/manager.h"
 #include "backend/common/ids.h"
+#include "backend/database/change_stream/change_stream_partition_churner.h"
 #include "backend/locking/manager.h"
 #include "backend/query/query_engine.h"
 #include "backend/schema/catalog/schema.h"
@@ -107,6 +108,10 @@ class Database {
   // Used to execute queries against the database.
   QueryEngine* query_engine() { return query_engine_.get(); }
 
+  ChangeStreamPartitionChurner* get_change_stream_partition_churner() {
+    return change_stream_partition_churner_.get();
+  }
+
  private:
   Database();
   // Delete copy and assignment operators since database shouldn't be copyable.
@@ -123,6 +128,9 @@ class Database {
 
   // Unique ID generator for storage TableIDs.
   TableIDGenerator table_id_generator_;
+
+  // Unique ID generator for storage ChangeStreamIDs.
+  ChangeStreamIDGenerator change_stream_id_generator_;
 
   // Unique ID generator for storage ColumnIDs.
   ColumnIDGenerator column_id_generator_;
@@ -144,6 +152,9 @@ class Database {
 
   // Maintains an action registry per schema.
   std::unique_ptr<ActionManager> action_manager_;
+
+  std::unique_ptr<ChangeStreamPartitionChurner>
+      change_stream_partition_churner_;
 };
 
 }  // namespace backend

@@ -78,7 +78,7 @@ http_archive(
 
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 
-go_register_toolchains(version = "1.20.6")
+go_register_toolchains(version = "1.20.7")
 
 _bazel_gazelle_version = "0.31.1"
 
@@ -215,8 +215,8 @@ protobuf_deps()
 http_archive(
     name = "com_google_absl",
     sha256 = "3439843ac7d7b9cc354dd6735b6790fa7589b73429bbda77976e0db61e92f1fd",
-    url = "https://github.com/abseil/abseil-cpp/archive/0697762c62cdb51ead8d9c2f0d299c5d4a4ff9db.tar.gz",
     strip_prefix = "abseil-cpp-0697762c62cdb51ead8d9c2f0d299c5d4a4ff9db",
+    url = "https://github.com/abseil/abseil-cpp/archive/0697762c62cdb51ead8d9c2f0d299c5d4a4ff9db.tar.gz",
 )
 
 http_archive(
@@ -241,9 +241,27 @@ http_archive(
     name = "upb",
     patch_args = ["-p1"],
     patches = ["//build/bazel:upb.patch"],
-    urls = ["https://github.com/protocolbuffers/upb/archive/0ea9f73be35e35db242ccc65aa9c87487b792324.tar.gz"],
     sha256 = "046b5f134523eaad9265a41a2ec0701cc45973841070af2772e3578a9f3bfed0",
     strip_prefix = "upb-0ea9f73be35e35db242ccc65aa9c87487b792324",
+    urls = ["https://github.com/protocolbuffers/upb/archive/0ea9f73be35e35db242ccc65aa9c87487b792324.tar.gz"],
+)
+
+http_archive(
+    name = "nlohmann_json",
+    build_file_content = """
+cc_library(
+  name = "json",
+  hdrs = glob([
+    "include/nlohmann/**/*.hpp",
+  ]),
+  includes = ["include"],
+  visibility = ["//visibility:public"],
+  alwayslink = True,
+)""",
+    strip_prefix = "json-3.10.5",
+    urls = [
+        "https://github.com/nlohmann/json/archive/refs/tags/v3.10.5.tar.gz",
+    ],
 )
 
 load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps")
@@ -256,11 +274,11 @@ grpc_deps()
 
 http_archive(
     name = "com_google_zetasql",
+    patch_args = ["-p1"],
+    patches = ["//build/bazel:zetasql.patch"],
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
     sha256 = "02d2ae94c7ed597ae40930635d55f2090094ea8bf02dfcdc77c6b6d22ace9b8b",
-    patch_args = ["-p1"],
-    patches = ["//build/bazel:zetasql.patch"],
     strip_prefix = "zetasql-5133c6e373a3f67f7f40b0619a2913c3fcab8171",
     url = "https://github.com/google/zetasql/archive/5133c6e373a3f67f7f40b0619a2913c3fcab8171.tar.gz",
 )
@@ -275,9 +293,9 @@ http_archive(
 # gRPC Java
 http_archive(
     name = "io_grpc_grpc_java",
-    url = "https://github.com/grpc/grpc-java/archive/v1.56.0.tar.gz",
-    strip_prefix = "grpc-java-1.56.0",
     sha256 = "4af5ecbaed16455fcda9fdab36e131696f5092858dd130f026069fcf11817a21",
+    strip_prefix = "grpc-java-1.56.0",
+    url = "https://github.com/grpc/grpc-java/archive/v1.56.0.tar.gz",
 )
 
 load("@rules_jvm_external//:repositories.bzl", "rules_jvm_external_deps")
@@ -331,6 +349,7 @@ load("@com_google_zetasql//bazel:zetasql_deps_step_4.bzl", "zetasql_deps_step_4"
 zetasql_deps_step_4()
 
 google_cloud_cpp_version = "2.12.0"
+
 http_archive(
     name = "com_github_googleapis_google_cloud_cpp",
     sha256 = "8cda870803925c62de8716a765e03eb9d34249977e5cdb7d0d20367e997a55e2",

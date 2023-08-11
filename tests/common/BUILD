@@ -120,18 +120,35 @@ cc_library(
     hdrs = ["actions.h"],
     deps = [
         ":proto_matchers",
+        ":test_row_reader",
         "//backend/actions:context",
         "//backend/actions:ops",
-        "//backend/storage:in_memory_iterator",
+        "//backend/common:rows",
+        "//backend/datamodel:key",
+        "//backend/datamodel:key_range",
+        "//backend/schema/catalog:schema",
         "//backend/storage:in_memory_storage",
+        "//backend/storage:iterator",
         "//common:clock",
+        "//common:constants",
+        "//common:errors",
+        "//common:limits",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
+        "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:json_value",
+        "@com_google_zetasql//zetasql/public:options_cc_proto",
+        "@com_google_zetasql//zetasql/public:type_cc_proto",
         "@com_google_zetasql//zetasql/public:value",
+        "@nlohmann_json//:json",
     ],
 )
 
@@ -235,5 +252,19 @@ cc_library(
     ],
     deps = [
         "//common:feature_flags",
+    ],
+)
+
+cc_library(
+    name = "change_streams",
+    testonly = 1,
+    srcs = ["change_streams.cc"],
+    hdrs = ["change_streams.h"],
+    deps = [
+        "@com_google_absl//absl/status",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_zetasql//zetasql/base:ret_check",
     ],
 )

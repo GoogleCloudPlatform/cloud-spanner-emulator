@@ -48,6 +48,16 @@ TEST_F(LimitsTest, MaxColumnsPerTable) {
               StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
+TEST_F(LimitsTest, MaxChangeStreamNameLength) {
+  std::string create_change_stream_statement = absl::StrCat(
+      "CREATE CHANGE STREAM "
+      "test_change_stream_name_greater_than_128_characters_",
+      std::string(129, '0'), " FOR ALL");
+
+  EXPECT_THAT(UpdateSchema({create_change_stream_statement}),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 TEST_F(LimitsTest, MaxTableNameLength) {
   std::string create_table_statement = absl::StrCat(
       "CREATE TABLE test_table_name_greater_than_128_characters_",
@@ -101,6 +111,28 @@ TEST_F(LimitsTest, DISABLED_MaxTablesPerDatabase) {
           "CREATE TABLE table_%d ( ID INT64 NOT NULL, ) PRIMARY KEY (ID)", i)}),
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
+
+TEST_F(LimitsTest, MaxChangeStreamsPerDatabase) {
+  std::vector<std::string> statements;
+  int i = 0;
+  for (; i < 10; ++i) {
+    statements.emplace_back(
+        absl::StrFormat("CREATE TABLE table_%d (ID INT64 NOT NULL, string_col "
+                        "STRING(MAX),) PRIMARY KEY (ID)",
+                        i));
+    statements.emplace_back(absl::StrFormat(
+        "CREATE CHANGE STREAM change_stream_%d FOR table_%d", i, i));
+  }
+  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+  ZETASQL_ASSERT_OK(
+      UpdateSchema({absl::StrFormat("CREATE TABLE table_%d (ID INT64 NOT NULL, "
+                                    "string_col STRING(MAX),) PRIMARY KEY (ID)",
+                                    i)}));
+  EXPECT_THAT(UpdateSchema({absl::StrFormat(
+                  "CREATE CHANGE STREAM change_stream_%d FOR table_%d", i, i)}),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
 // TODO: This test is timing out in the emulator.
 TEST_F(LimitsTest, DISABLED_MaxIndexesPerDatabase) {
   std::vector<std::string> statements;
@@ -142,6 +174,40 @@ TEST_F(LimitsTest, MaxIndexPerTable) {
       UpdateSchema({"CREATE INDEX index_too_many ON test_table(string_col)"}),
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
+
+TEST_F(LimitsTest, MaxChangeStreamsPerTable) {
+  std::vector<std::string> statements = {R"(
+     CREATE TABLE test_table (
+       int64_col INT64 NOT NULL,
+       string_col STRING(MAX),
+     ) PRIMARY KEY(int64_col)
+  )"};
+  for (int i = 0; i < 3; ++i) {
+    statements.emplace_back(absl::StrFormat(
+        "CREATE CHANGE STREAM change_stream_%d FOR test_table", i));
+  }
+  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+
+  EXPECT_THAT(
+      UpdateSchema({"CREATE CHANGE STREAM change_stream_too_many FOR ALL"}),
+      StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(LimitsTest, MaxChangeStreamsPerColumn) {
+  std::vector<std::string> statements = {R"(
+     CREATE TABLE test_table (
+       int64_col INT64 NOT NULL,
+       string_col STRING(MAX),
+     ) PRIMARY KEY(int64_col)
+  )"};
+  for (int i = 0; i < 4; i++) {
+    statements.emplace_back(absl::StrFormat(
+        "CREATE CHANGE STREAM change_stream_%d FOR test_table(string_col)", i));
+  }
+  EXPECT_THAT(UpdateSchema(statements),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
 TEST_F(LimitsTest, MaxColumnInIndexPrimaryKey) {
   std::string create_table_statement = "CREATE TABLE test_table (";
   for (int i = 0; i <= 16; ++i) {

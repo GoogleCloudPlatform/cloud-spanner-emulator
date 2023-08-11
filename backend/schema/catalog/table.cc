@@ -65,6 +65,20 @@ const Index* Table::FindIndex(const std::string& index_name) const {
   }
   return *itr;
 }
+
+const ChangeStream* Table::FindChangeStream(
+    const std::string& change_stream_name) const {
+  auto itr = std::find_if(change_streams_.begin(), change_streams_.end(),
+                          [&change_stream_name](const auto& change_stream) {
+                            return absl::EqualsIgnoreCase(change_stream->Name(),
+                                                          change_stream_name);
+                          });
+  if (itr == change_streams_.end()) {
+    return nullptr;
+  }
+  return *itr;
+}
+
 const Column* Table::FindColumnCaseSensitive(
     const std::string& column_name) const {
   auto column = FindColumn(column_name);
@@ -176,6 +190,8 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&check_constraints_));
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&foreign_keys_));
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&referencing_foreign_keys_));
+  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_));
+  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_tracking_entire_table_));
 
   if (owner_index_) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(owner_index_));
@@ -184,6 +200,16 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
       MarkDeleted();
     }
   }
+
+  if (owner_change_stream_) {
+    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node,
+                     editor->Clone(owner_change_stream_));
+    owner_change_stream_ = schema_node->As<const ChangeStream>();
+    if (owner_change_stream_->is_deleted()) {
+      MarkDeleted();
+    }
+  }
+
   return absl::OkStatus();
 }
 

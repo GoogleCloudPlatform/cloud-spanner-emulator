@@ -155,6 +155,34 @@ TEST_F(SchemaTest, Basic) {
   EXPECT_FALSE(index_data_table->primary_key()[1]->is_descending());
 }
 
+TEST_F(SchemaTest, ChangeStreamBasic) {
+  EXPECT_EQ(base_schema_->change_streams().size(), 0);
+  base_schema_ =
+      test::CreateSchemaWithOneTableAndOneChangeStream(type_factory_.get());
+  EXPECT_EQ(base_schema_->change_streams().size(), 1);
+  const ChangeStream* change_stream =
+      base_schema_->FindChangeStream("change_stream_test_table");
+  const Table* table = base_schema_->FindTable("test_table");
+  const Column* col = table->FindColumn("string_col");
+  ASSERT_NE(col->FindChangeStream("change_stream_test_table"), nullptr);
+  ASSERT_TRUE(col->FindChangeStream("change_stream_test") == nullptr);
+  EXPECT_EQ(col->change_streams().size(), 1);
+  ASSERT_TRUE(col->is_trackable_by_change_stream());
+  ASSERT_NE(table->FindChangeStream("change_stream_test_table"), nullptr);
+  ASSERT_TRUE(table->FindChangeStream("change_stream_test") == nullptr);
+  EXPECT_EQ(table->change_streams_tracking_entire_table().size(), 1);
+  ASSERT_TRUE(table->is_trackable_by_change_stream());
+  EXPECT_EQ(table->trackable_columns().size(), 2);
+  ASSERT_NE(change_stream, nullptr);
+  ASSERT_TRUE(change_stream->track_all());
+  EXPECT_EQ(change_stream->tracked_tables_columns().size(), 1);
+  EXPECT_EQ(change_stream->tracked_tables_columns()[table->Name()].size(), 2);
+  EXPECT_EQ(table->FindChangeStream("change_stream_test_table"), change_stream);
+  EXPECT_EQ(table->change_streams().size(), 1);
+  EXPECT_EQ(col->FindChangeStream("change_stream_test_table"), change_stream);
+  EXPECT_EQ(col->change_streams().size(), 1);
+}
+
 // TODO: Move this test to the unit test for
 // SchemaConstructor/SchemaUpdater.
 TEST_F(SchemaTest, InterleaveTest) {

@@ -19,8 +19,18 @@
 #include <utility>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
+#include "absl/strings/substitute.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -46,29 +56,30 @@ class InformationSchemaTest
   // Information schema tables not yet supported.
   const std::pair<std::string, Value> kUnsupportedTables{
       "unsupported_tables",
-      std::vector<std::string>({"CHANGE_STREAMS",
-                                "CHANGE_STREAM_COLUMNS",
-                                "CHANGE_STREAM_OPTIONS",
-                                "CHANGE_STREAM_PRIVILEGES",
-                                "CHANGE_STREAM_TABLES",
-                                "MODELS",
-                                "MODEL_OPTIONS",
-                                "MODEL_COLUMNS",
-                                "MODEL_COLUMN_OPTIONS",
-                                "VIEWS",
-                                "ROLES",
-                                "ROLE_GRANTEES",
-                                "TABLE_PRIVILEGES",
-                                "COLUMN_PRIVILEGES",
-                                "PARAMETERS",
-                                "ROUTINES",
-                                "ROUTINE_OPTIONS",
-                                "ROUTINE_PRIVILEGES",
-                                "ROLE_TABLE_GRANTS",
-                                "ROLE_COLUMN_GRANTS",
-                                "ROLE_CHANGE_STREAM_GRANTS",
-                                "ROLE_ROUTINE_GRANTS",
-                                "TABLE_SYNONYMS"})};
+      std::vector<std::string>(
+          {GetNameForDialect("CHANGE_STREAMS"),
+           GetNameForDialect("CHANGE_STREAM_COLUMNS"),
+           GetNameForDialect("CHANGE_STREAM_OPTIONS"),
+           GetNameForDialect("CHANGE_STREAM_PRIVILEGES"),
+           GetNameForDialect("CHANGE_STREAM_TABLES"),
+           GetNameForDialect("MODELS"), GetNameForDialect("MODEL_OPTIONS"),
+           GetNameForDialect("MODEL_COLUMNS"),
+           GetNameForDialect("MODEL_COLUMN_OPTIONS"),
+           GetNameForDialect("VIEWS"), GetNameForDialect("ROLES"),
+           GetNameForDialect("ROLE_GRANTEES"),
+           GetNameForDialect("TABLE_PRIVILEGES"),
+           GetNameForDialect("COLUMN_PRIVILEGES"),
+           GetNameForDialect("PARAMETERS"), GetNameForDialect("ROUTINES"),
+           GetNameForDialect("ROUTINE_OPTIONS"),
+           GetNameForDialect("ROUTINE_PRIVILEGES"),
+           GetNameForDialect("ROLE_TABLE_GRANTS"),
+           GetNameForDialect("ROLE_COLUMN_GRANTS"),
+           GetNameForDialect("ROLE_CHANGE_STREAM_GRANTS"),
+           GetNameForDialect("ROLE_ROUTINE_GRANTS"),
+           GetNameForDialect("TABLE_SYNONYMS"),
+           // Unsupported PG-specific tables.
+           "applicable_roles", "enabled_roles",
+           "information_schema_catalog_name"})};
 
   // Information schema columns not yet supported.
   const std::pair<std::string, Value> kUnsupportedColumns{
@@ -76,8 +87,10 @@ class InformationSchemaTest
 
   // Information schema constraints not yet supported.
   const std::pair<std::string, Value> kUnsupportedConstraints{
-      "unsupported_constraints",
-      std::vector<std::string>({"CK_IS_NOT_NULL_TABLES_TABLE_TYPE"})};
+      "unsupported_constraints", std::vector<std::string>({
+                                     "CK_IS_NOT_NULL_TABLES_TABLE_TYPE",
+                                     "CK_IS_NOT_NULL_VIEWS_SECURITY_TYPE",
+                                 })};
 
   // Returns the given rows, replacing matching string patterns with their
   // actual values from the given results.
@@ -119,6 +132,48 @@ class InformationSchemaTest
   }
 
   static void LogResults(const absl::StatusOr<std::vector<ValueRow>>& results) {
+  }
+
+  inline std::string GetNameForDialect(absl::string_view name) {
+    // The system tables and associated columns are all defined in lowercase for
+    // the PG dialect. The constants defined for the InformationSchema are for
+    // the ZetaSQL dialect which are all uppercase. So we lowercase them here
+    // for PG.
+    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+      return absl::AsciiStrToLower(name);
+    }
+    return std::string(name);
+  }
+
+  std::string GetUnsupportedTablesAsString() {
+    struct formatter {
+      void operator()(std::string* out, std::string s) const {
+        out->append(absl::StrCat("'", s, "'"));
+      }
+    };
+    return absl::StrCat(
+        "array[",
+        absl::StrJoin(
+            *(kUnsupportedTables.second).get<std::vector<std::string>>(), ", ",
+            formatter()),
+        "]");
+  }
+
+  // For most of the tests, the table_catalog column is the first column in a
+  // result. For PG, we currently don't set the value of this column correctly.
+  // So we use this function to get a vector of rows with the first column
+  // stripped.
+  std::vector<ValueRow> StripFirstColumnFromRows(
+      const std::vector<ValueRow>& rows) {
+    std::vector<ValueRow> new_rows;
+    for (const auto& row : rows) {
+      ValueRow new_row;
+      for (auto& value : row.values().subspan(1)) {
+        new_row.add(value);
+      }
+      new_rows.push_back(new_row);
+    }
+    return new_rows;
   }
 
   // Aliases so test expectations read more clearly.
@@ -163,17 +218,34 @@ TEST_P(InformationSchemaTest, Schemata) {
 }
 
 TEST_P(InformationSchemaTest, MetaTables) {
-  // Currently unsupported for PG in the emulator information schema.
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   // The documented set of tables that should be returned is at:
-  // https://cloud.google.com/spanner/docs/information-schema#information_schemadatabase_options.
+  // ZetaSQL: https://cloud.google.com/spanner/docs/information-schema
+  // PostgreSQL: https://cloud.google.com/spanner/docs/information-schema-pg
   //
   // The tables filtered out by the WHERE clause are not currently available in
   // the emulator. This test should not need to filter on table_name.
-  auto results = QueryWithParams(R"(
+
+  std::string table_schema = GetNameForDialect("INFORMATION_SCHEMA");
+  std::string filter;
+  std::string collation;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // The PG dialect doesn't support UNNEST or ANY on parameters so we have to
+    // provide a static array of unsupported tables. The array is substituted in
+    // below when running the query.
+    filter = "NOT (t.table_name = ANY ($0))";
+  } else {
+    filter = "t.table_name not in unnest(@unsupported_tables)";
+    // PG sorts strings differently to GSQL (underscores come before
+    // alpha-numeric characters). In GSQL: "COLUMNS" "COLUMN_OPTIONS" In PG:
+    // "COLUMN_OPTIONS"
+    // "COLUMNS"
+    // Since the Spanner PG dialect doesn't yet support specifying the
+    // collation, we update the GSQL collation to return results in the same
+    // order as PG.
+    collation = "COLLATE \"en_US:cs\"";
+  }
+
+  std::string query = absl::Substitute(R"(
       select
         t.table_catalog,
         t.table_schema,
@@ -186,37 +258,54 @@ TEST_P(InformationSchemaTest, MetaTables) {
       from
         information_schema.tables AS t
       where
-        t.table_schema = 'INFORMATION_SCHEMA'
-        and t.table_name not in unnest(@unsupported_tables)
+        t.table_schema = '$0'
+        and $1
       order by
         t.table_name
+      $2
     )",
-                                 {kUnsupportedTables});
-  LogResults(results);
+                                       table_schema, filter, collation);
+
   // clang-format off
   auto expected = std::vector<ValueRow>({
-    {"", "INFORMATION_SCHEMA", "VIEW", "CHECK_CONSTRAINTS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMNS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMN_COLUMN_USAGE", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "COLUMN_OPTIONS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "CONSTRAINT_COLUMN_USAGE", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "CONSTRAINT_TABLE_USAGE", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "DATABASE_OPTIONS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "INDEXES", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "INDEX_COLUMNS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "KEY_COLUMN_USAGE", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "REFERENTIAL_CONSTRAINTS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "SCHEMATA", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "SPANNER_STATISTICS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "TABLES", Ns(), Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "VIEW", "TABLE_CONSTRAINTS", Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("CHECK_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("COLUMN_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("COLUMN_OPTIONS"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("COLUMNS"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("CONSTRAINT_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("CONSTRAINT_TABLE_USAGE"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("DATABASE_OPTIONS"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("INDEX_COLUMNS"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("INDEXES"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("KEY_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("REFERENTIAL_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("SCHEMATA"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("SPANNER_STATISTICS"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("TABLE_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
+    {"", table_schema, "VIEW", GetNameForDialect("TABLES"), Ns(), Ns(), Ns(), Ns()},  // NOLINT
   });
   // clang-format on
-  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  absl::StatusOr<std::vector<ValueRow>> results;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Remove the table_catalog column from the expected results since we don't
+    // currently set that to its correct value for PG.
+    std::vector<ValueRow> pg_expected = StripFirstColumnFromRows(expected);
+
+    // Substituting in the static array of unsupported tables.
+    results = Query(absl::Substitute(query, GetUnsupportedTablesAsString()));
+    LogResults(results);
+    ZETASQL_EXPECT_OK(results);
+    EXPECT_THAT(StripFirstColumnFromRows(*results), pg_expected);
+  } else {
+    results = QueryWithParams(query, {kUnsupportedTables});
+    LogResults(results);
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
 }
 
-TEST_P(InformationSchemaTest, MetaColumns) {
-  // Currently unsupported for PG in the emulator information schema.
+TEST_P(InformationSchemaTest, GSQLMetaColumns) {
+  // Since the query and output for the PG dialect is significantly different,
+  // we test this logic in a separate function just for the PG dialect.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
@@ -370,6 +459,59 @@ TEST_P(InformationSchemaTest, MetaColumns) {
     {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+  });
+  // clang-format on
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+}
+
+TEST_P(InformationSchemaTest, PGMetaColumns) {
+  // Since the query and output for the PG dialect is significantly different,
+  // we test this logic in a separate function for the GSQL dialect.
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    GTEST_SKIP();
+  }
+
+  // This test currently ignores the ORDINAL_POSITION column as the emulator
+  // reports a different value because production has additional columns that
+  // the emulator does not yet support.
+  //
+  auto results = Query(R"(
+      select
+        t.table_schema,
+        t.table_name,
+        t.column_name,
+        t.column_default,
+        t.data_type,
+        t.is_nullable,
+        t.spanner_type,
+        t.is_generated,
+        t.generation_expression,
+        t.is_stored,
+        t.spanner_state,
+        t.character_maximum_length,
+        t.numeric_precision,
+        t.numeric_precision_radix,
+        t.numeric_scale
+      from
+        information_schema.columns as t
+      where
+        t.table_schema = 'information_schema'
+        and t.table_name = 'columns'
+        and t.column_name = any (array['table_catalog', 'ordinal_position'])
+      order by
+        t.table_name,
+        t.column_name
+    )");
+  LogResults(results);
+  // We keep this test simple and don't test for all possible tables and columns
+  // that could be in this table. The PG version of the information schema
+  // doesn't have a lot of variety in terms of types. So we test for the two
+  // types that we know exist in the schema. The remaining column values will be
+  // the same for all columns.
+  // clang-format off
+  auto expected = std::vector<ValueRow>({
+    {"information_schema", "columns", "ordinal_position", Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), Ns(), Ni(), 64, 2, 0},  // NOLINT
+    {"information_schema", "columns", "table_catalog", Ns(), "character varying", "YES", "character varying", "NEVER", Ns(), Ns(), Ns(), Ni(), Ni(), Ni(), Ni()},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -701,6 +843,7 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINES%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_OPTIONS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_PRIVILEGES%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_TABLE_SYNONYMS%'
       order by
         t.constraint_name
   )",
@@ -1249,42 +1392,52 @@ TEST_P(InformationSchemaTest, MetaConstraintColumnUsage) {
 }
 
 TEST_P(InformationSchemaTest, DefaultTables) {
-  // Currently unsupported for PG in the emulator information schema.
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
+  // GSQL uses an empty string for the default schema and PG doesn't.
+  std::string filter = "";
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    filter = "t.table_catalog = '' and ";
   }
-
-  auto results = Query(R"(
-      select
-        t.table_type,
-        t.table_name,
-        t.parent_table_name,
-        t.on_delete_action,
-        t.row_deletion_policy_expression
-      from
-        information_schema.tables AS t
-      where
-        t.table_catalog = ''
-        and t.table_schema = ''
-      order by
-        t.table_catalog,
-        t.table_schema,
-        t.table_name
-    )");
+  auto results = Query(absl::Substitute(
+      R"(
+        select
+          t.table_type,
+          t.table_name,
+          t.parent_table_name,
+          t.on_delete_action,
+          t.row_deletion_policy_expression
+        from
+          information_schema.tables AS t
+        where
+          $0
+          t.table_schema = '$1'
+        order by
+          t.table_catalog,
+          t.table_schema,
+          t.table_name
+      )",
+      filter,
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public" :
+       "")));
   LogResults(results);
+  std::string expected_interval =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+      ?  "INTERVAL '7 DAYS' ON created_at"
+      : "OLDER_THAN(created_at, INTERVAL 7 DAY)";
   // clang-format off
   auto expected = std::vector<ValueRow>({
     {"BASE TABLE", "base", Ns(), Ns(), Ns()},
+    {"VIEW", "base_view", Ns(), Ns(), Ns()},
     {"BASE TABLE", "cascade_child", "base", "CASCADE", Ns()}, // NOLINT
     {"BASE TABLE", "no_action_child", "base", "NO ACTION", Ns()},
-    {"BASE TABLE", "row_deletion_policy", Ns(), Ns(), "OLDER_THAN(created_at, INTERVAL 7 DAY)"}, // NOLINT
+    {"BASE TABLE", "row_deletion_policy", Ns(), Ns(), expected_interval}, // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_P(InformationSchemaTest, DefaultColumns) {
-  // Currently unsupported for PG in the emulator information schema.
+TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
+  // Since the query and output for the PG dialect is significantly different,
+  // we test this logic in a separate function just for the GSQL dialect.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
@@ -1330,12 +1483,13 @@ TEST_P(InformationSchemaTest, DefaultColumns) {
     {"", "", "base", "double_array", 12, Ns(), Ns(), "YES", "ARRAY<FLOAT64>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "str_array", 13, Ns(), Ns(), "YES", "ARRAY<STRING(256)>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "byte_array", 14, Ns(), Ns(), "YES", "ARRAY<BYTES(MAX)>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "TimestampArray", 15, Ns(), Ns(), "YES", "ARRAY<TIMESTAMP>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "timestamp_array", 15, Ns(), Ns(), "YES", "ARRAY<TIMESTAMP>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "date_array", 16, Ns(), Ns(), "YES", "ARRAY<DATE>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "gen_value", 17, Ns(), Ns(), "YES", "INT64", "ALWAYS", "key1 + 1", "YES", "COMMITTED"},  // NOLINT
     {"", "", "base", "gen_function_value", 18, Ns(), Ns(), "YES", "INT64", "ALWAYS", "LENGTH(key2)", "YES", "COMMITTED"},  // NOLINT
     {"", "", "base", "default_col_value", 19, "100", Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "default_timestamp_col_value", 20, "CURRENT_TIMESTAMP()", Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base_view", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "cascade_child", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "cascade_child", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "cascade_child", "child_key", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
@@ -1348,6 +1502,69 @@ TEST_P(InformationSchemaTest, DefaultColumns) {
     {"", "", "no_action_child", "value", 4, Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "row_deletion_policy", "key", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "row_deletion_policy", "created_at", 2, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+  });
+  // clang-format on
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+}
+
+TEST_P(InformationSchemaTest, PGDefaultColumns) {
+  // Since the query and output for the PG dialect is significantly different,
+  // we test this logic in a separate function for the PG dialect.
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    GTEST_SKIP();
+  }
+
+  auto results = Query(R"(
+      select
+        t.table_schema,
+        t.table_name,
+        t.column_name,
+        t.ordinal_position,
+        t.column_default,
+        t.data_type,
+        t.is_nullable,
+        t.spanner_type,
+        t.is_generated,
+        t.generation_expression,
+        t.is_stored,
+        t.spanner_state,
+        t.character_maximum_length,
+        t.numeric_precision,
+        t.numeric_precision_radix,
+        t.numeric_scale
+      from
+        information_schema.columns AS t
+      where
+        t.table_schema = 'public'
+        and t.table_name = any (array['base', 'base_view'])
+      order by
+        t.table_name,
+        t.ordinal_position
+    )");
+  LogResults(results);
+  // clang-format off
+  auto expected = std::vector<ValueRow>({
+    {"public", "base", "key1", 1, Ns(), "bigint", "NO", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
+    {"public", "base", "key2", 2, Ns(), "character varying", "NO", "character varying(256)", "NEVER", Ns(), Ns(), "COMMITTED", 256, Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "bool_value", 3, Ns(), "boolean", "YES", "boolean", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "int_value", 4, Ns(), "bigint", "NO", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
+    {"public", "base", "double_value", 5, Ns(), "double precision", "YES", "double precision", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 53, 2, Ni()},  // NOLINT
+    {"public", "base", "str_value", 6, Ns(), "character varying", "YES", "character varying", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "byte_value", 7, Ns(), "bytea", "YES", "bytea", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "timestamp_value", 8, Ns(), "spanner.commit_timestamp", "YES", "spanner.commit_timestamp", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "date_value", 9, Ns(), "date", "YES", "date", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "bool_array", 10, Ns(), "ARRAY", "NO", "boolean[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "int_array", 11, Ns(), "ARRAY", "YES", "bigint[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "double_array", 12, Ns(), "ARRAY", "YES", "double precision[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "str_array", 13, Ns(), "ARRAY", "YES", "character varying[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "byte_array", 14, Ns(), "ARRAY", "YES", "bytea[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "timestamp_array", 15, Ns(), "ARRAY", "YES", "timestamp with time zone[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "date_array", 16, Ns(), "ARRAY", "YES", "date[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "gen_value", 17, Ns(), "bigint", "YES", "bigint", "ALWAYS", "(key1 + '1'::bigint)", "YES", "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
+    {"public", "base", "gen_function_value", 18, Ns(), "bigint", "YES", "bigint", "ALWAYS", "length(key2)", "YES", "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
+    {"public", "base", "default_col_value", 19, "'100'::bigint", "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
+    {"public", "base", "default_timestamp_col_value", 20, "CURRENT_TIMESTAMP", "timestamp with time zone", "YES", "timestamp with time zone", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base_view", "key1", 1, Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -1734,18 +1951,75 @@ TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
 // Tests information schema behavior in the presence of generated columns.
 class ColumnColumnUsageInformationSchemaTest : public InformationSchemaTest {
  public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
   absl::Status SetUpDatabase() override {
-    return SetSchema({R"(
-      CREATE TABLE GeneratedColumns (
-        UserId INT64,
-        FirstName STRING(100),
-        LastName STRING(100),
-        FullName STRING(200) AS (CONCAT(FirstName, ", ", LastName)) STORED,
-        UppercaseName STRING(MAX) AS (UPPER(FullName)) STORED,
-      ) PRIMARY KEY(UserId)
-    )"});
+    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+      return SetSchema({R"(
+        CREATE TABLE generated_columns (
+          user_id bigint,
+          first_name varchar(100),
+          last_name varchar(100),
+          full_name varchar(200) GENERATED ALWAYS AS (CONCAT(first_name, ', '::text, last_name)) STORED,
+          uppercase_name varchar GENERATED ALWAYS AS (UPPER(first_name)) STORED,
+          PRIMARY KEY(user_id)
+        )
+      )"});
+    } else {
+      return SetSchema({R"(
+        CREATE TABLE generated_columns (
+          user_id INT64,
+          first_name STRING(100),
+          last_name STRING(100),
+          full_name STRING(200) AS (CONCAT(first_name, ", ", last_name)) STORED,
+          uppercase_name STRING(MAX) AS (UPPER(first_name)) STORED,
+        ) PRIMARY KEY(user_id)
+      )"});
+    }
   }
 };
+
+TEST_P(InformationSchemaTest, DefaultViews) {
+  std::string filter;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    filter = "t.table_schema = 'public'";
+  } else {
+    filter = "t.table_catalog = '' and t.table_schema = ''";
+  }
+  auto results = Query(absl::Substitute(R"(
+      select
+        t.table_catalog,
+        t.table_schema,
+        t.table_name,
+        t.view_definition
+      from
+        information_schema.views AS t
+      where
+        $0
+      order by
+        t.table_name
+    )",
+                                        filter));
+  LogResults(results);
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    auto expected = std::vector<ValueRow>({
+        {"public", "base_view", "SELECT key1 FROM base"},
+    });
+    ZETASQL_EXPECT_OK(results);
+    // Remove the table_catalog column from the expected results since we don't
+    // currently set that to its correct value for PG.
+    EXPECT_THAT(StripFirstColumnFromRows(*results), expected);
+  } else {
+    auto expected = std::vector<ValueRow>({
+        {"", "", "base_view", "SELECT base.key1 FROM base"},
+    });
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
+}
 
 INSTANTIATE_TEST_SUITE_P(
     PerDialectColumnColumnUsageInformationSchemaTests,
@@ -1758,12 +2032,13 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 TEST_P(ColumnColumnUsageInformationSchemaTest, DefaultColumnColumnUsage) {
-  // Currently unsupported for PG in the emulator information schema.
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
+  // GSQL uses an empty string for the default schema and PG doesn't.
+  std::string filter = "";
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    filter = "t.table_catalog = '' and ";
   }
-
-  auto results = Query(R"(
+  auto results = Query(absl::Substitute(
+      R"(
       select
         t.table_name,
         t.dependent_column,
@@ -1771,17 +2046,20 @@ TEST_P(ColumnColumnUsageInformationSchemaTest, DefaultColumnColumnUsage) {
       from
         information_schema.column_column_usage as t
       where
-            t.table_catalog = ''
-        and t.table_schema = ''
+        $0
+        t.table_schema = '$1'
       order by
         t.table_name, t.dependent_column, t.column_name
-  )");
+  )",
+      filter,
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public"
+                                                               : "")));
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
-    {"GeneratedColumns",  "FullName",       "FirstName"},
-    {"GeneratedColumns",  "FullName",       "LastName"},
-    {"GeneratedColumns",  "UppercaseName",  "FullName"},
+    {"generated_columns",  "full_name",       "first_name"},
+    {"generated_columns",  "full_name",       "last_name"},
+    {"generated_columns",  "uppercase_name",  "first_name"},
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));

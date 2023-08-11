@@ -47,6 +47,7 @@ cc_library(
         "//backend/access:write",
         "//backend/common:case",
         "//backend/datamodel:value",
+        "//backend/query/change_stream:change_stream_query_validator",
         "//backend/query/feature_filter:query_size_limits_checker",
         "//backend/schema/catalog:schema",
         "//common:config",
@@ -54,6 +55,7 @@ cc_library(
         "//common:errors",
         "//common:limits",
         "//frontend/converters:values",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
@@ -241,22 +243,68 @@ genrule(
 )
 
 cc_library(
+    name = "info_schema_columns_metadata_values",
+    hdrs = [
+        "info_schema_columns_metadata_values.h",
+    ],
+    deps = [
+        "@com_google_zetasql//zetasql/base:no_destructor",  # buildcleaner: keep
+    ],
+)
+
+cc_library(
+    name = "tables_from_metadata",
+    srcs = [
+        "tables_from_metadata.cc",
+    ],
+    hdrs = [
+        "tables_from_metadata.h",
+    ],
+    deps = [
+        ":info_schema_columns_metadata_values",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_zetasql//zetasql/base:no_destructor",  # buildcleaner: keep
+        "@com_google_zetasql//zetasql/public:simple_catalog",
+    ],
+)
+
+cc_test(
+    name = "tables_from_metadata_test",
+    srcs = ["tables_from_metadata_test.cc"],
+    deps = [
+        ":tables_from_metadata",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base:no_destructor",  # buildcleaner: keep
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
     name = "information_schema_catalog",
     srcs = ["information_schema_catalog.cc"],
     hdrs = [
-        "info_schema_columns_metadata_values.h",
         "information_schema_catalog.h",
     ],
     deps = [
+        ":info_schema_columns_metadata_values",
+        ":tables_from_metadata",
         "//backend/schema/catalog:schema",
+        "//backend/schema/ddl:operations_cc_proto",
         "//backend/schema/printer:print_ddl",
+        "//backend/schema/updater:ddl_type_conversion",
+        "//common:limits",
         "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/types:optional",
-        "@com_google_absl//absl/types:variant",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_grpc",
         "@com_google_zetasql//zetasql/base:no_destructor",  # buildcleaner: keep
         "@com_google_zetasql//zetasql/public:simple_catalog",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 
@@ -264,11 +312,11 @@ cc_test(
     name = "information_schema_catalog_test",
     srcs = ["information_schema_catalog_test.cc"],
     deps = [
+        ":info_schema_columns_metadata_values",
         ":information_schema_catalog",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base:no_destructor",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
@@ -289,6 +337,7 @@ cc_library(
         ":queryable_view",
         "//backend/access:read",
         "//backend/common:case",
+        "//backend/query/change_stream:queryable_change_stream_tvf",
         "//backend/schema/catalog:schema",
         "//common:errors",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -378,9 +427,12 @@ cc_library(
         ":queryable_column",
         "//backend/access:read",
         "//backend/schema/catalog:schema",
+        "//common:constants",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
         "@com_google_zetasql//zetasql/public:analyzer",
         "@com_google_zetasql//zetasql/public:analyzer_options",

@@ -23,10 +23,12 @@ licenses(["unencumbered"])
 cc_library(
     name = "schema_backfillers",
     srcs = [
+        "change_stream_backfill.cc",
         "column_value_backfill.cc",
         "index_backfill.cc",
     ],
     hdrs = [
+        "change_stream_backfill.h",
         "column_value_backfill.h",
         "index_backfill.h",
     ],
@@ -49,12 +51,34 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:optional",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:type_cc_proto",
         "@com_google_zetasql//zetasql/public:value",
         "@com_google_zetasql//zetasql/public/functions:string",
+    ],
+)
+
+cc_test(
+    name = "change_stream_backfill_test",
+    srcs = [
+        "change_stream_backfill_test.cc",
+    ],
+    deps = [
+        ":schema_backfillers",
+        "//backend/database",
+        "//backend/schema/catalog:schema",
+        "//backend/schema/updater:schema_updater",
+        "//backend/transaction:read_only_transaction",
+        "//common:errors",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 

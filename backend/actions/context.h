@@ -16,12 +16,17 @@
 
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_ACTIONS_CONTEXT_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_ACTIONS_CONTEXT_H_
+#include <memory>
+#include <utility>
+#include <vector>
 
-#include "absl/status/status.h"
+#include "zetasql/public/value.h"
 #include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "backend/actions/ops.h"
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/iterator.h"
 #include "common/clock.h"
@@ -41,7 +46,7 @@ namespace backend {
 // are processed before the next row mutation in the statement is processed.
 class EffectsBuffer {
  public:
-  virtual ~EffectsBuffer() {}
+  virtual ~EffectsBuffer() = default;
 
   // Adds an insert operation to the effects buffer.
   virtual void Insert(const Table* table, const Key& key,
@@ -55,6 +60,31 @@ class EffectsBuffer {
 
   // Adds a delete operation to the effects buffer.
   virtual void Delete(const Table* table, const Key& key) = 0;
+};
+
+// TODO: Remove ChangeStreamEffectsBuffer.
+class ChangeStreamEffectsBuffer {
+ public:
+  virtual ~ChangeStreamEffectsBuffer() = default;
+
+  // Adds an insert operation to the effects buffer.
+  virtual void Insert(zetasql::Value partition_token_str,
+                      const ChangeStream* change_stream,
+                      const InsertOp& op) = 0;
+
+  // Adds an update operation to the effects buffer.
+  virtual void Update(zetasql::Value partition_token_str,
+                      const ChangeStream* change_stream,
+                      const UpdateOp& op) = 0;
+
+  // Adds a delete operation to the effects buffer.
+  virtual void Delete(zetasql::Value partition_token_str,
+                      const ChangeStream* change_stream,
+                      const DeleteOp& op) = 0;
+
+  virtual void BuildMutation() = 0;
+
+  virtual std::vector<WriteOp> GetWriteOps() = 0;
 };
 
 // ReadOnlyStore abstracts the storage environment in which an action lives.
@@ -72,7 +102,7 @@ class EffectsBuffer {
 //   operation.
 class ReadOnlyStore {
  public:
-  virtual ~ReadOnlyStore() {}
+  virtual ~ReadOnlyStore() = default;
 
   // Returns true if the given key exist, false if it does not.
   virtual absl::StatusOr<bool> Exists(const Table* table,
@@ -92,19 +122,28 @@ class ReadOnlyStore {
 // ActionContext contains the context in which an action operates.
 class ActionContext {
  public:
-  ActionContext(std::unique_ptr<ReadOnlyStore> store,
-                std::unique_ptr<EffectsBuffer> effects, Clock* clock)
-      : store_(std::move(store)), effects_(std::move(effects)), clock_(clock) {}
+  ActionContext(
+      std::unique_ptr<ReadOnlyStore> store,
+      std::unique_ptr<EffectsBuffer> effects,
+      std::unique_ptr<ChangeStreamEffectsBuffer> change_stream_effects,
+      Clock* clock)
+      : store_(std::move(store)),
+        effects_(std::move(effects)),
+        change_stream_effects_(std::move(change_stream_effects)),
+        clock_(clock) {}
 
   // Accessors.
   ReadOnlyStore* store() const { return store_.get(); }
   EffectsBuffer* effects() const { return effects_.get(); }
+  ChangeStreamEffectsBuffer* change_stream_effects() const {
+    return change_stream_effects_.get();
+  }
   Clock* clock() const { return clock_; }
 
  private:
   std::unique_ptr<ReadOnlyStore> store_;
   std::unique_ptr<EffectsBuffer> effects_;
-
+  std::unique_ptr<ChangeStreamEffectsBuffer> change_stream_effects_;
   // System-wide monotonic clock.
   Clock* clock_;
 };

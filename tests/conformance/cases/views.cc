@@ -421,7 +421,9 @@ TEST_F(ViewsTest, InformationSchema) {
 
   // User-created views are visible in the information schema.
   EXPECT_THAT(
-      Query("SELECT * FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = ''"),
+      Query(R"(SELECT TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, VIEW_DEFINITION
+               FROM INFORMATION_SCHEMA.VIEWS
+               WHERE TABLE_SCHEMA = '')"),
       IsOkAndHoldsUnorderedRows(
           {{"", "", "V", "SELECT TRUE AS T, FALSE AS F"}}));
 

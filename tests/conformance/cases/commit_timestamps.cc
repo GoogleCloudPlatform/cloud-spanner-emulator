@@ -481,15 +481,11 @@ TEST_F(CommitTimestamps, CanInsertPendingCommitTimestampWithSubsetOfColumns) {
                   {{1, Null<std::string>(), 27, result.commit_timestamp}}));
 }
 
-// TODO: Fix this inconsistent behavior.
 TEST_F(CommitTimestamps, CannotInsertPendingCommitTimestampFromSelect) {
   auto result =
       CommitDml({{SqlStatement("INSERT INTO Users(ID, Age, CommitTS) "
                                "SELECT 1, 27, PENDING_COMMIT_TIMESTAMP()")}});
-  std::string error_msg =
-      "The PENDING_COMMIT_TIMESTAMP() function may only be used as a value "
-      "for INSERT or UPDATE of an appropriately typed column. It cannot be "
-      "used in SELECT, or as the input to any other scalar expression.";
+  std::string error_msg = "PENDING_COMMIT_TIMESTAMP()";
   EXPECT_THAT(result,
               zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
                                         testing::HasSubstr(error_msg)));

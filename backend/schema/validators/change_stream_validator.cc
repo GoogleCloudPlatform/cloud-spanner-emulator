@@ -57,7 +57,16 @@ absl::Status ChangeStreamValidator::Validate(const ChangeStream* change_stream,
 absl::Status ChangeStreamValidator::ValidateUpdate(
     const ChangeStream* change_stream, const ChangeStream* old_change_stream,
     SchemaValidationContext* context) {
+  if (change_stream->is_deleted()) {
+    ZETASQL_RET_CHECK(change_stream->change_stream_data_table_->is_deleted());
+    ZETASQL_RET_CHECK(change_stream->change_stream_partition_table_->is_deleted());
+    context->global_names()->RemoveName(change_stream->Name());
+    return absl::OkStatus();
+  }
+  ZETASQL_RET_CHECK(!change_stream->change_stream_data_table()->is_deleted());
+  ZETASQL_RET_CHECK(!change_stream->change_stream_partition_table()->is_deleted());
   ZETASQL_RET_CHECK_EQ(change_stream->Name(), old_change_stream->Name());
+  ZETASQL_RET_CHECK_EQ(change_stream->id(), old_change_stream->id());
   return absl::OkStatus();
 }
 

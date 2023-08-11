@@ -1,0 +1,120 @@
+# CREATE CHANGE STREAM for explicit key columns.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users(UserId);
+--
+ERROR:.* should not list the primary key column UserId of Table Users.*
+==
+# ALTER CHANGE STREAM for explicit key columns.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users(Name);
+ALTER CHANGE STREAM foo SET FOR Users(UserId);
+--
+ERROR:.* should not list the primary key column UserId of Table Users.*
+==
+# CREATE CHANGE STREAM for repeated tables.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users,Users;
+--
+ERROR:.* foo should not list Table Users more than once in the FOR clause.
+==
+# CREATE CHANGE STREAM for repeated columns.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users(Name),Users(Name);
+--
+ERROR:.* foo should not list Table Users more than once in the FOR clause.
+==
+# CREATE CHANGE STREAM for non existed table.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR bar;
+--
+ERROR:.* do not track database objects of this type, or this Table does not exist.
+==
+# CREATE CHANGE STREAM for non existed column.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users(Age);
+--
+ERROR:.* cannot track column Age because it does not exist in Table Users.
+==
+# CREATE more than 3 CHANGE STREAM for one table.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users;
+CREATE CHANGE STREAM foo2 FOR Users;
+CREATE CHANGE STREAM foo3 FOR Users;
+CREATE CHANGE STREAM foo4 FOR Users;
+--
+ERROR:.* because it is not allowed to have more than 3 Change Streams.*
+==
+# CREATE more than 3 CHANGE STREAM for one column.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users(Name);
+CREATE CHANGE STREAM foo2 FOR Users(Name);
+CREATE CHANGE STREAM foo3 FOR Users(Name);
+CREATE CHANGE STREAM foo4 FOR Users(Name);
+--
+ERROR:.* because it is not allowed to have more than 3 Change Streams.*
+==
+# CREATE more than 3 CHANGE STREAM for one table.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users;
+CREATE CHANGE STREAM foo2 FOR Users;
+CREATE CHANGE STREAM foo3 FOR Users;
+CREATE CHANGE STREAM foo4 FOR Users;
+--
+ERROR:.* because it is not allowed to have more than 3 Change Streams.*
+==
+# CREATE more than 3 CHANGE STREAM for one of all tables.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE TABLE Albums (
+  AlbumId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(AlbumId);
+CREATE CHANGE STREAM foo FOR Users;
+CREATE CHANGE STREAM foo2 FOR Users;
+CREATE CHANGE STREAM foo3 FOR Users;
+CREATE CHANGE STREAM foo4 FOR ALL;
+--
+ERROR:.* because it is not allowed to have more than 3 Change Streams.*
+==
+
+
+

@@ -107,8 +107,24 @@ class CatalogTest : public testing::Test {
                                          &type_factory_);
   }
 
+  void MakeChangeStreamInternalQueryCatalog(
+      absl::Span<const std::string> statements) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema_,
+                         test::CreateSchemaFromDDL(statements, &type_factory_));
+    catalog_ = std::make_unique<Catalog>(schema_.get(), &function_catalog_,
+                                         &type_factory_);
+    change_stream_internal_query_catalog_ = std::make_unique<Catalog>(
+        schema_.get(), &function_catalog_, &type_factory_,
+        MakeGoogleSqlAnalyzerOptions(), /*reader=*/nullptr,
+        /*query_evaluator=*/nullptr,
+        /*change_stream_internal_lookup=*/"test_stream");
+  }
+
  protected:
   zetasql::EnumerableCatalog& catalog() { return *catalog_; }
+  zetasql::EnumerableCatalog& change_stream_internal_query_catalog() {
+    return *change_stream_internal_query_catalog_;
+  }
 
  private:
   zetasql::TypeFactory type_factory_;
@@ -116,6 +132,7 @@ class CatalogTest : public testing::Test {
   std::unique_ptr<const Schema> schema_ = nullptr;
   FunctionCatalog function_catalog_;
   std::unique_ptr<Catalog> catalog_;
+  std::unique_ptr<Catalog> change_stream_internal_query_catalog_;
 };
 
 TEST_F(CatalogTest, FullNameNameIsAlwaysEmpty) {
@@ -178,6 +195,122 @@ TEST_F(CatalogTest, FindViewTable) {
   EXPECT_EQ(view_col->IsPseudoColumn(), false);
   EXPECT_EQ(view_col->GetType(), zetasql::types::StringType());
   EXPECT_EQ(view->FindColumnByName("view_col"), view_col);
+}
+
+TEST_F(CatalogTest, FindTableValuedFunction) {
+  MakeCatalog({
+      R"(
+        CREATE TABLE test_table (
+          int64_col INT64 NOT NULL,
+          string_col STRING(MAX)
+        ) PRIMARY KEY (int64_col)
+      )",
+      R"(
+        CREATE CHANGE STREAM test_stream FOR test_table
+      )",
+  });
+
+  const zetasql::TableValuedFunction* tvf;
+  ZETASQL_EXPECT_OK(catalog().FindTableValuedFunction({"READ_test_stream"}, &tvf, {}));
+  EXPECT_EQ(tvf->FullName(), "READ_test_stream");
+}
+TEST_F(CatalogTest, FindTableValuedFunctionIsNotFound) {
+  MakeCatalog({
+      R"(
+        CREATE TABLE test_table (
+          int64_col INT64 NOT NULL,
+          string_col STRING(MAX)
+        ) PRIMARY KEY (int64_col)
+      )",
+      R"(
+        CREATE CHANGE STREAM test_stream FOR test_table
+      )",
+  });
+
+  const zetasql::TableValuedFunction* tvf;
+  EXPECT_THAT(catalog().FindTableValuedFunction({"BAR_tvf"}, &tvf, {}),
+              StatusIs(absl::StatusCode::kNotFound));
+  EXPECT_EQ(tvf, nullptr);
+}
+
+TEST_F(CatalogTest, FindChangeStreamInternalPartitionTable) {
+  MakeChangeStreamInternalQueryCatalog({
+      R"(
+        CREATE TABLE test_table (
+          int64_col INT64 NOT NULL,
+          string_col STRING(MAX)
+        ) PRIMARY KEY (int64_col)
+      )",
+      R"(
+        CREATE CHANGE STREAM test_stream FOR test_table
+      )",
+  });
+
+  const zetasql::Table* partition_table;
+  ZETASQL_EXPECT_OK(change_stream_internal_query_catalog().FindTable(
+      {"_change_stream_partition_test_stream"}, &partition_table, {}));
+  EXPECT_EQ(partition_table->FullName(),
+            "_change_stream_partition_test_stream");
+}
+
+TEST_F(CatalogTest, FindChangeStreamInternalDataTable) {
+  MakeChangeStreamInternalQueryCatalog({
+      R"(
+        CREATE TABLE test_table (
+          int64_col INT64 NOT NULL,
+          string_col STRING(MAX)
+        ) PRIMARY KEY (int64_col)
+      )",
+      R"(
+        CREATE CHANGE STREAM test_stream FOR test_table
+      )",
+  });
+
+  const zetasql::Table* data_table;
+  ZETASQL_EXPECT_OK(change_stream_internal_query_catalog().FindTable(
+      {"_change_stream_data_test_stream"}, &data_table, {}));
+  EXPECT_EQ(data_table->FullName(), "_change_stream_data_test_stream");
+}
+
+TEST_F(CatalogTest,
+       FindChangeStreamInternalPartitionTableNotValidFromExternalUser) {
+  MakeCatalog({
+      R"(
+        CREATE TABLE test_table (
+          int64_col INT64 NOT NULL,
+          string_col STRING(MAX)
+        ) PRIMARY KEY (int64_col)
+      )",
+      R"(
+        CREATE CHANGE STREAM test_stream FOR test_table
+      )",
+  });
+
+  const zetasql::Table* partition_table;
+  EXPECT_THAT(catalog().FindTable({"_change_stream_partition_test_stream"},
+                                  &partition_table, {}),
+              StatusIs(absl::StatusCode::kNotFound));
+  EXPECT_EQ(partition_table, nullptr);
+}
+
+TEST_F(CatalogTest, FindChangeStreamInternalDataTableNotValidFromExternalUser) {
+  MakeCatalog({
+      R"(
+        CREATE TABLE test_table (
+          int64_col INT64 NOT NULL,
+          string_col STRING(MAX)
+        ) PRIMARY KEY (int64_col)
+      )",
+      R"(
+        CREATE CHANGE STREAM test_stream FOR test_table
+      )",
+  });
+
+  const zetasql::Table* data_table;
+  EXPECT_THAT(
+      catalog().FindTable({"_change_stream_dat_test_stream"}, &data_table, {}),
+      StatusIs(absl::StatusCode::kNotFound));
+  EXPECT_EQ(data_table, nullptr);
 }
 
 }  // namespace

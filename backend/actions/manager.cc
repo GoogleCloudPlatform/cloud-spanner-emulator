@@ -20,18 +20,33 @@
 #include <string>
 #include <vector>
 
+#include "zetasql/public/types/type_factory.h"
+#include "zetasql/public/value.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/synchronization/mutex.h"
 #include "backend/access/write.h"
+#include "backend/actions/change_stream.h"
 #include "backend/actions/check_constraint.h"
 #include "backend/actions/column_value.h"
+#include "backend/actions/context.h"
 #include "backend/actions/existence.h"
 #include "backend/actions/foreign_key.h"
 #include "backend/actions/generated_column.h"
 #include "backend/actions/index.h"
 #include "backend/actions/interleave.h"
+#include "backend/actions/ops.h"
 #include "backend/actions/unique_index.h"
+#include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/check_constraint.h"
+#include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
+#include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/schema.h"
 #include "common/errors.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -115,7 +130,11 @@ void ActionRegistry::BuildActionRegistry() {
       table_validators_[table].emplace_back(
           std::make_unique<InterleaveChildValidator>(table->parent(), table));
     }
-
+    // Actions for ChangeStream.
+    for (const ChangeStream* change_stream : table->change_streams()) {
+      table_effectors_[table].emplace_back(
+          std::make_unique<ChangeStreamEffector>(change_stream));
+    }
     // Actions for Index.
     for (const Index* index : table->indexes()) {
       // Index effects.
@@ -176,12 +195,14 @@ void ActionRegistry::BuildActionRegistry() {
 void ActionManager::AddActionsForSchema(const Schema* schema,
                                         const FunctionCatalog* function_catalog,
                                         zetasql::TypeFactory* type_factory) {
+  absl::MutexLock l(&mutex_);
   registry_[schema] =
       std::make_unique<ActionRegistry>(schema, function_catalog, type_factory);
 }
 
 absl::StatusOr<ActionRegistry*> ActionManager::GetActionsForSchema(
     const Schema* schema) const {
+  absl::MutexLock l(&mutex_);
   auto itr = registry_.find(schema);
   if (itr == registry_.end()) {
     return error::Internal(

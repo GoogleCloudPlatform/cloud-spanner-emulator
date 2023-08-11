@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <string>
 #include <utility>
@@ -25,11 +26,12 @@
 
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/memory/memory.h"
 #include "absl/random/random.h"
+#include "absl/random/uniform_int_distribution.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
+#include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
@@ -38,16 +40,16 @@
 #include "backend/actions/context.h"
 #include "backend/actions/manager.h"
 #include "backend/actions/ops.h"
-#include "backend/common/case.h"
 #include "backend/common/ids.h"
 #include "backend/common/rows.h"
+#include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/datamodel/value.h"
-#include "backend/locking/request.h"
+#include "backend/locking/manager.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/versioned_catalog.h"
-#include "backend/storage/in_memory_iterator.h"
 #include "backend/storage/iterator.h"
 #include "backend/storage/storage.h"
 #include "backend/transaction/actions.h"
@@ -56,11 +58,13 @@
 #include "backend/transaction/options.h"
 #include "backend/transaction/resolve.h"
 #include "backend/transaction/row_cursor.h"
+#include "backend/transaction/transaction_store.h"
+#include "common/change_stream.h"
 #include "common/clock.h"
 #include "common/config.h"
 #include "common/constants.h"
 #include "common/errors.h"
-#include "absl/status/status.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -197,7 +201,7 @@ ReadWriteTransaction::ReadWriteTransaction(
       action_context_(std::make_unique<ActionContext>(
           std::make_unique<TransactionReadOnlyStore>(transaction_store_.get()),
           std::make_unique<TransactionEffectsBuffer>(&write_ops_queue_),
-          clock)),
+          std::make_unique<ChangeStreamTransactionEffectsBuffer>(id_), clock)),
       schema_(versioned_catalog_->GetLatestSchema()) {}
 
 absl::StatusOr<absl::Time> ReadWriteTransaction::GetCommitTimestamp() {
@@ -346,6 +350,12 @@ absl::Status ReadWriteTransaction::ProcessWriteOps(
     // Apply to transaction store.
     ZETASQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(write_op));
   }
+
+  action_context_->change_stream_effects()->BuildMutation();
+  for (const WriteOp& writeop :
+       action_context_->change_stream_effects()->GetWriteOps()) {
+    ZETASQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(writeop));
+  }
   return absl::OkStatus();
 }
 
@@ -355,6 +365,12 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
   ZETASQL_RET_CHECK(mutation_op.type != MutationOpType::kDelete);
 
   const Table* table = schema->FindTable(mutation_op.table);
+
+  if (IsChangeStreamPartitionTable(mutation_op.table)) {
+    ZETASQL_ASSIGN_OR_RETURN(table,
+                     FindChangeStreamPartitionTable(schema, mutation_op.table));
+  }
+
   if (table == nullptr) {
     return error::TableNotFound(mutation_op.table);
   }

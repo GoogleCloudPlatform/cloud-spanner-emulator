@@ -124,6 +124,8 @@ Schema::Schema(const SchemaGraph* graph
   tables_.clear();
   tables_map_.clear();
   index_map_.clear();
+  change_streams_.clear();
+  change_streams_map_.clear();
   for (const SchemaNode* node : graph_->GetSchemaNodes()) {
     const View* view = node->As<const View>();
     if (view != nullptr) {

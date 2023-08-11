@@ -115,7 +115,10 @@ class ActionManager {
       const Schema* schema) const;
 
  private:
-  absl::node_hash_map<const Schema*, std::unique_ptr<ActionRegistry>> registry_;
+  absl::node_hash_map<const Schema*, std::unique_ptr<ActionRegistry>> registry_
+      ABSL_GUARDED_BY(mutex_);
+
+  mutable absl::Mutex mutex_;
 };
 
 }  // namespace backend

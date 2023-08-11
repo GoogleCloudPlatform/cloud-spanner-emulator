@@ -76,6 +76,11 @@ class Table : public SchemaNode {
   // have a parent table.
   const Table* parent() const { return parent_table_; }
 
+  // Returns the Change Stream that owns this table if one exists.
+  const ChangeStream* owner_change_stream() const {
+    return owner_change_stream_;
+  }
+
   // Returns the Index that owns this table, or nullptr if this table is not
   // owned by an Index.
   const Index* owner_index() const { return owner_index_; }
@@ -116,6 +121,25 @@ class Table : public SchemaNode {
     return change_streams_;
   }
 
+  // List of change streams that are tracking this entire table (explicitly or
+  // implicitly)
+  absl::Span<const ChangeStream* const> change_streams_tracking_entire_table()
+      const {
+    return change_streams_tracking_entire_table_;
+  }
+
+  bool is_trackable_by_change_stream() const { return is_public(); }
+
+  std::vector<std::string> trackable_columns() const {
+    std::vector<std::string> trackable_columns;
+    for (const Column* column : columns_) {
+      if (column->is_trackable_by_change_stream()) {
+        trackable_columns.push_back(column->Name());
+      }
+    }
+    return trackable_columns;
+  }
+
   // Returns the primary key of this table.
   const absl::Span<const KeyColumn* const> primary_key() const {
     return primary_key_;
@@ -124,8 +148,7 @@ class Table : public SchemaNode {
   // Returns true if the Table is publicly visible, i.e. can be accessed
   // directly by a user request.
   bool is_public() const {
-    return
-        owner_index_ == nullptr;
+    return owner_change_stream_ == nullptr && owner_index_ == nullptr;
   }
 
   // Finds a column by its name. Returns a const pointer to the column, or
@@ -135,6 +158,11 @@ class Table : public SchemaNode {
   // Finds an index on the table by its name. Name comparison is
   // case-insensitive.
   const Index* FindIndex(const std::string& index_name) const;
+
+  // Finds a change stream on the table by its name. Name comparison is
+  // case-insensitive.
+  const ChangeStream* FindChangeStream(
+      const std::string& change_stream_name) const;
 
   // Same as above, but name comparison is case-sensitive.
   const Column* FindColumnCaseSensitive(const std::string& column_name) const;
@@ -235,6 +263,13 @@ class Table : public SchemaNode {
   // List of change streams tracking this table. These are owned by the
   // Schema, not by the Table.
   std::vector<const ChangeStream*> change_streams_;
+
+  // List of change streams tracking to this entire table. These are owned by
+  // the Schema, not by the Table.
+  std::vector<const ChangeStream*> change_streams_tracking_entire_table_;
+
+  // The Change Stream that owns this table if one exists.
+  const ChangeStream* owner_change_stream_ = nullptr;
 
   // The Index that owns this table if one exists.
   const Index* owner_index_ = nullptr;

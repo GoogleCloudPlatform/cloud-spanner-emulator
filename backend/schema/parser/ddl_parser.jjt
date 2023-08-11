@@ -221,8 +221,15 @@ void foreign_key() :
     "(" identifier_list() #referencing_columns ")"
   <REFERENCES> qualified_identifier() #referenced_table
     "(" identifier_list() #referenced_columns ")"
+  [ <ON> <DELETE> referential_action() #on_delete ]
 }
 
+void referential_action() :
+{}
+{
+    <NO> <ACTION> #no_action
+  | <CASCADE> #cascade
+}
 
 void statement_token_no_paren() :
 {}

@@ -14,7 +14,7 @@ CREATE TABLE base (
   double_array ARRAY<FLOAT64>,
   str_array ARRAY<STRING(256)>,
   byte_array ARRAY<BYTES(MAX)>,
-  TimestampArray ARRAY<TIMESTAMP>,
+  timestamp_array ARRAY<TIMESTAMP>,
   date_array ARRAY<DATE>,
   gen_value INT64 AS (key1 + 1) STORED,
   gen_function_value INT64 AS (LENGTH(key2)) STORED,
@@ -50,6 +50,7 @@ CREATE TABLE row_deletion_policy (
   key INT64,
   created_at TIMESTAMP,
 ) PRIMARY KEY (key), ROW DELETION POLICY (OLDER_THAN(created_at, INTERVAL 7 DAY));
+CREATE VIEW base_view SQL SECURITY INVOKER AS SELECT base.key1 FROM base;
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE base (
@@ -67,7 +68,7 @@ CREATE TABLE base (
   double_array float8[],
   str_array varchar(256)[],
   byte_array bytea[],
-  TimestampArray timestamptz[],
+  timestamp_array timestamptz[],
   date_array date[],
   gen_value bigint GENERATED ALWAYS AS (key1 + 1) STORED,
   gen_function_value bigint GENERATED ALWAYS AS (LENGTH(key2)) STORED,
@@ -120,3 +121,4 @@ CREATE TABLE row_deletion_policy (
   created_at timestamptz,
   PRIMARY KEY (key)
 ) TTL INTERVAL '7 days' on created_at;
+CREATE VIEW base_view SQL SECURITY INVOKER AS SELECT base.key1 FROM base;

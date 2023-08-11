@@ -52,6 +52,7 @@ cc_library(
     name = "schema_updater_tests",
     testonly = 1,
     srcs = [
+        "change_stream_test.cc",
         "check_constraint.cc",
         "column_default_values.cc",
         "common.cc",
@@ -71,9 +72,11 @@ cc_library(
         "//tests/common:scoped_feature_flags_setter",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:type_cc_proto",
     ],
     alwayslink = 1,
 )
