@@ -118,6 +118,13 @@ class QueryEngineTestBase : public testing::Test {
   const Schema* schema() { return schema_.get(); }
   const Schema* multi_table_schema() { return multi_table_schema_.get(); }
   const Schema* views_schema() { return views_schema_.get(); }
+  const Schema* change_stream_schema() { return change_stream_schema_.get(); }
+  RowReader* change_stream_partition_table_reader() {
+    return &change_stream_partition_table_reader_;
+  }
+  RowReader* change_stream_data_table_reader() {
+    return &change_stream_data_table_reader_;
+  }
   RowReader* reader() { return &reader_; }
   QueryEngine& query_engine() { return query_engine_; }
   zetasql::TypeFactory* type_factory() { return &type_factory_; }
@@ -126,6 +133,7 @@ class QueryEngineTestBase : public testing::Test {
   zetasql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
   std::unique_ptr<const Schema> multi_table_schema_;
+  std::unique_ptr<const Schema> change_stream_schema_;
 
  private:
   std::unique_ptr<const Schema> views_schema_ =
@@ -140,6 +148,12 @@ class QueryEngineTestBase : public testing::Test {
   QueryEngine query_engine_{&type_factory_};
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_setter_ =
       test::ScopedEmulatorFeatureFlagsSetter({.enable_dml_returning = true});
+  test::TestRowReader change_stream_partition_table_reader_{
+      {{"_change_stream_partition_change_stream_test_table",
+        {{"partition_token"}, {zetasql::types::StringType()}}}}};
+  test::TestRowReader change_stream_data_table_reader_{
+      {{"_change_stream_data_change_stream_test_table",
+        {{"partition_token"}, {zetasql::types::StringType()}}}}};
 };
 
 class QueryEngineTest
@@ -150,6 +164,8 @@ class QueryEngineTest
     if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
       schema_ = test::CreateSchemaWithOneTable(&type_factory_);
       multi_table_schema_ = test::CreateSchemaWithMultiTables(&type_factory_);
+      change_stream_schema_ =
+          test::CreateSchemaWithOneTableAndOneChangeStream(&type_factory_);
     }
   }
 };
@@ -455,6 +471,136 @@ TEST_P(QueryEngineTest, ConnotUpdatePrimaryKey) {
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{"UPDATE test_table SET int64_col=2 WHERE int64_col=2"},
                   QueryContext{schema(), reader(), &writer}),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_P(QueryEngineTest, TestGetValidChangeStreamMetadataFromChangeStreamQuery) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+
+  absl::Time start_time = absl::Now();
+  absl::Time end_time = start_time + absl::Minutes(1);
+  Query query{
+      absl::Substitute("SELECT * FROM "
+                       "READ_change_stream_test_table ('$0', "
+                       "'$1', 'test_token', 1000 )",
+                       start_time, end_time)};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto metadata, query_engine().TryGetChangeStreamMetadata(
+                                          query, change_stream_schema()));
+  EXPECT_EQ(metadata.change_stream_name, "change_stream_test_table");
+  EXPECT_EQ(metadata.heartbeat_milliseconds, 1000);
+  EXPECT_EQ(metadata.partition_token.value(), "test_token");
+  EXPECT_EQ(metadata.end_timestamp.value(), end_time);
+  EXPECT_EQ(metadata.start_timestamp, start_time);
+  EXPECT_EQ(metadata.tvf_name, "READ_change_stream_test_table");
+  EXPECT_EQ(metadata.partition_table,
+            "_change_stream_partition_change_stream_test_table");
+  EXPECT_EQ(metadata.data_table,
+            "_change_stream_data_change_stream_test_table");
+  ASSERT_TRUE(metadata.is_change_stream_query);
+}
+
+TEST_P(QueryEngineTest,
+       TestCannotGetChangeStreamMetadataFromInvalidChangeStreamQuery) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+
+  absl::Time start_time = absl::Now();
+  absl::Time end_time = start_time + absl::Minutes(1);
+  Query query{
+      absl::Substitute("SELECT * FROM "
+                       "READ_change_stream_test_table ('$0', "
+                       "'$1', 'test_token', NULL )",
+                       start_time, end_time)};
+  EXPECT_THAT(
+      query_engine().TryGetChangeStreamMetadata(query, change_stream_schema()),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_P(QueryEngineTest, TestGetEmptyChangeStreamMetadataFromNormalQuery) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+
+  Query query{"SELECT * FROM test_table"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto metadata, query_engine().TryGetChangeStreamMetadata(
+                                          query, change_stream_schema()));
+  ASSERT_FALSE(metadata.is_change_stream_query);
+}
+
+TEST_P(QueryEngineTest,
+       TestPreventChanegStreamQueriesFromGenericExecuteSqlAPI) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+
+  absl::Time start_time = absl::Now();
+  absl::Time end_time = start_time + absl::Minutes(1);
+  Query query{
+      absl::Substitute("SELECT * FROM "
+                       "READ_change_stream_test_table ('$0', "
+                       "'$1', 'test_token', NULL )",
+                       start_time, end_time)};
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  query, QueryContext{change_stream_schema(), reader()}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("Change stream queries are not "
+                                     "supported for the ExecuteSql API.")));
+}
+
+TEST_P(QueryEngineTest, TestCanQueryChangeStreamPartitionTableInternally) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+  Query query{
+      "SELECT partition_token FROM "
+      "_change_stream_partition_change_stream_test_table"};
+  query.change_stream_internal_lookup = "change_stream_test_table";
+
+  ZETASQL_ASSERT_OK(query_engine().ExecuteSql(
+      query, QueryContext{change_stream_schema(),
+                          change_stream_partition_table_reader()}));
+}
+
+TEST_P(QueryEngineTest, TestCannotQueryChangeStreamPartitionTableExternally) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+  Query query{
+      "SELECT partition_token FROM "
+      "_change_stream_partition_change_stream_test_table"};
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  query, QueryContext{change_stream_schema(),
+                                      change_stream_partition_table_reader()}),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_P(QueryEngineTest, TestCanQueryChangeStreamDataTableInternally) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+  Query query{
+      "SELECT partition_token FROM "
+      "_change_stream_data_change_stream_test_table"};
+  query.change_stream_internal_lookup = "change_stream_test_table";
+  ZETASQL_ASSERT_OK(query_engine().ExecuteSql(
+      query,
+      QueryContext{change_stream_schema(), change_stream_data_table_reader()}));
+}
+
+TEST_P(QueryEngineTest, TestCannotQueryChangeStreamDataTableExternally) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+  Query query{
+      "SELECT partition_token FROM "
+      "_change_stream_data_change_stream_test_table"};
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  query, QueryContext{change_stream_schema(),
+                                      change_stream_data_table_reader()}),
               zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 

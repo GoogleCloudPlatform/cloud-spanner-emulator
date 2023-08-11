@@ -59,8 +59,10 @@ class ResolveTest : public testing::Test {
                         )",
                         R"(
                           CREATE UNIQUE INDEX TestIndex ON TestTable(StringCol DESC)
-                        )"
-                    },
+                        )",
+                        R"(
+                          CREATE CHANGE STREAM ChangeStream_TestTable FOR ALL
+                          )"},
                     type_factory_.get())
                     .value()),
         test_table_(schema_->FindTable("TestTable")),
@@ -68,8 +70,11 @@ class ResolveTest : public testing::Test {
         index_data_table_(index_->index_data_table()),
         int_col_(test_table_->FindColumn("Int64Col")),
         string_col_(test_table_->FindColumn("StringCol")),
-        index_string_col_(index_data_table_->FindColumn("StringCol"))
-  {}
+        index_string_col_(index_data_table_->FindColumn("StringCol")),
+        change_stream_(schema_->FindChangeStream("ChangeStream_TestTable")),
+        change_stream_partition_table_(
+            change_stream_->change_stream_partition_table()),
+        change_stream_data_table_(change_stream_->change_stream_data_table()) {}
 
  protected:
   Clock clock_;
@@ -81,6 +86,9 @@ class ResolveTest : public testing::Test {
   const Column* int_col_;
   const Column* string_col_;
   const Column* index_string_col_;
+  const ChangeStream* change_stream_;
+  const Table* change_stream_partition_table_;
+  const Table* change_stream_data_table_;
 };
 
 TEST_F(ResolveTest, CanResolveTableAndColumnsFromReadArg) {
@@ -95,6 +103,41 @@ TEST_F(ResolveTest, CanResolveTableAndColumnsFromReadArg) {
   EXPECT_EQ(resolved_read_arg.table, test_table_);
   EXPECT_THAT(resolved_read_arg.columns,
               testing::ElementsAre(int_col_, string_col_));
+}
+
+TEST_F(ResolveTest, CanResolveChangeStreamInternalPartitionTableFromReadArg) {
+  backend::ReadArg read_arg;
+  read_arg.change_stream_for_partition_table = "ChangeStream_TestTable";
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto resolved_read_arg,
+                       ResolveReadArg(read_arg, schema_.get()));
+
+  EXPECT_EQ(resolved_read_arg.table, change_stream_partition_table_);
+}
+TEST_F(ResolveTest,
+       CannotResolveUnexistedChangeStreamInternalPartitionTableFromReadArg) {
+  backend::ReadArg read_arg;
+  read_arg.change_stream_for_partition_table = "ChangeStream_FooBar";
+
+  EXPECT_THAT(ResolveReadArg(read_arg, schema_.get()),
+              StatusIs(absl::StatusCode::kNotFound));
+}
+TEST_F(ResolveTest, CanResolveChangeStreamInternalDataTableFromReadArg) {
+  backend::ReadArg read_arg;
+  read_arg.change_stream_for_data_table = "ChangeStream_TestTable";
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto resolved_read_arg,
+                       ResolveReadArg(read_arg, schema_.get()));
+
+  EXPECT_EQ(resolved_read_arg.table, change_stream_data_table_);
+}
+TEST_F(ResolveTest,
+       CannotResolveUnexistedChangeStreamInternalDataTableFromReadArg) {
+  backend::ReadArg read_arg;
+  read_arg.change_stream_for_data_table = "ChangeStream_FooBar";
+
+  EXPECT_THAT(ResolveReadArg(read_arg, schema_.get()),
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(ResolveTest, CannotResolveEmptyReadArg) {

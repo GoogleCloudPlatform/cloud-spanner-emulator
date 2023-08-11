@@ -35,6 +35,7 @@
 #include "google/cloud/spanner/transaction.h"
 #include "google/cloud/spanner/value.h"
 #include "tests/common/file_based_test_runner.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 #include "absl/status/status.h"
 
@@ -56,13 +57,10 @@ const char kSchemaChangeTestDataDir[] = "tests/conformance/data/schema_changes";
 
 // List of schema change test files within the directory above.
 const absl::string_view kSchemaChangeTestFiles[] = {
-    "check_constraint.test",
-    "column_default_values.test",
-    "combined.test",
-    "foreign_key.test",
-    "generated_column.test",
-    "key_column_alteration.test",
-    "views.test",
+    "change_streams.test",        "check_constraint.test",
+    "column_default_values.test", "combined.test",
+    "foreign_key.test",           "generated_column.test",
+    "key_column_alteration.test", "views.test",
 };
 
 constexpr std::array<char, 10> kBytesLiteral = {'\xd0', '\xb0', '\xd0', '\xb1',
@@ -75,6 +73,10 @@ class SchemaChangeTest
     : public DatabaseTest,
       public ::testing::WithParamInterface<FileBasedTestCase> {
  public:
+  SchemaChangeTest()
+      : flag_setter_({
+        }) {}
+  const ScopedEmulatorFeatureFlagsSetter flag_setter_;
   absl::Status SetUpDatabase() override { return absl::OkStatus(); }
 
   // Runs a file-based schema change test case.

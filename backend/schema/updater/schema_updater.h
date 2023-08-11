@@ -30,6 +30,10 @@
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/schema.h"
 
+// If true, disable to limit on change stream retention period between 1h and
+// 7day to prevent long running integration tests.
+ABSL_DECLARE_FLAG(bool, cloud_spanner_emulator_disable_cs_retention_check);
+
 namespace google {
 namespace spanner {
 namespace emulator {

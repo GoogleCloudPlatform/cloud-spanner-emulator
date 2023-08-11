@@ -97,6 +97,9 @@ absl::Status ValidateNonDeleteMutationOp(const MutationOp& mutation_op,
 absl::StatusOr<ResolvedMutationOp> ResolveDeleteMutationOp(
     const MutationOp& mutation_op, const Schema* schema, absl::Time now);
 
+absl::StatusOr<const Table*> FindChangeStreamPartitionTable(
+    const Schema* schema, std::string change_stream_partition_table_name);
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

@@ -24,10 +24,6 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/simple_catalog.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/types/optional.h"
-#include "absl/types/variant.h"
-#include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/schema/catalog/schema.h"
 
 namespace google {
@@ -66,19 +62,17 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
       tables_by_name_;
 
   inline std::string GetNameForDialect(absl::string_view name);
+  std::pair<zetasql::Value, zetasql::Value> GetPGDataTypeAndSpannerType(
+      const zetasql::Type* type, std::optional<int64_t> length);
 
   void FillSchemataTable();
   void FillSpannerStatisticsTable();
   void FillDatabaseOptionsTable();
 
-  zetasql::SimpleTable* AddTablesTable();
-  void FillTablesTable(zetasql::SimpleTable* tables);
+  void FillTablesTable();
+  void FillColumnsTable();
 
-  zetasql::SimpleTable* AddColumnsTable();
-  void FillColumnsTable(zetasql::SimpleTable* columns);
-
-  zetasql::SimpleTable* AddColumnColumnUsageTable();
-  void FillColumnColumnUsageTable(zetasql::SimpleTable* column_column_usage);
+  void FillColumnColumnUsageTable();
 
   zetasql::SimpleTable* AddIndexesTable();
   void FillIndexesTable(zetasql::SimpleTable* indexes);
@@ -109,31 +103,8 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   void FillConstraintColumnUsageTable(
       zetasql::SimpleTable* constraint_column_usage);
 
-  zetasql::SimpleTable* AddViewsTable();
-  void FillViewsTable(zetasql::SimpleTable* views);
+  void FillViewsTable();
 };
-
-// Maps the type specified in the information catalog metadata for a Spanner
-// ZetaSQL database to a ZetaSQL type.
-static const zetasql_base::NoDestructor<
-    absl::flat_hash_map<std::string, const zetasql::Type*>>
-    kSpannerTypeToGSQLType{{
-        {"BOOL", zetasql::types::BoolType()},
-        {"INT64", zetasql::types::Int64Type()},
-        {"STRING(MAX)", zetasql::types::StringType()},
-    }};
-
-// Given a list of ColumnsMetaEntry items, returns SimpleTables that can be
-// added to a SimpleCatalog mapped by the table name. The tables are created by
-// mapping the spanner type in the ColumnsMetaEntry to the ZetaSQL type given
-// by the provided mapping. Only tables for the given supported list of tables
-// is returned. The metadata entries must be ordered by table name.
-absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
-AddTablesFromMetadata(
-    const std::vector<ColumnsMetaEntry>& metadata_entries,
-    const absl::flat_hash_map<std::string, const zetasql::Type*>&
-        spanner_to_gsql_type,
-    const absl::flat_hash_set<std::string>& supported_tables);
 
 }  // namespace backend
 }  // namespace emulator

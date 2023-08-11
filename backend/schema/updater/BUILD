@@ -141,6 +141,7 @@ cc_library(
         "//backend/schema/validators:schema_validators",
         "//backend/schema/verifiers:check_constraint_verifiers",
         "//backend/schema/verifiers:foreign_key_verifiers",
+        "//common:constants",
         "//common:errors",
         "//common:feature_flags",
         "//common:limits",
@@ -167,6 +168,7 @@ cc_library(
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/resolved_ast",
         "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
+        "@com_googlesource_code_re2//:re2",
     ],
 )
 

@@ -77,6 +77,46 @@ constexpr char kInstanceResourceType[] =
 // The default timezone used by the query engine.
 constexpr char kDefaultTimeZone[] = "America/Los_Angeles";
 
+// Change stream tvf output column name and type
+constexpr char kChangeStreamTvfOutputColumn[] = "ChangeRecord";
+constexpr char kChangeStreamTvfOutputFormat[] = R"(ARRAY<STRUCT<
+  data_change_record ARRAY<STRUCT<
+    commit_timestamp TIMESTAMP,
+    record_sequence STRING,
+    server_transaction_id STRING,
+    is_last_record_in_transaction_in_partition BOOL,
+    table_name STRING,
+    column_types ARRAY<STRUCT<
+      name STRING,
+      type $0,
+      is_primary_key BOOL,
+      ordinal_position INT64>>,
+    mods ARRAY<STRUCT<
+      keys $0,
+      new_values $0,
+      old_values $0>>,
+    mod_type STRING,
+    value_capture_type STRING,
+    number_of_records_in_transaction INT64,
+    number_of_partitions_in_transaction INT64,
+    transaction_tag STRING,
+    is_system_transaction BOOL>>,
+  heartbeat_record ARRAY<STRUCT<
+    timestamp TIMESTAMP>>,
+  child_partitions_record ARRAY<STRUCT<
+    start_timestamp TIMESTAMP,
+    record_sequence STRING,
+    child_partitions ARRAY<STRUCT<
+      token STRING,
+      parent_partition_tokens ARRAY<STRING>>>>>>>)";
+// Prefix for change stream tvf in googlesql dialect
+constexpr char kChangeStreamTvfStructPrefix[] = "READ_";
+// Prefix for change stream data table
+static constexpr char kChangeStreamDataTablePrefix[] = "_change_stream_data_";
+// Prefix for change stream partition table
+static constexpr char kChangeStreamPartitionTablePrefix[] =
+    "_change_stream_partition_";
+
 // Quotes used by different dialects of Spanner in DDL statements.
 static constexpr char kGSQLQuote[] = "`";
 #endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_CONSTANTS_H_

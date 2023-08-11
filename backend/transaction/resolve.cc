@@ -24,12 +24,17 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
+#include "absl/strings/string_view.h"
 #include "backend/access/write.h"
 #include "backend/common/case.h"
 #include "backend/common/rows.h"
 #include "backend/datamodel/key_set.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/transaction/commit_timestamp.h"
+#include "common/change_stream.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
@@ -193,11 +198,29 @@ Key ComputeKey(const ValueList& row,
 absl::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
                                                const Schema* schema) {
   const Table* read_table;
+  if (!read_arg.change_stream_for_partition_table.empty()) {
+    if (schema->FindChangeStream(read_arg.change_stream_for_partition_table) ==
+        nullptr) {
+      return error::ChangeStreamNotFound(
+          read_arg.change_stream_for_partition_table);
+    }
+    read_table =
+        schema->FindChangeStream(read_arg.change_stream_for_partition_table)
+            ->change_stream_partition_table();
+  } else if (!read_arg.change_stream_for_data_table.empty()) {
+    if (schema->FindChangeStream(read_arg.change_stream_for_data_table) ==
+        nullptr) {
+      return error::ChangeStreamNotFound(read_arg.change_stream_for_data_table);
+    }
+    read_table = schema->FindChangeStream(read_arg.change_stream_for_data_table)
+                     ->change_stream_data_table();
+  } else {
     // Find the table to read from schema.
     read_table = schema->FindTable(read_arg.table);
     if (read_table == nullptr) {
       return error::TableNotFound(read_arg.table);
     }
+  }
 
   // Check if index should be read from instead.
   const Index* index = nullptr;
@@ -245,11 +268,29 @@ absl::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
   return resolved_read_arg;
 }
 
+absl::StatusOr<const Table*> FindChangeStreamPartitionTable(
+    const Schema* schema, std::string change_stream_partition_table_name) {
+  const std::string change_stream_name = std::string(
+      absl::ClippedSubstr(change_stream_partition_table_name,
+                          sizeof(kChangeStreamPartitionTablePrefix) - 1));
+  auto iter = schema->FindChangeStream(change_stream_name);
+  if (iter == nullptr) {
+    return error::ChangeStreamNotFound(change_stream_name);
+  }
+  return iter->change_stream_partition_table();
+}
+
 absl::Status ValidateNonDeleteMutationOp(const MutationOp& mutation_op,
                                          const Schema* schema) {
   ZETASQL_RET_CHECK(mutation_op.type != MutationOpType::kDelete);
 
   const Table* table = schema->FindTable(mutation_op.table);
+
+  if (IsChangeStreamPartitionTable(mutation_op.table)) {
+    ZETASQL_ASSIGN_OR_RETURN(table,
+                     FindChangeStreamPartitionTable(schema, mutation_op.table));
+  }
+
   if (table == nullptr) {
     return error::TableNotFound(mutation_op.table);
   }

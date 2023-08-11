@@ -17,10 +17,10 @@
 #include "backend/database/database.h"
 
 #include <memory>
-#include <string>
+#include <thread>  // NOLINT
 #include <utility>
-#include <vector>
 
+#include "absl/functional/bind_front.h"
 #include "absl/memory/memory.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -28,6 +28,7 @@
 #include "absl/types/variant.h"
 #include "backend/actions/manager.h"
 #include "backend/common/ids.h"
+#include "backend/database/change_stream/change_stream_partition_churner.h"
 #include "backend/locking/manager.h"
 #include "backend/query/query_engine.h"
 #include "backend/schema/catalog/versioned_catalog.h"
@@ -75,9 +76,17 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
       database->query_engine_->function_catalog(),
       database->query_engine_->type_factory());
 
+  database->change_stream_partition_churner_ =
+      std::make_unique<ChangeStreamPartitionChurner>(
+          absl::bind_front(&Database::CreateReadWriteTransaction,
+                           database.get()),
+          database->clock_);
+
+  database->change_stream_partition_churner_->Update(
+      database->versioned_catalog_->GetLatestSchema());
+
   return database;
 }
-
 absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
 Database::CreateReadOnlyTransaction(const ReadOnlyOptions& options) {
   return std::make_unique<ReadOnlyTransaction>(
@@ -143,6 +152,9 @@ absl::Status Database::UpdateSchema(
                                          query_engine_->function_catalog(),
                                          query_engine_->type_factory());
   }
+  change_stream_partition_churner_->Update(
+      versioned_catalog_->GetLatestSchema());
+
   return absl::OkStatus();
 }
 

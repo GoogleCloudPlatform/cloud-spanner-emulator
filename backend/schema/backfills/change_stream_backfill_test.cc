@@ -24,6 +24,9 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "backend/database/database.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/updater/schema_updater.h"
@@ -88,6 +91,14 @@ TEST_F(ChangeStreamBackfillTest, BackfillChangeStreamPartitionTable) {
       values.push_back(cursor->ColumnValue(4));
     }
     EXPECT_THAT(values.size(), 10);
+  }
+}
+
+TEST_F(ChangeStreamBackfillTest, TestNoDuplicateTokenStringsAreGenerated) {
+  absl::flat_hash_set<std::string> token_strings;
+  absl::Time end_time = absl::Now() + absl::Milliseconds(900);
+  while (absl::Now() < end_time) {
+    ASSERT_TRUE(token_strings.insert(CreatePartitionTokenString()).second);
   }
 }
 

@@ -195,8 +195,74 @@ absl::Status InvalidDropKeyColumn(absl::string_view colum_name,
                                   absl::string_view table_name);
 absl::Status TooManyTablesPerDatabase(absl::string_view table_name,
                                       int64_t limit);
+absl::Status CreateChangeStreamForClauseInvalidOneof(
+    absl::string_view change_stream_name);
+absl::Status CreateChangeStreamForClauseZeroEntriesInTrackedTables(
+    absl::string_view change_stream_name);
+absl::Status CreateChangeStreamForClauseTrackedTablesEntryMissingTableName(
+    absl::string_view change_stream_name);
+absl::Status ChangeStreamDuplicateTable(absl::string_view change_stream_name,
+                                        absl::string_view table_name);
+absl::Status InvalidTrackedObjectInChangeStream(
+    absl::string_view change_stream_name, absl::string_view object_type,
+    absl::string_view object_name);
+absl::Status UnsupportedTrackedObjectOrNonExistentTableInChangeStream(
+    absl::string_view change_stream_name, absl::string_view table_name);
+absl::Status CreateChangeStreamForClauseTrackedTablesEntryInvalidOneof(
+    absl::string_view change_stream_name);
+absl::Status ChangeStreamDuplicateColumn(absl::string_view change_stream_name,
+                                         absl::string_view column_name,
+                                         absl::string_view table_name);
+absl::Status NonexistentTrackedColumnInChangeStream(
+    absl::string_view change_stream_name, absl::string_view column_name,
+    absl::string_view table_name);
+absl::Status KeyColumnInChangeStreamForClause(
+    absl::string_view change_stream_name, absl::string_view key_column_name,
+    absl::string_view table_name);
 absl::Status TooManyChangeStreamsPerDatabase(
     absl::string_view change_stream_name, int64_t limit);
+absl::Status TooManyChangeStreamsTrackingSameObject(
+    absl::string_view change_stream_name, int64_t limit,
+    absl::string_view object_name_string);
+absl::Status UnsupportedChangeStreamOption(absl::string_view option_name);
+absl::Status InvalidChangeStreamRetentionPeriodOptionValue();
+absl::Status InvalidTimeDurationFormat(absl::string_view time_duration);
+absl::Status InvalidDataRetentionPeriod(absl::string_view time_duration);
+absl::Status InvalidValueCaptureType(absl::string_view value_capture_type);
+absl::Status AlterChangeStreamDropNonexistentForClause(
+    absl::string_view change_stream_name);
+absl::Status TrackUntrackableTables(absl::string_view table_name);
+absl::Status TrackUntrackableColumns(absl::string_view column_name);
+absl::Status UnsetTrackedObject(absl::string_view change_stream_name,
+                                absl::string_view table_name);
+// change stream tvf query related errors
+absl::Status InvalidChangeStreamTvfArgumentNullStartTimestamp();
+absl::Status InvalidChangeStreamTvfArgumentStartTimestampTooFarInFuture(
+    absl::string_view min_read_ts_string, absl::string_view max_read_ts_string,
+    absl::string_view start_ts_string);
+absl::Status InvalidChangeStreamTvfArgumentStartTimestampTooOld(
+    absl::string_view min_read_ts_string, absl::string_view start_ts_string);
+absl::Status
+InvalidChangeStreamTvfArgumentStartTimestampGreaterThanEndTimestamp(
+    absl::string_view start_ts_string, absl::string_view end_ts_string);
+absl::Status InvalidChangeStreamTvfArgumentNullHeartbeat();
+absl::Status InvalidChangeStreamTvfArgumentOutOfRangeHeartbeat(
+    int64_t min_heartbeat_num, int64_t max_heartbeat_num,
+    int64_t heartbeat_num);
+absl::Status InvalidChangeStreamTvfArgumentNonNullReadOptions();
+absl::Status InvalidChangeStreamTvfArgumentWithArgIndex(
+    absl::string_view tvf_name_string, int index_num);
+absl::Status
+InvalidChangeStreamTvfArgumentPartitionTokenInvalidChangeStreamName(
+    absl::string_view partition_token_string);
+absl::Status InvalidChangeStreamTvfArgumentStartTimestampForPartition(
+    absl::string_view min_ts_string, absl::string_view max_ts_string,
+    absl::string_view start_ts_string);
+absl::Status ChangeStreamStalePartition();
+absl::Status IllegalChangeStreamQuerySyntax(absl::string_view tvf_name_string);
+absl::Status ChangeStreamQueriesMustBeSingleUseOnly();
+absl::Status ChangeStreamQueriesMustBeStrongReads();
+absl::Status ChangeStreamQueriesMustBeStreaming();
 absl::Status TooManyIndicesPerDatabase(absl::string_view index_name,
                                        int64_t limit);
 absl::Status TooManyColumns(absl::string_view object_type,
@@ -214,6 +280,8 @@ absl::Status DropTableWithInterleavedTables(absl::string_view table_name,
                                             absl::string_view child_tables);
 absl::Status DropTableWithDependentIndices(absl::string_view table_name,
                                            absl::string_view indexes);
+absl::Status DropTableWithDependentChangeStreams(
+    absl::string_view table_name, absl::string_view change_streams);
 absl::Status SetOnDeleteWithoutInterleaving(absl::string_view table_name);
 absl::Status NonExistentKeyColumn(absl::string_view object_type,
                                   absl::string_view object_name,
@@ -275,6 +343,17 @@ absl::Status TableNotFound(absl::string_view table_name);
 absl::Status TableNotFoundAtTimestamp(absl::string_view table_name,
                                       absl::Time timestamp);
 absl::Status IndexNotFound(absl::string_view index_name);
+
+absl::Status ChangeStreamNotFound(absl::string_view change_stream_name);
+absl::Status TableValuedFunctionNotFound(absl::string_view tvf_name);
+absl::Status DroppingTableWithChangeStream(
+    absl::string_view table_name, int64_t change_stream_count,
+    absl::string_view change_stream_name_list_string);
+absl::Status DropColumnWithChangeStream(
+    absl::string_view table_name, absl::string_view column_name,
+    int64_t change_stream_count,
+    absl::string_view change_stream_name_list_string);
+
 absl::Status DropForeignKeyManagedIndex(absl::string_view index_name,
                                         absl::string_view foreign_key_names);
 absl::Status ColumnNotFound(absl::string_view table_name,
@@ -506,6 +585,9 @@ absl::Status UnsupportedArrayConstructorSyntaxForEmptyStructArray();
 absl::Status UnsupportedFeatureSafe(absl::string_view feature_type,
                                     absl::string_view info_message);
 absl::Status UnsupportedFunction(absl::string_view function_name);
+absl::Status UnsupportedUserDefinedTableValuedFunction(
+    absl::string_view tvf_name);
+
 absl::Status UnsupportedHavingModifierWithDistinct();
 absl::Status UnsupportedIgnoreNullsInAggregateFunctions();
 absl::Status NullifStructNotSupported();

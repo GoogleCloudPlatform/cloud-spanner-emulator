@@ -25,6 +25,9 @@ namespace backend {
 
 std::ostream& operator<<(std::ostream& out, const ReadArg& arg) {
   out << "Table  : '" << arg.table << "'\n";
+  if (!arg.change_stream_for_partition_table.empty()) {
+    out << "ChangeStream: '" << arg.change_stream_for_partition_table << "'\n";
+  }
   if (!arg.index.empty()) {
     out << "Index  : '" << arg.index << "'\n";
   }

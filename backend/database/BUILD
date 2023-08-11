@@ -31,6 +31,7 @@ cc_library(
     deps = [
         "//backend/actions:manager",
         "//backend/common:ids",
+        "//backend/database/change_stream:change_stream_partition_churner",
         "//backend/locking:manager",
         "//backend/query:query_engine",
         "//backend/schema/catalog:schema",
@@ -42,6 +43,7 @@ cc_library(
         "//backend/transaction:read_only_transaction",
         "//backend/transaction:read_write_transaction",
         "//common:clock",
+        "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

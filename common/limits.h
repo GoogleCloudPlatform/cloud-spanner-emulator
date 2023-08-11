@@ -45,6 +45,22 @@ constexpr int kMaxTablesPerDatabase = 2560;
 //   https://cloud.google.com/spanner/quotas#change-streams
 constexpr int kMaxChangeStreamsPerDatabase = 10;
 
+// Minimum retention duration supported for Change Streams in seconds.
+constexpr int kChangeStreamsMinRetention = 60 * 60 * 24;
+
+// Maximum retention duration supported for Change Streams.
+constexpr int kChangeStreamsMaxRetention = 60 * 60 * 24 * 7;
+
+// Minimum heartbeat milliseconds.
+constexpr int64_t kChangeStreamsMinHeartbeatMilliseconds = 100;
+
+// Maximum heartbeat milliseconds.
+constexpr int64_t kChangeStreamsMaxHeartbeatMilliseconds = 300000;
+
+// Maximum duration in minutes supported for change stream query to read into
+// the future
+constexpr int kChangeStreamsMaxStartTimestampDelay = 10;
+
 // Maximum number of change streams per column.
 constexpr int kMaxChangeStreamsTrackingATableOrColumn = 3;
 

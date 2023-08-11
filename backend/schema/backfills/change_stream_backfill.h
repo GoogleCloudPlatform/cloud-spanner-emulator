@@ -30,6 +30,12 @@ namespace backend {
 absl::Status BackfillChangeStream(const ChangeStream* change_stream,
                                   const SchemaValidationContext* context);
 
+// Creates a random string to represent a change stream partition token.
+// Change stream partition tokens are provided to the user when they execute
+// an initial change stream query. They will then use the partition token
+// to execute a partitioned change stream query to receive data.
+std::string CreatePartitionTokenString();
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

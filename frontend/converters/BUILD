@@ -327,3 +327,51 @@ cc_library(
         "@com_google_zetasql//zetasql/base:ret_check",
     ],
 )
+
+cc_library(
+    name = "change_streams",
+    srcs = ["change_streams.cc"],
+    hdrs = ["change_streams.h"],
+    deps = [
+        ":chunking",
+        ":types",
+        ":values",
+        "//backend/access:read",
+        "//backend/query:analyzer_options",
+        "//common:constants",
+        "//common:limits",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_zetasql//zetasql/public:analyzer",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
+        "@com_google_zetasql//zetasql/public:simple_catalog",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "change_streams_test",
+    srcs = ["change_streams_test.cc"],
+    deps = [
+        ":change_streams",
+        ":chunking",
+        "//tests/common:change_streams",
+        "//tests/common:chunking",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_row_cursor",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)

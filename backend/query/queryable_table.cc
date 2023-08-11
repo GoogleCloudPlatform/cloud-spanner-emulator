@@ -28,12 +28,17 @@
 #include "zetasql/public/analyzer_output.h"
 #include "zetasql/public/evaluator_table_iterator.h"
 #include "zetasql/public/value.h"
+#include "absl/log/check.h"
 #include "absl/memory/memory.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
+#include "absl/strings/string_view.h"
+#include "absl/strings/strip.h"  //
 #include "absl/types/span.h"
 #include "backend/access/read.h"
 #include "backend/query/queryable_column.h"
+#include "common/constants.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -101,17 +106,11 @@ QueryableTable::QueryableTable(
   for (const auto* column : table->columns()) {
     std::unique_ptr<const zetasql::AnalyzerOutput> output = nullptr;
     if (options.has_value() && column->has_default_value()) {
-      // (b/270162778) Implicit cast default expressions to the destination
-      // column types so that explicit cast of non-primitive types is not
-      // required.
-      constexpr char kExpression[] = "CAST (($0) AS $1)";
-      std::string sql = absl::Substitute(
-          kExpression, column->expression().value(),
-          column->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL));
-      absl::Status s = zetasql::AnalyzeExpression(
-          sql, options.value(), catalog, type_factory, &output);
-      ZETASQL_DCHECK(s.ok()) << "Failed to analyze default expression for column "
-                     << column->FullName() << "\n";
+      absl::Status s = zetasql::AnalyzeExpressionForAssignmentToType(
+          column->expression().value(), options.value(), catalog, type_factory,
+          column->GetType(), &output);
+      ZETASQL_CHECK_OK(s) << "Failed to analyze default expression"  // Crash OK
+                  << " for column " << column->FullName() << "\n";
     }
     if (column->has_default_value()) {
       zetasql::Column::ExpressionAttributes::ExpressionKind expression_kind =
@@ -154,6 +153,19 @@ QueryableTable::CreateEvaluatorTableIterator(
   read_arg.table = Name();
   read_arg.key_set = KeySet::All();
   read_arg.columns = column_names;
+  // If current table is a change stream internal data/partition table, change
+  // the read arg to access internal tables directly.
+  if (wrapped_table_->owner_change_stream() != nullptr) {
+    absl::string_view change_stream_name = read_arg.table;
+    if (absl::StartsWith(read_arg.table, kChangeStreamPartitionTablePrefix)) {
+      absl::ConsumePrefix(&change_stream_name,
+                          kChangeStreamPartitionTablePrefix);
+      read_arg.change_stream_for_partition_table = change_stream_name;
+    } else {
+      absl::ConsumePrefix(&change_stream_name, kChangeStreamDataTablePrefix);
+      read_arg.change_stream_for_data_table = change_stream_name;
+    }
+  }
   std::unique_ptr<RowCursor> cursor;
   ZETASQL_RETURN_IF_ERROR(reader_->Read(read_arg, &cursor));
   return std::make_unique<RowCursorEvaluatorTableIterator>(std::move(cursor));

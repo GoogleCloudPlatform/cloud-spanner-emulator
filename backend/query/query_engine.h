@@ -29,6 +29,7 @@
 #include "absl/status/statusor.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
+#include "backend/query/change_stream/change_stream_query_validator.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/schema.h"
 #include "absl/status/status.h"
@@ -50,6 +51,10 @@ struct Query {
   // Parameters that did not have a type supplied. They will be deserialized in
   // the backend once the ZetaSQL analyzer provides types.
   std::map<std::string, google::protobuf::Value> undeclared_params;
+
+  // If not empty,the current query is an internal query against a non public
+  // partition or data table of this change stream
+  std::optional<std::string> change_stream_internal_lookup;
 };
 
 // Returns true if the given query is a DML statement.
@@ -106,6 +111,14 @@ class QueryEngine {
   // partitioned DML.
   absl::Status IsValidPartitionedDML(const Query& query,
                                      const QueryContext& context) const;
+
+  // Returns an empty change stream metadata if current query is a valid regular
+  // query. Returns the complete change stream metadata if current query is a
+  // valid change stream query. Returns corresponding error status if current
+  // query is an invalid regular query, a non-change stream tvf query or an
+  // invalid change stream tvf query.
+  static absl::StatusOr<ChangeStreamQueryValidator::ChangeStreamMetadata>
+  TryGetChangeStreamMetadata(const Query& query, const Schema* schema);
 
   zetasql::TypeFactory* type_factory() const { return type_factory_; }
 

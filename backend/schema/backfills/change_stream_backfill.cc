@@ -22,6 +22,8 @@
 #include <vector>
 
 #include "zetasql/public/value.h"
+#include "absl/strings/escaping.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "backend/common/rows.h"
@@ -55,13 +57,13 @@ absl::StatusOr<Key> ComputeChangeStreamPartitionTableKey(
 
 std::vector<zetasql::Value> CreateInitialBackfillPartitions(
     std::vector<zetasql::Value> row_values, std::string partition_token_str,
-    absl::Time start_time, absl::Time end_time) {
+    absl::Time start_time) {
   // specify partition_token
   row_values.push_back(zetasql::Value::String(partition_token_str));
   // Specify start_time
   row_values.push_back(zetasql::Value::Timestamp(start_time));
   // Specify end_time
-  row_values.push_back(zetasql::Value::Timestamp(end_time));
+  row_values.push_back(zetasql::Value::NullTimestamp());
   // Specify parents
   row_values.push_back(
       zetasql::Value::EmptyArray(zetasql::types::StringArrayType()));
@@ -72,6 +74,7 @@ std::vector<zetasql::Value> CreateInitialBackfillPartitions(
 }
 
 std::string gen_random(const int len) {
+  std::srand(absl::ToUnixMicros(absl::Now()));
   static const char alphanum[] =
       "0123456789"
       "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -104,8 +107,7 @@ absl::Status BackfillChangeStreamPartition(
   std::vector<zetasql::Value> initial_row_values;
   initial_row_values.reserve(change_stream_partition_table_columns.size());
   initial_row_values = CreateInitialBackfillPartitions(
-      initial_row_values, partition_token_str, change_stream->creation_time(),
-      absl::FromUnixMicros(zetasql::types::kTimestampMax));
+      initial_row_values, partition_token_str, change_stream->creation_time());
   // Create Key for the change stream partition table
   ZETASQL_ASSIGN_OR_RETURN(
       Key change_stream_partition_table_key,

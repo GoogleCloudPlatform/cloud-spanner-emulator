@@ -73,6 +73,15 @@ py_test(
 )
 
 py_test(
+    name = "database_ddl_test",
+    srcs = ["database_ddl_test.py"],
+    python_version = "PY3",
+    deps = [
+        ":emulator",
+    ],
+)
+
+py_test(
     name = "operation_test",
     srcs = ["operation_test.py"],
     python_version = "PY3",

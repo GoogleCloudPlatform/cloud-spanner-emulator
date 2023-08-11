@@ -17,7 +17,6 @@
 #include "backend/transaction/transaction_store.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <memory>
 #include <utility>
 #include <variant>
@@ -25,19 +24,27 @@
 
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
+#include "absl/types/span.h"
+#include "backend/actions/ops.h"
 #include "backend/common/rows.h"
+#include "backend/common/variant.h"
+#include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
+#include "backend/datamodel/value.h"
 #include "backend/locking/request.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/in_memory_iterator.h"
 #include "backend/storage/iterator.h"
 #include "backend/transaction/commit_timestamp.h"
 #include "common/errors.h"
-#include "absl/status/status.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -325,6 +332,10 @@ void TransactionStore::TrackTableForCommitTimestamp(const Table* table,
     // Any time a table has a pending commit-ts in key, include all its indexes.
     for (const Index* index : table->indexes()) {
       commit_ts_tables_.insert(index->index_data_table());
+    }
+
+    for (const ChangeStream* change_stream : table->change_streams()) {
+      commit_ts_tables_.insert(change_stream->change_stream_data_table());
     }
   }
 }

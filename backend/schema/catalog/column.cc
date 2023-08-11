@@ -57,6 +57,19 @@ bool IsNullFilteredIndexKeyColumn(const Column* column) {
 
 }  // namespace
 
+const ChangeStream* Column::FindChangeStream(
+    const std::string& change_stream_name) const {
+  auto itr = std::find_if(change_streams_.begin(), change_streams_.end(),
+                          [&change_stream_name](const auto& change_stream) {
+                            return absl::EqualsIgnoreCase(change_stream->Name(),
+                                                          change_stream_name);
+                          });
+  if (itr == change_streams_.end()) {
+    return nullptr;
+  }
+  return *itr;
+}
+
 std::string Column::FullName() const {
   return absl::StrCat(table_->Name(), ".", name_);
 }
@@ -79,6 +92,8 @@ absl::Status Column::DeepClone(SchemaGraphEditor* editor,
   if (table_->is_deleted()) {
     MarkDeleted();
   }
+
+  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_));
 
   for (const Column*& column : dependent_columns_) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));

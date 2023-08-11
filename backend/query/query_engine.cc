@@ -50,6 +50,7 @@
 #include "backend/datamodel/value.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
+#include "backend/query/change_stream/change_stream_query_validator.h"
 #include "backend/query/dml_query_validator.h"
 #include "backend/query/feature_filter/query_size_limits_checker.h"
 #include "backend/query/hint_rewriter.h"
@@ -716,7 +717,8 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
       type_factory_,
       analyzer_options,
       context.reader,
-      &view_evaluator
+      &view_evaluator,
+      query.change_stream_internal_lookup,
   };
 
   std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
@@ -729,6 +731,19 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
   ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
                    ExtractValidatedResolvedStatementAndOptions(
                        analyzer_output.get(), context.schema));
+
+  // Change stream queries are not directly executed via this generic ExecuteSql
+  // function in query engine. If a change stream query reaches here, it is from
+  // an incorrect API(only ExecuteStreamingSql is allowed).
+  ChangeStreamQueryValidator validator{
+      context.schema, start_time,
+      absl::flat_hash_map<std::string, zetasql::Value>(params.begin(),
+                                                         params.end())};
+  ZETASQL_ASSIGN_OR_RETURN(auto is_change_stream,
+                   validator.IsChangeStreamQuery(resolved_statement.get()));
+  if (is_change_stream) {
+    return error::ChangeStreamQueriesMustBeStreaming();
+  }
 
   QueryResult result;
   if (!IsDMLStmt(analyzer_output->resolved_statement()->node_kind())) {
@@ -810,6 +825,38 @@ absl::Status QueryEngine::IsValidPartitionedDML(
 bool IsDMLQuery(const std::string& query) {
   zetasql::ResolvedNodeKind query_kind = zetasql::GetStatementKind(query);
   return IsDMLStmt(query_kind);
+}
+
+absl::StatusOr<ChangeStreamQueryValidator::ChangeStreamMetadata>
+QueryEngine::TryGetChangeStreamMetadata(const Query& query,
+                                        const Schema* schema) {
+  const absl::Time start_time = absl::Now();
+  ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
+                   MakeAnalyzerOptionsWithParameters(query.declared_params));
+  analyzer_options.set_prune_unused_columns(true);
+  zetasql::TypeFactory type_factory;
+  FunctionCatalog function_catalog(&type_factory);
+  Catalog catalog{schema, &function_catalog, &type_factory, analyzer_options};
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto analyzer_output,
+      Analyze(query.sql, &catalog, analyzer_options, &type_factory));
+
+  ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
+                   ExtractValidatedResolvedStatementAndOptions(
+                       analyzer_output.get(), schema));
+
+  ZETASQL_ASSIGN_OR_RETURN(auto params,
+                   ExtractParameters(query, analyzer_output.get()));
+  ChangeStreamQueryValidator validator{
+      schema, start_time,
+      absl::flat_hash_map<std::string, zetasql::Value>(params.begin(),
+                                                         params.end())};
+  ZETASQL_ASSIGN_OR_RETURN(auto is_change_stream,
+                   validator.IsChangeStreamQuery(resolved_statement.get()));
+  if (is_change_stream) {
+    ZETASQL_RETURN_IF_ERROR(resolved_statement->Accept(&validator));
+  }
+  return validator.change_stream_metadata();
 }
 
 }  // namespace backend

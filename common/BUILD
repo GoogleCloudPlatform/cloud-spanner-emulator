@@ -51,6 +51,20 @@ cc_library(
 )
 
 cc_library(
+    name = "change_stream",
+    srcs = [
+        "change_stream.cc",
+    ],
+    hdrs = [
+        "change_stream.h",
+    ],
+    deps = [
+        ":constants",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "errors",
     srcs = [
         "errors.cc",

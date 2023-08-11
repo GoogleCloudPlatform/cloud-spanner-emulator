@@ -27,6 +27,7 @@
 #include "absl/types/span.h"
 #include "backend/access/read.h"
 #include "backend/query/queryable_column.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/table.h"
 #include "absl/status/status.h"
 

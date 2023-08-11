@@ -17,6 +17,7 @@
 #include "backend/query/catalog.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -32,6 +33,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/access/read.h"
 #include "backend/query/analyzer_options.h"
+#include "backend/query/change_stream/queryable_change_stream_tvf.h"
 #include "backend/query/function_catalog.h"
 #include "backend/query/information_schema_catalog.h"
 #include "backend/query/queryable_table.h"
@@ -80,8 +82,8 @@ class NetCatalog : public zetasql::Catalog {
 Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
                  zetasql::TypeFactory* type_factory,
                  const zetasql::AnalyzerOptions& options, RowReader* reader,
-                 QueryEvaluator* query_evaluator
-                 )
+                 QueryEvaluator* query_evaluator,
+                 std::optional<std::string> change_stream_internal_lookup)
     : schema_(schema),
       function_catalog_(function_catalog),
       type_factory_(type_factory) {
@@ -95,6 +97,23 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
   for (const auto* view : schema->views()) {
     views_[view->Name()] =
         std::make_unique<QueryableView>(view, query_evaluator);
+  }
+
+  if (change_stream_internal_lookup.has_value()) {
+    auto change_stream =
+        schema->FindChangeStream(change_stream_internal_lookup.value());
+    auto partition_table = change_stream->change_stream_partition_table();
+    auto data_table = change_stream->change_stream_data_table();
+    tables_[partition_table->Name()] = std::make_unique<QueryableTable>(
+        partition_table, reader, options, this, type_factory);
+    tables_[data_table->Name()] = std::make_unique<QueryableTable>(
+        data_table, reader, options, this, type_factory);
+  }
+  // Register a table valued function for each active change stream
+  for (const auto* change_stream : schema->change_streams()) {
+    tvfs_[change_stream->tvf_name()] =
+        std::move(*QueryableChangeStreamTvf::Create(change_stream, options,
+                                                    this, type_factory));
   }
 }
 
@@ -124,6 +143,17 @@ absl::Status Catalog::GetTable(const std::string& name,
   }
 
   return error::TableNotFound(name);
+}
+
+absl::Status Catalog::GetTableValuedFunction(
+    const std::string& name, const zetasql::TableValuedFunction** tvf,
+    const FindOptions& options) {
+  *tvf = nullptr;
+  if (auto it = tvfs_.find(name); it != tvfs_.end()) {
+    *tvf = it->second.get();
+    return absl::OkStatus();
+  }
+  return error::TableValuedFunctionNotFound(name);
 }
 
 absl::Status Catalog::GetFunction(const std::string& name,

@@ -304,6 +304,9 @@ absl::Status TableValidator::Validate(const Table* table,
     bool ignore_nullability = table->owner_index() != nullptr &&
                               table->owner_index()->is_null_filtered();
     ZETASQL_RET_CHECK(table->parent_table_->is_public()
+              // Change stream partition table should have interleave
+              // compatibility even though it's not a public table.
+              || table->parent_table_->owner_change_stream() != nullptr
     );
     auto parent_pk = table->parent_table_->primary_key();
     for (int i = 0; i < parent_pk.size(); ++i) {
@@ -406,6 +409,15 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
                           return out->append(child->Name());
                         }));
     }
+    if (!table->change_streams().empty()) {
+      return error::DropTableWithDependentChangeStreams(
+          table->name_,
+          absl::StrJoin(table->change_streams().begin(),
+                        table->change_streams().end(), ",",
+                        [](std::string* out, const ChangeStream* child) {
+                          return out->append(child->Name());
+                        }));
+    }
     context->global_names()->RemoveName(table->Name());
     return absl::OkStatus();
   }
@@ -413,6 +425,10 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
   // Name and ID should not change during cloning.
   ZETASQL_RET_CHECK_EQ(table->Name(), old_table->Name());
   ZETASQL_RET_CHECK_EQ(table->id(), old_table->id());
+
+  if (table->owner_change_stream_) {
+    ZETASQL_RET_CHECK(!table->owner_change_stream_->is_deleted());
+  }
 
   if (table->owner_index_) {
     ZETASQL_RET_CHECK(!table->owner_index_->is_deleted());

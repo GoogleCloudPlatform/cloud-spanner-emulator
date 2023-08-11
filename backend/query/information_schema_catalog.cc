@@ -16,12 +16,30 @@
 
 #include "backend/query/information_schema_catalog.h"
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
+#include "zetasql/public/types/type.h"
+#include "zetasql/public/value.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "absl/strings/strip.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
+#include "backend/query/tables_from_metadata.h"
+#include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/printer/print_ddl.h"
+#include "backend/schema/updater/ddl_type_conversion.h"
+#include "common/limits.h"
 #include "zetasql/base/no_destructor.h"
 
 namespace google {
@@ -77,6 +95,8 @@ static constexpr char kCharacterVarying[] = "character varying";
 static constexpr char kPublic[] = "public";
 static constexpr char kBaseTable[] = "BASE TABLE";
 static constexpr char kCommitted[] = "COMMITTED";
+static constexpr char kInterleaveType[] = "INTERLEAVE_TYPE";
+static constexpr char kInParent[] = "IN PARENT";
 static constexpr char kView[] = "VIEW";
 static constexpr char kYes[] = "YES";
 static constexpr char kNo[] = "NO";
@@ -103,6 +123,7 @@ static constexpr char kCheckClause[] = "CHECK_CLAUSE";
 static constexpr char kDesc[] = "DESC";
 static constexpr char kAsc[] = "ASC";
 static constexpr char kAllowCommitTimestamp[] = "allow_commit_timestamp";
+static constexpr char kSpannerCommitTimestamp[] = "spanner.commit_timestamp";
 static constexpr char kBool[] = "BOOL";
 static constexpr char kTrue[] = "TRUE";
 static constexpr char kConstraintType[] = "CONSTRAINT_TYPE";
@@ -132,15 +153,26 @@ static constexpr char kPositionInUniqueConstraint[] =
     "POSITION_IN_UNIQUE_CONSTRAINT";
 static constexpr char kViews[] = "VIEWS";
 static constexpr char kViewDefinition[] = "VIEW_DEFINITION";
+static constexpr char kCharacterMaximumLength[] = "CHARACTER_MAXIMUM_LENGTH";
+static constexpr char kNumericPrecision[] = "NUMERIC_PRECISION";
+static constexpr char kNumericPrecisionRadix[] = "NUMERIC_PRECISION_RADIX";
+static constexpr char kNumericScale[] = "NUMERIC_SCALE";
+static int kDoubleNumericPrecision = 53;
+static int kBigintNumericPrecision = 64;
+static int kDoubleNumericPrecisionRadix = 2;
 
 static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
     // For now, this is a set of tables that are created from metadata. Once the
     // migration to auto-create tables is complete, it'll be the tables from
     // https://cloud.google.com/spanner/docs/information-schema.
     kSupportedGSQLTables{{
+        kColumnColumnUsage,
+        kColumns,
         kDatabaseOptions,
         kSchemata,
         kSpannerStatistics,
+        kTables,
+        kViews,
     }};
 
 static const zetasql_base::NoDestructor<
@@ -260,8 +292,8 @@ absl::flat_hash_map<std::string, zetasql::Value> GetColumnsWithDefault(
 // and the following key-value pairs of specific values for certain columns:
 //
 // {
-//   {"user_id", zetasql::values::Int64(1234)},
-//   {"name", zetasql::values::String("Spanner User")},
+//   {"USER_ID", zetasql::values::Int64(1234)},
+//   {"NAME", zetasql::values::String("Spanner User")},
 // }
 //
 // this function will return the following row of values:
@@ -274,6 +306,10 @@ absl::flat_hash_map<std::string, zetasql::Value> GetColumnsWithDefault(
 //
 // where the first two values are taken from row_kvs and the last value is a
 // default value.
+//
+// Note that the keys in row_kvs are expected to be created from the column name
+// constants defined in this file and hence must be all upper-case. Otherwise
+// this function will crash.
 std::vector<zetasql::Value> GetRowFromRowKVs(
     const zetasql::Table* table,
     const absl::flat_hash_map<std::string, zetasql::Value>& row_kvs) {
@@ -282,7 +318,14 @@ std::vector<zetasql::Value> GetRowFromRowKVs(
   row.reserve(table->NumColumns());
   for (int i = 0; i < table->NumColumns(); ++i) {
     auto column = table->GetColumn(i);
-    if (auto kv = row_kvs.find(column->Name()); kv != row_kvs.end()) {
+    // Since the row_kvs are constructed using the column name constants defined
+    // earlier in the file, all incoming keys in the map must be uppercase so we
+    // ensure that if a key is found, it's not the lowercase column name.
+    ZETASQL_CHECK(row_kvs.find(  // crash ok
+              absl::AsciiStrToLower(column->Name())) == row_kvs.end());
+    // We convert the column names to uppercase before looking it up on the map.
+    if (auto kv = row_kvs.find(absl::AsciiStrToUpper(column->Name()));
+        kv != row_kvs.end()) {
       row.push_back(kv->second);
     } else {
       row.push_back(default_row_kvs.at(column->Name()));
@@ -292,64 +335,6 @@ std::vector<zetasql::Value> GetRowFromRowKVs(
 }
 
 }  // namespace
-
-absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
-AddTablesFromMetadata(
-    const std::vector<ColumnsMetaEntry>& metadata_entries,
-    const absl::flat_hash_map<std::string, const zetasql::Type*>&
-        spanner_to_gsql_type,
-    const absl::flat_hash_set<std::string>& supported_tables) {
-  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
-      tables_by_name;
-  if (metadata_entries.empty()) {
-    // No tables to create.
-    return tables_by_name;
-  }
-
-  std::string table_name = "";
-  std::vector<zetasql::SimpleTable::NameAndType> columns;
-  for (auto it = metadata_entries.cbegin(); it != metadata_entries.cend();
-       ++it) {
-    // This is a table we're in the process of creating so add the next
-    // column.
-    if (!table_name.empty() && it->table_name == table_name) {
-      columns.push_back(
-          {it->column_name, spanner_to_gsql_type.at(it->spanner_type)});
-      continue;
-    }
-
-    // It's a new table so if there was an existing table that we were in the
-    // process of creating, create the table.
-    if (!table_name.empty()) {
-      tables_by_name[table_name] =
-          std::make_unique<zetasql::SimpleTable>(table_name, columns);
-
-      // Clear the table name and columns for the next table.
-      table_name = "";
-      columns.clear();
-    }
-
-    // We need to check if the new table is one that we support.
-    auto supported_tables_it = supported_tables.find(it->table_name);
-    if (supported_tables_it != supported_tables.end()) {
-      // If we've seen this table before, then the metadata is not ordered by
-      // the table name so we have to crash.
-      ZETASQL_CHECK(  // crash ok
-          tables_by_name.find(it->table_name) == tables_by_name.end())
-          << "invalid metadata";
-      table_name = it->table_name;
-      columns.push_back(
-          {it->column_name, spanner_to_gsql_type.at(it->spanner_type)});
-    }
-  }
-  // If the last supported table hasn't been created yet, create it now.
-  if (!table_name.empty()) {
-    tables_by_name[table_name] =
-        std::make_unique<zetasql::SimpleTable>(table_name, columns);
-  }
-
-  return tables_by_name;
-}
 
 InformationSchemaCatalog::InformationSchemaCatalog(
     const std::string& catalog_name, const Schema* default_schema)
@@ -372,9 +357,6 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   // function to fill the table.
   FillDatabaseOptionsTable();
 
-  auto* tables = AddTablesTable();
-  auto* columns = AddColumnsTable();
-  auto* column_column_usage = AddColumnColumnUsageTable();
   auto* indexes = AddIndexesTable();
   auto* index_columns = AddIndexColumnsTable();
   AddColumnOptionsTable();
@@ -384,14 +366,13 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   auto* referential_constraints = AddReferentialConstraintsTable();
   auto* key_column_usage = AddKeyColumnUsageTable();
   auto* constraint_column_usage = AddConstraintColumnUsageTable();
-  auto* views = AddViewsTable();
 
   // These tables are populated only after all tables have been added to the
   // catalog (including meta tables) because they add rows based on the tables
   // in the catalog.
-  FillTablesTable(tables);
-  FillColumnsTable(columns);
-  FillColumnColumnUsageTable(column_column_usage);
+  FillTablesTable();
+  FillColumnsTable();
+  FillColumnColumnUsageTable();
   FillIndexesTable(indexes);
   FillIndexColumnsTable(index_columns);
   FillCheckConstraintsTable(check_constraints);
@@ -400,7 +381,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   FillReferentialConstraintsTable(referential_constraints);
   FillKeyColumnUsageTable(key_column_usage);
   FillConstraintColumnUsageTable(constraint_column_usage);
-  FillViewsTable(views);
+  FillViewsTable();
 }
 
 inline std::string InformationSchemaCatalog::GetNameForDialect(
@@ -422,15 +403,14 @@ void InformationSchemaCatalog::FillSchemataTable() {
   // Row for the unnamed default schema. This is an empty string in GSQL and
   // kPublic in PG.
   absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
-  std::string schema_name = GetNameForDialect(kSchemaName);
   if (dialect_ == DatabaseDialect::POSTGRESQL) {
-    specific_kvs[schema_name] = String(kPublic);
+    specific_kvs[kSchemaName] = String(kPublic);
   }
   rows.push_back(GetRowFromRowKVs(table, specific_kvs));
 
   // Row for the information schema.
   specific_kvs.clear();
-  specific_kvs[schema_name] = String(GetNameForDialect(kInformationSchema));
+  specific_kvs[kSchemaName] = String(GetNameForDialect(kInformationSchema));
   rows.push_back(GetRowFromRowKVs(table, specific_kvs));
 
   table->SetContents(rows);
@@ -441,14 +421,13 @@ void InformationSchemaCatalog::FillDatabaseOptionsTable() {
 
   absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
   if (dialect_ == DatabaseDialect::POSTGRESQL) {
-    specific_kvs[GetNameForDialect(kSchemaName)] = String(kPublic);
-    specific_kvs[GetNameForDialect(kOptionType)] = String(kCharacterVarying);
+    specific_kvs[kSchemaName] = String(kPublic);
+    specific_kvs[kOptionType] = String(kCharacterVarying);
   } else {
-    specific_kvs[GetNameForDialect(kOptionType)] = String(kString);
+    specific_kvs[kOptionType] = String(kString);
   }
-  specific_kvs[GetNameForDialect(kOptionName)] = String(kDatabaseDialect);
-  specific_kvs[GetNameForDialect(kOptionValue)] =
-      String(DatabaseDialect_Name(dialect_));
+  specific_kvs[kOptionName] = String(kDatabaseDialect);
+  specific_kvs[kOptionValue] = String(DatabaseDialect_Name(dialect_));
 
   std::vector<std::vector<zetasql::Value>> rows;
   rows.push_back(GetRowFromRowKVs(table, specific_kvs));
@@ -456,159 +435,189 @@ void InformationSchemaCatalog::FillDatabaseOptionsTable() {
   table->SetContents(rows);
 }
 
-zetasql::SimpleTable* InformationSchemaCatalog::AddTablesTable() {
-  // Setup table schema.
-  auto tables = new zetasql::SimpleTable(
-      kTables, {{kTableCatalog, StringType()},
-                {kTableSchema, StringType()},
-                {kTableType, StringType()},
-                {kTableName, StringType()},
-                {kParentTableName, StringType()},
-                {kOnDeleteAction, StringType()},
-                {kSpannerState, StringType()},
-                {kRowDeletionPolicyExpression, StringType()}});
-  // Add table to catalog so it is included in rows.
-  AddOwnedTable(tables);
-  return tables;
-}
+// Fills the "information_schema.tables" table based on the specifications
+// provided for each dialect:
+// ZetaSQL: https://cloud.google.com/spanner/docs/information-schema#tables
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#tables
+//
+// Rows are added for each table and view defined in the default schema, as well
+// as for tables in the information schema.
+void InformationSchemaCatalog::FillTablesTable() {
+  auto tables = tables_by_name_.at(GetNameForDialect(kTables)).get();
 
-void InformationSchemaCatalog::FillTablesTable(zetasql::SimpleTable* tables) {
   // Add table rows.
   std::vector<std::vector<zetasql::Value>> rows;
+  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
   for (const Table* table : default_schema_->tables()) {
-    rows.push_back({
-        // table_catalog
-        String(""),
-        // table_schema
-        String(""),
-        // table_type
-        String(kBaseTable),
-        // table_name
-        String(table->Name()),
-        // parent_table_name
-        table->parent() ? String(table->parent()->Name()) : NullString(),
-        // on_delete_action
+    if (dialect_ == DatabaseDialect::POSTGRESQL) {
+      specific_kvs[kTableSchema] = String(kPublic);
+      specific_kvs[kRowDeletionPolicyExpression] = NullString();
+    } else {
+      specific_kvs[kRowDeletionPolicyExpression] =
+          table->row_deletion_policy().has_value()
+              ? String(RowDeletionPolicyToString(
+                    table->row_deletion_policy().value()))
+              : NullString();
+    }
+
+    specific_kvs[kTableName] = String(table->Name());
+    specific_kvs[kTableType] = String(kBaseTable);
+    specific_kvs[kParentTableName] =
+        table->parent() ? String(table->parent()->Name()) : NullString();
+    specific_kvs[kOnDeleteAction] =
         table->parent()
             ? String(OnDeleteActionToString(table->on_delete_action()))
-            : NullString(),
-        // spanner_state,
-        String(kCommitted),
-        // row_deletion_policy_expression
-        table->row_deletion_policy().has_value()
-            ? String(RowDeletionPolicyToString(
-                  table->row_deletion_policy().value()))
-            : NullString(),
-    });
+            : NullString();
+    specific_kvs[kSpannerState] = String(kCommitted);
+    // The emulator only supports INTERLEAVE IN PARENT.
+    specific_kvs[kInterleaveType] = String(kInParent);
+
+    rows.push_back(GetRowFromRowKVs(tables, specific_kvs));
+    specific_kvs.clear();
   }
 
   for (const View* view : default_schema_->views()) {
-    rows.push_back({
-        // table_catalog
-        String(""),
-        // table_schema
-        String(""),
-        // table_type
-        String("VIEW"),
-        // table_name
-        String(view->Name()),
-        // parent_table_name
-        NullString(),
-        // on_delete_action
-        NullString(),
-        // spanner_state,
-        String(kCommitted),
-        // row_deletion_policy_expression
-        NullString(),
-    });
+    if (dialect_ == DatabaseDialect::POSTGRESQL) {
+      specific_kvs[kTableSchema] = String(kPublic);
+      specific_kvs[kSpannerState] = NullString();
+    } else {
+      specific_kvs[kSpannerState] = String(kCommitted);
+    }
+
+    specific_kvs[kTableName] = String(view->Name());
+    specific_kvs[kTableType] = String(kView);
+    specific_kvs[kParentTableName] = NullString();
+    specific_kvs[kOnDeleteAction] = NullString();
+    specific_kvs[kRowDeletionPolicyExpression] = NullString();
+
+    rows.push_back(GetRowFromRowKVs(tables, specific_kvs));
+    specific_kvs.clear();
   }
 
   for (const auto& table : this->tables()) {
-    rows.push_back({
-        // table_catalog
-        String(""),
-        // table_schema
-        String(kInformationSchema),
-        // table_type
-        String(kView),
-        // table_name
-        String(table->Name()),
-        // parent_table_name
-        NullString(),
-        // on_delete_action
-        NullString(),
-        // spanner_state,
-        NullString(),
-        // row_deletion_policy_expression
-        NullString(),
-    });
+    specific_kvs[kTableSchema] = String(GetNameForDialect(kInformationSchema));
+    specific_kvs[kTableName] = String(GetNameForDialect(table->Name()));
+    specific_kvs[kTableType] = String(kView);
+    specific_kvs[kParentTableName] = NullString();
+    specific_kvs[kOnDeleteAction] = NullString();
+    specific_kvs[kSpannerState] = NullString();
+    specific_kvs[kRowDeletionPolicyExpression] = NullString();
+
+    rows.push_back(GetRowFromRowKVs(tables, specific_kvs));
+    specific_kvs.clear();
   }
 
   tables->SetContents(rows);
 }
 
-zetasql::SimpleTable* InformationSchemaCatalog::AddColumnsTable() {
-  // Setup table schema.
-  auto columns = new zetasql::SimpleTable(
-      kColumns, {{kTableCatalog, StringType()},
-                 {kTableSchema, StringType()},
-                 {kTableName, StringType()},
-                 {kColumnName, StringType()},
-                 {kOrdinalPosition, Int64Type()},
-                 {kColumnDefault, StringType()},
-                 {kDataType, StringType()},
-                 {kIsNullable, StringType()},
-                 {kSpannerType, StringType()},
-                 {kIsGenerated, StringType()},
-                 {kGenerationExpression, StringType()},
-                 {kIsStored, StringType()},
-                 {kSpannerState, StringType()}});
-  AddOwnedTable(columns);
-  return columns;
+// Returns the value to be used by the "numeric_precision" column of the
+// "columns" table, based on the given column type.
+zetasql::Value GetPGNumericPrecision(const zetasql::Type* type) {
+  if (type->IsDouble()) {
+    return Int64(kDoubleNumericPrecision);
+  } else if (type->IsInt64()) {
+    return Int64(kBigintNumericPrecision);
+  }
+  return NullInt64();
 }
 
-void InformationSchemaCatalog::FillColumnsTable(
-    zetasql::SimpleTable* columns) {
+// Returns the value to be used by the "numeric_precision_radix" column of the
+// "columns" table, based on the given column type.
+zetasql::Value GetPGNumericPrecisionRadix(const zetasql::Type* type) {
+  // Setting the numeric precision radix.
+  if (type->IsDouble() || type->IsInt64()) {
+    return Int64(kDoubleNumericPrecisionRadix);
+  }
+  return NullInt64();
+}
+
+// To be used to determine the maximum string or byte column length if the
+// underlying column object doesn't store it. E.g. for views and information
+// schema columns.
+zetasql::Value GetPGCharacterMaximumLength(const zetasql::Type* type) {
+  if (type->IsString() ||
+      (type->IsArray() && type->AsArray()->element_type()->IsString())) {
+    return Int64(limits::kMaxStringColumnLength);
+  }
+  if (type->IsBytes() ||
+      (type->IsArray() && type->AsArray()->element_type()->IsBytes())) {
+    return Int64(limits::kMaxBytesColumnLength);
+  }
+  return NullInt64();
+}
+
+// Fills the "information_schema.columns" table based on the specifications
+// provided for each dialect:
+// ZetaSQL: https://cloud.google.com/spanner/docs/information-schema#columns
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#columns
+//
+// Rows are added for each column in each table and view defined in the default
+// schema, as well as for tables in the information schema.
+void InformationSchemaCatalog::FillColumnsTable() {
+  auto columns = tables_by_name_.at(GetNameForDialect(kColumns)).get();
+
   // Add table rows.
   std::vector<std::vector<zetasql::Value>> rows;
+  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
   for (const Table* table : default_schema_->tables()) {
     int pos = 1;
     for (const Column* column : table->columns()) {
-      absl::string_view expression;
-      if (column->is_generated()) {
-        expression = column->expression().value();
-        absl::ConsumePrefix(&expression, "(");
-        absl::ConsumeSuffix(&expression, ")");
+      if (dialect_ == DatabaseDialect::POSTGRESQL) {
+        specific_kvs[kTableSchema] = String(kPublic);
+
+        specific_kvs[kColumnDefault] = NullString();
+
+        const zetasql::Type* type = column->GetType();
+        if (column->has_allows_commit_timestamp()) {
+          specific_kvs[kDataType] = String(kSpannerCommitTimestamp);
+          specific_kvs[kSpannerType] = String(kSpannerCommitTimestamp);
+        } else {
+          specific_kvs[kDataType] = NullString();
+          specific_kvs[kSpannerType] = NullString();
+        }
+
+        specific_kvs[kCharacterMaximumLength] =
+            (!type->IsArray() && column->declared_max_length() != std::nullopt)
+                ? Int64(column->declared_max_length().value())
+                : NullInt64();
+
+        specific_kvs[kNumericPrecision] = GetPGNumericPrecision(type);
+        specific_kvs[kNumericPrecisionRadix] = GetPGNumericPrecisionRadix(type);
+        specific_kvs[kNumericScale] = type->IsInt64() ? Int64(0) : NullInt64();
+
+        specific_kvs[kGenerationExpression] = NullString();
+      } else {
+        specific_kvs[kGenerationExpression] = NullString();
+        if (column->is_generated()) {
+          absl::string_view expression = column->expression().value();
+          absl::ConsumePrefix(&expression, "(");
+          absl::ConsumeSuffix(&expression, ")");
+          specific_kvs[kGenerationExpression] = String(expression);
+        }
+
+        specific_kvs[kColumnDefault] =
+            column->has_default_value() ? String(column->expression().value())
+                                        : NullString();
+
+        specific_kvs[kDataType] = NullString();
+        specific_kvs[kSpannerType] = String(ColumnTypeToString(
+            column->GetType(), column->declared_max_length()));
       }
-      rows.push_back({
-          // table_catalog
-          String(""),
-          // table_schema
-          String(""),
-          // table_name
-          String(table->Name()),
-          // column_name
-          String(column->Name()),
-          // ordinal_position
-          Int64(pos++),
-          // column_default,
-          column->has_default_value() ? String(column->expression().value())
-                                      : NullString(),
-          // data_type,
-          NullString(),
-          // is_nullable
-          String(column->is_nullable() ? kYes : kNo),
-          // spanner_type
-          String(ColumnTypeToString(column->GetType(),
-                                    column->declared_max_length())),
-          // is_generated
-          String(column->is_generated() ? kAlways : kNever),
-          // generation_expression
-          column->is_generated() ? String(expression) : NullString(),
-          // is_stored
-          column->is_generated() ? String(kYes) : NullString(),
-          // spanner_state
-          String(kCommitted),
-      });
+
+      specific_kvs[kTableName] = String(table->Name());
+      specific_kvs[kColumnName] = String(column->Name());
+      specific_kvs[kOrdinalPosition] = Int64(pos++);
+      specific_kvs[kIsNullable] = String(column->is_nullable() ? kYes : kNo);
+      specific_kvs[kIsGenerated] =
+          String(column->is_generated() ? kAlways : kNever);
+      specific_kvs[kIsStored] =
+          column->is_generated() ? String(kYes) : NullString();
+      specific_kvs[kSpannerState] = String(kCommitted);
+
+      rows.push_back(GetRowFromRowKVs(columns, specific_kvs));
+      specific_kvs.clear();
     }
   }
 
@@ -616,34 +625,40 @@ void InformationSchemaCatalog::FillColumnsTable(
   for (const View* view : default_schema_->views()) {
     int pos = 1;
     for (const View::Column& column : view->columns()) {
-      rows.push_back({
-          // table_catalog
-          String(""),
-          // table_schema
-          String(""),
-          // table_name
-          String(view->Name()),
-          // column_name
-          String(column.name),
-          // ordinal_position
-          Int64(pos++),
-          // column_default,
-          NullBytes(),
-          // data_type,
-          NullString(),
-          // is_nullable
-          String(kYes),
-          // spanner_type
-          String(ColumnTypeToString(column.type, 0)),
-          // is_generated
-          String(kNever),
-          // generation_expression
-          NullString(),
-          // is_stored
-          NullString(),
-          // spanner_state
-          String(kCommitted),
-      });
+      if (dialect_ == DatabaseDialect::POSTGRESQL) {
+        specific_kvs[kTableSchema] = String(kPublic);
+
+        specific_kvs[kDataType] = NullString();
+        specific_kvs[kSpannerType] = NullString();
+
+        // Emulator's View::Column doesn't store the length so we assume the
+        // length is the max string or byte length.
+        // TODO: Update the View::Column to store the actual
+        // length.
+        specific_kvs[kCharacterMaximumLength] = NullInt64();
+
+        specific_kvs[kNumericPrecision] = GetPGNumericPrecision(column.type);
+        specific_kvs[kNumericPrecisionRadix] =
+            GetPGNumericPrecisionRadix(column.type);
+        specific_kvs[kNumericScale] =
+            column.type->IsInt64() ? Int64(0) : NullInt64();
+      } else {
+        specific_kvs[kDataType] = NullString();
+        specific_kvs[kSpannerType] = String(ColumnTypeToString(column.type, 0));
+      }
+
+      specific_kvs[kTableName] = String(view->Name());
+      specific_kvs[kColumnName] = String(column.name);
+      specific_kvs[kOrdinalPosition] = Int64(pos++);
+      specific_kvs[kColumnDefault] = NullBytes();
+      specific_kvs[kIsNullable] = String(kYes);
+      specific_kvs[kIsGenerated] = String(kNever);
+      specific_kvs[kGenerationExpression] = NullString();
+      specific_kvs[kIsStored] = NullString();
+      specific_kvs[kSpannerState] = String(kCommitted);
+
+      rows.push_back(GetRowFromRowKVs(columns, specific_kvs));
+      specific_kvs.clear();
     }
   }
 
@@ -653,34 +668,35 @@ void InformationSchemaCatalog::FillColumnsTable(
     for (int i = 0; i < table->NumColumns(); ++i) {
       const auto* column = table->GetColumn(i);
       const auto& metadata = GetColumnMetadata(dialect_, table, column);
-      rows.push_back({
-          // table_catalog
-          String(""),
-          // table_schema
-          String(kInformationSchema),
-          // table_name
-          String(table->Name()),
-          // column_name
-          String(column->Name()),
-          // ordinal_position
-          Int64(pos++),
-          // column_default,
-          NullString(),
-          // data_type,
-          NullString(),
-          // is_nullable
-          String(metadata.is_nullable),
-          // spanner_type
-          String(metadata.spanner_type),
-          // is_generated
-          String(kNever),
-          // generation_expression
-          NullString(),
-          // is_stored
-          NullString(),
-          // spanner_state
-          NullString(),
-      });
+
+      if (dialect_ == DatabaseDialect::POSTGRESQL) {
+        const zetasql::Type* type = column->GetType();
+        specific_kvs[kDataType] = NullString();
+        specific_kvs[kSpannerType] = NullString();
+
+        specific_kvs[kCharacterMaximumLength] = NullInt64();
+        specific_kvs[kNumericPrecision] = GetPGNumericPrecision(type);
+        specific_kvs[kNumericPrecisionRadix] = GetPGNumericPrecisionRadix(type);
+        specific_kvs[kNumericScale] = type->IsInt64() ? Int64(0) : NullInt64();
+      } else {
+        specific_kvs[kDataType] = NullString();
+        specific_kvs[kSpannerType] = String(metadata.spanner_type);
+      }
+
+      specific_kvs[kTableSchema] =
+          String(GetNameForDialect(kInformationSchema));
+      specific_kvs[kTableName] = String(GetNameForDialect(table->Name()));
+      specific_kvs[kColumnName] = String(GetNameForDialect(column->Name()));
+      specific_kvs[kOrdinalPosition] = Int64(pos++);
+      specific_kvs[kColumnDefault] = NullBytes();
+      specific_kvs[kIsNullable] = String(metadata.is_nullable);
+      specific_kvs[kIsGenerated] = String(kNever);
+      specific_kvs[kGenerationExpression] = NullString();
+      specific_kvs[kIsStored] = NullString();
+      specific_kvs[kSpannerState] = NullString();
+
+      rows.push_back(GetRowFromRowKVs(columns, specific_kvs));
+      specific_kvs.clear();
     }
   }
 
@@ -688,20 +704,10 @@ void InformationSchemaCatalog::FillColumnsTable(
   columns->SetContents(rows);
 }
 
-zetasql::SimpleTable* InformationSchemaCatalog::AddColumnColumnUsageTable() {
-  // Setup table schema.
-  auto column_column_usage = new zetasql::SimpleTable(
-      kColumnColumnUsage, {{kTableCatalog, StringType()},
-                           {kTableSchema, StringType()},
-                           {kTableName, StringType()},
-                           {kColumnName, StringType()},
-                           {kDepenentColumn, StringType()}});
-  AddOwnedTable(column_column_usage);
-  return column_column_usage;
-}
+void InformationSchemaCatalog::FillColumnColumnUsageTable() {
+  auto column_column_usage =
+      tables_by_name_.at(GetNameForDialect(kColumnColumnUsage)).get();
 
-void InformationSchemaCatalog::FillColumnColumnUsageTable(
-    zetasql::SimpleTable* column_column_usage) {
   // Add table rows.
   std::vector<std::vector<zetasql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
@@ -712,7 +718,7 @@ void InformationSchemaCatalog::FillColumnColumnUsageTable(
               // table_catalog
               String(""),
               // table_schema
-              String(""),
+              String(dialect_ == DatabaseDialect::POSTGRESQL ? kPublic : ""),
               // table_name
               String(table->Name()),
               // column_name
@@ -1890,35 +1896,25 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
   constraint_column_usage->SetContents(rows);
 }
 
-zetasql::SimpleTable* InformationSchemaCatalog::AddViewsTable() {
-  // Setup table schema.
-  auto views =
-      new zetasql::SimpleTable(kViews, {
-                                             {kTableCatalog, StringType()},
-                                             {kTableSchema, StringType()},
-                                             {kTableName, StringType()},
-                                             {kViewDefinition, StringType()},
-                                         });
+// Fills the "information_schema.views" table based on the specifications
+// provided for each dialect:
+// ZetaSQL: https://cloud.google.com/spanner/docs/information-schema#views
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#views
+//
+// Rows are added for each view defined in the default schema.
+void InformationSchemaCatalog::FillViewsTable() {
+  auto views = tables_by_name_.at(GetNameForDialect(kViews)).get();
 
-  // Add table to catalog.
-  AddOwnedTable(views);
-  return views;
-}
-
-void InformationSchemaCatalog::FillViewsTable(zetasql::SimpleTable* views) {
   std::vector<std::vector<zetasql::Value>> rows;
-
+  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
   for (const View* view : default_schema_->views()) {
-    rows.push_back({
-        // table_catalog
-        String(""),
-        // table_schema
-        String(""),
-        // table_name
-        String(view->Name()),
-        // view_definition
-        String(view->body()),
-    });
+    specific_kvs[kTableSchema] =
+        String(dialect_ == DatabaseDialect::POSTGRESQL ? kPublic : "");
+    specific_kvs[kTableName] = String(view->Name());
+      specific_kvs[kViewDefinition] = String(view->body());
+    rows.push_back(GetRowFromRowKVs(views, specific_kvs));
+    specific_kvs.clear();
   }
 
   views->SetContents(rows);

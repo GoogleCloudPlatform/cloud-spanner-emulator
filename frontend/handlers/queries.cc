@@ -31,6 +31,7 @@
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
 #include "backend/access/read.h"
+#include "backend/query/change_stream/change_stream_query_validator.h"
 #include "backend/query/query_engine.h"
 #include "common/constants.h"
 #include "common/errors.h"
@@ -42,6 +43,7 @@
 #include "frontend/converters/values.h"
 #include "frontend/entities/session.h"
 #include "frontend/entities/transaction.h"
+#include "frontend/handlers/change_streams.h"
 #include "frontend/proto/partition_token.pb.h"
 #include "frontend/server/handler.h"
 #include "frontend/server/request_context.h"
@@ -344,8 +346,12 @@ absl::Status ExecuteStreamingSql(
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    GetSession(ctx, request->session()));
 
+  backend::ChangeStreamQueryValidator::ChangeStreamMetadata
+      change_stream_metadata;
+
   // Get underlying transaction.
   bool is_dml_query = backend::IsDMLQuery(request->sql());
+
   ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction(),
                                                       is_dml_query));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
@@ -406,6 +412,14 @@ absl::Status ExecuteStreamingSql(
                          QueryFromProto(request->sql(), request->params(),
                                         request->param_types(),
                                         txn->query_engine()->type_factory()));
+        ZETASQL_ASSIGN_OR_RETURN(change_stream_metadata,
+                         backend::QueryEngine::TryGetChangeStreamMetadata(
+                             query, txn->schema()));
+        // if current query is a change stream query, return and exit current
+        // transaction lambda to avoid nested transaction call.
+        if (change_stream_metadata.is_change_stream_query) {
+          return absl::OkStatus();
+        }
         auto maybe_result = txn->ExecuteSql(query);
         if (!maybe_result.ok()) {
           absl::Status error = maybe_result.status();
@@ -491,6 +505,11 @@ absl::Status ExecuteStreamingSql(
         }
         return absl::OkStatus();
       });
+  if (change_stream_metadata.is_change_stream_query) {
+    ChangeStreamsHandler change_streams_handler{change_stream_metadata};
+    return change_streams_handler.ExecuteChangeStreamQuery(request, stream,
+                                                           session);
+  }
   return status;
 }
 REGISTER_GRPC_HANDLER(Spanner, ExecuteStreamingSql);

@@ -61,6 +61,53 @@ class ChangeStream::Builder {
     return *this;
   }
 
+  Builder& set_tvf_name(const std::string& tvf_name) {
+    instance_->tvf_name_ = tvf_name;
+    return *this;
+  }
+
+  Builder& set_change_stream_data_table(const Table* table) {
+    instance_->change_stream_data_table_ = table;
+    return *this;
+  }
+
+  Builder& set_change_stream_partition_table(const Table* table) {
+    instance_->change_stream_partition_table_ = table;
+    return *this;
+  }
+
+  Builder& add_tracked_tables_columns(std::string table_name,
+                                      std::vector<std::string> columns) {
+    instance_->tracked_tables_columns_[table_name] = columns;
+    return *this;
+  }
+
+  Builder& set_retention_period(std::optional<std::string> retention_period) {
+    instance_->retention_period_ = retention_period;
+    return *this;
+  }
+
+  Builder& set_value_capture_type(
+      std::optional<std::string> value_capture_type) {
+    instance_->value_capture_type_ = value_capture_type;
+    return *this;
+  }
+
+  Builder& set_for_clause(const ddl::ChangeStreamForClause& for_clause) {
+    instance_->for_clause_ = for_clause;
+    return *this;
+  }
+
+  Builder& set_track_all(bool track_all) {
+    instance_->track_all_ = track_all;
+    return *this;
+  }
+
+  Builder& set_creation_time(absl::Time creation_time) {
+    instance_->creation_time_ = creation_time;
+    return *this;
+  }
+
  private:
   std::unique_ptr<ChangeStream> instance_;
 };
@@ -70,6 +117,53 @@ class ChangeStream::Editor {
   explicit Editor(ChangeStream* instance) : instance_(instance) {}
 
   const ChangeStream* get() const { return instance_; }
+
+  Editor& add_tracked_tables_columns(std::string table_name,
+                                     std::vector<std::string> columns) {
+    instance_->tracked_tables_columns_[table_name] = columns;
+    return *this;
+  }
+
+  Editor& add_tracked_table_column(std::string table_name, std::string column) {
+    instance_->tracked_tables_columns_[table_name].push_back(column);
+    return *this;
+  }
+
+  Editor& clear_tracked_tables_columns() {
+    instance_->tracked_tables_columns_.clear();
+    return *this;
+  }
+
+  Editor& set_retention_period(std::optional<std::string> retention_period) {
+    instance_->retention_period_ = retention_period;
+    return *this;
+  }
+
+  Editor& set_parsed_retention_period(int64_t parsed_retention_period) {
+    instance_->parsed_retention_period_ = parsed_retention_period;
+    return *this;
+  }
+
+  Editor& set_value_capture_type(
+      std::optional<std::string> value_capture_type) {
+    instance_->value_capture_type_ = value_capture_type;
+    return *this;
+  }
+
+  Editor& set_for_clause(const ddl::ChangeStreamForClause& for_clause) {
+    instance_->for_clause_ = for_clause;
+    return *this;
+  }
+
+  Editor& set_track_all(bool track_all) {
+    instance_->track_all_ = track_all;
+    return *this;
+  }
+
+  Editor& clear_for_clause() {
+    instance_->for_clause_.reset();
+    return *this;
+  }
 
  private:
   // Not owned.

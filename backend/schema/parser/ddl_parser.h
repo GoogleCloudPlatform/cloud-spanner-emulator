@@ -35,6 +35,10 @@ extern const char kCommitTimestampOptionName[];
 // The PostgreSQL option to enable the use of cloud spanner commit timestamps
 // for a column.
 extern const char kPGCommitTimestampOptionName[];
+// The option to set the value capture type for a change stream.
+extern const char kChangeStreamValueCaptureTypeOptionName[];
+// The option to set the retention period for a change stream.
+extern const char kChangeStreamRetentionPeriodOptionName[];
 
 absl::Status ParseDDLStatement(absl::string_view ddl, DDLStatement* statement);
 

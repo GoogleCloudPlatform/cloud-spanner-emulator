@@ -58,6 +58,13 @@ std::string ChangeStream::DebugString() const {
 
 absl::Status ChangeStream::DeepClone(SchemaGraphEditor* editor,
                                      const SchemaNode* orig) {
+  ZETASQL_ASSIGN_OR_RETURN(const auto* change_stream_data_table,
+                   editor->Clone(change_stream_data_table_));
+  change_stream_data_table_ = change_stream_data_table->As<const Table>();
+  ZETASQL_ASSIGN_OR_RETURN(const auto* change_stream_partition_table,
+                   editor->Clone(change_stream_partition_table_));
+  change_stream_partition_table_ =
+      change_stream_partition_table->As<const Table>();
   return absl::OkStatus();
 }
 

@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_ACTIONS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_ACTIONS_H_
 
+#include <cstdint>
 #include <memory>
 #include <queue>
 #include <vector>
@@ -25,8 +26,11 @@
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/time/time.h"
 #include "backend/actions/context.h"
+#include "backend/actions/ops.h"
 #include "backend/datamodel/key_range.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/iterator.h"
 #include "backend/transaction/transaction_store.h"
@@ -81,6 +85,109 @@ class TransactionEffectsBuffer : public EffectsBuffer {
 
  private:
   std::queue<WriteOp>* ops_queue_;
+};
+
+static constexpr char kInsert[] = "INSERT";
+static constexpr char kUpdate[] = "UPDATE";
+static constexpr char kDelete[] = "DELETE";
+static constexpr absl::string_view kMinimumValidJson = "{}";
+
+// Each Mod stores the columns and values for keys, new_values, and old_values
+// for one WriteOp.
+struct Mod {
+  const absl::Span<const KeyColumn* const> key_columns;
+  std::vector<std::string> non_key_columns;
+  const std::vector<zetasql::Value> keys;
+  const std::vector<zetasql::Value> new_values;
+  const std::vector<zetasql::Value> old_values;
+};
+
+struct ColumnType {
+  std::string name;
+  std::string type;
+  bool is_primary_key;
+  int64_t ordinal_position;
+};
+
+// Each DataChangeRecord represents one row in change_stream_data_table and will
+// be converted to one WriteOp to be written into the change_stream_data_table.
+struct DataChangeRecord {
+  zetasql::Value partition_token;
+  zetasql::Value commit_timestamp;
+  std::string server_transaction_id;
+  std::string record_sequence;
+  bool is_last_record_in_transaction_in_partition;
+  std::string tracked_table_name;
+  std::vector<ColumnType> column_types;
+  std::vector<Mod> mods;
+  std::string mod_type;
+  std::string value_capture_type;
+  int64_t number_of_records_in_transaction;
+  int64_t number_of_partitions_in_transaction;
+  std::string transaction_tag;
+  bool is_system_transaction;
+};
+
+// ModGroup stores the column_types and mods collected from WriteOps that should
+// be built into the same DataChangeRecord. Specifically, these WriteOps are
+// in the same mod_type, for the same change stream, for the same user table,
+// and for the same set of tracked non key columns.
+struct ModGroup {
+  std::string table_name;
+  std::string mod_type;
+  absl::flat_hash_set<std::string> non_key_column_names;
+  // column_types contains ColumnType for all columns including key columns and
+  // tracked non key columns
+  std::vector<ColumnType> column_types;
+  std::vector<Mod> mods;
+  zetasql::Value partition_token_str;
+};
+
+// TODO: Move the logic to backend/actions while skip the
+// EffectsBuffer abstraction.
+//  ChangeStreamTransactionEffectsBuffer is the transaction buffer in which the
+//  change stream write operations live.
+class ChangeStreamTransactionEffectsBuffer : public ChangeStreamEffectsBuffer {
+ public:
+  explicit ChangeStreamTransactionEffectsBuffer(TransactionID transaction_id)
+      : transaction_id_(transaction_id) {}
+
+  void Insert(zetasql::Value partition_token_str,
+              const ChangeStream* change_stream, const InsertOp& op) override;
+
+  void Update(zetasql::Value partition_token_str,
+              const ChangeStream* change_stream, const UpdateOp& op) override;
+
+  void Delete(zetasql::Value partition_token_str,
+              const ChangeStream* change_stream, const DeleteOp& op) override;
+
+  void BuildMutation() override;
+
+  std::vector<WriteOp> GetWriteOps() override;
+
+ private:
+  DataChangeRecord BuildDataChangeRecord(std::string tracked_table_name,
+                                         std::string value_capture_type,
+                                         const ChangeStream* change_stream);
+  void LogTableMod(const Key& key, std::vector<const Column*> columns,
+                   const std::vector<zetasql::Value>& values,
+                   const Table* table, const ChangeStream* change_stream,
+                   std::string mod_type, zetasql::Value partition_token_str);
+  absl::StatusOr<Key> ComputeChangeStreamDataTableKey(
+      zetasql::Value partition_token_str, zetasql::Value commit_timestamp,
+      std::string record_sequence, std::string server_transaction_id,
+      std::string table_name);
+  absl::StatusOr<WriteOp> ConvertDataChangeRecordToWriteOp(
+      const ChangeStream* change_stream, DataChangeRecord record);
+  std::vector<WriteOp> writeops_;
+  absl::flat_hash_map<const ChangeStream*, std::vector<DataChangeRecord>>
+      data_change_records_in_transaction_by_change_stream_;
+  TransactionID transaction_id_;
+  // TODO: create a mutation builder class scoped to a single
+  // change stream and use a map to store the class objects by change streams.
+  absl::flat_hash_map<std::string, int64_t> record_sequence_by_change_stream_;
+  absl::flat_hash_map<const ChangeStream*, ModGroup>
+      last_mod_group_by_change_stream_;
 };
 
 }  // namespace backend

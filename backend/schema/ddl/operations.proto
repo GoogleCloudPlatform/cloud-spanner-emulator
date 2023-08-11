@@ -129,8 +129,8 @@ message KeyPartClause {
   optional string key_name = 1;
 
   enum Order {
-    ASC = 0;               // Ascending direction with NULLs sorted first.
-    DESC = 1;              // Descending direction with NULLs sorted last.
+    ASC = 0;   // Ascending direction with NULLs sorted first.
+    DESC = 1;  // Descending direction with NULLs sorted last.
   }
   // The ordering specified by this key component (if at all)
   optional Order order = 2 [default = ASC];
@@ -152,6 +152,15 @@ message ForeignKey {
 
   // Whether or not the constraint is enforced.
   optional bool enforced = 5;
+
+  // Referential actions.
+  enum Action {
+    reserved 2, 4, 5;
+    ACTION_UNSPECIFIED = 0;  // Unspecified action enum.
+    NO_ACTION = 1;           // Referential checks only; default if unspecified.
+    CASCADE = 3;             // Constrained rows updated or deleted.
+  }
+  optional Action on_delete = 7;
 }
 
 message Function {

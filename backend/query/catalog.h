@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_CATALOG_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "zetasql/public/analyzer_options.h"
@@ -54,9 +55,8 @@ class Catalog : public zetasql::EnumerableCatalog {
       zetasql::TypeFactory* type_factory,
       const zetasql::AnalyzerOptions& options =
           MakeGoogleSqlAnalyzerOptions(),
-      RowReader* reader = nullptr,
-      QueryEvaluator* query_evaluator = nullptr
-  );
+      RowReader* reader = nullptr, QueryEvaluator* query_evaluator = nullptr,
+      std::optional<std::string> change_stream_internal_lookup = std::nullopt);
 
   std::string FullName() const final {
     // The name of the root catalog is "".
@@ -65,6 +65,11 @@ class Catalog : public zetasql::EnumerableCatalog {
 
  private:
   friend class NetCatalog;
+  // These tests needs to access the tvf map and manually add an empty tvf.
+  FRIEND_TEST(ChangeStreamQueryValidatorTest,
+              ValidateNoneChangeStreamTvfWithSamePrefixIsFiltered);
+  FRIEND_TEST(ChangeStreamQueryValidatorTest,
+              ValidateNoneChangeStreamTvfWithDifferentPrefixIsFiltered);
 
   // Implementation of the zetasql::Catalog interface.
   absl::Status GetCatalog(const std::string& name, zetasql::Catalog** catalog,
@@ -74,6 +79,10 @@ class Catalog : public zetasql::EnumerableCatalog {
   absl::Status GetFunction(const std::string& name,
                            const zetasql::Function** function,
                            const FindOptions& options) final;
+  absl::Status GetTableValuedFunction(
+      const std::string& name, const zetasql::TableValuedFunction** tvf,
+      const FindOptions& options) final;
+
   // Implementation of the zetasql::EnumerableCatalog interface.
   absl::Status GetCatalogs(
       absl::flat_hash_set<const zetasql::Catalog*>* output) const final;
@@ -97,6 +106,11 @@ class Catalog : public zetasql::EnumerableCatalog {
   // Tables available in the default schema.
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableTable>> tables_;
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableView>> views_;
+
+  // Change Stream TVFs available in the default schema.
+  CaseInsensitiveStringMap<
+      std::unique_ptr<const zetasql::TableValuedFunction>>
+      tvfs_;
 
   // Functions available in the default schema.
   const FunctionCatalog* function_catalog_ = nullptr;

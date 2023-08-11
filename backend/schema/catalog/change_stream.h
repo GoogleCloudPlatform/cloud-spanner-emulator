@@ -37,6 +37,11 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+inline constexpr absl::string_view kChangeStreamRetentionPeriodDefault = "1d";
+inline constexpr absl::string_view kChangeStreamValueCaptureTypeDefault =
+    "OLD_AND_NEW_VALUES";
+
 class Table;
 class Column;
 class ChangeStream : public SchemaNode {
@@ -44,7 +49,42 @@ class ChangeStream : public SchemaNode {
   // Returns the name of this change stream.
   std::string Name() const { return name_; }
 
-  const ddl::ChangeStreamForClause* for_clause() const { return for_clause_; }
+  std::string tvf_name() const { return tvf_name_; }
+
+  const ChangeStreamID id() const { return id_; }
+
+  // Returns the tables and columns that is tracked.
+  absl::flat_hash_map<std::string, std::vector<std::string>>
+  tracked_tables_columns() const {
+    return tracked_tables_columns_;
+  }
+
+  // Returns the backing table which stores the change stream data.
+  const Table* change_stream_data_table() const {
+    return change_stream_data_table_;
+  }
+
+  const Table* change_stream_partition_table() const {
+    return change_stream_partition_table_;
+  }
+
+  std::optional<std::string> retention_period() const {
+    return retention_period_;
+  }
+
+  int64_t parsed_retention_period() const { return parsed_retention_period_; }
+
+  absl::Time creation_time() const { return creation_time_; }
+
+  std::optional<std::string> value_capture_type() const {
+    return value_capture_type_;
+  }
+
+  bool track_all() const { return track_all_; }
+
+  const ddl::ChangeStreamForClause* for_clause() const {
+    return for_clause_.has_value() ? &for_clause_.value() : nullptr;
+  }
 
   const ddl::SetOption* options() const { return options_; }
 
@@ -94,6 +134,18 @@ class ChangeStream : public SchemaNode {
   // Name of this change stream's table valued function.
   std::string tvf_name_;
 
+  // The tables and columns that this change stream tracks.
+  absl::flat_hash_map<std::string, std::vector<std::string>>
+      tracked_tables_columns_;
+
+  // We should not set the default value for the set options; otherwise, we
+  // cannot know if they are specified in the DDL statement.
+  std::optional<std::string> retention_period_;
+
+  std::optional<std::string> value_capture_type_;
+
+  bool track_all_;
+
   // TODO: assign the ID during change stream creation
   // A unique ID for identifying this change stream in the schema that owns this
   // change stream.
@@ -107,7 +159,12 @@ class ChangeStream : public SchemaNode {
   // change stream before creation
   absl::Time creation_time_;
 
-  const ddl::ChangeStreamForClause* for_clause_ = nullptr;
+  // A copy of for clause statement. We cannot use a pointer here because
+  // ddl::ChangeStreamForClause will be destroyed after parsing and we will get
+  // a segmentation fault when accessing its content. A unique pointer does not
+  // work since we need to support ShallowClone() and the ownership will be
+  // passed to the new object.
+  std::optional<ddl::ChangeStreamForClause> for_clause_;
 
   const ddl::SetOption* options_ = nullptr;
 

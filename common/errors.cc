@@ -822,6 +822,115 @@ absl::Status TooManyTablesPerDatabase(absl::string_view table_name,
                                        "(limit $1 per database).",
                                        table_name, limit));
 }
+
+absl::Status CreateChangeStreamForClauseInvalidOneof(
+    absl::string_view change_stream_name) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Invalid CreateChangeStreamForClause: "
+                                       "Change Stream $0 is missing"
+                                       " `all` or `tracked_tables` in oneof "
+                                       "for_clause_type.",
+                                       change_stream_name));
+}
+
+absl::Status CreateChangeStreamForClauseZeroEntriesInTrackedTables(
+    absl::string_view change_stream_name) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Invalid CreateChangeStreamForClause "
+                                       "tracked_tables: Change Stream $0 has"
+                                       " zero entries in `tracked_tables`.",
+                                       change_stream_name));
+}
+
+absl::Status CreateChangeStreamForClauseTrackedTablesEntryMissingTableName(
+    absl::string_view change_stream_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Invalid CreateChangeStreamForClause::TrackedTables::Entry: "
+          "Change Stream $0 is missing `table_name`"
+          " in CreateChangeStreamForClause::TrackedTables::Entry.",
+          change_stream_name));
+}
+
+absl::Status ChangeStreamDuplicateTable(absl::string_view change_stream_name,
+                                        absl::string_view table_name) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Change Stream $0 should not list Table "
+                                       "$1 more than once in the FOR clause.",
+                                       change_stream_name, table_name));
+}
+
+absl::Status InvalidTrackedObjectInChangeStream(
+    absl::string_view change_stream_name, absl::string_view object_type,
+    absl::string_view object_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Change Stream $0 does "
+                       "not support tracking $1 $2. Change "
+                       "Streams support tracking Tables and "
+                       "Columns in the default schema (not in "
+                       "INFORMATION_SCHEMA or SPANNER_SYS)."
+                       " Change Streams, Indexes, Queues, "
+                       "Views/Functions and non-key Generated "
+                       "Columns that are not STORED VOLATILE are"
+                       " not supported for tracking.",
+                       change_stream_name, object_type, object_name));
+}
+
+absl::Status UnsupportedTrackedObjectOrNonExistentTableInChangeStream(
+    absl::string_view change_stream_name, absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Change Stream $0 cannot track $1 because either Change "
+                       "Streams do not track database objects of this type, or "
+                       "this Table does not exist.",
+                       change_stream_name, table_name));
+}
+
+absl::Status CreateChangeStreamForClauseTrackedTablesEntryInvalidOneof(
+    absl::string_view change_stream_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Invalid CreateChangeStreamForClause::TrackedTables::Entry: Change "
+          "Stream $0 is missing `all` or `tracked_columns` in "
+          "CreateChangeStreamForClause::TrackedTables::Entry oneof track_type.",
+          change_stream_name));
+}
+
+absl::Status ChangeStreamDuplicateColumn(absl::string_view change_stream_name,
+                                         absl::string_view column_name,
+                                         absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Change Stream $0 should not list Column $1 "
+                       "of Table $2 more than once in the FOR clause.",
+                       change_stream_name, column_name, table_name));
+}
+
+absl::Status NonexistentTrackedColumnInChangeStream(
+    absl::string_view change_stream_name, absl::string_view column_name,
+    absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Change Stream $0 cannot track column "
+                       "$1 because it does not exist in Table $2.",
+                       change_stream_name, column_name, table_name));
+}
+
+absl::Status KeyColumnInChangeStreamForClause(
+    absl::string_view change_stream_name, absl::string_view key_column_name,
+    absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("The FOR clause of Change Stream $0 should not list "
+                       "the primary key column $1 of Table $2. Please list "
+                       "non-key columns only, because primary key columns "
+                       "are always tracked if the table is tracked.",
+                       change_stream_name, key_column_name, table_name));
+}
+
 absl::Status TooManyChangeStreamsPerDatabase(
     absl::string_view change_stream_name, int64_t limit) {
   return absl::Status(absl::StatusCode::kFailedPrecondition,
@@ -830,6 +939,224 @@ absl::Status TooManyChangeStreamsPerDatabase(
                                        "of Change Streams per Database "
                                        "(limit $1) has been reached.",
                                        change_stream_name, limit));
+}
+
+absl::Status TooManyChangeStreamsTrackingSameObject(
+    absl::string_view change_stream_name, int64_t limit,
+    absl::string_view object_name_string) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Failed to create or alter Change Stream $0 : "
+                       "because it is not allowed to have more than "
+                       "$1 Change Streams tracking the same table or "
+                       "non-key column or ALL: $2.",
+                       change_stream_name, limit, object_name_string));
+}
+
+absl::Status UnsupportedChangeStreamOption(absl::string_view option_name) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Invalid Change Stream Option: $0."
+                                       "Supported options are retention_period "
+                                       "and value_capture_type.",
+                                       option_name));
+}
+
+absl::Status InvalidChangeStreamRetentionPeriodOptionValue() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Option retention_period can only take string_value."));
+}
+
+absl::Status InvalidTimeDurationFormat(absl::string_view time_duration) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Invalid time duration format: $0.", time_duration));
+}
+
+absl::Status InvalidDataRetentionPeriod(absl::string_view time_duration) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Invalid retention_period: $0. Change Streams retention "
+                       "period must be a value in the range [24h, 7d].",
+                       time_duration));
+}
+
+absl::Status InvalidValueCaptureType(absl::string_view value_capture_type) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Invalid value_capture_type: $0. Change Streams only "
+                       "support value capture types in OLD_AND_NEW_VALUES, "
+                       "NEW_ROW, and NEW_VALUES.",
+                       value_capture_type));
+}
+
+absl::Status AlterChangeStreamDropNonexistentForClause(
+    absl::string_view change_stream_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "The ALTER CHANGE STREAM DROP FOR clause cannot be "
+          "applied on Change Stream $0, because it does not have a FOR clause "
+          "and it does not track any database object.",
+          change_stream_name));
+}
+
+absl::Status TrackUntrackableTables(absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("ChangeStream cannot track internal or owned tables $0",
+                       table_name));
+}
+
+absl::Status TrackUntrackableColumns(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("ChangeStream cannot track generated columns $0",
+                       column_name));
+}
+
+absl::Status UnsetTrackedObject(absl::string_view change_stream_name,
+                                absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "ChangeStream $0 table entry $1 column track type not set",
+          change_stream_name, table_name));
+}
+
+absl::Status InvalidChangeStreamTvfArgumentNullStartTimestamp() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "start_timestamp must not be null.");
+}
+
+absl::Status InvalidChangeStreamTvfArgumentStartTimestampTooFarInFuture(
+    absl::string_view min_read_ts_string, absl::string_view max_read_ts_string,
+    absl::string_view start_ts_string) {
+  return absl::Status(
+      absl::StatusCode::kOutOfRange,
+      absl::Substitute(
+          "Specified start_timestamp is too far in the future. Please specify "
+          "a start_timestamp within the earliest read timestamp: $0, and the "
+          "current maximum start timestamp: "
+          "$1. Received start_timestamp: $2.",
+          min_read_ts_string, max_read_ts_string, start_ts_string));
+}
+
+absl::Status InvalidChangeStreamTvfArgumentStartTimestampTooOld(
+    absl::string_view min_read_ts_string, absl::string_view start_ts_string) {
+  return absl::Status(
+      absl::StatusCode::kOutOfRange,
+      absl::Substitute(
+          "Specified start_timestamp is too far in the past. Please specify "
+          "a start_timestamp within the earliest read timestamp: $0. Received "
+          "start_timestamp: $1.",
+          min_read_ts_string, start_ts_string));
+}
+
+absl::Status
+InvalidChangeStreamTvfArgumentStartTimestampGreaterThanEndTimestamp(
+    absl::string_view start_ts_string, absl::string_view end_ts_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("If end_timestamp is specified, start_timestamp must be "
+                       "<=  end_timestamp. Received start_timestamp: $0, "
+                       "end_timestamp: $1.",
+                       start_ts_string, end_ts_string));
+}
+
+absl::Status InvalidChangeStreamTvfArgumentNullHeartbeat() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "heartbeat_milliseconds must not be null.");
+}
+
+absl::Status InvalidChangeStreamTvfArgumentOutOfRangeHeartbeat(
+    int64_t min_heartbeat_num, int64_t max_heartbeat_num,
+    int64_t heartbeat_num) {
+  return absl::Status(
+      absl::StatusCode::kOutOfRange,
+      absl::Substitute("heartbeat_milliseconds must be within min $0 and "
+                       "max $1. Received heartbeat_milliseconds: $2.",
+                       min_heartbeat_num, max_heartbeat_num, heartbeat_num));
+}
+
+absl::Status InvalidChangeStreamTvfArgumentNonNullReadOptions() {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      "read_options must be null.");
+}
+
+absl::Status InvalidChangeStreamTvfArgumentWithArgIndex(
+    absl::string_view tvf_name_string, int index_num) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Invalid argument of change stream TVF $0. "
+          "Argument $1 is not a literal or parameter. Implicit type "
+          "conversions are not supported.",
+          tvf_name_string, index_num));
+}
+
+absl::Status
+InvalidChangeStreamTvfArgumentPartitionTokenInvalidChangeStreamName(
+    absl::string_view partition_token_str) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Specified partition_token is invalid, as it does not belong to the "
+          "Change Stream associated with the TVF. Received partition_token: "
+          "$0.",
+          partition_token_str));
+}
+
+absl::Status InvalidChangeStreamTvfArgumentStartTimestampForPartition(
+    absl::string_view min_ts_string, absl::string_view max_ts_string,
+    absl::string_view start_ts_string) {
+  return absl::Status(
+      absl::StatusCode::kOutOfRange,
+      absl::Substitute(
+          "Specified start_timestamp is invalid for the partition. Please "
+          "specify a start_timestamp within $0 and $1. "
+          "Received start_timestamp: $2.",
+          min_ts_string, max_ts_string, start_ts_string));
+}
+
+absl::Status ChangeStreamStalePartition() {
+  return absl::Status(
+      absl::StatusCode::kOutOfRange,
+      "This partition is no longer valid. All Change Stream records associated "
+      "with this partition have expired and have been deleted, as specified by "
+      "the Change Stream retention period.");
+}
+
+absl::Status IllegalChangeStreamQuerySyntax(absl::string_view tvf_name_string) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("Change stream TVF must not be combined with any other "
+                       "SQL statements. "
+                       "Change stream records should be read using "
+                       "`SELECT ChangeRecord FROM $0(<args>)`.",
+                       tvf_name_string));
+}
+
+absl::Status ChangeStreamQueriesMustBeSingleUseOnly() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "Change stream queries are not supported for multi use transactions. "
+      "Change stream queries must be strong reads executed via single use "
+      "transactions using the ExecuteStreamingSql API.");
+}
+absl::Status ChangeStreamQueriesMustBeStrongReads() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "Change stream queries are not supported for multi use transactions. "
+      "Change stream queries must be strong reads executed via single use "
+      "transactions using the ExecuteStreamingSql API.");
+}
+absl::Status ChangeStreamQueriesMustBeStreaming() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "Change stream queries are not supported for the ExecuteSql API. "
+      "Change stream queries must be strong reads executed via single use "
+      "transactions using the ExecuteStreamingSql API.");
 }
 
 absl::Status TooManyIndicesPerDatabase(absl::string_view index_name,
@@ -862,6 +1189,15 @@ absl::Status DropTableWithDependentIndices(absl::string_view table_name,
                       absl::Substitute("Cannot drop table $0 with indices: $1.",
                                        table_name, indexes));
 }
+
+absl::Status DropTableWithDependentChangeStreams(
+    absl::string_view table_name, absl::string_view change_streams) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot drop table $0 with change_streams: $1.",
+                       table_name, change_streams));
+}
+
 absl::Status SetOnDeleteWithoutInterleaving(absl::string_view table_name) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
@@ -1076,6 +1412,47 @@ absl::Status IndexNotFound(absl::string_view index_name) {
   return absl::Status(absl::StatusCode::kNotFound,
                       absl::Substitute("Index not found: $0", index_name));
 }
+
+absl::Status ChangeStreamNotFound(absl::string_view change_stream_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::StrCat("Change Stream not found: ", change_stream_name));
+}
+
+absl::Status TableValuedFunctionNotFound(absl::string_view tvf_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::StrCat("Table valued function not found: ", tvf_name));
+}
+
+absl::Status DroppingTableWithChangeStream(
+    absl::string_view table_name, int64_t change_stream_count,
+    absl::string_view change_stream_name_list_string) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot drop table $0. Table $0 is tracked by $1 change streams: $2. "
+          "Tables explicitly tracked by a Change Stream cannot be dropped. "
+          "Please drop the Change Stream or modify its FOR clause to stop "
+          "tracking the table explicitly before dropping the table.",
+          table_name, change_stream_count, change_stream_name_list_string));
+}
+absl::Status DropColumnWithChangeStream(
+    absl::string_view table_name, absl::string_view column_name,
+    int64_t change_stream_count,
+    absl::string_view change_stream_name_list_string) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot drop column $0.$1 . Column $0 is tracked by $2 change "
+          "streams: $3. "
+          "Columns explicitly tracked by a Change Stream cannot be dropped. "
+          "Please alter the Change Stream to stop tracking the column before "
+          "dropping the column.",
+          table_name, column_name, change_stream_count,
+          change_stream_name_list_string));
+}
+
 absl::Status DropForeignKeyManagedIndex(absl::string_view index_name,
                                         absl::string_view foreign_key_names) {
   return absl::Status(
@@ -1956,6 +2333,16 @@ absl::Status UnsupportedFunction(absl::string_view function_name) {
   return absl::Status(
       absl::StatusCode::kUnimplemented,
       absl::Substitute("Unsupported built-in function: $0", function_name));
+}
+
+absl::Status UnsupportedUserDefinedTableValuedFunction(
+    absl::string_view tvf_name) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute(
+          "Unsupported table valued function: $0, user defined table valued "
+          "function is not supported in Cloud Spanner.",
+          tvf_name));
 }
 
 absl::Status UnsupportedHavingModifierWithDistinct() {

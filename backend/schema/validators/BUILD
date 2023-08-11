@@ -50,6 +50,7 @@ cc_library(
         "//backend/query:queryable_view",
         "//backend/schema/backfills:schema_backfillers",
         "//backend/schema/catalog:schema",
+        "//backend/schema/ddl:operations_cc_proto",
         "//backend/schema/graph:schema_node",
         "//backend/schema/updater:global_schema_names",
         "//backend/schema/updater:schema_validation_context",

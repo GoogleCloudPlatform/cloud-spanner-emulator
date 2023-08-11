@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "google/protobuf/descriptor.h"
+#include "absl/log/log.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -655,6 +656,21 @@ void AddForeignKeyColumnNames(SimpleNode* child,
   }
 }
 
+ForeignKey::Action GetForeignKeyAction(const SimpleNode* node) {
+  CheckNode(node, JJTON_DELETE);
+  SimpleNode* action = GetChildNode(node, 0, JJTREFERENTIAL_ACTION);
+  SimpleNode* child = GetChildNode(action, 0);
+  switch (child->getId()) {
+    case JJTNO_ACTION:
+      return ForeignKey::NO_ACTION;
+    case JJTCASCADE:
+      return ForeignKey::CASCADE;
+    default:
+      ZETASQL_LOG(ERROR) << "Unexpected foreign key action: " << child->toString();
+      return ForeignKey::ACTION_UNSPECIFIED;
+  }
+}
+
 void VisitForeignKeyNode(const SimpleNode* node, ForeignKey* foreign_key,
                          std::vector<std::string>* errors) {
   CheckNode(node, JJTFOREIGN_KEY);
@@ -679,6 +695,9 @@ void VisitForeignKeyNode(const SimpleNode* node, ForeignKey* foreign_key,
             child, [&foreign_key](const std::string& name) {
               foreign_key->add_referenced_column_name(name);
             });
+        break;
+      case JJTON_DELETE:
+        foreign_key->set_on_delete(GetForeignKeyAction(child));
         break;
       default:
         // We can only get here if there is a bug in the grammar or parser.

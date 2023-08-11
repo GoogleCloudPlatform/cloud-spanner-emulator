@@ -538,6 +538,134 @@ TEST(ParseCreateTable, CanParseAlterTableWithAddNamedForeignKey) {
                   )pb")));
 }
 
+TEST(ParseCreateTable, CanParseCreateTableWithForeignKeyDeleteCascadeAction) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE TABLE T (
+                      A INT64,
+                      B STRING(MAX),
+                      CONSTRAINT FK_UXY FOREIGN KEY (B, A)
+                      REFERENCES U (X, Y) ON DELETE CASCADE,
+                    ) PRIMARY KEY (A)
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "T"
+                      column {
+                        column_name: "A"
+                        type: INT64
+                      }
+                      column {
+                        column_name: "B"
+                        type: STRING
+                      }
+                      primary_key {
+                        key_name: "A"
+                      }
+                      foreign_key {
+                        constraint_name: "FK_UXY"
+                        constrained_column_name: "B"
+                        constrained_column_name: "A"
+                        referenced_table_name: "U"
+                        referenced_column_name: "X"
+                        referenced_column_name: "Y"
+                        enforced: true
+                        on_delete: CASCADE
+                      }
+                    }
+                  )pb")));
+}
+
+TEST(ParseCreateTable, CanParseAlterTableAddForeignKeyWithDeleteCascadeAction) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE T ADD FOREIGN KEY (B, A)
+                    REFERENCES U (X, Y) ON DELETE CASCADE
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "T"
+                      add_foreign_key {
+                        foreign_key {
+                          constrained_column_name: "B"
+                          constrained_column_name: "A"
+                          referenced_table_name: "U"
+                          referenced_column_name: "X"
+                          referenced_column_name: "Y"
+                          enforced: true
+                          on_delete: CASCADE
+                        }
+                      }
+                    }
+                  )pb")));
+}
+
+TEST(ParseCreateTable, CanParseCreateTableWithForeignKeyDeleteNoAction) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE TABLE T (
+                      A INT64,
+                      B STRING(MAX),
+                      CONSTRAINT FK_UXY FOREIGN KEY (B, A)
+                      REFERENCES U (X, Y) ON DELETE NO ACTION,
+                    ) PRIMARY KEY (A)
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "T"
+                      column {
+                        column_name: "A"
+                        type: INT64
+                      }
+                      column {
+                        column_name: "B"
+                        type: STRING
+                      }
+                      primary_key {
+                        key_name: "A"
+                      }
+                      foreign_key {
+                        constraint_name: "FK_UXY"
+                        constrained_column_name: "B"
+                        constrained_column_name: "A"
+                        referenced_table_name: "U"
+                        referenced_column_name: "X"
+                        referenced_column_name: "Y"
+                        enforced: true
+                        on_delete: NO_ACTION
+                      }
+                    }
+                  )pb")));
+}
+
+TEST(ParseCreateTable, CanParseAlterTableAddForeignKeyWithDeleteNoAction) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE T ADD FOREIGN KEY (B, A)
+                    REFERENCES U (X, Y) ON DELETE NO ACTION
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "T"
+                      add_foreign_key {
+                        foreign_key {
+                          constrained_column_name: "B"
+                          constrained_column_name: "A"
+                          referenced_table_name: "U"
+                          referenced_column_name: "X"
+                          referenced_column_name: "Y"
+                          enforced: true
+                          on_delete: NO_ACTION
+                        }
+                      }
+                    }
+                  )pb")));
+}
+
 TEST(ParseCreateTable, CanParseAlterTableWithDropConstraint) {
   EXPECT_THAT(ParseDDLStatement(
                   R"sql(
@@ -2199,6 +2327,194 @@ TEST(CreateChangeStream, CanParseCreateChangeStreamForExplicitColumn) {
                 })pb")));
 }
 
+TEST(CreateChangeStream, CanParseCreateChangeStreamForTableAndExplicitColumns) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamTableAndExplicitColumns FOR Users, Albums (Name, Description), Singers())sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_change_stream {
+          change_stream_name: "ChangeStreamTableAndExplicitColumns"
+          for_clause {
+            tracked_tables {
+              table_entry { table_name: "Users" all_columns: true }
+              table_entry {
+                table_name: "Albums"
+                tracked_columns {
+                  column_name: "Name"
+                  column_name: "Description"
+                }
+              }
+              table_entry {
+                table_name: "Singers"
+                tracked_columns {}
+              }
+            }
+          }
+        })pb")));
+}
+
+TEST(CreateChangeStream, CanParseCreateChangeStreamForTableNamedQuoteALL) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(CREATE CHANGE STREAM ChangeStreamForTableNamedQuoteALL
+  FOR `ALL`)sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_change_stream {
+                  change_stream_name: "ChangeStreamForTableNamedQuoteALL"
+                  for_clause {
+                    tracked_tables {
+                      table_entry { table_name: "ALL" all_columns: true }
+                    }
+                  }
+                })pb")));
+}
+
+TEST(CreateChangeStream,
+     CanParseCreateChangeStreamForTableNamedQuoteALLWithColumn) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamForTableNamedQuoteALLWithColumn
+  FOR `ALL`(SomeColumn))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_change_stream {
+          change_stream_name: "ChangeStreamForTableNamedQuoteALLWithColumn"
+          for_clause {
+            tracked_tables {
+              table_entry {
+                table_name: "ALL"
+                tracked_columns { column_name: "SomeColumn" }
+              }
+            }
+          }
+        })pb")));
+}
+
+TEST(CreateChangeStream,
+     CanParseCreateChangeStreamForTableNamedQuoteALLWithQuoteALLColumn) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamForTableNamedQuoteALLWithQuoteALLColumn
+  FOR `ALL`(`ALL`))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_change_stream {
+          change_stream_name: "ChangeStreamForTableNamedQuoteALLWithQuoteALLColumn"
+          for_clause {
+            tracked_tables {
+              table_entry {
+                table_name: "ALL"
+                tracked_columns { column_name: "ALL" }
+              }
+            }
+          }
+        })pb")));
+}
+
+TEST(CreateChangeStream, ChangeStreamErrorForTableNamedALLWithColumn) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForTableNamedALLWithColumn
+  FOR ALL(SomeColumn))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateChangeStream, ChangeStreamErrorForTableNamedALLWithPK) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForTableNamedALLWithPK FOR ALL())sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateChangeStream, ChangeStreamErrorForUsersAndALL) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForUsersAndALL FOR Users, ALL)sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateChangeStream, ChangeStreamErrorForUsersALLAlbums) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForUsersALLAlbums FOR Users(), ALL, Albums())sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateChangeStream, ChangeStreamErrorForUsersColumnALL) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForUsersColumnALL FOR Users(ALL))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateChangeStream, CanParseCreateChangeStreamNoForClause) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(CREATE CHANGE STREAM ChangeStreamNoForClause)sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_change_stream {
+                  change_stream_name: "ChangeStreamNoForClause"
+                })pb")));
+}
+
+TEST(CreateChangeStream, ChangeStreamErrorForClauseNothingFollowing) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing FOR)sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateChangeStream, CanParseCreateChangeStreamMassivelyQuoted) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM `ChangeStreamQuoted`
+  FOR `Users`, `Albums`(`Name`), `Singers`())sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_change_stream {
+                  change_stream_name: "ChangeStreamQuoted"
+                  for_clause {
+                    tracked_tables {
+                      table_entry { table_name: "Users" all_columns: true }
+                      table_entry {
+                        table_name: "Albums"
+                        tracked_columns { column_name: "Name" }
+                      }
+                      table_entry {
+                        table_name: "Singers"
+                        tracked_columns {}
+                      }
+                    }
+                  }
+                })pb")));
+}
+
+TEST(CreateChangeStream, CanParseCreateChangeStreamRepeatedTableColumns) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(CREATE CHANGE STREAM ChangeStreamRepeatedTableColumns
+  FOR Users, Users, Albums(Name), Albums(Name, Description))sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_change_stream {
+                  change_stream_name: "ChangeStreamRepeatedTableColumns"
+                  for_clause {
+                    tracked_tables {
+                      table_entry { table_name: "Users" all_columns: true }
+                      table_entry { table_name: "Users" all_columns: true }
+                      table_entry {
+                        table_name: "Albums"
+                        tracked_columns { column_name: "Name" }
+                      }
+                      table_entry {
+                        table_name: "Albums"
+                        tracked_columns {
+                          column_name: "Name"
+                          column_name: "Description"
+                        }
+                      }
+                    }
+                  }
+                })pb")));
+}
+
 TEST(CreateChangeStream,
      CanParseCreateChangeStreamSetOptionsDataRetentionPeriod) {
   EXPECT_THAT(
@@ -2209,6 +2525,19 @@ TEST(CreateChangeStream,
           change_stream_name: "ChangeStream"
           for_clause { all: true }
           set_options { option_name: "retention_period" string_value: "168h" }
+        })pb")));
+}
+
+TEST(CreateChangeStream,
+     CanParseCreateChangeStreamSetOptionsDataRetentionPeriodNull) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
+      ALL OPTIONS ( retention_period = null ))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_change_stream {
+          change_stream_name: "ChangeStream"
+          for_clause { all: true }
+          set_options { option_name: "retention_period" null_value: true }
         })pb")));
 }
 
@@ -2224,6 +2553,158 @@ TEST(CreateChangeStream, CanParseCreateChangeStreamSetOptionsValueCaptureType) {
                     string_value: "NEW_ROW"
                   }
                 })pb")));
+}
+
+TEST(CreateChangeStream,
+     CanParseCreateChangeStreamSetOptionsValueCaptureTypeNull) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
+      ALL OPTIONS (value_capture_type = NULL))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_change_stream {
+          change_stream_name: "ChangeStream"
+          for_clause { all: true }
+          set_options { option_name: "value_capture_type" null_value: true }
+        })pb")));
+}
+
+TEST(CreateChangeStream,
+     CanParseCreateChangeStreamSetOptionsRetentionPeriodAndValueCaptureType) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM cs OPTIONS (retention_period='7d',value_capture_type='OLD_AND_NEW_VALUES'))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_change_stream {
+          change_stream_name: "cs"
+          set_options { option_name: "retention_period" string_value: "7d" }
+          set_options {
+            option_name: "value_capture_type"
+            string_value: "OLD_AND_NEW_VALUES"
+          }
+        })pb")));
+}
+
+TEST(CreateChangeStream,
+     CanParseCreateChangeStreamSetValueCaptureTypeAndOptionsRetentionPeriod) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM cs OPTIONS (value_capture_type='OLD_AND_NEW_VALUES', retention_period='7d'))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_change_stream {
+          change_stream_name: "cs"
+          set_options {
+            option_name: "value_capture_type"
+            string_value: "OLD_AND_NEW_VALUES"
+          }
+          set_options { option_name: "retention_period" string_value: "7d" }
+        })pb")));
+}
+
+TEST(CreateChangeStream, ChangeStreamErrorEmptyOptions) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS ())sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateChangeStream, ChangeStreamErrorDuplicateOptions) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (retention_period = '7d', retention_period = '7d'))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateChangeStream, ChangeStreamErrorInvalidOptionsSyntax) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing SET OPTIONS (retention_period = '7d'))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateChangeStream, ChangeStreamErrorUnsupportedOptionName) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (allow_commit_timestamp = true))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateChangeStream, ChangeStreamErrorInvalidOptionType) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (retention_period = 1))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (retention_period = true))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (retention_period = ['list']))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (retention_period = [('key','val')]))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (value_capture_type = -1))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (value_capture_type = false))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (value_capture_type = ['list']))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (value_capture_type = [('key','val')]))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(AlterChangeStream, CanParseAlterChangeStreamValidSetForClause) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs SET FOR ALL)sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_change_stream {
+                  change_stream_name: "cs"
+                  set_for_clause { all: true }
+                })pb")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM cs SET FOR Users, Albums (Name, Description), Singers())sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_change_stream {
+          change_stream_name: "cs"
+          set_for_clause {
+            tracked_tables {
+              table_entry { table_name: "Users" all_columns: true }
+              table_entry {
+                table_name: "Albums"
+                tracked_columns {
+                  column_name: "Name"
+                  column_name: "Description"
+                }
+              }
+              table_entry {
+                table_name: "Singers"
+                tracked_columns {}
+              }
+            }
+          }
+        })pb")));
 }
 
 TEST(AlterChangeStream,
@@ -2256,6 +2737,41 @@ TEST(AlterChangeStream, CanParseAlterChangeStreamSetOptionsValueCaptureType) {
         })pb")));
 }
 
+TEST(AlterChangeStream,
+     CanParseAlterChangeStreamSetOptionsRetentionPeriodAndValueCaptureType) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM cs SET OPTIONS (
+            retention_period = '7d',
+            value_capture_type = 'OLD_AND_NEW_VALUES'
+          ))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_change_stream {
+          change_stream_name: "cs"
+          set_options {
+            options { option_name: "retention_period" string_value: "7d" }
+            options {
+              option_name: "value_capture_type"
+              string_value: "OLD_AND_NEW_VALUES"
+            }
+          }
+        })pb")));
+}
+
+TEST(AlterChangeStream, CanParseAlterChangeStreamSetOptionsNull) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM cs SET OPTIONS (value_capture_type = NULL, retention_period = NULL))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_change_stream {
+          change_stream_name: "cs"
+          set_options {
+            options { option_name: "value_capture_type" null_value: true }
+            options { option_name: "retention_period" null_value: true }
+          }
+        })pb")));
+}
+
 TEST(AlterChangeStream, CanParseAlterChangeStreamSuspend) {
   EXPECT_THAT(ParseDDLStatement(
                   R"sql(ALTER CHANGE STREAM ChangeStream DROP FOR ALL )sql"),
@@ -2266,11 +2782,111 @@ TEST(AlterChangeStream, CanParseAlterChangeStreamSuspend) {
                 })pb")));
 }
 
+TEST(DropChangeStream, MissingAlterAction) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs)sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(DropChangeStream, MissingChangeStreamName) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(ALTER CHANGE STREAM SET FOR ALL)sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM SET OPTIONS (retention_period = '7d'))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(DropChangeStream, MissingKeyWordSet) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs FOR ALL)sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM cs OPTIONS (retention_period = '7d'))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(DropChangeStream, InvalidForClause) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs SET FOR)sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs SET FOR ALL())sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs SET FOR ALL, Users)sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(DropChangeStream, EmptyOptions) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs SET OPTIONS ())sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(DropChangeStream, DuplicateOptions) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM cs SET OPTIONS (retention_period = '7d', retention_period = '5d'))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(DropChangeStream, UnsupportedOptionName) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM cs SET OPTIONS (allow_commit_timestamp = true))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(DropChangeStream, InvalidOptionType) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM cs SET OPTIONS (retention_period = 1))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM cs SET OPTIONS (retention_period = true))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM cs SET OPTIONS (value_capture_type = -1))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER CHANGE STREAM cs SET OPTIONS (value_capture_type = false))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+}
+
 TEST(DropChangeStream, CanParseDropChangeStream) {
   EXPECT_THAT(
       ParseDDLStatement(R"sql(DROP CHANGE STREAM ChangeStream)sql"),
       IsOkAndHolds(test::EqualsProto(R"pb(
         drop_change_stream { change_stream_name: "ChangeStream" })pb")));
+}
+
+TEST(DropChangeStream, ErrorParseDropChangeStreams) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(DROP CHANGE STREAM)sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(ParseDDLStatement(R"sql(DROP `CHANGE STREAM`)sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(ParseDDLStatement(R"sql(DROP `CHANGE` `STREAM`)sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
 }
 
 TEST(ParseViews, CreateViewNoSqlSecurity) {

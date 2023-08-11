@@ -43,6 +43,11 @@ struct ReadArg {
   // The table from which to read rows.
   std::string table;
 
+  // If non-empty, read the non-public partition table for this change stream.
+  std::string change_stream_for_partition_table;
+  // If non-empty, read the non-public data table for this change stream.
+  std::string change_stream_for_data_table;
+
   // If non-empty, key_set below specifies keys from this index, not the table.
   std::string index;
 

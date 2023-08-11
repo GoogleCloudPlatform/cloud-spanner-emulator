@@ -17,8 +17,10 @@
 #include "backend/schema/updater/schema_updater.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -57,6 +59,7 @@
 #include "backend/query/catalog.h"
 #include "backend/query/query_engine_options.h"
 #include "backend/query/query_validator.h"
+#include "backend/schema/backfills/change_stream_backfill.h"
 #include "backend/schema/backfills/column_value_backfill.h"
 #include "backend/schema/backfills/index_backfill.h"
 #include "backend/schema/builders/change_stream_builder.h"
@@ -84,11 +87,17 @@
 #include "backend/schema/validators/view_validator.h"
 #include "backend/schema/verifiers/check_constraint_verifiers.h"
 #include "backend/schema/verifiers/foreign_key_verifiers.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
 #include "common/limits.h"
+#include "re2/re2.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
+
+ABSL_FLAG(bool, cloud_spanner_emulator_disable_cs_retention_check, false,
+          "whether we want to check the retention limit when altering a change "
+          "stream's retention period.");
 
 namespace google {
 namespace spanner {
@@ -230,6 +239,46 @@ class SchemaUpdaterImpl {
   absl::Status CreateInterleaveConstraint(const Table* parent,
                                           Table::OnDeleteAction on_delete,
                                           Table::Builder* builder);
+  absl::Status ValidateChangeStreamForClause(
+      const ddl::ChangeStreamForClause& change_stream_for_clause,
+      absl::string_view change_stream_name);
+  absl::Status ValidateChangeStreamLimits(
+      const ddl::ChangeStreamForClause& change_stream_for_clause,
+      absl::string_view change_stream_name);
+  absl::Status ValidateLimitsForTrackedObjects(
+      const ddl::ChangeStreamForClause& change_stream_for_clause,
+      absl::FunctionRef<absl::Status(const Table*)> table_cb,
+      absl::FunctionRef<absl::Status(const Column*)> column_cb);
+  absl::Status RegisterTrackedObjects(
+      const ddl::ChangeStreamForClause& change_stream_for_clause,
+      const ChangeStream* change_stream);
+  absl::Status UnregisterChangeStreamFromTrackedObjects(
+      const ChangeStream* change_stream);
+  absl::Status BuildChangeStreamTrackedObjects(
+      const ddl::ChangeStreamForClause& change_stream_for_clause,
+      const ChangeStream* change_stream, ChangeStream::Builder* builder);
+  absl::Status EditChangeStreamTrackedObjects(
+      const ddl::ChangeStreamForClause& change_stream_for_clause,
+      const ChangeStream* change_stream);
+  absl::Status UnregisterChangeStreamFromTrackedObjects(
+      const ChangeStream* change_stream,
+      absl::FunctionRef<absl::Status(Table::Editor*)> table_cb,
+      absl::FunctionRef<absl::Status(Column::Editor*)> column_cb);
+  absl::Status RegisterTrackedObjects(
+      const ChangeStream* change_stream,
+      const ddl::ChangeStreamForClause& change_stream_for_clause,
+      absl::FunctionRef<absl::Status(Table::Editor*)> table_cb,
+      absl::FunctionRef<absl::Status(Column::Editor*)> column_cb);
+  template <typename ChangeStreamModifier>
+  absl::Status SetChangeStreamOptions(
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+      ChangeStreamModifier* modifier);
+  absl::Status ValidateChangeStreamOptions(
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options);
+  int64_t ParseSchemaTimeSpec(absl::string_view spec);
+  static std::string MakeChangeStreamStructTvfName(
+      std::string change_stream_name);
+
   absl::StatusOr<const Table*> GetInterleaveConstraintTable(
       const std::string& interleave_in_table_name,
       const Table::Builder& builder) const;
@@ -281,6 +330,19 @@ class SchemaUpdaterImpl {
       const Index* index, const Table* indexed_table,
       ColumnsUsedByIndex* columns_used_by_index);
 
+  absl::StatusOr<std::unique_ptr<const Table>> CreateChangeStreamDataTable(
+      const ChangeStream* change_stream,
+      const Table* change_stream_partition_table);
+  absl::StatusOr<std::unique_ptr<const Table>> CreateChangeStreamPartitionTable(
+      const ChangeStream* change_stream);
+  absl::StatusOr<const Column*> CreateChangeStreamTableColumn(
+      const std::string& column_name, const Table* change_stream_table,
+      const zetasql::Type* type);
+  absl::StatusOr<const KeyColumn*> CreateChangeStreamTablePKColumn(
+      const std::string& pk_column_name, const Table* change_stream_table);
+  absl::Status CreateChangeStreamTablePKConstraint(
+      const std::string& pk_column_name, Table::Builder* builder);
+
   absl::StatusOr<const Index*> CreateIndex(
       const ddl::CreateIndex& ddl_index, const Table* indexed_table = nullptr);
 
@@ -304,6 +366,9 @@ class SchemaUpdaterImpl {
   );
   absl::Status AlterChangeStream(
       const ddl::AlterChangeStream& alter_change_stream);
+  absl::Status AlterChangeStreamForClause(
+      const ddl::ChangeStreamForClause& ddl_change_stream_for_clause,
+      const ChangeStream* change_stream);
   absl::Status AlterInterleaveAction(
       const ddl::InterleaveClause::Action& ddl_interleave_action,
       const Table* table);
@@ -599,6 +664,100 @@ absl::Status SchemaUpdaterImpl::SetColumnOptions(
   modifier->set_allow_commit_timestamp(allows_commit_timestamp);
   return absl::OkStatus();
 }
+
+template <typename ChangeStreamModifier>
+absl::Status SchemaUpdaterImpl::SetChangeStreamOptions(
+    const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+    ChangeStreamModifier* modifier) {
+  for (const ddl::SetOption& option : set_options) {
+    if (option.option_name() == ddl::kChangeStreamRetentionPeriodOptionName) {
+      std::optional<std::string> retention_period = option.string_value();
+      modifier->set_retention_period(retention_period);
+      modifier->set_parsed_retention_period(
+          ParseSchemaTimeSpec(*retention_period));
+    } else if (option.option_name() ==
+               ddl::kChangeStreamValueCaptureTypeOptionName) {
+      std::optional<std::string> value_capture_type = option.string_value();
+      modifier->set_value_capture_type(value_capture_type);
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::ValidateChangeStreamOptions(
+    const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options) {
+  for (const ddl::SetOption& option : set_options) {
+    if (option.option_name() == ddl::kChangeStreamRetentionPeriodOptionName) {
+      if (!option.has_string_value()) {
+        return error::InvalidChangeStreamRetentionPeriodOptionValue();
+      } else {
+        const int64_t retention_seconds =
+            ParseSchemaTimeSpec(option.string_value());
+        const int64_t invalid_parse_result = -1;
+        if (retention_seconds == invalid_parse_result) {
+          return error::InvalidTimeDurationFormat(option.string_value());
+        } else if (
+            !absl::GetFlag(
+                FLAGS_cloud_spanner_emulator_disable_cs_retention_check) &&
+            (retention_seconds < limits::kChangeStreamsMinRetention ||
+             retention_seconds > limits::kChangeStreamsMaxRetention)) {
+          return error::InvalidDataRetentionPeriod(option.string_value());
+        }
+      }
+    } else if (option.option_name() ==
+               ddl::kChangeStreamValueCaptureTypeOptionName) {
+      if (option.has_string_value() &&
+          (option.string_value() == kValueCaptureTypeOldAndNewValues ||
+           option.string_value() == kValueCaptureTypeNewRow ||
+           option.string_value() == kValueCaptureTypeNewValues)) {
+        continue;
+      } else {
+        return error::InvalidValueCaptureType(option.string_value());
+      }
+    } else {
+      return error::UnsupportedChangeStreamOption(option.option_name());
+    }
+  }
+  return absl::OkStatus();
+}
+
+// Parses the retention period provided in the DDL statement and the returned
+// time is in seconds. Return -1 if the retention period is invalid.
+int64_t SchemaUpdaterImpl::ParseSchemaTimeSpec(absl::string_view spec) {
+  const int64_t invalid_parse_result = -1;
+  int64_t num = invalid_parse_result;
+  char modifier = '\0';
+  static LazyRE2 time_spec_re = {"(\\d+)([smhd])"};
+  constexpr int64_t kint64max = std::numeric_limits<int64_t>::max();
+  if (!RE2::FullMatch(spec, *time_spec_re, &num, &modifier)) {
+    return num;
+  }
+
+  if (modifier == 's') {
+    // RE2 already did overflow checking for us.  NOTE: We explicitly
+    // require the 's' modifier so that it will be straightforward to
+    // extend the language to support "ms" and "us".
+  } else if (modifier == 'm') {
+    if (num > kint64max / 60) return -1;
+    num *= 60;
+  } else if (modifier == 'h') {
+    if (num > kint64max / (60 * 60)) return -1;
+    num *= (60 * 60);
+  } else if (modifier == 'd') {
+    if (num > kint64max / (24 * 60 * 60)) return -1;
+    num *= (24 * 60 * 60);
+  }
+
+  return num;
+}
+
+// Construct the change stream tvf name for googlesql
+std::string SchemaUpdaterImpl::MakeChangeStreamStructTvfName(
+    std::string change_stream_name) {
+  const char kChangeStreamTvfStructPrefix[] = "READ_";
+  return absl::StrCat(kChangeStreamTvfStructPrefix, change_stream_name);
+}
+
 absl::Status SchemaUpdaterImpl::AlterColumnDefinition(
     const ddl::ColumnDefinition& ddl_column, const Table* table,
     Column::Editor* editor) {
@@ -830,6 +989,325 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
   }
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return column;
+}
+
+// Check the number of change streams tracking an object and return error if the
+// number exceed the limit.
+absl::Status SchemaUpdaterImpl::ValidateChangeStreamLimits(
+    const ddl::ChangeStreamForClause& change_stream_for_clause,
+    absl::string_view change_stream_name) {
+  if (change_stream_for_clause.all()) {
+    int all_count = 1;
+    for (const ChangeStream* change_stream : latest_schema_->change_streams()) {
+      if (change_stream->Name() != change_stream_name &&
+          (change_stream->for_clause() != nullptr &&
+           change_stream->for_clause()->all())) {
+        ++all_count;
+        // Number of change streams tracking ALL should not exceed the limit.
+        if (all_count > limits::kMaxChangeStreamsTrackingATableOrColumn) {
+          return error::TooManyChangeStreamsTrackingSameObject(
+              change_stream_name,
+              limits::kMaxChangeStreamsTrackingATableOrColumn, "ALL");
+        }
+      }
+    }
+  }
+
+  // Checks the number of change streams tracking the same table.
+  auto validate_table = [&](const Table* table) {
+    absl::flat_hash_set<std::string> all_change_streams;
+    all_change_streams.reserve(table->change_streams().size());
+    for (auto& change_stream : table->change_streams()) {
+      all_change_streams.insert(change_stream->Name());
+    }
+
+    int change_stream_count = table->change_streams().size();
+    if (!all_change_streams.contains(change_stream_name)) {
+      ++change_stream_count;
+    }
+    if (change_stream_count > limits::kMaxChangeStreamsTrackingATableOrColumn) {
+      return error::TooManyChangeStreamsTrackingSameObject(
+          change_stream_name, limits::kMaxChangeStreamsTrackingATableOrColumn,
+          table->Name());
+    }
+    return absl::OkStatus();
+  };
+
+  // Checks the number of change streams tracking the same column.
+  auto validate_column = [&](const Column* column) {
+    absl::flat_hash_set<std::string> all_change_streams;
+    all_change_streams.reserve(column->change_streams().size());
+    for (auto& change_stream : column->change_streams()) {
+      all_change_streams.insert(change_stream->Name());
+    }
+
+    bool none_key = column->table()->FindKeyColumn(column->Name()) == nullptr;
+    // Get the change stream size from the parent table if current column is
+    // a primary key column.
+    int change_stream_count = none_key
+                                  ? column->change_streams().size()
+                                  : column->table()->change_streams().size();
+    if (!all_change_streams.contains(change_stream_name)) {
+      ++change_stream_count;
+    }
+    if (change_stream_count > limits::kMaxChangeStreamsTrackingATableOrColumn) {
+      return error::TooManyChangeStreamsTrackingSameObject(
+          change_stream_name, limits::kMaxChangeStreamsTrackingATableOrColumn,
+          column->Name());
+    }
+    return absl::OkStatus();
+  };
+
+  ZETASQL_RETURN_IF_ERROR(ValidateLimitsForTrackedObjects(
+      change_stream_for_clause, validate_table, validate_column));
+
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::RegisterTrackedObjects(
+    const ChangeStream* change_stream,
+    const ddl::ChangeStreamForClause& change_stream_for_clause,
+    absl::FunctionRef<absl::Status(Table::Editor*)> table_cb,
+    absl::FunctionRef<absl::Status(Column::Editor*)> column_cb) {
+  if (change_stream_for_clause.all()) {
+    for (const auto& table : latest_schema_->tables()) {
+      if (!table->is_trackable_by_change_stream()) {
+        continue;
+      }
+      ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(table, table_cb));
+      for (const auto& column : table->columns()) {
+        // Skip all key columns when registering/unregistering change stream
+        // tracking columns to prevent modifications on key columns with child
+        // tables. This is safe because primary key columns are guaranteed to be
+        // populated in data change records no matter user specified or not.
+        if (column->is_trackable_by_change_stream() &&
+            !table->FindKeyColumn(column->Name())) {
+          ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(column, column_cb));
+        }
+      }
+    }
+    return absl::OkStatus();
+  }
+
+  for (auto& entry : change_stream_for_clause.tracked_tables().table_entry()) {
+    const Table* table = latest_schema_->FindTable(entry.table_name());
+    ZETASQL_RET_CHECK(table != nullptr);
+    if (!table->is_trackable_by_change_stream()) {
+      return error::TrackUntrackableTables(entry.table_name());
+    }
+    ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(table, table_cb));
+    if (entry.has_all_columns()) {
+      for (auto& column : table->columns()) {
+        if (column->is_trackable_by_change_stream() &&
+            !table->FindKeyColumn(column->Name())) {
+          ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(column, column_cb));
+        }
+      }
+    } else if (entry.has_tracked_columns()) {
+      for (const std::string& column_name :
+           entry.tracked_columns().column_name()) {
+        const Column* column = table->FindColumn(column_name);
+        if (!column->is_trackable_by_change_stream()) {
+          return error::TrackUntrackableColumns(column_name);
+        }
+        ZETASQL_RET_CHECK(column != nullptr);
+        ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(column, column_cb));
+      }
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::UnregisterChangeStreamFromTrackedObjects(
+    const ChangeStream* change_stream,
+    absl::FunctionRef<absl::Status(Table::Editor*)> table_cb,
+    absl::FunctionRef<absl::Status(Column::Editor*)> column_cb) {
+  for (auto& pair : change_stream->tracked_tables_columns()) {
+    std::string table_name = pair.first;
+    std::vector<std::string> column_name_list = pair.second;
+    const Table* table = latest_schema_->FindTable(table_name);
+    ZETASQL_RETURN_IF_ERROR(AlterNode(table, table_cb));
+    for (std::string& column_name : column_name_list) {
+      const Column* column = table->FindColumn(column_name);
+      if (!table->FindKeyColumn(column->Name())) {
+        ZETASQL_RETURN_IF_ERROR(AlterNode(column, column_cb));
+      }
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::RegisterTrackedObjects(
+    const ddl::ChangeStreamForClause& change_stream_for_clause,
+    const ChangeStream* change_stream) {
+  // Register tracked objects.
+  auto register_tracked_table = [change_stream](Table::Editor* table_editor) {
+    table_editor->add_change_stream(change_stream);
+    return absl::OkStatus();
+  };
+  auto register_tracked_column =
+      [change_stream](Column::Editor* column_editor) {
+        column_editor->add_change_stream(change_stream);
+        return absl::OkStatus();
+      };
+  return RegisterTrackedObjects(change_stream, change_stream_for_clause,
+                                register_tracked_table,
+                                register_tracked_column);
+}
+
+absl::Status SchemaUpdaterImpl::UnregisterChangeStreamFromTrackedObjects(
+    const ChangeStream* change_stream) {
+  auto unregister_tracked_table = [change_stream](Table::Editor* table_editor) {
+    table_editor->remove_change_stream(change_stream);
+    return absl::OkStatus();
+  };
+  auto unregister_tracked_column =
+      [change_stream](Column::Editor* column_editor) {
+        column_editor->remove_change_stream(change_stream);
+        return absl::OkStatus();
+      };
+  ZETASQL_RETURN_IF_ERROR(UnregisterChangeStreamFromTrackedObjects(
+      change_stream, unregister_tracked_table, unregister_tracked_column));
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::ValidateLimitsForTrackedObjects(
+    const ddl::ChangeStreamForClause& change_stream_for_clause,
+    absl::FunctionRef<absl::Status(const Table*)> table_cb,
+    absl::FunctionRef<absl::Status(const Column*)> column_cb) {
+  std::vector<std::string> tables_names_;
+  if (change_stream_for_clause.all()) {
+    for (const auto& table : latest_schema_->tables()) {
+      ZETASQL_RETURN_IF_ERROR(table_cb(table));
+      for (const auto& column : table->columns()) {
+        if (column->is_trackable_by_change_stream() &&
+            !table->FindKeyColumn(column->Name())) {
+          ZETASQL_RETURN_IF_ERROR(column_cb(column));
+        }
+      }
+    }
+    return absl::OkStatus();
+  }
+  for (auto& entry : change_stream_for_clause.tracked_tables().table_entry()) {
+    const Table* table = latest_schema_->FindTable(entry.table_name());
+    ZETASQL_RET_CHECK(table != nullptr);
+
+    if (entry.has_all_columns()) {
+      ZETASQL_RETURN_IF_ERROR(table_cb(table));
+      for (const auto& column : table->columns()) {
+        if (column->is_trackable_by_change_stream() &&
+            !table->FindKeyColumn(column->Name())) {
+          ZETASQL_RETURN_IF_ERROR(column_cb(column));
+        }
+      }
+    } else if (!entry.tracked_columns().column_name().empty()) {
+      for (const std::string& column_name :
+           entry.tracked_columns().column_name()) {
+        const Column* column = table->FindColumn(column_name);
+        ZETASQL_RET_CHECK(column != nullptr);
+        ZETASQL_RETURN_IF_ERROR(column_cb(column));
+      }
+    } else {
+      ZETASQL_RETURN_IF_ERROR(table_cb(table));
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::ValidateChangeStreamForClause(
+    const ddl::ChangeStreamForClause& change_stream_for_clause,
+    absl::string_view change_stream_name) {
+  if (change_stream_for_clause.has_all()) {
+    return absl::OkStatus();
+  }
+  if (!change_stream_for_clause.has_tracked_tables()) {
+    return error::CreateChangeStreamForClauseInvalidOneof(change_stream_name);
+  }
+  const ddl::ChangeStreamForClause::TrackedTables& tracked_tables =
+      change_stream_for_clause.tracked_tables();
+  if (tracked_tables.table_entry_size() == 0) {
+    return error::CreateChangeStreamForClauseZeroEntriesInTrackedTables(
+        change_stream_name);
+  }
+
+  absl::flat_hash_set<absl::string_view> tracked_tables_set;
+  for (const ddl::ChangeStreamForClause::TrackedTables::Entry& entry :
+       tracked_tables.table_entry()) {
+    if (!entry.has_table_name()) {
+      return error::
+          CreateChangeStreamForClauseTrackedTablesEntryMissingTableName(
+              change_stream_name);
+    }
+
+    const std::string& table_name = entry.table_name();
+    // Cannot list the same table more than once.
+    if (!tracked_tables_set.insert(table_name).second) {
+      return error::ChangeStreamDuplicateTable(change_stream_name, table_name);
+    }
+
+    // Tracking a change stream is not supported.
+    if (latest_schema_->FindChangeStream(table_name) != nullptr) {
+      return error::InvalidTrackedObjectInChangeStream(
+          change_stream_name, "Change Stream", table_name);
+    }
+
+    // Tracking an index is not supported.
+    if (latest_schema_->FindIndex(table_name) != nullptr) {
+      return error::InvalidTrackedObjectInChangeStream(change_stream_name,
+                                                       "Index", table_name);
+    }
+
+    // TODO: Return error if the change stream is tracking a
+    // function after function is supported.
+    // TODO: The parser would have returned a parser error if the
+    // user specified a FOR clause with table names starting with SPANNER_SYS.*
+    // or INFORMATION_SCHEMA.*.
+
+    const Table* table = latest_schema_->FindTable(table_name);
+    if (table == nullptr) {
+      return error::UnsupportedTrackedObjectOrNonExistentTableInChangeStream(
+          change_stream_name, table_name);
+    }
+
+    // Validate the tracked columns of the change stream
+    if (!entry.has_all_columns()) {
+      if (!entry.has_tracked_columns()) {
+        return error::CreateChangeStreamForClauseTrackedTablesEntryInvalidOneof(
+            change_stream_name);
+      }
+
+      absl::flat_hash_set<absl::string_view> tracked_columns_set;
+      // Note: entry.tracked_columns() can contain zero columns, indicating only
+      // the primary key columns of the table are tracked.
+      for (const std::string& column_name :
+           entry.tracked_columns().column_name()) {
+        // Cannot list the same column more than once.
+        if (!tracked_columns_set.insert(column_name).second) {
+          return error::ChangeStreamDuplicateColumn(change_stream_name,
+                                                    column_name, table_name);
+        }
+        const Column* column = table->FindColumn(column_name);
+        // Check that the column exists in the table
+        if (column == nullptr) {
+          return error::NonexistentTrackedColumnInChangeStream(
+              change_stream_name, column_name, table_name);
+        }
+        const KeyColumn* key_column = table->FindKeyColumn(column_name);
+        // Primary key column should not be listed in the FOR clause.
+        if (key_column != nullptr) {
+          return error::KeyColumnInChangeStreamForClause(
+              change_stream_name, column_name, table_name);
+        }
+        if (column->is_generated()) {
+          // Tracking a non-key Stored Generated column is not supported
+          return error::InvalidTrackedObjectInChangeStream(
+              change_stream_name, "non-key generated column",
+              absl::StrCat(table_name, ".", column_name));
+        }
+      }
+    }
+  }
+  return absl::OkStatus();
 }
 
 absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
@@ -1314,6 +1792,41 @@ absl::Status SchemaUpdaterImpl::CreateTable(
     ZETASQL_RETURN_IF_ERROR(
         CreateRowDeletionPolicy(ddl_table.row_deletion_policy(), &builder));
   }
+  if (builder.get()->is_trackable_by_change_stream()) {
+    // If change streams implicitly tracking the entire database, newly added
+    // tables should be automatically watched by those change streams.
+    for (const ChangeStream* change_stream : latest_schema_->change_streams()) {
+      if (change_stream->track_all()) {
+        std::vector<std::string> columns = builder.get()->trackable_columns();
+        for (const Column* column : builder.get()->columns()) {
+          if (column->is_trackable_by_change_stream() &&
+              !column->table()->FindKeyColumn(column->Name())) {
+            // Register the trackable columns of the newly added table to the
+            // list of change streams implicitly tracking the entire database
+            ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+                column,
+                [change_stream](Column::Editor* editor) -> absl::Status {
+                  editor->add_change_stream(change_stream);
+                  return absl::OkStatus();
+                }));
+          }
+        }
+        // Register the newly added table to the list of change streams
+        // implicitly tracking the entire database
+        ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+            change_stream,
+            [ddl_table, columns](
+                ChangeStream::Editor* change_stream_editor) -> absl::Status {
+              change_stream_editor->add_tracked_tables_columns(
+                  ddl_table.table_name(), columns);
+              return absl::OkStatus();
+            }));
+        // Register the change stream tracking the entire database to the newly
+        // added table
+        builder.add_change_stream(change_stream);
+      }
+    }
+  }
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return absl::OkStatus();
 }
@@ -1363,6 +1876,178 @@ absl::Status SchemaUpdaterImpl::AddSearchIndexColumns(
     columns.push_back(column);
   }
 
+  return absl::OkStatus();
+}
+
+absl::StatusOr<std::unique_ptr<const Table>>
+SchemaUpdaterImpl::CreateChangeStreamPartitionTable(
+    const ChangeStream* change_stream) {
+  std::string partition_table_name =
+      absl::StrCat(kChangeStreamPartitionTablePrefix, change_stream->Name());
+  Table::Builder builder;
+  builder.set_name(partition_table_name)
+      .set_id(table_id_generator_->NextId(partition_table_name))
+      .set_owner_change_stream(change_stream);
+  // Create columns in table _ChangeStream_Partition_${ChangeStreamName}
+  ZETASQL_ASSIGN_OR_RETURN(const Column* column, CreateChangeStreamTableColumn(
+                                             "partition_token", builder.get(),
+                                             type_factory_->get_string()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(
+      column, CreateChangeStreamTableColumn("start_time", builder.get(),
+                                            type_factory_->get_timestamp()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(
+      column, CreateChangeStreamTableColumn("end_time", builder.get(),
+                                            type_factory_->get_timestamp()));
+  builder.add_column(column);
+  const zetasql::Type* updated_string_array_type;
+  ZETASQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(type_factory_->get_string(),
+                                               &updated_string_array_type));
+  ZETASQL_ASSIGN_OR_RETURN(column,
+                   CreateChangeStreamTableColumn("parents", builder.get(),
+                                                 updated_string_array_type));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(column,
+                   CreateChangeStreamTableColumn("children", builder.get(),
+                                                 updated_string_array_type));
+  builder.add_column(column);
+
+  // Set the partition_token as primary key column
+  ZETASQL_RETURN_IF_ERROR(
+      CreateChangeStreamTablePKConstraint("partition_token", &builder));
+  return builder.build();
+}
+
+absl::StatusOr<std::unique_ptr<const Table>>
+SchemaUpdaterImpl::CreateChangeStreamDataTable(
+    const ChangeStream* change_stream,
+    const Table* change_stream_partition_table) {
+  std::string data_table_name =
+      absl::StrCat(kChangeStreamDataTablePrefix, change_stream->Name());
+  Table::Builder builder;
+  builder.set_name(data_table_name)
+      .set_id(table_id_generator_->NextId(data_table_name))
+      .set_owner_change_stream(change_stream);
+  // Create columns in table _ChangeStream_Data_${ChangeStreamName}
+  ZETASQL_ASSIGN_OR_RETURN(const Column* column, CreateChangeStreamTableColumn(
+                                             "partition_token", builder.get(),
+                                             type_factory_->get_string()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(
+      column, CreateChangeStreamTableColumn("commit_timestamp", builder.get(),
+                                            type_factory_->get_timestamp()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+                               "server_transaction_id", builder.get(),
+                               type_factory_->get_string()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(
+      column, CreateChangeStreamTableColumn("record_sequence", builder.get(),
+                                            type_factory_->get_string()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+                               "is_last_record_in_transaction_in_partition",
+                               builder.get(), type_factory_->get_bool()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(column,
+                   CreateChangeStreamTableColumn("table_name", builder.get(),
+                                                 type_factory_->get_string()));
+  builder.add_column(column);
+  const zetasql::Type* updated_json_array_type;
+  ZETASQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(type_factory_->get_json(),
+                                               &updated_json_array_type));
+  ZETASQL_ASSIGN_OR_RETURN(column,
+                   CreateChangeStreamTableColumn("column_types", builder.get(),
+                                                 updated_json_array_type));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+                               "mods", builder.get(), updated_json_array_type));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(column,
+                   CreateChangeStreamTableColumn("mod_type", builder.get(),
+                                                 type_factory_->get_string()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(
+      column, CreateChangeStreamTableColumn("value_capture_type", builder.get(),
+                                            type_factory_->get_string()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+                               "number_of_records_in_transaction",
+                               builder.get(), type_factory_->get_int64()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+                               "number_of_partitions_in_transaction",
+                               builder.get(), type_factory_->get_int64()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(
+      column, CreateChangeStreamTableColumn("transaction_tag", builder.get(),
+                                            type_factory_->get_string()));
+  builder.add_column(column);
+  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+                               "is_system_transaction", builder.get(),
+                               type_factory_->get_bool()));
+  builder.add_column(column);
+  // Set primary key columns
+  ZETASQL_RETURN_IF_ERROR(
+      CreateChangeStreamTablePKConstraint("partition_token", &builder));
+  ZETASQL_RETURN_IF_ERROR(
+      CreateChangeStreamTablePKConstraint("commit_timestamp", &builder));
+  ZETASQL_RETURN_IF_ERROR(
+      CreateChangeStreamTablePKConstraint("server_transaction_id", &builder));
+  ZETASQL_RETURN_IF_ERROR(
+      CreateChangeStreamTablePKConstraint("record_sequence", &builder));
+  // Set _ChangeStream_Partition_${ChangeStreamName} as interleaved parent table
+  Table::OnDeleteAction on_delete = Table::OnDeleteAction::kNoAction;
+  ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(change_stream_partition_table,
+                                             on_delete, &builder));
+  return builder.build();
+}
+
+absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateChangeStreamTableColumn(
+    const std::string& column_name, const Table* change_stream_table,
+    const zetasql::Type* type) {
+  Column::Builder builder;
+  builder.set_name(column_name)
+      .set_id(column_id_generator_->NextId(
+          absl::StrCat(change_stream_table->Name(), ".", column_name)))
+      .set_table(change_stream_table)
+      .set_type(type);
+  if (column_name == "end_time" || column_name == "start_time" ||
+      column_name == "commit_timestamp") {
+    builder.set_allow_commit_timestamp(true);
+  }
+  const Column* column = builder.get();
+  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  return column;
+}
+
+absl::StatusOr<const KeyColumn*>
+SchemaUpdaterImpl::CreateChangeStreamTablePKColumn(
+    const std::string& pk_column_name, const Table* change_stream_table) {
+  KeyColumn::Builder builder;
+  const bool is_descending = false;
+
+  // References to columns in primary key clause are case-sensitive.
+  const Column* column =
+      change_stream_table->FindColumnCaseSensitive(pk_column_name);
+  if (column == nullptr) {
+    return error::NonExistentKeyColumn(OwningObjectType(change_stream_table),
+                                       OwningObjectName(change_stream_table),
+                                       pk_column_name);
+  }
+  builder.set_column(column).set_descending(is_descending);
+  const KeyColumn* key_col = builder.get();
+  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  return key_col;
+}
+
+absl::Status SchemaUpdaterImpl::CreateChangeStreamTablePKConstraint(
+    const std::string& pk_column_name, Table::Builder* builder) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      const KeyColumn* key_col,
+      CreateChangeStreamTablePKColumn(pk_column_name, builder->get()));
+  builder->add_key_column(key_col);
   return absl::OkStatus();
 }
 
@@ -1495,7 +2180,155 @@ absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
   ChangeStream::Builder builder;
   builder.set_name(ddl_change_stream.change_stream_name());
   const ChangeStream* change_stream = builder.get();
+  const std::string tvf_name =
+      MakeChangeStreamStructTvfName(ddl_change_stream.change_stream_name());
+  builder.set_tvf_name(tvf_name);
+  // Validate the change stream tvf name in global_names_
+  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Change Stream", tvf_name));
+  // Set up _ChangeStream_Partition_${ChangeStreamName}
+  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const Table> change_stream_partition_table,
+                   CreateChangeStreamPartitionTable(change_stream));
+  builder.set_change_stream_partition_table(
+      change_stream_partition_table.get());
+  // Register a backfill action for the change stream partition table.
+  statement_context_->AddAction(
+      [change_stream](const SchemaValidationContext* context) {
+        return BackfillChangeStream(change_stream, context);
+      });
+  // Set up _ChangeStream_Data_${ChangeStreamName}
+  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const Table> change_stream_data_table,
+                   CreateChangeStreamDataTable(
+                       change_stream, change_stream_partition_table.get()));
+  builder.set_change_stream_data_table(change_stream_data_table.get());
+  // Set up for clause
+  if (ddl_change_stream.has_for_clause()) {
+    ZETASQL_RETURN_IF_ERROR(
+        ValidateChangeStreamForClause(ddl_change_stream.for_clause(),
+                                      ddl_change_stream.change_stream_name()));
+    builder.set_for_clause(ddl_change_stream.for_clause());
+    builder.set_track_all(ddl_change_stream.for_clause().all());
+    ZETASQL_RETURN_IF_ERROR(
+        ValidateChangeStreamLimits(ddl_change_stream.for_clause(),
+                                   ddl_change_stream.change_stream_name()));
+  }
+
+  // Validate and set change stream options.
+  const auto& set_options = ddl_change_stream.set_options();
+  if (!set_options.empty()) {
+    ZETASQL_RETURN_IF_ERROR(ValidateChangeStreamOptions(set_options));
+    ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+        change_stream,
+        [this, set_options](ChangeStream::Editor* editor) -> absl::Status {
+          // Set change stream options
+          return SetChangeStreamOptions(set_options, editor);
+        }));
+  }
+  // Add the current change stream to the change stream lists of tracked table
+  // and column.
+  if (ddl_change_stream.has_for_clause()) {
+    ZETASQL_RETURN_IF_ERROR(
+        RegisterTrackedObjects(ddl_change_stream.for_clause(), change_stream));
+    ZETASQL_RETURN_IF_ERROR(BuildChangeStreamTrackedObjects(
+        ddl_change_stream.for_clause(), change_stream, &builder));
+  }
+  // Set the creation time to now
+  builder.set_creation_time(absl::Now());
+
+  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  ZETASQL_RETURN_IF_ERROR(AddNode(std::move(change_stream_partition_table)));
+  ZETASQL_RETURN_IF_ERROR(AddNode(std::move(change_stream_data_table)));
   return change_stream;
+}
+
+absl::Status SchemaUpdaterImpl::BuildChangeStreamTrackedObjects(
+    const ddl::ChangeStreamForClause& change_stream_for_clause,
+    const ChangeStream* change_stream, ChangeStream::Builder* builder) {
+  if (change_stream_for_clause.has_tracked_tables()) {
+    for (const ddl::ChangeStreamForClause::TrackedTables::Entry& entry :
+         change_stream_for_clause.tracked_tables().table_entry()) {
+      if (!latest_schema_->FindTable(entry.table_name())
+               ->is_trackable_by_change_stream()) {
+        return error::TrackUntrackableTables(entry.table_name());
+      }
+      std::vector<std::string> columns;
+      if (entry.has_tracked_columns()) {
+        for (const std::string& column_name :
+             entry.tracked_columns().column_name()) {
+          columns.push_back(column_name);
+        }
+        builder->add_tracked_tables_columns(entry.table_name(), columns);
+      } else if (entry.has_all_columns()) {
+        const Table* table = latest_schema_->FindTable(entry.table_name());
+        ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+            table, [change_stream](Table::Editor* editor) -> absl::Status {
+              editor->add_change_streams_tracking_entire_table(change_stream);
+              return absl::OkStatus();
+            }));
+        for (const Column* column :
+             latest_schema_->FindTable(entry.table_name())->columns()) {
+          if (!column->is_trackable_by_change_stream() &&
+              !table->FindKeyColumn(column->Name())) {
+            continue;
+          }
+          columns.push_back(column->Name());
+        }
+        builder->add_tracked_tables_columns(entry.table_name(), columns);
+      } else {
+        return error::UnsetTrackedObject(change_stream->Name(),
+                                         entry.table_name());
+      }
+    }
+  } else if (change_stream_for_clause.all()) {
+    for (const Table* table : latest_schema_->tables()) {
+      if (!table->is_trackable_by_change_stream()) {
+        continue;
+      }
+      builder->add_tracked_tables_columns(table->Name(),
+                                          table->trackable_columns());
+      ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+          table, [change_stream](Table::Editor* editor) -> absl::Status {
+            editor->add_change_streams_tracking_entire_table(change_stream);
+            return absl::OkStatus();
+          }));
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::EditChangeStreamTrackedObjects(
+    const ddl::ChangeStreamForClause& change_stream_for_clause,
+    const ChangeStream* change_stream) {
+  if (!change_stream_for_clause.has_tracked_tables()) {
+    return absl::OkStatus();
+  }
+  for (const ddl::ChangeStreamForClause::TrackedTables::Entry& entry :
+       change_stream_for_clause.tracked_tables().table_entry()) {
+    std::vector<std::string> columns;
+    if (!entry.has_all_columns()) {
+      for (const std::string& column_name :
+           entry.tracked_columns().column_name()) {
+        if (latest_schema_->FindTable(entry.table_name())
+                ->is_trackable_by_change_stream()) {
+          columns.push_back(column_name);
+        } else {
+          return error::TrackUntrackableColumns(column_name);
+        }
+      }
+    } else {
+      for (const std::string& column_name :
+           latest_schema_->FindTable(entry.table_name())->trackable_columns()) {
+        columns.push_back(column_name);
+      }
+    }
+    ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+        change_stream,
+        [&, entry, columns](ChangeStream::Editor* editor) -> absl::Status {
+          editor->clear_tracked_tables_columns();
+          editor->add_tracked_tables_columns(entry.table_name(), columns);
+          return absl::OkStatus();
+        }));
+  }
+  return absl::OkStatus();
 }
 
 absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
@@ -1655,6 +2488,75 @@ absl::Status SchemaUpdaterImpl::AlterRowDeletionPolicy(
 
 absl::Status SchemaUpdaterImpl::AlterChangeStream(
     const ddl::AlterChangeStream& alter_change_stream) {
+  const ChangeStream* change_stream = latest_schema_->FindChangeStream(
+      alter_change_stream.change_stream_name());
+  if (change_stream == nullptr) {
+    return error::ChangeStreamNotFound(
+        alter_change_stream.change_stream_name());
+  }
+  std::string change_stream_name = change_stream->Name();
+  switch (alter_change_stream.alter_type_case()) {
+    case ddl::AlterChangeStream::kSetForClause: {
+      ZETASQL_RETURN_IF_ERROR(AlterChangeStreamForClause(
+          alter_change_stream.set_for_clause(), change_stream));
+      return absl::OkStatus();
+    }
+    case ddl::AlterChangeStream::kSetOptions: {
+      const auto& set_options = alter_change_stream.set_options();
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& repeated_set_options =
+          set_options.options();
+      ZETASQL_RETURN_IF_ERROR(ValidateChangeStreamOptions(repeated_set_options));
+      ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+          change_stream,
+          [this,
+           repeated_set_options](ChangeStream::Editor* editor) -> absl::Status {
+            // Set change stream options
+            return SetChangeStreamOptions(repeated_set_options, editor);
+          }));
+      return absl::OkStatus();
+    }
+    case ddl::AlterChangeStream::kDropForClause: {
+      ZETASQL_RET_CHECK(alter_change_stream.drop_for_clause().all());
+      if (!change_stream->for_clause()) {
+        return error::AlterChangeStreamDropNonexistentForClause(
+            change_stream->Name());
+      }
+      ZETASQL_RETURN_IF_ERROR(UnregisterChangeStreamFromTrackedObjects(change_stream));
+      ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+          change_stream, [](ChangeStream::Editor* editor) -> absl::Status {
+            editor->clear_for_clause();
+            editor->clear_tracked_tables_columns();
+            return absl::OkStatus();
+          }));
+      return absl::OkStatus();
+    }
+    default:
+      return error::Internal(
+          absl::StrCat("Unsupported alter change stream type: ",
+                       alter_change_stream.DebugString()));
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AlterChangeStreamForClause(
+    const ddl::ChangeStreamForClause& ddl_change_stream_for_clause,
+    const ChangeStream* change_stream) {
+  ZETASQL_RETURN_IF_ERROR(ValidateChangeStreamForClause(ddl_change_stream_for_clause,
+                                                change_stream->Name()));
+  ZETASQL_RETURN_IF_ERROR(ValidateChangeStreamLimits(ddl_change_stream_for_clause,
+                                             change_stream->Name()));
+  ZETASQL_RETURN_IF_ERROR(UnregisterChangeStreamFromTrackedObjects(change_stream));
+  ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+      change_stream, [&](ChangeStream::Editor* editor) -> absl::Status {
+        editor->set_for_clause(ddl_change_stream_for_clause);
+        editor->set_track_all(ddl_change_stream_for_clause.all());
+        return absl::OkStatus();
+      }));
+
+  ZETASQL_RETURN_IF_ERROR(
+      RegisterTrackedObjects(ddl_change_stream_for_clause, change_stream));
+  ZETASQL_RETURN_IF_ERROR(EditChangeStreamTrackedObjects(ddl_change_stream_for_clause,
+                                                 change_stream));
   return absl::OkStatus();
 }
 
@@ -1700,6 +2602,33 @@ absl::Status SchemaUpdaterImpl::AlterTable(
       if (new_column->is_generated()) {
         const_cast<Column*>(new_column)->PopulateDependentColumns();
       }
+
+      if (new_column->is_trackable_by_change_stream()) {
+        // Add the newly added column to tracking objects map for each change
+        // stream implicitly/explicitly tracking the entire table this column
+        // belongs to
+        for (const ChangeStream* change_stream :
+             table->change_streams_tracking_entire_table()) {
+          ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+              change_stream,
+              [table, new_column](
+                  ChangeStream::Editor* change_stream_editor) -> absl::Status {
+                change_stream_editor->add_tracked_table_column(
+                    table->Name(), new_column->Name());
+                return absl::OkStatus();
+              }));
+        }
+        // Populate the list of change streams tracking this column
+        ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+            new_column, [table](Column::Editor* column_editor) -> absl::Status {
+              for (const ChangeStream* change_stream :
+                   table->change_streams_tracking_entire_table()) {
+                column_editor->add_change_stream(change_stream);
+              }
+              return absl::OkStatus();
+            }));
+      }
+
       ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
           table, [new_column](Table::Editor* editor) -> absl::Status {
             editor->add_column(new_column);
@@ -1743,6 +2672,18 @@ absl::Status SchemaUpdaterImpl::AlterTable(
       const Column* column = table->FindColumn(alter_table.drop_column());
       if (column == nullptr) {
         return error::ColumnNotFound(table->Name(), alter_table.drop_column());
+      }
+      if (!column->change_streams().empty()) {
+        std::vector<std::string> change_stream_names_list;
+        for (const ChangeStream* const change_stream :
+             column->change_streams()) {
+          change_stream_names_list.push_back(change_stream->Name());
+        }
+        std::string change_stream_names =
+            absl::StrJoin(change_stream_names_list, ",");
+        return error::DropColumnWithChangeStream(
+            table->Name(), column->Name(), change_stream_names_list.size(),
+            change_stream_names);
       }
       ZETASQL_RETURN_IF_ERROR(DropNode(column));
       return absl::OkStatus();
@@ -1830,6 +2771,20 @@ absl::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_table) {
     }
     return error::TableNotFound(drop_table.table_name());
   }
+  if (!table->change_streams().empty()) {
+    absl::Span<const ChangeStream* const> change_streams =
+        table->change_streams();
+    std::string change_stream_names;
+    for (auto change_stream = change_streams.begin();
+         change_stream != change_streams.end(); ++change_stream) {
+      if (change_stream != change_streams.begin()) {
+        change_stream_names += ",";
+      }
+      change_stream_names += (*change_stream)->Name();
+    }
+    return error::DroppingTableWithChangeStream(
+        table->Name(), change_streams.size(), change_stream_names);
+  }
 
   // TODO : Error if any view depends on this table.
   return DropNode(table);
@@ -1849,6 +2804,13 @@ absl::Status SchemaUpdaterImpl::DropIndex(const ddl::DropIndex& drop_index) {
 
 absl::Status SchemaUpdaterImpl::DropChangeStream(
     const ddl::DropChangeStream& drop_change_stream) {
+  const ChangeStream* change_stream =
+      latest_schema_->FindChangeStream(drop_change_stream.change_stream_name());
+  if (change_stream == nullptr) {
+    return error::ChangeStreamNotFound(drop_change_stream.change_stream_name());
+  }
+  global_names_.RemoveName(change_stream->tvf_name());
+  ZETASQL_RETURN_IF_ERROR(DropNode(change_stream));
   return absl::OkStatus();
 }
 

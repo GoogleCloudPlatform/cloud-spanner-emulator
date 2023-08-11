@@ -66,6 +66,16 @@ class Table::Builder {
     return *this;
   }
 
+  Builder& set_owner_change_stream(const ChangeStream* change_stream) {
+    instance_->owner_change_stream_ = change_stream;
+    return *this;
+  }
+
+  Builder& add_change_stream(const ChangeStream* change_stream) {
+    instance_->change_streams_.push_back(change_stream);
+    return *this;
+  }
+
   Builder& add_column(const Column* column) {
     instance_->columns_.push_back(column);
     instance_->columns_map_[column->Name()] = column;
@@ -152,6 +162,29 @@ class Table::Editor {
   Editor& set_row_deletion_policy(
       std::optional<ddl::RowDeletionPolicy> policy) {
     instance_->row_deletion_policy_ = policy;
+    return *this;
+  }
+
+  Editor& add_change_stream(const ChangeStream* change_stream) {
+    instance_->change_streams_.push_back(change_stream);
+    return *this;
+  }
+
+  Editor& add_change_streams_tracking_entire_table(
+      const ChangeStream* change_stream) {
+    instance_->change_streams_tracking_entire_table_.push_back(change_stream);
+    return *this;
+  }
+
+  Editor& remove_change_stream(const ChangeStream* change_stream) {
+    auto itr = std::find_if(
+        instance_->change_streams_.begin(), instance_->change_streams_.end(),
+        [change_stream](const auto& change_stream_element) {
+          return absl::EqualsIgnoreCase(change_stream->Name(),
+                                        change_stream_element->Name());
+        });
+    ZETASQL_DCHECK(itr != instance_->change_streams_.end());
+    instance_->change_streams_.erase(itr);
     return *this;
   }
 

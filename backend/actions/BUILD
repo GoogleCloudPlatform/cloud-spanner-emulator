@@ -42,8 +42,9 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//backend/storage:iterator",
         "//common:clock",
-        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 
@@ -193,6 +194,24 @@ cc_test(
 )
 
 cc_library(
+    name = "change_stream",
+    srcs = ["change_stream.cc"],
+    hdrs = ["change_stream.h"],
+    deps = [
+        ":action",
+        ":ops",
+        "//backend/actions:context",
+        "//backend/datamodel:key_range",
+        "//backend/schema/catalog:schema",
+        "//backend/storage:iterator",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_library(
     name = "index",
     srcs = ["index.cc"],
     hdrs = ["index.h"],
@@ -224,6 +243,31 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:evaluator",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "change_stream_test",
+    srcs = ["change_stream_test.cc"],
+    deps = [
+        ":action",
+        ":change_stream",
+        ":context",
+        ":ops",
+        "//backend/datamodel:key",
+        "//backend/schema/catalog:schema",
+        "//tests/common:actions",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_schema_constructor",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/types:span",
+        "@com_google_absl//absl/types:variant",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:json_value",
+        "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )
@@ -328,13 +372,19 @@ cc_library(
         ":ops",
         ":unique_index",
         "//backend/access:write",
+        "//backend/actions:change_stream",
         "//backend/query:catalog",
         "//backend/query:function_catalog",
         "//backend/schema/catalog:schema",
         "//common:errors",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/container:node_hash_map",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
