@@ -34,6 +34,8 @@ namespace spanner {
 namespace emulator {
 namespace test {
 
+namespace database_api = ::google::spanner::admin::database::v1;
+
 // Utility methods for initializing standard schemas for unit tests.
 
 // Creates a schema from supplied DDL statements.
@@ -43,6 +45,9 @@ namespace test {
 inline absl::StatusOr<std::unique_ptr<const backend::Schema>>
 CreateSchemaFromDDL(absl::Span<const std::string> statements,
                     zetasql::TypeFactory* type_factory
+                    ,
+                    database_api::DatabaseDialect dialect =
+                        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
 ) {
   backend::TableIDGenerator table_id_gen;
   backend::ColumnIDGenerator column_id_gen;
@@ -55,14 +60,17 @@ CreateSchemaFromDDL(absl::Span<const std::string> statements,
   return updater.ValidateSchemaFromDDL(
       backend::SchemaChangeOperation{
           .statements = statements
+          ,
+          .database_dialect = dialect
       },
       context);
 }
 
 // Creates a schema with a single table and an index on the table.
 inline std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
-    zetasql::TypeFactory* type_factory
-) {
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
   std::string test_table =
       R"(
           CREATE TABLE test_table (
@@ -70,6 +78,15 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
             string_col STRING(MAX)
           ) PRIMARY KEY (int64_col)
       )";
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    test_table =
+        R"(
+            CREATE TABLE test_table (
+              int64_col bigint NOT NULL PRIMARY KEY,
+              string_col varchar
+            )
+        )";
+  }
   auto maybe_schema = CreateSchemaFromDDL(
       {
           test_table,
@@ -78,8 +95,10 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
             )",
       },
       type_factory
+      ,
+      dialect
   );
-  ZETASQL_CHECK_OK(maybe_schema.status());
+  ABSL_CHECK_OK(maybe_schema.status());
   return std::move(maybe_schema.value());
 }
 
@@ -99,7 +118,7 @@ CreateSchemaWithOneTableAndOneChangeStream(
             )",
       },
       type_factory);
-  ZETASQL_CHECK_OK(maybe_schema.status());
+  ABSL_CHECK_OK(maybe_schema.status());
   return std::move(maybe_schema.value());
 }
 
@@ -115,14 +134,15 @@ inline std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
           )sql",
       },
       type_factory);
-  ZETASQL_DCHECK_OK(maybe_schema.status());
+  ABSL_DCHECK_OK(maybe_schema.status());
   return std::move(maybe_schema.value());
 }
 
 // Creates a schema with two child tables interleaved in a parent table.
 inline std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
-    zetasql::TypeFactory* const type_factory
-) {
+    zetasql::TypeFactory* const type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
   std::string parent_table =
       R"(
           CREATE TABLE Parent (
@@ -148,6 +168,33 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
           ) PRIMARY KEY (k1, k2),
                 INTERLEAVE IN PARENT Parent ON DELETE NO ACTION
         )";
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    parent_table =
+        R"(
+            CREATE TABLE Parent (
+              k1 bigint NOT NULL PRIMARY KEY,
+              c1 varchar
+            )
+          )";
+    cascade_delete_child_table =
+        R"(
+            CREATE TABLE CascadeDeleteChild (
+              k1 bigint NOT NULL,
+              k2 bigint NOT NULL,
+              c1 varchar,
+              PRIMARY KEY (k1, k2)
+            ) INTERLEAVE IN PARENT Parent ON DELETE CASCADE
+        )";
+    no_action_delete_child_table =
+        R"(
+            CREATE TABLE NoActionDeleteChild (
+              k1 bigint NOT NULL,
+              k2 bigint NOT NULL,
+              c1 varchar,
+              PRIMARY KEY (k1, k2)
+            ) INTERLEAVE IN PARENT Parent ON DELETE NO ACTION
+          )";
+  }
   auto maybe_schema = CreateSchemaFromDDL(
       {
           parent_table,
@@ -155,15 +202,18 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
           no_action_delete_child_table,
       },
       type_factory
+      ,
+      dialect
   );
-  ZETASQL_CHECK_OK(maybe_schema.status());
+  ABSL_CHECK_OK(maybe_schema.status());
   return std::move(maybe_schema.value());
 }
 
 // Creates a schema with two top level tables and one child table.
 inline std::unique_ptr<const backend::Schema> CreateSchemaWithMultiTables(
-    zetasql::TypeFactory* type_factory
-) {
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
   std::string test_table =
       R"(
           CREATE TABLE test_table (
@@ -186,6 +236,30 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithMultiTables(
             string_col STRING(MAX)
           ) PRIMARY KEY (int64_col)
         )";
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    test_table =
+        R"(
+            CREATE TABLE test_table (
+              int64_col bigint NOT NULL PRIMARY KEY,
+              string_col varchar
+            )
+        )";
+    child_table =
+        R"(
+            CREATE TABLE child_table (
+              int64_col bigint NOT NULL,
+              child_key bigint NOT NULL,
+              PRIMARY KEY (int64_col, child_key)
+            ) INTERLEAVE IN PARENT test_table ON DELETE CASCADE
+        )";
+    test_table2 =
+        R"(
+            CREATE TABLE test_table2 (
+              int64_col bigint NOT NULL PRIMARY KEY,
+              string_col varchar
+            )
+        )";
+  }
   auto maybe_schema = CreateSchemaFromDDL(
       {
           test_table,
@@ -193,15 +267,18 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithMultiTables(
           test_table2,
       },
       type_factory
+      ,
+      dialect
   );
-  ZETASQL_CHECK_OK(maybe_schema.status());
+  ABSL_CHECK_OK(maybe_schema.status());
   return std::move(maybe_schema.value());
 }
 
 // Creates a schema with foreign key constraints.
 inline std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKey(
-    zetasql::TypeFactory* type_factory
-) {
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
   std::string test_table =
       R"(
           CREATE TABLE test_table (
@@ -220,6 +297,27 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKey(
             FOREIGN KEY (child_c2) REFERENCES test_table (c2),
           ) PRIMARY KEY (child_k1)
         )";
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    test_table =
+        R"(
+            CREATE TABLE test_table (
+              k1 bigint NOT NULL PRIMARY KEY,
+              c1 varchar(20),
+              c2 varchar(20)
+            )
+        )";
+    child_table =
+        R"(
+            CREATE TABLE child_table (
+              child_k1 bigint NOT NULL,
+              child_c1 varchar(20),
+              child_c2 varchar(20),
+              CONSTRAINT C FOREIGN KEY (child_k1, child_c1) REFERENCES test_table (k1, c1),
+              FOREIGN KEY (child_c2) REFERENCES test_table (c2),
+              PRIMARY KEY (child_k1)
+            )
+        )";
+  }
   absl::StatusOr<std::unique_ptr<const backend::Schema>> schema =
       CreateSchemaFromDDL(
           {
@@ -227,9 +325,11 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKey(
               child_table,
           },
           type_factory
+          ,
+          dialect
       );
   if (!schema.ok()) {
-    ZETASQL_LOG(ERROR) << "Failed to create the schema: " << schema.status();
+    ABSL_LOG(ERROR) << "Failed to create the schema: " << schema.status();
     return nullptr;
   }
   return *std::move(schema);
@@ -253,7 +353,7 @@ inline std::unique_ptr<const backend::Schema> CreateSchemaWithView(
             )",
       },
       type_factory);
-  ZETASQL_CHECK_OK(maybe_schema.status());
+  ABSL_CHECK_OK(maybe_schema.status());
   return std::move(maybe_schema.value());
 }
 

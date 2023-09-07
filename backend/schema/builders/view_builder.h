@@ -58,6 +58,11 @@ class View::Builder {
     return *this;
   }
 
+  Builder& set_sql_body_origin(absl::string_view body_origin) {
+    instance_->body_origin_ = body_origin;
+    return *this;
+  }
+
   Builder& add_column(View::Column column) {
     instance_->columns_.push_back(column);
     instance_->columns_map_.emplace(column.name, column);
@@ -94,6 +99,7 @@ class View::Editor {
 
     instance_->security_ = view->security_;
     instance_->body_ = view->body_;
+    instance_->body_origin_ = view->body_origin_;
     instance_->dependencies_ = view->dependencies_;
     return *this;
   }

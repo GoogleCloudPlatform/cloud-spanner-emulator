@@ -87,7 +87,7 @@ struct ChangeStreamOutputTypes {
   const zetasql::StructType* mods_struct;
 
   void ConstructChangeRecordTypes() {
-    ZETASQL_CHECK_OK(zetasql::AnalyzeType(
+    ABSL_CHECK_OK(zetasql::AnalyzeType(
         absl::Substitute(kChangeStreamTvfOutputFormat, "JSON"),
         analyzer_options, &catalog, &type_factory, &change_record_arr));
     change_record_struct =

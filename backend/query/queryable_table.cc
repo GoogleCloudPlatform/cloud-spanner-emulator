@@ -109,7 +109,7 @@ QueryableTable::QueryableTable(
       absl::Status s = zetasql::AnalyzeExpressionForAssignmentToType(
           column->expression().value(), options.value(), catalog, type_factory,
           column->GetType(), &output);
-      ZETASQL_CHECK_OK(s) << "Failed to analyze default expression"  // Crash OK
+      ABSL_CHECK_OK(s) << "Failed to analyze default expression"  // Crash OK
                   << " for column " << column->FullName() << "\n";
     }
     if (column->has_default_value()) {

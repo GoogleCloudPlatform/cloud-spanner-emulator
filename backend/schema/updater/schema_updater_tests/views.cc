@@ -45,6 +45,10 @@ using ::testing::StrEq;
 
 namespace {
 
+// For the following tests, a custom PG DDL statement is required as translating
+// queries from GSQL to PG is not supported in tests.
+using database_api::DatabaseDialect::POSTGRESQL;
+
 class ViewsTest : public SchemaUpdaterTest {
  public:
   ViewsTest()
@@ -56,14 +60,28 @@ class ViewsTest : public SchemaUpdaterTest {
 
 INSTANTIATE_TEST_SUITE_P(
     SchemaUpdaterPerDialectTests, ViewsTest,
-    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
-                    ),
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
     [](const testing::TestParamInfo<ViewsTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
     });
 
 TEST_P(ViewsTest, Basic) {
   std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+    CREATE TABLE t(
+      col1 bigint primary key,
+      col2 varchar
+    )
+  )",
+                                       R"(
+    CREATE OR REPLACE VIEW "MyView" SQL SECURITY INVOKER AS SELECT T.col1, T.col2 FROM T
+  )"},
+                                      database_api::DatabaseDialect::POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       CREATE TABLE T(
         col1 INT64,
@@ -74,6 +92,7 @@ TEST_P(ViewsTest, Basic) {
       CREATE OR REPLACE VIEW `MyView` SQL SECURITY INVOKER AS
       SELECT T.col1, T.col2 FROM T
     )"}));
+  }
 
   auto t = schema->FindTable("T");
   ASSERT_NE(t, nullptr);
@@ -84,8 +103,17 @@ TEST_P(ViewsTest, Basic) {
   EXPECT_THAT(schema->views(), testing::ElementsAreArray({v}));
   EXPECT_EQ(v->Name(), "MyView");
   EXPECT_EQ(v->columns().size(), 2);
+  if (GetParam() == POSTGRESQL) {
+    ASSERT_TRUE(v->body_origin().has_value());
+    EXPECT_THAT(absl::StripAsciiWhitespace(*v->body_origin()),
+                StrEq("SELECT col1, col2 FROM t"));
+    EXPECT_THAT(absl::StripAsciiWhitespace(v->body()),
+                StrEq("SELECT t_3.a_1 AS col1, t_3.a_2 AS col2 FROM (SELECT "
+                      "t.col1 AS a_1, t.col2 AS a_2 FROM t) AS t_3"));
+  } else {
     EXPECT_THAT(absl::StripAsciiWhitespace(v->body()),
                 StrEq("SELECT T.col1, T.col2 FROM T"));
+  }
   EXPECT_THAT(
       v->dependencies(),
       testing::UnorderedElementsAreArray((std::vector<const SchemaNode*>{
@@ -94,6 +122,7 @@ TEST_P(ViewsTest, Basic) {
 }
 
 TEST_P(ViewsTest, IndexDependency) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
@@ -126,6 +155,7 @@ TEST_P(ViewsTest, IndexDependency) {
 }
 
 TEST_P(ViewsTest, MultipleTableDependencies) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -155,6 +185,7 @@ TEST_P(ViewsTest, MultipleTableDependencies) {
 }
 
 TEST_P(ViewsTest, ViewDependsOnView) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -183,11 +214,13 @@ TEST_P(ViewsTest, ViewDependsOnView) {
 }
 
 TEST_P(ViewsTest, ViewRequiresInvokerSecurity) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({"CREATE VIEW V AS SELECT 1"}),
               StatusIs(error::ViewRequiresInvokerSecurity("V")));
 }
 
 TEST_P(ViewsTest, MissingDependency) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(
       CreateSchema({"CREATE VIEW V SQL SECURITY INVOKER AS SELECT * FROM T"}),
       ::zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
@@ -195,6 +228,7 @@ TEST_P(ViewsTest, MissingDependency) {
 }
 
 TEST_P(ViewsTest, ViewAnalysisError_UnsupportedFunction) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({R"(
         CREATE TABLE T(
           k1 INT64,
@@ -212,6 +246,7 @@ TEST_P(ViewsTest, ViewAnalysisError_UnsupportedFunction) {
 }
 
 TEST_P(ViewsTest, ViewAnalysisError_UnsupportedFunction_PrunedColumn) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({R"(
         CREATE TABLE T(
           k1 INT64,
@@ -230,6 +265,7 @@ TEST_P(ViewsTest, ViewAnalysisError_UnsupportedFunction_PrunedColumn) {
 }
 
 TEST_P(ViewsTest, ViewReplace) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -261,6 +297,7 @@ TEST_P(ViewsTest, ViewReplace) {
 }
 
 TEST_P(ViewsTest, ViewReplace_NoCircularDependency) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 1 AS k1
@@ -283,6 +320,7 @@ TEST_P(ViewsTest, ViewReplace_NoCircularDependency) {
 }
 
 TEST_P(ViewsTest, ViewReplaceDependentViewInvalidDefinition) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 1 AS k1, 2 AS k2
@@ -307,6 +345,7 @@ TEST_P(ViewsTest, ViewReplaceDependentViewInvalidDefinition) {
 }
 
 TEST_P(ViewsTest, ViewReplaceDependentViewIncompatibleTypeChange) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 1 AS k1, 2 AS k2
@@ -346,6 +385,7 @@ TEST_P(ViewsTest, ViewReplaceDependentViewIncompatibleTypeChange) {
 }
 
 TEST_P(ViewsTest, ViewReplace_DependentViewCompatibleTypeChange) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 'a' AS k1
@@ -377,6 +417,7 @@ TEST_P(ViewsTest, ViewReplace_DependentViewCompatibleTypeChange) {
 }
 
 TEST_P(ViewsTest, StrictNameResolutionMode) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -393,6 +434,7 @@ TEST_P(ViewsTest, StrictNameResolutionMode) {
 }
 
 TEST_P(ViewsTest, DropViewBasic) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -412,6 +454,7 @@ TEST_P(ViewsTest, DropViewBasic) {
 }
 
 TEST_P(ViewsTest, UnnamedColumnView) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       auto schema, CreateSchema({
                        "CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS c",
@@ -423,6 +466,7 @@ TEST_P(ViewsTest, UnnamedColumnView) {
 }
 
 TEST_P(ViewsTest, ViewNotFound) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       auto schema, CreateSchema({
                        "CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS c",
@@ -436,6 +480,7 @@ TEST_P(ViewsTest, ViewNotFound) {
 }
 
 TEST_P(ViewsTest, PrintViewBasic) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -454,6 +499,7 @@ TEST_P(ViewsTest, PrintViewBasic) {
 }
 
 TEST_P(ViewsTest, DropView_Dependencies) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
     CREATE TABLE T1(
@@ -490,6 +536,7 @@ TEST_P(ViewsTest, DropView_Dependencies) {
 }
 
 TEST_P(ViewsTest, DropViewIsCaseSensitive) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,

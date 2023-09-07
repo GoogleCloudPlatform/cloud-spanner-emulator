@@ -1,0 +1,74 @@
+DROP VIEW IF EXISTS Users;
+--
+ERROR: <IF EXISTS> is not supported by <DROP> statement.
+==
+
+DROP VIEW Users CASCADE;
+--
+ERROR: Only <RESTRICT> behavior is supported by <DROP> statement.
+==
+
+DROP VIEW Users1, Users2;
+--
+ERROR: <DROP> statements support deletion of only single object per statement.
+==
+DROP VIEW IF EXISTS catalog.schema.users;
+--
+ERROR: Object name catalog qualifiers are not supported in <DROP> statement.
+==
+
+# --regex
+CREATE TABLE test (
+  id bigint PRIMARY KEY,
+  name varchar NOT NULL,
+  val bigint NOT NULL
+);
+CREATE VIEW users SECURITY INVOKER AS SELECT name FROM test WHERE val > 18;
+DROP VIEW Users;
+--
+^CREATE TABLE test \(
+  id bigint NOT NULL,
+  name character varying NOT NULL,
+  val bigint NOT NULL,
+  PRIMARY KEY\(id\)
+\);$
+==
+
+# --regex
+CREATE TABLE test (
+  id bigint PRIMARY KEY,
+  name varchar NOT NULL,
+  val bigint NOT NULL
+);
+CREATE VIEW "All_Users_2" SECURITY INVOKER AS SELECT name FROM test WHERE val > 18;
+DROP VIEW "All_Users_2";
+--
+^CREATE TABLE test \(
+  id bigint NOT NULL,
+  name character varying NOT NULL,
+  val bigint NOT NULL,
+  PRIMARY KEY\(id\)
+\);$
+==
+
+# TODO: When named schema is supported, re-enable this test.
+# DROP VIEW users_schema.users;
+# --
+# DROP VIEW users_schema.users
+# ==
+
+# --regex
+CREATE TABLE test (
+  id bigint PRIMARY KEY,
+  name varchar NOT NULL,
+  val bigint NOT NULL
+);
+CREATE VIEW users SECURITY INVOKER AS SELECT name FROM test WHERE val > 18;
+DROP VIEW public.Users;
+--
+^CREATE TABLE test \(
+  id bigint NOT NULL,
+  name character varying NOT NULL,
+  val bigint NOT NULL,
+  PRIMARY KEY\(id\)
+\);$

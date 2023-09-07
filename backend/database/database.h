@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/type.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -46,6 +47,8 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+namespace database_api = ::google::spanner::admin::database::v1;
 
 // Database represents a database in the emulator backend.
 //
@@ -108,6 +111,9 @@ class Database {
   // Used to execute queries against the database.
   QueryEngine* query_engine() { return query_engine_.get(); }
 
+  // Returns the database dialect.
+  database_api::DatabaseDialect dialect() { return dialect_; }
+
   ChangeStreamPartitionChurner* get_change_stream_partition_churner() {
     return change_stream_partition_churner_.get();
   }
@@ -152,6 +158,9 @@ class Database {
 
   // Maintains an action registry per schema.
   std::unique_ptr<ActionManager> action_manager_;
+
+  // The database dialect.
+  database_api::DatabaseDialect dialect_;
 
   std::unique_ptr<ChangeStreamPartitionChurner>
       change_stream_partition_churner_;

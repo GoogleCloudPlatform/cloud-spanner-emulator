@@ -85,8 +85,12 @@ void DatabaseTest::SetUp() {
   google::spanner::admin::database::v1::CreateDatabaseRequest request;
   request.set_parent(database_->instance().FullName());
   std::string quote = kGSQLQuote;
+  if (dialect_ == admin::database::v1::DatabaseDialect::POSTGRESQL) {
+    quote = kPGQuote;
+  }
   request.set_create_statement("CREATE DATABASE " + quote +
                                database_->database_id() + quote);
+  request.set_database_dialect(dialect_);
   ZETASQL_ASSERT_OK(ToUtilStatusOr(database_client_->CreateDatabase(request).get()));
 
   // Setup a client to interact with the database.
@@ -121,8 +125,12 @@ absl::Status DatabaseTest::ResetDatabase() {
   google::spanner::admin::database::v1::CreateDatabaseRequest request;
   request.set_parent(database_->instance().FullName());
   std::string quote = kGSQLQuote;
+  if (dialect_ == admin::database::v1::DatabaseDialect::POSTGRESQL) {
+    quote = kPGQuote;
+  }
   request.set_create_statement("CREATE DATABASE " + quote +
                                database_->database_id() + quote);
+  request.set_database_dialect(dialect_);
   return ToUtilStatus(database_client_->CreateDatabase(request).get().status());
 }
 

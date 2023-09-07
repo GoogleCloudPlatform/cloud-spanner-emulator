@@ -52,7 +52,7 @@ PARSER_BEGIN(DDLParser)
     Node* result = nullptr;
     if (errorHandler->getErrorCount() == 0) {
       result = jjtree.peekNode();
-      ZETASQL_CHECK_NE(nullptr, result);
+      ABSL_CHECK_NE(nullptr, result);
     }
     return dynamic_cast<SimpleNode*>(result);
   }

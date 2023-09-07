@@ -122,7 +122,7 @@ void ChangeStreamPartitionChurner::PeriodicChurnPartitions(
           absl::GetFlag(FLAGS_change_stream_churn_thread_retry_sleep_interval) +
           absl::Milliseconds(delay));
       if (!s.ok() && !absl::IsAborted(s)) {
-        ZETASQL_LOG(ERROR) << "Failed to churn change stream " << change_stream_name
+        ABSL_LOG(ERROR) << "Failed to churn change stream " << change_stream_name
                    << " with status: " << s;
       }
     } while (!s.ok());

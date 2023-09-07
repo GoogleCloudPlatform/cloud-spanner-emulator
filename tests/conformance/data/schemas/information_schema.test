@@ -85,7 +85,7 @@ CREATE TABLE cascade_child (
   key1 bigint,
   key2 varchar(256),
   child_key bool,
-  value1 varchar NOT NULL,
+  value1 varchar(256) NOT NULL,
   value2 bool,
   created_at timestamptz,
   -- PostgreSQL doesn't support creating an index backed by a primary key

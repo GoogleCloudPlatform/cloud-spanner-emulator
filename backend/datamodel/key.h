@@ -51,9 +51,8 @@ class Key {
   explicit Key(std::vector<zetasql::Value> columns);
 
   // Adds a column to the key.
-  void AddColumn(zetasql::Value value,
-                 bool desc = false
-  );
+  void AddColumn(zetasql::Value value, bool desc = false,
+                 bool is_nulls_last = false);
 
   // Returns the number of columns in a key.
   int NumColumns() const;
@@ -61,10 +60,12 @@ class Key {
   // Sets the column at a specific index.
   void SetColumnValue(int i, zetasql::Value value);
   void SetColumnDescending(int i, bool value);
+  void SetColumnNullsLast(int i, bool value);
 
   // Returns the column at a specific index.
   const zetasql::Value& ColumnValue(int i) const;
   bool IsColumnDescending(int i) const;
+  bool IsColumnNullsLast(int i) const;
 
   // Returns all column values in the key.
   const std::vector<zetasql::Value>& column_values() const {
@@ -114,6 +115,7 @@ class Key {
   // has both the ordering and null handling.
   // Column metadata.
   std::vector<bool> is_descending_;
+  std::vector<bool> is_nulls_last_;
 
   // Friend for member access.
   friend std::ostream& operator<<(std::ostream& out, const Key& k);

@@ -33,6 +33,7 @@
 #include "absl/status/statusor.h"
 #include "backend/query/analyzer_options.h"
 #include "common/constants.h"
+#include "third_party/spanner_pg/catalog/emulator_functions.h"
 #include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
 
@@ -42,6 +43,8 @@ namespace emulator {
 namespace backend {
 
 namespace {
+using postgres_translator::GetSpannerPGFunctions;
+using postgres_translator::SpannerPGFunctions;
 
 absl::StatusOr<zetasql::Value> EvalPendingCommitTimestamp(
     absl::Span<const zetasql::Value> args) {
@@ -78,6 +81,7 @@ FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory,
   AddSpannerFunctions();
   // Add aliases for the functions.
   AddFunctionAliases();
+  AddSpannerPGFunctions(type_factory);
 }
 
 void FunctionCatalog::AddZetaSQLBuiltInFunctions(
@@ -100,6 +104,17 @@ void FunctionCatalog::AddSpannerFunctions() {
   auto pending_commit_ts_func = PendingCommitTimestampFunction(catalog_name_);
   functions_[pending_commit_ts_func->Name()] =
       std::move(pending_commit_ts_func);
+}
+
+// Adds Spanner PG-specific functions to the list of known functions.
+void FunctionCatalog::AddSpannerPGFunctions(
+    zetasql::TypeFactory* type_factory) {
+  SpannerPGFunctions spanner_pg_functions =
+      GetSpannerPGFunctions(catalog_name_);
+
+  for (auto& function : spanner_pg_functions) {
+    functions_[function->Name()] = std::move(function);
+  }
 }
 
 void FunctionCatalog::GetFunction(const std::string& name,

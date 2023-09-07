@@ -71,6 +71,11 @@ class Column::Builder {
     return *this;
   }
 
+  Builder& set_original_expression(const std::string& expression) {
+    instance_->original_expression_ = expression;
+    return *this;
+  }
+
   Builder& set_has_default_value(bool has_default_value) {
     instance_->has_default_value_ = has_default_value;
     return *this;
@@ -78,6 +83,11 @@ class Column::Builder {
 
   Builder& clear_expression() {
     instance_->expression_.reset();
+    return *this;
+  }
+
+  Builder& clear_original_expression() {
+    instance_->original_expression_.reset();
     return *this;
   }
 
@@ -138,6 +148,11 @@ class Column::Editor {
     return *this;
   }
 
+  Editor& set_original_expression(const std::string& expression) {
+    instance_->original_expression_ = expression;
+    return *this;
+  }
+
   Editor& set_has_default_value(bool has_default_value) {
     instance_->has_default_value_ = has_default_value;
     return *this;
@@ -160,8 +175,13 @@ class Column::Editor {
           return absl::EqualsIgnoreCase(change_stream->Name(),
                                         change_stream_element->Name());
         });
-    ZETASQL_DCHECK(itr != instance_->change_streams_.end());
+    ABSL_DCHECK(itr != instance_->change_streams_.end());
     instance_->change_streams_.erase(itr);
+    return *this;
+  }
+
+  Editor& clear_original_expression() {
+    instance_->original_expression_.reset();
     return *this;
   }
 
@@ -205,6 +225,11 @@ class KeyColumn::Builder {
     instance_->is_descending_ = desceding;
     return *this;
   }
+  Builder& set_nulls_last(bool nulls_last) {
+    instance_->is_nulls_last_ = nulls_last;
+    return *this;
+  }
+
  private:
   std::unique_ptr<KeyColumn> instance_;
 };

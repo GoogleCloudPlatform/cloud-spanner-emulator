@@ -31,14 +31,18 @@ function emulator::copy_logs() {
 }
 
 function emulator::build_and_test() {
+  # Below we exclude all targets in //third_party/spanner_pg/src/... from
+  # building and testing as not all of the PostgreSQL source needs to be built
+  # and some targets won't build anyway.
   set +e
   # Build with optional caching
   if [[ -z "${REMOTE_CACHE}" ]]; then
-     bazel build -c opt ...
+     bazel build -c opt -- ... -third_party/spanner_pg/src/...
   else
-    bazel build -c opt ... \
+    bazel build -c opt \
     --remote_cache=${REMOTE_CACHE} \
-    --google_default_credentials
+    --google_default_credentials \
+    -- ... -third_party/spanner_pg/src/...
   fi
   exit_code=$?
   if [[ $exit_code != 0 ]]; then
@@ -48,7 +52,7 @@ function emulator::build_and_test() {
   fi
 
 # Run tests without cache
-  bazel test -c opt ...
+  bazel test -c opt -- ... -third_party/spanner_pg/src/...
   exit_code=$?
   set -e
   if [[ $exit_code != 0 ]]; then

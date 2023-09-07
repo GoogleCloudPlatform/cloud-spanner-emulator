@@ -1,0 +1,50 @@
+# --regex
+CREATE TABLE users (
+  id bigint primary key
+);
+DROP TABLE Users;
+--
+^;$
+==
+
+# --regex
+CREATE TABLE "All_Users_2" (
+  id bigint primary key
+);
+DROP TABLE "All_Users_2";
+--
+^;$
+==
+
+# --regex
+CREATE TABLE "All_Users_2" (
+  id bigint primary key
+);
+DROP TABLE IF EXISTS "All_Users_2";
+--
+^;$
+==
+
+DROP TABLE Users CASCADE;
+--
+ERROR: Only <RESTRICT> behavior is supported by <DROP> statement.
+==
+
+DROP TABLE Users1, Users2;
+--
+ERROR: <DROP> statements support deletion of only single object per statement.
+==
+
+# TODO: When named schema is supported, re-enable this test.
+# DROP TABLE users_schema.users;
+# --
+# DROP TABLE users_schema.users
+# ==
+
+# --regex
+CREATE TABLE Users (
+  id bigint primary key
+);
+DROP TABLE public.Users;
+--
+^;$

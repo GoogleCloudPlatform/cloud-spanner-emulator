@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 
+#include "absl/log/check.h"
+
 namespace google {
 namespace spanner {
 namespace emulator {
@@ -66,7 +68,7 @@ AddTablesFromMetadata(
     if (supported_tables_it != supported_tables.end()) {
       // If we've seen this table before, then the metadata is not ordered by
       // the table name so we have to crash.
-      ZETASQL_CHECK(  // crash ok
+      CHECK(  // crash ok
           tables_by_name.find(it->table_name) == tables_by_name.end())
           << "invalid metadata";
       table_name = it->table_name;

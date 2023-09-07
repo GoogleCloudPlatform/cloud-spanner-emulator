@@ -89,7 +89,7 @@ GeneratedColumnEffector::GeneratedColumnEffector(
     const Table* table, zetasql::Catalog* function_catalog, bool for_keys)
     : table_(table), for_keys_(for_keys) {
   absl::Status s = Initialize(function_catalog);
-  ZETASQL_DCHECK(s.ok()) << "Failed to initialize GeneratedColumnEffector: " << s;
+  ABSL_DCHECK(s.ok()) << "Failed to initialize GeneratedColumnEffector: " << s;
 }
 
 absl::Status GeneratedColumnEffector::Initialize(

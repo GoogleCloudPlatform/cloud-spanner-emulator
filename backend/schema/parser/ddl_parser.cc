@@ -199,13 +199,13 @@ class CloudDDLErrorHandler : public ErrorHandler {
 
 // Return child node of "parent" by position.
 SimpleNode* GetChildNode(const SimpleNode* parent, int pos) {
-  ZETASQL_CHECK_LT(pos, parent->jjtGetNumChildren())
+  ABSL_CHECK_LT(pos, parent->jjtGetNumChildren())
       << "[" << pos << "] vs " << parent->jjtGetNumChildren();
   return dynamic_cast<SimpleNode*>(parent->jjtGetChild(pos));
 }
 
 void CheckNode(const SimpleNode* node, int expected_type) {
-  ZETASQL_CHECK_EQ(node->getId(), expected_type)
+  ABSL_CHECK_EQ(node->getId(), expected_type)
       << "Expected '" << jjtNodeName[expected_type] << "' but was '"
       << jjtNodeName[node->getId()] << "'";
 }
@@ -230,7 +230,7 @@ SimpleNode* GetFirstChildNode(const SimpleNode* parent, int type) {
 // Returns the text in ddl_text that was used to parse node.
 absl::string_view ExtractTextForNode(const SimpleNode* node,
                                      absl::string_view ddl_text) {
-  ZETASQL_DCHECK(node);
+  ABSL_DCHECK(node);
   int node_offset = node->absolute_begin_column();
   int node_length = node->absolute_end_column() - node_offset;
   return absl::ClippedSubstr(ddl_text, node_offset, node_length);
@@ -253,7 +253,7 @@ std::string GetQualifiedIdentifier(const SimpleNode* node) {
 std::string CheckOptionKeyValNodeAndGetName(const SimpleNode* node) {
   CheckNode(node, JJTOPTION_KEY_VAL);
   const int num_children = node->jjtGetNumChildren();
-  ZETASQL_CHECK_GE(num_children, 2);
+  ABSL_CHECK_GE(num_children, 2);
   const SimpleNode* key = GetChildNode(node, 0, JJTKEY);
   return key->image();
 }
@@ -320,7 +320,7 @@ void VisitCreateDatabaseNode(const SimpleNode* node, CreateDatabase* database,
         database->set_db_name(child->image());
         break;
       default:
-        ZETASQL_LOG(ERROR) << "Unknown node type: " << node->toString();
+        ABSL_LOG(FATAL) << "Unknown node type: " << node->toString();
     }
   }
 }
@@ -333,7 +333,7 @@ void VisitOnDeleteClause(const SimpleNode* node,
   } else if (GetFirstChildNode(node, JJTCASCADE) != nullptr) {
     *on_delete_action = InterleaveClause::CASCADE;
   } else {
-    ZETASQL_LOG(ERROR) << "ON DELETE does not specify a valid behavior: "
+    ABSL_LOG(FATAL) << "ON DELETE does not specify a valid behavior: "
                << node->toString();
   }
 }
@@ -360,14 +360,14 @@ void VisitTableInterleaveNode(const SimpleNode* node,
 void VisitIndexInterleaveNode(const SimpleNode* node,
                               std::string* interleave_in_table) {
   CheckNode(node, JJTINDEX_INTERLEAVE_CLAUSE);
-  ZETASQL_CHECK_EQ(1, node->jjtGetNumChildren());
+  ABSL_CHECK_EQ(1, node->jjtGetNumChildren());
   *interleave_in_table =
       GetQualifiedIdentifier(GetChildNode(node, 0, JJTINTERLEAVE_IN));
 }
 
 void VisitIntervalExpressionNode(const SimpleNode* node, int64_t* days) {
   CheckNode(node, JJTINTERVAL_EXPRESSION);
-  ZETASQL_CHECK_EQ(1, node->jjtGetNumChildren());
+  ABSL_CHECK_EQ(1, node->jjtGetNumChildren());
 
   *days = GetChildNode(node, 0)->image_as_int64();
 }
@@ -376,7 +376,7 @@ void VisitRowDeletionPolicyExpressionNode(const SimpleNode* node,
                                           RowDeletionPolicy* policy,
                                           std::vector<std::string>* errors) {
   CheckNode(node, JJTROW_DELETION_POLICY_EXPRESSION);
-  ZETASQL_CHECK_EQ(3, node->jjtGetNumChildren());
+  ABSL_CHECK_EQ(3, node->jjtGetNumChildren());
 
   SimpleNode* function = GetChildNode(node, 0, JJTROW_DELETION_POLICY_FUNCTION);
   if (!absl::EqualsIgnoreCase(function->image(), "OLDER_THAN")) {
@@ -398,7 +398,7 @@ void VisitTableRowDeletionPolicyNode(const SimpleNode* node,
                                      RowDeletionPolicy* policy,
                                      std::vector<std::string>* errors) {
   CheckNode(node, JJTROW_DELETION_POLICY_CLAUSE);
-  ZETASQL_CHECK_EQ(1, node->jjtGetNumChildren());
+  ABSL_CHECK_EQ(1, node->jjtGetNumChildren());
   VisitRowDeletionPolicyExpressionNode(GetChildNode(node, 0), policy, errors);
 }
 
@@ -425,7 +425,7 @@ void VisitStoredColumnNode(const SimpleNode* node, StoredColumnDefinition* def,
                            std::vector<std::string>* errors) {
   CheckNode(node, JJTSTORED_COLUMN);
   const int num_children = node->jjtGetNumChildren();
-  ZETASQL_CHECK_EQ(num_children, 1);
+  ABSL_CHECK_EQ(num_children, 1);
   def->set_name(GetChildNode(node, 0, JJTPATH)->image());
 }
 
@@ -434,7 +434,7 @@ void VisitStoredColumnListNode(
     google::protobuf::RepeatedPtrField<StoredColumnDefinition>* stored_columns,
     std::vector<std::string>* errors) {
   CheckNode(node, JJTSTORED_COLUMN_LIST);
-  ZETASQL_CHECK_GT(node->jjtGetNumChildren(), 0);
+  ABSL_CHECK_GT(node->jjtGetNumChildren(), 0);
   for (int i = 0; i < node->jjtGetNumChildren(); i++) {
     SimpleNode* stored_column = GetChildNode(node, i, JJTSTORED_COLUMN);
     VisitStoredColumnNode(stored_column, stored_columns->Add(), errors);
@@ -466,7 +466,7 @@ void VisitColumnTypeNode(const SimpleNode* column_type,
     if (type_name == "FLOAT64") {
       type = ColumnDefinition::DOUBLE;
     } else if (!ColumnDefinition::Type_Parse(type_name, &type)) {
-      ZETASQL_LOG(ERROR) << "Unrecognized type: " << type_name;
+      ABSL_LOG(FATAL) << "Unrecognized type: " << type_name;
     }
 
   column->set_type(type);
@@ -501,7 +501,7 @@ void VisitGenerationClauseNode(const SimpleNode* node, ColumnDefinition* column,
         break;
       }
       default:
-        ZETASQL_LOG(ERROR) << "Unexpected generated column info: " << child->toString();
+        ABSL_LOG(FATAL) << "Unexpected generated column info: " << child->toString();
     }
   }
 }
@@ -511,7 +511,7 @@ void VisitColumnDefaultClauseNode(const SimpleNode* node,
                                   absl::string_view ddl_text) {
   CheckNode(node, JJTCOLUMN_DEFAULT_CLAUSE);
 
-  ZETASQL_DCHECK_EQ(node->jjtGetNumChildren(), 1);
+  ABSL_DCHECK_EQ(node->jjtGetNumChildren(), 1);
 
   SimpleNode* child = GetChildNode(node, 0, JJTCOLUMN_DEFAULT_EXPRESSION);
 
@@ -548,7 +548,7 @@ void VisitColumnNode(const SimpleNode* node, ColumnDefinition* column,
         VisitColumnDefaultClauseNode(child, column, ddl_text);
         break;
       default:
-        ZETASQL_LOG(ERROR) << "Unexpected column info: " << child->toString();
+        ABSL_LOG(FATAL) << "Unexpected column info: " << child->toString();
     }
   }
 }
@@ -577,7 +577,7 @@ void VisitColumnNodeAlterAttrs(const SimpleNode* node,
         VisitColumnDefaultClauseNode(child, column, ddl_text);
         break;
       default:
-        ZETASQL_LOG(ERROR) << "Unexpected column info: " << child->toString();
+        ABSL_LOG(FATAL) << "Unexpected column info: " << child->toString();
     }
   }
 }
@@ -642,7 +642,7 @@ void VisitColumnNodeAlter(const std::string& table_name,
       break;
     }
     default:
-      ZETASQL_LOG(ERROR) << "Unexpected alter column type: "
+      ABSL_LOG(FATAL) << "Unexpected alter column type: "
                  << GetChildNode(node, 1)->toString();
   }
 }
@@ -666,7 +666,7 @@ ForeignKey::Action GetForeignKeyAction(const SimpleNode* node) {
     case JJTCASCADE:
       return ForeignKey::CASCADE;
     default:
-      ZETASQL_LOG(ERROR) << "Unexpected foreign key action: " << child->toString();
+      ABSL_LOG(FATAL) << "Unexpected foreign key action: " << child->toString();
       return ForeignKey::ACTION_UNSPECIFIED;
   }
 }
@@ -701,7 +701,7 @@ void VisitForeignKeyNode(const SimpleNode* node, ForeignKey* foreign_key,
         break;
       default:
         // We can only get here if there is a bug in the grammar or parser.
-        ZETASQL_LOG(ERROR) << "Unexpected foreign key attribute: " << child->toString();
+        ABSL_LOG(FATAL) << "Unexpected foreign key attribute: " << child->toString();
     }
   }
 }
@@ -725,7 +725,7 @@ void VisitCheckConstraintNode(const SimpleNode* node,
         continue;
       }
       default: {
-        ZETASQL_LOG(ERROR) << "Unexpected check constraint attribute: "
+        ABSL_LOG(FATAL) << "Unexpected check constraint attribute: "
                    << child->toString();
       }
     }
@@ -772,7 +772,7 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
             child, table->mutable_row_deletion_policy(), errors);
         break;
       default:
-        ZETASQL_LOG(ERROR) << "Unexpected table info: " << child->toString();
+        ABSL_LOG(FATAL) << "Unexpected table info: " << child->toString();
     }
   }
 }
@@ -783,7 +783,7 @@ void VisitCreateViewNode(const SimpleNode* node, CreateFunction* function,
   CheckNode(node, JJTCREATE_VIEW_STATEMENT);
 
   const SimpleNode* name = GetFirstChildNode(node, JJTNAME);
-  ZETASQL_DCHECK(name);
+  ABSL_DCHECK(name);
   function->set_function_name(GetQualifiedIdentifier(name));
 
   function->set_language(Function::SQL);
@@ -835,7 +835,7 @@ void VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index,
         index->set_existence_modifier(IF_NOT_EXISTS);
         break;
       default:
-        ZETASQL_LOG(ERROR) << "Unexpected index info: " << child->toString();
+        ABSL_LOG(FATAL) << "Unexpected index info: " << child->toString();
     }
   }
 }
@@ -853,7 +853,7 @@ void VisitChangeStreamExplicitColumns(
         tracked_columns->add_column_name(child->image());
         break;
       default:
-        ZETASQL_LOG(ERROR) << "Unexpected change streams tracked column: "
+        ABSL_LOG(FATAL) << "Unexpected change streams tracked column: "
                    << child->toString();
     }
   }
@@ -877,7 +877,7 @@ void VisitChangeStreamTrackedTablesEntry(
         break;
       }
       default:
-        ZETASQL_LOG(ERROR) << "Unexpected change streams tracked tables entry: "
+        ABSL_LOG(FATAL) << "Unexpected change streams tracked tables entry: "
                    << child->toString();
     }
   }
@@ -893,7 +893,7 @@ void VisitChangeStreamTrackedTables(
     std::vector<std::string>* errors) {
   CheckNode(node, JJTCHANGE_STREAM_TRACKED_TABLES);
   // The parser does not accept a FOR clause without anything following.
-  ZETASQL_CHECK_GE(node->jjtGetNumChildren(), 1);
+  ABSL_CHECK_GE(node->jjtGetNumChildren(), 1);
   google::protobuf::RepeatedPtrField<ChangeStreamForClause::TrackedTables::Entry>*
       table_entry = tracked_tables->mutable_table_entry();
   ChangeStreamForClause::TrackedTables::Entry* last = nullptr;
@@ -906,7 +906,7 @@ void VisitChangeStreamTrackedTables(
         break;
       }
       default:
-        ZETASQL_LOG(ERROR) << "Unexpected change stream tracked tables: "
+        ABSL_LOG(FATAL) << "Unexpected change stream tracked tables: "
                    << child->toString();
     }
   }
@@ -916,7 +916,7 @@ void VisitChangeStreamForClause(const SimpleNode* node,
                                 ChangeStreamForClause* for_clause,
                                 std::vector<std::string>* errors) {
   CheckNode(node, JJTCHANGE_STREAM_FOR_CLAUSE);
-  ZETASQL_CHECK_EQ(1, node->jjtGetNumChildren());
+  ABSL_CHECK_EQ(1, node->jjtGetNumChildren());
   SimpleNode* child = GetChildNode(node, 0);
   switch (child->getId()) {
     case JJTALL:
@@ -927,17 +927,17 @@ void VisitChangeStreamForClause(const SimpleNode* node,
           child, for_clause->mutable_tracked_tables(), errors);
       break;
     default:
-      ZETASQL_LOG(ERROR) << "Unexpected change stream for clause: "
+      ABSL_LOG(FATAL) << "Unexpected change stream for clause: "
                  << child->toString();
   }
 }
 
 bool UnescapeStringLiteral(absl::string_view val, std::string* result) {
   if (val.size() <= 2) {
-    ZETASQL_LOG(ERROR) << "Invalid string literal: " << val;
+    ABSL_LOG(FATAL) << "Invalid string literal: " << val;
   }
-  ZETASQL_CHECK_EQ(val[0], val[val.size() - 1]);
-  ZETASQL_CHECK(val[0] == '\'' || val[0] == '"');
+  ABSL_CHECK_EQ(val[0], val[val.size() - 1]);
+  ZETASQL_VLOG(val[0] == '\'' || val[0] == '"');
   return absl::CUnescape(absl::ClippedSubstr(val, 1, val.size() - 2), result);
 }
 
@@ -1031,7 +1031,7 @@ void VisitCreateChangeStreamNode(const SimpleNode* node,
                                        errors);
         break;
       default:
-        ZETASQL_LOG(ERROR) << "Unexpected create change stream clause: "
+        ABSL_LOG(FATAL) << "Unexpected create change stream clause: "
                    << child->toString();
     }
   }
@@ -1061,7 +1061,7 @@ void VisitAlterChangeStreamNode(const SimpleNode* node,
       break;
     }
     default:
-      ZETASQL_LOG(ERROR) << "Unexpected alter change stream clause: "
+      ABSL_LOG(FATAL) << "Unexpected alter change stream clause: "
                  << child->toString();
   }
 }
@@ -1143,7 +1143,7 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
         break;
       }
       default:
-        ZETASQL_LOG(ERROR) << "Unexpected alter table type: "
+        ABSL_LOG(FATAL) << "Unexpected alter table type: "
                    << GetChildNode(node, 1)->toString();
     }
   }
@@ -1200,7 +1200,7 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
           statement->mutable_drop_function()->set_function_name(name);
           break;
         default:
-          ZETASQL_LOG(ERROR) << "Unexpected object type: "
+          ABSL_LOG(FATAL) << "Unexpected object type: "
                      << GetChildNode(stmt, 0)->toString();
       }
     } break;
@@ -1225,12 +1225,12 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
                               has_or_replace, ddl_text, errors);
           break;
         default:
-          ZETASQL_LOG(ERROR) << "Unexpected statement: " << stmt->toString();
+          ABSL_LOG(FATAL) << "Unexpected statement: " << stmt->toString();
       }
       break;
     }
     default:
-      ZETASQL_LOG(ERROR) << "Unexpected statement: " << stmt->toString();
+      ABSL_LOG(FATAL) << "Unexpected statement: " << stmt->toString();
   }
 }
 

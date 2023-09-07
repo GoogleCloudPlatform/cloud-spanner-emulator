@@ -20,6 +20,9 @@
 #include <vector>
 
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_format.h"
 #include "absl/time/civil_time.h"
@@ -123,8 +126,8 @@ class QueryTest
 
 INSTANTIATE_TEST_SUITE_P(
     PerDialectQueryTests, QueryTest,
-    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
-                    ),
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
     [](const testing::TestParamInfo<QueryTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
     });
@@ -481,11 +484,11 @@ TEST_P(QueryTest, CannotQueryArrayOfEmptyStruct) {
             "syntax for an empty array where array elements are Structs."));
   }
 
-  auto query = Query("SELECT ARRAY<INT64>[]");
+  std::string query = "SELECT ARRAY<INT64>[]";
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    query = Query("SELECT '{}'::bigint[]");
+    query = "SELECT '{}'::bigint[]";
   }
-  EXPECT_THAT(query, IsOkAndHoldsRow({Value(std::vector<int64_t>{})}));
+  EXPECT_THAT(Query(query), IsOkAndHoldsRow({Value(std::vector<int64_t>{})}));
 }
 
 TEST_P(QueryTest, QueryColumnCannotBeStruct) {
@@ -510,6 +513,11 @@ TEST_P(QueryTest, CharLengthFunctionAliasesAreAvailable) {
 }
 
 TEST_P(QueryTest, PowerFunctionAliasesAreAvailable) {
+  // TODO: Enable once PG.NUMERIC is supported.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   auto query = Query("SELECT POWER(2,2)");
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     query = Query("SELECT power('2.0'::float8, '2.0'::float8)");
@@ -524,6 +532,11 @@ TEST_P(QueryTest, PowerFunctionAliasesAreAvailable) {
 }
 
 TEST_P(QueryTest, CeilingFunctionAliasesAreAvailable) {
+  // TODO: Enable once PG.NUMERIC is supported.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(Query("SELECT CEILING(1.6)"), IsOkAndHoldsRow({2.0}));
   }

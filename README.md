@@ -220,6 +220,8 @@ Notable limitations:
   hints. However, index names generated in the emulator cannot be used in the
   emulator or in production.
 
+- Generated primary keys are not supported.
+
 - The [Cloud Spanner PostgreSQL interface](
   https://cloud.google.com/spanner/docs/postgresql-interface) is not supported.
 

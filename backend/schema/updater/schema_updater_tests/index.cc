@@ -36,7 +36,12 @@ namespace types = zetasql::types;
 
 namespace {
 
+using database_api::DatabaseDialect::POSTGRESQL;
+
 TEST_P(SchemaUpdaterTest, CreateIndex) {
+  // TODO: Reenable the test for PG when PG.Numeric is supported in
+  // the emulator.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T (
@@ -106,6 +111,8 @@ TEST_P(SchemaUpdaterTest, CreateIndex) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_NoKeys) {
+  // Creating an index with no key columns is not supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
@@ -119,6 +126,8 @@ TEST_P(SchemaUpdaterTest, CreateIndex_NoKeys) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndexIfNotExists) {
+  // IF NOT EXISTS isn't yet supported on the PG side of the emulator
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
@@ -132,6 +141,8 @@ TEST_P(SchemaUpdaterTest, CreateIndexIfNotExists) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndexIfNotExistsOnExistingIndex) {
+  // IF NOT EXISTS isn't yet supported on the PG side of the emulator
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
@@ -163,10 +174,31 @@ TEST_P(SchemaUpdaterTest, CreateIndex_DescKeys) {
   EXPECT_EQ(idx->key_columns().size(), 2);
   EXPECT_TRUE(idx->key_columns()[0]->is_descending());
   EXPECT_TRUE(idx->key_columns()[1]->is_descending());
+  EXPECT_TRUE(idx->key_columns()[0]->is_nulls_last());
+  EXPECT_TRUE(idx->key_columns()[1]->is_nulls_last());
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_AscKeys) {
   std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    // Custom DDL statements are required because the original Spanner DDL would
+    // generate an ASC ordering by default. After the translation from Spanner
+    // to PG, the ordering of the PG DDL is also ASC instead of ASC_NULLS_LAST.
+    // If the ordering is not specified, the default ordering should be
+    // ASC_NULLS_LAST in PG.
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"sql(
+        CREATE TABLE T (
+          k1 bigint primary key,
+          c1 bigint
+        )
+      )sql",
+                                       R"sql(
+        CREATE INDEX Idx ON T(c1, k1)
+      )sql"},
+                                      POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"sql(
         CREATE TABLE T (
           k1 INT64,
@@ -176,15 +208,27 @@ TEST_P(SchemaUpdaterTest, CreateIndex_AscKeys) {
                                                R"sql(
         CREATE INDEX Idx ON T(c1, k1)
       )sql"}));
+  }
 
   auto idx = schema->FindIndex("Idx");
   EXPECT_NE(idx, nullptr);
   EXPECT_EQ(idx->key_columns().size(), 2);
   EXPECT_FALSE(idx->key_columns()[0]->is_descending());
   EXPECT_FALSE(idx->key_columns()[1]->is_descending());
+  if (GetParam() == POSTGRESQL) {
+    // Sorted NULLs last
+    EXPECT_TRUE(idx->key_columns()[0]->is_nulls_last());
+    EXPECT_TRUE(idx->key_columns()[1]->is_nulls_last());
+  } else {
+    // Sorted NULLs first
+    EXPECT_FALSE(idx->key_columns()[0]->is_nulls_last());
+    EXPECT_FALSE(idx->key_columns()[1]->is_nulls_last());
+  }
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_SharedPK) {
+  // Null filtered indexes are not supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T (
@@ -211,6 +255,8 @@ TEST_P(SchemaUpdaterTest, CreateIndex_SharedPK) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_NullFiltered_Unique) {
+  // Null filtered indexes are not supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T (
@@ -279,6 +325,8 @@ TEST_P(SchemaUpdaterTest, CreateIndex_Interleave) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_NullFilteredInterleave) {
+  // Null filtered indexes are not supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T1 (
@@ -472,6 +520,8 @@ TEST_P(SchemaUpdaterTest, DropIndex) {
 }
 
 TEST_P(SchemaUpdaterTest, DropIndexIfExists) {
+  // IF NOT EXISTS isn't yet supported on the PG side of the emulator
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
@@ -498,6 +548,8 @@ TEST_P(SchemaUpdaterTest, DropIndexIfExists) {
 }
 
 TEST_P(SchemaUpdaterTest, DropIndexIfExistsTwice) {
+  // IF NOT EXISTS isn't yet supported on the PG side of the emulator
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
@@ -524,6 +576,8 @@ TEST_P(SchemaUpdaterTest, DropIndexIfExistsTwice) {
 }
 
 TEST_P(SchemaUpdaterTest, DropIndexIfExistsButIndexDoesNotExist) {
+  // IF NOT EXISTS isn't yet supported on the PG side of the emulator
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
@@ -542,6 +596,8 @@ TEST_P(SchemaUpdaterTest, DropIndexIfExistsButIndexDoesNotExist) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndexOnTableWithNoPK) {
+  // Table with no key columns is not supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T ( col1 INT64 ) PRIMARY KEY ()
@@ -567,6 +623,9 @@ TEST_P(SchemaUpdaterTest, CreateIndexOnTableWithNoPK) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_NumericColumn) {
+  // TODO: Reenable the test for PG when PG.Numeric is supported in
+  // the emulator.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T (
@@ -591,6 +650,9 @@ TEST_P(SchemaUpdaterTest, CreateIndex_NumericColumn) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_JsonColumn) {
+  // TODO: Reenable the test for PG when PG.Jsonb is supported in
+  // the emulator.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(
       CreateSchema({
           R"sql(

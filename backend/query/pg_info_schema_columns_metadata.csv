@@ -1,0 +1,389 @@
+table_name,column_name,is_nullable,spanner_type
+applicable_roles,grantee,YES,character varying
+applicable_roles,role_name,YES,character varying
+applicable_roles,is_grantable,YES,character varying
+change_stream_columns,change_stream_catalog,YES,character varying
+change_stream_columns,change_stream_schema,YES,character varying
+change_stream_columns,change_stream_name,YES,character varying
+change_stream_columns,table_catalog,YES,character varying
+change_stream_columns,table_schema,YES,character varying
+change_stream_columns,table_name,YES,character varying
+change_stream_columns,column_name,YES,character varying
+change_stream_options,change_stream_catalog,YES,character varying
+change_stream_options,change_stream_schema,YES,character varying
+change_stream_options,change_stream_name,YES,character varying
+change_stream_options,option_name,YES,character varying
+change_stream_options,option_type,YES,character varying
+change_stream_options,option_value,YES,character varying
+change_stream_privileges,grantor,YES,character varying
+change_stream_privileges,grantee,YES,character varying
+change_stream_privileges,change_stream_catalog,YES,character varying
+change_stream_privileges,change_stream_schema,YES,character varying
+change_stream_privileges,change_stream_name,YES,character varying
+change_stream_privileges,privilege_type,YES,character varying
+change_stream_privileges,is_grantable,YES,character varying
+change_stream_tables,change_stream_catalog,YES,character varying
+change_stream_tables,change_stream_schema,YES,character varying
+change_stream_tables,change_stream_name,YES,character varying
+change_stream_tables,table_catalog,YES,character varying
+change_stream_tables,table_schema,YES,character varying
+change_stream_tables,table_name,YES,character varying
+change_stream_tables,all_columns,YES,character varying
+change_streams,change_stream_catalog,YES,character varying
+change_streams,change_stream_schema,YES,character varying
+change_streams,change_stream_name,YES,character varying
+change_streams,all,YES,character varying
+check_constraints,constraint_catalog,YES,character varying
+check_constraints,constraint_schema,YES,character varying
+check_constraints,constraint_name,YES,character varying
+check_constraints,check_clause,YES,character varying
+check_constraints,spanner_state,YES,character varying
+column_column_usage,table_catalog,YES,character varying
+column_column_usage,table_schema,YES,character varying
+column_column_usage,table_name,YES,character varying
+column_column_usage,column_name,YES,character varying
+column_column_usage,dependent_column,YES,character varying
+column_options,table_catalog,YES,character varying
+column_options,table_schema,YES,character varying
+column_options,table_name,YES,character varying
+column_options,column_name,YES,character varying
+column_options,option_name,YES,character varying
+column_options,option_value,YES,character varying
+column_options,option_type,YES,character varying
+column_privileges,grantor,YES,character varying
+column_privileges,grantee,YES,character varying
+column_privileges,table_catalog,YES,character varying
+column_privileges,table_schema,YES,character varying
+column_privileges,table_name,YES,character varying
+column_privileges,column_name,YES,character varying
+column_privileges,privilege_type,YES,character varying
+column_privileges,is_grantable,YES,character varying
+columns,table_catalog,YES,character varying
+columns,table_schema,YES,character varying
+columns,table_name,YES,character varying
+columns,column_name,YES,character varying
+columns,ordinal_position,YES,bigint
+columns,column_default,YES,character varying
+columns,is_nullable,YES,character varying
+columns,data_type,YES,character varying
+columns,character_maximum_length,YES,bigint
+columns,character_octet_length,YES,bigint
+columns,numeric_precision,YES,bigint
+columns,numeric_precision_radix,YES,bigint
+columns,numeric_scale,YES,bigint
+columns,datetime_precision,YES,bigint
+columns,interval_type,YES,character varying
+columns,interval_precision,YES,bigint
+columns,character_set_catalog,YES,character varying
+columns,character_set_schema,YES,character varying
+columns,character_set_name,YES,character varying
+columns,collation_catalog,YES,character varying
+columns,collation_schema,YES,character varying
+columns,collation_name,YES,character varying
+columns,domain_catalog,YES,character varying
+columns,domain_schema,YES,character varying
+columns,domain_name,YES,character varying
+columns,udt_catalog,YES,character varying
+columns,udt_schema,YES,character varying
+columns,udt_name,YES,character varying
+columns,scope_catalog,YES,character varying
+columns,scope_schema,YES,character varying
+columns,scope_name,YES,character varying
+columns,maximum_cardinality,YES,bigint
+columns,dtd_identifier,YES,character varying
+columns,is_self_referencing,YES,character varying
+columns,is_identity,YES,character varying
+columns,identity_generation,YES,character varying
+columns,identity_start,YES,character varying
+columns,identity_increment,YES,character varying
+columns,identity_maximum,YES,character varying
+columns,identity_minimum,YES,character varying
+columns,identity_cycle,YES,character varying
+columns,is_generated,YES,character varying
+columns,generation_expression,YES,character varying
+columns,is_updatable,YES,character varying
+columns,spanner_type,YES,character varying
+columns,is_stored,YES,character varying
+columns,spanner_state,YES,character varying
+constraint_column_usage,table_catalog,YES,character varying
+constraint_column_usage,table_schema,YES,character varying
+constraint_column_usage,table_name,YES,character varying
+constraint_column_usage,column_name,YES,character varying
+constraint_column_usage,constraint_catalog,YES,character varying
+constraint_column_usage,constraint_schema,YES,character varying
+constraint_column_usage,constraint_name,YES,character varying
+constraint_table_usage,table_catalog,YES,character varying
+constraint_table_usage,table_schema,YES,character varying
+constraint_table_usage,table_name,YES,character varying
+constraint_table_usage,constraint_catalog,YES,character varying
+constraint_table_usage,constraint_schema,YES,character varying
+constraint_table_usage,constraint_name,YES,character varying
+database_options,catalog_name,YES,character varying
+database_options,schema_name,YES,character varying
+database_options,option_name,YES,character varying
+database_options,option_type,YES,character varying
+database_options,option_value,YES,character varying
+enabled_roles,role_name,YES,character varying
+enabled_roles,spanner_is_system,YES,character varying
+index_columns,table_catalog,YES,character varying
+index_columns,table_schema,YES,character varying
+index_columns,table_name,YES,character varying
+index_columns,index_name,YES,character varying
+index_columns,index_type,YES,character varying
+index_columns,column_name,YES,character varying
+index_columns,ordinal_position,YES,bigint
+index_columns,column_ordering,YES,character varying
+index_columns,is_nullable,YES,character varying
+index_columns,spanner_type,YES,character varying
+indexes,table_catalog,YES,character varying
+indexes,table_schema,YES,character varying
+indexes,table_name,YES,character varying
+indexes,index_name,YES,character varying
+indexes,index_type,YES,character varying
+indexes,parent_table_name,YES,character varying
+indexes,is_unique,YES,character varying
+indexes,is_null_filtered,YES,character varying
+indexes,index_state,YES,character varying
+indexes,spanner_is_managed,YES,character varying
+indexes,filter,YES,character varying
+information_schema_catalog_name,catalog_name,YES,character varying
+key_column_usage,constraint_catalog,YES,character varying
+key_column_usage,constraint_schema,YES,character varying
+key_column_usage,constraint_name,YES,character varying
+key_column_usage,table_catalog,YES,character varying
+key_column_usage,table_schema,YES,character varying
+key_column_usage,table_name,YES,character varying
+key_column_usage,column_name,YES,character varying
+key_column_usage,ordinal_position,YES,bigint
+key_column_usage,position_in_unique_constraint,YES,bigint
+parameters,specific_catalog,YES,character varying
+parameters,specific_schema,YES,character varying
+parameters,specific_name,YES,character varying
+parameters,ordinal_position,YES,bigint
+parameters,parameter_mode,YES,character varying
+parameters,is_result,YES,character varying
+parameters,as_locator,YES,character varying
+parameters,parameter_name,YES,character varying
+parameters,data_type,YES,character varying
+parameters,character_maximum_length,YES,bigint
+parameters,character_octet_length,YES,bigint
+parameters,character_set_catalog,YES,character varying
+parameters,character_set_schema,YES,character varying
+parameters,character_set_name,YES,character varying
+parameters,collation_catalog,YES,character varying
+parameters,collation_schema,YES,character varying
+parameters,collation_name,YES,character varying
+parameters,numeric_precision,YES,bigint
+parameters,numeric_precision_radix,YES,bigint
+parameters,numeric_scale,YES,bigint
+parameters,datetime_precision,YES,bigint
+parameters,interval_type,YES,character varying
+parameters,interval_precision,YES,bigint
+parameters,udt_catalog,YES,character varying
+parameters,udt_schema,YES,character varying
+parameters,udt_name,YES,character varying
+parameters,scope_catalog,YES,character varying
+parameters,scope_schema,YES,character varying
+parameters,scope_name,YES,character varying
+parameters,maximum_cardinality,YES,bigint
+parameters,dtd_identifier,YES,character varying
+parameters,parameter_default,YES,character varying
+referential_constraints,constraint_catalog,YES,character varying
+referential_constraints,constraint_schema,YES,character varying
+referential_constraints,constraint_name,YES,character varying
+referential_constraints,unique_constraint_catalog,YES,character varying
+referential_constraints,unique_constraint_schema,YES,character varying
+referential_constraints,unique_constraint_name,YES,character varying
+referential_constraints,match_option,YES,character varying
+referential_constraints,update_rule,YES,character varying
+referential_constraints,delete_rule,YES,character varying
+referential_constraints,spanner_state,YES,character varying
+role_change_stream_grants,grantor,YES,character varying
+role_change_stream_grants,grantee,YES,character varying
+role_change_stream_grants,change_stream_catalog,YES,character varying
+role_change_stream_grants,change_stream_schema,YES,character varying
+role_change_stream_grants,change_stream_name,YES,character varying
+role_change_stream_grants,privilege_type,YES,character varying
+role_change_stream_grants,is_grantable,YES,character varying
+role_column_grants,grantor,YES,character varying
+role_column_grants,grantee,YES,character varying
+role_column_grants,table_catalog,YES,character varying
+role_column_grants,table_schema,YES,character varying
+role_column_grants,table_name,YES,character varying
+role_column_grants,column_name,YES,character varying
+role_column_grants,privilege_type,YES,character varying
+role_column_grants,is_grantable,YES,character varying
+role_routine_grants,grantor,YES,character varying
+role_routine_grants,grantee,YES,character varying
+role_routine_grants,specific_catalog,YES,character varying
+role_routine_grants,specific_schema,YES,character varying
+role_routine_grants,specific_name,YES,character varying
+role_routine_grants,routine_catalog,YES,character varying
+role_routine_grants,routine_schema,YES,character varying
+role_routine_grants,routine_name,YES,character varying
+role_routine_grants,privilege_type,YES,character varying
+role_routine_grants,is_grantable,YES,character varying
+role_table_grants,grantor,YES,character varying
+role_table_grants,grantee,YES,character varying
+role_table_grants,table_catalog,YES,character varying
+role_table_grants,table_schema,YES,character varying
+role_table_grants,table_name,YES,character varying
+role_table_grants,privilege_type,YES,character varying
+role_table_grants,is_grantable,YES,character varying
+role_table_grants,with_hierarchy,YES,character varying
+routine_options,specific_catalog,YES,character varying
+routine_options,specific_schema,YES,character varying
+routine_options,specific_name,YES,character varying
+routine_options,option_name,YES,character varying
+routine_options,option_type,YES,character varying
+routine_options,option_value,YES,character varying
+routine_privileges,grantor,YES,character varying
+routine_privileges,grantee,YES,character varying
+routine_privileges,specific_catalog,YES,character varying
+routine_privileges,specific_schema,YES,character varying
+routine_privileges,specific_name,YES,character varying
+routine_privileges,routine_catalog,YES,character varying
+routine_privileges,routine_schema,YES,character varying
+routine_privileges,routine_name,YES,character varying
+routine_privileges,privilege_type,YES,character varying
+routine_privileges,is_grantable,YES,character varying
+routines,specific_catalog,YES,character varying
+routines,specific_schema,YES,character varying
+routines,specific_name,YES,character varying
+routines,routine_catalog,YES,character varying
+routines,routine_schema,YES,character varying
+routines,routine_name,YES,character varying
+routines,routine_type,YES,character varying
+routines,module_catalog,YES,character varying
+routines,module_schema,YES,character varying
+routines,module_name,YES,character varying
+routines,udt_catalog,YES,character varying
+routines,udt_schema,YES,character varying
+routines,udt_name,YES,character varying
+routines,data_type,YES,character varying
+routines,character_maximum_length,YES,bigint
+routines,character_octet_length,YES,bigint
+routines,character_set_catalog,YES,character varying
+routines,character_set_schema,YES,character varying
+routines,character_set_name,YES,character varying
+routines,collation_catalog,YES,character varying
+routines,collation_schema,YES,character varying
+routines,collation_name,YES,character varying
+routines,numeric_precision,YES,bigint
+routines,numeric_precision_radix,YES,bigint
+routines,numeric_scale,YES,bigint
+routines,datetime_precision,YES,bigint
+routines,interval_type,YES,character varying
+routines,interval_precision,YES,bigint
+routines,type_udt_catalog,YES,character varying
+routines,type_udt_schema,YES,character varying
+routines,type_udt_name,YES,character varying
+routines,scope_catalog,YES,character varying
+routines,scope_schema,YES,character varying
+routines,scope_name,YES,character varying
+routines,maximum_cardinality,YES,bigint
+routines,dtd_identifier,YES,character varying
+routines,routine_body,YES,character varying
+routines,routine_definition,YES,character varying
+routines,external_name,YES,character varying
+routines,external_language,YES,character varying
+routines,parameter_style,YES,character varying
+routines,is_deterministic,YES,character varying
+routines,sql_data_access,YES,character varying
+routines,is_null_call,YES,character varying
+routines,sql_path,YES,character varying
+routines,schema_level_routine,YES,character varying
+routines,max_dynamic_result_sets,YES,character varying
+routines,is_user_defined_cast,YES,character varying
+routines,is_implicitly_invocable,YES,character varying
+routines,security_type,YES,character varying
+routines,to_sql_specific_catalog,YES,character varying
+routines,to_sql_specific_schema,YES,character varying
+routines,to_sql_specific_name,YES,character varying
+routines,as_locator,YES,character varying
+routines,created,YES,timestamp with time zone
+routines,last_altered,YES,timestamp with time zone
+routines,new_savepoint_level,YES,character varying
+routines,is_udt_dependent,YES,character varying
+routines,result_cast_from_data_type,YES,character varying
+routines,result_cast_as_locator,YES,character varying
+routines,result_cast_char_max_length,YES,bigint
+routines,result_cast_char_octet_length,YES,bigint
+routines,result_cast_char_set_catalog,YES,character varying
+routines,result_cast_char_set_schema,YES,character varying
+routines,result_cast_char_set_name,YES,character varying
+routines,result_cast_collation_catalog,YES,character varying
+routines,result_cast_collation_schema,YES,character varying
+routines,result_cast_collation_name,YES,character varying
+routines,result_cast_numeric_precision,YES,bigint
+routines,result_cast_numeric_precision_radix,YES,bigint
+routines,result_cast_numeric_scale,YES,bigint
+routines,result_cast_datetime_precision,YES,bigint
+routines,result_cast_interval_type,YES,character varying
+routines,result_cast_interval_precision,YES,bigint
+routines,result_cast_type_udt_catalog,YES,character varying
+routines,result_cast_type_udt_schema,YES,character varying
+routines,result_cast_type_udt_name,YES,character varying
+routines,result_cast_scope_catalog,YES,character varying
+routines,result_cast_scope_schema,YES,character varying
+routines,result_cast_scope_name,YES,character varying
+routines,result_cast_maximum_cardinality,YES,bigint
+routines,result_cast_dtd_identifier,YES,character varying
+schemata,catalog_name,YES,character varying
+schemata,schema_name,YES,character varying
+schemata,schema_owner,YES,character varying
+schemata,default_character_set_catalog,YES,character varying
+schemata,default_character_set_schema,YES,character varying
+schemata,default_character_set_name,YES,character varying
+schemata,sql_path,YES,character varying
+schemata,effective_timestamp,YES,bigint
+spanner_statistics,catalog_name,YES,character varying
+spanner_statistics,schema_name,YES,character varying
+spanner_statistics,package_name,YES,character varying
+spanner_statistics,allow_gc,YES,character varying
+table_constraints,constraint_catalog,YES,character varying
+table_constraints,constraint_schema,YES,character varying
+table_constraints,constraint_name,YES,character varying
+table_constraints,table_catalog,YES,character varying
+table_constraints,table_schema,YES,character varying
+table_constraints,table_name,YES,character varying
+table_constraints,constraint_type,YES,character varying
+table_constraints,is_deferrable,YES,character varying
+table_constraints,initially_deferred,YES,character varying
+table_constraints,enforced,YES,character varying
+table_privileges,grantor,YES,character varying
+table_privileges,grantee,YES,character varying
+table_privileges,table_catalog,YES,character varying
+table_privileges,table_schema,YES,character varying
+table_privileges,table_name,YES,character varying
+table_privileges,privilege_type,YES,character varying
+table_privileges,is_grantable,YES,character varying
+table_privileges,with_hierarchy,YES,character varying
+tables,table_catalog,YES,character varying
+tables,table_schema,YES,character varying
+tables,table_name,YES,character varying
+tables,table_type,YES,character varying
+tables,self_referencing_column_name,YES,character varying
+tables,reference_generation,YES,character varying
+tables,user_defined_type_catalog,YES,character varying
+tables,user_defined_type_schema,YES,character varying
+tables,user_defined_type_name,YES,character varying
+tables,is_insertable_into,YES,character varying
+tables,is_typed,YES,character varying
+tables,commit_action,YES,character varying
+tables,parent_table_name,YES,character varying
+tables,on_delete_action,YES,character varying
+tables,spanner_state,YES,character varying
+tables,interleave_type,YES,character varying
+tables,row_deletion_policy_expression,YES,character varying
+views,table_catalog,YES,character varying
+views,table_schema,YES,character varying
+views,table_name,YES,character varying
+views,view_definition,YES,character varying
+views,check_option,YES,character varying
+views,is_updatable,YES,character varying
+views,is_insertable_into,YES,character varying
+views,is_trigger_updatable,YES,character varying
+views,is_trigger_deletable,YES,character varying
+views,is_trigger_insertable_into,YES,character varying
+views,security_type,YES,character varying

@@ -1,0 +1,432 @@
+CREATE TABLE roles (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk bigint REFERENCES Roles(id) ON DELETE NO ACTION ON UPDATE NO ACTION,
+  fkdefault bigint REFERENCES Roles(id)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  fk bigint,
+  fkdefault bigint,
+  PRIMARY KEY(id),
+  FOREIGN KEY (fk) REFERENCES roles(id),
+  FOREIGN KEY (fkdefault) REFERENCES roles(id)
+)
+==
+
+CREATE TABLE roles (
+  id1 bigint NOT NULL,
+  id2 bigint NOT NULL,
+  PRIMARY KEY(id1, id2)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk1 bigint,
+  fk2 bigint,
+  CONSTRAINT fk_constr FOREIGN KEY(fk1, fk2) REFERENCES Roles(id1, id2)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  fk1 bigint,
+  fk2 bigint,
+  PRIMARY KEY(id),
+  CONSTRAINT fk_constr FOREIGN KEY (fk1, fk2) REFERENCES roles(id1, id2)
+)
+==
+
+CREATE TABLE roles (
+  id1 bigint NOT NULL,
+  id2 bigint NOT NULL,
+  PRIMARY KEY(id1, id2)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk1 bigint,
+  fk2 bigint,
+  CONSTRAINT fk_constr FOREIGN KEY(fk1, fk2) REFERENCES public.Roles(id1, id2)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  fk1 bigint,
+  fk2 bigint,
+  PRIMARY KEY(id),
+  CONSTRAINT fk_constr FOREIGN KEY (fk1, fk2) REFERENCES roles(id1, id2)
+)
+==
+
+CREATE TABLE roles (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk bigint REFERENCES public.Roles(id) ON DELETE NO ACTION ON UPDATE NO ACTION,
+  fkdefault bigint REFERENCES public.Roles(id)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  fk bigint,
+  fkdefault bigint,
+  PRIMARY KEY(id),
+  FOREIGN KEY (fk) REFERENCES roles(id),
+  FOREIGN KEY (fkdefault) REFERENCES roles(id)
+)
+==
+
+CREATE TABLE roles (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk bigint REFERENCES Roles(id) MATCH PARTIAL
+);
+--
+ERROR: [ERROR] MATCH PARTIAL not yet implemented
+==
+
+CREATE TABLE roles (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk bigint REFERENCES Roles(id)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  fk bigint,
+  PRIMARY KEY(id),
+  FOREIGN KEY (fk) REFERENCES roles(id)
+)
+==
+
+CREATE TABLE roles (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk bigint REFERENCES Roles(id)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  fk bigint,
+  PRIMARY KEY(id),
+  FOREIGN KEY (fk) REFERENCES roles(id)
+)
+==
+
+CREATE TABLE Users (id bigint PRIMARY KEY NULL);
+--
+ERROR: Nullable <PRIMARY KEY> columns are not supported.
+==
+
+CREATE TABLE home (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES home(id1)
+);
+--
+CREATE TABLE users (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1),
+  FOREIGN KEY (id1) REFERENCES home(id1)
+)
+==
+
+CREATE TABLE home (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES home(id1)
+);
+--
+CREATE TABLE users (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1),
+  FOREIGN KEY (id1) REFERENCES home(id1)
+)
+==
+
+CREATE TABLE home (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES home(id1)
+);
+--
+CREATE TABLE users (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1),
+  FOREIGN KEY (id1) REFERENCES home(id1)
+)
+==
+
+CREATE TABLE home (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES home(id1) ON DELETE NO ACTION
+);
+--
+CREATE TABLE users (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1),
+  FOREIGN KEY (id1) REFERENCES home(id1)
+)
+==
+
+CREATE TABLE home (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES home(id1) MATCH SIMPLE
+);
+--
+CREATE TABLE users (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1),
+  FOREIGN KEY (id1) REFERENCES home(id1)
+)
+==
+
+CREATE TABLE home (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE parent (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES home(id1)
+) INTERLEAVE IN parent;
+--
+ERROR: <INTERLEAVE IN> clause is not supported. Consider using <INTERLEAVE IN PARENT>.
+==
+
+CREATE TABLE home (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES Home(id1)
+) IN Home;
+--
+ERROR: [ERROR] syntax error at or near "IN"
+==
+
+CREATE TABLE home (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES Home(id1)
+) INTERLEAVE Home;
+--
+ERROR: [ERROR] syntax error at or near "Home"
+==
+
+CREATE TABLE home (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES Home(id1)
+) INTERLEAVE PARENT Home;
+--
+ERROR: [ERROR] syntax error at or near "PARENT"
+==
+
+CREATE TABLE home (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES Home(id1)
+) INTERLEAVE IN PARENT Home;
+--
+CREATE TABLE users (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1),
+  FOREIGN KEY (id1) REFERENCES home(id1)
+) INTERLEAVE IN PARENT home
+==
+
+CREATE TABLE parent (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES "parent"(id1)
+) INTERLEAVE IN PARENT "parent";
+--
+CREATE TABLE users (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1),
+  FOREIGN KEY (id1) REFERENCES parent(id1)
+) INTERLEAVE IN PARENT parent
+==
+
+CREATE TABLE parent (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES parent(id1)
+) INTERLEAVE IN PARENT parent ON DELETE CASCADE;
+--
+CREATE TABLE users (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1),
+  FOREIGN KEY (id1) REFERENCES parent(id1)
+) INTERLEAVE IN PARENT parent ON DELETE CASCADE
+==
+
+CREATE TABLE parent (
+  pid bigint NOT NULL,
+  PRIMARY KEY(pid)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  id2 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES parent(pid)
+) INTERLEAVE IN PARENT parent ON DELETE NO ACTION;
+--
+ERROR: Table users does not reference parent key column pid.
+==
+
+CREATE TABLE parent (
+  pid bigint NOT NULL,
+  PRIMARY KEY(pid)
+);
+CREATE TABLE Users (
+  id1 bigint,
+  id2 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES parent(pid)
+) INTERLEAVE IN PARENT parent;
+--
+ERROR: Table users does not reference parent key column pid.
+==
+
+CREATE TABLE roles (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk bigint REFERENCES Roles(id) ON UPDATE SET DEFAULT
+);
+--
+ERROR: Requested foreign key action is not supported.
+==
+
+CREATE TABLE Users (
+  id1 bigint
+) INTERLEAVE IN PARENT parent ON DELETE SET NULL;
+--
+ERROR: Only <NO ACTION> and <CASCADE> are supported in <ON DELETE> clause of <INTERLEAVE IN PARENT>.
+==
+
+CREATE TABLE Users (
+  id1 bigint
+) INTERLEAVE IN PARENT parent DELETE CASCADE;
+--
+ERROR: [ERROR] syntax error at or near "DELETE"
+==
+
+CREATE TABLE Users (
+  id1 bigint
+) INTERLEAVE IN PARENT parent ON DELETE;
+--
+ERROR: [ERROR] syntax error at end of input
+==
+
+CREATE TABLE Users (
+  id1 bigint
+) INTERLEAVE IN PARENT parent INTERLEAVE PARENT;
+--
+ERROR: [ERROR] syntax error at or near "INTERLEAVE"
+==
+
+CREATE TABLE roles (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk bigint REFERENCES Roles(id) ON UPDATE SET DEFAULT
+);
+--
+ERROR: Requested foreign key action is not supported.
+==
+
+CREATE TABLE roles (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk bigint REFERENCES Roles(id) ON DELETE SET DEFAULT
+);
+--
+ERROR: Requested foreign key action is not supported.
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk bigint REFERENCES Roles
+);
+--
+ERROR: At least one referenced column is required in foreign key.
+==
+
+CREATE TABLE Users (
+  id1 bigint,
+  PRIMARY KEY(id1),
+  FOREIGN KEY(id1) REFERENCES parent
+);
+--
+ERROR: At least one referenced column is required in foreign key.

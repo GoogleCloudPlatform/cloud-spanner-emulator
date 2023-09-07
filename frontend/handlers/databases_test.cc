@@ -68,17 +68,22 @@ class DatabaseApiTest : public test::ServerTest {
 
   absl::Status CreateDatabase(
       const std::string& instance_uri, const std::string& database_name,
-      const std::vector<std::string>& extra_statements = {}
-  ) {
+      const std::vector<std::string>& extra_statements = {},
+      const database_api::DatabaseDialect& dialect =
+          // DATABASE_DIALECT_UNSPECIFIED defaults to creating a database with
+          // the GOOGLE_STANDARD_SQL dialect.
+      database_api::DatabaseDialect::DATABASE_DIALECT_UNSPECIFIED) {
     grpc::ClientContext context;
     database_api::CreateDatabaseRequest request;
     request.set_parent(instance_uri);
-    std::string quote = kGSQLQuote;
+    std::string quote =
+        (dialect == database_api::POSTGRESQL) ? kPGQuote : kGSQLQuote;
     request.set_create_statement(
         absl::StrCat("CREATE DATABASE ", quote, database_name, quote));
     for (auto extra_statement : extra_statements) {
       request.add_extra_statements(extra_statement);
     }
+    request.set_database_dialect(dialect);
     operations_api::Operation operation;
     ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->CreateDatabase(
         &context, request, &operation));
@@ -231,6 +236,31 @@ TEST_F(DatabaseApiTest, CreateDatabaseWithoutInstanceReturnsNotFound) {
                   MakeInstanceUri(test_project_name_, "non-existent-instance"),
                   test_database_name_),
               StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(DatabaseApiTest, CreateDatabaseWithGSQLDialect) {
+  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
+                           absl::StrCat(test_database_name_, "_gsql"),
+                           /* extra_statements = */ {},
+                           database_api::DatabaseDialect::GOOGLE_STANDARD_SQL));
+}
+
+TEST_F(DatabaseApiTest, CreateDatabaseWithPostgresDialect) {
+  ZETASQL_EXPECT_OK(CreateDatabase(
+      test_instance_uri_, absl::StrCat(test_database_name_, "_pg_1"),
+      /* extra_statements = */ {}, database_api::DatabaseDialect::POSTGRESQL));
+
+  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
+                           absl::StrCat(test_database_name_, "_pg_2"),
+                           {
+                               R"(
+                                   CREATE TABLE test_table (
+                                     int64_col bigint not null primary key,
+                                     string_col varchar(1024)
+                                   )
+                                 )",
+                           },
+                           database_api::DatabaseDialect::POSTGRESQL));
 }
 
 // Tests for ListDatabases.

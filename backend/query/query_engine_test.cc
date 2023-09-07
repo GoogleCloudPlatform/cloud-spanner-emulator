@@ -72,6 +72,9 @@ inline constexpr char kQueryContainsSubqueryError[] =
 inline constexpr char kQueryNotASimpleTableScanError[] =
     "Query is not a simple table scan.";
 
+inline constexpr char kPGUnnestUnsupportedError[] =
+    "[ERROR] syntax error at or near \"[\"";
+
 testing::Matcher<const zetasql::Type*> Int64Type() {
   return Property(&zetasql::Type::IsInt64, IsTrue());
 }
@@ -161,7 +164,13 @@ class QueryEngineTest
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  protected:
   void SetUp() override {
-    if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+      schema_ = test::CreateSchemaWithOneTable(
+          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
+      multi_table_schema_ = test::CreateSchemaWithMultiTables(
+          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
+    } else if (GetParam() ==
+               database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
       schema_ = test::CreateSchemaWithOneTable(&type_factory_);
       multi_table_schema_ = test::CreateSchemaWithMultiTables(&type_factory_);
       change_stream_schema_ =
@@ -172,8 +181,8 @@ class QueryEngineTest
 
 INSTANTIATE_TEST_SUITE_P(
     QueryEnginePerDialectTests, QueryEngineTest,
-    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
-                    ),
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
     [](const testing::TestParamInfo<QueryEngineTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
     });
@@ -214,7 +223,9 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTable) {
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTableWithForceIndexHint) {
-  std::string hint = "@{force_index=test_index}";
+  std::string hint = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+                         ? "/*@ force_index=test_index */"
+                         : "@{force_index=test_index}";
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,
       query_engine().ExecuteSql(
@@ -231,7 +242,9 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTableWithForceIndexHint) {
 
 TEST_P(QueryEngineTest,
        ExecuteSqlSelectsOneColumnFromTableWithBaseTableStatementHint) {
-  std::string hint = "@{force_index=_base_table}";
+  std::string hint = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+                         ? "/*@ force_index=_base_table */"
+                         : "@{force_index=_base_table}";
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,
       query_engine().ExecuteSql(
@@ -264,9 +277,15 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsAllColumnsFromTable) {
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlSelectsParameterValuesFromTable) {
-  Query query = {
-      "SELECT @int64_p AS int64_p, @string_p AS string_p FROM test_table",
-      {{"int64_p", Int64(24)}, {"string_p", String("bar")}}};
+  Query query;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = {"SELECT $1 AS int64_p, $2 AS string_p FROM test_table",
+             {{"p1", Int64(24)}, {"p2", String("bar")}}};
+  } else {
+    query = {
+        "SELECT @int64_p AS int64_p, @string_p AS string_p FROM test_table",
+        {{"int64_p", Int64(24)}, {"string_p", String("bar")}}};
+  }
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,
       query_engine().ExecuteSql(query, QueryContext{schema(), reader()}));
@@ -306,8 +325,16 @@ TEST_P(QueryEngineTest, PartitionableSimpleScanFilter) {
 }
 
 TEST_P(QueryEngineTest, PartitionableSimpleScanSubqueryColumn) {
-  absl::StatusCode error_code = absl::StatusCode::kInvalidArgument;
-  std::string error_msg = kQueryContainsSubqueryError;
+  absl::StatusCode error_code;
+  std::string error_msg;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // UNNEST is unsupported in the PG dialect.
+    error_code = absl::StatusCode::kUnimplemented;
+    error_msg = "Array Subquery expressions are not supported";
+  } else {
+    error_code = absl::StatusCode::kInvalidArgument;
+    error_msg = kQueryContainsSubqueryError;
+  }
   Query query{
       "SELECT string_col, ARRAY(SELECT child_key from child_table) FROM "
       "test_table"};
@@ -318,7 +345,11 @@ TEST_P(QueryEngineTest, PartitionableSimpleScanSubqueryColumn) {
 }
 
 TEST_P(QueryEngineTest, PartitionableSimpleScanNoTable) {
-  std::string error_msg = kQueryNotASimpleTableScanError;
+  std::string error_msg =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+          // UNNEST is unsupported in the PG dialect.
+          ? kPGUnnestUnsupportedError
+          : kQueryNotASimpleTableScanError;
   Query query{"SELECT a FROM UNNEST([1, 2, 3]) AS a"};
   EXPECT_THAT(query_engine().IsPartitionable(
                   query, QueryContext{multi_table_schema(), reader()}),
@@ -327,7 +358,11 @@ TEST_P(QueryEngineTest, PartitionableSimpleScanNoTable) {
 }
 
 TEST_P(QueryEngineTest, PartitionableSimpleScanFilterNoTable) {
-  std::string error_msg = kQueryNotASimpleTableScanError;
+  std::string error_msg =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+          // UNNEST is unsupported in the PG dialect.
+          ? kPGUnnestUnsupportedError
+          : kQueryNotASimpleTableScanError;
   Query query{"SELECT a FROM UNNEST([1, 2, 3]) AS a WHERE a = 1"};
   EXPECT_THAT(query_engine().IsPartitionable(
                   query, QueryContext{multi_table_schema(), reader()}),
@@ -621,6 +656,14 @@ struct ParameterSensitiveHintInfo {
         {.hint_value = "12", .is_valid = false},
     };
 
+    int num_tests = test_cases.size();
+    test_cases.reserve(num_tests * 2);
+    for (int i = 0; i < num_tests; ++i) {
+      ParameterSensitiveHintInfo pg_test_case = test_cases[i];
+      pg_test_case.dialect = database_api::DatabaseDialect::POSTGRESQL;
+      test_cases.emplace_back(pg_test_case);
+    }
+
     return test_cases;
   }
 };
@@ -630,8 +673,13 @@ class ParameterSensitiveHintTests
       public ::testing::WithParamInterface<ParameterSensitiveHintInfo> {
   void SetUp() override {
     const ParameterSensitiveHintInfo& test_params = GetParam();
-    if (test_params.dialect ==
-        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    if (test_params.dialect == database_api::DatabaseDialect::POSTGRESQL) {
+      schema_ = test::CreateSchemaWithOneTable(
+          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
+      multi_table_schema_ = test::CreateSchemaWithMultiTables(
+          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
+    } else if (test_params.dialect ==
+               database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
       schema_ = test::CreateSchemaWithOneTable(&type_factory_);
       multi_table_schema_ = test::CreateSchemaWithMultiTables(&type_factory_);
     }
@@ -642,6 +690,10 @@ TEST_P(ParameterSensitiveHintTests, TestParameterSensitiveHint) {
   const ParameterSensitiveHintInfo& test_params = GetParam();
   std::string hint =
       absl::Substitute("@{parameter_sensitive=$0} ", test_params.hint_value);
+  if (test_params.dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    hint = absl::Substitute("/*@ parameter_sensitive=$0 */ ",
+                            test_params.hint_value);
+  }
   SCOPED_TRACE(absl::StrCat("hint=", test_params.hint_value));
 
   const auto query = absl::StrCat(hint, "SELECT string_col FROM test_table");
@@ -671,7 +723,9 @@ INSTANTIATE_TEST_SUITE_P(
     testing::ValuesIn(ParameterSensitiveHintInfo::TestCases()));
 
 TEST_P(QueryEngineTest, ExecuteSqlInsertReturning) {
-  std::string returning = "THEN RETURN";
+  std::string returning =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
+                                                                : "THEN RETURN";
   MockRowWriter writer;
   EXPECT_CALL(
       writer,
@@ -710,7 +764,9 @@ TEST_P(QueryEngineTest, ExecuteSqlInsertReturning) {
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlDeleteReturning) {
-  std::string returning = "THEN RETURN";
+  std::string returning =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
+                                                                : "THEN RETURN";
   MockRowWriter writer;
   EXPECT_CALL(writer,
               Write(Property(
@@ -745,7 +801,9 @@ TEST_P(QueryEngineTest, ExecuteSqlDeleteReturning) {
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlUpdatesReturning) {
-  std::string returning = "THEN RETURN";
+  std::string returning =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
+                                                                : "THEN RETURN";
   MockRowWriter writer;
   EXPECT_CALL(
       writer,

@@ -38,8 +38,27 @@ namespace test {
 
 namespace {
 
+// For the following tests, a custom PG DDL statement is required as translating
+// expressions from GSQL to PG is not supported in tests.
+using database_api::DatabaseDialect::GOOGLE_STANDARD_SQL;
+using database_api::DatabaseDialect::POSTGRESQL;
+
 TEST_P(SchemaUpdaterTest, CheckConstraintBasic) {
   std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        CreateSchema(
+            {R"(
+            CREATE TABLE "T" (
+              "K" bigint PRIMARY KEY,
+              "V" bigint,
+              CONSTRAINT "C1" CHECK("K" > 0)
+            ))",
+             R"(ALTER TABLE "T" ADD CONSTRAINT "C2" CHECK("K" + "V" > 0))"},
+            POSTGRESQL,
+            /*use_gsql_to_pg_translation=*/false));
+  } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema({
@@ -50,6 +69,7 @@ TEST_P(SchemaUpdaterTest, CheckConstraintBasic) {
             ") PRIMARY KEY (K)",
             "ALTER TABLE T ADD CONSTRAINT C2 CHECK(K + V > 0)"  // Crash OK
         }));
+  }
 
   const Table* table = ASSERT_NOT_NULL(schema->FindTable("T"));
   const CheckConstraint* check1 =
@@ -62,7 +82,11 @@ TEST_P(SchemaUpdaterTest, CheckConstraintBasic) {
 
   EXPECT_EQ(check2->Name(), "C2");
   EXPECT_EQ(check2->table()->Name(), "T");
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(check2->expression(), "(K + V) > 0");
+  } else {
     EXPECT_EQ(check2->expression(), "K + V > 0");
+  }
 
   auto get_column_names = [](absl::Span<const Column* const> columns,
                              std::vector<std::string>* column_names) {
@@ -84,7 +108,16 @@ TEST_P(SchemaUpdaterTest, CheckConstraintBasic) {
 }
 
 std::vector<std::string> SchemaForCaseSensitivityTests(
-) {
+    database_api::DatabaseDialect dialect) {
+  if (dialect == POSTGRESQL) {
+    return {
+        "CREATE TABLE T ("
+        "  K bigint primary key,"
+        "  V bigint,"
+        "  CONSTRAINT C1 CHECK(K > 0)"  // Crash OK
+        ")",
+    };
+  }
   return {
       "CREATE TABLE T ("
       "  K INT64,"
@@ -97,20 +130,38 @@ std::vector<std::string> SchemaForCaseSensitivityTests(
 TEST_P(SchemaUpdaterTest, CheckConstraintColumnNameIsCaseInsensitive) {
   std::string add_constraint_ddl =
       "ALTER TABLE T ADD CONSTRAINT C2 CHECK(v > 0)";  // Crash OK
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                         CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
+                                      POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {add_constraint_ddl},
+                           POSTGRESQL,
+                           /*use_gsql_to_pg_translation=*/false));
+  } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         auto schema,
-        CreateSchema(SchemaForCaseSensitivityTests(
-            )));
+        CreateSchema(SchemaForCaseSensitivityTests(GOOGLE_STANDARD_SQL)));
     ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {add_constraint_ddl}));
+  }
 }
 
 TEST_P(SchemaUpdaterTest, CheckConstraintConstraintNameIsCaseInsensitive) {
   std::string drop_constraint_ddl = "ALTER TABLE T DROP CONSTRAINT c1";
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                         CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
+                                      POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {drop_constraint_ddl},
+                           POSTGRESQL,
+                           /*use_gsql_to_pg_translation=*/false));
+  } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         auto schema,
-        CreateSchema(SchemaForCaseSensitivityTests(
-            )));
+        CreateSchema(SchemaForCaseSensitivityTests(GOOGLE_STANDARD_SQL)));
     ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {drop_constraint_ddl}));
+  }
 }
 
 }  // namespace

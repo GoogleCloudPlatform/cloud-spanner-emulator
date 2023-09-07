@@ -127,8 +127,14 @@ TEST_F(ChangeStreamTest, AddOneInsertOpAndCheckResultWriteOpContent) {
       change_stream_->change_stream_partition_table()->FindColumn("end_time"));
   const std::vector<zetasql::Value> values = {
       zetasql::Value::String("11111"), zetasql::Value::NullTimestamp()};
+  // Insert 1st partition
   ZETASQL_EXPECT_OK(store()->Insert(change_stream_->change_stream_partition_table(),
                             Key({String("11111")}), columns, values));
+  // Insert 2nd partition
+  const std::vector<zetasql::Value> values2 = {
+      zetasql::Value::String("22222"), zetasql::Value::NullTimestamp()};
+  ZETASQL_EXPECT_OK(store()->Insert(change_stream_->change_stream_partition_table(),
+                            Key({String("22222")}), columns, values2));
   // Insert base table entry.
   ZETASQL_EXPECT_OK(effector_->Effect(
       ctx(), Insert(table_, Key({Int64(1)}), base_columns_,
@@ -215,6 +221,64 @@ TEST_F(ChangeStreamTest, AddOneInsertOpAndCheckResultWriteOpContent) {
   ASSERT_EQ(operation->values[12], zetasql::Value(String("")));
   // Verify is_system_transaction
   ASSERT_EQ(operation->values[13], zetasql::Value(Bool(false)));
+}
+
+TEST_F(ChangeStreamTest, AddTwoInsertForDiffSetCols) {
+  // Populate partition table with the initial partition token
+  std::vector<const Column*> columns;
+  columns.push_back(change_stream2_->change_stream_partition_table()
+                        ->FindKeyColumn("partition_token")
+                        ->column());
+  columns.push_back(
+      change_stream2_->change_stream_partition_table()->FindColumn("end_time"));
+  const std::vector<zetasql::Value> values = {
+      zetasql::Value::String("11111"), zetasql::Value::NullTimestamp()};
+  // Insert 1st partition
+  ZETASQL_EXPECT_OK(store()->Insert(change_stream2_->change_stream_partition_table(),
+                            Key({String("11111")}), columns, values));
+  // Insert 1st base table entry. base_columns1 only contains the first two
+  // columns of TestTable2.
+  std::vector<const Column*> base_columns1 = {
+      table2_->FindColumn("int64_col"), table2_->FindColumn("string_col")};
+  ZETASQL_EXPECT_OK(
+      effector2_->Effect(ctx(), Insert(table2_, Key({Int64(1)}), base_columns1,
+                                       {Int64(1), String("value")})));
+  // Insert 2nd base table entry. base_columns2_ contains all columns of
+  // TestTable2.
+  ZETASQL_EXPECT_OK(effector2_->Effect(
+      ctx(), Insert(table2_, Key({Int64(2)}), base_columns2_,
+                    {Int64(2), String("value"), String("value2")})));
+  ctx()->change_stream_effects()->BuildMutation();
+  // Verify change stream entry is added to the transaction buffer.
+  ASSERT_EQ(change_stream_effects_buffer()->GetWriteOps().size(), 1);
+}
+
+TEST_F(ChangeStreamTest, AddTwoInsertForDiffSetNonKeyTrackedCols) {
+  // Populate partition table with the initial partition token
+  std::vector<const Column*> columns;
+  columns.push_back(change_stream2_->change_stream_partition_table()
+                        ->FindKeyColumn("partition_token")
+                        ->column());
+  columns.push_back(
+      change_stream2_->change_stream_partition_table()->FindColumn("end_time"));
+  const std::vector<zetasql::Value> values = {
+      zetasql::Value::String("11111"), zetasql::Value::NullTimestamp()};
+  // Insert 1st partition
+  ZETASQL_EXPECT_OK(store()->Insert(change_stream2_->change_stream_partition_table(),
+                            Key({String("11111")}), columns, values));
+  // Insert 1st base table entry.
+  std::vector<const Column*> base_columns1 = {table2_->FindColumn("int64_col")};
+  ZETASQL_EXPECT_OK(effector2_->Effect(
+      ctx(), Insert(table2_, Key({Int64(1)}), base_columns1, {Int64(1)})));
+  // Insert 2nd base table entry
+  std::vector<const Column*> base_columns2 = {
+      table2_->FindColumn("int64_col"), table2_->FindColumn("string_col")};
+  ZETASQL_EXPECT_OK(
+      effector2_->Effect(ctx(), Insert(table2_, Key({Int64(2)}), base_columns2,
+                                       {Int64(2), String("value")})));
+  ctx()->change_stream_effects()->BuildMutation();
+  // Verify change stream entry is added to the transaction buffer.
+  ASSERT_EQ(change_stream_effects_buffer()->GetWriteOps().size(), 2);
 }
 
 // Add operations with different mod_types to the buffer and check if distinct

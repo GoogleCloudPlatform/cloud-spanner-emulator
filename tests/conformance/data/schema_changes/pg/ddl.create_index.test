@@ -1,0 +1,291 @@
+CREATE TABLE users (
+  id bigint NOT NULL,
+  firstname varchar NOT NULL,
+  address varchar,
+  "PhoneNumber" varchar,
+  PRIMARY KEY(id)
+);
+CREATE INDEX firstname_idx ON Users (FirstName) INCLUDE (Address, "PhoneNumber")
+--
+CREATE INDEX firstname_idx ON users (firstname) INCLUDE (address, "PhoneNumber")
+==
+
+CREATE TABLE users (
+  id bigint NOT NULL,
+  firstname varchar NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE INDEX duplicate_columns_allowed_in_index ON Users (FirstName, FirstName);
+--
+ERROR: Index duplicate_columns_allowed_in_index specifies key column firstname twice.
+==
+
+# TODO: Re-add WHERE clauses when null_filtered_column is supported.
+CREATE TABLE users (
+  id bigint NOT NULL,
+  firstname varchar NOT NULL,
+  address varchar,
+  PRIMARY KEY(id)
+);
+CREATE INDEX any_columns_allowed_in_filter ON Users (FirstName) INCLUDE (Address);
+--
+CREATE INDEX any_columns_allowed_in_filter ON users (firstname) INCLUDE (address);
+==
+
+# TODO: Re-add WHERE clauses when null_filtered_column is supported.
+CREATE TABLE users (
+  id bigint NOT NULL,
+  firstname varchar,
+  lastname varchar,
+  PRIMARY KEY(id)
+);
+CREATE INDEX any_columns_allowed_in_filter ON Users (FirstName, LastName);
+--
+CREATE INDEX any_columns_allowed_in_filter ON users (firstname, lastname)
+==
+
+CREATE INDEX ON Users ();
+--
+ERROR: [ERROR] syntax error at or near ")"
+==
+
+CREATE INDEX ON Users (name);
+--
+ERROR: Index name is mandatory in <CREATE INDEX> statement.
+==
+
+CREATE INDEX name_idx ON Users (name) TABLESPACE tbspace;
+--
+ERROR: Tablespaces are not supported in <CREATE INDEX> statement.
+==
+
+CREATE INDEX CONCURRENTLY name_idx ON Users (name);
+--
+ERROR: Concurrent index creation is not supported in <CREATE INDEX> statement.
+==
+
+# TODO: Re-add WHERE clauses when null_filtered_column is supported.
+CREATE TABLE users (
+  id bigint NOT NULL,
+  name varchar,
+  PRIMARY KEY(id)
+);
+CREATE INDEX not_null_filtered_if_unknown_cols_present ON Users (name);
+--
+CREATE INDEX not_null_filtered_if_unknown_cols_present ON users (name)
+==
+
+CREATE INDEX name_idx ON Users (name, age) WHERE (name IS NOT NULL OR age is NOT NULL);
+--
+ERROR: <WHERE> clause of <CREATE INDEX> statement supports only conjunction of <column IS NOT NULL> expressions using <AND>, where <column> is part of an index.
+==
+
+CREATE INDEX name_idx ON Users (age) WHERE (age > 10);
+--
+ERROR: <WHERE> clause of <CREATE INDEX> statement supports only conjunction of <column IS NOT NULL> expressions using <AND>, where <column> is part of an index.
+==
+
+CREATE INDEX name_idx ON Users (name, age) WHERE (name IS NULL AND abc IS NOT NULL);
+--
+ERROR: <WHERE> clause of <CREATE INDEX> statement supports only conjunction of <column IS NOT NULL> expressions using <AND>, where <column> is part of an index.
+==
+
+# TODO: Re-add WHERE clauses when null_filtered_column is supported.
+CREATE TABLE users (
+  id bigint NOT NULL,
+  name varchar,
+  age bigint,
+  count bigint,
+  PRIMARY KEY(id)
+);
+CREATE INDEX name_idx ON Users (name, age, count);
+--
+CREATE INDEX name_idx ON users (name, age, count)
+==
+
+# TODO: Re-add WHERE clauses when null_filtered_column is supported.
+CREATE TABLE users (
+  id bigint NOT NULL,
+  name varchar,
+  age bigint,
+  count bigint,
+  last varchar,
+  PRIMARY KEY(id)
+);
+CREATE INDEX name_idx ON Users (name, age, count, last);
+--
+CREATE INDEX name_idx ON users (name, age, count, last)
+==
+
+# TODO: Re-enable the test when the NULLS ordering is supported in
+# the emulator
+# CREATE TABLE nulls (
+#   id bigint NOT NULL,
+#   f1 bigint,
+#   f2 bigint,
+#   f3 bigint,
+#   f4 bigint,
+#   f5 bigint,
+#   f6 bigint,
+#   PRIMARY KEY(id)
+# );
+# CREATE INDEX nulls_test_idx ON Nulls (
+#   f1 DESC NULLS FIRST,
+#   f2 ASC NULLS LAST,
+#   f3 DESC,
+#   f4 ASC,
+#   f5 DESC NULLS LAST,
+#   f6 ASC NULLS FIRST
+# );
+# --
+# CREATE INDEX nulls_test_idx ON nulls (f1 DESC, f2, f3 DESC, f4, f5 DESC NULLS LAST, f6 NULLS FIRST)
+# ==
+
+CREATE INDEX name_idx ON Users (name) WHERE (NOT name IS NULL);
+--
+ERROR: <WHERE> clause of <CREATE INDEX> statement supports only conjunction of <column IS NOT NULL> expressions using <AND>, where <column> is part of an index.
+==
+
+CREATE INDEX name_idx ON Users (UPPER(name));
+--
+ERROR: Expressions are not supported in <CREATE INDEX> statement.
+==
+
+CREATE INDEX name_idx ON Users (name COLLATE ja_JP.utf8);
+--
+ERROR: Setting collation is not supported in <CREATE INDEX> statement.
+==
+
+CREATE INDEX name_idx ON Users (name varchar_pattern_ops);
+--
+ERROR: Setting operator class is not supported in <CREATE INDEX> statement.
+==
+
+# TODO: Re-add WHERE clauses when null_filtered_column is supported.
+# Also, interleave_in_table should be able to print out.
+CREATE TABLE parent (
+  name varchar NOT NULL,
+  PRIMARY KEY(name)
+);
+CREATE TABLE users (
+  name varchar NOT NULL,
+  id bigint NOT NULL,
+  age varchar,
+  PRIMARY KEY(name, id)
+) INTERLEAVE IN PARENT parent;
+CREATE INDEX name_idx ON Users (name, age) INTERLEAVE IN parent;
+--
+CREATE INDEX name_idx ON users (name, age) INTERLEAVE IN parent;
+==
+
+CREATE INDEX name_idx ON Users (name, age) INTERLEAVE IN PARENT parent WHERE (name IS NOT NULL);
+--
+ERROR: [ERROR] syntax error at or near "parent"
+==
+
+CREATE INDEX name_idx ON Users (name, age) WHERE (name IS NOT NULL) INTERLEAVE IN parent ;
+--
+ERROR: [ERROR] syntax error at or near "INTERLEAVE"
+==
+
+CREATE INDEX name_idx ON Users (name, age) INTERLEAVE IN PARENT parent ON DELETE CASCADE WHERE (name IS NOT NULL);
+--
+ERROR: [ERROR] syntax error at or near "parent"
+==
+
+# TODO: Re-add WHERE clauses when null_filtered_column is supported.
+# In test env, it returns the following UNIMPLEMENTED error:
+# ERROR: Interleaving index idx into a table that's not a parent of users is not supported.
+# The emulator needs to return the same error code and message.
+# CREATE TABLE stable (
+#   id bigint PRIMARY KEY
+# );
+# CREATE TABLE users (
+#   id bigint PRIMARY KEY,
+#   name varchar
+# );
+# CREATE INDEX idx ON Users (id) INTERLEAVE IN public.stable;
+# --
+# ERROR: UNIMPLEMENTED: Cannot interleave index idx of table users within table stable because stable is not an ancestor of users.
+# ==
+
+CREATE TABLE abc (
+  id bigint PRIMARY KEY
+);
+CREATE INDEX idx ON abc USING btree (id);
+--
+CREATE INDEX idx ON abc (id)
+==
+
+CREATE INDEX gin_idx ON documents_table USING gin (locations);
+--
+ERROR: Setting access method is not supported in <CREATE INDEX> statement.
+==
+
+CREATE INDEX title_idx ON films (title) WITH (fillfactor = 70);
+--
+ERROR: Index options are not supported in <CREATE INDEX> statement.
+==
+
+CREATE INDEX CONCURRENTLY sales_quantity_index ON sales_table (quantity);
+--
+ERROR: Concurrent index creation is not supported in <CREATE INDEX> statement.
+==
+
+CREATE INDEX idx ON cname.sname.tname (id);
+--
+ERROR: Catalog in the name is not supported in <CREATE INDEX> statement.
+==
+
+CREATE TABLE tname (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE INDEX idx ON public.tname (id);
+--
+CREATE INDEX idx ON tname (id)
+==
+
+CREATE TABLE users (
+  id bigint NOT NULL,
+  firstname varchar NOT NULL,
+  address varchar,
+  "PhoneNumber" varchar,
+  PRIMARY KEY(id)
+);
+CREATE INDEX firstname_idx ON public.Users (FirstName) INCLUDE (Address, "PhoneNumber")
+--
+CREATE INDEX firstname_idx ON users (firstname) INCLUDE (address, "PhoneNumber")
+==
+
+CREATE INDEX idx ON abc/*@ FORCE_INDEX=table1_index1 */  (id);
+--
+ERROR: Table hints are not supported in <CREATE INDEX> statement.
+==
+
+CREATE INDEX name_idx ON Users (name) WHERE (false);
+--
+ERROR: <WHERE> clause of <CREATE INDEX> statement supports only conjunction of <column IS NOT NULL> expressions using <AND>, where <column> is part of an index.
+==
+
+CREATE INDEX idx ON ONLY Users (id);
+--
+ERROR: <ONLY> for table inheritance is not supported in <CREATE INDEX> statement.
+==
+
+CREATE TABLE users (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE INDEX idx ON Users * (id);
+--
+CREATE INDEX idx ON users (id)
+==
+
+CREATE TABLE users (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE INDEX IF NOT EXISTS idx ON Users * (id);
+--
+CREATE INDEX idx ON users (id)

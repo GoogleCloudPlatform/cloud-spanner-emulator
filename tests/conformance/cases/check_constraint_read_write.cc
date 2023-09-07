@@ -78,7 +78,7 @@ TEST_F(CheckConstraintTest, InsertNull) {
 }
 
 TEST_F(CheckConstraintTest, InsertWithCoercion) {
-  // v_left_shift_gt_zero ZETASQL_CHECK ((V << 1) > 0) is OK.
+  // v_left_shift_gt_zero ZETASQL_VLOG ((V << 1) > 0) is OK.
   ZETASQL_ASSERT_OK(Insert("T", {"K", "V"}, {1, (int32_t)1073741824}));
   EXPECT_THAT(Read("T", {"K", "V"}, Key(1)),
               IsOkAndHoldsRow({1, (int64_t)1073741824}));

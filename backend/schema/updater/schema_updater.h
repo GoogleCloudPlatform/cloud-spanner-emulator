@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/type.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -47,6 +48,8 @@ static constexpr const char kValueCaptureTypeNewValues[] = "NEW_VALUES";
 // Container holding all the required inputs for processing a schema change.
 struct SchemaChangeOperation {
   absl::Span<const std::string> statements;
+  ::google::spanner::admin::database::v1::DatabaseDialect database_dialect =
+      ::google::spanner::admin::database::v1::GOOGLE_STANDARD_SQL;
 };
 
 // Database context within which a schema change is processed.
@@ -85,8 +88,7 @@ struct SchemaChangeResult {
 // Parses the given statement based on the dialect and returns the DDL
 // statement.
 absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
-    absl::string_view statement
-);
+    absl::string_view statement, database_api::DatabaseDialect dialect);
 
 class SchemaUpdater {
  public:

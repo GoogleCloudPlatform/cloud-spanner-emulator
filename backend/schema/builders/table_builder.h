@@ -183,7 +183,7 @@ class Table::Editor {
           return absl::EqualsIgnoreCase(change_stream->Name(),
                                         change_stream_element->Name());
         });
-    ZETASQL_DCHECK(itr != instance_->change_streams_.end());
+    ABSL_DCHECK(itr != instance_->change_streams_.end());
     instance_->change_streams_.erase(itr);
     return *this;
   }

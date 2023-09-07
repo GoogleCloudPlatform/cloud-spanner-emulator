@@ -119,4 +119,5 @@ static constexpr char kChangeStreamPartitionTablePrefix[] =
 
 // Quotes used by different dialects of Spanner in DDL statements.
 static constexpr char kGSQLQuote[] = "`";
+static constexpr char kPGQuote[] = "\"";
 #endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_CONSTANTS_H_

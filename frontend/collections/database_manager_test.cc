@@ -50,6 +50,21 @@ TEST_F(DatabaseManagerTest, CreateNewDatabase) {
       std::shared_ptr<Database> database,
       database_manager_.CreateDatabase(database_uri_, empty_schema_operation_));
   EXPECT_EQ(database->database_uri(), database_uri_);
+  EXPECT_EQ(database->backend()->dialect(),
+            backend::database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+}
+
+TEST_F(DatabaseManagerTest, CreateNewPGDatabase) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::shared_ptr<Database> database,
+      database_manager_.CreateDatabase(
+          database_uri_,
+          backend::SchemaChangeOperation{
+              .database_dialect =
+                  backend::database_api::DatabaseDialect::POSTGRESQL}));
+  EXPECT_EQ(database->database_uri(), database_uri_);
+  EXPECT_EQ(database->backend()->dialect(),
+            backend::database_api::DatabaseDialect::POSTGRESQL);
 }
 
 TEST_F(DatabaseManagerTest, CreateExistingDatabaseUriFailsWithAlreadyExists) {

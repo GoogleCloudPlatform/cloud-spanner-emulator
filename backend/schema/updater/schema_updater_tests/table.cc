@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
@@ -35,6 +36,8 @@ namespace test {
 namespace types = zetasql::types;
 
 namespace {
+
+using database_api::DatabaseDialect::POSTGRESQL;
 
 TEST_P(SchemaUpdaterTest, CreateTable_SingleKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
@@ -59,11 +62,24 @@ TEST_P(SchemaUpdaterTest, CreateTable_SingleKey) {
 
 TEST_P(SchemaUpdaterTest, CreateTable_MultiKey) {
   std::unique_ptr<const Schema> schema;
+  // Changing the ordering for key columns is unsupported in PG.
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+    CREATE TABLE T (
+      col1 bigint,
+      col2 varchar,
+      PRIMARY KEY(col1, col2)
+    ))"},
+                                      /*dialect=*/POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       CREATE TABLE T(
         col1 INT64,
         col2 STRING(MAX)
       ) PRIMARY KEY(col1 DESC, col2))"}));
+  }
 
   auto t = schema->FindTable("T");
   EXPECT_NE(t, nullptr);
@@ -72,7 +88,11 @@ TEST_P(SchemaUpdaterTest, CreateTable_MultiKey) {
 
   auto col1 = t->columns()[0];
   EXPECT_THAT(col1, ColumnIs("col1", types::Int64Type()));
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(col1, IsKeyColumnOf(t, "ASC"));
+  } else {
     EXPECT_THAT(col1, IsKeyColumnOf(t, "DESC"));
+  }
 
   auto col2 = t->columns()[1];
   EXPECT_THAT(col2, ColumnIs("col2", types::StringType()));
@@ -80,6 +100,8 @@ TEST_P(SchemaUpdaterTest, CreateTable_MultiKey) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_NoKey) {
+  // Empty key columns are unsupported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64
@@ -96,6 +118,8 @@ TEST_P(SchemaUpdaterTest, CreateTable_NoKey) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_NoColumns) {
+  // Empty key columns are unsupported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
     ) PRIMARY KEY())"}));
@@ -107,6 +131,8 @@ TEST_P(SchemaUpdaterTest, CreateTable_NoColumns) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_ColumnLength) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  // Empty key columns are unsupported in PG.
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 BYTES(10)
@@ -133,6 +159,16 @@ TEST_P(SchemaUpdaterTest, CreateTable_ColumnLength) {
 
 TEST_P(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
   std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+      CREATE TABLE T(
+        col1 bigint PRIMARY KEY,
+        col2 spanner.commit_timestamp
+      ))"},
+                                      /*dialect=*/POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       CREATE TABLE T(
         col1 INT64,
@@ -140,11 +176,16 @@ TEST_P(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
           allow_commit_timestamp = true
         )
       ) PRIMARY KEY(col1))"}));
+  }
 
   auto t = schema->FindTable("T");
   auto col2 = t->columns()[1];
   EXPECT_THAT(col2, ColumnIs("col2", types::TimestampType()));
   EXPECT_TRUE(col2->allows_commit_timestamp());
+
+  // The following tests are skipped because column options are unsupported in
+  // PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
     CREATE TABLE T(
@@ -173,6 +214,8 @@ TEST_P(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_InvalidColumnLength) {
+  // Empty key columns are unsupported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({R"(
     CREATE TABLE T(
       col1 BYTES(1000000000)
@@ -182,6 +225,8 @@ TEST_P(SchemaUpdaterTest, CreateTable_InvalidColumnLength) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_DuplicateKeys) {
+  // Only BYTES(MAX) is supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
@@ -200,6 +245,8 @@ TEST_P(SchemaUpdaterTest, CreateTable_DuplicateColumns) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_ColumnNullability) {
+  // Empty key columns are unsupported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64 NOT NULL,
@@ -272,6 +319,8 @@ TEST_P(SchemaUpdaterTest, CreateTable_Interleave) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_InterleaveMismatch) {
+  // Changing the ordering for key columns is unsupported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE `Parent` (
         k1 INT64 NOT NULL,
@@ -361,6 +410,8 @@ TEST_P(SchemaUpdaterTest, CreateTable_ParentNotFound) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_AddColumn) {
+  // Only BYTES(MAX) is supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -385,6 +436,8 @@ TEST_P(SchemaUpdaterTest, AlterTable_AddColumn) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTableAddColumnIfNotExists) {
+  // IF NOT EXISTS isn't yet supported on the PG side of the emulator
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -423,6 +476,8 @@ TEST_P(SchemaUpdaterTest, AlterTableAddColumnIfNotExists) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_AddColumnAlreadyExists) {
+  // Only BYTES(MAX) is supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -437,6 +492,8 @@ TEST_P(SchemaUpdaterTest, AlterTable_AddColumnAlreadyExists) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterColumn_ChangeColumnType_StaticCheckValid) {
+  // Only BYTES(MAX) is supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -523,6 +580,8 @@ TEST_P(SchemaUpdaterTest, AlterColumn_NotNullToNullable) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnType) {
+  // Only BYTES(MAX) is supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -556,6 +615,8 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnType) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnNullability) {
+  // Only BYTES(MAX) is supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -626,6 +687,8 @@ TEST_P(SchemaUpdaterTest, AlterColumn_KeyColumnNullability) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_UnsetAllowCommitTimestamp) {
+  // Assigning column options is not supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -745,6 +808,8 @@ TEST_P(SchemaUpdaterTest, AlterTable_ChangeOnDelete) {
 }
 
 TEST_P(SchemaUpdaterTest, DropTableNonexistentIfExists) {
+  // IF NOT EXISTS isn't yet supported on the PG side of the emulator
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
@@ -784,6 +849,8 @@ TEST_P(SchemaUpdaterTest, DropTableNonexistentIfExists) {
 }
 
 TEST_P(SchemaUpdaterTest, DropTableIfExists) {
+  // IF NOT EXISTS isn't yet supported on the PG side of the emulator
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
@@ -945,6 +1012,8 @@ TEST_P(SchemaUpdaterTest, ChangeKeyColumn) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_NumericColumns) {
+  // Reenable if PG.Numeric is supported in the emulator.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
@@ -969,6 +1038,8 @@ TEST_P(SchemaUpdaterTest, CreateTable_NumericColumns) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_NumericAsPK) {
+  // Reenable if PG.Numeric is supported in the emulator.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EmulatorFeatureFlags::Flags flags;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
@@ -986,6 +1057,8 @@ TEST_P(SchemaUpdaterTest, CreateTable_NumericAsPK) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_JsonColumns) {
+  // Reenable if PG.JSONB is supported in the emulator.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EmulatorFeatureFlags::Flags flags;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
@@ -1012,6 +1085,8 @@ TEST_P(SchemaUpdaterTest, CreateTable_JsonColumns) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_JsonAsPK) {
+  // Reenable if PG.JSONB is supported in the emulator.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EmulatorFeatureFlags::Flags flags;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(CreateSchema({R"(
@@ -1079,6 +1154,8 @@ TEST_P(SchemaUpdaterTest, InterleaveTableNameIsCaseSensitive) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTableNameIsCaseSensitive) {
+  // Only BYTES(MAX) is supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -1089,6 +1166,8 @@ TEST_P(SchemaUpdaterTest, AlterTableNameIsCaseSensitive) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTableSetOptionsIsCaseSensitive) {
+  // Assigning column options is not supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -1129,6 +1208,8 @@ TEST_P(SchemaUpdaterTest, DropColumnIsCaseSensitive) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTableIfNotExists) {
+  // IF NOT EXISTS isn't yet supported on the PG side of the emulator
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,

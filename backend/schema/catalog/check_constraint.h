@@ -38,6 +38,11 @@ class CheckConstraint : public SchemaNode {
   // Returns the expression.
   const std::string& expression() const { return expression_; }
 
+  // Returns the original dialect expression.
+  const std::optional<std::string>& original_expression() const {
+    return original_expression_;
+  }
+
   // Returns the list of directly dependent columns.
   absl::Span<const Column* const> dependent_columns() const {
     return dependent_columns_;
@@ -94,6 +99,10 @@ class CheckConstraint : public SchemaNode {
   bool has_generated_name_;
 
   std::string expression_;
+
+  // For ZetaSQL, original_expression_ will be null and it is only for other
+  // dialects.
+  std::optional<std::string> original_expression_;
 
   // This is the list of columns that are directly referenced in its expression.
   // Generated columns are not expanded.

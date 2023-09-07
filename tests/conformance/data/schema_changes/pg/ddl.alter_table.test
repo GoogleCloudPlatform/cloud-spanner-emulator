@@ -1,0 +1,688 @@
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE Users ADD COLUMN newcol bigint NOT NULL;
+--
+ERROR: Cannot add NOT NULL column users.newcol to existing table users.
+==
+
+ALTER TABLE Users ADD COLUMN newcol varchar(9999999);
+--
+ERROR: Maximum length for <varchar> fields is 2621440.
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE Users ADD COLUMN newcol bigint;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  newcol bigint,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE Users ADD COLUMN IF NOT EXISTS newcol bigint;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  newcol bigint,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE Users ADD COLUMN nullable bigint NULL;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  nullable bigint,
+  PRIMARY KEY(id)
+);
+==
+
+# TODO: Re-enable when PG.numeric is supported.
+# CREATE TABLE Users (
+#   id bigint PRIMARY KEY
+# );
+# ALTER TABLE users ADD COLUMN newcol numeric;
+# --
+# CREATE TABLE users (
+#   id bigint NOT NULL,
+#   newcol numeric,
+#   PRIMARY KEY(id)
+# );
+# ==
+
+# TODO: Re-enable when PG.jsonb is supported.
+# CREATE TABLE Users (
+#   id bigint PRIMARY KEY
+# );
+# ALTER TABLE users ADD COLUMN newcol jsonb;
+# --
+# CREATE TABLE users (
+#   id bigint NOT NULL,
+#   newcol jsonb,
+#   PRIMARY KEY(id)
+# );
+# ==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE users ADD COLUMN newcol int8[];
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  newcol bigint[],
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE users ADD COLUMN newcol varchar(128)[];
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  newcol character varying(128)[],
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE users ADD COLUMN newcol varchar;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  newcol character varying,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE users ADD COLUMN newcol bytea;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  newcol bytea,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE users ADD COLUMN cts spanner.commit_timestamp;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  cts spanner.commit_timestamp,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE "All_Users_99" (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE "All_Users_99" ADD COLUMN "Weird_and_Long_columN_Name_123" int8;
+--
+CREATE TABLE "All_Users_99" (
+  id bigint NOT NULL,
+  "Weird_and_Long_columN_Name_123" bigint,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE alter_col (
+  id bigint PRIMARY KEY,
+  c1 bytea
+);
+ALTER TABLE alter_col ALTER COLUMN c1 TYPE varchar, ALTER COLUMN c1 SET NOT NULL;
+--
+CREATE TABLE alter_col (
+  id bigint NOT NULL,
+  c1 character varying NOT NULL,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE alter_col (
+  id bigint PRIMARY KEY,
+  c1 bytea NOT NULL
+);
+ALTER TABLE alter_col ALTER COLUMN c1 TYPE varchar, ALTER COLUMN c1 DROP NOT NULL;
+--
+CREATE TABLE alter_col (
+  id bigint NOT NULL,
+  c1 character varying,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  oldcol bigint
+);
+ALTER TABLE Users DROP COLUMN oldcol;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  oldcol bigint
+);
+ALTER TABLE Users DROP COLUMN oldcol RESTRICT;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE "AllUsers_2" (
+  id bigint PRIMARY KEY,
+  "Elaborate_column_Name" bigint
+);
+ALTER TABLE "AllUsers_2" DROP COLUMN "Elaborate_column_Name";
+--
+CREATE TABLE "AllUsers_2" (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Other (
+  id1 bigint,
+  id2 bigint,
+  PRIMARY KEY(id1, id2)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk1 bigint,
+  fk2 bigint
+);
+ALTER TABLE Users ADD CONSTRAINT comp_fk FOREIGN KEY (fk1, fk2) REFERENCES Other(id1, id2);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  fk1 bigint,
+  fk2 bigint,
+  PRIMARY KEY(id),
+  CONSTRAINT comp_fk FOREIGN KEY (fk1, fk2) REFERENCES other(id1, id2)
+);
+==
+
+CREATE TABLE Other (
+  id bigint primary key
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk bigint
+);
+ALTER TABLE Users ADD FOREIGN KEY (fk) REFERENCES Other(id);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  fk bigint,
+  PRIMARY KEY(id),
+  FOREIGN KEY (fk) REFERENCES other(id)
+);
+==
+
+CREATE TABLE other (
+  "ID1" bigint,
+  "ID2" bigint,
+  PRIMARY KEY("ID1", "ID2")
+);
+CREATE TABLE users (
+  id bigint PRIMARY KEY,
+  "Col1" bigint,
+  "Col2" bigint
+);
+ALTER TABLE users ADD CONSTRAINT "comp_FK_99" FOREIGN KEY ("Col1", "Col2") REFERENCES other("ID1", "ID2");
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  "Col1" bigint,
+  "Col2" bigint,
+  PRIMARY KEY(id),
+  CONSTRAINT "comp_FK_99" FOREIGN KEY ("Col1", "Col2") REFERENCES other("ID1", "ID2")
+);
+==
+
+CREATE TABLE Roles (
+  id1 bigint,
+  id2 bigint,
+  PRIMARY KEY(id1, id2)
+);
+CREATE TABLE Users (
+  id bigint primary key,
+  fk1 bigint,
+  fk2 bigint,
+  CONSTRAINT roles_fk FOREIGN KEY (fk1, fk2) REFERENCES Roles(id1, id2)
+);
+ALTER TABLE Users DROP CONSTRAINT roles_fk;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  fk1 bigint,
+  fk2 bigint,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Roles (
+  id1 bigint,
+  id2 bigint,
+  PRIMARY KEY(id1, id2)
+);
+CREATE TABLE "AllUsers_2" (
+  id bigint primary key,
+  fk1 bigint,
+  fk2 bigint,
+  CONSTRAINT "Long_and_Complex_Index_Name_99" FOREIGN KEY (fk1, fk2) REFERENCES Roles(id1, id2)
+);
+ALTER TABLE "AllUsers_2" DROP CONSTRAINT "Long_and_Complex_Index_Name_99";
+--
+CREATE TABLE "AllUsers_2" (
+  id bigint NOT NULL,
+  fk1 bigint,
+  fk2 bigint,
+  PRIMARY KEY(id)
+);
+==
+
+ALTER TABLE Users ALTER COLUMN name SET NOT NULL;
+--
+ERROR: <SET/DROP NOT NULL> are allowed only after <ALTER COLUMN> action of <ALTER TABLE> statement.
+==
+
+ALTER TABLE Users ALTER COLUMN name DROP NOT NULL;
+--
+ERROR: <SET/DROP NOT NULL> are allowed only after <ALTER COLUMN> action of <ALTER TABLE> statement.
+==
+
+ALTER TABLE Users ADD COLUMN newcol bigint PRIMARY KEY;
+--
+ERROR: Primary keys cannot be added via <ALTER TABLE> statement.
+==
+
+ALTER TABLE IF EXISTS Users ADD COLUMN newcol bigint;
+--
+ERROR: <IF [NOT] EXISTS> is not supported in <ALTER> statement.
+==
+
+ALTER TABLE Users ADD COLUMN fk bigint CONSTRAINT ref REFERENCES Roles(id);
+--
+ERROR: Foreign key creation is not supported in <ALTER TABLE ADD COLUMN> statement.
+==
+
+ALTER TABLE Users DROP COLUMN IF EXISTS oldcol;
+--
+ERROR: <IF [NOT] EXISTS> is not supported in <ALTER> statement operations.
+==
+
+ALTER TABLE Users DROP COLUMN oldcol CASCADE;
+--
+ERROR: Only <RESTRICT> drop mode is supported in <ALTER> statement operations.
+==
+
+ALTER TABLE Users ADD UNIQUE (name);
+--
+ERROR: Constraint type is not supported.
+==
+
+CREATE TABLE Users (
+  id bigint primary key,
+  val bigint
+);
+ALTER TABLE Users ADD CHECK (val > 0);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  val bigint,
+  PRIMARY KEY(id),
+  CHECK((val > '0'::bigint))
+);
+==
+
+ALTER TABLE Users ADD PRIMARY KEY (newid);
+--
+ERROR: Constraint type is not supported.
+==
+
+ALTER TABLE Users ADD EXCLUDE USING gist (position WITH =);
+--
+ERROR: Constraint type is not supported.
+==
+
+ALTER TABLE Users DROP CONSTRAINT IF EXISTS con;
+--
+ERROR: <IF [NOT] EXISTS> is not supported in <ALTER> statement operations.
+==
+
+ALTER TABLE Users DROP CONSTRAINT con CASCADE;
+--
+ERROR: Only <RESTRICT> drop mode is supported in <ALTER> statement operations.
+==
+
+# TODO: Re-enable when on-delete-cascade for foreign keys is
+# supported in the emulator.
+# CREATE TABLE Other (
+#   id1 bigint,
+#   id2 bigint,
+#   PRIMARY KEY(id1, id2)
+# );
+# CREATE TABLE Users (
+#   id bigint PRIMARY KEY,
+#   fk1 bigint,
+#   fk2 bigint
+# );
+# ALTER TABLE Users ADD CONSTRAINT comp_fk FOREIGN KEY (fk1, fk2) REFERENCES Other(id1, id2) ON DELETE CASCADE;
+# --
+# CREATE TABLE users (
+#   id bigint NOT NULL,
+#   fk1 bigint,
+#   fk2 bigint,
+#   PRIMARY KEY(id),
+#   CONSTRAINT comp_fk FOREIGN KEY (fk1, fk2) REFERENCES other(id1, id2) ON DELETE CASCADE
+# );
+# ==
+
+CREATE TABLE Other (
+  id1 bigint,
+  id2 bigint,
+  PRIMARY KEY(id1, id2)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk1 bigint,
+  fk2 bigint
+);
+ALTER TABLE Users ADD CONSTRAINT comp_fk FOREIGN KEY (fk1, fk2) REFERENCES Other(id1, id2) MATCH SIMPLE;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  fk1 bigint,
+  fk2 bigint,
+  PRIMARY KEY(id),
+  CONSTRAINT comp_fk FOREIGN KEY (fk1, fk2) REFERENCES other(id1, id2)
+);
+==
+
+CREATE TABLE Other (
+  id1 bigint,
+  id2 bigint,
+  PRIMARY KEY(id1, id2)
+);
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  fk1 bigint,
+  fk2 bigint
+);
+ALTER TABLE Users ADD CONSTRAINT comp_fk FOREIGN KEY (fk1, fk2) REFERENCES Other(id1, id2) ON DELETE NO ACTION;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  fk1 bigint,
+  fk2 bigint,
+  PRIMARY KEY(id),
+  CONSTRAINT comp_fk FOREIGN KEY (fk1, fk2) REFERENCES other(id1, id2)
+);
+==
+
+# TODO: When named schema is supported, re-enable this test.
+# ALTER TABLE Users ADD CONSTRAINT comp_fk FOREIGN KEY (fk1, fk2) REFERENCES Sname.Other(id1, id2) ON DELETE NO ACTION;
+# --
+# ALTER TABLE users ADD CONSTRAINT comp_fk FOREIGN KEY (fk1, fk2) REFERENCES sname.other(id1, id2)
+# ==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  name varchar
+);
+ALTER TABLE users ADD CONSTRAINT check_constraint CHECK(name IS NOT NULL);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  name character varying,
+  PRIMARY KEY(id),
+  CONSTRAINT check_constraint CHECK((name IS NOT NULL))
+);
+==
+
+CREATE TABLE users (
+  id bigint PRIMARY KEY,
+  c1 bytea
+);
+ALTER TABLE users ALTER COLUMN c1 TYPE varchar;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  c1 character varying,
+  PRIMARY KEY(id)
+);
+==
+
+ALTER TABLE wrong_action ALTER COLUMN c1 TYPE bigint, ALTER COLUMN c1 SET NOT NULL, ALTER COLUMN c1 DROP DEFAULT;
+--
+ERROR: <ALTER TABLE ALTER COLUMN> statement can only modify one column at a time and only support <ALTER COLUMN SET DATA TYPE> and <ALTER COLUMN {SET|DROP} NOT NULL>.
+==
+
+ALTER TABLE users ADD CONSTRAINT check_constraint CHECK(name IS NOT NULL) NO INHERIT;
+--
+ERROR: <NO INHERIT> clause is not supported in constraints.
+==
+
+ALTER TABLE Users ADD CONSTRAINT comp_fk FOREIGN KEY (fk1) REFERENCES Other(id1) NOT VALID;
+--
+ERROR: <NOT VALID> clause is not supported in <ALTER TABLE ADD> statement.
+==
+
+ALTER TABLE t1 DROP COLUMN f1, DROP COLUMN f2;
+--
+ERROR: For the provided action type of the <ALTER TABLE> statement only single action per statement is allowed.
+==
+
+ALTER TABLE users ADD COLUMN c1 BIGINT CHECK(val>0);
+--
+ERROR: Check constraint creation is not supported in <ALTER TABLE ADD COLUMN> statement
+==
+
+ALTER TABLE t ADD PRIMARY KEY USING INDEX idx;
+--
+ERROR: Constraint type is not supported.
+==
+
+ALTER TABLE t;
+--
+ERROR: [ERROR] syntax error at end of input; failed to parse the DDL statements.
+==
+
+ALTER VIEW view SET (param);
+--
+ERROR: Object type is not supported in <ALTER> statement.
+==
+
+ALTER TABLE cname.sname.tname DROP COLUMN col;
+--
+ERROR: Catalog in the name is not supported in <ALTER TABLE> statement.
+==
+
+# TODO: When named schema is supported, re-enable this test.
+# ALTER TABLE sname.tname DROP COLUMN col;
+# --
+# ALTER TABLE sname.tname DROP COLUMN col
+# ==
+
+ALTER TABLE tname/*@ FORCE_INDEX=idx1*/ DROP COLUMN col;
+--
+ERROR: Table hints are not supported in <ALTER TABLE> statement.
+==
+
+ALTER TABLE wrong_action ALTER COLUMN c1 TYPE bigint, ADD FOREIGN KEY (fk) REFERENCES tbl(id);
+--
+ERROR: Only <SET/DROP NOT NULL> action is allowed after <ALTER COLUMN> action of <ALTER TABLE> statement.
+==
+
+ALTER TABLE wrong_column ALTER COLUMN c1 TYPE bigint, ALTER COLUMN other SET NOT NULL;
+--
+ERROR: Both actions (<SET DATA TYPE> and <{SET|DROP} NOT NULL>) of <ALTER TABLE ALTER COLUMN> statement should be applied to the same column.
+==
+
+ALTER TABLE using_not_supported ALTER col TYPE bigint USING other_col+2, ALTER using_not_supported SET NOT NULL;
+--
+ERROR: <USING> clause is not supported in <ALTER TABLE ALTER COLUMN TYPE> statement
+==
+
+ALTER TABLE parse_error_without_semicolon
+--
+ERROR: [ERROR] syntax error at end of input
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE public.users ADD COLUMN newcol bigint;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  newcol bigint,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE vanishing_data (
+  id bigint PRIMARY KEY,
+  shadow_date timestamptz
+) TTL INTERVAL '5 DAYS' ON shadow_date;
+ALTER TABLE vanishing_data ALTER TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date
+--
+CREATE TABLE vanishing_data (
+  id bigint NOT NULL,
+  shadow_date timestamp with time zone,
+  PRIMARY KEY(id)
+) TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date;
+==
+
+ALTER TABLE bad_interval ALTER TTL INTERVAL 'filbert' ON shadow_date
+--
+ERROR: invalid input syntax for type interval: "filbert"
+==
+
+ALTER TABLE no_interval ALTER TTL INTERVAL '' ON shadow_date
+--
+ERROR: invalid input syntax for type interval: ""
+==
+
+ALTER TABLE no_column ALTER TTL INTERVAL '1 day'
+--
+ERROR: [ERROR] syntax error at end of input; failed to parse the DDL statements.
+
+==
+
+CREATE TABLE ttl_table (
+  id bigint PRIMARY KEY,
+  shadow_date timestamptz
+) TTL INTERVAL '5 DAYS' ON shadow_date;
+ALTER TABLE ttl_table DROP TTL;
+--
+CREATE TABLE ttl_table (
+  id bigint NOT NULL,
+  shadow_date timestamp with time zone,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE vanishing_data (
+  id bigint PRIMARY KEY,
+  shadow_date timestamptz
+);
+ALTER TABLE vanishing_data ADD TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date
+--
+CREATE TABLE vanishing_data (
+  id bigint NOT NULL,
+  shadow_date timestamp with time zone,
+  PRIMARY KEY(id)
+) TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date;
+==
+
+ALTER TABLE bad_interval ADD TTL INTERVAL 'filbert' ON shadow_date
+--
+ERROR: invalid input syntax for type interval: "filbert"
+==
+
+CREATE TABLE no_interval (
+  id bigint PRIMARY KEY,
+  shadow_date timestamptz
+);
+ALTER TABLE no_interval ADD TTL INTERVAL '' ON shadow_date
+--
+ERROR: invalid input syntax for type interval: ""
+==
+
+CREATE TABLE no_interval (
+  id bigint PRIMARY KEY,
+  shadow_date timestamptz
+);
+ALTER TABLE no_interval ADD TTL INTERVAL '-1 DAY' ON shadow_date
+--
+ERROR: TTL interval must be greater than or equal to zero
+==
+
+CREATE TABLE no_interval (
+  id bigint PRIMARY KEY,
+  shadow_date timestamptz
+);
+ALTER TABLE no_interval ADD TTL INTERVAL '0 DAYS' ON shadow_date
+--
+CREATE TABLE no_interval (
+  id bigint NOT NULL,
+  shadow_date timestamp with time zone,
+  PRIMARY KEY(id)
+) TTL INTERVAL '0 DAYS' ON shadow_date;
+==
+
+ALTER TABLE no_column ADD TTL INTERVAL '1 day'
+--
+ERROR: [ERROR] syntax error at end of input; failed to parse the DDL statements.
+==
+
+CREATE TABLE parent (
+  name varchar NOT NULL,
+  PRIMARY KEY(name)
+);
+CREATE TABLE "Test" (
+  name varchar,
+  id bigint,
+  PRIMARY KEY(name, id)
+) INTERLEAVE IN PARENT parent;
+ALTER TABLE "Test" SET ON DELETE CASCADE
+--
+CREATE TABLE "Test" (
+  name character varying NOT NULL,
+  id bigint NOT NULL,
+  PRIMARY KEY(name, id)
+) INTERLEAVE IN PARENT parent ON DELETE CASCADE;
+==
+
+# TODO: When named schema is supported, re-enable this test.
+# ALTER TABLE "Schema_a"."Test" SET ON DELETE NO ACTION
+# --
+# ALTER TABLE "Schema_a"."Test" SET ON DELETE NO ACTION

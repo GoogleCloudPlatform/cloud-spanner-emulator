@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/type.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -42,12 +43,19 @@
 #include "backend/storage/in_memory_storage.h"
 #include "common/errors.h"
 #include "common/limits.h"
+#include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
+#include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
 namespace test {
+
+using postgres_translator::spangres::CreateSpangresDirectSchemaPrinter;
+using postgres_translator::spangres::SpangresSchemaPrinter;
+
+namespace database_api = ::google::spanner::admin::database::v1;
 
 // Matcher for matching an absl::StatusOr with an expected status.
 MATCHER_P(StatusIs, status, "") { return arg.status() == status; }
@@ -152,14 +160,27 @@ class SchemaUpdaterTest
  public:
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
       absl::Span<const std::string> statements
+      ,
+      const database_api::DatabaseDialect& dialect = GetParam(),
+      bool use_gsql_to_pg_translation = true
   );
 
   absl::StatusOr<std::unique_ptr<const Schema>> UpdateSchema(
       const Schema* base_schema,
       absl::Span<const std::string> statements
+      ,
+      const database_api::DatabaseDialect& dialect = GetParam(),
+      bool use_gsql_to_pg_translation = true
   );
 
  protected:
+  void SetUp() override {
+    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+      pg_schema_printer_ = CreateSpangresDirectSchemaPrinter().value();
+    }
+  }
+
+  std::unique_ptr<SpangresSchemaPrinter> pg_schema_printer_;
   zetasql::TypeFactory type_factory_;
   TableIDGenerator table_id_generator_;
   ColumnIDGenerator column_id_generator_;
@@ -167,8 +188,8 @@ class SchemaUpdaterTest
 
 INSTANTIATE_TEST_SUITE_P(
     SchemaUpdaterPerDialectTests, SchemaUpdaterTest,
-    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
-                    ),
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
     [](const testing::TestParamInfo<SchemaUpdaterTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
     });

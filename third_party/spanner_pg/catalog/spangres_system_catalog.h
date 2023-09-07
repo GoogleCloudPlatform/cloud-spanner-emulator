@@ -1,0 +1,136 @@
+//
+// PostgreSQL is released under the PostgreSQL License, a liberal Open Source
+// license, similar to the BSD or MIT licenses.
+//
+// PostgreSQL Database Management System
+// (formerly known as Postgres, then as Postgres95)
+//
+// Portions Copyright © 1996-2020, The PostgreSQL Global Development Group
+//
+// Portions Copyright © 1994, The Regents of the University of California
+//
+// Portions Copyright 2023 Google LLC
+//
+// Permission to use, copy, modify, and distribute this software and its
+// documentation for any purpose, without fee, and without a written agreement
+// is hereby granted, provided that the above copyright notice and this
+// paragraph and the following two paragraphs appear in all copies.
+//
+// IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO ANY PARTY FOR
+// DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, INCLUDING
+// LOST PROFITS, ARISING OUT OF THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION,
+// EVEN IF THE UNIVERSITY OF CALIFORNIA HAS BEEN ADVISED OF THE POSSIBILITY OF
+// SUCH DAMAGE.
+//
+// THE UNIVERSITY OF CALIFORNIA SPECIFICALLY DISCLAIMS ANY WARRANTIES,
+// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+// FITNESS FOR A PARTICULAR PURPOSE. THE SOFTWARE PROVIDED HEREUNDER IS ON AN
+// "AS IS" BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATIONS TO PROVIDE
+// MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
+//------------------------------------------------------------------------------
+
+#ifndef CATALOG_SPANGRES_SYSTEM_CATALOG_H_
+#define CATALOG_SPANGRES_SYSTEM_CATALOG_H_
+
+#include "zetasql/public/language_options.h"
+#include "absl/memory/memory.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "third_party/spanner_pg/catalog/engine_system_catalog.h"
+#include "third_party/spanner_pg/interface/engine_builtin_function_catalog.h"
+
+namespace postgres_translator {
+namespace spangres {
+
+constexpr absl::string_view kSpangresSystemCatalogName = "pg";
+
+// A derived class of EngineSystemCatalog which represents the PostgreSQL types
+// and functions supported in Spanner through the PostgreSQL dialect.
+class SpangresSystemCatalog : public EngineSystemCatalog {
+ public:
+  // Attempt to initialize the EngineSystemCatalog singleton with a
+  // SpangresSystemCatalog.
+  // Returns true if successful, false if EngineSystemCatalog was already
+  // initialized, and an error if there was a problem initializing the catalog.
+  static absl::StatusOr<bool> TryInitializeEngineSystemCatalog(
+      std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog,
+      const zetasql::LanguageOptions& language_options);
+
+  // Test-only method to reset the EngineSystemCatalog. This is useful, for
+  // example, when you expect the catalog to initialise differently for
+  // different tests based on flag values.
+  static void ResetEngineSystemCatalogForTest();
+
+  const PostgresTypeMapping* GetType(const std::string& name) const override;
+
+  bool IsTransformationRequiredForComparison(
+      const zetasql::ResolvedExpr& gsql_expr) override;
+
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  GetResolvedExprForComparison(
+      std::unique_ptr<zetasql::ResolvedExpr> gsql_expr,
+      const zetasql::LanguageOptions& language_options) override;
+
+  virtual bool IsResolvedExprForComparison(
+      const zetasql::ResolvedExpr& gsql_expr) const override;
+
+  virtual absl::StatusOr<const zetasql::ResolvedExpr*>
+  GetOriginalExprFromComparisonExpr(
+      const zetasql::ResolvedExpr& mapped_gsql_expr) const override;
+
+  virtual std::optional<Oid> GetMappedOidForComparisonFuncid(
+      Oid funcid) const override;
+
+  absl::StatusOr<zetasql::TypeListView> GetExtendedTypeSuperTypes(
+      const zetasql::Type* type) override;
+
+  // Get the matching function and signature for this oid and set of input
+  // argument types. Returns an error if the function call is not supported.
+  absl::StatusOr<FunctionAndSignature> GetFunctionAndSignature(
+      Oid proc_oid,
+      const std::vector<zetasql::InputArgumentType>& input_argument_types,
+      const zetasql::LanguageOptions& language_options) override;
+
+  // Get the matching function and signature for this expr identifier and set of
+  // input argument types. Returns an error if the function call is not
+  // supported.
+  absl::StatusOr<FunctionAndSignature> GetFunctionAndSignature(
+      const PostgresExprIdentifier& expr_id,
+      const std::vector<zetasql::InputArgumentType>& input_argument_types,
+      const zetasql::LanguageOptions& language_options) override;
+
+ private:
+  SpangresSystemCatalog(
+      std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog)
+      : EngineSystemCatalog(kSpangresSystemCatalogName,
+                            std::move(builtin_function_catalog)) {}
+
+  // Add PostgreSQL types for Spanner.
+  absl::Status AddTypes(
+      const zetasql::LanguageOptions& language_options) override;
+
+  // Add PostgreSQL functions for Spanner.
+  absl::Status AddFunctions(
+      const zetasql::LanguageOptions& language_options) override;
+
+  // If the input `gsql_expr` returns a double type, wraps it in a call to
+  // PG.MapDoubleToInt in order to preserve double/float8 ordering and equality
+  // semantics.
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  GetResolvedExprForDoubleComparison(
+      std::unique_ptr<zetasql::ResolvedExpr> gsql_expr,
+      const zetasql::LanguageOptions& language_options);
+
+  // MapDoubleToInt function is necessary because Spanner has different sort
+  // semantics for FLOAT8 type compared to Postgres. Wrapping ResolvedExprs
+  // which return FLOAT8 with this function allows sort and comparison semantics
+  // to be equivalent.
+  absl::StatusOr<FunctionAndSignature> GetMapDoubleToIntFunction(
+      const zetasql::LanguageOptions& language_options);
+};
+
+}  // namespace spangres
+}  // namespace postgres_translator
+
+#endif  // CATALOG_SPANGRES_SYSTEM_CATALOG_H_

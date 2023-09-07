@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "absl/status/status.h"
 #include "absl/status/status.h"
 
@@ -28,6 +29,8 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace test {
+
+using ::google::spanner::admin::database::v1::DatabaseDialect;
 
 // Options for the file based test runner.
 struct FileBasedTestOptions {
@@ -46,16 +49,14 @@ struct FileBasedTestOptions {
 
 // Input for a file based test case.
 struct FileBasedTestCaseInput {
-  FileBasedTestCaseInput(absl::string_view file_name,
-                         int line_no
-                         )
-      : file_name(file_name),
-        line_no(line_no)
-  {}
+  FileBasedTestCaseInput(absl::string_view file_name, int line_no,
+                         const DatabaseDialect& dialect)
+      : file_name(file_name), line_no(line_no), dialect(dialect) {}
   std::string text;
   bool regex = false;
   std::string file_name;
   int line_no = 0;
+  DatabaseDialect dialect;
 };
 
 // Output for a file based test case.
@@ -67,21 +68,17 @@ struct FileBasedTestCaseOutput {
 
 // Container for input and exected result of a file-based test case.
 struct FileBasedTestCase {
-  FileBasedTestCase(absl::string_view file_name,
-                    int line_no
-                    )
-      : input(file_name,
-              line_no
-        ) {}
+  FileBasedTestCase(absl::string_view file_name, int line_no,
+                    const DatabaseDialect& dialect)
+      : input(file_name, line_no, dialect) {}
   FileBasedTestCaseInput input;
   FileBasedTestCaseOutput expected;
 };
 
 // Reads and returns all testcases in `file`.
 std::vector<FileBasedTestCase> ReadTestCasesFromFile(
-    const std::string& file,
-    const FileBasedTestOptions& options
-);
+    const std::string& file, const FileBasedTestOptions& options,
+    const DatabaseDialect& dialect = DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 // Returns the runfiles directory for the given source-root relative directory.
 std::string GetRunfilesDir(const std::string& dir);

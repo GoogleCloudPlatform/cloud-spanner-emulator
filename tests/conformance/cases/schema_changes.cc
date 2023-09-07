@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -49,11 +50,16 @@ namespace {
 using cloud::spanner::Bytes;
 using cloud::spanner::InsertMutationBuilder;
 using zetasql_base::testing::StatusIs;
+using ::google::spanner::admin::database::v1::DatabaseDialect;
+
 template <class T>
 using optional = google::cloud::optional<T>;
 
 // Directory containing schema change test files.
 const char kSchemaChangeTestDataDir[] = "tests/conformance/data/schema_changes";
+
+// Directory containing PostgreSQL DDL test files.
+const char kPgDdlTestDataDir[] = "tests/conformance/data/schema_changes/pg";
 
 // List of schema change test files within the directory above.
 const absl::string_view kSchemaChangeTestFiles[] = {
@@ -61,6 +67,23 @@ const absl::string_view kSchemaChangeTestFiles[] = {
     "column_default_values.test", "combined.test",
     "foreign_key.test",           "generated_column.test",
     "key_column_alteration.test", "views.test",
+};
+
+const absl::string_view kPgDdlTestFiles[] = {
+    "ddl.create_index.test",
+    "ddl.create_table.test",
+    "ddl.create_table_checkconstraint.test",
+    "ddl.create_table_generatedcolumn_default.test",
+    "ddl.create_view.test",
+    "ddl.create_change_stream.test",
+    "ddl.foreign_keys.test",
+    "ddl.alter_table.test",
+    "ddl.alter_table_generatedcolumn_default.test",
+    "ddl.alter_change_stream.test",
+    "ddl.drop_index.test",
+    "ddl.drop_table.test",
+    "ddl.drop_view.test",
+    "ddl.drop_change_stream.test",
 };
 
 constexpr std::array<char, 10> kBytesLiteral = {'\xd0', '\xb0', '\xd0', '\xb1',
@@ -84,6 +107,8 @@ class SchemaChangeTest
       const FileBasedTestCaseInput& input) {
     // Check that we were not mistakenly passed an empty test case.
     ZETASQL_RET_CHECK(!input.text.empty()) << "Found empty schema change test case.";
+
+    dialect_ = input.dialect;
 
     // Reset the database used for this test.
     ZETASQL_RETURN_IF_ERROR(ResetDatabase());
@@ -120,28 +145,35 @@ class SchemaChangeTest
   }
 
   // Returns list of all schema change test files.
-  static std::vector<std::string> GetAllTestFiles(
-  ) {
+  static std::vector<std::string> GetAllTestFiles(DatabaseDialect dialect) {
     std::vector<std::string> result;
-    std::string root_dir = GetRunfilesDir(kSchemaChangeTestDataDir);
+    std::string root_dir = dialect == DatabaseDialect::POSTGRESQL
+                               ? GetRunfilesDir(kPgDdlTestDataDir)
+                               : GetRunfilesDir(kSchemaChangeTestDataDir);
+    if (dialect == DatabaseDialect::POSTGRESQL) {
+      for (absl::string_view filename : kPgDdlTestFiles) {
+        result.push_back(absl::StrCat(root_dir, "/", filename));
+      }
+    } else {
       for (absl::string_view filename : kSchemaChangeTestFiles) {
         result.push_back(absl::StrCat(root_dir, "/", filename));
       }
+    }
     return result;
   }
 
   // Returns list of all test cases from all the test case files.
   static std::vector<FileBasedTestCase> GetAllTestCases() {
     std::vector<FileBasedTestCase> test_cases;
-      for (const auto& file : GetAllTestFiles(
-               )) {
-        const auto file_cases = ReadTestCasesFromFile(
-            file,
-            FileBasedTestOptions{}
-        );
+    for (DatabaseDialect dialect :
+         {DatabaseDialect::POSTGRESQL, DatabaseDialect::GOOGLE_STANDARD_SQL}) {
+      for (const auto& file : GetAllTestFiles(dialect)) {
+        const auto file_cases =
+            ReadTestCasesFromFile(file, FileBasedTestOptions{}, dialect);
         test_cases.insert(test_cases.end(), file_cases.begin(),
                           file_cases.end());
       }
+    }
     return test_cases;
   }
 };

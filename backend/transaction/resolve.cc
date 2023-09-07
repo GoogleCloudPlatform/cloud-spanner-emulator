@@ -53,6 +53,7 @@ KeySet SetSortOrder(const Table* table, const KeySet& key_set) {
     // Set ascending and descending values for the keys.
     for (int i = 0; i < new_key.NumColumns(); ++i) {
       new_key.SetColumnDescending(i, table->primary_key()[i]->is_descending());
+      new_key.SetColumnNullsLast(i, table->primary_key()[i]->is_nulls_last());
     }
     result_set.AddKey(new_key);
   }
@@ -63,10 +64,14 @@ KeySet SetSortOrder(const Table* table, const KeySet& key_set) {
     for (int i = 0; i < range.start_key().NumColumns(); ++i) {
       new_range.start_key().SetColumnDescending(
           i, table->primary_key()[i]->is_descending());
+      new_range.start_key().SetColumnNullsLast(
+          i, table->primary_key()[i]->is_nulls_last());
     }
     for (int i = 0; i < range.limit_key().NumColumns(); ++i) {
       new_range.limit_key().SetColumnDescending(
           i, table->primary_key()[i]->is_descending());
+      new_range.limit_key().SetColumnNullsLast(
+          i, table->primary_key()[i]->is_nulls_last());
     }
     result_set.AddRange(new_range);
   }
@@ -189,8 +194,7 @@ Key ComputeKey(const ValueList& row,
         key_indices[i].has_value()
             ? row[key_indices[i].value()]
             : zetasql::Value::Null(primary_key[i]->column()->GetType()),
-        primary_key[i]->is_descending()
-    );
+        primary_key[i]->is_descending(), primary_key[i]->is_nulls_last());
   }
   return key;
 }

@@ -68,14 +68,13 @@ Key::Key() = default;
 
 Key::Key(std::vector<zetasql::Value> columns)
     : columns_(std::move(columns)),
-      is_descending_(columns_.size())
-{}
+      is_descending_(columns_.size()),
+      is_nulls_last_(columns_.size()) {}
 
-void Key::AddColumn(zetasql::Value value,
-                    bool desc
-) {
+void Key::AddColumn(zetasql::Value value, bool desc, bool is_nulls_last) {
   columns_.emplace_back(std::move(value));
   is_descending_.push_back(desc);
+  is_nulls_last_.push_back(is_nulls_last);
 }
 
 int Key::NumColumns() const { return columns_.size(); }
@@ -85,10 +84,12 @@ void Key::SetColumnValue(int i, zetasql::Value value) {
 }
 
 void Key::SetColumnDescending(int i, bool value) { is_descending_[i] = value; }
+void Key::SetColumnNullsLast(int i, bool value) { is_nulls_last_[i] = value; }
 
 const zetasql::Value& Key::ColumnValue(int i) const { return columns_[i]; }
 
 bool Key::IsColumnDescending(int i) const { return is_descending_[i]; }
+bool Key::IsColumnNullsLast(int i) const { return is_nulls_last_[i]; }
 
 int Key::Compare(const Key& other) const {
   // Handle infinity keys first.
@@ -104,6 +105,15 @@ int Key::Compare(const Key& other) const {
     if (i >= other.columns_.size()) {
       // If we reached here, other is a prefix of *this.
       return other.is_prefix_limit_ ? -1 : 1;
+    }
+    if (columns_[i].is_null() && other.columns_[i].is_null()) {
+      continue;
+    }
+    if (columns_[i].is_null() && !other.columns_[i].is_null()) {
+      return is_nulls_last_[i] ? 1 : -1;
+    }
+    if (other.columns_[i].is_null()) {
+      return is_nulls_last_[i] ? -1 : 1;
     }
     if (columns_[i].LessThan(other.columns_[i])) {
       return is_descending_[i] ? 1 : -1;

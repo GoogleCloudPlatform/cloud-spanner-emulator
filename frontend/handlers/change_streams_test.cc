@@ -16,27 +16,36 @@
 
 #include "tests/common/change_streams.h"
 
+#include <algorithm>
 #include <string>
 #include <thread>  // NOLINT
 #include <vector>
 
 #include "google/protobuf/struct.pb.h"
+#include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "google/spanner/v1/commit_response.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/flags/flag.h"
+#include "absl/flags/reflection.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/time.h"
+#include "backend/database/change_stream/change_stream_partition_churner.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "common/clock.h"
 #include "frontend/handlers/change_streams.h"
 #include "tests/common/chunking.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
+#include "grpcpp/client_context.h"
+#include "zetasql/base/ret_check.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -53,17 +62,19 @@ using zetasql_base::testing::StatusIs;
 class ChangeStreamQueryAPITest : public test::ServerTest {
  public:
   void SetUp() override {
-    absl::SetFlag(
-        &FLAGS_cloud_spanner_emulator_read_mock_change_streams_internal_tables,
-        true);
+    // Set churning interval and churner thread sleep interval to 1 second to
+    // prevent long running unit tests.
+    absl::SetFlag(&FLAGS_change_stream_churning_interval,
+                  absl::Milliseconds(500));
+    absl::SetFlag(&FLAGS_change_stream_churn_thread_sleep_interval,
+                  absl::Milliseconds(500));
     ZETASQL_ASSERT_OK(CreateTestInstance());
     ZETASQL_ASSERT_OK(CreateTestDatabaseWithChangeStream());
     ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_, CreateTestSession());
     now_ = Clock().Now();
     now_str_ = test::EncodeTimestampString(now_);
-    ZETASQL_ASSERT_OK(PopulatePartitionTable());
-    ZETASQL_ASSERT_OK(PopulateDataTable());
-    null_end_initial_query_ = absl::Substitute(
+    ZETASQL_ASSERT_OK(PopulateTestDatabase());
+    valid_initial_query_ = absl::Substitute(
         "SELECT * FROM "
         "READ_change_stream_test_table ('$0', NULL, NULL, 10000 )",
         now_);
@@ -72,20 +83,19 @@ class ChangeStreamQueryAPITest : public test::ServerTest {
         "executed via single use transactions using the ExecuteStreamingSql "
         "API.";
   }
-
+  absl::FlagSaver flag_saver_;
   std::string test_session_uri_;
-  std::string null_end_initial_query_;
+  std::string valid_initial_query_;
   std::string transaction_selector_err_msg_;
   absl::Time now_;
   std::string now_str_;
   absl::StatusOr<test::ChangeStreamRecords> ExecuteChangeStreamQuery(
-      const std::string& sql) {
+      const std::string& sql, const std::string& transaction_selector = "{}") {
     spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(absl::Substitute(
         R"pb(
-          transaction {}
-          sql: "$0"
+          transaction $0 sql: "$1"
         )pb",
-        sql));
+        transaction_selector, sql));
     request.set_session(test_session_uri_);
 
     std::vector<spanner_api::PartialResultSet> response;
@@ -122,22 +132,73 @@ class ChangeStreamQueryAPITest : public test::ServerTest {
                         status.message());
   }
 
-  absl::Status DropChangeStream() {
+  absl::Status UpdateSchema(std::vector<std::string> statements) {
     database_api::UpdateDatabaseDdlMetadata metadata;
-    std::vector<std::string> statements = {R"(
-     DROP CHANGE STREAM change_stream_test_table
-  )"};
     return UpdateDatabaseDdl(test_database_uri_, statements, &metadata);
   }
 
-  absl::Status ChangeRetentionToZeroSec() {
-    absl::SetFlag(&FLAGS_cloud_spanner_emulator_disable_cs_retention_check,
-                  true);
-    database_api::UpdateDatabaseDdlMetadata metadata;
-    std::vector<std::string> statements = {R"(
-     ALTER CHANGE STREAM change_stream_test_table SET OPTIONS ( retention_period='0s' )
-  )"};
-    return UpdateDatabaseDdl(test_database_uri_, statements, &metadata);
+  absl::StatusOr<std::string> GetActiveTokenFromInitialQuery(absl::Time start) {
+    std::string sql = absl::Substitute(
+        "SELECT * FROM "
+        "READ_change_stream_test_table ('$0',NULL, NULL, 10000 )",
+        start);
+    ZETASQL_ASSIGN_OR_RETURN(test::ChangeStreamRecords change_records,
+                     ExecuteChangeStreamQuery(sql));
+    std::string active_partition_token = "|";
+    for (const auto& child_partition_record :
+         change_records.child_partition_records) {
+      for (const auto& child_partition :
+           child_partition_record.child_partitions.values()) {
+        active_partition_token =
+            std::min(active_partition_token,
+                     child_partition.list_value().values(0).string_value());
+      }
+    }
+    return active_partition_token;
+  }
+
+  absl::Status InsertOneRow(absl::string_view table_name) {
+    spanner_api::CommitRequest commit_request = PARSE_TEXT_PROTO(
+        absl::Substitute(R"pb(
+                           single_use_transaction { read_write {} }
+                           mutations {
+                             insert {
+                               table: "$0"
+                               columns: "int64_col"
+                               columns: "string_col"
+                               values {
+                                 values { string_value: "2" }
+                                 values { string_value: "row_2" }
+                               }
+                             }
+                           }
+                         )pb",
+                         table_name));
+    *commit_request.mutable_session() = test_session_uri_;
+
+    spanner_api::CommitResponse commit_response;
+    return Commit(commit_request, &commit_response);
+  }
+
+  absl::Status PopulateTestDatabase() {
+    spanner_api::CommitRequest commit_request = PARSE_TEXT_PROTO(R"pb(
+      single_use_transaction { read_write {} }
+      mutations {
+        insert {
+          table: "test_table"
+          columns: "int64_col"
+          columns: "string_col"
+          values {
+            values { string_value: "1" }
+            values { string_value: "row_1" }
+          }
+        }
+      }
+    )pb");
+    *commit_request.mutable_session() = test_session_uri_;
+
+    spanner_api::CommitResponse commit_response;
+    return Commit(commit_request, &commit_response);
   }
 
   // Populate a fake partition table for testing purpose before partition token
@@ -185,7 +246,7 @@ class ChangeStreamQueryAPITest : public test::ServerTest {
                   values {
                     values { string_value: "historical_token1" }
                     values { string_value: "$2" }
-                    values { string_value: "$3" }
+                    values { string_value: "$0" }
                     values {
                       list_value: { values
                                     [] }
@@ -209,8 +270,8 @@ class ChangeStreamQueryAPITest : public test::ServerTest {
                   }
                   values {
                     values { string_value: "future_token1" }
-                    values { string_value: "$4" }
-                    values { string_value: "$5" }
+                    values { string_value: "$1" }
+                    values { string_value: "$3" }
                     values {
                       list_value: { values { string_value: "initial_token1" } }
                     }
@@ -225,131 +286,7 @@ class ChangeStreamQueryAPITest : public test::ServerTest {
             test::EncodeTimestampString(now_),
             test::EncodeTimestampString(now_ + absl::Seconds(1)),
             test::EncodeTimestampString(now_ - absl::Seconds(1)),
-            test::EncodeTimestampString(now_),
-            test::EncodeTimestampString(now_ + absl::Seconds(1)),
             test::EncodeTimestampString(now_ + absl::Seconds(2))));
-    *commit_request.mutable_session() = test_session_uri_;
-    spanner_api::CommitResponse commit_response;
-    return Commit(commit_request, &commit_response);
-  }
-
-  std::string ConstructFakeDataChangeRecord(
-      absl::string_view partition_token, absl::string_view record_sequence,
-      absl::Duration commit_duration_from_now) {
-    return absl::Substitute(
-        R"pb(
-          values { string_value: "$0" }
-          values { string_value: "$1" }
-          values { string_value: "$2" }
-          values { string_value: "test_id" }
-          values { bool_value: false }
-          values { string_value: "test_table" }
-          values {
-            list_value {
-                values
-                [ {
-                  string_value: "{ \"name\": \"IsPrimaryUser\", \"type\": \"{ \\\"code\\\": \\\"BOOL\\\" }\",\"is_primary_key\": false, \"ordinal_position\": 1 }"
-                }
-                  , {
-                    string_value: "{ \"name\": \"UserId\", \"type\": \"{ \\\"code\\\": \\\"STRING\\\" }\",\"is_primary_key\": true, \"ordinal_position\": 2 }"
-                  }] }
-          }
-          values {
-            list_value {
-                values
-                [ {
-                  string_value: "{ \"keys\" : \"{\\\"UserId\\\": \\\"User2\\\"}\", \"new_values\": \"{ \\\"IsPrimaryUser\\\": true, \\\"UserId\\\": \\\"User2\\\" }\", \"old_values\": \"{}\" }"
-                }
-                  , {
-                    string_value: "{ \"keys\" : \"{\\\"UserId\\\": \\\"User2\\\"}\", \"new_values\": \"{ \\\"IsPrimaryUser\\\": true }\", \"old_values\": \"{}\" }"
-                  }] }
-          }
-          values { string_value: "UPDATE" }
-          values { string_value: "NEW_VALUES" }
-          values { string_value: "3" }
-          values { string_value: "2" }
-          values { string_value: "test_tag" }
-          values { bool_value: false })pb",
-        partition_token,
-        test::EncodeTimestampString(now_ + commit_duration_from_now),
-        record_sequence);
-  }
-
-  // Populate a fake data table for testing purpose before write effect is done.
-  absl::Status InsertDataChangeRecord() {
-    spanner_api::CommitRequest commit_request =
-        PARSE_TEXT_PROTO(absl::Substitute(
-            R"pb(
-              single_use_transaction { read_write {} }
-              mutations {
-                insert {
-                  table: "data_table"
-                  columns: "partition_token"
-                  columns: "commit_timestamp"
-                  columns: "record_sequence"
-                  columns: "server_transaction_id"
-                  columns: "is_last_record_in_transaction_in_partition"
-                  columns: "table_name"
-                  columns: "column_types"
-                  columns: "mods"
-                  columns: "mod_type"
-                  columns: "value_capture_type"
-                  columns: "number_of_records_in_transaction"
-                  columns: "number_of_partitions_in_transaction"
-                  columns: "transaction_tag"
-                  columns: "is_system_transaction"
-                  values { $0 }
-                }
-              }
-            )pb",
-            ConstructFakeDataChangeRecord("initial_token1", "00000001",
-                                          absl::ZeroDuration())));
-    *commit_request.mutable_session() = test_session_uri_;
-    spanner_api::CommitResponse commit_response;
-    return Commit(commit_request, &commit_response);
-  }
-
-  // Populate a fake data table for testing purpose before write effect is done.
-  absl::Status PopulateDataTable() {
-    spanner_api::CommitRequest commit_request =
-        PARSE_TEXT_PROTO(absl::Substitute(
-            R"pb(
-              single_use_transaction { read_write {} }
-              mutations {
-                insert {
-                  table: "data_table"
-                  columns: "partition_token"
-                  columns: "commit_timestamp"
-                  columns: "record_sequence"
-                  columns: "server_transaction_id"
-                  columns: "is_last_record_in_transaction_in_partition"
-                  columns: "table_name"
-                  columns: "column_types"
-                  columns: "mods"
-                  columns: "mod_type"
-                  columns: "value_capture_type"
-                  columns: "number_of_records_in_transaction"
-                  columns: "number_of_partitions_in_transaction"
-                  columns: "transaction_tag"
-                  columns: "is_system_transaction"
-                  values { $0 }
-                  values { $1 }
-                  values { $2 }
-                  values { $3 }
-                  values { $4 }
-                }
-              }
-            )pb",
-            ConstructFakeDataChangeRecord("historical_token1", "00000001",
-                                          absl::Microseconds(-2)),
-            ConstructFakeDataChangeRecord("historical_token1", "00000002",
-                                          absl::Microseconds(-1)),
-            ConstructFakeDataChangeRecord("initial_token1", "00000001",
-                                          absl::Microseconds(2)),
-            ConstructFakeDataChangeRecord("initial_token1", "00000002",
-                                          absl::Microseconds(1)),
-            ConstructFakeDataChangeRecord("null_end_token", "00000002",
-                                          absl::Microseconds(-2))));
     *commit_request.mutable_session() = test_session_uri_;
     spanner_api::CommitResponse commit_response;
     return Commit(commit_request, &commit_response);
@@ -358,91 +295,45 @@ class ChangeStreamQueryAPITest : public test::ServerTest {
 
 TEST_F(ChangeStreamQueryAPITest,
        CanReadWithSingleUseReadOnlyStrongTransaction) {
-  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(absl::Substitute(
-      R"pb(
-        transaction { single_use { read_only { strong: true } } }
-        sql: "$0"
-      )pb",
-      null_end_initial_query_));
-  request.set_session(test_session_uri_);
-
-  std::vector<spanner_api::PartialResultSet> response;
-  ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  ZETASQL_EXPECT_OK(ExecuteChangeStreamQuery(
+      valid_initial_query_, "{ single_use { read_only { strong: true } } }"));
 }
 
 TEST_F(ChangeStreamQueryAPITest, CanReadWithEmptyDefaultTransactionSelector) {
-  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(absl::Substitute(
-      R"pb(
-        transaction {}
-        sql: "$0"
-      )pb",
-      null_end_initial_query_));
-  request.set_session(test_session_uri_);
-
-  std::vector<spanner_api::PartialResultSet> response;
-  ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  ZETASQL_EXPECT_OK(ExecuteChangeStreamQuery(valid_initial_query_, "{}"));
 }
 
 TEST_F(ChangeStreamQueryAPITest, CannotReadWithReadWriteTransaction) {
-  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(absl::Substitute(
-      R"pb(
-        transaction { begin { read_write {} } }
-        sql: "$0"
-      )pb",
-      null_end_initial_query_));
-  request.set_session(test_session_uri_);
-
-  std::vector<spanner_api::PartialResultSet> response;
-  EXPECT_THAT(ExecuteStreamingSql(request, &response),
+  EXPECT_THAT(ExecuteChangeStreamQuery(valid_initial_query_,
+                                       "{ begin { read_write {} } }"),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        testing::HasSubstr(transaction_selector_err_msg_)));
 }
 
 TEST_F(ChangeStreamQueryAPITest, CannotReadWithPartitionedDmlTransaction) {
-  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(absl::Substitute(
-      R"pb(
-        transaction { begin { partitioned_dml {} } }
-        sql: "$0"
-      )pb",
-      null_end_initial_query_));
-  request.set_session(test_session_uri_);
-
-  std::vector<spanner_api::PartialResultSet> response;
-  EXPECT_THAT(ExecuteStreamingSql(request, &response),
+  EXPECT_THAT(ExecuteChangeStreamQuery(valid_initial_query_,
+                                       "{ begin { partitioned_dml {} } }"),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        testing::HasSubstr(transaction_selector_err_msg_)));
 }
 
 TEST_F(ChangeStreamQueryAPITest, CannotReadUsingReadOnlyStrongTransaction) {
-  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(absl::Substitute(
-      R"pb(
-        transaction { begin { read_only { strong: true } } }
-        sql: "$0"
-      )pb",
-      null_end_initial_query_));
-  request.set_session(test_session_uri_);
-
-  std::vector<spanner_api::PartialResultSet> response;
-  EXPECT_THAT(ExecuteStreamingSql(request, &response),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       testing::HasSubstr(transaction_selector_err_msg_)));
+  EXPECT_THAT(
+      ExecuteChangeStreamQuery(valid_initial_query_,
+                               "{ begin { read_only { strong: true } } }"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               testing::HasSubstr(transaction_selector_err_msg_)));
 }
 
 TEST_F(ChangeStreamQueryAPITest,
        CannotReadUsingSingleUseReadOnlyNonStrongTransaction) {
-  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(absl::Substitute(
-      R"pb(
-        transaction { begin { read_only { exact_staleness { seconds: 1 } } } }
-        sql: "$0"
-      )pb",
-      null_end_initial_query_));
-  request.set_session(test_session_uri_);
-
-  std::vector<spanner_api::PartialResultSet> response;
-  EXPECT_THAT(ExecuteStreamingSql(request, &response),
+  EXPECT_THAT(ExecuteChangeStreamQuery(
+                  valid_initial_query_,
+                  "{ begin { read_only { exact_staleness { seconds: 1 } } } }"),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        testing::HasSubstr(transaction_selector_err_msg_)));
 }
+
 TEST_F(ChangeStreamQueryAPITest, RejectsPlanMode) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(absl::Substitute(
       R"pb(
@@ -450,7 +341,7 @@ TEST_F(ChangeStreamQueryAPITest, RejectsPlanMode) {
         query_mode: PLAN
         sql: "$0"
       )pb",
-      null_end_initial_query_));
+      valid_initial_query_));
   request.set_session(test_session_uri_);
   std::vector<spanner_api::PartialResultSet> response;
   EXPECT_THAT(ExecuteStreamingSql(request, &response),
@@ -464,7 +355,7 @@ TEST_F(ChangeStreamQueryAPITest, RejectsRequestWithValidQueryIfNonStreaming) {
         query_mode: PLAN
         sql: "$0"
       )pb",
-      null_end_initial_query_));
+      valid_initial_query_));
   request.set_session(test_session_uri_);
 
   spanner_api::ResultSet response;
@@ -475,7 +366,7 @@ TEST_F(ChangeStreamQueryAPITest, RejectsRequestWithValidQueryIfNonStreaming) {
 }
 
 TEST_F(ChangeStreamQueryAPITest, RejectsRequestWithInvalidQueryIfNonStreaming) {
-  std::string invalid_query =
+  std::string sql =
       "SELECT * FROM "
       "READ_change_stream_test_table ( NULL, "
       "NULL, NULL, NULL )";
@@ -485,7 +376,7 @@ TEST_F(ChangeStreamQueryAPITest, RejectsRequestWithInvalidQueryIfNonStreaming) {
         query_mode: PLAN
         sql: "$0"
       )pb",
-      null_end_initial_query_));
+      sql));
   request.set_session(test_session_uri_);
 
   spanner_api::ResultSet response;
@@ -500,8 +391,10 @@ TEST_F(ChangeStreamQueryAPITest, ExecuteQueryOnJustDroppedChangeStream) {
       "SELECT * FROM "
       "READ_change_stream_test_table ('$0', NULL, NULL, 10000 )",
       now_ + absl::Seconds(1));
-  std::thread drop_change_stream(&ChangeStreamQueryAPITest::DropChangeStream,
-                                 this);
+  std::thread drop_change_stream(&ChangeStreamQueryAPITest::UpdateSchema, this,
+                                 std::vector<std::string>{R"(
+     DROP CHANGE STREAM change_stream_test_table
+  )"});
   // Occasionally due to latency in unit test it is possible that drop thread
   // finishes before ExecuteStreamingSql handler finishes validating query. To
   // avoid waiting too long in unit test, we just test the error status is
@@ -563,10 +456,12 @@ TEST_F(ChangeStreamQueryAPITest,
 
 TEST_F(ChangeStreamQueryAPITest,
        ExecutePartitionQueryWithInvalidPartitionStartTime) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::string initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
   std::string sql = absl::Substitute(
       "SELECT * FROM "
-      "READ_change_stream_test_table ('$0', NULL , 'initial_token1', 10000 )",
-      now_ + absl::Seconds(10));
+      "READ_change_stream_test_table ('$0', NULL , '$1', 10000 )",
+      now_ + absl::Seconds(10), initial_active_token);
   EXPECT_THAT(
       ExecuteChangeStreamQuery(sql),
       StatusIs(absl::StatusCode::kOutOfRange,
@@ -577,7 +472,7 @@ TEST_F(ChangeStreamQueryAPITest,
 TEST_F(ChangeStreamQueryAPITest,
        ExecuteInitialQueryOnInitialBackfilledPartitions) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
-                       ExecuteChangeStreamQuery(null_end_initial_query_));
+                       ExecuteChangeStreamQuery(valid_initial_query_));
   EXPECT_THAT(change_records.child_partition_records.at(0)
                   .child_partitions.values_size(),
               1);
@@ -600,8 +495,47 @@ TEST_F(ChangeStreamQueryAPITest,
       now_str_);
 }
 
+TEST_F(ChangeStreamQueryAPITest, ExecuteInitialQueryAfterChurned) {
+  std::string sql = absl::Substitute(
+      "SELECT * FROM "
+      "READ_change_stream_test_table ('$0', NULL, NULL, 10000 )",
+      now_ + absl::Milliseconds(1500));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       ExecuteChangeStreamQuery(sql));
+  EXPECT_THAT(change_records.child_partition_records.at(0)
+                  .child_partitions.values_size(),
+              1);
+  EXPECT_THAT(change_records.child_partition_records.at(1)
+                  .child_partitions.values_size(),
+              1);
+  EXPECT_EQ(change_records.child_partition_records.at(0)
+                .record_sequence.string_value(),
+            "00000000");
+  EXPECT_EQ(change_records.child_partition_records.at(1)
+                .record_sequence.string_value(),
+            "00000001");
+  // Verify that no parents partition records are populated for initial query.
+  EXPECT_EQ(change_records.child_partition_records.at(0)
+                .child_partitions.values(0)
+                .list_value()
+                .values(1)
+                .list_value()
+                .values_size(),
+            0);
+  EXPECT_EQ(change_records.child_partition_records.at(1)
+                .child_partitions.values(0)
+                .list_value()
+                .values(1)
+                .list_value()
+                .values_size(),
+            0);
+}
+
 TEST_F(ChangeStreamQueryAPITest,
        ExecuteHistoricalPartitionQueryStartAtTokenEndTime) {
+  ZETASQL_ASSERT_OK(PopulatePartitionTable());
+  absl::SetFlag(&FLAGS_cloud_spanner_emulator_test_with_fake_partition_table,
+                true);
   std::string sql = absl::Substitute(
       "SELECT * FROM "
       "READ_change_stream_test_table ('$0', NULL, 'historical_token1', 10000 )",
@@ -613,60 +547,130 @@ TEST_F(ChangeStreamQueryAPITest,
   ASSERT_EQ(change_records.data_change_records.size(), 0);
 }
 
-TEST_F(ChangeStreamQueryAPITest,
-       ExecuteHistoricalPartitionQueryEndAtTokenEndTime) {
+TEST_F(ChangeStreamQueryAPITest, VerifyChildPartitionsRecordContent) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
   std::string sql = absl::Substitute(
       "SELECT * FROM "
-      "READ_change_stream_test_table ('$0', '$1', 'historical_token1', 10000 )",
+      "READ_change_stream_test_table ('$0', '$1', '$2', 10000 )",
+      now_, now_ + absl::Milliseconds(1100), initial_active_token);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       ExecuteChangeStreamQuery(sql));
+  ASSERT_EQ(change_records.child_partition_records.size(), 1);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+  ASSERT_EQ(change_records.data_change_records.size(), 1);
+  auto child_partition_record = change_records.child_partition_records[0];
+  // Start time of child token should be greater than start time of current
+  // token.
+  ASSERT_TRUE(child_partition_record.start_time.string_value() > now_str_);
+  ASSERT_EQ(child_partition_record.record_sequence.string_value(), "00000000");
+  for (const auto& child_partition :
+       child_partition_record.child_partitions.values()) {
+    // Returned child tokens should be different from the current token.
+    ASSERT_NE(child_partition.list_value().values(0).string_value(),
+              initial_active_token);
+    for (const auto& parent_token :
+         child_partition.list_value().values(1).list_value().values()) {
+      // Parent token of the returned child partition token should be exactly
+      // the same with current input token.
+      ASSERT_EQ(parent_token.string_value(), initial_active_token);
+    }
+  }
+}
+
+TEST_F(ChangeStreamQueryAPITest, VerifyHeartbeatRecordContent) {
+  absl::Time query_start = Clock().Now();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(query_start));
+  std::string sql = absl::Substitute(
+      "SELECT * FROM "
+      "READ_change_stream_test_table ('$0', NULL, '$1', 100 )",
+      query_start, initial_active_token);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       ExecuteChangeStreamQuery(sql));
+  ASSERT_EQ(change_records.child_partition_records.size(), 1);
+  // actual number of heartbeat records may vary due to latencies and lagging
+  // churning thread, so for a test token with lifetime in [500ms, 1000ms], we
+  // check there are at least 1 heartbeat record returned when heartbeat
+  // milliseconds is 100ms.
+  ASSERT_GE(change_records.heartbeat_records.size(), 1);
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
+  std::string last_record_time = test::EncodeTimestampString(query_start);
+  for (const auto& heartbeat_record : change_records.heartbeat_records) {
+    // Timestamp for heartbeat record should be increasing.
+    ASSERT_TRUE(heartbeat_record.timestamp.string_value() > last_record_time);
+    last_record_time = heartbeat_record.timestamp.string_value();
+  }
+}
+
+TEST_F(ChangeStreamQueryAPITest,
+       ExecuteHistoricalPartitionQueryEndAtTokenEndTime) {
+  ZETASQL_ASSERT_OK(PopulatePartitionTable());
+  absl::SetFlag(&FLAGS_cloud_spanner_emulator_test_with_fake_partition_table,
+                true);
+  std::string sql = absl::Substitute(
+      "SELECT * FROM "
+      "READ_change_stream_test_table ('$0', '$1', 'historical_token1', 10000 "
+      ")",
       now_ - absl::Microseconds(2), now_);
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 1);
   ASSERT_EQ(change_records.heartbeat_records.size(), 0);
-  ASSERT_EQ(change_records.data_change_records.size(), 2);
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
 }
 
 TEST_F(ChangeStreamQueryAPITest,
        ExecuteHistoricalPartitionQueryEndAfterTokenEndTime) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
   std::string sql = absl::Substitute(
       "SELECT * FROM "
-      "READ_change_stream_test_table ('$0', '$1', 'historical_token1', 10000 )",
-      now_ - absl::Microseconds(3), now_ + absl::Microseconds(1));
+      "READ_change_stream_test_table ('$0', '$1', '$2', 10000 )",
+      now_, now_ + absl::Seconds(1), initial_active_token);
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 1);
-  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
-  ASSERT_EQ(change_records.data_change_records.size(), 2);
-}
-
-TEST_F(ChangeStreamQueryAPITest,
-       ExecuteHistoricalPartitionQueryEndBeforeTokenEndTime) {
-  std::string sql = absl::Substitute(
-      "SELECT * FROM "
-      "READ_change_stream_test_table ('$0', '$1', 'historical_token1', 10000 )",
-      now_ - absl::Microseconds(3), now_ - absl::Microseconds(1));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
-                       ExecuteChangeStreamQuery(sql));
-  ASSERT_EQ(change_records.child_partition_records.size(), 0);
-  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
-  ASSERT_EQ(change_records.data_change_records.size(), 2);
-}
-
-TEST_F(ChangeStreamQueryAPITest,
-       ExecuteHistoricalPartitionQuerySameStartAndEndTime) {
-  std::string sql = absl::Substitute(
-      "SELECT * FROM "
-      "READ_change_stream_test_table ('$0', '$1', 'historical_token1', 10000 )",
-      now_ - absl::Microseconds(1), now_ - absl::Microseconds(1));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
-                       ExecuteChangeStreamQuery(sql));
-  ASSERT_EQ(change_records.child_partition_records.size(), 0);
   ASSERT_EQ(change_records.heartbeat_records.size(), 0);
   ASSERT_EQ(change_records.data_change_records.size(), 1);
 }
 
 TEST_F(ChangeStreamQueryAPITest,
+       ExecuteHistoricalPartitionQueryEndBeforeTokenEndTime) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
+  std::string sql = absl::Substitute(
+      "SELECT * FROM "
+      "READ_change_stream_test_table ('$0', '$1', '$2', 10000 )",
+      now_ - absl::Microseconds(1), now_, initial_active_token);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       ExecuteChangeStreamQuery(sql));
+  ASSERT_EQ(change_records.child_partition_records.size(), 0);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
+}
+
+TEST_F(ChangeStreamQueryAPITest,
+       ExecuteHistoricalPartitionQuerySameStartAndEndTime) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
+  std::string sql = absl::Substitute(
+      "SELECT * FROM "
+      "READ_change_stream_test_table ('$0', '$1', '$2', 10000 )",
+      now_ - absl::Milliseconds(1), now_ - absl::Milliseconds(1),
+      initial_active_token);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       ExecuteChangeStreamQuery(sql));
+  ASSERT_EQ(change_records.child_partition_records.size(), 0);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
+}
+
+TEST_F(ChangeStreamQueryAPITest,
        ExecuteHistoricalPartitionQueryOnNullEndPartitionToken) {
+  ZETASQL_ASSERT_OK(PopulatePartitionTable());
+  absl::SetFlag(&FLAGS_cloud_spanner_emulator_test_with_fake_partition_table,
+                true);
   std::string sql = absl::Substitute(
       "SELECT * FROM "
       "READ_change_stream_test_table ('$0', '$1', 'null_end_token', 10000 )",
@@ -675,23 +679,31 @@ TEST_F(ChangeStreamQueryAPITest,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 0);
   ASSERT_EQ(change_records.heartbeat_records.size(), 0);
-  ASSERT_EQ(change_records.data_change_records.size(), 1);
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
 }
 
 TEST_F(ChangeStreamQueryAPITest, ExecuteRealTimePartitionQueryWithStaleToken) {
-  ZETASQL_ASSERT_OK(ChangeRetentionToZeroSec());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
+  absl::SetFlag(&FLAGS_cloud_spanner_emulator_disable_cs_retention_check, true);
+  ZETASQL_ASSERT_OK(UpdateSchema(std::vector<std::string>{R"(
+     ALTER CHANGE STREAM change_stream_test_table SET OPTIONS ( retention_period='0s' )
+  )"}));
   std::string sql = absl::Substitute(
       "SELECT * FROM "
-      "READ_change_stream_test_table ('$0', NULL , 'initial_token1', 10000 )",
-      now_ + absl::Seconds(1));
+      "READ_change_stream_test_table ('$0', NULL , '$1', 10000 )",
+      now_ + absl::Milliseconds(100), initial_active_token);
   EXPECT_THAT(
       ExecuteChangeStreamQuery(sql),
       StatusIs(absl::StatusCode::kOutOfRange,
-               testing::HasSubstr("This partition is no longer valid.")));
+               testing::HasSubstr("start_timestamp is too far in the past.")));
 }
 
 TEST_F(ChangeStreamQueryAPITest,
        ExecuteRealTimePartitionQueryStartAtTokenEndTime) {
+  ZETASQL_ASSERT_OK(PopulatePartitionTable());
+  absl::SetFlag(&FLAGS_cloud_spanner_emulator_test_with_fake_partition_table,
+                true);
   std::string sql = absl::Substitute(
       "SELECT * FROM "
       "READ_change_stream_test_table ('$0', NULL , 'initial_token1', 10000 )",
@@ -705,6 +717,9 @@ TEST_F(ChangeStreamQueryAPITest,
 
 TEST_F(ChangeStreamQueryAPITest,
        ExecuteRealTimePartitionQueryEndAtTokenEndTime) {
+  ZETASQL_ASSERT_OK(PopulatePartitionTable());
+  absl::SetFlag(&FLAGS_cloud_spanner_emulator_test_with_fake_partition_table,
+                true);
   std::string sql = absl::Substitute(
       "SELECT * FROM "
       "READ_change_stream_test_table ('$0', '$1' , 'initial_token1', 10000 )",
@@ -713,50 +728,65 @@ TEST_F(ChangeStreamQueryAPITest,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 1);
   ASSERT_EQ(change_records.heartbeat_records.size(), 0);
-  ASSERT_EQ(change_records.data_change_records.size(), 2);
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
 }
 
 TEST_F(ChangeStreamQueryAPITest,
        ExecuteRealTimePartitionQueryEndBeforeTokenEndTime) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
   std::string sql = absl::Substitute(
       "SELECT * FROM "
-      "READ_change_stream_test_table ('$0', '$1' , 'initial_token1', 10000 )",
-      now_, now_ + absl::Microseconds(50));
+      "READ_change_stream_test_table ('$0', '$1' , '$2', 10000 )",
+      now_ + absl::Milliseconds(50), now_ + absl::Milliseconds(51),
+      initial_active_token);
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 0);
   ASSERT_EQ(change_records.heartbeat_records.size(), 0);
-  ASSERT_EQ(change_records.data_change_records.size(), 2);
+  // The two inserted rows might commit within or out of the given tvf start
+  // and end, so we skip checking the number of data change records.
+  ASSERT_GE(change_records.data_change_records.size(), 0);
 }
 
 TEST_F(ChangeStreamQueryAPITest,
        ExecuteRealTimePartitionQueryEndAfterTokenEndTime) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
   std::string sql = absl::Substitute(
       "SELECT * FROM "
-      "READ_change_stream_test_table ('$0', '$1' , 'initial_token1', 10000 )",
-      now_, now_ + absl::Milliseconds(1100));
+      "READ_change_stream_test_table ('$0', '$1', '$2', 10000 )",
+      now_, now_ + absl::Milliseconds(1100), initial_active_token);
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 1);
-  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
-  ASSERT_EQ(change_records.data_change_records.size(), 2);
-}
-
-TEST_F(ChangeStreamQueryAPITest,
-       ExecuteRealTimePartitionQuerySameStartAndEndTime) {
-  std::string sql = absl::Substitute(
-      "SELECT * FROM "
-      "READ_change_stream_test_table ('$0', '$1' , 'initial_token1', 10000 )",
-      now_ + absl::Microseconds(1), now_ + absl::Microseconds(1));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
-                       ExecuteChangeStreamQuery(sql));
-  ASSERT_EQ(change_records.child_partition_records.size(), 0);
   ASSERT_EQ(change_records.heartbeat_records.size(), 0);
   ASSERT_EQ(change_records.data_change_records.size(), 1);
 }
 
 TEST_F(ChangeStreamQueryAPITest,
+       ExecuteRealTimePartitionQuerySameStartAndEndTime) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
+  std::string sql = absl::Substitute(
+      "SELECT * FROM "
+      "READ_change_stream_test_table ('$0', '$1', '$2', 10000 )",
+      now_ + absl::Milliseconds(100), now_ + absl::Milliseconds(100),
+      initial_active_token);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       ExecuteChangeStreamQuery(sql));
+  ASSERT_EQ(change_records.child_partition_records.size(), 0);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+  // Skip verification for data change records because if commit timestamp of
+  // data change records are exactly at the sa=tart/end time, they will be
+  // returned although with very low possibility.
+}
+
+TEST_F(ChangeStreamQueryAPITest,
        ExecuteRealTimePartitionQueryOnNullEndPartitionToken) {
+  ZETASQL_ASSERT_OK(PopulatePartitionTable());
+  absl::SetFlag(&FLAGS_cloud_spanner_emulator_test_with_fake_partition_table,
+                true);
   std::string sql = absl::Substitute(
       "SELECT * FROM "
       "READ_change_stream_test_table ('$0', '$1', 'null_end_token', 10000 )",
@@ -765,38 +795,34 @@ TEST_F(ChangeStreamQueryAPITest,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 0);
   ASSERT_EQ(change_records.heartbeat_records.size(), 0);
-  ASSERT_EQ(change_records.data_change_records.size(), 1);
-}
-
-TEST_F(ChangeStreamQueryAPITest,
-       ExecuteRealTimePartitionQueryWithMultipleHeartbeatRecords) {
-  std::string sql = absl::Substitute(
-      "SELECT * FROM "
-      "READ_change_stream_test_table ('$0', '$1' , 'initial_token1', 100 )",
-      now_, now_ + absl::Seconds(1));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
-                       ExecuteChangeStreamQuery(sql));
-  ASSERT_EQ(change_records.child_partition_records.size(), 1);
-  ASSERT_EQ(change_records.heartbeat_records.size(), 8);
-  ASSERT_EQ(change_records.data_change_records.size(), 2);
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
 }
 
 TEST_F(ChangeStreamQueryAPITest, ExecuteRealTimePartitionQueryThreaded) {
+  // Change stream token lifetime to 1~2 hours to ensure the insertion thread
+  // can be successfully committed before the token ends.
+  absl::SetFlag(&FLAGS_change_stream_churning_interval, absl::Hours(1));
+  absl::SetFlag(&FLAGS_change_stream_churn_thread_sleep_interval,
+                absl::Hours(1));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
   std::string sql = absl::Substitute(
       "SELECT * FROM "
-      "READ_change_stream_test_table ('$0',NULL,'initial_token1', 10000 )",
-      now_);
-  std::thread insert_data_record(
-      &ChangeStreamQueryAPITest::InsertDataChangeRecord, this);
+      "READ_change_stream_test_table ('$0','$1','$2', 10000 )",
+      now_, now_ + absl::Seconds(2), initial_active_token);
+  std::thread insert_data_record(&ChangeStreamQueryAPITest::InsertOneRow, this,
+                                 "test_table");
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(sql));
   insert_data_record.join();
-  ASSERT_EQ(change_records.child_partition_records.size(), 1);
+  ASSERT_EQ(change_records.child_partition_records.size(), 0);
   ASSERT_EQ(change_records.heartbeat_records.size(), 0);
-  ASSERT_EQ(change_records.data_change_records.size(), 3);
+  ASSERT_EQ(change_records.data_change_records.size(), 2);
 }
 
 TEST_F(ChangeStreamQueryAPITest, ExecuteRealTimePartitionQueryWithParameter) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
   std::string sql = absl::Substitute(
       "SELECT * FROM "
       "READ_change_stream_test_table ('$0',NULL, @token , 10000 )",
@@ -816,7 +842,7 @@ TEST_F(ChangeStreamQueryAPITest, ExecuteRealTimePartitionQueryWithParameter) {
           value { code: STRING }
         }
       )pb",
-      sql, "initial_token1"));
+      sql, initial_active_token));
   request.set_session(test_session_uri_);
   std::vector<spanner_api::PartialResultSet> response;
   ZETASQL_ASSERT_OK(ExecuteStreamingSql(request, &response));
@@ -826,7 +852,74 @@ TEST_F(ChangeStreamQueryAPITest, ExecuteRealTimePartitionQueryWithParameter) {
                        test::GetChangeStreamRecordsFromResultSet(result_set));
   ASSERT_EQ(change_records.child_partition_records.size(), 1);
   ASSERT_EQ(change_records.heartbeat_records.size(), 0);
-  ASSERT_EQ(change_records.data_change_records.size(), 2);
+  ASSERT_EQ(change_records.data_change_records.size(), 1);
+}
+
+TEST_F(ChangeStreamQueryAPITest, ExecutePartitionQueryAfterAlterTrackingTable) {
+  // Change stream token lifetime to 1~2 hours to ensure the altering operations
+  // can be successfully committed before the token ends.
+  absl::SetFlag(&FLAGS_change_stream_churning_interval, absl::Hours(1));
+  absl::SetFlag(&FLAGS_change_stream_churn_thread_sleep_interval,
+                absl::Hours(1));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
+  std::string sql_before_alter = absl::Substitute(
+      "SELECT * FROM "
+      "READ_change_stream_test_table ('$0','$1','$2', 10000 )",
+      now_, Clock().Now(), initial_active_token);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       ExecuteChangeStreamQuery(sql_before_alter));
+  ASSERT_EQ(change_records.data_change_records.size(), 1);
+  ASSERT_EQ(change_records.data_change_records[0].table_name.string_value(),
+            "test_table");
+  // Alter tracking table from test_table to test_table2
+  ZETASQL_ASSERT_OK(UpdateSchema(std::vector<std::string>{R"(
+     ALTER CHANGE STREAM change_stream_test_table SET FOR test_table2
+  )"}));
+  absl::Time after_alter = Clock().Now();
+  ZETASQL_ASSERT_OK(InsertOneRow("test_table"));
+  ZETASQL_ASSERT_OK(InsertOneRow("test_table2"));
+  std::string sql_after_alter = absl::Substitute(
+      "SELECT * FROM "
+      "READ_change_stream_test_table ('$0','$1','$2', 10000 )",
+      after_alter, Clock().Now(), initial_active_token);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records2,
+                       ExecuteChangeStreamQuery(sql_after_alter));
+  ASSERT_EQ(change_records2.data_change_records.size(), 1);
+  ASSERT_EQ(change_records2.data_change_records[0].table_name.string_value(),
+            "test_table2");
+}
+
+TEST_F(ChangeStreamQueryAPITest, ExecutePartitionQueryAfterDropTrackingTable) {
+  // Change stream token lifetime to 1~2 hours to ensure the altering operations
+  // can be successfully committed before the token ends.
+  absl::SetFlag(&FLAGS_change_stream_churning_interval, absl::Hours(1));
+  absl::SetFlag(&FLAGS_change_stream_churn_thread_sleep_interval,
+                absl::Hours(1));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
+                       GetActiveTokenFromInitialQuery(now_));
+  std::string sql_before_alter = absl::Substitute(
+      "SELECT * FROM "
+      "READ_change_stream_test_table ('$0','$1','$2', 10000 )",
+      now_, Clock().Now(), initial_active_token);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       ExecuteChangeStreamQuery(sql_before_alter));
+  ASSERT_EQ(change_records.data_change_records.size(), 1);
+  ASSERT_EQ(change_records.data_change_records[0].table_name.string_value(),
+            "test_table");
+  // Drop all tracking columns and tables.
+  ZETASQL_ASSERT_OK(UpdateSchema(std::vector<std::string>{R"(
+     ALTER CHANGE STREAM change_stream_test_table DROP FOR ALL
+  )"}));
+  absl::Time after_alter = Clock().Now();
+  ZETASQL_ASSERT_OK(InsertOneRow("test_table"));
+  std::string sql_after_alter = absl::Substitute(
+      "SELECT * FROM "
+      "READ_change_stream_test_table ('$0','$1','$2', 10000 )",
+      after_alter, Clock().Now() + absl::Seconds(2), initial_active_token);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records2,
+                       ExecuteChangeStreamQuery(sql_after_alter));
+  ASSERT_EQ(change_records2.data_change_records.size(), 0);
 }
 
 }  // namespace

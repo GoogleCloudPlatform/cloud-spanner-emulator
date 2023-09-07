@@ -47,15 +47,21 @@ class Schema {
  public:
   Schema()
       : graph_(SchemaGraph::CreateEmpty())
-  {}
+        ,
+        dialect_(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {}
 
   explicit Schema(const SchemaGraph* graph
+                  ,
+                  const database_api::DatabaseDialect& dialect
   );
 
   virtual ~Schema() = default;
 
   // Returns the generation number of this schema.
   int64_t generation() const { return generation_; }
+
+  // Dumps the schema to ddl::DDLStatementList.
+  ddl::DDLStatementList Dump() const;
 
   // Finds a view by its name. Returns a const pointer of the view, or
   // nullptr if the view is not found. Name comparison is case-insensitive.
@@ -103,6 +109,9 @@ class Schema {
   // Returns the number of change streams in the schema.
   int num_change_stream() const { return change_streams_map_.size(); }
 
+  // Returns the database dialect.
+  database_api::DatabaseDialect dialect() const { return dialect_; }
+
  private:
   // Tries to find the managed index from the non-fingerprint part of the
   // index name.
@@ -139,6 +148,9 @@ class Schema {
   // A map that owns all of the indexes. Key is the name of the index. Hash and
   // comparison on the keys are case-insensitive.
   CaseInsensitiveStringMap<const Index*> index_map_;
+
+  // Holds the database dialect for this schema.
+  const database_api::DatabaseDialect dialect_;
 };
 
 // A Schema that also owns the SchemaGraph that manages the lifetime of the
@@ -146,8 +158,12 @@ class Schema {
 class OwningSchema : public Schema {
  public:
   explicit OwningSchema(std::unique_ptr<const SchemaGraph> graph
+                        ,
+                        const database_api::DatabaseDialect& dialect
                         )
       : Schema(graph.get()
+               ,
+               dialect
                ),
         graph_(std::move(graph)) {}
 

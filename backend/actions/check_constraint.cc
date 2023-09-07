@@ -70,7 +70,7 @@ CheckConstraintVerifier::CheckConstraintVerifier(
     zetasql::Catalog* function_catalog)
     : check_constraint_(check_constraint) {
   absl::Status s = PrepareExpression(check_constraint, function_catalog);
-  ZETASQL_DCHECK(s.ok()) << "Failed to initialize CheckConstraintVerifier: " << s;
+  ABSL_DCHECK(s.ok()) << "Failed to initialize CheckConstraintVerifier: " << s;
 }
 
 absl::Status CheckConstraintVerifier::VerifyInsertUpdateOp(

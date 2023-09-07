@@ -1,0 +1,182 @@
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream;
+ALTER CHANGE STREAM change_stream SET FOR table1;
+--
+CREATE CHANGE STREAM change_stream FOR table1
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM "quoted_change_stream";
+ALTER CHANGE STREAM "quoted_change_stream" SET FOR table1;
+--
+CREATE CHANGE STREAM quoted_change_stream FOR table1
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE table2 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream;
+ALTER CHANGE STREAM change_stream SET FOR public.table1, table2;
+--
+CREATE CHANGE STREAM change_stream FOR table1, table2
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM "quoted_change_stream";
+ALTER CHANGE STREAM "quoted_change_stream" SET FOR "table1";
+--
+CREATE CHANGE STREAM quoted_change_stream FOR table1
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE table2 (
+  id bigint NOT NULL,
+  column1 bigint,
+  PRIMARY KEY(id)
+);
+CREATE TABLE table3 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream_explicit_columns;
+ALTER CHANGE STREAM change_stream_explicit_columns SET FOR table1, table2(column1), table3();
+--
+CREATE CHANGE STREAM change_stream_explicit_columns
+FOR table1, table2(column1), table3()
+==
+CREATE CHANGE STREAM change_stream_all;
+ALTER CHANGE STREAM change_stream_all SET FOR ALL;
+--
+CREATE CHANGE STREAM change_stream_all
+FOR ALL
+
+==
+CREATE TABLE "ALL" (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream_all;
+ALTER CHANGE STREAM change_stream_all SET FOR "ALL";
+--
+CREATE CHANGE STREAM change_stream_all
+FOR "ALL"
+
+==
+CREATE CHANGE STREAM change_stream_drop_for_all FOR ALL;
+ALTER CHANGE STREAM change_stream_drop_for_all DROP FOR ALL;
+--
+CREATE CHANGE STREAM change_stream_drop_for_all;
+
+==
+CREATE CHANGE STREAM change_stream_options;
+ALTER CHANGE STREAM change_stream_options SET (retention_period = '7d', value_capture_type = 'NEW_ROW');
+--
+CREATE CHANGE STREAM change_stream_options
+WITH (value_capture_type = 'NEW_ROW', retention_period = '7d')
+==
+# TODO: The emulator returns the following error:
+# ERROR: Change Streams only support value capture types in OLD_AND_NEW_VALUES, NEW_ROW, and NEW_VALUES.
+# CREATE CHANGE STREAM change_stream_null;
+# ALTER CHANGE STREAM change_stream_null SET (value_capture_type = null);
+# --
+# CREATE CHANGE STREAM change_stream_null
+# ==
+# TODO: The emulator returns the following error:
+# ERROR: Change Streams only support value capture types in OLD_AND_NEW_VALUES, NEW_ROW, and NEW_VALUES.
+# CREATE CHANGE STREAM change_stream_null;
+# ALTER CHANGE STREAM change_stream_null SET (value_capture_type = 'null');
+# --
+# CREATE CHANGE STREAM change_stream_null
+# ==
+# TODO: The emulator returns the following error:
+# ERROR: Change Streams only support value capture types in OLD_AND_NEW_VALUES, NEW_ROW, and NEW_VALUES.
+# CREATE CHANGE STREAM change_stream_null;
+# ALTER CHANGE STREAM change_stream_null SET (value_capture_type = NULL);
+# --
+# CREATE CHANGE STREAM change_stream_null
+# ==
+ALTER CHANGE STREAM change_stream_no_option_set;
+--
+ERROR: [ERROR] syntax error at end of input; failed to parse the DDL statements.
+
+==
+ALTER CHANGE STREAM (retention_period = '7d');
+--
+ERROR: [ERROR] syntax error at or near "("; failed to parse the DDL statements.
+
+==
+ALTER CHANGE STREAM change_stream_nothing_following_for SET FOR;
+--
+ERROR: [ERROR] syntax error at end of input; failed to parse the DDL statements.
+==
+ALTER CHANGE STREAM change_stream_empty_set SET();
+--
+ERROR: [ERROR] syntax error at or near ")"; failed to parse the DDL statements.
+==
+ALTER CHANGE STREAM change_stream SET OPTIONS (retention_period = '7d');
+--
+ERROR: [ERROR] syntax error at or near "OPTIONS"; failed to parse the DDL statements.
+==
+ALTER CHANGE STREAM change_stream OPTIONS (retention_period = '7d');
+--
+ERROR: [ERROR] syntax error at or near "OPTIONS"; failed to parse the DDL statements.
+==
+ALTER CHANGE STREAM change_stream SET (invalid_option=invalid);
+--
+ERROR: Invalid change stream option 'invalid_option' in <ALTER CHANGE STREAM> statement.
+==
+ALTER CHANGE STREAM change_stream SET (retention_period);
+--
+ERROR: Failed to parse change stream option correctly in <ALTER CHANGE STREAM> statement.
+==
+ALTER CHANGE STREAM SET table1;
+--
+ERROR: [ERROR] syntax error at or near "table1"; failed to parse the DDL statements.
+==
+ALTER CHANGE STREAM SET FOR table1(), ALL;
+--
+ERROR: [ERROR] syntax error at or near "FOR"; failed to parse the DDL statements.
+==
+ALTER CHANGE STREAM SET FOR ALL();
+--
+ERROR: [ERROR] syntax error at or near "FOR"; failed to parse the DDL statements.
+==
+ALTER CHANGE STREAM SET FOR table1(ALL);
+--
+ERROR: [ERROR] syntax error at or near "FOR"; failed to parse the DDL statements.
+==
+ALTER CHANGE STREAM DROP FOR;
+--
+ERROR: [ERROR] syntax error at or near "FOR"; failed to parse the DDL statements.
+
+==
+ALTER CHANGE STREAM DROP FOR 'ALL';
+--
+ERROR: [ERROR] syntax error at or near "FOR"; failed to parse the DDL statements.
+
+==
+ALTER CHANGE STREAM DROP FOR "ALL";
+--
+ERROR: [ERROR] syntax error at or near "FOR"; failed to parse the DDL statements.
+
+==
+ALTER CHANGE STREAM DROP FOR Users;
+--
+ERROR: [ERROR] syntax error at or near "FOR"; failed to parse the DDL statements.
+==
+ALTER CHANGE STREAM a.change_stream SET FOR table1;
+--
+ERROR: Schema name can only be 'public' in <ALTER CHANGE STREAM> statement.

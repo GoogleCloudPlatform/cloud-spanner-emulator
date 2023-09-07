@@ -24,12 +24,14 @@
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "backend/query/change_stream/change_stream_query_validator.h"
+#include "backend/query/query_engine.h"
+#include "frontend/entities/session.h"
 #include "frontend/server/handler.h"
 
-ABSL_DECLARE_FLAG(
-    bool, cloud_spanner_emulator_read_mock_change_streams_internal_tables);
+ABSL_DECLARE_FLAG(bool, cloud_spanner_emulator_test_with_fake_partition_table);
 
 namespace google {
 namespace spanner {
@@ -50,14 +52,9 @@ class ChangeStreamsHandler {
     // this need to be set to test only mock tables.
     partition_table_ =
         absl::GetFlag(
-            FLAGS_cloud_spanner_emulator_read_mock_change_streams_internal_tables)
+            FLAGS_cloud_spanner_emulator_test_with_fake_partition_table)
             ? kTestPartitionTable
             : metadata.partition_table;
-    data_table_ =
-        absl::GetFlag(
-            FLAGS_cloud_spanner_emulator_read_mock_change_streams_internal_tables)
-            ? kTestDataTable
-            : metadata.data_table;
   }
 
   absl::Status ExecuteChangeStreamQuery(
@@ -91,7 +88,6 @@ class ChangeStreamsHandler {
  private:
   const backend::ChangeStreamQueryValidator::ChangeStreamMetadata& metadata_;
   std::string partition_table_;
-  std::string data_table_;
 };
 }  // namespace frontend
 }  // namespace emulator

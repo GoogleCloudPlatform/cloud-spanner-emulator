@@ -29,20 +29,23 @@
 #include "absl/status/status.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/time.h"
+#include "backend/access/read.h"
 #include "backend/query/change_stream/change_stream_query_validator.h"
+#include "backend/query/query_engine.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/clock.h"
 #include "common/errors.h"
 #include "frontend/converters/change_streams.h"
 #include "frontend/converters/time.h"
+#include "frontend/entities/session.h"
+#include "frontend/entities/transaction.h"
 #include "frontend/server/handler.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
-#include "zetasql/base/time_proto_util.h"
 
-ABSL_FLAG(bool, cloud_spanner_emulator_read_mock_change_streams_internal_tables,
-          false,
+ABSL_FLAG(bool, cloud_spanner_emulator_test_with_fake_partition_table, false,
           "TEST ONLY. Set to true to enable querying against mocked change "
-          "stream internal data and partition tables during test.");
+          "stream internal partition table during test.");
 
 ABSL_FLAG(
     absl::Duration, change_streams_partition_query_chop_interval,
@@ -255,7 +258,7 @@ backend::Query ChangeStreamsHandler::ConstructDataTablePartitionQuery(
       "WHERE( partition_token='$1' AND commit_timestamp >= '$2' AND "
       "commit_timestamp $3 '$4' ) ORDER BY partition_token, commit_timestamp, "
       "server_transaction_id,record_sequence",
-      data_table_, metadata().partition_token.value(), start,
+      metadata().data_table, metadata().partition_token.value(), start,
       is_inclusive_read ? "<=" : "<", end)};
   data_table_partition_query.change_stream_internal_lookup =
       metadata().change_stream_name;
