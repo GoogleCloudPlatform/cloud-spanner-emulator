@@ -20,6 +20,7 @@
 #include <thread>  // NOLINT
 #include <utility>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "absl/functional/bind_front.h"
 #include "absl/memory/memory.h"
 #include "absl/status/statusor.h"
@@ -31,6 +32,7 @@
 #include "backend/database/change_stream/change_stream_partition_churner.h"
 #include "backend/locking/manager.h"
 #include "backend/query/query_engine.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/versioned_catalog.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "backend/schema/updater/scoped_schema_change_lock.h"
@@ -58,9 +60,18 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
   database->query_engine_ =
       std::make_unique<QueryEngine>(database->type_factory_.get());
   database->action_manager_ = std::make_unique<ActionManager>();
+  database->dialect_ = schema_change_operation.database_dialect;
 
   if (schema_change_operation.statements.empty()) {
+    if (database->dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+      // Create an empty schema with the dialect set.
+      database->versioned_catalog_ = std::make_unique<VersionedCatalog>(
+          std::make_unique<const Schema>(SchemaGraph::CreateEmpty()
+                                         ,
+                                         database->dialect_));
+    } else {
       database->versioned_catalog_ = std::make_unique<VersionedCatalog>();
+    }
   } else {
     SchemaUpdater updater;
     ZETASQL_ASSIGN_OR_RETURN(

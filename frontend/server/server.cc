@@ -315,7 +315,7 @@ std::unique_ptr<Server> Server::Create(const Server::Options& options) {
   // Actually start the server.
   server->grpc_server_ = builder.BuildAndStart();
   if (server->port_ < 0) {
-    ZETASQL_LOG(ERROR) << "Failed to bind to address: " << options.server_address;
+    ABSL_LOG(ERROR) << "Failed to bind to address: " << options.server_address;
     return nullptr;
   }
 

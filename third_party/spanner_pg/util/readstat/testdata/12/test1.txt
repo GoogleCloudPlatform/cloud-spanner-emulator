@@ -1,0 +1,4 @@
+Tx: 12
+Rx: 100000
+Count: 10
+TextEntry: "This is a random chunk of text"

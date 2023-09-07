@@ -1,0 +1,112 @@
+table_name,column_name,is_nullable,spanner_type
+pg_available_extension_versions,name,YES,character varying
+pg_available_extension_versions,version,YES,character varying
+pg_available_extension_versions,installed,YES,boolean
+pg_available_extension_versions,superuser,YES,boolean
+pg_available_extension_versions,trusted,YES,boolean
+pg_available_extension_versions,relocatable,YES,boolean
+pg_available_extension_versions,schema,YES,character varying
+pg_available_extension_versions,requires,YES,character varying[]
+pg_available_extension_versions,comment,YES,character varying
+pg_available_extensions,name,YES,character varying
+pg_available_extensions,default_version,YES,character varying
+pg_available_extensions,installed_version,YES,character varying
+pg_available_extensions,comment,YES,character varying
+pg_backend_memory_contexts,name,YES,character varying
+pg_backend_memory_contexts,ident,YES,character varying
+pg_backend_memory_contexts,parent,YES,character varying
+pg_backend_memory_contexts,level,YES,bigint
+pg_backend_memory_contexts,total_bytes,YES,bigint
+pg_backend_memory_contexts,total_nblocks,YES,bigint
+pg_backend_memory_contexts,free_bytes,YES,bigint
+pg_backend_memory_contexts,free_chunks,YES,bigint
+pg_backend_memory_contexts,used_bytes,YES,bigint
+pg_config,name,YES,character varying
+pg_config,setting,YES,character varying
+pg_cursors,name,YES,character varying
+pg_cursors,statement,YES,character varying
+pg_cursors,is_holdable,YES,boolean
+pg_cursors,is_binary,YES,boolean
+pg_cursors,is_scrollable,YES,boolean
+pg_cursors,creation_time,YES,timestamp with time zone
+pg_file_settings,sourcefile,YES,character varying
+pg_file_settings,sourceline,YES,bigint
+pg_file_settings,seqno,YES,bigint
+pg_file_settings,name,YES,character varying
+pg_file_settings,setting,YES,character varying
+pg_file_settings,applied,YES,boolean
+pg_file_settings,error,YES,character varying
+pg_hba_file_rules,line_number,YES,bigint
+pg_hba_file_rules,type,YES,character varying
+pg_hba_file_rules,database,YES,character varying[]
+pg_hba_file_rules,user_name,YES,character varying[]
+pg_hba_file_rules,address,YES,character varying
+pg_hba_file_rules,netmask,YES,character varying
+pg_hba_file_rules,auth_method,YES,character varying
+pg_hba_file_rules,options,YES,character varying[]
+pg_hba_file_rules,error,YES,character varying
+pg_indexes,schemaname,YES,character varying
+pg_indexes,tablename,YES,character varying
+pg_indexes,indexname,YES,character varying
+pg_indexes,tablespace,YES,character varying
+pg_indexes,indexdef,YES,character varying
+pg_matviews,schemaname,YES,character varying
+pg_matviews,matviewname,YES,character varying
+pg_matviews,matviewowner,YES,character varying
+pg_matviews,tablespace,YES,character varying
+pg_matviews,hasindexes,YES,boolean
+pg_matviews,ispopulated,YES,boolean
+pg_matviews,definition,YES,character varying
+pg_policies,schemaname,YES,character varying
+pg_policies,tablename,YES,character varying
+pg_policies,policyname,YES,character varying
+pg_policies,permissive,YES,character varying
+pg_policies,roles,YES,character varying[]
+pg_policies,cmd,YES,character varying
+pg_policies,qual,YES,character varying
+pg_policies,with_check,YES,character varying
+pg_prepared_xacts,transaction,YES,bigint
+pg_prepared_xacts,gid,YES,character varying
+pg_prepared_xacts,prepared,YES,timestamp with time zone
+pg_prepared_xacts,owner,YES,character varying
+pg_prepared_xacts,database,YES,character varying
+pg_publication_tables,pubname,YES,character varying
+pg_publication_tables,schemaname,YES,character varying
+pg_publication_tables,tablename,YES,character varying
+pg_rules,schemaname,YES,character varying
+pg_rules,tablename,YES,character varying
+pg_rules,rulename,YES,character varying
+pg_rules,definition,YES,character varying
+pg_settings,name,YES,character varying
+pg_settings,setting,YES,character varying
+pg_settings,unit,YES,character varying
+pg_settings,category,YES,character varying
+pg_settings,short_desc,YES,character varying
+pg_settings,extra_desc,YES,character varying
+pg_settings,context,YES,character varying
+pg_settings,vartype,YES,character varying
+pg_settings,source,YES,character varying
+pg_settings,min_val,YES,character varying
+pg_settings,max_val,YES,character varying
+pg_settings,enumvals,YES,character varying[]
+pg_settings,boot_val,YES,character varying
+pg_settings,reset_val,YES,character varying
+pg_settings,sourcefile,YES,character varying
+pg_settings,sourceline,YES,bigint
+pg_settings,pending_restart,YES,boolean
+pg_shmem_allocations,name,YES,character varying
+pg_shmem_allocations,off,YES,bigint
+pg_shmem_allocations,size,YES,bigint
+pg_shmem_allocations,allocated_size,YES,bigint
+pg_tables,schemaname,YES,character varying
+pg_tables,tablename,YES,character varying
+pg_tables,tableowner,YES,character varying
+pg_tables,tablespace,YES,character varying
+pg_tables,hasindexes,YES,boolean
+pg_tables,hasrules,YES,boolean
+pg_tables,hastriggers,YES,boolean
+pg_tables,rowsecurity,YES,boolean
+pg_views,schemaname,YES,character varying
+pg_views,viewname,YES,character varying
+pg_views,viewowner,YES,character varying
+pg_views,definition,YES,character varying

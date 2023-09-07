@@ -134,7 +134,7 @@ absl::Status ChangeStreamQueryValidator::ValidateTvfScanAndExtractMetadata(
 // form of query_stmt->project_scan->tvf_scan
 absl::Status ChangeStreamQueryValidator::ValidateQuery(
     const zetasql::ResolvedNode* node) {
-  ZETASQL_DCHECK(node != nullptr);
+  ABSL_DCHECK(node != nullptr);
   if (node->node_kind() == zetasql::RESOLVED_QUERY_STMT) {
     const zetasql::ResolvedQueryStmt* query_stmt =
         node->GetAs<zetasql::ResolvedQueryStmt>();
@@ -170,7 +170,7 @@ absl::Status ChangeStreamQueryValidator::ValidateQuery(
 
 absl::StatusOr<bool> ChangeStreamQueryValidator::IsChangeStreamQuery(
     const zetasql::ResolvedNode* node) {
-  ZETASQL_DCHECK(node != nullptr);
+  ABSL_DCHECK(node != nullptr);
   std::vector<const zetasql::ResolvedNode*> child_nodes;
   node->GetChildNodes(&child_nodes);
   for (const zetasql::ResolvedNode* child : child_nodes) {

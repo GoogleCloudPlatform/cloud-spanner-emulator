@@ -40,6 +40,7 @@
 #include "backend/query/queryable_view.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/errors.h"
+#include "third_party/spanner_pg/catalog/pg_catalog.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -54,6 +55,40 @@ class NetCatalog : public zetasql::Catalog {
       : root_catalog_(root_catalog) {}
 
   static constexpr char kName[] = "NET";
+
+  std::string FullName() const final {
+    std::string name = root_catalog_->FullName();
+    if (name.empty()) {
+      return kName;
+    }
+    absl::StrAppend(&name, kName);
+    return name;
+  }
+
+  // Implementation of the zetasql::Catalog interface.
+  absl::Status GetFunction(const std::string& name,
+                           const zetasql::Function** function,
+                           const FindOptions& options) final {
+    // The list of all functions is maintained in the root catalog in the
+    // form of their fully-qualified names. Just prefix the function name
+    // with the name of 'this' catalog and delegate the request to parent.
+    return root_catalog_->GetFunction(absl::StrJoin({FullName(), name}, "."),
+                                      function, options);
+  }
+
+ private:
+  backend::Catalog* root_catalog_;
+};
+
+// A sub-catalog used for resolving PG function lookups from GSQL queries.
+// Required for supporting check constraints as PG queries are translated to
+// GSQL queries before storing in the DDL statement.
+class PGFunctionCatalog : public zetasql::Catalog {
+ public:
+  explicit PGFunctionCatalog(backend::Catalog* root_catalog)
+      : root_catalog_(root_catalog) {}
+
+  static constexpr char kName[] = "PG";
 
   std::string FullName() const final {
     std::string name = root_catalog_->FullName();
@@ -122,8 +157,15 @@ absl::Status Catalog::GetCatalog(const std::string& name,
                                  const FindOptions& options) {
   if (absl::EqualsIgnoreCase(name, InformationSchemaCatalog::kName)) {
     *catalog = GetInformationSchemaCatalog();
+  } else if (absl::EqualsIgnoreCase(name, InformationSchemaCatalog::kPGName)) {
+    *catalog = GetPGInformationSchemaCatalog();
   } else if (absl::EqualsIgnoreCase(name, NetCatalog::kName)) {
     *catalog = GetNetFunctionsCatalog();
+  } else if (absl::EqualsIgnoreCase(name, PGFunctionCatalog::kName)) {
+    *catalog = GetPGFunctionsCatalog();
+  } else if (absl::EqualsIgnoreCase(name,
+                                    postgres_translator::PGCatalog::kName)) {
+    *catalog = GetPGCatalog();
   }
   return absl::OkStatus();
 }
@@ -202,6 +244,15 @@ zetasql::Catalog* Catalog::GetInformationSchemaCatalog() const {
   return information_schema_catalog_.get();
 }
 
+zetasql::Catalog* Catalog::GetPGInformationSchemaCatalog() const {
+  absl::MutexLock lock(&mu_);
+  if (!pg_information_schema_catalog_) {
+    pg_information_schema_catalog_ = std::make_unique<InformationSchemaCatalog>(
+        InformationSchemaCatalog::kPGName, schema_);
+  }
+  return pg_information_schema_catalog_.get();
+}
+
 zetasql::Catalog* Catalog::GetNetFunctionsCatalog() const {
   absl::MutexLock lock(&mu_);
   if (!net_catalog_) {
@@ -209,6 +260,24 @@ zetasql::Catalog* Catalog::GetNetFunctionsCatalog() const {
   }
   return net_catalog_.get();
 }
+
+zetasql::Catalog* Catalog::GetPGFunctionsCatalog() const {
+  absl::MutexLock lock(&mu_);
+  if (!pg_function_catalog_) {
+    pg_function_catalog_ =
+        std::make_unique<PGFunctionCatalog>(const_cast<Catalog*>(this));
+  }
+  return pg_function_catalog_.get();
+}
+
+zetasql::Catalog* Catalog::GetPGCatalog() const {
+  absl::MutexLock lock(&mu_);
+  if (!pg_catalog_) {
+    pg_catalog_ = std::make_unique<postgres_translator::PGCatalog>(schema_);
+  }
+  return pg_catalog_.get();
+}
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

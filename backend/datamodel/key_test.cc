@@ -99,11 +99,23 @@ TEST(Key, SortsNullsCorrectly) {
   EXPECT_GT(one, null);
   EXPECT_LT(null, one);
 
+  // ASC_NULLS_LAST
+  null.SetColumnNullsLast(1, true);
+  one.SetColumnNullsLast(1, true);
+  EXPECT_GT(null, one);
+  EXPECT_LT(one, null);
+
   // DESC_NULLS_LAST
   null.SetColumnDescending(1, true);
   one.SetColumnDescending(1, true);
   EXPECT_GT(null, one);
   EXPECT_LT(one, null);
+
+  // DESC_NULLS_FIRST
+  null.SetColumnNullsLast(1, false);
+  one.SetColumnNullsLast(1, false);
+  EXPECT_GT(one, null);
+  EXPECT_LT(null, one);
 }
 
 TEST(Key, OrdersKeysOfSameLength) {

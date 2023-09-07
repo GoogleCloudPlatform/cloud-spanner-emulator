@@ -1,0 +1,4 @@
+[
+{ oid_symbol => 'SPANNER_NSP',
+  nspname => 'spanner', nspowner => 'PGUID', nspacl => '_null_' },
+]

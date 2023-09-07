@@ -1,3 +1,4 @@
+# # # # --- Failure Test Cases --- # # # #
 # CREATE CHANGE STREAM for explicit key columns.
 # --regex
 CREATE TABLE Users (
@@ -115,6 +116,150 @@ CREATE CHANGE STREAM foo4 FOR ALL;
 --
 ERROR:.* because it is not allowed to have more than 3 Change Streams.*
 ==
+# DROP TABLE explicitly tracked by a change stream.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users;
+DROP TABLE Users;
+--
+ERROR:.* Tables explicitly tracked by a Change Stream cannot be dropped.*
+==
+# DROP COLUMN explicitly tracked by a change stream.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users(Name);
+ALTER TABLE Users DROP Name;
+--
+ERROR:.* Columns explicitly tracked by a Change Stream cannot be dropped.*
+==
+# CREATE CHANGE STREAM for unsupported tracked obejct.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users;
+CREATE CHANGE STREAM bar FOR foo;
+--
+ERROR:.* Change Stream bar does not support tracking Change Stream foo.*
+==
+# CREATE CHANGE STREAM more than ten times in one database.
+# --regex
+CREATE TABLE Users1 (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE TABLE Users2 (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE TABLE Users3 (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE TABLE Users4 (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo1 FOR Users1;
+CREATE CHANGE STREAM foo2 FOR Users1;
+CREATE CHANGE STREAM foo3 FOR Users1;
+CREATE CHANGE STREAM foo4 FOR Users2;
+CREATE CHANGE STREAM foo5 FOR Users2;
+CREATE CHANGE STREAM foo6 FOR Users2;
+CREATE CHANGE STREAM foo7 FOR Users3;
+CREATE CHANGE STREAM foo8 FOR Users3;
+CREATE CHANGE STREAM foo9 FOR Users3;
+CREATE CHANGE STREAM foo10 FOR Users4;
+CREATE CHANGE STREAM foo11 FOR Users4;
+--
+ERROR:.*  because the maximum number of Change Streams per Database .*
+==
+# ALTER CHANGE STREAM with invalid retention.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users;
+ALTER CHANGE STREAM foo SET OPTIONS ( retention_period='50d' )
+--
+ERROR:.*  Change Streams retention period must be a value in the range .*
+==
+# ALTER CHANGE STREAM with invalid value capture type.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users;
+ALTER CHANGE STREAM foo SET OPTIONS ( value_capture_type='FooBar' )
+--
+ERROR:.*  Invalid value_capture_type.*
+==
+# ALTER CHANGE STREAM with invalid set FOR CLAUSE for nonexistent table.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users;
+ALTER CHANGE STREAM foo SET FOR bar
+--
+ERROR:.*  this Table does not exist.*
+==
+# ALTER CHANGE STREAM with invalid set FOR CLAUSE for nonexistent column.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users;
+ALTER CHANGE STREAM foo SET FOR Users(bar)
+--
+ERROR:.*  it does not exist in Table Users.*
+==
+# CREATE CHANGE STREAM with same name of existing change streams.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users;
+CREATE CHANGE STREAM foo FOR ALL;
+--
+ERROR:.*  Duplicate name in schema: foo.*
+==
+# CREATE CHANGE STREAM with same name of existing change streams tvf.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users;
+CREATE TABLE READ_foo()PRIMARY KEY();
+--
+ERROR:.*  Duplicate name in schema: READ_foo.*
+==
+# DROP CHANGE STREAM nonexistent.
+# --regex
+CREATE TABLE Users (
+  UserId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM foo FOR Users;
+DROP CHANGE STREAM bar;
+--
+ERROR:.*  Change Stream not found: bar.*
+
+
+
 
 
 

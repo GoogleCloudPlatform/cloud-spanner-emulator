@@ -1,0 +1,3 @@
+PID: 12
+Threads: 10
+Worst color: chartreuse

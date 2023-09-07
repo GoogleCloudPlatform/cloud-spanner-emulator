@@ -19,6 +19,10 @@ syntax = "proto2";
 package google.spanner.emulator.backend.ddl;
 
 
+// Represents the AST of set of Spanner DDL statements.
+message DDLStatementList {
+  repeated DDLStatement statement = 1;
+}
 
 message DDLStatement {
   oneof statement {
@@ -62,6 +66,16 @@ message SetOption {
 }
 
 
+// If database dialect, e.g., PostgreSQL compatible dialect, is different from
+// GoogleSQL, this message contains information about original SQL expression
+// or original SQL select statement used to generate target GoogleSQL expression
+// or statement. It is used by CheckConstraint, GeneratedColumnDefinition,
+// ColumnDefaultDefinition and CreateFunction.
+message SQLExpressionOrigin {
+  // Expression in original dialect.
+  optional string original_expression = 1;
+  optional string serialized_parse_tree = 2;
+}
 
 message ColumnDefinition {
   // Required in all cases, except when stored as part of array_subtype.
@@ -109,6 +123,10 @@ message ColumnDefinition {
     // True if the generated column is defined as STORED.
     optional bool stored = 2;
 
+    // Information about SQL expression in its original dialect, e.g.,
+    // PostgreSQL (before translation into GoogleSQL). GoogleSQL is not using
+    // this field.
+    optional SQLExpressionOrigin expression_origin = 4;
   }
 
   optional GeneratedColumnDefinition generated_column = 11;
@@ -117,6 +135,10 @@ message ColumnDefinition {
     // Googlesql string for the default expression.
     optional string expression = 1;
 
+    // Information about SQL expression in its original dialect, e.g.,
+    // PostgreSQL (before translation into GoogleSQL). GoogleSQL is not using
+    // this field.
+    optional SQLExpressionOrigin expression_origin = 2;
   }
 
   optional ColumnDefaultDefinition column_default = 12;
@@ -129,8 +151,10 @@ message KeyPartClause {
   optional string key_name = 1;
 
   enum Order {
-    ASC = 0;   // Ascending direction with NULLs sorted first.
-    DESC = 1;  // Descending direction with NULLs sorted last.
+    ASC = 0;               // Ascending direction with NULLs sorted first.
+    DESC = 1;              // Descending direction with NULLs sorted last.
+    ASC_NULLS_LAST = 2;    // Ascending direction with NULLs sorted last.
+    DESC_NULLS_FIRST = 3;  // Descending direction with NULLs sorted first.
   }
   // The ordering specified by this key component (if at all)
   optional Order order = 2 [default = ASC];
@@ -160,6 +184,7 @@ message ForeignKey {
     NO_ACTION = 1;           // Referential checks only; default if unspecified.
     CASCADE = 3;             // Constrained rows updated or deleted.
   }
+  optional Action on_update = 6;
   optional Action on_delete = 7;
 }
 
@@ -186,6 +211,7 @@ message CreateFunction {
   optional bool is_or_replace = 4;
   optional Function.SqlSecurity sql_security = 5;
   optional string sql_body = 9;
+  optional SQLExpressionOrigin sql_body_origin = 12;
   optional Function.Language language = 10;
 }
 
@@ -205,6 +231,9 @@ message CheckConstraint {
   // True if the constraint is enforced.
   optional bool enforced = 3;
 
+  // Information about SQL expression in its original dialect, e.g., PostgreSQL
+  // (before translation into GoogleSQL). GoogleSQL not using this field.
+  optional SQLExpressionOrigin expression_origin = 4;
 }
 
 // Used for CREATE TABLE.
@@ -217,6 +246,11 @@ message InterleaveClause {
     // Interleave this table in the parent table, requiring that the parent row
     // exists for the child row to exist.
     IN_PARENT = 0;
+
+    // Interleave this table in the parent table, without establishing any
+    // parent-child row existence relationship. Only used for supporting
+    // INTERLEAVE IN indexes for the PostgreSQL dialect.
+    IN = 1;
   }
   // Type of the relationship between the two tables involved.
   optional Type type = 4 [default = IN_PARENT];

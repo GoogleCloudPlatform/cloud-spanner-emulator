@@ -41,6 +41,7 @@ constexpr char kCloudSpannerEmulatorFunctionCatalog[] =
 class FunctionCatalog {
  public:
   // catalog_name allows tests to override the catalog name.
+  // Overriding the catalog name is required for some PG dialect testing.
   explicit FunctionCatalog(
       zetasql::TypeFactory* type_factory,
       const std::string& catalog_name = kCloudSpannerEmulatorFunctionCatalog);
@@ -53,6 +54,8 @@ class FunctionCatalog {
   void AddZetaSQLBuiltInFunctions(zetasql::TypeFactory* type_factory);
 
   void AddSpannerFunctions();
+
+  void AddSpannerPGFunctions(zetasql::TypeFactory* type_factory);
 
   void AddFunctionAliases();
 

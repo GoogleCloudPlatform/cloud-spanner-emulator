@@ -148,6 +148,13 @@ class ServerTest : public testing::Test {
                 string_col STRING(MAX)
               ) PRIMARY KEY(int64_col)
         )");
+    request.add_extra_statements(
+        R"(
+              CREATE TABLE test_table2(
+                int64_col INT64 NOT NULL,
+                string_col STRING(MAX)
+              ) PRIMARY KEY(int64_col)
+        )");
     request.add_extra_statements(R"(
               CREATE CHANGE STREAM change_stream_test_table FOR test_table
             )");
@@ -161,24 +168,6 @@ class ServerTest : public testing::Test {
                 parents ARRAY<STRING(MAX)>,
                 children ARRAY<STRING(MAX)>,
               ) PRIMARY KEY (partition_token)
-            )");
-    request.add_extra_statements(R"(
-              CREATE TABLE data_table (
-              partition_token STRING(MAX),
-              commit_timestamp TIMESTAMP,
-              record_sequence STRING(MAX),
-              server_transaction_id STRING(MAX),
-              is_last_record_in_transaction_in_partition BOOL,
-              table_name STRING(MAX),
-              column_types ARRAY<JSON>,
-              mods ARRAY<JSON>,
-              mod_type STRING(MAX),
-              value_capture_type STRING(MAX),
-              number_of_records_in_transaction INT64,
-              number_of_partitions_in_transaction INT64,
-              transaction_tag STRING(MAX),
-              is_system_transaction BOOL,
-            ) PRIMARY KEY (partition_token, commit_timestamp, record_sequence, server_transaction_id)
             )");
     request.set_parent(test_instance_uri_);
     request.set_create_statement(

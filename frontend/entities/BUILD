@@ -61,7 +61,7 @@ cc_library(
         "//backend/database",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
-        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_grpc",
+        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
     ],
 )
 

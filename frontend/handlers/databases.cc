@@ -103,11 +103,21 @@ absl::Status CreateDatabase(RequestContext* ctx,
     return error::CreateDatabaseMissingCreateStatement();
   }
 
+  // Determine the database dialect.
+  database_api::DatabaseDialect dialect;
+  // DATABASE_DIALECT_UNSPECIFIED defaults to creating a database with the
+  // GOOGLE_STANDARD_SQL dialect.
+  if (request->database_dialect() ==
+      database_api::DatabaseDialect::DATABASE_DIALECT_UNSPECIFIED) {
+    dialect = database_api::DatabaseDialect::GOOGLE_STANDARD_SQL;
+  } else {
+    dialect = request->database_dialect();
+  }
+
   // Extract database name from create statement.
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<backend::ddl::DDLStatement> stmt,
-      backend::ParseDDLByDialect(request->create_statement()
-                                 ));
+      backend::ParseDDLByDialect(request->create_statement(), dialect));
   std::string database_name = stmt->create_database().db_name();
 
   // Validate database name.
@@ -125,6 +135,7 @@ absl::Status CreateDatabase(RequestContext* ctx,
           database_uri,
           backend::SchemaChangeOperation{
               .statements = create_statements,
+              .database_dialect = dialect,
           }));
 
   // Create an operation tracking the database creation.
@@ -193,6 +204,7 @@ absl::Status UpdateDatabaseDdl(
   ZETASQL_RETURN_IF_ERROR(backend_database->UpdateSchema(
       backend::SchemaChangeOperation{
           .statements = statements,
+          .database_dialect = backend_database->dialect()
       },
       &num_succesful_statements, &commit_timestamp, &backfill_status));
 

@@ -35,6 +35,7 @@
 #include "backend/query/queryable_table.h"
 #include "backend/query/queryable_view.h"
 #include "backend/schema/catalog/schema.h"
+#include "third_party/spanner_pg/catalog/pg_catalog.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -43,6 +44,7 @@ namespace emulator {
 namespace backend {
 
 class NetCatalog;
+class PGFunctionCatalog;
 
 // Implementation of zetasql::Catalog for the root catalog in the catalog
 // hierarchy. For more details, see code of zetasql::Catalog.
@@ -65,6 +67,7 @@ class Catalog : public zetasql::EnumerableCatalog {
 
  private:
   friend class NetCatalog;
+  friend class PGFunctionCatalog;
   // These tests needs to access the tvf map and manually add an empty tvf.
   FRIEND_TEST(ChangeStreamQueryValidatorTest,
               ValidateNoneChangeStreamTvfWithSamePrefixIsFiltered);
@@ -97,8 +100,18 @@ class Catalog : public zetasql::EnumerableCatalog {
   zetasql::Catalog* GetInformationSchemaCatalog() const
       ABSL_LOCKS_EXCLUDED(mu_);
 
+  // Returns the PG information schema catalog (creating one if needed).
+  zetasql::Catalog* GetPGInformationSchemaCatalog() const
+      ABSL_LOCKS_EXCLUDED(mu_);
+
   // Returns the NET catalog.
   zetasql::Catalog* GetNetFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
+
+  // Returns the PG functions catalog.
+  zetasql::Catalog* GetPGFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
+
+  // Returns the PG catalog (similar to information_schema).
+  zetasql::Catalog* GetPGCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
 
   // The backend schema (which is the default schema in this catalog).
   const Schema* schema_ = nullptr;
@@ -127,8 +140,19 @@ class Catalog : public zetasql::EnumerableCatalog {
   mutable std::unique_ptr<zetasql::Catalog> information_schema_catalog_
       ABSL_GUARDED_BY(mu_);
 
+  // PG information schema catalog (created only if accessed).
+  mutable std::unique_ptr<zetasql::Catalog> pg_information_schema_catalog_
+      ABSL_GUARDED_BY(mu_);
+
   // Sub-catalog for resolving NET function lookup.
   mutable std::unique_ptr<zetasql::Catalog> net_catalog_ ABSL_GUARDED_BY(mu_);
+
+  // Sub-catalog for resolving PG function lookup.
+  mutable std::unique_ptr<zetasql::Catalog> pg_function_catalog_
+      ABSL_GUARDED_BY(mu_);
+
+  // Sub-catalog for resolving pg_catalog lookup.
+  mutable std::unique_ptr<zetasql::Catalog> pg_catalog_ ABSL_GUARDED_BY(mu_);
 };
 
 }  // namespace backend

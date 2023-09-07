@@ -1425,13 +1425,13 @@ absl::Status TableValuedFunctionNotFound(absl::string_view tvf_name) {
       absl::StrCat("Table valued function not found: ", tvf_name));
 }
 
-absl::Status DroppingTableWithChangeStream(
+absl::Status DropTableWithChangeStream(
     absl::string_view table_name, int64_t change_stream_count,
     absl::string_view change_stream_name_list_string) {
   return absl::Status(
       absl::StatusCode::kFailedPrecondition,
       absl::Substitute(
-          "Cannot drop table $0. Table $0 is tracked by $1 change streams: $2. "
+          "Cannot drop table $0. Table $0 is tracked by $1 Change Stream: $2. "
           "Tables explicitly tracked by a Change Stream cannot be dropped. "
           "Please drop the Change Stream or modify its FOR clause to stop "
           "tracking the table explicitly before dropping the table.",
@@ -1444,8 +1444,8 @@ absl::Status DropColumnWithChangeStream(
   return absl::Status(
       absl::StatusCode::kFailedPrecondition,
       absl::Substitute(
-          "Cannot drop column $0.$1 . Column $0 is tracked by $2 change "
-          "streams: $3. "
+          "Cannot drop column $0.$1 . Column $0.$1 is tracked by $2 Change "
+          "Stream: $3. "
           "Columns explicitly tracked by a Change Stream cannot be dropped. "
           "Please alter the Change Stream to stop tracking the column before "
           "dropping the column.",
@@ -2772,6 +2772,18 @@ absl::Status WithViewsAreNotSupported() {
   return absl::Status(absl::StatusCode::kInvalidArgument,
                       "WITH clauses are unsupported in view definitions.");
 }
+
+absl::Status DdlInvalidArgumentError(absl::string_view message) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("$0", message));
+}
+
+absl::Status DdlUnavailableError() {
+  return absl::Status(
+      absl::StatusCode::kUnavailable,
+      "Error processing PostgreSQL DDL statements, retry may succeed.");
+}
+
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

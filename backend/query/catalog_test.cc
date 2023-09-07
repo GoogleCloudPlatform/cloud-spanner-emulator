@@ -90,6 +90,22 @@ TEST_F(AnalyzeStatementTest, SelectNestedCatalogNetFunctions) {
                        "NET.IPV4_TO_INT64(b\"\\x00\\x00\\x00\\x00\")"));
 }
 
+TEST_F(AnalyzeStatementTest, SelectNestedCatalogPGFunctions) {
+  ZETASQL_EXPECT_OK(
+      AnalyzeStatement("SELECT pg.map_double_to_int(CAST(1.1 as float64)) "
+                       "IN (pg.map_double_to_int(1.1), "
+                       "pg.map_double_to_int(2.0)) as col"));
+}
+
+TEST_F(AnalyzeStatementTest, SelectFromPGInformationSchema) {
+  ZETASQL_EXPECT_OK(AnalyzeStatement(
+      "SELECT column_name FROM pg_information_schema.columns"));
+}
+
+TEST_F(AnalyzeStatementTest, SelectFromPGCatalog) {
+  ZETASQL_EXPECT_OK(AnalyzeStatement("SELECT tablename FROM pg_catalog.pg_tables"));
+}
+
 class CatalogTest : public testing::Test {
  public:
   CatalogTest() : type_factory_(), function_catalog_(&type_factory_) {}

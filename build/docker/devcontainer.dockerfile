@@ -35,6 +35,9 @@ RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
                         --slave   /usr/bin/g++ g++ /usr/bin/g++-${GCC_VERSION} && \
     update-alternatives --set gcc /usr/bin/gcc-${GCC_VERSION}
 
+# Install the en* locales required for PG scalar functions.
+RUN apt-get -qq install language-pack-en
+
 ENV BAZEL_CXXOPTS="-std=c++17"
 
 # Install google-cloud-sdk to get gcloud.

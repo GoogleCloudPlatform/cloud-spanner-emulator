@@ -1,0 +1,89 @@
+# --regex
+CREATE TABLE users (
+  id bigint NOT NULL,
+  firstname varchar NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE INDEX users_idx ON Users (FirstName);
+DROP INDEX users_idx;
+--
+^CREATE TABLE users \(
+  id bigint NOT NULL,
+  firstname character varying NOT NULL,
+  PRIMARY KEY\(id\)
+\);$
+==
+
+# --regex
+CREATE TABLE users (
+  id bigint NOT NULL,
+  firstname varchar NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE INDEX "users_IDX_1" ON Users (FirstName);
+DROP INDEX "users_IDX_1";
+--
+^CREATE TABLE users \(
+  id bigint NOT NULL,
+  firstname character varying NOT NULL,
+  PRIMARY KEY\(id\)
+\);$
+==
+
+# --regex
+CREATE TABLE users (
+  id bigint NOT NULL,
+  firstname varchar NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE INDEX "users_IDX_1" ON Users (FirstName);
+DROP INDEX IF EXISTS "users_IDX_1";
+--
+^CREATE TABLE users \(
+  id bigint NOT NULL,
+  firstname character varying NOT NULL,
+  PRIMARY KEY\(id\)
+\);$
+==
+
+DROP INDEX users_idx CASCADE;
+--
+ERROR: Only <RESTRICT> behavior is supported by <DROP> statement.
+==
+
+DROP INDEX users_idx1, users_idx2;
+--
+ERROR: <DROP> statements support deletion of only single object per statement.
+==
+
+# TODO: When named schema is supported, re-enable this test.
+# DROP INDEX users_schema.users_idx;
+# --
+# DROP INDEX users_schema.users_idx
+# ==
+
+# --regex
+CREATE TABLE users (
+  id bigint NOT NULL,
+  firstname varchar NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE INDEX users_idx ON Users (FirstName);
+DROP INDEX public.users_idx;
+--
+^CREATE TABLE users \(
+  id bigint NOT NULL,
+  firstname character varying NOT NULL,
+  PRIMARY KEY\(id\)
+\);$
+==
+
+DROP INDEX CONCURRENTLY concurrently_not_supported;
+--
+ERROR: <CONCURRENTLY> is not supported by <DROP> statement.
+==
+
+DROP INDEX;
+--
+ERROR: [ERROR] syntax error at end of input; failed to parse the DDL statements.
+==

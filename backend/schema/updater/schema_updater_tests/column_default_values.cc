@@ -28,8 +28,28 @@ namespace emulator {
 namespace backend {
 namespace test {
 
+// For the following tests, a custom PG DDL statement is required as translating
+// expressions from GSQL to PG is not supported in tests.
+using database_api::DatabaseDialect::POSTGRESQL;
+
 TEST_P(SchemaUpdaterTest, NonKeyColumns) {
   std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        CreateSchema(
+            {
+                R"(
+          create table "T" (
+            "K" bigint primary key,
+            "V" varchar(10),
+            "D1" bigint not null default (1)
+          )
+        )",
+                "alter table \"T\" add column \"D2\" bigint default (2)"},
+            database_api::DatabaseDialect::POSTGRESQL,
+            /*use_gsql_to_pg_translation=*/false));
+  } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema({R"(
@@ -40,6 +60,7 @@ TEST_P(SchemaUpdaterTest, NonKeyColumns) {
           ) PRIMARY KEY (K)
         )",
                       "ALTER TABLE T ADD COLUMN D2 INT64 DEFAULT (2)"}));
+  }
 
   const Table* table = schema->FindTable("T");
   ASSERT_NE(table, nullptr);
@@ -49,6 +70,7 @@ TEST_P(SchemaUpdaterTest, NonKeyColumns) {
   EXPECT_FALSE(col->is_generated());
   EXPECT_FALSE(col->has_default_value());
   EXPECT_FALSE(col->expression().has_value());
+  EXPECT_FALSE(col->original_expression().has_value());
 
   col = table->FindColumn("D1");
   ASSERT_NE(col, nullptr);
@@ -59,6 +81,11 @@ TEST_P(SchemaUpdaterTest, NonKeyColumns) {
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
   EXPECT_EQ(col->expression().value(), "1");
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(col->original_expression(), "'1'::bigint");
+  } else {
+    EXPECT_FALSE(col->original_expression().has_value());
+  }
   EXPECT_EQ(col->dependent_columns().size(), 0);
 
   col = table->FindColumn("D2");
@@ -70,17 +97,34 @@ TEST_P(SchemaUpdaterTest, NonKeyColumns) {
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
   EXPECT_EQ(col->expression().value(), "2");
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(col->original_expression(), "'2'::bigint");
+  } else {
+    EXPECT_FALSE(col->original_expression().has_value());
+  }
   EXPECT_EQ(col->dependent_columns().size(), 0);
 }
 
 TEST_P(SchemaUpdaterTest, FunctionAsDefault) {
   std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+        CREATE TABLE "T" (
+          "K" bigint primary key,
+          "V" timestamptz DEFAULT (NOW())
+        )
+      )"},
+                                      database_api::DatabaseDialect::POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
           CREATE TABLE T (
             K INT64 NOT NULL,
             V TIMESTAMP DEFAULT (CURRENT_TIMESTAMP())
           ) PRIMARY KEY(K)
         )"}));
+  }
 
   const Table* table = schema->FindTable("T");
   ASSERT_NE(table, nullptr);
@@ -90,11 +134,34 @@ TEST_P(SchemaUpdaterTest, FunctionAsDefault) {
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(col->original_expression(), "now()");
+  } else {
+    EXPECT_FALSE(col->original_expression().has_value());
+  }
   EXPECT_EQ(col->expression().value(), "CURRENT_TIMESTAMP()");
 }
 
 TEST_P(SchemaUpdaterTest, KeyColumn) {
   std::unique_ptr<const Schema> schema;
+  // The DDL translation from GSQL to PG does not support expressions. Skip it
+  // for now and a hand-written PG DDL will be added.
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        CreateSchema({R"(
+        create table "T" (
+          "K1" bigint not null,
+          "K2" bigint default (20),
+          "K3" bigint,
+          "V" varchar(10),
+          primary key ("K1", "K2", "K3")
+        )
+      )",
+                      "alter table \"T\" alter column \"K3\" set default (30)"},
+                     database_api::DatabaseDialect::POSTGRESQL,
+                     /*use_gsql_to_pg_translation=*/false));
+  } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema({R"(
@@ -106,6 +173,7 @@ TEST_P(SchemaUpdaterTest, KeyColumn) {
         ) PRIMARY KEY (K1, K2, K3)
       )",
                       "ALTER TABLE T ALTER COLUMN K3 INT64 DEFAULT (30)"}));
+  }
 
   const Table* table = schema->FindTable("T");
   ASSERT_NE(table, nullptr);
@@ -115,6 +183,7 @@ TEST_P(SchemaUpdaterTest, KeyColumn) {
   EXPECT_FALSE(col->is_generated());
   EXPECT_FALSE(col->has_default_value());
   EXPECT_FALSE(col->expression().has_value());
+  EXPECT_FALSE(col->original_expression().has_value());
 
   col = table->FindColumn("K2");
   ASSERT_NE(col, nullptr);
@@ -124,6 +193,11 @@ TEST_P(SchemaUpdaterTest, KeyColumn) {
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
   EXPECT_EQ(col->expression().value(), "20");
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(col->original_expression(), "'20'::bigint");
+  } else {
+    EXPECT_FALSE(col->original_expression().has_value());
+  }
   EXPECT_EQ(col->dependent_columns().size(), 0);
 
   col = table->FindColumn("K3");
@@ -134,11 +208,36 @@ TEST_P(SchemaUpdaterTest, KeyColumn) {
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
   EXPECT_EQ(col->expression().value(), "30");
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(col->original_expression(), "'30'::bigint");
+  } else {
+    EXPECT_FALSE(col->original_expression().has_value());
+  }
   EXPECT_EQ(col->dependent_columns().size(), 0);
 }
 
 TEST_P(SchemaUpdaterTest, SetDropDefault) {
   std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        CreateSchema(
+            {
+                R"(
+        create table "T" (
+          "K1" bigint not null,
+          "K2" bigint default (20),
+          "K3" bigint,
+          "V" varchar(10) default ('Hello'),
+          primary key ("K1", "K2", "K3")
+        )
+      )",
+                "alter table \"T\" alter column \"K3\" set default (30)",
+                "alter table \"T\" alter column \"K2\" set default (2)",
+                "alter table \"T\" alter column \"V\" drop default"},
+            database_api::DatabaseDialect::POSTGRESQL,
+            /*use_gsql_to_pg_translation=*/false));
+  } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         schema, CreateSchema({R"(
         CREATE TABLE T (
@@ -151,6 +250,7 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
                               "ALTER TABLE T ALTER COLUMN K3 SET DEFAULT (30)",
                               "ALTER TABLE T ALTER COLUMN K2 SET DEFAULT (2)",
                               "ALTER TABLE T ALTER V DROP DEFAULT"}));
+  }
 
   const Table* table = schema->FindTable("T");
   ASSERT_NE(table, nullptr);
@@ -160,6 +260,7 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
   EXPECT_FALSE(col->is_generated());
   EXPECT_FALSE(col->has_default_value());
   EXPECT_FALSE(col->expression().has_value());
+  EXPECT_FALSE(col->original_expression().has_value());
 
   col = table->FindColumn("K2");
   ASSERT_NE(col, nullptr);
@@ -169,6 +270,11 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
   EXPECT_EQ(col->expression().value(), "2");
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(col->original_expression(), "'2'::bigint");
+  } else {
+    EXPECT_FALSE(col->original_expression().has_value());
+  }
   EXPECT_EQ(col->dependent_columns().size(), 0);
 
   col = table->FindColumn("K3");
@@ -179,6 +285,11 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
   EXPECT_EQ(col->expression().value(), "30");
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(col->original_expression(), "'30'::bigint");
+  } else {
+    EXPECT_FALSE(col->original_expression().has_value());
+  }
   EXPECT_EQ(col->dependent_columns().size(), 0);
 
   col = table->FindColumn("V");
@@ -188,6 +299,7 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
   EXPECT_FALSE(col->is_generated());
   EXPECT_FALSE(col->has_default_value());
   EXPECT_FALSE(col->expression().has_value());
+  EXPECT_FALSE(col->original_expression().has_value());
 }
 
 }  // namespace test

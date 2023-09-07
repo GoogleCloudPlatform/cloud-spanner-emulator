@@ -61,6 +61,9 @@ class DatabaseTest : public ::testing::Test {
 TEST_F(DatabaseTest, CreateSuccessful) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<Database> database,
                        Database::Create(&clock_, SchemaChangeOperation{}));
+  // Verifies that by default, a ZetaSQL database is created.
+  EXPECT_EQ(database->dialect(),
+            database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
   std::vector<std::string> create_statements = {R"(
     CREATE TABLE T(
@@ -75,6 +78,69 @@ TEST_F(DatabaseTest, CreateSuccessful) {
       database,
       Database::Create(&clock_,
                        SchemaChangeOperation{.statements = create_statements}));
+  // Verifies that by default, a ZetaSQL database is created.
+  EXPECT_EQ(database->dialect(),
+            database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+}
+
+TEST_F(DatabaseTest, CreateWithGSQLDialectSuccessful) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<Database> database,
+      Database::Create(
+          &clock_,
+          SchemaChangeOperation{
+              .database_dialect =
+                  database_api::DatabaseDialect::GOOGLE_STANDARD_SQL}));
+  EXPECT_EQ(database->dialect(),
+            database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+
+  std::vector<std::string> create_statements = {R"(
+    CREATE TABLE T(
+      k1 INT64,
+      k2 INT64,
+    ) PRIMARY KEY(k1)
+  )",
+                                                R"(
+    CREATE INDEX I on T(k1))"};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      database,
+      Database::Create(
+          &clock_,
+          SchemaChangeOperation{
+              .statements = create_statements,
+              .database_dialect =
+                  database_api::DatabaseDialect::GOOGLE_STANDARD_SQL}));
+  EXPECT_EQ(database->dialect(),
+            database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+}
+
+TEST_F(DatabaseTest, CreateWithPostgresDialectSuccessful) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<Database> database,
+      Database::Create(
+          &clock_,
+          SchemaChangeOperation{
+              .database_dialect = database_api::DatabaseDialect::POSTGRESQL}));
+  EXPECT_EQ(database->dialect(), database_api::DatabaseDialect::POSTGRESQL);
+
+  std::vector<std::string> create_statements = {R"(
+    CREATE TABLE T(
+      k1 bigint primary key,
+      k2 bigint
+    )
+  )",
+                                                R"(
+    CREATE INDEX I on T(k1))"};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      database,
+      Database::Create(
+          &clock_,
+          SchemaChangeOperation{
+              .statements = create_statements,
+              .database_dialect = database_api::DatabaseDialect::POSTGRESQL}));
+  EXPECT_EQ(database->dialect(), database_api::DatabaseDialect::POSTGRESQL);
 }
 
 TEST_F(DatabaseTest, UpdateSchemaSuccessful) {

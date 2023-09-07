@@ -43,7 +43,7 @@ class ServerStream {
 
   void Send(const T& msg) {
     if (config::should_log_requests()) {
-      ZETASQL_LOG(INFO) << "Sending streaming response:\n" << msg.DebugString();
+      ABSL_LOG(INFO) << "Sending streaming response:\n" << msg.DebugString();
     }
     writer_->Write(msg);
   }
@@ -85,12 +85,12 @@ class UnaryGRPCHandler final : public GRPCHandlerBase {
   absl::Status Run(RequestContext* ctx, const RequestT* request,
                    ResponseT* response) {
     if (config::should_log_requests()) {
-      ZETASQL_LOG(INFO) << "Request[" << service_name() << "." << method_name() << "]\n"
+      ABSL_LOG(INFO) << "Request[" << service_name() << "." << method_name() << "]\n"
                 << request->DebugString();
     }
     absl::Status status = fn_(ctx, request, response);
     if (config::should_log_requests()) {
-      ZETASQL_LOG(INFO) << "Response[" << service_name() << "." << method_name()
+      ABSL_LOG(INFO) << "Response[" << service_name() << "." << method_name()
                 << "]\n"
                 << response->DebugString() << "\n"
                 << (status.ok() ? "OK" : "Error: " + status.ToString());
@@ -119,13 +119,13 @@ class ServerStreamingGRPCHandler final : public GRPCHandlerBase {
   absl::Status Run(RequestContext* ctx, const RequestT* request,
                    grpc::ServerWriterInterface<ResponseT>* writer) {
     if (config::should_log_requests()) {
-      ZETASQL_LOG(INFO) << "Request[" << service_name() << "." << method_name() << "]\n"
+      ABSL_LOG(INFO) << "Request[" << service_name() << "." << method_name() << "]\n"
                 << request->DebugString();
     }
     ServerStream<ResponseT> stream(writer);
     absl::Status status = fn_(ctx, request, &stream);
     if (config::should_log_requests()) {
-      ZETASQL_LOG(INFO) << "Response[" << service_name() << "." << method_name()
+      ABSL_LOG(INFO) << "Response[" << service_name() << "." << method_name()
                 << "]\n"
                 << (status.ok() ? "OK" : "Error: " + status.ToString());
     }

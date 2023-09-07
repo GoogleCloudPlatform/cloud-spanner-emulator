@@ -1,0 +1,314 @@
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  notnullable varchar NOT NULL,
+  nullable varchar NULL
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  notnullable character varying NOT NULL,
+  nullable character varying,
+  PRIMARY KEY(id)
+)
+==
+
+CREATE TABLE Users (
+  PRIMARY KEY(id2, id1),
+  id1 bigint,
+  id2 bigint
+);
+--
+CREATE TABLE users (
+  id1 bigint NOT NULL,
+  id2 bigint NOT NULL,
+  PRIMARY KEY(id2, id1)
+)
+==
+
+# TODO: When named schema is supported, re-enable this test.
+# CREATE TABLE Sch.Users (
+#   PRIMARY KEY(id2, id1),
+#   id1 bigint,
+#   id2 bigint
+# );
+# --
+# CREATE TABLE sch.users (
+#   id1 bigint NOT NULL,
+#   id2 bigint NOT NULL,
+#   PRIMARY KEY(id2, id1)
+# )
+# ==
+
+CREATE TABLE public.Users (
+  id bigint PRIMARY KEY,
+  notnullable varchar NOT NULL,
+  nullable varchar NULL
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  notnullable character varying NOT NULL,
+  nullable character varying,
+  PRIMARY KEY(id)
+)
+==
+
+CREATE TABLE Users(id bigint PRIMARY KEY) INHERITS (People);
+--
+ERROR: <INHERITS> clause is not supported in <CREATE TABLE> statement.
+==
+
+CREATE TABLE Users OF UserType (PRIMARY KEY(id));
+--
+ERROR: <OF type_name> clause is not supported in <CREATE TABLE> statement.
+==
+
+CREATE TABLE Users(id bigint PRIMARY KEY) ON COMMIT DROP;
+--
+ERROR: <ON COMMIT> clause is not supported in <CREATE TABLE> statement.
+==
+
+CREATE TABLE Users(id bigint PRIMARY KEY) WITH (fillfactor=99);
+--
+ERROR: <WITH> clause is not supported in <CREATE TABLE> statement.
+==
+
+CREATE TABLE Users(id bigint PRIMARY KEY) PARTITION BY RANGE (id);
+--
+ERROR: <PARTITION BY> clause is not supported in <CREATE TABLE> statement.
+==
+
+CREATE TABLE Users(id bigint PRIMARY KEY) TABLESPACE TestSpace;
+--
+ERROR: <TABLESPACE> clause is not supported in <CREATE TABLE> statement.
+==
+
+CREATE TABLE Users(id bigint);
+--
+ERROR: Primary key must be defined for a table.
+==
+
+CREATE TABLE deferrable_not_supported_on_col(id bigint PRIMARY KEY DEFERRABLE);
+--
+ERROR: <DEFERRABLE> constraints are not supported.
+==
+
+CREATE TABLE deferrable_not_supported_on_col(id bigint PRIMARY KEY INITIALLY DEFERRED);
+--
+ERROR: <DEFERRABLE> constraints are not supported.
+==
+
+CREATE TABLE immediate_supported_on_col(id bigint PRIMARY KEY NOT DEFERRABLE);
+--
+CREATE TABLE immediate_supported_on_col (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+)
+==
+
+CREATE TABLE immediate_supported_on_col(id bigint PRIMARY KEY INITIALLY IMMEDIATE);
+--
+CREATE TABLE immediate_supported_on_col (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+)
+==
+
+CREATE TABLE deferrable_not_supported_on_table(
+  id bigint,
+  PRIMARY KEY(id) DEFERRABLE
+);
+--
+ERROR: <DEFERRABLE> constraints are not supported.
+==
+
+CREATE TABLE deferrable_not_supported_on_table(
+  id bigint,
+  PRIMARY KEY(id) INITIALLY DEFERRED
+);
+--
+ERROR: <DEFERRABLE> constraints are not supported.
+==
+
+CREATE TABLE immediate_supported_on_table(
+  id bigint,
+  PRIMARY KEY(id) NOT DEFERRABLE
+);
+--
+CREATE TABLE immediate_supported_on_table (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+)
+==
+
+CREATE TABLE immediate_supported_on_table(
+  id bigint,
+  PRIMARY KEY(id) INITIALLY IMMEDIATE
+);
+--
+CREATE TABLE immediate_supported_on_table (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+)
+==
+
+CREATE TABLE pg_users (
+  id bigint PRIMARY KEY,
+  notnullable varchar NOT NULL,
+  nullable varchar NULL
+);
+--
+ERROR: 'pg_' is not supported as a prefix for a table name.
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  LIKE People INCLUDING ALL
+);
+--
+ERROR: <LIKE> clause is not supported in <CREATE TABLE> statement.
+==
+
+CREATE TABLE Users(name text COLLATE "en_US" PRIMARY KEY);
+--
+ERROR: <COLLATE> clause is not supported in column definition.
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255) PRIMARY KEY
+);
+--
+ERROR: Primary key can be only defined once.
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255),
+  PRIMARY KEY(name)
+);
+--
+ERROR: Primary key can be only defined once.
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255) UNIQUE
+);
+--
+ERROR: <UNIQUE> constraint is not supported, create a unique index instead.
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255),
+  CONSTRAINT invalid UNIQUE(name)
+);
+--
+ERROR: <UNIQUE> constraint is not supported, create a unique index instead.
+==
+
+CREATE TABLE Users(
+  id bigint,
+  CONSTRAINT pk PRIMARY KEY(id)
+);
+--
+ERROR: Setting a name of a <PRIMARY KEY> constraint is not supported.
+==
+
+CREATE TABLE "Users_1"(a bigint primary key, id2 bigint constraint c_1 NOT NULL);
+--
+ERROR: Setting a name of a <NOT NULL> constraint is not supported.
+==
+
+CREATE TABLE "Users_1"(a bigint primary key, id2 bigint constraint c_1 NULL);
+--
+ERROR: Setting a name of a <NULL> constraint is not supported.
+==
+
+CREATE TABLE unsupported_pk_include(
+  id bigint,
+  other_col bigint,
+  PRIMARY KEY(id) INCLUDE(other_col)
+);
+--
+ERROR: <INCLUDE> clause is not supported in constraints.
+==
+
+CREATE TABLE unsupported_pk_with(
+  id bigint,
+  PRIMARY KEY(id) WITH (unsup_param = 'val')
+);
+--
+ERROR: <WITH> clause is not supported in constraint definitions.
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  position bigint,
+  EXCLUDE USING gist (position WITH =)
+);
+--
+ERROR: Constraint type is not supported.
+==
+
+CREATE TEMPORARY TABLE Users(
+  id bigint PRIMARY KEY
+);
+--
+ERROR: TEMP/TEMPORARY or UNLOGGED objects are not supported in <CREATE TABLE> statement.
+==
+
+CREATE TABLE (id bigint PRIMARY KEY);
+--
+ERROR: [ERROR] syntax error at or near "("
+==
+
+CREATE TABLE "" (id bigint PRIMARY KEY);
+--
+ERROR: zero-length delimited identifier at or near """"
+==
+
+CREATE TABLE identity_not_supported(
+  id bigint PRIMARY KEY,
+  ident bigint GENERATED ALWAYS AS IDENTITY
+);
+--
+ERROR: Constraint type is not supported.
+==
+
+CREATE TABLE typed_table_not_supported OF some_type(col WITH OPTIONS DEFAULT 123)
+--
+ERROR: <OF type_name> clause is not supported in <CREATE TABLE> statement.
+==
+
+CREATE TABLE partitioning_not_supported PARTITION OF parent(col WITH OPTIONS DEFAULT 123) FOR VALUES IN (1, 2)
+--
+ERROR: <INHERITS> clause is not supported in <CREATE TABLE> statement.
+==
+
+CREATE TABLE no_ending_semicolon(id bigint PRIMARY KEY)
+--
+CREATE TABLE no_ending_semicolon (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+)
+==
+
+CREATE TABLE ttl_table (id bigint PRIMARY KEY) TTL INTERVAL '5 days' ON id
+--
+ERROR: Cannot create ROW DELETION POLICY because column id in table ttl_table is not of type TIMESTAMP.
+==
+
+CREATE TABLE "Users_1"(a bigint primary key, id2 bigint generated always as (row_number() OVER (ORDER BY a)) stored)
+--
+ERROR: Unsupported expression in statement.
+==
+# TODO: When named schema is supported, re-enable this test.
+# CREATE TABLE IF NOT EXISTS Sch.Users (
+#   PRIMARY KEY(id2, id1),
+#   id1 bigint,
+#   id2 bigint
+# );
+# --
+# CREATE TABLE sch.users ( id1 bigint NOT NULL, id2 bigint NOT NULL, PRIMARY KEY(id2, id1) );

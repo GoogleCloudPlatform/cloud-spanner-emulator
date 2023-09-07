@@ -32,12 +32,12 @@ int main(int argc, char** argv) {
   options.server_address = google::spanner::emulator::config::grpc_host_port();
   std::unique_ptr<Server> server = Server::Create(options);
   if (!server) {
-    ZETASQL_LOG(ERROR) << "Failed to start gRPC server.";
+    ABSL_LOG(ERROR) << "Failed to start gRPC server.";
     return EXIT_FAILURE;
   }
 
-  ZETASQL_LOG(INFO) << "Cloud Spanner Emulator running.";
-  ZETASQL_LOG(INFO) << "Server address: "
+  ABSL_LOG(INFO) << "Cloud Spanner Emulator running.";
+  ABSL_LOG(INFO) << "Server address: "
             << absl::StrCat(server->host(), ":", server->port());
 
   // Block forever until the server is terminated.

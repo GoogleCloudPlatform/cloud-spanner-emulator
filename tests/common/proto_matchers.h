@@ -55,7 +55,7 @@ class ParseProtoHelper {
   operator ProtoT() {
     ProtoT proto;
     std::string error_text;
-    ZETASQL_CHECK(ParsePartialFromAscii(asciipb_, &proto, &error_text))  // Crash ok.
+    ZETASQL_VLOG(ParsePartialFromAscii(asciipb_, &proto, &error_text))  // Crash ok.
         << "Failed to parse \"" << asciipb_ << "\" as a "
         << proto.GetDescriptor()->full_name() << ":\n"
         << error_text;

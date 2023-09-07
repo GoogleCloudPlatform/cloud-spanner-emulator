@@ -48,9 +48,9 @@ http_archive(
     build_file = "@//build/bazel:googleapis.BUILD",
     patch_args = ["-p1"],
     patches = ["//build/bazel:googleapis.patch"],
-    sha256 = "64080665f3c74998ff7d18f998713a9428c83f94400b0507d7469e8513fcaaa0",
-    strip_prefix = "googleapis-5096eae6a449e0ee66b68cfd2634cac97b682e88",
-    url = "https://github.com/googleapis/googleapis/archive/5096eae6a449e0ee66b68cfd2634cac97b682e88.tar.gz",
+    sha256 = "42a09adf83c5d43abacb4fb07d9958e37ffe50e9835f5ff82ba8e02ddb149a59",
+    strip_prefix = "googleapis-eda81ef50cbc08ddf39e9e0689e116421581a234",
+    url = "https://github.com/googleapis/googleapis/archive/eda81ef50cbc08ddf39e9e0689e116421581a234.tar.gz",
 )
 
 load("@com_google_googleapis//:repository_rules.bzl", "switched_rules_by_language")
@@ -155,32 +155,32 @@ go_repository(
     name = "com_github_golang_glog",
     build_file_proto_mode = "disable_global",
     importpath = "github.com/golang/glog",
-    sum = "h1:nfP3RFugxnNRyKgeWd4oI1nYvXpxrx8ck8ZrcizshdQ=",
-    version = "v1.0.0",
+    sum = "h1:/d3pCKDPWNnvIWe0vVUpNP32qc8U3PDVxySP/y360qE=",
+    version = "v1.1.0",
 )
 
 go_repository(
     name = "org_golang_x_net",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/net",
-    sum = "h1:Zrh2ngAOFYneWTAIAPethzeaQLuHwhuBkuV6ZiRnUaQ=",
-    version = "v0.8.0",
+    sum = "h1:BONx9s002vGdD9umnlX1Po8vOZmrgH34qlHcD1MfK14=",
+    version = "v0.14.0",
 )
 
 go_repository(
     name = "org_golang_x_sys",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/sys",
-    sum = "h1:MVltZSvRTcU2ljQOhs94SXPftV6DCNnZViHeQps87pQ=",
-    version = "v0.6.0",
+    sum = "h1:eG7RXZHdqOJ1i+0lgLgCpSXAp6M3LYlAo6osgSi0xOM=",
+    version = "v0.11.0",
 )
 
 go_repository(
     name = "org_golang_x_text",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/text",
-    sum = "h1:57P1ETyNKtuIjB4SRd15iJxuhj8Gc416Y78H3qgMh68=",
-    version = "v0.8.0",
+    sum = "h1:k+n5B8goJNdU7hSvEtMUz3d1Q6D/XW4COJSJR6fN0mc=",
+    version = "v0.12.0",
 )
 
 ################################################################################
@@ -278,9 +278,9 @@ http_archive(
     patches = ["//build/bazel:zetasql.patch"],
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
-    sha256 = "02d2ae94c7ed597ae40930635d55f2090094ea8bf02dfcdc77c6b6d22ace9b8b",
-    strip_prefix = "zetasql-5133c6e373a3f67f7f40b0619a2913c3fcab8171",
-    url = "https://github.com/google/zetasql/archive/5133c6e373a3f67f7f40b0619a2913c3fcab8171.tar.gz",
+    sha256 = "2ba3436859e15109d4909fa99e143eca4141d54143eddd97a2f804baba76506c",
+    strip_prefix = "zetasql-0b082e844376e9485fef4f285f1bd34d5f3af6c4",
+    url = "https://github.com/google/zetasql/archive/0b082e844376e9485fef4f285f1bd34d5f3af6c4.tar.gz",
 )
 
 http_archive(

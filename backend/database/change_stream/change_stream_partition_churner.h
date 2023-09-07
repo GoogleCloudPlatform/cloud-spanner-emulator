@@ -93,7 +93,7 @@ class ChangeStreamPartitionChurner {
     ~ChurningThread() {
       {
         absl::MutexLock l(&mu);
-        ZETASQL_LOG(ERROR) << "Stopping ChurningThread ";
+        ABSL_LOG(ERROR) << "Stopping ChurningThread ";
         stop_thread = true;
       }
       // Join the thread.

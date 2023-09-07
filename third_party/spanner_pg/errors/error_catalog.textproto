@@ -1,0 +1,803 @@
+# proto-file: third_party/spanner_pg/errors/errors.proto
+# proto-message: FileProto
+#
+# This file is used with the spangres_error_catalog() rule in
+# third_party/spanner_pg/errors/error_generator.bzl to generate C++
+# factory functions for Spanner PG errors.
+#
+# The file format is an ascii-format spangres.error.FileProto protocol
+# message. More details about the meaning of various fields can be
+# found in third_party/spanner_pg/errors/errors.proto.
+#
+# All Spanner PG errors should be generated from this catalog file.
+
+type {
+  name: "string"
+  cpp_type: "absl::string_view"
+  pass_by: VALUE
+  printer: "$0"
+}
+
+group {
+  code: "SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION"
+
+  message {
+    name: "FailedToDeserializeExtendedType"
+    format: "Failed to deserialized extended type: $string"
+  }
+}
+
+group {
+  code: "DATA_EXCEPTION"
+
+  message {
+    name: "NumericWholeComponentTooLarge"
+    format:
+      "Invalid NUMERIC value: whole component of NUMERIC $string too "
+      "large"
+  }
+}
+
+group {
+  code: "INTERNAL_ERROR"
+
+  message {
+    name: "UnableToGetColumnNamesForTable"
+    format: "Unable to get column names for table: $message_string"
+  }
+
+  message {
+    name: "EmptyEngineCatalogForCatalogAdapter"
+    format:
+      "The catalog adapter needs to be "
+      "created with a valid engine $type_string "
+      "catalog instance."
+  }
+}
+
+group {
+  code: "UNDEFINED_TABLE"
+
+  message {
+    name: "RelationNotFound"
+    format: "relation \"$relname_string\" does not exist"
+  }
+}
+
+group {
+  code: "INTERNAL_ERROR"
+
+  message {
+    name: "ErrorOccurBeforeErrorMessageProcessing"
+    pg_message_id: "error occurred before error message processing is available"
+  }
+
+  message {
+    name: "TypeOidNotFoundInBootstrapCatalog"
+    pg_message_id: "Typeoid not found in bootstrap catalog: %d"
+  }
+}
+
+group {
+  code: "SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION"
+
+  message {
+    name: "InvalidParameterNumberRange"
+    pg_message_id: "parameter number must be between '$1', ..., '$%d'"
+  }
+}
+
+group {
+  code: "UNDEFINED_SCHEMA"
+
+  message {
+    name: "SchemaNotFound"
+    pg_message_id: "schema \"%s\" does not exist"
+  }
+}
+
+group {
+  code: "GROUPING_ERROR"
+
+  message {
+    name: "NotInGroupByOrAggregateFunction"
+    pg_message_id: "column \"%s.%s\" must appear in the GROUP BY clause or be used in an aggregate function"
+  }
+
+  message {
+    name: "AggregateFunctionNotAllowed"
+    pg_message_id: "aggregate functions are not allowed in %s"
+  }
+}
+
+group {
+  code: "UNDEFINED_COLUMN"
+
+  message {
+    name: "ColumnNotExist"
+    pg_message_id: "column \"%s\" does not exist"
+  }
+
+  message {
+    name: "NamespacedColumnNotExist"
+    pg_message_id: "column %s.%s does not exist"
+  }
+
+  message {
+    name: "ColumnTypeForRelationNotFound"
+    pg_message_id: "Unable to get type of column \"%s\" of relation \"%s\". (Is the column type supported?)"
+  }
+}
+
+group {
+  code: "UNDEFINED_TABLE"
+
+  message {
+    name: "MissFromClauseForTable"
+    pg_message_id: "missing FROM-clause entry for table \"%s\""
+  }
+
+  message {
+    name: "RangeTblEntryErrorForRelation"
+    pg_message_id: "Error occurred during RangeTblEntry construction of relation: \"%s\""
+  }
+
+  message {
+    name: "InvalidReferenceToFromClauseForTable"
+    pg_message_id: "invalid reference to FROM-clause entry for table \"%s\""
+  }
+}
+
+group {
+  code: "UNDEFINED_FUNCTION"
+
+  message {
+    name: "FunctionNotExist"
+    pg_message_id: "function %s does not exist"
+  }
+
+  message {
+    name: "OperatorNotExist"
+    pg_message_id: "operator does not exist: %s"
+  }
+}
+
+group {
+  code: "FEATURE_NOT_SUPPORTED"
+
+  message {
+    name: "CrossDatabaseReferencesNotSupport"
+    pg_message_id: "cross-database references are not implemented: %s"
+  }
+
+  message {
+    name: "TooManyNamesInHintValue"
+    pg_message_id: "Too many names in hint value; if a string is intended, please enclose it with quotation marks"
+  }
+
+  message {
+    name: "StatementTypeNotSupport"
+    pg_message_id: "statement type is not supported"
+  }
+
+  message {
+    name: "RecordTypesNotSupport"
+    pg_message_id: "Record types are not supported."
+  }
+
+  message {
+    name: "NaturalJoinNotSupport"
+    pg_message_id: "Natural join is not supported"
+  }
+
+  message {
+    name: "LookupRowTypeIDForTableNotSupport"
+    pg_message_id: "Tried to lookup a rowtype id for table %s but this feature is not supported"
+  }
+
+  message {
+    name: "XMLExpressionsNotSupport"
+    pg_message_id: "XML expressions are not supported"
+  }
+
+  message {
+    name: "MatchPartialNotSupport"
+    pg_message_id: "MATCH PARTIAL not yet implemented"
+  }
+
+  message {
+    name: "StatementTypeNotSupportWithTypeName"
+    pg_message_id: "statement type \"%s\" is not supported"
+  }
+
+  message {
+    name: "UnableToConvertNanToInteger"
+    pg_message_id: "cannot convert NaN to integer"
+  }
+
+  message {
+    name: "NumericToNumberEEEENotSupport"
+    pg_message_id: "\"EEEE\" not supported for input"
+  }
+
+  message {
+    name: "NumericToNumberRNNotSupport"
+    pg_message_id: "\"RN\" not supported for input"
+  }
+
+  message {
+    name: "InvalidFormatingField"
+    pg_message_id: "formatting field \"%s\" is only supported in to_char"
+  }
+
+  message {
+    name: "SetReturningFunctionsNotSupport"
+    pg_message_id: "set-returning functions are not allowed in %s"
+  }
+
+  message {
+    name: "NamedParametersNotSupport"
+    pg_message_id: "Named arguments are not supported"
+  }
+
+  message {
+    name: "InvalidOrderByClause"
+    pg_message_id: "invalid UNION/INTERSECT/EXCEPT ORDER BY clause"
+  }
+
+  message {
+    name: "ConversionNotSupport"
+    pg_message_id: "conversion between %s and %s is not supported"
+  }
+}
+
+group {
+  code: "UNDEFINED_OBJECT"
+
+  message {
+    name: "CollationsNotSupport"
+    pg_message_id: "Collations are not supported"
+  }
+
+  message {
+    name: "RoleNotFound"
+    pg_message_id: "role \"%s\" does not exist"
+  }
+
+  message {
+    name: "TypeNotFound"
+    pg_message_id: "type \"%s\" does not exist"
+  }
+}
+
+group {
+  code: "INVALID_TEXT_REPRESENTATION"
+
+  message {
+    name: "MalformedArrayLiteral"
+    pg_message_id: "malformed array literal: \"%s\""
+  }
+
+  message {
+    name: "InvalidBinaryDigit"
+    pg_message_id: "\"%c\" is not a valid binary digit"
+  }
+
+  message {
+    name: "InvalidInputSyntaxForType"
+    pg_message_id: "invalid input syntax for type %s"
+  }
+
+  message {
+    name: "InvalidInputSyntaxForTypeWithDetails"
+    pg_message_id: "invalid input syntax for type %s: \"%s\""
+  }
+
+  message {
+    name: "IsNotNumber"
+    pg_message_id: "\"%s\" is not a number"
+  }
+}
+
+group {
+  code: "SYNTAX_ERROR"
+
+  message {
+    name: "SyntaxGenericError"
+    pg_message_id: "%s at or near \"%s\""
+  }
+
+  message {
+    name: "NoHintsOnInClauseWithValueList"
+    pg_message_id: "HINTs cannot be specified on IN clause with value list"
+  }
+
+  message {
+    name: "CommentNestingTooDeep"
+    pg_message_id: "Comment nesting too deep"
+  }
+
+  message {
+    name: "InvalidQualifiedName"
+    pg_message_id: "improper qualified name (too many dotted names): %s"
+  }
+
+  message {
+    name: "TooManyExpressionsInInsert"
+    pg_message_id: "INSERT has more expressions than target columns"
+  }
+
+  message {
+    name: "IdentifierNestingTooDeep"
+    pg_message_id: "Identifier nesting too deep"
+  }
+
+  message {
+    name: "GeneratedAlwaysMustBeSpecified"
+    pg_message_id: "for a generated column, GENERATED ALWAYS must be specified"
+  }
+
+  message {
+    name: "AtEndOfInputSyntaxError"
+    pg_message_id: "%s at end of input"
+  }
+
+  message {
+    name: "SubqueryInFromShouldHaveAlias"
+    pg_message_id: "subquery in FROM must have an alias"
+  }
+
+  message {
+    name: "NumberFormatting9MustBeAheadOfPR"
+    pg_message_id: "\"9\" must be ahead of \"PR\""
+  }
+
+  message {
+    name: "NumberFormatting0MustBeAheadOfPR"
+    pg_message_id: "\"0\" must be ahead of \"PR\""
+  }
+
+  message {
+    name: "CannotUseVAndDecimalPointTogether"
+    pg_message_id: "cannot use \"V\" and decimal point together"
+  }
+
+  message {
+    name: "TooManyOperatorsInStatement"
+    pg_message_id: "Too many operators in the statement"
+  }
+
+  message {
+    name: "TooManyTypeCastsInStatement"
+    pg_message_id: "Too many type casts in the statement"
+  }
+
+  message {
+    name: "MultipleDecimalPoints"
+    pg_message_id: "multiple decimal points"
+  }
+
+  message {
+    name: "CannotUseSTwice"
+    pg_message_id: "cannot use \"S\" twice"
+  }
+
+  message {
+    name: "EEEEMustBeLastPatternUsed"
+    pg_message_id: "\"EEEE\" must be the last pattern used"
+  }
+
+  message {
+    name: "CannotUseEEEETwice"
+    pg_message_id: "cannot use \"EEEE\" twice"
+  }
+
+  message {
+    name: "EEEEIsIncompatibleWithOtherFormats"
+    pg_message_id: "\"EEEE\" is incompatible with other formats"
+  }
+
+  message {
+    name: "CannotUseSAndMiTogether"
+    pg_message_id: "cannot use \"S\" and \"MI\" together"
+  }
+
+  message {
+    name: "CannotUseSAndPlTogether"
+    pg_message_id: "cannot use \"S\" and \"PL\" together"
+  }
+
+  message {
+    name: "CannotUseSWithOthersTogether"
+    pg_message_id: "cannot use \"S\" and \"PL\"/\"MI\"/\"SG\"/\"PR\" together"
+  }
+
+  message {
+    name: "CannotUseSWithSGTogether"
+    pg_message_id: "cannot use \"S\" and \"SG\" together"
+  }
+
+  message {
+    name: "CannotUsePRWithOthersTogether"
+    pg_message_id: "cannot use \"PR\" and \"S\"/\"PL\"/\"MI\"/\"SG\" together"
+  }
+
+  message {
+    name: "InvalidUnicodeEscape"
+    pg_message_id: "invalid Unicode escape"
+  }
+
+  message {
+    name: "NotAllowedMultipleLimitClauses"
+    pg_message_id: "multiple LIMIT clauses not allowed"
+  }
+}
+
+group {
+  code: "INVALID_PARAMETER_VALUE"
+
+  message {
+    name: "Float4NotSupport"
+    pg_message_id: "The Postgres Type is not supported: float4"
+  }
+
+  message {
+    name: "GlobalOptionNotSupport"
+    pg_message_id: "%s does not support the \"global\" option"
+  }
+
+  message {
+    name: "InvalidRegularExpressionOption"
+    pg_message_id: "invalid regular expression option: \"%c\""
+  }
+}
+
+group {
+  code: "DATATYPE_MISMATCH"
+
+  message {
+    name: "CollationsForTypeNotSupport"
+    pg_message_id: "collations are not supported by type %s"
+  }
+
+  message {
+    name: "InvalidArgumentType"
+    pg_message_id: "argument of %s must be type %s, not type %s"
+  }
+}
+
+group {
+  code: "OUT_OF_MEMORY"
+
+  message {
+    name: "OutOfMemory"
+    pg_message_id: "out of memory"
+  }
+
+  message {
+    name: "EcpgLogNull"
+    pg_message_id: "(null)"
+  }
+}
+
+group {
+  code: "CANNOT_COERCE"
+
+  message {
+    name: "InvalidCastType"
+    pg_message_id: "cannot cast type %s to %s"
+  }
+}
+
+group {
+  code: "NUMERIC_VALUE_OUT_OF_RANGE"
+
+  message {
+    name: "NumericFormatValueOverflow"
+    pg_message_id: "value overflows numeric format"
+  }
+
+  message {
+    name: "NumericFieldOverflow"
+    pg_message_id: "numeric field overflow"
+  }
+
+  message {
+    name: "IntegerOutOfRange"
+    pg_message_id: "integer out of range"
+  }
+
+  message {
+    name: "BigIntOutOfRange"
+    pg_message_id: "bigint out of range"
+  }
+}
+
+group {
+  code: "UNTRANSLATABLE_CHARACTER"
+
+  message {
+    name: "UnsupportedUnicodeEscapeSequence"
+    pg_message_id: "unsupported Unicode escape sequence"
+  }
+}
+
+group {
+  code: "RESERVED_NAME"
+
+  message {
+    name: "ReservedRoleName"
+    pg_message_id: "role name \"%s\" is reserved"
+  }
+
+  message {
+    name: "InvalidRoleName"
+    pg_message_id: "%s cannot be used as a role name here"
+  }
+}
+
+group {
+  code: "NUMERIC_VALUE_OUT_OF_RANGE"
+
+  message {
+    name: "ValueOutOfRangeForType"
+    pg_message_id: "value \"%s\" is out of range for type %s"
+  }
+}
+
+group {
+  code: "INVALID_COLUMN_REFERENCE"
+
+  message {
+    name: "InvalidReferenceToFromClauseForTable"
+    pg_message_id: "invalid reference to FROM-clause entry for table \"%s\""
+  }
+}
+
+# We have some special error conversion in
+# third_party/spanner_pg/shims/catalog_shim_cc_wrappers.cc.
+group {
+  code: "INVALID_DATETIME_FORMAT"
+
+  message {
+    name: "DateTimeFormatError"
+    pg_message_id: "%s"
+  }
+
+  message {
+    name: "InvalidValue"
+    pg_message_id: "invalid value \"%s\" for \"%s\""
+  }
+}
+
+group {
+  code: "STATEMENT_TOO_COMPLEX"
+
+  message {
+    name: "StackDepthLimitExceeded"
+    pg_message_id: "stack depth limit exceeded"
+  }
+}
+
+# This is for elog.
+group {
+  code: "SUCCESSFUL_COMPLETION"
+
+  message {
+    name: "UnrecognizedToken"
+    pg_message_id: "unrecognized token: \"%.*s\""
+  }
+
+  message {
+    name: "FunctionReturnNull"
+    pg_message_id: "function %u returned NULL"
+  }
+
+  message {
+    name: "InvalidMemoryAllocRequestSize"
+    pg_message_id: "invalid memory alloc request size %zu"
+  }
+
+  message {
+    name: "UnrecognizedValue"
+    pg_message_id: "Unrecognized value at %.32s"
+  }
+}
+
+group {
+  code: "AMBIGUOUS_ALIAS"
+
+  message {
+    name: "AmbiguousTableReference"
+    pg_message_id: "table reference \"%s\" is ambiguous"
+  }
+}
+
+group {
+  code: "INVALID_REGULAR_EXPRESSION"
+
+  message {
+    name: "InvalidRegularExpression"
+    pg_message_id: "invalid regular expression: %s"
+  }
+}
+
+group {
+  code: "DATETIME_FIELD_OVERFLOW"
+
+  message {
+    name: "DateTimeFieldValueOutOfRange"
+    pg_message_id: "date/time field value out of range: \"%s\""
+  }
+}
+
+group {
+  code: "CHARACTER_NOT_IN_REPERTOIRE"
+
+  message {
+    name: "InvalidByteSequenceForEncoding"
+    pg_message_id: "invalid byte sequence for encoding \"%s\": %s"
+  }
+}
+
+group {
+  code: "GROUPING_ERROR"
+
+  message {
+    name: "NoNestedAggregateFunctionCalls"
+    pg_message_id: "aggregate function calls cannot be nested"
+  }
+
+  message {
+    name: "SubqueryUseUngroupedColumnFromOuterQuery"
+    pg_message_id: "subquery uses ungrouped column \"%s.%s\" from outer query"
+  }
+
+  # An error "aggregate functions are not allowed in functions in FROM" can be
+  # raised in the following format.
+  message {
+    name: "ParseAggregateGroupingError"
+    pg_message_id: "%s"
+  }
+}
+
+############## TEST ONLY - START ##############
+# The following entries are for ErrorShimTest.ErrorCodes test in
+# third_party/spanner_pg/shims/error_shim_test.cc.
+
+group {
+  code: "INTERNAL_ERROR"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "FEATURE_NOT_SUPPORTED"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "INSUFFICIENT_RESOURCES"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "STATEMENT_TOO_COMPLEX"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "OUT_OF_MEMORY"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "SYNTAX_ERROR"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "INSUFFICIENT_PRIVILEGE"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "INDEX_CORRUPTED"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "DATA_CORRUPTED"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "PROGRAM_LIMIT_EXCEEDED"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "UNDEFINED_TABLE"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "UNDEFINED_OBJECT"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "DATA_EXCEPTION"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "INVALID_TEXT_REPRESENTATION"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "test error message"
+  }
+}
+
+group {
+  code: "SUCCESSFUL_COMPLETION"
+
+  message {
+    name: "TestErrorMessage"
+    pg_message_id: "Test error message."
+  }
+}
+
+############## TEST ONLY - END ##############

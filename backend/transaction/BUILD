@@ -149,6 +149,28 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "actions_test",
+    srcs = ["actions_test.cc"],
+    deps = [
+        ":actions",
+        "//backend/actions:context",
+        "//backend/actions:ops",
+        "//backend/datamodel:key",
+        "//backend/schema/catalog:schema",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_schema_constructor",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
 cc_library(
     name = "row_cursor",
     srcs = ["row_cursor.cc"],

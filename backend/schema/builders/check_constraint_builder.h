@@ -63,6 +63,11 @@ class CheckConstraint::Builder {
     return *this;
   }
 
+  Builder& set_original_expression(const std::string& expression) {
+    instance_->original_expression_ = expression;
+    return *this;
+  }
+
   Builder& set_table(const Table* table) {
     instance_->table_ = table;
     return *this;

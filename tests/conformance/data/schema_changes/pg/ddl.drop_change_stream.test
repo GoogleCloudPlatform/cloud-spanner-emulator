@@ -1,0 +1,31 @@
+# --regex
+CREATE CHANGE STREAM change_stream;
+DROP CHANGE STREAM change_stream;
+--
+^;$
+==
+# --regex
+CREATE CHANGE STREAM "change_stream";
+DROP CHANGE STREAM "change_stream";
+--
+^;$
+==
+DROP CHANGE STREAM change_stream, change_stream2;
+--
+ERROR: [ERROR] syntax error at or near ","; failed to parse the DDL statements.
+==
+DROP CHANGE STREAM 'change_stream';
+--
+ERROR: [ERROR] syntax error at or near "'change_stream'"; failed to parse the DDL statements.
+==
+DROP CHANGE STREAM 'c.';
+--
+ERROR: [ERROR] syntax error at or near "'c.'"; failed to parse the DDL statements.
+==
+DROP CHANGE STREAM '.c';
+--
+ERROR: [ERROR] syntax error at or near "'.c'"; failed to parse the DDL statements.
+==
+DROP CHANGE STREAM a.change_stream;
+--
+ERROR: Schema name can only be 'public' in <DROP CHANGE STREAM> statement.

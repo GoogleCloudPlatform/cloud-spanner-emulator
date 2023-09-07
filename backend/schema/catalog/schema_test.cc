@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/type.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -544,6 +545,22 @@ TEST_F(SchemaTest, PrintDDLStatementsTestOneTable) {
           "CREATE UNIQUE INDEX test_index ON test_table(string_col DESC)")));
 }
 
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestOneTable) {
+  std::unique_ptr<const Schema> schema = test::CreateSchemaWithOneTable(
+      type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL);
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
+                              R"(CREATE TABLE test_table (
+  int64_col bigint NOT NULL,
+  string_col character varying,
+  PRIMARY KEY(int64_col)
+))",
+                              "CREATE UNIQUE INDEX test_index ON test_table "
+                              "(string_col DESC)")));
+}
+
 TEST_F(SchemaTest, PrintDDLStatementsTestInterleaving) {
   std::unique_ptr<const Schema> schema =
       test::CreateSchemaWithInterleaving(type_factory_.get());
@@ -569,6 +586,32 @@ TEST_F(SchemaTest, PrintDDLStatementsTestInterleaving) {
   INTERLEAVE IN PARENT Parent ON DELETE NO ACTION)")));
 }
 
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestInterleaving) {
+  std::unique_ptr<const Schema> schema = test::CreateSchemaWithInterleaving(
+      type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL);
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
+                              R"(CREATE TABLE parent (
+  k1 bigint NOT NULL,
+  c1 character varying,
+  PRIMARY KEY(k1)
+))",
+                              R"(CREATE TABLE cascadedeletechild (
+  k1 bigint NOT NULL,
+  k2 bigint NOT NULL,
+  c1 character varying,
+  PRIMARY KEY(k1, k2)
+) INTERLEAVE IN PARENT parent ON DELETE CASCADE)",
+                              R"(CREATE TABLE noactiondeletechild (
+  k1 bigint NOT NULL,
+  k2 bigint NOT NULL,
+  c1 character varying,
+  PRIMARY KEY(k1, k2)
+) INTERLEAVE IN PARENT parent ON DELETE NO ACTION)")));
+}
+
 TEST_F(SchemaTest, PrintDDLStatementsTestForeignKey) {
   std::unique_ptr<const Schema> schema =
       test::CreateSchemaWithForeignKey(type_factory_.get());
@@ -587,6 +630,29 @@ TEST_F(SchemaTest, PrintDDLStatementsTestForeignKey) {
   CONSTRAINT C FOREIGN KEY(child_k1, child_c1) REFERENCES test_table(k1, c1),
   FOREIGN KEY(child_c2) REFERENCES test_table(c2),
 ) PRIMARY KEY(child_k1))")));
+}
+
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestForeignKey) {
+  std::unique_ptr<const Schema> schema = test::CreateSchemaWithForeignKey(
+      type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL);
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
+                              R"(CREATE TABLE test_table (
+  k1 bigint NOT NULL,
+  c1 character varying(20),
+  c2 character varying(20),
+  PRIMARY KEY(k1)
+))",
+                              R"(CREATE TABLE child_table (
+  child_k1 bigint NOT NULL,
+  child_c1 character varying(20),
+  child_c2 character varying(20),
+  PRIMARY KEY(child_k1),
+  CONSTRAINT c FOREIGN KEY (child_k1, child_c1) REFERENCES test_table(k1, c1),
+  FOREIGN KEY (child_c2) REFERENCES test_table(c2)
+))")));
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestColumnExpressions) {
@@ -619,6 +685,39 @@ TEST_F(SchemaTest, PrintDDLStatementsTestColumnExpressions) {
 ) PRIMARY KEY(int64_col))")));
 }
 
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestColumnExpressions) {
+  std::string test_table =
+      R"(
+          CREATE TABLE test_table (
+            int64_col bigint not null primary key,
+            string_col varchar(10),
+            default_int64_col bigint DEFAULT (10),
+            default_timestamp_col timestamptz DEFAULT (NOW()),
+            gen_col bigint not null generated always as ("int64_col" + LENGTH("string_col")) stored
+          )
+      )";
+  absl::StatusOr<std::unique_ptr<const backend::Schema>> schema =
+      test::CreateSchemaFromDDL(
+          {
+              test_table,
+          },
+          type_factory_.get(),
+          database_api::DatabaseDialect::POSTGRESQL);
+  ZETASQL_ASSERT_OK(schema);
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.value().get());
+
+  EXPECT_THAT(statements, zetasql_base::testing::IsOkAndHolds(
+                              testing::ElementsAre(R"(CREATE TABLE test_table (
+  int64_col bigint NOT NULL,
+  string_col character varying(10),
+  default_int64_col bigint DEFAULT '10'::bigint,
+  default_timestamp_col timestamp with time zone DEFAULT now(),
+  gen_col bigint GENERATED ALWAYS AS ((int64_col + length(string_col))) STORED NOT NULL,
+  PRIMARY KEY(int64_col)
+))")));
+}
+
 TEST_F(SchemaTest, PrintDDLStatementsTestAllowCommitTimestamp) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL(
@@ -642,6 +741,27 @@ TEST_F(SchemaTest, PrintDDLStatementsTestAllowCommitTimestamp) {
 ) PRIMARY KEY(col1))")));
 }
 
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestAllowCommitTimestamp) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+                       test::CreateSchemaFromDDL(
+                           {
+                               R"(
+    CREATE TABLE T(
+      col1 bigint primary key,
+      col2 spanner.commit_timestamp
+    ))",
+                           },
+                           type_factory_.get(),
+                           database_api::DatabaseDialect::POSTGRESQL));
+
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(R"(CREATE TABLE t (
+  col1 bigint NOT NULL,
+  col2 spanner.commit_timestamp,
+  PRIMARY KEY(col1)
+))")));
+}
+
 TEST_F(SchemaTest, PrintDDLStatementsTestCheckConstraints) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL(
@@ -662,6 +782,29 @@ TEST_F(SchemaTest, PrintDDLStatementsTestCheckConstraints) {
 ) PRIMARY KEY(K))")));
 }
 
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestCheckConstraints) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(
+          CREATE TABLE "T" (
+             "K" bigint PRIMARY KEY,
+             "V" bigint,
+             CONSTRAINT "C1" CHECK("K" > 0)
+           ))",
+           R"(ALTER TABLE "T" ADD CONSTRAINT "C2" CHECK("K" + "V" > 0))"},
+          type_factory_.get(),
+          database_api::DatabaseDialect::POSTGRESQL));
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(R"(CREATE TABLE "T" (
+  "K" bigint NOT NULL,
+  "V" bigint,
+  PRIMARY KEY("K"),
+  CONSTRAINT "C1" CHECK(("K" > '0'::bigint)),
+  CONSTRAINT "C2" CHECK((("K" + "V") > '0'::bigint))
+))")));
+}
+
 TEST_F(SchemaTest, PrintDDLStatementsTestNoNameCheckConstraints) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL({R"(CREATE TABLE T (
@@ -677,6 +820,57 @@ TEST_F(SchemaTest, PrintDDLStatementsTestNoNameCheckConstraints) {
   V INT64,
   CHECK(K > 0),
 ) PRIMARY KEY(K))")));
+}
+
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestNoNameCheckConstraints) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL({R"(
+          CREATE TABLE "T" (
+             "K" bigint PRIMARY KEY,
+             "V" bigint,
+             CHECK("K" > 0)
+           ))"},
+                                type_factory_.get(),
+                                database_api::DatabaseDialect::POSTGRESQL));
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(R"(CREATE TABLE "T" (
+  "K" bigint NOT NULL,
+  "V" bigint,
+  PRIMARY KEY("K"),
+  CHECK(("K" > '0'::bigint))
+))")));
+}
+
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestCheckConstraintsOrdering) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL({R"(
+  CREATE TABLE Users(
+    id bigint PRIMARY KEY,
+    reg varchar(255),
+    named varchar(255),
+    inline_named varchar(255) CONSTRAINT con_inline_named CHECK(inline_named IS NOT NULL),
+    inline varchar(255) CHECK(inline IS NOT NULL),
+    CHECK(reg IS NOT NULL),
+    CONSTRAINT con_named CHECK(named IS NOT NULL)
+  )
+           )"},
+                                type_factory_.get(),
+                                database_api::DatabaseDialect::POSTGRESQL));
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(R"(CREATE TABLE users (
+  id bigint NOT NULL,
+  reg character varying(255),
+  named character varying(255),
+  inline_named character varying(255),
+  inline character varying(255),
+  PRIMARY KEY(id),
+  CHECK((inline IS NOT NULL)),
+  CHECK((reg IS NOT NULL)),
+  CONSTRAINT con_inline_named CHECK((inline_named IS NOT NULL)),
+  CONSTRAINT con_named CHECK((named IS NOT NULL))
+))")));
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestViews) {
@@ -701,6 +895,32 @@ TEST_F(SchemaTest, PrintDDLStatementsTestViews) {
 ) PRIMARY KEY(col1))",
                                "CREATE VIEW MyView SQL SECURITY INVOKER AS "
                                "SELECT T.col1, T.col2 FROM T")));
+}
+
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestViews) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL({R"(
+    CREATE TABLE t(
+      col1 bigint primary key,
+      col2 varchar
+    )
+  )",
+                                 R"(
+    CREATE OR REPLACE VIEW "MyView" SQL SECURITY INVOKER AS SELECT T.col1, T.col2 FROM T
+  )"},
+                                type_factory_.get(),
+                                database_api::DatabaseDialect::POSTGRESQL));
+
+  EXPECT_THAT(
+      PrintDDLStatements(schema.get()),
+      IsOkAndHolds(ElementsAre(
+          R"(CREATE TABLE t (
+  col1 bigint NOT NULL,
+  col2 character varying,
+  PRIMARY KEY(col1)
+))",
+          R"(CREATE VIEW "MyView" SQL SECURITY INVOKER AS SELECT col1, col2 FROM t)")));
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestStoredIndex) {
@@ -728,6 +948,118 @@ TEST_F(SchemaTest, PrintDDLStatementsTestStoredIndex) {
 ) PRIMARY KEY(col1))",
                   "CREATE INDEX col2_idx ON T(col2) STORING (col3, col4)")));
 }
+
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestStoredIndex) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(
+    CREATE TABLE t(
+      col1 bigint primary key,
+      col2 varchar,
+      col3 varchar,
+      col4 bigint
+    )
+  )",
+           "CREATE INDEX col2_idx ON t(col2) INCLUDE (col3, col4)"},
+          type_factory_.get(),
+          database_api::DatabaseDialect::POSTGRESQL));
+
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(
+                  R"(CREATE TABLE t (
+  col1 bigint NOT NULL,
+  col2 character varying,
+  col3 character varying,
+  col4 bigint,
+  PRIMARY KEY(col1)
+))",
+                  "CREATE INDEX col2_idx ON t (col2) INCLUDE "
+                  "(col3, col4)")));
+}
+
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestChangeStreams) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL({R"(
+    CREATE TABLE t(
+      col1 bigint primary key,
+      col2 varchar
+    )
+  )",
+                                 R"(
+    CREATE CHANGE STREAM change_stream FOR t
+  )"},
+                                type_factory_.get(),
+                                database_api::DatabaseDialect::POSTGRESQL));
+
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(
+                  R"(CREATE TABLE t (
+  col1 bigint NOT NULL,
+  col2 character varying,
+  PRIMARY KEY(col1)
+))",
+                  R"(CREATE CHANGE STREAM change_stream
+FOR t)")));
+}
+
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestArrays) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL({R"(
+CREATE TABLE base (
+  key bigint,
+  bool_array bool[] NOT NULL,
+  int_array bigint[4],
+  double_array float8[],
+  str_array varchar(256)[],
+  byte_array bytea[],
+  timestamp_array timestamptz[],
+  date_array date[],
+  PRIMARY KEY (key)
+);
+  )"},
+                                type_factory_.get(),
+                                database_api::DatabaseDialect::POSTGRESQL));
+
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(R"(CREATE TABLE base (
+  key bigint NOT NULL,
+  bool_array boolean[] NOT NULL,
+  int_array bigint[],
+  double_array double precision[],
+  str_array character varying(256)[],
+  byte_array bytea[],
+  timestamp_array timestamp with time zone[],
+  date_array date[],
+  PRIMARY KEY(key)
+))")));
+}
+
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestTTL) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL({R"(
+CREATE TABLE vanishing_data (
+  id bigint PRIMARY KEY,
+  shadow_date timestamptz
+) TTL INTERVAL '5 DAYS' ON shadow_date
+  )",
+                                 R"(
+ALTER TABLE vanishing_data ALTER TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date
+                            )"},
+                                type_factory_.get(),
+                                database_api::DatabaseDialect::POSTGRESQL));
+
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(R"(CREATE TABLE vanishing_data (
+  id bigint NOT NULL,
+  shadow_date timestamp with time zone,
+  PRIMARY KEY(id)
+) TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date)")));
+}
+
 }  // namespace
 }  // namespace backend
 }  // namespace emulator

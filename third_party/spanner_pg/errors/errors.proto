@@ -1,0 +1,211 @@
+//
+// PostgreSQL is released under the PostgreSQL License, a liberal Open Source
+// license, similar to the BSD or MIT licenses.
+//
+// PostgreSQL Database Management System
+// (formerly known as Postgres, then as Postgres95)
+//
+// Portions Copyright © 1996-2020, The PostgreSQL Global Development Group
+//
+// Portions Copyright © 1994, The Regents of the University of California
+//
+// Portions Copyright 2023 Google LLC
+//
+// Permission to use, copy, modify, and distribute this software and its
+// documentation for any purpose, without fee, and without a written agreement
+// is hereby granted, provided that the above copyright notice and this
+// paragraph and the following two paragraphs appear in all copies.
+//
+// IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO ANY PARTY FOR
+// DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, INCLUDING
+// LOST PROFITS, ARISING OUT OF THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION,
+// EVEN IF THE UNIVERSITY OF CALIFORNIA HAS BEEN ADVISED OF THE POSSIBILITY OF
+// SUCH DAMAGE.
+//
+// THE UNIVERSITY OF CALIFORNIA SPECIFICALLY DISCLAIMS ANY WARRANTIES,
+// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+// FITNESS FOR A PARTICULAR PURPOSE. THE SOFTWARE PROVIDED HEREUNDER IS ON AN
+// "AS IS" BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATIONS TO PROVIDE
+// MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
+//------------------------------------------------------------------------------
+
+syntax = "proto2";
+
+package spangres.error;
+
+import "google/rpc/code.proto";
+import "google/rpc/status.proto";
+
+// FileProto represents a file containing error messages. The code
+// generator in third_party/spanner_pg/errors/error_generator.cc uses
+// this format to generate C++ error factory functions.
+message FileProto {
+  // "type" declares the C++ types that may be used as parameters in
+  // error messages.
+  repeated ParamTypeProto type = 1;
+
+  // The groups of errors to be generated.
+  repeated GroupProto group = 2;
+}
+
+// A group of error messages with similar properties.
+message GroupProto {
+  // The error code for the messages. The error code should match the PG
+  // error code without the "ERRCODE_" prefix, e.g., UNDEFINED_FUNCTION and
+  // INVALID_TABLE_DEFINITION.
+  optional string code = 1;
+
+  // The messages in this group. Each message will turn into a
+  // generated factory function.
+  repeated MessageProto message = 3;
+}
+
+// MessageProto specifies a factory function to be code-generated.
+message MessageProto {
+  // The name of the function.
+  optional string name = 1;
+
+  // A comma-separated list of the parameters used in format strings, in the
+  // order that they will appear in the generated function declaration.
+  //
+  // In the common case, this field can be omitted and the parameters will be
+  // inferred from "format".  However, the parameters may be specified
+  // explicitly if the natural order of parameters does not correspond to that
+  // in which they appear in "format", or if the message in "format" needs to be
+  // changed without updating a large number of call sites.
+  optional string parameters = 2;
+
+  // The format string to be used to generate the error message. This
+  // error is always used for google3 clients; for cloud clients, this
+  // format is only used if the "cloud" field below is not present.
+  //
+  // Format strings may contain parameter placeholders. Placeholders
+  // start with $. There are several legal syntaxes:
+  //
+  //   $$: A literal $ character.
+  //   $<identifier>: substituted with the value of <identifier>
+  //   ${<identifier>}: substituted with the value of <identifier>
+  //   ${<identifier>.<field identifier>}: substituted with the value
+  //      of <identifier>, but use an alternate printer, identified by
+  //      <field identifier>
+  //
+  // <identifier> must be lower case letters, underscores, or numbers.
+  // Each unique value of <identifier> becomes a parameter to the
+  // error factory function. The type of the parameter is inferred
+  // from the identifier name: the part of the identifier after the
+  // final underscore is cross referenced with the types in
+  // FileProto.type. For example, if the placeholder $expected_column
+  // is used in a format, the parameter name will be
+  // "expected_column", and its type will be determined by looking for
+  // the name "column" in FileProto.type.
+  //
+  // For example, suppose the following types are available in the FileProto:
+  //
+  //   type <
+  //     name: "key"
+  //     cpp_type: "Key"
+  //     header: "spangres/errors/key.h"
+  //     printer: "$0.DebugString()"
+  //   >
+  //   type <
+  //     name: "dir"
+  //     cpp_type: "string"
+  //     printer: "$0"
+  //   >
+  //
+  // A legal MessageProto might be:
+  //
+  //   message <
+  //     name: "RowNotInDir"
+  //     format: "$key is not a row in directory $dir."
+  //   >
+  //
+  // The resulting factory function would have a signature like:
+  //
+  //   absl::Status error::RowNotInDir(const Key& key, const string& dir);
+  optional string format = 3;
+
+  // The original string of a PG error message (before substituting
+  // interpolation expressions), e.g., "function %s does not exist". The message
+  // ID combined with the PG error code will be used for identifying an error
+  // from the original PG code. If this field is defined, it indicates that this
+  // entry in the error catalog is a correpsonding match to a PG error.
+  optional string pg_message_id = 6;
+}
+
+// ParamTypeProto declares a C++ type to be used as a parameter to an
+// error message.
+message ParamTypeProto {
+  // The name of the type. This name will be used in message
+  // placeholder names.  For example, if a parameter is named
+  // "column", error format strings can declare a parameter of that
+  // type using placeholder names like $column, $foo_column,
+  // $bar_column, ${baz_column}, or {$foo_column.table_name}.
+  optional string name = 1;
+
+  // The C++ type of the parameter, without qualifications like
+  // "const" or "&". Examples: "Key", "Database", "Mutation::Mod".
+  optional string cpp_type = 2;
+
+  // The header file(s) that must be #included to find the type named
+  // in "cpp_type".
+  repeated string header = 3;
+
+  // How to pass "cpp_type" as a function argument.
+  enum PassMode {
+    // const <cpp_type>&
+    REFERENCE = 0;
+    // const <cpp_type>*
+    POINTER = 1;
+    // <cpp_type>
+    VALUE = 2;
+  }
+  optional PassMode pass_by = 4 [default = REFERENCE];
+
+  // A C++ expression to use when converting a value of this type to a
+  // string for embedding in an error message. This expression will be
+  // passed to absl::Substitute, where $0 is the name of the
+  // variable to be printed.
+  //
+  // For example, if "cpp_type" has a DebugString() method, "printer"
+  // could be set to "$0.DebugString()".
+  //
+  // "printer" may be omitted if "field" is used instead.
+  optional string printer = 5;
+
+  // Some types may have several attributes that should be printed separately in
+  // some error messages.
+  //
+  // Fields declare alternate printers that can be used with this
+  // parameter type.
+  //
+  // For example, spanner::Value parameters could be represented as:
+  //
+  //   type <
+  //     name: "value"
+  //     cpp_type: "Value"
+  //     printer: "$0.DebugString()"
+  //
+  //     field <
+  //       name: "type"
+  //       printer: "$0.type().DebugString()"
+  //     >
+  //   >
+  //
+  // This allows an error message format like:
+  //
+  //   Expected INT64. Got $value, whose type is ${value.type}.
+  //
+  // This format's factory function will only require one parameter,
+  // "const Value& value", and will use that single parameter to
+  // generate text for both the $value and ${value.type} placeholders.
+  message Field {
+    // The name of the field.
+    optional string name = 1;
+
+    // The printer to use for this field. Similar to
+    // ParamTypeProto.printer.
+    optional string printer = 2;
+  }
+  repeated Field field = 8;
+}

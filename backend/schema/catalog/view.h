@@ -67,6 +67,9 @@ class View : public SchemaNode {
 
   const std::string& body() const { return body_; }
 
+  // Returns the sql body of the view in the original dialect.
+  const std::optional<std::string>& body_origin() const { return body_origin_; }
+
   SqlSecurity security() const { return security_; }
 
   // Returns the list of all columns of this view.
@@ -142,6 +145,8 @@ class View : public SchemaNode {
 
   // View definition body.
   std::string body_;
+  // View definition body in the original dialect.
+  std::optional<std::string> body_origin_;
 };
 
 }  // namespace backend

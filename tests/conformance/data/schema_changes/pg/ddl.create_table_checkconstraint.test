@@ -1,0 +1,183 @@
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255),
+  CONSTRAINT check_name CHECK(name IS NOT NULL)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  name character varying(255),
+  PRIMARY KEY(id),
+  CONSTRAINT check_name CHECK((name IS NOT NULL))
+)
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  reg varchar(255),
+  named varchar(255),
+  inline varchar(255) CHECK(inline IS NOT NULL),
+  inline_named varchar(255) CONSTRAINT con_inline_named CHECK(inline_named IS NOT NULL),
+  CHECK(reg IS NOT NULL),
+  CONSTRAINT con_named CHECK(named IS NOT NULL)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  reg character varying(255),
+  named character varying(255),
+  inline character varying(255),
+  inline_named character varying(255),
+  PRIMARY KEY(id),
+  CHECK((inline IS NOT NULL)),
+  CHECK((reg IS NOT NULL)),
+  CONSTRAINT con_inline_named CHECK((inline_named IS NOT NULL)),
+  CONSTRAINT con_named CHECK((named IS NOT NULL))
+)
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  age bigint,
+  CHECK(age >> 1 > 10)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  age bigint,
+  PRIMARY KEY(id),
+  CHECK(((age >> '1'::bigint) > '10'::bigint))
+)
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  age bigint,
+  CHECK(age > 10 and age < 100)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  age bigint,
+  PRIMARY KEY(id),
+  CHECK(((age > '10'::bigint) AND (age < '100'::bigint)))
+)
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255),
+  CHECK(LENGTH(name) > 10)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  name character varying(255),
+  PRIMARY KEY(id),
+  CHECK((length(name) > '10'::bigint))
+)
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  price bigint,
+  CHECK(price > 10)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  price bigint,
+  PRIMARY KEY(id),
+  CHECK((price > '10'::bigint))
+)
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name character varying(255),
+  CHECK(name IS NOT NULL)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  name character varying(255),
+  PRIMARY KEY(id),
+  CHECK((name IS NOT NULL))
+)
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255),
+  CHECK(cos(id) + sin(id) < 1)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  name character varying(255),
+  PRIMARY KEY(id),
+  CHECK(((cos((id)::double precision) + sin((id)::double precision)) < ('1'::bigint)::double precision))
+)
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255),
+  prefix varchar(255),
+  fullname varchar(255),
+  CHECK(concat(name, prefix) = fullname)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  name character varying(255),
+  prefix character varying(255),
+  fullname character varying(255),
+  PRIMARY KEY(id),
+  CHECK((concat(name, prefix) = fullname))
+)
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255) CHECK ((name IS NOT NULL)) NO INHERIT
+);
+--
+ERROR: <NO INHERIT> clause is not supported in constraints.
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255) CHECK (9)
+);
+--
+ERROR: INVALID_ARGUMENT: Error parsing expression '9' from check constraint '<unnamed>' in table 'users': Expected type BOOL; found INT64
+==
+# --regex
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255) CHECK (true)
+);
+--
+ERROR:.* Check constraint `users`.`.*` does not use any non generated column. Expression: 'true'. A check constraint expression requires at least one non-generated column as dependency.
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  name varchar(255) CHECK (id)
+);
+--
+ERROR: INVALID_ARGUMENT: Error parsing expression 'id' from check constraint '<unnamed>' in table 'users': Expected type BOOL; found INT64
+==
+
+CREATE TABLE Users(
+  id bigint PRIMARY KEY,
+  col_bool bool CHECK (col_bool)
+);
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  col_bool boolean,
+  PRIMARY KEY(id),
+  CHECK(col_bool)
+)

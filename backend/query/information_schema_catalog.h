@@ -25,6 +25,7 @@
 #include "zetasql/public/simple_catalog.h"
 #include "absl/container/flat_hash_map.h"
 #include "backend/schema/catalog/schema.h"
+#include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 
 namespace google {
 namespace spanner {
@@ -51,6 +52,7 @@ struct IndexColumnsMetaEntry;
 class InformationSchemaCatalog : public zetasql::SimpleCatalog {
  public:
   static constexpr char kName[] = "INFORMATION_SCHEMA";
+  static constexpr char kPGName[] = "PG_INFORMATION_SCHEMA";
 
   explicit InformationSchemaCatalog(const std::string& catalog_name,
                                     const Schema* default_schema);
@@ -60,10 +62,20 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   const ::google::spanner::admin::database::v1::DatabaseDialect dialect_;
   absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
       tables_by_name_;
+  std::unique_ptr<postgres_translator::spangres::SpangresSchemaPrinter>
+      pg_schema_printer_;
 
   inline std::string GetNameForDialect(absl::string_view name);
   std::pair<zetasql::Value, zetasql::Value> GetPGDataTypeAndSpannerType(
       const zetasql::Type* type, std::optional<int64_t> length);
+
+  zetasql::Value GetSpannerType(const Column* column);
+  zetasql::Value GetSpannerType(const zetasql::Type* type,
+                                  std::optional<int64_t> length);
+  zetasql::Value PGDataType(const zetasql::Type* type);
+  inline zetasql::Value DialectDefaultSchema();
+  inline zetasql::Value DialectBoolValue(bool value);
+  zetasql::Value DialectColumnOrdering(const KeyColumn* column);
 
   void FillSchemataTable();
   void FillSpannerStatisticsTable();
@@ -71,38 +83,18 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
 
   void FillTablesTable();
   void FillColumnsTable();
-
   void FillColumnColumnUsageTable();
-
-  zetasql::SimpleTable* AddIndexesTable();
-  void FillIndexesTable(zetasql::SimpleTable* indexes);
-
-  zetasql::SimpleTable* AddIndexColumnsTable();
-  void FillIndexColumnsTable(zetasql::SimpleTable* index_columns);
+  void FillIndexesTable();
+  void FillIndexColumnsTable();
 
   void AddColumnOptionsTable();
 
-  zetasql::SimpleTable* AddTableConstraintsTable();
-  void FillTableConstraintsTable(zetasql::SimpleTable* table_constraints);
-
-  zetasql::SimpleTable* AddCheckConstraintsTable();
-  void FillCheckConstraintsTable(zetasql::SimpleTable* check_constraints);
-
-  zetasql::SimpleTable* AddConstraintTableUsageTable();
-  void FillConstraintTableUsageTable(
-      zetasql::SimpleTable* constraint_table_usage);
-
-  zetasql::SimpleTable* AddReferentialConstraintsTable();
-  void FillReferentialConstraintsTable(
-      zetasql::SimpleTable* referential_constraints);
-
-  zetasql::SimpleTable* AddKeyColumnUsageTable();
-  void FillKeyColumnUsageTable(zetasql::SimpleTable* key_column_usage);
-
-  zetasql::SimpleTable* AddConstraintColumnUsageTable();
-  void FillConstraintColumnUsageTable(
-      zetasql::SimpleTable* constraint_column_usage);
-
+  void FillTableConstraintsTable();
+  void FillCheckConstraintsTable();
+  void FillConstraintTableUsageTable();
+  void FillReferentialConstraintsTable();
+  void FillKeyColumnUsageTable();
+  void FillConstraintColumnUsageTable();
   void FillViewsTable();
 };
 

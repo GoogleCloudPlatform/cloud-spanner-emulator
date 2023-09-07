@@ -31,12 +31,16 @@
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/ddl_reserved_words.h"
+#include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+using ::postgres_translator::spangres::SpangresSchemaPrinter;
 
 namespace {
 
@@ -256,6 +260,20 @@ std::string PrintForeignKey(const ForeignKey* foreign_key) {
 absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
     const Schema* schema) {
   std::vector<std::string> statements;
+  if (schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
+    absl::StatusOr<std::unique_ptr<SpangresSchemaPrinter>> printer =
+        postgres_translator::spangres::CreateSpangresDirectSchemaPrinter();
+    ZETASQL_RETURN_IF_ERROR(printer.status());
+    ddl::DDLStatementList ddl_statements = schema->Dump();
+    for (const ddl::DDLStatement& statement : ddl_statements.statement()) {
+      absl::StatusOr<std::vector<std::string>> printed_statements =
+          (*printer)->PrintDDLStatementForEmulator(statement);
+      ZETASQL_RETURN_IF_ERROR(printed_statements.status());
+      statements.insert(statements.end(), (*printed_statements).begin(),
+                        (*printed_statements).end());
+    }
+    return statements;
+  }
 
   // Print tables
   for (auto table : schema->tables()) {

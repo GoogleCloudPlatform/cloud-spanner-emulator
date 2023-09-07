@@ -157,6 +157,9 @@ absl::Status EmptyDDLStatement();
 absl::Status DDLStatementWithErrors(absl::string_view ddl_string,
                                     const std::vector<std::string>& errors);
 
+absl::Status DdlInvalidArgumentError(absl::string_view message);
+absl::Status DdlUnavailableError();
+
 // Schema validation errors.
 absl::Status InvalidSchemaName(absl::string_view object_kind,
                                absl::string_view identifier);
@@ -346,7 +349,7 @@ absl::Status IndexNotFound(absl::string_view index_name);
 
 absl::Status ChangeStreamNotFound(absl::string_view change_stream_name);
 absl::Status TableValuedFunctionNotFound(absl::string_view tvf_name);
-absl::Status DroppingTableWithChangeStream(
+absl::Status DropTableWithChangeStream(
     absl::string_view table_name, int64_t change_stream_count,
     absl::string_view change_stream_name_list_string);
 absl::Status DropColumnWithChangeStream(

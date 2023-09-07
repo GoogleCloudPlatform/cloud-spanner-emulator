@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
@@ -67,6 +68,9 @@
 #include "common/errors.h"
 #include "common/limits.h"
 #include "frontend/converters/values.h"
+#include "third_party/spanner_pg/interface/emulator_parser.h"
+#include "third_party/spanner_pg/interface/pg_arena.h"
+#include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
@@ -154,6 +158,18 @@ absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> Analyze(
   ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeStatement(sql, options, catalog,
                                               type_factory, &output));
   return output;
+}
+
+absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
+                  zetasql::AnalyzerOptions& options,
+                  zetasql::TypeFactory* type_factory) {
+  options.CreateDefaultArenasIfNotSet();
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
+      postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
+  return postgres_translator::spangres::ParseAndAnalyzePostgreSQL(
+      sql, catalog, options, type_factory);
 }
 
 // TODO : Replace with a better error transforming mechanism,
@@ -722,8 +738,14 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
   };
 
   std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
+  if (context.schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
+    ZETASQL_ASSIGN_OR_RETURN(analyzer_output,
+                     AnalyzePostgreSQL(query.sql, &catalog, analyzer_options,
+                                       type_factory_));
+  } else {
     ZETASQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(query.sql, &catalog,
                                               analyzer_options, type_factory_));
+  }
 
   ZETASQL_ASSIGN_OR_RETURN(auto params,
                    ExtractParameters(query, analyzer_output.get()));
@@ -754,9 +776,16 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
   } else {
     ZETASQL_RET_CHECK_NE(context.writer, nullptr);
     analyzer_options.set_prune_unused_columns(false);
+    if (context.schema->dialect() ==
+        database_api::DatabaseDialect::POSTGRESQL) {
+      ZETASQL_ASSIGN_OR_RETURN(analyzer_output,
+                       AnalyzePostgreSQL(query.sql, &catalog, analyzer_options,
+                                         type_factory_));
+    } else {
       ZETASQL_ASSIGN_OR_RETURN(
           analyzer_output,
           Analyze(query.sql, &catalog, analyzer_options, type_factory_));
+    }
     ZETASQL_ASSIGN_OR_RETURN(resolved_statement,
                      ExtractValidatedResolvedStatementAndOptions(
                          analyzer_output.get(), context.schema));
@@ -782,8 +811,14 @@ absl::Status QueryEngine::IsPartitionable(const Query& query,
                   analyzer_options};
 
   std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
+  if (context.schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
+    ZETASQL_ASSIGN_OR_RETURN(analyzer_output,
+                     AnalyzePostgreSQL(query.sql, &catalog, analyzer_options,
+                                       type_factory_));
+  } else {
     ZETASQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(query.sql, &catalog,
                                               analyzer_options, type_factory_));
+  }
 
   QueryEngineOptions options;
   ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
@@ -830,6 +865,10 @@ bool IsDMLQuery(const std::string& query) {
 absl::StatusOr<ChangeStreamQueryValidator::ChangeStreamMetadata>
 QueryEngine::TryGetChangeStreamMetadata(const Query& query,
                                         const Schema* schema) {
+  // change streams for postgres is not supported now
+  if (schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
+    return ChangeStreamQueryValidator::ChangeStreamMetadata();
+  }
   const absl::Time start_time = absl::Now();
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(query.declared_params));

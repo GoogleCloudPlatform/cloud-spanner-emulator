@@ -71,11 +71,11 @@ void TestEnv::SetupServer() {
   frontend::Server::Options options;
   options.server_address = "localhost:0";
   server_ = frontend::Server::Create(options);
-  ZETASQL_CHECK(server_ != nullptr);  // Crash ok
+  ZETASQL_VLOG(server_ != nullptr);  // Crash ok
   ASSERT_EQ(server_->host(), "localhost");
   host_port_ = absl::StrCat(server_->host(), ":", server_->port());
-  ZETASQL_LOG(INFO) << "Cloud Spanner Emulator running in test.";
-  ZETASQL_LOG(INFO) << "Server address: " << host_port_;
+  ABSL_LOG(INFO) << "Cloud Spanner Emulator running in test.";
+  ABSL_LOG(INFO) << "Server address: " << host_port_;
   ready_.Notify();
   server_->WaitForShutdown();
 }
@@ -89,7 +89,7 @@ void TestEnv::SetupClientStubs() {
   instance_admin_client_ =
       admin::instance::v1::InstanceAdmin::NewStub(channel);
   operations_client_ = longrunning::Operations::NewStub(channel);
-  ZETASQL_LOG(INFO) << "Client stubs setup finished.";
+  ABSL_LOG(INFO) << "Client stubs setup finished.";
 }
 
 void TestEnv::WaitForServerReady() { ready_.WaitForNotification(); }

@@ -23,6 +23,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/flags/flag.h"
+#include "absl/log/absl_log.h"
 #include "absl/strings/str_cat.h"
 #include "tools/cpp/runfiles/runfiles.h"
 
@@ -35,7 +36,7 @@ std::string GetTestFileDir(const std::string& path) {
   std::string error;
   auto runfiles = bazel::tools::cpp::runfiles::Runfiles::CreateForTest(&error);
   if (!error.empty()) {
-    ZETASQL_LOG(WARNING) << "Error when fetching runfiles: " << error;
+    ABSL_LOG(WARNING) << "Error when fetching runfiles: " << error;
     return "";
   }
   return runfiles->Rlocation(path);

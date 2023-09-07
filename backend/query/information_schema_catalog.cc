@@ -36,10 +36,13 @@
 #include "absl/strings/strip.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/query/tables_from_metadata.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
 #include "common/limits.h"
+#include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
+#include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 #include "zetasql/base/no_destructor.h"
 
 namespace google {
@@ -100,6 +103,7 @@ static constexpr char kInParent[] = "IN PARENT";
 static constexpr char kView[] = "VIEW";
 static constexpr char kYes[] = "YES";
 static constexpr char kNo[] = "NO";
+static constexpr char kNone[] = "NONE";
 static constexpr char kAlways[] = "ALWAYS";
 static constexpr char kNever[] = "NEVER";
 static constexpr char kPrimary_Key[] = "PRIMARY_KEY";
@@ -122,6 +126,8 @@ static constexpr char kConstraintName[] = "CONSTRAINT_NAME";
 static constexpr char kCheckClause[] = "CHECK_CLAUSE";
 static constexpr char kDesc[] = "DESC";
 static constexpr char kAsc[] = "ASC";
+static constexpr char kAscNullsFirst[] = "ASC NULLS FIRST";
+static constexpr char kDescNullsLast[] = "DESC NULLS LAST";
 static constexpr char kAllowCommitTimestamp[] = "allow_commit_timestamp";
 static constexpr char kSpannerCommitTimestamp[] = "spanner.commit_timestamp";
 static constexpr char kBool[] = "BOOL";
@@ -166,13 +172,43 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
     // migration to auto-create tables is complete, it'll be the tables from
     // https://cloud.google.com/spanner/docs/information-schema.
     kSupportedGSQLTables{{
+        kCheckConstraints,
         kColumnColumnUsage,
         kColumns,
+        kConstraintColumnUsage,
+        kConstraintTableUsage,
         kDatabaseOptions,
+        kIndexes,
+        kIndexColumns,
+        kKeyColumnUsage,
+        kReferentialConstraints,
         kSchemata,
         kSpannerStatistics,
+        kTableConstraints,
         kTables,
         kViews,
+    }};
+
+static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+    // For now, this is a set of tables that are created from metadata. Once the
+    // migration to auto-create tables is complete, it'll be the tables from
+    // https://cloud.google.com/spanner/docs/information-schema-pg.
+    kSupportedPGTables{{
+        absl::AsciiStrToLower(kCheckConstraints),
+        absl::AsciiStrToLower(kColumnColumnUsage),
+        absl::AsciiStrToLower(kColumns),
+        absl::AsciiStrToLower(kConstraintColumnUsage),
+        absl::AsciiStrToLower(kConstraintTableUsage),
+        absl::AsciiStrToLower(kDatabaseOptions),
+        absl::AsciiStrToLower(kIndexes),
+        absl::AsciiStrToLower(kIndexColumns),
+        absl::AsciiStrToLower(kKeyColumnUsage),
+        absl::AsciiStrToLower(kReferentialConstraints),
+        absl::AsciiStrToLower(kSchemata),
+        absl::AsciiStrToLower(kSpannerStatistics),
+        absl::AsciiStrToLower(kTableConstraints),
+        absl::AsciiStrToLower(kTables),
+        absl::AsciiStrToLower(kViews),
     }};
 
 static const zetasql_base::NoDestructor<
@@ -208,9 +244,19 @@ const ColumnsMetaEntry& GetColumnMetadata(const DatabaseDialect& dialect,
                                           const zetasql::Table* table,
                                           const zetasql::Column* column) {
   std::string error = "Missing metadata for column ";
+  if (dialect == DatabaseDialect::POSTGRESQL) {
+    std::string table_name = absl::AsciiStrToLower(table->Name());
+    std::string column_name = absl::AsciiStrToLower(column->Name());
+    auto m = FindMetadata(PGColumnsMetadata(), table_name, column_name);
+    if (m == PGColumnsMetadata().end()) {
+      ABSL_LOG(FATAL) << error << table_name << "." << column_name;
+    }
+    return *m;
+  }
+
   auto m = FindMetadata(ColumnsMetadata(), table->Name(), column->Name());
   if (m == ColumnsMetadata().end()) {
-    ZETASQL_LOG(DFATAL) << error << table->Name() << "." << column->Name();
+    ABSL_LOG(FATAL) << error << table->Name() << "." << column->Name();
   }
   return *m;
 }
@@ -220,8 +266,16 @@ const ColumnsMetaEntry& GetColumnMetadata(const DatabaseDialect& dialect,
 const IndexColumnsMetaEntry* FindKeyColumnMetadata(
     const DatabaseDialect& dialect, const zetasql::Table* table,
     const zetasql::Column* column) {
-  auto m = FindMetadata(IndexColumnsMetadata(), table->Name(), column->Name());
-  return m == IndexColumnsMetadata().end() ? nullptr : &*m;
+  if (dialect == DatabaseDialect::POSTGRESQL) {
+    auto m = FindMetadata(PGIndexColumnsMetadata(),
+                          absl::AsciiStrToLower(table->Name()),
+                          absl::AsciiStrToLower(column->Name()));
+    return m == PGIndexColumnsMetadata().end() ? nullptr : &*m;
+  } else {
+    auto m =
+        FindMetadata(IndexColumnsMetadata(), table->Name(), column->Name());
+    return m == IndexColumnsMetadata().end() ? nullptr : &*m;
+  }
 }
 
 template <typename T>
@@ -321,7 +375,7 @@ std::vector<zetasql::Value> GetRowFromRowKVs(
     // Since the row_kvs are constructed using the column name constants defined
     // earlier in the file, all incoming keys in the map must be uppercase so we
     // ensure that if a key is found, it's not the lowercase column name.
-    ZETASQL_CHECK(row_kvs.find(  // crash ok
+    ZETASQL_VLOG(row_kvs.find(  // crash ok
               absl::AsciiStrToLower(column->Name())) == row_kvs.end());
     // We convert the column names to uppercase before looking it up on the map.
     if (auto kv = row_kvs.find(absl::AsciiStrToUpper(column->Name()));
@@ -340,13 +394,23 @@ InformationSchemaCatalog::InformationSchemaCatalog(
     const std::string& catalog_name, const Schema* default_schema)
     : zetasql::SimpleCatalog(catalog_name),
       default_schema_(default_schema),
-      // clang-format off
-      dialect_(DatabaseDialect::GOOGLE_STANDARD_SQL) {
-  // clang-format on
-
+      dialect_(catalog_name == kPGName ? DatabaseDialect::POSTGRESQL
+                               : DatabaseDialect::GOOGLE_STANDARD_SQL) {
   // Create a subset of tables using columns metadata.
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    absl::StatusOr<
+        std::unique_ptr<postgres_translator::spangres::SpangresSchemaPrinter>>
+        printer =
+            postgres_translator::spangres::CreateSpangresDirectSchemaPrinter();
+    ABSL_CHECK_OK(printer.status());  // crash ok
+    pg_schema_printer_ = std::move(*printer);
+
+    tables_by_name_ = AddTablesFromMetadata(
+        PGColumnsMetadata(), *kSpannerPGTypeToGSQLType, *kSupportedPGTables);
+  } else {
     tables_by_name_ = AddTablesFromMetadata(
         ColumnsMetadata(), *kSpannerTypeToGSQLType, *kSupportedGSQLTables);
+  }
 
   for (auto& [name, table] : tables_by_name_) {
     AddTable(table.get());
@@ -357,15 +421,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   // function to fill the table.
   FillDatabaseOptionsTable();
 
-  auto* indexes = AddIndexesTable();
-  auto* index_columns = AddIndexColumnsTable();
   AddColumnOptionsTable();
-  auto* check_constraints = AddCheckConstraintsTable();
-  auto* table_constraints = AddTableConstraintsTable();
-  auto* constraint_table_usage = AddConstraintTableUsageTable();
-  auto* referential_constraints = AddReferentialConstraintsTable();
-  auto* key_column_usage = AddKeyColumnUsageTable();
-  auto* constraint_column_usage = AddConstraintColumnUsageTable();
 
   // These tables are populated only after all tables have been added to the
   // catalog (including meta tables) because they add rows based on the tables
@@ -373,14 +429,14 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   FillTablesTable();
   FillColumnsTable();
   FillColumnColumnUsageTable();
-  FillIndexesTable(indexes);
-  FillIndexColumnsTable(index_columns);
-  FillCheckConstraintsTable(check_constraints);
-  FillTableConstraintsTable(table_constraints);
-  FillConstraintTableUsageTable(constraint_table_usage);
-  FillReferentialConstraintsTable(referential_constraints);
-  FillKeyColumnUsageTable(key_column_usage);
-  FillConstraintColumnUsageTable(constraint_column_usage);
+  FillIndexesTable();
+  FillIndexColumnsTable();
+  FillCheckConstraintsTable();
+  FillTableConstraintsTable();
+  FillConstraintTableUsageTable();
+  FillReferentialConstraintsTable();
+  FillKeyColumnUsageTable();
+  FillConstraintColumnUsageTable();
   FillViewsTable();
 }
 
@@ -396,16 +452,17 @@ inline std::string InformationSchemaCatalog::GetNameForDialect(
   return std::string(name);
 }
 
+inline zetasql::Value InformationSchemaCatalog::DialectDefaultSchema() {
+  return String(dialect_ == DatabaseDialect::POSTGRESQL ? kPublic : "");
+}
+
 void InformationSchemaCatalog::FillSchemataTable() {
   auto table = tables_by_name_.at(GetNameForDialect(kSchemata)).get();
   std::vector<std::vector<zetasql::Value>> rows;
-
-  // Row for the unnamed default schema. This is an empty string in GSQL and
-  // kPublic in PG.
   absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
-  if (dialect_ == DatabaseDialect::POSTGRESQL) {
-    specific_kvs[kSchemaName] = String(kPublic);
-  }
+
+  // Row for the unnamed default schema.
+  specific_kvs[kSchemaName] = DialectDefaultSchema();
   rows.push_back(GetRowFromRowKVs(table, specific_kvs));
 
   // Row for the information schema.
@@ -420,12 +477,9 @@ void InformationSchemaCatalog::FillDatabaseOptionsTable() {
   auto table = tables_by_name_.at(GetNameForDialect(kDatabaseOptions)).get();
 
   absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
-  if (dialect_ == DatabaseDialect::POSTGRESQL) {
-    specific_kvs[kSchemaName] = String(kPublic);
-    specific_kvs[kOptionType] = String(kCharacterVarying);
-  } else {
-    specific_kvs[kOptionType] = String(kString);
-  }
+  specific_kvs[kSchemaName] = DialectDefaultSchema();
+  specific_kvs[kOptionType] = String(
+      dialect_ == DatabaseDialect::POSTGRESQL ? kCharacterVarying : kString);
   specific_kvs[kOptionName] = String(kDatabaseDialect);
   specific_kvs[kOptionValue] = String(DatabaseDialect_Name(dialect_));
 
@@ -451,8 +505,17 @@ void InformationSchemaCatalog::FillTablesTable() {
   absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
   for (const Table* table : default_schema_->tables()) {
     if (dialect_ == DatabaseDialect::POSTGRESQL) {
-      specific_kvs[kTableSchema] = String(kPublic);
-      specific_kvs[kRowDeletionPolicyExpression] = NullString();
+      zetasql::Value row_deletion_policy_value = NullString();
+      if (table->row_deletion_policy().has_value()) {
+        // Use the PG schema printer to get the row deletion policy in a format
+        // expected by the PG dialect.
+        absl::StatusOr<std::string> row_deletion_policy =
+            pg_schema_printer_->PrintRowDeletionPolicyForEmulator(
+                table->row_deletion_policy().value());
+        ABSL_CHECK_OK(row_deletion_policy.status());  // crash ok
+        row_deletion_policy_value = String(*row_deletion_policy);
+      }
+      specific_kvs[kRowDeletionPolicyExpression] = row_deletion_policy_value;
     } else {
       specific_kvs[kRowDeletionPolicyExpression] =
           table->row_deletion_policy().has_value()
@@ -461,6 +524,7 @@ void InformationSchemaCatalog::FillTablesTable() {
               : NullString();
     }
 
+    specific_kvs[kTableSchema] = DialectDefaultSchema();
     specific_kvs[kTableName] = String(table->Name());
     specific_kvs[kTableType] = String(kBaseTable);
     specific_kvs[kParentTableName] =
@@ -478,15 +542,10 @@ void InformationSchemaCatalog::FillTablesTable() {
   }
 
   for (const View* view : default_schema_->views()) {
-    if (dialect_ == DatabaseDialect::POSTGRESQL) {
-      specific_kvs[kTableSchema] = String(kPublic);
-      specific_kvs[kSpannerState] = NullString();
-    } else {
-      specific_kvs[kSpannerState] = String(kCommitted);
-    }
-
+    specific_kvs[kTableSchema] = DialectDefaultSchema();
     specific_kvs[kTableName] = String(view->Name());
     specific_kvs[kTableType] = String(kView);
+    specific_kvs[kSpannerState] = NullString();
     specific_kvs[kParentTableName] = NullString();
     specific_kvs[kOnDeleteAction] = NullString();
     specific_kvs[kRowDeletionPolicyExpression] = NullString();
@@ -511,6 +570,37 @@ void InformationSchemaCatalog::FillTablesTable() {
   tables->SetContents(rows);
 }
 
+// Returns the spanner_type based on the dialect.
+zetasql::Value InformationSchemaCatalog::GetSpannerType(
+    const Column* column) {
+  return GetSpannerType(column->GetType(), column->declared_max_length());
+}
+
+zetasql::Value InformationSchemaCatalog::GetSpannerType(
+    const zetasql::Type* type, std::optional<int64_t> length) {
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    ddl::ColumnDefinition column_def = GoogleSqlTypeToDDLColumnType(type);
+    if (length != std::nullopt) {
+      column_def.set_length(length.value());
+    }
+    ABSL_LOG(ERROR) << type->DebugString();
+    absl::StatusOr<std::string> spanner_type =
+        pg_schema_printer_->PrintTypeForEmulator(column_def);
+    ABSL_CHECK_OK(spanner_type.status());  // crash ok
+
+    return String(*spanner_type);
+  }
+
+  return String(ColumnTypeToString(type, length));
+}
+
+// Returns the data_type for the PG dialect. If the type is an array, returns
+// "ARRAY". Otherwise returns the spanner_type without the length.
+zetasql::Value InformationSchemaCatalog::PGDataType(
+    const zetasql::Type* type) {
+  return type->IsArray() ? String("ARRAY") : GetSpannerType(type, std::nullopt);
+}
+
 // Returns the value to be used by the "numeric_precision" column of the
 // "columns" table, based on the given column type.
 zetasql::Value GetPGNumericPrecision(const zetasql::Type* type) {
@@ -528,21 +618,6 @@ zetasql::Value GetPGNumericPrecisionRadix(const zetasql::Type* type) {
   // Setting the numeric precision radix.
   if (type->IsDouble() || type->IsInt64()) {
     return Int64(kDoubleNumericPrecisionRadix);
-  }
-  return NullInt64();
-}
-
-// To be used to determine the maximum string or byte column length if the
-// underlying column object doesn't store it. E.g. for views and information
-// schema columns.
-zetasql::Value GetPGCharacterMaximumLength(const zetasql::Type* type) {
-  if (type->IsString() ||
-      (type->IsArray() && type->AsArray()->element_type()->IsString())) {
-    return Int64(limits::kMaxStringColumnLength);
-  }
-  if (type->IsBytes() ||
-      (type->IsArray() && type->AsArray()->element_type()->IsBytes())) {
-    return Int64(limits::kMaxBytesColumnLength);
   }
   return NullInt64();
 }
@@ -565,17 +640,18 @@ void InformationSchemaCatalog::FillColumnsTable() {
     int pos = 1;
     for (const Column* column : table->columns()) {
       if (dialect_ == DatabaseDialect::POSTGRESQL) {
-        specific_kvs[kTableSchema] = String(kPublic);
-
-        specific_kvs[kColumnDefault] = NullString();
+        specific_kvs[kColumnDefault] =
+            column->has_default_value()
+                ? String(column->original_expression().value())
+                : NullString();
 
         const zetasql::Type* type = column->GetType();
         if (column->has_allows_commit_timestamp()) {
           specific_kvs[kDataType] = String(kSpannerCommitTimestamp);
           specific_kvs[kSpannerType] = String(kSpannerCommitTimestamp);
         } else {
-          specific_kvs[kDataType] = NullString();
-          specific_kvs[kSpannerType] = NullString();
+          specific_kvs[kDataType] = PGDataType(type);
+          specific_kvs[kSpannerType] = GetSpannerType(column);
         }
 
         specific_kvs[kCharacterMaximumLength] =
@@ -587,7 +663,10 @@ void InformationSchemaCatalog::FillColumnsTable() {
         specific_kvs[kNumericPrecisionRadix] = GetPGNumericPrecisionRadix(type);
         specific_kvs[kNumericScale] = type->IsInt64() ? Int64(0) : NullInt64();
 
-        specific_kvs[kGenerationExpression] = NullString();
+        specific_kvs[kGenerationExpression] =
+            column->is_generated()
+                ? String(column->original_expression().value())
+                : NullString();
       } else {
         specific_kvs[kGenerationExpression] = NullString();
         if (column->is_generated()) {
@@ -602,10 +681,10 @@ void InformationSchemaCatalog::FillColumnsTable() {
                                         : NullString();
 
         specific_kvs[kDataType] = NullString();
-        specific_kvs[kSpannerType] = String(ColumnTypeToString(
-            column->GetType(), column->declared_max_length()));
+        specific_kvs[kSpannerType] = GetSpannerType(column);
       }
 
+      specific_kvs[kTableSchema] = DialectDefaultSchema();
       specific_kvs[kTableName] = String(table->Name());
       specific_kvs[kColumnName] = String(column->Name());
       specific_kvs[kOrdinalPosition] = Int64(pos++);
@@ -626,10 +705,10 @@ void InformationSchemaCatalog::FillColumnsTable() {
     int pos = 1;
     for (const View::Column& column : view->columns()) {
       if (dialect_ == DatabaseDialect::POSTGRESQL) {
-        specific_kvs[kTableSchema] = String(kPublic);
-
-        specific_kvs[kDataType] = NullString();
-        specific_kvs[kSpannerType] = NullString();
+        // Emulator's View::Column doesn't store the length so we pass the
+        // length in as a std::nullopt.
+        specific_kvs[kDataType] = PGDataType(column.type);
+        specific_kvs[kSpannerType] = GetSpannerType(column.type, std::nullopt);
 
         // Emulator's View::Column doesn't store the length so we assume the
         // length is the max string or byte length.
@@ -644,9 +723,10 @@ void InformationSchemaCatalog::FillColumnsTable() {
             column.type->IsInt64() ? Int64(0) : NullInt64();
       } else {
         specific_kvs[kDataType] = NullString();
-        specific_kvs[kSpannerType] = String(ColumnTypeToString(column.type, 0));
+        specific_kvs[kSpannerType] = GetSpannerType(column.type, 0);
       }
 
+      specific_kvs[kTableSchema] = DialectDefaultSchema();
       specific_kvs[kTableName] = String(view->Name());
       specific_kvs[kColumnName] = String(column.name);
       specific_kvs[kOrdinalPosition] = Int64(pos++);
@@ -671,8 +751,11 @@ void InformationSchemaCatalog::FillColumnsTable() {
 
       if (dialect_ == DatabaseDialect::POSTGRESQL) {
         const zetasql::Type* type = column->GetType();
-        specific_kvs[kDataType] = NullString();
-        specific_kvs[kSpannerType] = NullString();
+        // Information schema metadata doesn't store the length of a character
+        // varying or bytea type. So we always pass in std::nullopt as the
+        // length.
+        specific_kvs[kDataType] = PGDataType(type);
+        specific_kvs[kSpannerType] = GetSpannerType(type, std::nullopt);
 
         specific_kvs[kCharacterMaximumLength] = NullInt64();
         specific_kvs[kNumericPrecision] = GetPGNumericPrecision(type);
@@ -718,7 +801,7 @@ void InformationSchemaCatalog::FillColumnColumnUsageTable() {
               // table_catalog
               String(""),
               // table_schema
-              String(dialect_ == DatabaseDialect::POSTGRESQL ? kPublic : ""),
+              DialectDefaultSchema(),
               // table_name
               String(table->Name()),
               // column_name
@@ -735,29 +818,47 @@ void InformationSchemaCatalog::FillColumnColumnUsageTable() {
   column_column_usage->SetContents(rows);
 }
 
-zetasql::SimpleTable* InformationSchemaCatalog::AddIndexesTable() {
-  // Setup table schema.
-  auto indexes =
-      new zetasql::SimpleTable(kIndexes, {
-                                               {kTableCatalog, StringType()},
-                                               {kTableSchema, StringType()},
-                                               {kTableName, StringType()},
-                                               {kIndexName, StringType()},
-                                               {kIndexType, StringType()},
-                                               {kParentTableName, StringType()},
-                                               {kIsUnique, BoolType()},
-                                               {kIsNullFiltered, BoolType()},
-                                               {kIndexState, StringType()},
-                                               {kSpannerIsManaged, BoolType()},
-                                           });
-  AddOwnedTable(indexes);
-  return indexes;
+// Returns a value that represents a boolean based on the dialect. I.e. "YES" or
+// "NO" for PG or a true or false for GSQL.
+inline zetasql::Value InformationSchemaCatalog::DialectBoolValue(bool value) {
+  return dialect_ == DatabaseDialect::POSTGRESQL ? String(value ? kYes : kNo)
+                                                 : Bool(value);
 }
 
-void InformationSchemaCatalog::FillIndexesTable(
-    zetasql::SimpleTable* indexes) {
-  // Add table rows.
+// Returns the column ordering based on dialect.
+//
+// For GSQL, it returns ASC or DESC based on whether the key column is set to
+// ascending or descending, respectively.
+//
+// For PG, returns ASC if the order is ASC NULLS LAST, or ASC NULLS FIRST if
+// that's the specified order. If the order is descending, returns DESC if the
+// order is DESC NULLS FIRST, or DESC NULLS LAST if that's the specified order.
+zetasql::Value InformationSchemaCatalog::DialectColumnOrdering(
+    const KeyColumn* column) {
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    if (column->is_descending()) {
+      return column->is_nulls_last() ? String(kDescNullsLast) : String(kDesc);
+    } else {
+      return column->is_nulls_last() ? String(kAsc) : String(kAscNullsFirst);
+    }
+  }
+  return String(column->is_descending() ? kDesc : kAsc);
+}
+
+// Fills the "information_schema.indexes" table based on the specifications
+// provided for each dialect:
+// ZetaSQL: https://cloud.google.com/spanner/docs/information-schema#indexes
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#indexes
+//
+// Rows are added for each table defined in the default schema for both
+// dialects, as well as for tables in the information schema for the GSQL
+// dialect.
+void InformationSchemaCatalog::FillIndexesTable() {
+  auto indexes = tables_by_name_.at(GetNameForDialect(kIndexes)).get();
+
   std::vector<std::vector<zetasql::Value>> rows;
+  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
   for (const Table* table : default_schema_->tables()) {
     // Add normal indexes.
     for (const Index* index : table->indexes()) {
@@ -765,7 +866,7 @@ void InformationSchemaCatalog::FillIndexesTable(
           // table_catalog
           String(""),
           // table_schema
-          String(""),
+          DialectDefaultSchema(),
           // table_name
           String(table->Name()),
           // index_name
@@ -775,14 +876,22 @@ void InformationSchemaCatalog::FillIndexesTable(
           // parent_table_name
           String(index->parent() ? index->parent()->Name() : ""),
           // is_unique
-          Bool(index->is_unique()),
+          DialectBoolValue(index->is_unique()),
           // is_null_filtered
-          Bool(index->is_null_filtered()),
+          DialectBoolValue(index->is_null_filtered()),
           // index_state
           String(kReadWrite),
           // spanner_is_managed
-          Bool(index->is_managed()),
+          DialectBoolValue(index->is_managed()),
       });
+      if (dialect_ == DatabaseDialect::POSTGRESQL) {
+        // PG has one more undocumented column than GSQL called "filter". There
+        // is no support in the emulator Index object to print this value so we
+        // leave it as an empty string. It also means the value is not tested
+        // since otherwise the tests fail against production which does have a
+        // value for it.
+        rows.back().push_back(String(""));
+      }
     }
 
     // Add the primary key index.
@@ -790,7 +899,7 @@ void InformationSchemaCatalog::FillIndexesTable(
         // table_catalog
         String(""),
         // table_schema
-        String(""),
+        DialectDefaultSchema(),
         // table_name
         String(table->Name()),
         // index_name
@@ -800,69 +909,72 @@ void InformationSchemaCatalog::FillIndexesTable(
         // parent_table_name
         String(""),
         // is_unique
-        Bool(true),
+        DialectBoolValue(true),
         // is_null_filtered
-        Bool(false),
+        DialectBoolValue(false),
         // index_state
         NullString(),
         // spanner_is_managed
-        Bool(false),
+        DialectBoolValue(false),
     });
+    if (dialect_ == DatabaseDialect::POSTGRESQL) {
+      // PG has one more undocumented column than GSQL called "filter". There
+      // is no support in the emulator Index object to print this value so we
+      // leave it as an empty string. It also means the value is not tested
+      // since otherwise the tests fail against production which does have a
+      // value for it.
+      rows.back().push_back(String(""));
+    }
   }
 
-  // Add the primary key index for tables that live in INFORMATION_SCHEMA.
-  for (const auto& table : this->tables()) {
-    rows.push_back({
-        // table_catalog
-        String(""),
-        // table_schema
-        String(kInformationSchema),
-        // table_name
-        String(table->Name()),
-        // index_name
-        String(kPrimary_Key),
-        // index_type
-        String(kPrimary_Key),
-        // parent_table_name
-        String(""),
-        // is_unique
-        Bool(true),
-        // is_null_filtered
-        Bool(false),
-        // index_state
-        NullString(),
-        // spanner_is_managed
-        Bool(false),
-    });
+  // The primary key index for tables in the INFORMATION_SCHEMA are not added in
+  // the PG dialect in production so we also don't add it in the emulator.
+  if (dialect_ != DatabaseDialect::POSTGRESQL) {
+    // Add the primary key index for tables that live in INFORMATION_SCHEMA.
+    for (const auto& table : this->tables()) {
+      rows.push_back({
+          // table_catalog
+          String(""),
+          // table_schema
+          String(kInformationSchema),
+          // table_name
+          String(table->Name()),
+          // index_name
+          String(kPrimary_Key),
+          // index_type
+          String(kPrimary_Key),
+          // parent_table_name
+          String(""),
+          // is_unique
+          Bool(true),
+          // is_null_filtered
+          Bool(false),
+          // index_state
+          NullString(),
+          // spanner_is_managed
+          Bool(false),
+      });
+    }
   }
 
   // Add table to catalog.
   indexes->SetContents(rows);
 }
 
-zetasql::SimpleTable* InformationSchemaCatalog::AddIndexColumnsTable() {
-  // Setup table schema.
-  auto index_columns = new zetasql::SimpleTable(
-      kIndexColumns, {
-                         {kTableCatalog, StringType()},
-                         {kTableSchema, StringType()},
-                         {kTableName, StringType()},
-                         {kIndexName, StringType()},
-                         {kIndexType, StringType()},
-                         {kColumnName, StringType()},
-                         {kOrdinalPosition, Int64Type()},
-                         {kColumnOrdering, StringType()},
-                         {kIsNullable, StringType()},
-                         {kSpannerType, StringType()},
-                     });
+// Fills the "information_schema.index_columns" table based on the
+// specifications provided for each dialect:
+// ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#index_columns
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#index_columns
+//
+// Rows are added for each table defined in the default schema for both
+// dialects, as well as for tables in the information schema for the GSQL
+// dialect.
+void InformationSchemaCatalog::FillIndexColumnsTable() {
+  auto index_columns =
+      tables_by_name_.at(GetNameForDialect(kIndexColumns)).get();
 
-  // Add table to catalog.
-  AddOwnedTable(index_columns);
-  return index_columns;
-}
-
-void InformationSchemaCatalog::FillIndexColumnsTable(
-    zetasql::SimpleTable* index_columns) {
   // Add table rows.
   std::vector<std::vector<zetasql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
@@ -875,7 +987,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
             // table_catalog
             String(""),
             // table_schema
-            String(""),
+            DialectDefaultSchema(),
             // table_name
             String(table->Name()),
             // index_name
@@ -887,16 +999,18 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
             // ordinal_position
             Int64(pos++),
             // column_ordering
-            String(key_column->is_descending() ? kDesc : kAsc),
+            DialectColumnOrdering(key_column),
             // is_nullable
             String(key_column->column()->is_nullable() &&
                            !index->is_null_filtered()
                        ? kYes
                        : kNo),
             // spanner_type
-            String(ColumnTypeToString(
-                key_column->column()->GetType(),
-                key_column->column()->declared_max_length())),
+            dialect_ == DatabaseDialect::POSTGRESQL
+                ?
+                // In prod the length is not printed, just the type.
+                GetSpannerType(key_column->column()->GetType(), std::nullopt)
+                : GetSpannerType(key_column->column()),
         });
       }
 
@@ -906,7 +1020,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
             // table_catalog
             String(""),
             // table_schema
-            String(""),
+            DialectDefaultSchema(),
             // table_name
             String(table->Name()),
             // index_name
@@ -922,8 +1036,11 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
             // is_nullable
             String(column->is_nullable() ? kYes : kNo),
             // spanner_type
-            String(ColumnTypeToString(column->GetType(),
-                                      column->declared_max_length())),
+            dialect_ == DatabaseDialect::POSTGRESQL
+                ?
+                // In prod the length is not printed, just the type.
+                GetSpannerType(column->GetType(), std::nullopt)
+                : GetSpannerType(column),
         });
       }
     }
@@ -936,7 +1053,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
             // table_catalog
             String(""),
             // table_schema
-            String(""),
+            DialectDefaultSchema(),
             // table_name
             String(table->Name()),
             // index_name
@@ -948,51 +1065,57 @@ void InformationSchemaCatalog::FillIndexColumnsTable(
             // ordinal_position
             Int64(pos++),
             // column_ordering
-            String(key_column->is_descending() ? kDesc : kAsc),
+            DialectColumnOrdering(key_column),
             // is_nullable
             String(key_column->column()->is_nullable() ? kYes : kNo),
             // spanner_type
-            String(ColumnTypeToString(
-                key_column->column()->GetType(),
-                key_column->column()->declared_max_length())),
+            dialect_ == DatabaseDialect::POSTGRESQL
+                ?
+                // In prod the length is not printed, just the type.
+                GetSpannerType(key_column->column()->GetType(), std::nullopt)
+                : GetSpannerType(key_column->column()),
         });
       }
     }
   }
 
-  // Add the information schema primary key columns.
-  for (const auto& table : this->tables()) {
-    int primary_key_ordinal = 1;
-    for (int i = 0; i < table->NumColumns(); ++i) {
-      const auto* column = table->GetColumn(i);
-      const auto* metadata = FindKeyColumnMetadata(dialect_, table, column);
-      if (metadata == nullptr) {
-        continue;  // Not a primary key column.
+  // The primary key columns for tables in the INFORMATION_SCHEMA are not added
+  // in the PG dialect in production so we also don't add it in the emulator.
+  if (dialect_ != DatabaseDialect::POSTGRESQL) {
+    // Add the information schema primary key columns.
+    for (const auto& table : this->tables()) {
+      int primary_key_ordinal = 1;
+      for (int i = 0; i < table->NumColumns(); ++i) {
+        const auto* column = table->GetColumn(i);
+        const auto* metadata = FindKeyColumnMetadata(dialect_, table, column);
+        if (metadata == nullptr) {
+          continue;  // Not a primary key column.
+        }
+        rows.push_back({
+            // table_catalog
+            String(""),
+            // table_schema
+            String(kInformationSchema),
+            // table_name
+            String(table->Name()),
+            // index_name
+            String(kPrimary_Key),
+            // index_type
+            String(kPrimary_Key),
+            // column_name
+            String(column->Name()),
+            // ordinal_position
+            Int64(metadata->primary_key_ordinal > 0
+                      ? metadata->primary_key_ordinal
+                      : primary_key_ordinal++),
+            // column_ordering
+            String(metadata->column_ordering),
+            // is_nullable
+            String(metadata->is_nullable),
+            // spanner_type
+            String(metadata->spanner_type),
+        });
       }
-      rows.push_back({
-          // table_catalog
-          String(""),
-          // table_schema
-          String(kInformationSchema),
-          // table_name
-          String(table->Name()),
-          // index_name
-          String(kPrimary_Key),
-          // index_type
-          String(kPrimary_Key),
-          // column_name
-          String(column->Name()),
-          // ordinal_position
-          Int64(metadata->primary_key_ordinal > 0
-                    ? metadata->primary_key_ordinal
-                    : primary_key_ordinal++),
-          // column_ordering
-          String(metadata->column_ordering),
-          // is_nullable
-          String(metadata->is_nullable),
-          // spanner_type
-          String(metadata->spanner_type),
-      });
     }
   }
 
@@ -1036,29 +1159,20 @@ void InformationSchemaCatalog::AddColumnOptionsTable() {
   AddOwnedTable(columns);
 }
 
-zetasql::SimpleTable* InformationSchemaCatalog::AddTableConstraintsTable() {
-  // Setup table schema.
-  auto table_constraints = new zetasql::SimpleTable(
-      kTableConstraints, {
-                             {kConstraintCatalog, StringType()},
-                             {kConstraintSchema, StringType()},
-                             {kConstraintName, StringType()},
-                             {kTableCatalog, StringType()},
-                             {kTableSchema, StringType()},
-                             {kTableName, StringType()},
-                             {kConstraintType, StringType()},
-                             {kIsDeferrable, StringType()},
-                             {kInitiallyDeferred, StringType()},
-                             {kEnforced, StringType()},
-                         });
+// Fills the "information_schema.table_constraints" table based on the
+// specifications provided for each dialect:
+// ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#table_constraints
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#table_constraints
+//
+// Rows are added for each table defined in the default schema for both
+// dialects, as well as for tables in the information schema for the GSQL
+// dialect.
+void InformationSchemaCatalog::FillTableConstraintsTable() {
+  auto table_constraints =
+      tables_by_name_.at(GetNameForDialect(kTableConstraints)).get();
 
-  // Add table to catalog.
-  AddOwnedTable(table_constraints);
-  return table_constraints;
-}
-
-void InformationSchemaCatalog::FillTableConstraintsTable(
-    zetasql::SimpleTable* table_constraints) {
   std::vector<std::vector<zetasql::Value>> rows;
 
   // Add the user table constraints.
@@ -1068,13 +1182,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
         // constraint_catalog
         String(""),
         // constraint_schema
-        String(""),
+        DialectDefaultSchema(),
         // constraint_name
         String(PrimaryKeyName(table)),
         // table_catalog
         String(""),
         // table_schema
-        String(""),
+        DialectDefaultSchema(),
         // table_name
         String(table->Name()),
         // constraint_type,
@@ -1096,13 +1210,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
           // constraint_catalog
           String(""),
           // constraint_schema
-          String(""),
+          DialectDefaultSchema(),
           // constraint_name
           String(CheckNotNullName(table, column)),
           // table_catalog
           String(""),
           // table_schema
-          String(""),
+          DialectDefaultSchema(),
           // table_name
           String(table->Name()),
           // constraint_type,
@@ -1116,19 +1230,19 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
       });
     }
 
-    // Add the check constraints defined by the ZETASQL_CHECK keyword.
+    // Add the check constraints defined by the ZETASQL_VLOG keyword.
     for (const auto* check_constraint : table->check_constraints()) {
       rows.push_back({
           // constraint_catalog
           String(""),
           // constraint_schema
-          String(""),
+          DialectDefaultSchema(),
           // constraint_name
           String(check_constraint->Name()),
           // table_catalog
           String(""),
           // table_schema
-          String(""),
+          DialectDefaultSchema(),
           // table_name
           String(table->Name()),
           // constraint_type,
@@ -1148,13 +1262,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
           // constraint_catalog
           String(""),
           // constraint_schema
-          String(""),
+          DialectDefaultSchema(),
           // constraint_name
           String(foreign_key->Name()),
           // table_catalog
           String(""),
           // table_schema
-          String(""),
+          DialectDefaultSchema(),
           // table_name
           String(table->Name()),
           // constraint_type,
@@ -1173,13 +1287,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
             // constraint_catalog
             String(""),
             // constraint_schema
-            String(""),
+            DialectDefaultSchema(),
             // constraint_name
             String(foreign_key->referenced_index()->Name()),
             // table_catalog
             String(""),
             // table_schema
-            String(""),
+            DialectDefaultSchema(),
             // table_name
             String(foreign_key->referenced_table()->Name()),
             // constraint_type,
@@ -1195,85 +1309,85 @@ void InformationSchemaCatalog::FillTableConstraintsTable(
     }
   }
 
-  // Add the information schema constraints.
-  for (const auto* table : this->tables()) {
-    // Add the primary key.
-    rows.push_back({
-        // constraint_catalog
-        String(""),
-        // constraint_schema
-        String(kInformationSchema),
-        // constraint_name
-        String(PrimaryKeyName(table)),
-        // table_catalog
-        String(""),
-        // table_schema
-        String(kInformationSchema),
-        // table_name
-        String(table->Name()),
-        // constraint_type
-        String(kPrimaryKey),
-        // is_deferrable,
-        String(kNo),
-        // initially_deferred
-        String(kNo),
-        // enforced
-        String(kYes),
-    });
-
-    // Add the NOT NULL check constraints.
-    for (int i = 0; i < table->NumColumns(); ++i) {
-      const auto* column = table->GetColumn(i);
-      const auto& metadata = GetColumnMetadata(dialect_, table, column);
-      if (IsNullable(metadata)) {
-        continue;
-      }
+  // Production doesn't add check constraints for the information schema so we
+  // also don't add it in the emulator.
+  if (dialect_ != DatabaseDialect::POSTGRESQL) {
+    // Add the information schema constraints.
+    for (const auto* table : this->tables()) {
+      // Add the primary key.
       rows.push_back({
           // constraint_catalog
           String(""),
           // constraint_schema
           String(kInformationSchema),
           // constraint_name
-          String(CheckNotNullName(table, column)),
+          String(PrimaryKeyName(table)),
           // table_catalog
           String(""),
           // table_schema
           String(kInformationSchema),
           // table_name
           String(table->Name()),
-          // constraint_type,
-          String(kCheck),
+          // constraint_type
+          String(kPrimaryKey),
           // is_deferrable,
           String(kNo),
-          // initially_deferred,
+          // initially_deferred
           String(kNo),
-          // enforced,
+          // enforced
           String(kYes),
       });
+
+      // Add the NOT NULL check constraints.
+      for (int i = 0; i < table->NumColumns(); ++i) {
+        const auto* column = table->GetColumn(i);
+        const auto& metadata = GetColumnMetadata(dialect_, table, column);
+        if (IsNullable(metadata)) {
+          continue;
+        }
+        rows.push_back({
+            // constraint_catalog
+            String(""),
+            // constraint_schema
+            String(kInformationSchema),
+            // constraint_name
+            String(CheckNotNullName(table, column)),
+            // table_catalog
+            String(""),
+            // table_schema
+            String(kInformationSchema),
+            // table_name
+            String(table->Name()),
+            // constraint_type,
+            String(kCheck),
+            // is_deferrable,
+            String(kNo),
+            // initially_deferred,
+            String(kNo),
+            // enforced,
+            String(kYes),
+        });
+      }
     }
   }
 
   table_constraints->SetContents(rows);
 }
 
-zetasql::SimpleTable* InformationSchemaCatalog::AddCheckConstraintsTable() {
-  // Setup table schema.
-  auto check_constraints = new zetasql::SimpleTable(
-      kCheckConstraints, {
-                             {kConstraintCatalog, StringType()},
-                             {kConstraintSchema, StringType()},
-                             {kConstraintName, StringType()},
-                             {kCheckClause, StringType()},
-                             {kSpannerState, StringType()},
-                         });
+// Fills the "information_schema.check_constraints" table based on the
+// specifications provided for each dialect:
+// ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#check_constraints
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#check_constraints
+//
+// Rows are added for each table defined in the default schema for both
+// dialects, as well as for tables in the information schema for the GSQL
+// dialect.
+void InformationSchemaCatalog::FillCheckConstraintsTable() {
+  auto check_constraints =
+      tables_by_name_.at(GetNameForDialect(kCheckConstraints)).get();
 
-  // Add table to catalog.
-  AddOwnedTable(check_constraints);
-  return check_constraints;
-}
-
-void InformationSchemaCatalog::FillCheckConstraintsTable(
-    zetasql::SimpleTable* check_constraints) {
   std::vector<std::vector<zetasql::Value>> rows;
 
   // Add the user table check constraints.
@@ -1287,7 +1401,7 @@ void InformationSchemaCatalog::FillCheckConstraintsTable(
           // constraint_catalog
           String(""),
           // constraint_schema
-          String(""),
+          DialectDefaultSchema(),
           // constraint_name
           String(CheckNotNullName(table, column)),
           // check clause
@@ -1297,69 +1411,70 @@ void InformationSchemaCatalog::FillCheckConstraintsTable(
       });
     }
 
-    // Add the check constraints defined by the ZETASQL_CHECK keyword.
+    // Add the check constraints defined by the ZETASQL_VLOG keyword.
     for (const auto* check_constraint : table->check_constraints()) {
       rows.push_back({
           // constraint_catalog
           String(""),
           // constraint_schema
-          String(""),
+          DialectDefaultSchema(),
           // constraint_name
           String(check_constraint->Name()),
-          // check clasue
-          String(check_constraint->expression()),
+          // check clause
+          String(dialect_ == DatabaseDialect::POSTGRESQL
+                     ? check_constraint->original_expression().value()
+                     : check_constraint->expression()),
+          // original_expression() is not yet visible externally.
           // spanner state
           String(kCommitted),
       });
     }
   }
 
-  // Add the information schema constraints.
-  for (const auto* table : this->tables()) {
-    // Add the NOT NULL check constraints.
-    for (int i = 0; i < table->NumColumns(); ++i) {
-      const auto* column = table->GetColumn(i);
-      const auto& metadata = GetColumnMetadata(dialect_, table, column);
-      if (IsNullable(metadata)) {
-        continue;
+  // Production doesn't add check constraints for the information schema so we
+  // also don't add it in the emulator.
+  if (dialect_ != DatabaseDialect::POSTGRESQL) {
+    // Add the information schema constraints.
+    for (const auto* table : this->tables()) {
+      // Add the NOT NULL check constraints.
+      for (int i = 0; i < table->NumColumns(); ++i) {
+        const auto* column = table->GetColumn(i);
+        const auto& metadata = GetColumnMetadata(dialect_, table, column);
+        if (IsNullable(metadata)) {
+          continue;
+        }
+        rows.push_back({
+            // constraint_catalog
+            String(""),
+            // constraint_schema
+            String(kInformationSchema),
+            // constraint_name
+            String(CheckNotNullName(table, column)),
+            // check clause
+            String(CheckNotNullClause(column->Name())),
+            // spanner state
+            String(kCommitted),
+        });
       }
-      rows.push_back({
-          // constraint_catalog
-          String(""),
-          // constraint_schema
-          String(kInformationSchema),
-          // constraint_name
-          String(CheckNotNullName(table, column)),
-          // check clause
-          String(CheckNotNullClause(column->Name())),
-          // spanner state
-          String(kCommitted),
-      });
     }
   }
   check_constraints->SetContents(rows);
 }
 
-zetasql::SimpleTable*
-InformationSchemaCatalog::AddConstraintTableUsageTable() {
-  // Setup table schema.
-  auto constraint_table_usage = new zetasql::SimpleTable(
-      kConstraintTableUsage, {
-                                 {kTableCatalog, StringType()},
-                                 {kTableSchema, StringType()},
-                                 {kTableName, StringType()},
-                                 {kConstraintCatalog, StringType()},
-                                 {kConstraintSchema, StringType()},
-                                 {kConstraintName, StringType()},
-                             });
+// Fills the "information_schema.constraint_table_usage" table based on the
+// specifications provided for each dialect:
+// ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#constraint_table_usage
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#constraint_table_usage
+//
+// Rows are added for each table defined in the default schema for both
+// dialects, as well as for tables in the information schema for the GSQL
+// dialect.
+void InformationSchemaCatalog::FillConstraintTableUsageTable() {
+  auto constraint_table_usage =
+      tables_by_name_.at(GetNameForDialect(kConstraintTableUsage)).get();
 
-  // Add table to catalog.
-  AddOwnedTable(constraint_table_usage);
-  return constraint_table_usage;
-}
-
-void InformationSchemaCatalog::FillConstraintTableUsageTable(
-    zetasql::SimpleTable* constraint_table_usage) {
   std::vector<std::vector<zetasql::Value>> rows;
 
   // Add the user table constraints.
@@ -1369,54 +1484,58 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable(
         // table_catalog
         String(""),
         // table_schema
-        String(""),
+        DialectDefaultSchema(),
         // table_name
         String(table->Name()),
         // constraint_catalog
         String(""),
         // constraint_schema
-        String(""),
+        DialectDefaultSchema(),
         // constraint_name
         String(PrimaryKeyName(table)),
     });
 
-    // Add the NOT NULL check constraints.
-    for (const auto* column : table->columns()) {
-      if (column->is_nullable()) {
-        continue;
+    // Production doesn't add check constraints to the information schema for
+    // this table so we also don't add it in the emulator.
+    if (dialect_ != DatabaseDialect::POSTGRESQL) {
+      // Add the NOT NULL check constraints.
+      for (const auto* column : table->columns()) {
+        if (column->is_nullable()) {
+          continue;
+        }
+        rows.push_back({
+            // table_catalog
+            String(""),
+            // table_schema
+            DialectDefaultSchema(),
+            // table_name
+            String(table->Name()),
+            // constraint_catalog
+            String(""),
+            // constraint_schema
+            DialectDefaultSchema(),
+            // constraint_name
+            String(CheckNotNullName(table, column)),
+        });
       }
-      rows.push_back({
-          // table_catalog
-          String(""),
-          // table_schema
-          String(""),
-          // table_name
-          String(table->Name()),
-          // constraint_catalog
-          String(""),
-          // constraint_schema
-          String(""),
-          // constraint_name
-          String(CheckNotNullName(table, column)),
-      });
-    }
 
-    // Add the check constraints defined by the ZETASQL_CHECK keyword.
-    for (const auto* check_constraint : table->check_constraints()) {
-      rows.push_back({
-          // table_catalog
-          String(""),
-          // table_schema
-          String(""),
-          // table_name
-          String(table->Name()),
-          // constraint_catalog
-          String(""),
-          // constraint_schema
-          String(""),
-          // constraint_name
-          String(check_constraint->Name()),
-      });
+      // Add the check constraints defined by the ZETASQL_VLOG keyword.
+      for (const auto* check_constraint : table->check_constraints()) {
+        rows.push_back({
+            // table_catalog
+            String(""),
+            // table_schema
+            DialectDefaultSchema(),
+            // table_name
+            String(table->Name()),
+            // constraint_catalog
+            String(""),
+            // constraint_schema
+            DialectDefaultSchema(),
+            // constraint_name
+            String(check_constraint->Name()),
+        });
+      }
     }
 
     // Add the foreign keys.
@@ -1425,13 +1544,13 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable(
           // table_catalog
           String(""),
           // table_schema
-          String(""),
+          DialectDefaultSchema(),
           // table_name
           String(foreign_key->referenced_table()->Name()),
           // constraint_catalog
           String(""),
           // constraint_schema
-          String(""),
+          DialectDefaultSchema(),
           // constraint_name
           String(foreign_key->Name()),
       });
@@ -1442,13 +1561,13 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable(
             // table_catalog
             String(""),
             // table_schema
-            String(""),
+            DialectDefaultSchema(),
             // table_name
             String(foreign_key->referenced_table()->Name()),
             // constraint_catalog
             String(""),
             // constraint_schema
-            String(""),
+            DialectDefaultSchema(),
             // constraint_name
             String(foreign_key->referenced_index()->Name()),
         });
@@ -1456,31 +1575,12 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable(
     }
   }
 
-  // Add the information schema constraints.
-  for (const auto* table : this->tables()) {
-    // Add the primary key.
-    rows.push_back({
-        // table_catalog
-        String(""),
-        // table_schema
-        String(kInformationSchema),
-        // table_name
-        String(table->Name()),
-        // constraint_catalog
-        String(""),
-        // constraint_schema
-        String(kInformationSchema),
-        // constraint_name
-        String(PrimaryKeyName(table)),
-    });
-
-    // Add the NOT NULL check constraints.
-    for (int i = 0; i < table->NumColumns(); ++i) {
-      const auto* column = table->GetColumn(i);
-      const auto& metadata = GetColumnMetadata(dialect_, table, column);
-      if (IsNullable(metadata)) {
-        continue;
-      }
+  // Production doesn't add check constraints for the information schema so we
+  // also don't add it in the emulator.
+  if (dialect_ != DatabaseDialect::POSTGRESQL) {
+    // Add the information schema constraints.
+    for (const auto* table : this->tables()) {
+      // Add the primary key.
       rows.push_back({
           // table_catalog
           String(""),
@@ -1493,38 +1593,50 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable(
           // constraint_schema
           String(kInformationSchema),
           // constraint_name
-          String(CheckNotNullName(table, column)),
+          String(PrimaryKeyName(table)),
       });
+
+      // Add the NOT NULL check constraints.
+      for (int i = 0; i < table->NumColumns(); ++i) {
+        const auto* column = table->GetColumn(i);
+        const auto& metadata = GetColumnMetadata(dialect_, table, column);
+        if (IsNullable(metadata)) {
+          continue;
+        }
+        rows.push_back({
+            // table_catalog
+            String(""),
+            // table_schema
+            String(kInformationSchema),
+            // table_name
+            String(table->Name()),
+            // constraint_catalog
+            String(""),
+            // constraint_schema
+            String(kInformationSchema),
+            // constraint_name
+            String(CheckNotNullName(table, column)),
+        });
+      }
     }
   }
 
   constraint_table_usage->SetContents(rows);
 }
 
-zetasql::SimpleTable*
-InformationSchemaCatalog::AddReferentialConstraintsTable() {
-  // Setup table schema.
-  auto referential_constraints = new zetasql::SimpleTable(
-      kReferentialConstraints, {
-                                   {kConstraintCatalog, StringType()},
-                                   {kConstraintSchema, StringType()},
-                                   {kConstraintName, StringType()},
-                                   {kUniqueConstraintCatalog, StringType()},
-                                   {kUniqueConstraintSchema, StringType()},
-                                   {kUniqueConstraintName, StringType()},
-                                   {kMatchOption, StringType()},
-                                   {kUpdateRule, StringType()},
-                                   {kDeleteRule, StringType()},
-                                   {kSpannerState, StringType()},
-                               });
+// Fills the "information_schema.referential_constraints" table based on the
+// specifications provided for each dialect:
+// ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#referential_constraints
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#referential_constraints
+//
+// Rows are added for each foreign key defined in the default schema for both
+// dialects.
+void InformationSchemaCatalog::FillReferentialConstraintsTable() {
+  auto referential_constraints =
+      tables_by_name_.at(GetNameForDialect(kReferentialConstraints)).get();
 
-  // Add table to catalog.
-  AddOwnedTable(referential_constraints);
-  return referential_constraints;
-}
-
-void InformationSchemaCatalog::FillReferentialConstraintsTable(
-    zetasql::SimpleTable* referential_constraints) {
   std::vector<std::vector<zetasql::Value>> rows;
 
   // Add the foreign key constraints.
@@ -1534,17 +1646,17 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable(
           // constraint_catalog
           String(""),
           // constraint_schema
-          String(""),
+          DialectDefaultSchema(),
           // constraint_name
           String(foreign_key->Name()),
           // unique_constraint_catalog
           String(""),
           // unique_constraint_schema
-          String(""),
+          DialectDefaultSchema(),
           // unique_constraint_name
           String(ForeignKeyReferencedIndexName(foreign_key)),
           // match_option
-          String(kSimple),
+          String(dialect_ == DatabaseDialect::POSTGRESQL ? kNone : kSimple),
           // update_rule
           String(kNoAction),
           // delete_rule
@@ -1558,30 +1670,21 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable(
   referential_constraints->SetContents(rows);
 }
 
-zetasql::SimpleTable* InformationSchemaCatalog::AddKeyColumnUsageTable() {
-  // Setup table schema.
-  auto key_column_usage = new zetasql::SimpleTable(
-      kKeyColumnUsage, {
-                           {kConstraintCatalog, StringType()},
-                           {kConstraintSchema, StringType()},
-                           {kConstraintName, StringType()},
-                           {kTableCatalog, StringType()},
-                           {kTableSchema, StringType()},
-                           {kTableName, StringType()},
-                           {kColumnName, StringType()},
-                           {kOrdinalPosition, Int64Type()},
-                           {kPositionInUniqueConstraint, Int64Type()},
-                       });
+// Fills the "information_schema.key_column_usage" table based on the
+// specifications provided for each dialect:
+// ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#key_column_usage
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#key_column_usage
+//
+// Rows are added for each key column defined in the default schema for both
+// dialects, as well as for key columns in the information schema for the GSQL
+// dialect.
+void InformationSchemaCatalog::FillKeyColumnUsageTable() {
+  auto key_column_usage =
+      tables_by_name_.at(GetNameForDialect(kKeyColumnUsage)).get();
 
-  // Add table to catalog.
-  AddOwnedTable(key_column_usage);
-  return key_column_usage;
-}
-
-void InformationSchemaCatalog::FillKeyColumnUsageTable(
-    zetasql::SimpleTable* key_column_usage) {
   std::vector<std::vector<zetasql::Value>> rows;
-
   for (const auto* table : default_schema_->tables()) {
     // Add the primary key columns.
     int table_ordinal = 1;
@@ -1590,13 +1693,13 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable(
           // constraint_catalog
           String(""),
           // constraint_schema
-          String(""),
+          DialectDefaultSchema(),
           // constraint_name
           String(PrimaryKeyName(table)),
           // table_catalog
           String(""),
           // table_schema
-          String(""),
+          DialectDefaultSchema(),
           // table_name
           String(table->Name()),
           // column_name
@@ -1617,13 +1720,13 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable(
             // constraint_catalog
             String(""),
             // constraint_schema
-            String(""),
+            DialectDefaultSchema(),
             // constraint_name
             String(foreign_key->Name()),
             // table_catalog
             String(""),
             // table_schema
-            String(""),
+            DialectDefaultSchema(),
             // table_name
             String(table->Name()),
             // column_name
@@ -1645,13 +1748,13 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable(
               // constraint_catalog
               String(""),
               // constraint_schema
-              String(""),
+              DialectDefaultSchema(),
               // constraint_name
               String(foreign_key->referenced_index()->Name()),
               // table_catalog
               String(""),
               // table_schema
-              String(""),
+              DialectDefaultSchema(),
               // table_name
               String(foreign_key->referenced_table()->Name()),
               // column_name
@@ -1666,66 +1769,62 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable(
     }
   }
 
-  // Add the information schema primary key columns.
-  for (const auto& table : this->tables()) {
-    int primary_key_ordinal = 1;
-    for (int i = 0; i < table->NumColumns(); ++i) {
-      const auto* column = table->GetColumn(i);
-      const auto* metadata = FindKeyColumnMetadata(dialect_, table, column);
-      if (metadata == nullptr) {
-        continue;  // Not a primary key column.
+  // Production doesn't add check constraints for the information schema so we
+  // also don't add it in the emulator.
+  if (dialect_ != DatabaseDialect::POSTGRESQL) {
+    // Add the information schema primary key columns.
+    for (const auto& table : this->tables()) {
+      int primary_key_ordinal = 1;
+      for (int i = 0; i < table->NumColumns(); ++i) {
+        const auto* column = table->GetColumn(i);
+        const auto* metadata = FindKeyColumnMetadata(dialect_, table, column);
+        if (metadata == nullptr) {
+          continue;  // Not a primary key column.
+        }
+        rows.push_back({
+            // constraint_catalog
+            String(""),
+            // constraint_schema
+            String(kInformationSchema),
+            // constraint_name
+            String(PrimaryKeyName(table)),
+            // table_catalog
+            String(""),
+            // table_schema
+            String(kInformationSchema),
+            // table_name
+            String(table->Name()),
+            // column_name
+            String(metadata->column_name),
+            // ordinal_position
+            Int64(metadata->primary_key_ordinal > 0
+                      ? metadata->primary_key_ordinal
+                      : primary_key_ordinal++),
+            // position_in_unique_constraint
+            NullString(),
+        });
       }
-      rows.push_back({
-          // constraint_catalog
-          String(""),
-          // constraint_schema
-          String(kInformationSchema),
-          // constraint_name
-          String(PrimaryKeyName(table)),
-          // table_catalog
-          String(""),
-          // table_schema
-          String(kInformationSchema),
-          // table_name
-          String(table->Name()),
-          // column_name
-          String(metadata->column_name),
-          // ordinal_position
-          Int64(metadata->primary_key_ordinal > 0
-                    ? metadata->primary_key_ordinal
-                    : primary_key_ordinal++),
-          // position_in_unique_constraint
-          NullString(),
-      });
     }
   }
 
   key_column_usage->SetContents(rows);
 }
 
-zetasql::SimpleTable*
-InformationSchemaCatalog::AddConstraintColumnUsageTable() {
-  // Setup table schema.
-  auto constraint_column_usage = new zetasql::SimpleTable(
-      kConstraintColumnUsage, {
-                                  {kTableCatalog, StringType()},
-                                  {kTableSchema, StringType()},
-                                  {kTableName, StringType()},
-                                  {kColumnName, StringType()},
-                                  {kConstraintCatalog, StringType()},
-                                  {kConstraintSchema, StringType()},
-                                  {kConstraintName, StringType()},
-                              });
+// Fills the "information_schema.constraints_column_usage" table based on the
+// specifications provided for each dialect:
+// ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#constraints_column_usage
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#constraints_column_usage
+//
+// Rows are added for each column defined in the default schema for both
+// dialects, as well as for columns in the information schema for the GSQL
+// dialect.
+void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
+  auto constraint_column_usage =
+      tables_by_name_.at(GetNameForDialect(kConstraintColumnUsage)).get();
 
-  // Add table to catalog.
-  AddOwnedTable(constraint_column_usage);
-  return constraint_column_usage;
-}
-
-void InformationSchemaCatalog::FillConstraintColumnUsageTable(
-    zetasql::SimpleTable* constraint_column_usage) {
   std::vector<std::vector<zetasql::Value>> rows;
-
   for (const auto* table : default_schema_->tables()) {
     // Add the primary key columns.
     for (const auto* key_column : table->primary_key()) {
@@ -1733,7 +1832,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
           // table_catalog
           String(""),
           // table_schema
-          String(""),
+          DialectDefaultSchema(),
           // table_name
           String(table->Name()),
           // column_name
@@ -1741,7 +1840,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
           // constraint_catalog
           String(""),
           // constraint_schema
-          String(""),
+          DialectDefaultSchema(),
           // constraint_name
           String(PrimaryKeyName(table)),
       });
@@ -1756,7 +1855,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
           // table_catalog
           String(""),
           // table_schema
-          String(""),
+          DialectDefaultSchema(),
           // table_name
           String(table->Name()),
           // column_name
@@ -1764,20 +1863,20 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
           // constraint_catalog
           String(""),
           // constraint_schema
-          String(""),
+          DialectDefaultSchema(),
           // constraint_name
           String(CheckNotNullName(table, column)),
       });
     }
 
-    // Add the check constraints defined by the ZETASQL_CHECK keyword.
+    // Add the check constraints defined by the ZETASQL_VLOG keyword.
     for (const auto* check_constraint : table->check_constraints()) {
       for (const auto* dep_column : check_constraint->dependent_columns()) {
         rows.push_back({
             // table_catalog
             String(""),
             // table_schema
-            String(""),
+            DialectDefaultSchema(),
             // table_name
             String(table->Name()),
             // column_name
@@ -1785,7 +1884,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
             // constraint_catalog
             String(""),
             // constraint_schema
-            String(""),
+            DialectDefaultSchema(),
             // constraint_name
             String(check_constraint->Name()),
         });
@@ -1800,7 +1899,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
             // table_catalog
             String(""),
             // table_schema
-            String(""),
+            DialectDefaultSchema(),
             // table_name
             String(foreign_key->referenced_table()->Name()),
             // column_name
@@ -1808,7 +1907,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
             // constraint_catalog
             String(""),
             // constraint_schema
-            String(""),
+            DialectDefaultSchema(),
             // constraint_name
             String(foreign_key->Name()),
         });
@@ -1822,7 +1921,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
               // table_catalog
               String(""),
               // table_schema
-              String(""),
+              DialectDefaultSchema(),
               // table_name
               String(foreign_key->referenced_table()->Name()),
               // column_name
@@ -1830,7 +1929,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
               // constraint_catalog
               String(""),
               // constraint_schema
-              String(""),
+              DialectDefaultSchema(),
               // constraint_name
               String(foreign_key->referenced_index()->Name()),
           });
@@ -1839,57 +1938,61 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable(
     }
   }
 
-  // Add the information schema primary key columns.
-  for (const auto& table : this->tables()) {
-    for (int i = 0; i < table->NumColumns(); ++i) {
-      const auto* column = table->GetColumn(i);
-      const auto* metadata = FindKeyColumnMetadata(dialect_, table, column);
-      if (metadata == nullptr) {
-        continue;  // Not a primary key column.
+  // Production doesn't add constraint column usage for the information schema
+  // so we also don't add it in the emulator.
+  if (dialect_ != DatabaseDialect::POSTGRESQL) {
+    // Add the information schema primary key columns.
+    for (const auto& table : this->tables()) {
+      for (int i = 0; i < table->NumColumns(); ++i) {
+        const auto* column = table->GetColumn(i);
+        const auto* metadata = FindKeyColumnMetadata(dialect_, table, column);
+        if (metadata == nullptr) {
+          continue;  // Not a primary key column.
+        }
+        rows.push_back({
+            // table_catalog
+            String(""),
+            // table_schema
+            String(kInformationSchema),
+            // table_name
+            String(table->Name()),
+            // column_name
+            String(metadata->column_name),
+            // constraint_catalog
+            String(""),
+            // constraint_schema
+            String(kInformationSchema),
+            // constraint_name
+            String(PrimaryKeyName(table)),
+        });
       }
-      rows.push_back({
-          // table_catalog
-          String(""),
-          // table_schema
-          String(kInformationSchema),
-          // table_name
-          String(table->Name()),
-          // column_name
-          String(metadata->column_name),
-          // constraint_catalog
-          String(""),
-          // constraint_schema
-          String(kInformationSchema),
-          // constraint_name
-          String(PrimaryKeyName(table)),
-      });
     }
-  }
 
-  // Add the information schema NOT NULL check constraints.
-  for (const auto& table : this->tables()) {
-    for (int i = 0; i < table->NumColumns(); ++i) {
-      const auto* column = table->GetColumn(i);
-      const auto& metadata = GetColumnMetadata(dialect_, table, column);
-      if (IsNullable(metadata)) {
-        continue;
+    // Add the information schema NOT NULL check constraints.
+    for (const auto& table : this->tables()) {
+      for (int i = 0; i < table->NumColumns(); ++i) {
+        const auto* column = table->GetColumn(i);
+        const auto& metadata = GetColumnMetadata(dialect_, table, column);
+        if (IsNullable(metadata)) {
+          continue;
+        }
+        rows.push_back({
+            // table_catalog
+            String(""),
+            // table_schema
+            String(kInformationSchema),
+            // table_name
+            String(table->Name()),
+            // column_name
+            String(metadata.column_name),
+            // constraint_catalog
+            String(""),
+            // constraint_schema
+            String(kInformationSchema),
+            // constraint_name
+            String(CheckNotNullName(table, column)),
+        });
       }
-      rows.push_back({
-          // table_catalog
-          String(""),
-          // table_schema
-          String(kInformationSchema),
-          // table_name
-          String(table->Name()),
-          // column_name
-          String(metadata.column_name),
-          // constraint_catalog
-          String(""),
-          // constraint_schema
-          String(kInformationSchema),
-          // constraint_name
-          String(CheckNotNullName(table, column)),
-      });
     }
   }
 
@@ -1909,10 +2012,13 @@ void InformationSchemaCatalog::FillViewsTable() {
   std::vector<std::vector<zetasql::Value>> rows;
   absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
   for (const View* view : default_schema_->views()) {
-    specific_kvs[kTableSchema] =
-        String(dialect_ == DatabaseDialect::POSTGRESQL ? kPublic : "");
+    specific_kvs[kTableSchema] = DialectDefaultSchema();
     specific_kvs[kTableName] = String(view->Name());
+    if (dialect_ == DatabaseDialect::POSTGRESQL) {
+      specific_kvs[kViewDefinition] = String(view->body_origin().value());
+    } else {
       specific_kvs[kViewDefinition] = String(view->body());
+    }
     rows.push_back(GetRowFromRowKVs(views, specific_kvs));
     specific_kvs.clear();
   }

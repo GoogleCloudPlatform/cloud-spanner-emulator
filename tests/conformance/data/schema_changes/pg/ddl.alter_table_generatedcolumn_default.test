@@ -1,0 +1,50 @@
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  val bigint
+);
+ALTER TABLE users ADD COLUMN newcol bigint GENERATED ALWAYS AS (val + 5) STORED;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  val bigint,
+  newcol bigint GENERATED ALWAYS AS ((val + '5'::bigint)) STORED,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE users ADD COLUMN newcol bigint DEFAULT 9;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  newcol bigint DEFAULT '9'::bigint,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  val bigint DEFAULT 20
+);
+ALTER TABLE users ALTER COLUMN val SET DEFAULT 9;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  val bigint DEFAULT '9'::bigint,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  val bigint DEFAULT 20
+);
+ALTER TABLE users ALTER COLUMN val DROP DEFAULT;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  val bigint,
+  PRIMARY KEY(id)
+);

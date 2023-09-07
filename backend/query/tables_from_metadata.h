@@ -36,7 +36,20 @@ static const zetasql_base::NoDestructor<
         {"BOOL", zetasql::types::BoolType()},
         {"INT64", zetasql::types::Int64Type()},
         {"STRING(32)", zetasql::types::StringType()},
+        {"STRING(100)", zetasql::types::StringType()},
         {"STRING(MAX)", zetasql::types::StringType()},
+    }};
+
+// Maps the type specified in the information catalog metadata for a Spanner
+// PostgreSQL database to a ZetaSQL type.
+static const zetasql_base::NoDestructor<
+    absl::flat_hash_map<std::string, const zetasql::Type*>>
+    kSpannerPGTypeToGSQLType{{
+        {"bigint", zetasql::types::Int64Type()},
+        {"boolean", zetasql::types::BoolType()},
+        {"character varying", zetasql::types::StringType()},
+        {"character varying[]", zetasql::types::StringArrayType()},
+        {"timestamp with time zone", zetasql::types::TimestampType()},
     }};
 
 // Given a list of ColumnsMetaEntry items, returns SimpleTables that can be

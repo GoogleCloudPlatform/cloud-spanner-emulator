@@ -38,6 +38,8 @@ namespace test {
 
 namespace {
 
+using ::google::spanner::admin::database::v1::DatabaseDialect;
+
 // States that the test case file parser can be in.
 enum class ParserState {
   kReadingInput,
@@ -47,13 +49,10 @@ enum class ParserState {
 }  // namespace
 
 std::vector<FileBasedTestCase> ReadTestCasesFromFile(
-    const std::string& file,
-    const FileBasedTestOptions& options
-) {
+    const std::string& file, const FileBasedTestOptions& options,
+    const DatabaseDialect& dialect) {
   std::vector<FileBasedTestCase> test_cases;
-  FileBasedTestCase test_case(file,
-                              1
-  );
+  FileBasedTestCase test_case(file, 1, dialect);
   std::string line;
   int line_no = 0;
   ParserState state = ParserState::kReadingInput;
@@ -83,9 +82,7 @@ std::vector<FileBasedTestCase> ReadTestCasesFromFile(
     }
     test_cases.emplace_back(std::move(test_case));
     state = ParserState::kReadingInput;
-    test_case = FileBasedTestCase(file,
-                                  line_no + 1
-    );
+    test_case = FileBasedTestCase(file, line_no + 1, dialect);
   };
 
   // Process the input file a line at a time.

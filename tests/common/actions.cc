@@ -151,10 +151,6 @@ TestChangeStreamEffectsBuffer::ComputeChangeStreamDataTableKey(
   key.AddColumn(commit_timestamp, false);
   key.AddColumn(zetasql::Value::String(server_transaction_id), false);
   key.AddColumn(zetasql::Value::String(record_sequence), false);
-  const int64_t key_size = key.LogicalSizeInBytes();
-  if (key_size > limits::kMaxKeySizeBytes) {
-    return error::KeyTooLarge(table_name, key_size, limits::kMaxKeySizeBytes);
-  }
   return key;
 }
 
@@ -268,14 +264,13 @@ bool CheckIfNonKeyColumnsRemainSame(std::vector<const Column*> op_columns,
     op_key_cols.insert(pk->column()->Name());
   }
   for (const Column* column : op_columns) {
-    if (column->FindChangeStream(change_stream->Name()) &&
-        !op_key_cols.contains(column->Name())) {
+    if (!op_key_cols.contains(column->Name()) &&
+        column->FindChangeStream(change_stream->Name())) {
       op_non_key_columns_tracked_by_change_stream.push_back(column);
     }
   }
-  bool same_non_pk_columns =
-      op_non_key_columns_tracked_by_change_stream.size() ==
-      last_mod_group.non_key_column_names.size();
+  bool same_non_pk_columns = last_mod_group.non_key_column_names.size() ==
+                             op_non_key_columns_tracked_by_change_stream.size();
   if (same_non_pk_columns) {
     for (const Column* column : op_non_key_columns_tracked_by_change_stream) {
       if (!last_mod_group.non_key_column_names.contains(column->Name())) {

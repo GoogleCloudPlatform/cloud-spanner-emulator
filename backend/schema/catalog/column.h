@@ -107,6 +107,12 @@ class Column : public SchemaNode {
   // a default value.
   const std::optional<std::string>& expression() const { return expression_; }
 
+  // Returns the original dialect expression if the column is a generated column
+  // or if it has a default value.
+  const std::optional<std::string>& original_expression() const {
+    return original_expression_;
+  }
+
   absl::Span<const Column* const> dependent_columns() const {
     return dependent_columns_;
   }
@@ -207,6 +213,9 @@ class Column : public SchemaNode {
   // Expression for generated column or default value.
   std::optional<std::string> expression_ = std::nullopt;
 
+  // Original dialect expression for generated column or default value.
+  std::optional<std::string> original_expression_ = std::nullopt;
+
   // Whether the column has a default value.
   bool has_default_value_ = false;
 
@@ -236,6 +245,9 @@ class KeyColumn : public SchemaNode {
   // Returns true if this key column is sorted in descending order.
   bool is_descending() const { return is_descending_; }
 
+  // Returns true if NULLs are sorted last in this key column.
+  bool is_nulls_last() const { return is_nulls_last_; }
+
   // SchemaNode interface implementation.
   // ------------------------------------
 
@@ -245,12 +257,9 @@ class KeyColumn : public SchemaNode {
                               SchemaValidationContext* context) const override;
 
   std::string DebugString() const override {
-    return absl::Substitute(
-        "PK:$0(desc:$1"
-        ")",
-        column_->DebugString(),
-        is_descending_
-    );
+    return absl::Substitute("PK:$0(desc:$1, nulls_last:$2)",
+                            column_->DebugString(), is_descending_,
+                            is_nulls_last_);
   }
 
   class Builder;
@@ -285,6 +294,8 @@ class KeyColumn : public SchemaNode {
 
   // Whether this key column is sorted in descending order.
   bool is_descending_ = false;
+  // Whether NULLs are sorted last in this key column.
+  bool is_nulls_last_ = false;
 };
 
 }  // namespace backend

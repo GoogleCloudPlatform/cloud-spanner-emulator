@@ -64,7 +64,7 @@ void ResetInvalidValuesToNull(absl::Span<const Column* const> columns,
     return;
   }
 
-  ZETASQL_DCHECK(columns.size() == values->size());
+  ABSL_DCHECK(columns.size() == values->size());
 
   for (int i = 0; i < columns.size(); ++i) {
     if (!values->at(i).is_valid()) {
@@ -290,7 +290,7 @@ absl::Status TransactionStore::Read(
   // from buffered ops and the ones added from base storage were already in
   // sorted order respectively. Merge these two sorted subarrays to get overall
   // sorted order.
-  ZETASQL_DCHECK(buffered_rows_count <= rows.size())
+  ABSL_DCHECK(buffered_rows_count <= rows.size())
       << buffered_rows_count << " vs " << rows.size();
   auto first_base_row_iter = rows.begin() + buffered_rows_count;
   std::inplace_merge(rows.begin(), first_base_row_iter, rows.end(), SortByKey);
@@ -316,7 +316,7 @@ bool TransactionStore::RowExistsInBuffer(const Table* table, const Key& key,
 
 void TransactionStore::TrackColumnsForCommitTimestamp(
     absl::Span<const Column* const> columns, const ValueList& values) {
-  ZETASQL_DCHECK_EQ(columns.size(), values.size());
+  ABSL_DCHECK_EQ(columns.size(), values.size());
   for (int i = 0; i < columns.size(); ++i) {
     if (IsPendingCommitTimestamp(columns[i], values[i])) {
       commit_ts_columns_.insert(columns[i]);
@@ -332,10 +332,6 @@ void TransactionStore::TrackTableForCommitTimestamp(const Table* table,
     // Any time a table has a pending commit-ts in key, include all its indexes.
     for (const Index* index : table->indexes()) {
       commit_ts_tables_.insert(index->index_data_table());
-    }
-
-    for (const ChangeStream* change_stream : table->change_streams()) {
-      commit_ts_tables_.insert(change_stream->change_stream_data_table());
     }
   }
 }

@@ -1,0 +1,310 @@
+CREATE CHANGE STREAM change_stream;
+--
+CREATE CHANGE STREAM change_stream
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream FOR table1;
+--
+CREATE CHANGE STREAM change_stream
+FOR table1
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream FOR public.table1;
+--
+CREATE CHANGE STREAM change_stream
+FOR table1
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE table2 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream_multiple_tables FOR table1, table2;
+--
+CREATE CHANGE STREAM change_stream_multiple_tables
+FOR table1, table2
+
+==
+
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  column1 bigint,
+  PRIMARY KEY(id)
+);
+CREATE TABLE table2 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream_repeated_tables FOR table1, table1(column1), table2;
+--
+ERROR: Change Stream change_stream_repeated_tables should not list Table table1 more than once in the FOR clause.
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM "change_stream_double_quotes" FOR table1;
+--
+CREATE CHANGE STREAM change_stream_double_quotes
+FOR table1
+
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM "change_stream_double_quotes" FOR "table1";
+--
+CREATE CHANGE STREAM change_stream_double_quotes
+FOR table1
+
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE table2 (
+  id bigint NOT NULL,
+  column1 bigint,
+  column2 bigint,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream_explicit_columns FOR table1(), table2(column1, column2);
+--
+CREATE CHANGE STREAM change_stream_explicit_columns
+FOR table1(), table2(column1, column2)
+
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE table2 (
+  id bigint NOT NULL,
+  column1 bigint,
+  column2 bigint,
+  PRIMARY KEY(id)
+);
+CREATE TABLE table3 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream_explicit_columns FOR table1(), table2(column1, column2), table3;
+--
+CREATE CHANGE STREAM change_stream_explicit_columns
+FOR table1(), table2(column1, column2), table3
+
+==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE table2 (
+  id bigint NOT NULL,
+  column1 bigint,
+  column2 bigint,
+  column3 bigint,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream_explicit_columns FOR table1(), table2(column1, column2), table2(column1, column3);
+--
+ERROR: Change Stream change_stream_explicit_columns should not list Table table2 more than once in the FOR clause.
+
+==
+CREATE CHANGE STREAM change_stream_all FOR ALL;
+--
+CREATE CHANGE STREAM change_stream_all
+FOR ALL
+==
+CREATE TABLE "ALL" (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream_quoted_all FOR "ALL";
+--
+CREATE CHANGE STREAM change_stream_quoted_all
+FOR "ALL"
+==
+CREATE TABLE "ALL" (
+  id bigint NOT NULL,
+  column1 bigint,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream_quoted_all_with_column FOR "ALL"(column1);
+--
+CREATE CHANGE STREAM change_stream_quoted_all_with_column
+FOR "ALL"(column1)
+==
+CREATE TABLE "ALL" (
+  id bigint NOT NULL,
+  "ALL" bigint,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream_quoted_all_with_column FOR "ALL"("ALL");
+--
+CREATE CHANGE STREAM change_stream_quoted_all_with_column
+FOR "ALL"("ALL")
+==
+CREATE CHANGE STREAM change_stream_retention WITH (retention_period = '7d');
+--
+CREATE CHANGE STREAM change_stream_retention
+WITH (retention_period = '7d')
+
+==
+# TODO: The emulator returns the following error:
+# ERROR: Option retention_period can only take string_value.
+# CREATE CHANGE STREAM change_stream_null_retention WITH (retention_period = null);
+# --
+# CREATE CHANGE STREAM change_stream_null_retention;
+# ==
+CREATE CHANGE STREAM change_stream_value_capture_type WITH (value_capture_type = 'OLD_AND_NEW_VALUES');
+--
+CREATE CHANGE STREAM change_stream_value_capture_type
+WITH (value_capture_type = 'OLD_AND_NEW_VALUES')
+
+==
+# TODO: The emulator returns the following error:
+# ERROR: Change Streams only support value capture types in OLD_AND_NEW_VALUES, NEW_ROW, and NEW_VALUES.
+# CREATE CHANGE STREAM change_stream_null_option WITH (value_capture_type = null);
+# --
+# CREATE CHANGE STREAM change_stream_null_option;
+# ==
+CREATE CHANGE STREAM change_stream_quoted_option WITH ("value_capture_type" = 'NEW_ROW');
+--
+CREATE CHANGE STREAM change_stream_quoted_option
+WITH (value_capture_type = 'NEW_ROW')
+==
+# TODO: The emulator returns the following error:
+# ERROR: Change Streams only support value capture types in OLD_AND_NEW_VALUES, NEW_ROW, and NEW_VALUES.
+# CREATE CHANGE STREAM change_stream_null_option WITH (value_capture_type = NULL);
+# --
+# CREATE CHANGE STREAM change_stream_null_option
+# ==
+CREATE TABLE table1 (
+  id bigint NOT NULL,
+  PRIMARY KEY(id)
+);
+CREATE TABLE table2 (
+  id bigint NOT NULL,
+  column1 bigint,
+  column2 bigint,
+  PRIMARY KEY(id)
+);
+CREATE CHANGE STREAM change_stream_explicit_tables_and_options FOR table1, table2(column1, column2) WITH (retention_period = '7d', value_capture_type = 'OLD_AND_NEW_VALUES');
+--
+CREATE CHANGE STREAM change_stream_explicit_tables_and_options
+FOR table1, table2(column1, column2)
+WITH (value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '7d')
+==
+CREATE CHANGE STREAM change_stream_quoted_table FOR 'table1';
+--
+ERROR: [ERROR] syntax error at or near "'table1'"; failed to parse the DDL statements.
+==
+CREATE CHANGE STREAM change_stream_quoted_table FOR 'ALL';
+--
+ERROR: [ERROR] syntax error at or near "'ALL'"; failed to parse the DDL statements.
+
+==
+CREATE CHANGE STREAM 'change_stream_quoted_change_stream' FOR table1;
+--
+ERROR: [ERROR] syntax error at or near "'change_stream_quoted_change_stream'"; failed to parse the DDL statements.
+
+==
+CREATE CHANGE STREAM change_stream_quoted_column FOR table1('column1');
+--
+ERROR: [ERROR] syntax error at or near "'column1'"; failed to parse the DDL statements.
+
+==
+CREATE CHANGE STREAM change_stream_all_with_table FOR ALL, table1;
+--
+ERROR: [ERROR] syntax error at or near ","; failed to parse the DDL statements.
+
+==
+CREATE CHANGE STREAM change_stream_all_with_table FOR ALL(column1);
+--
+ERROR: [ERROR] syntax error at or near "("; failed to parse the DDL statements.
+
+==
+CREATE CHANGE STREAM change_stream_all_with_table FOR ALL();
+--
+ERROR: [ERROR] syntax error at or near "("; failed to parse the DDL statements.
+
+==
+CREATE CHANGE STREAM change_stream_all_with_table FOR Users(ALL);
+--
+ERROR: [ERROR] syntax error at or near "ALL"; failed to parse the DDL statements.
+
+==
+CREATE CHANGE STREAM change_stream_nothing_following_for FOR;
+--
+ERROR: [ERROR] syntax error at end of input; failed to parse the DDL statements.
+
+==
+CREATE CHANGE STREAM change_stream WITH (retention_period = '7d', value_capture_type = 'OLD_AND_NEW_VALUES', unknown_option = 'UNKNOWN_VALUE');
+--
+ERROR: Invalid change stream option 'unknown_option' in <CREATE CHANGE STREAM> statement.
+==
+CREATE CHANGE STREAM change_stream WITH (retention_period = '7d', retention_period = '7d', value_capture_type = 'OLD_AND_NEW_VALUES');
+--
+ERROR: Contains duplicate change stream option 'retention_period' in <CREATE CHANGE STREAM> statement.
+==
+CREATE CHANGE STREAM change_stream_unquoted_option WITH (value_capture_type = OLD_AND_NEW_VALUES);
+--
+ERROR: Failed to provide valid option value for 'value_capture_type' in <CREATE CHANGE STREAM> statement.
+==
+CREATE CHANGE STREAM change_stream_double_quoted_option WITH (value_capture_type = "OLD_AND_NEW_VALUES");
+--
+ERROR: Failed to provide valid option value for 'value_capture_type' in <CREATE CHANGE STREAM> statement.
+==
+CREATE CHANGE STREAM change_stream_invalid_option WITH (value_capture_type);
+--
+ERROR: Failed to parse change stream option correctly in <CREATE CHANGE STREAM> statement.
+==
+CREATE CHANGE STREAM change_stream WITH (retention_period = 7d);
+--
+ERROR: [ERROR] syntax error at or near "d"; failed to parse the DDL statements.
+==
+CREATE CHANGE STREAM change_stream WITH ();
+--
+ERROR: [ERROR] syntax error at or near ")"; failed to parse the DDL statements.
+==
+CREATE CHANGE STREAM change_stream SET OPTIONS (value_capture_type = 'OLD_AND_NEW_VALUES');
+--
+ERROR: [ERROR] syntax error at or near "SET"; failed to parse the DDL statements.
+==
+CREATE CHANGE STREAM change_stream  OPTIONS (retention_period = '7d');
+--
+ERROR: [ERROR] syntax error at or near "OPTIONS"; failed to parse the DDL statements.
+==
+CREATE CHANGE STREAM change_stream  WITH ('retention_period' = '7d');
+--
+ERROR: [ERROR] syntax error at or near "'retention_period'"; failed to parse the DDL statements.
+==
+CREATE CHANGE STREAM A.A.change_stream FOR B.B.table1;
+--
+ERROR: Catalog in the name is not supported in <CREATE CHANGE STREAM> statement.
+==
+CREATE CHANGE STREAM .change_stream FOR table1;
+--
+ERROR: [ERROR] syntax error at or near "."; failed to parse the DDL statements.
+==
+CREATE CHANGE STREAM A. FOR table1;
+--
+ERROR: [ERROR] syntax error at or near "table1"; failed to parse the DDL statements.
+==
+CREATE CHANGE STREAM . FOR table1;
+--
+ERROR: [ERROR] syntax error at or near "."; failed to parse the DDL statements.
+==
+CREATE CHANGE STREAM a.change_stream FOR b.table1;
+--
+ERROR: Schema name can only be 'public' in <CREATE CHANGE STREAM> statement.

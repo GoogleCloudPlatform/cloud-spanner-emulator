@@ -19,6 +19,9 @@
 #include <vector>
 
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/statusor.h"
 #include "google/cloud/spanner/value.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -55,8 +58,8 @@ class DmlTest
 
 INSTANTIATE_TEST_SUITE_P(
     PerDialectDmlTests, DmlTest,
-    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL
-                    ),
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
     [](const testing::TestParamInfo<DmlTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
     });

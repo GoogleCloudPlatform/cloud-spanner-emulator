@@ -64,8 +64,8 @@ absl::StatusOr<zetasql::Value> GetPartitionToken(
       active_partition_tokens.push_back(itr->ColumnValue(0).string_value());
     }
   }
-  ZETASQL_RET_CHECK(!active_partition_tokens.empty());
   std::sort(active_partition_tokens.begin(), active_partition_tokens.end());
+  ZETASQL_RET_CHECK(!active_partition_tokens.empty());
   return zetasql::Value::String(active_partition_tokens[0]);
 }
 }  // namespace

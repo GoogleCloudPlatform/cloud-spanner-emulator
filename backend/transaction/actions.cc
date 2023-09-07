@@ -42,6 +42,7 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
+#include "nlohmann/detail/value_t.hpp"
 #include "nlohmann/json_fwd.hpp"
 #include "nlohmann/json.hpp"
 #include "zetasql/base/status_macros.h"
@@ -188,17 +189,27 @@ ChangeStreamTransactionEffectsBuffer::ConvertDataChangeRecordToWriteOp(
     JSON mod_json;
     JSON keys_json;
     for (int i = 0; i < mod.key_columns.size(); ++i) {
-      keys_json[mod.key_columns[i]->column()->Name()] =
-          mod.keys[i].type_kind() == zetasql::TYPE_STRING
-              ? mod.keys[i].string_value()
-              : mod.keys[i].GetSQLLiteral();
+      // In theory, key values can't be null but double check to avoid any
+      // potential crash
+      if (mod.keys[i].is_null()) {
+        keys_json[mod.key_columns[i]->column()->Name()] = JSON::value_t::null;
+      } else {
+        keys_json[mod.key_columns[i]->column()->Name()] =
+            mod.keys[i].type_kind() == zetasql::TYPE_STRING
+                ? mod.keys[i].string_value()
+                : mod.keys[i].GetSQLLiteral();
+      }
     }
     JSON new_values_json;
     for (int i = 0; i < mod.new_values.size(); ++i) {
-      new_values_json[mod.non_key_columns[i]] =
-          mod.new_values[i].type_kind() == zetasql::TYPE_STRING
-              ? mod.new_values[i].string_value()
-              : mod.new_values[i].GetSQLLiteral();
+      if (mod.new_values[i].is_null()) {
+        new_values_json[mod.non_key_columns[i]] = JSON::value_t::null;
+      } else {
+        new_values_json[mod.non_key_columns[i]] =
+            mod.new_values[i].type_kind() == zetasql::TYPE_STRING
+                ? mod.new_values[i].string_value()
+                : mod.new_values[i].GetSQLLiteral();
+      }
     }
     mod_json["keys"] = keys_json.dump();
     mod_json["new_values"] = new_values_json.dump();
@@ -256,8 +267,8 @@ bool CheckIfNonKeyColumnsRemainSame(std::vector<const Column*> op_columns,
     op_key_cols.insert(pk->column()->Name());
   }
   for (const Column* column : op_columns) {
-    if (column->FindChangeStream(change_stream->Name()) &&
-        !op_key_cols.contains(column->Name())) {
+    if (!op_key_cols.contains(column->Name()) &&
+        column->FindChangeStream(change_stream->Name())) {
       op_non_key_columns_tracked_by_change_stream.push_back(column);
     }
   }
