@@ -4,7 +4,7 @@
  *		Functions for finding and validating executable files
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -24,6 +24,14 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#ifdef EXEC_BACKEND
+#if defined(HAVE_SYS_PERSONALITY_H)
+#include <sys/personality.h>
+#elif defined(HAVE_SYS_PROCCTL_H)
+#include <sys/procctl.h>
+#endif
+#endif
 
 /* Inhibit mingw CRT's auto-globbing of command line arguments */
 #if defined(WIN32) && !defined(_MSC_VER)
@@ -54,7 +62,6 @@ extern int _CRT_glob = 0; /* 0 turns off globbing; 1 turns it on */
 #define getcwd(cwd,len)  GetCurrentDirectory(len, cwd)
 #endif
 
-static int	validate_exec(const char *path);
 static int	resolve_symlinks(char *path);
 
 #ifdef WIN32
@@ -68,7 +75,7 @@ static BOOL GetTokenUser(HANDLE hToken, PTOKEN_USER *ppTokenUser);
  *		  -1 if the regular file "path" does not exist or cannot be executed.
  *		  -2 if the file is otherwise valid but cannot be read.
  */
-static int
+int
 validate_exec(const char *path)
 {
 	struct stat buf;
@@ -149,7 +156,7 @@ find_my_exec(const char *argv0, char *retpath)
 	if (first_dir_separator(argv0) != NULL)
 	{
 		if (is_absolute_path(argv0))
-			StrNCpy(retpath, argv0, MAXPGPATH);
+			strlcpy(retpath, argv0, MAXPGPATH);
 		else
 			join_path_components(retpath, cwd, argv0);
 		canonicalize_path(retpath);
@@ -189,7 +196,7 @@ find_my_exec(const char *argv0, char *retpath)
 			if (!endp)
 				endp = startp + strlen(startp); /* point to end */
 
-			StrNCpy(test_path, startp, Min(endp - startp + 1, MAXPGPATH));
+			strlcpy(test_path, startp, Min(endp - startp + 1, MAXPGPATH));
 
 			if (is_absolute_path(test_path))
 				join_path_components(retpath, test_path, argv0);
@@ -412,7 +419,7 @@ pclose_check(FILE *stream)
 	{
 		/* pclose() itself failed, and hopefully set errno */
 		log_error(errcode(ERRCODE_SYSTEM_ERROR),
-				  _("pclose failed: %m"));
+				  _("%s() failed: %m"), "pclose");
 	}
 	else
 	{
@@ -440,9 +447,6 @@ set_pglocale_pgservice(const char *argv0, const char *app)
 {
 	char		path[MAXPGPATH];
 	char		my_exec_path[MAXPGPATH];
-	char		env_path[MAXPGPATH + sizeof("PGSYSCONFDIR=")];	/* longer than
-																 * PGLOCALEDIR */
-	char	   *dup_path;
 
 	/* don't set LC_ALL in the backend */
 	if (strcmp(app, PG_TEXTDOMAIN("postgres")) != 0)
@@ -467,30 +471,42 @@ set_pglocale_pgservice(const char *argv0, const char *app)
 	get_locale_path(my_exec_path, path);
 	bindtextdomain(app, path);
 	textdomain(app);
-
-	if (getenv("PGLOCALEDIR") == NULL)
-	{
-		/* set for libpq to use */
-		snprintf(env_path, sizeof(env_path), "PGLOCALEDIR=%s", path);
-		canonicalize_path(env_path + 12);
-		dup_path = strdup(env_path);
-		if (dup_path)
-			putenv(dup_path);
-	}
+	/* set for libpq to use, but don't override existing setting */
+	setenv("PGLOCALEDIR", path, 0);
 #endif
 
 	if (getenv("PGSYSCONFDIR") == NULL)
 	{
 		get_etc_path(my_exec_path, path);
-
 		/* set for libpq to use */
-		snprintf(env_path, sizeof(env_path), "PGSYSCONFDIR=%s", path);
-		canonicalize_path(env_path + 13);
-		dup_path = strdup(env_path);
-		if (dup_path)
-			putenv(dup_path);
+		setenv("PGSYSCONFDIR", path, 0);
 	}
 }
+
+#ifdef EXEC_BACKEND
+/*
+ * For the benefit of PostgreSQL developers testing EXEC_BACKEND on Unix
+ * systems (code paths normally exercised only on Windows), provide a way to
+ * disable address space layout randomization, if we know how on this platform.
+ * Otherwise, backends may fail to attach to shared memory at the fixed address
+ * chosen by the postmaster.  (See also the macOS-specific hack in
+ * sysv_shmem.c.)
+ */
+int
+pg_disable_aslr(void)
+{
+#if defined(HAVE_SYS_PERSONALITY_H)
+	return personality(ADDR_NO_RANDOMIZE);
+#elif defined(HAVE_SYS_PROCCTL_H) && defined(PROC_ASLR_FORCE_DISABLE)
+	int			data = PROC_ASLR_FORCE_DISABLE;
+
+	return procctl(P_PID, 0, PROC_ASLR_CTL, &data);
+#else
+	errno = ENOSYS;
+	return -1;
+#endif
+}
+#endif
 
 #ifdef WIN32
 

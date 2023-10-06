@@ -32,7 +32,13 @@
 #ifndef CATALOG_EMULATOR_FUNCTION_EVALUATORS_H_
 #define CATALOG_EMULATOR_FUNCTION_EVALUATORS_H_
 
+#include <cstdint>
+#include <functional>
+
 #include "zetasql/public/function.h"
+#include "zetasql/public/value.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 
 namespace postgres_translator {
 
@@ -42,6 +48,18 @@ inline constexpr char kDefaultTimeZone[] = "America/Los_Angeles";
 zetasql::FunctionEvaluator PGFunctionEvaluator(
     const zetasql::FunctionEvaluator& function,
     const std::function<void()>& on_compute_end = []() {});
+
+// This function calls `F_JSONB_ARRAY_ELEMENT_TEXT` to compute the results on
+// arguments `jsonb` and `element`. The function returns `Value::String`
+// (`Value::NullString` to represent a SQL null).
+absl::StatusOr<zetasql::Value> EmulatorJsonBArrayElementText(
+    absl::string_view jsonb, int32_t element);
+
+// This function calls `F_JSONB_OBJECT_FIELD_TEXT` to compute the results on
+// arguments `jsonb` and `key`. The function returns `Value::String`
+// (`Value::NullString` to represent a SQL null).
+absl::StatusOr<zetasql::Value> EmulatorJsonBObjectFieldText(
+    absl::string_view jsonb, absl::string_view key);
 
 }  // namespace postgres_translator
 

@@ -122,6 +122,12 @@ const Index* Schema::FindManagedIndex(const std::string& index_name) const {
   return nullptr;
 }
 
+ddl::ForeignKey::Action FindForeignKeyOnDeleteAction(const ForeignKey* fk) {
+  return fk->on_delete_action() == ForeignKey::Action::kCascade
+             ? ddl::ForeignKey::CASCADE
+             : ddl::ForeignKey::NO_ACTION;
+}
+
 void DumpIndex(const Index* index, ddl::CreateIndex& create_index) {
   ABSL_CHECK_NE(index, nullptr);  // Crash OK
   create_index.set_index_name(index->Name());
@@ -214,6 +220,10 @@ void DumpForeignKey(const ForeignKey* foreign_key,
   }
   for (const Column* column : foreign_key->referenced_columns()) {
     foreign_key_def.add_referenced_column_name(column->Name());
+  }
+  if (foreign_key->on_delete_action() !=
+      ForeignKey::Action::kActionUnspecified) {
+    foreign_key_def.set_on_delete(FindForeignKeyOnDeleteAction(foreign_key));
   }
 }
 

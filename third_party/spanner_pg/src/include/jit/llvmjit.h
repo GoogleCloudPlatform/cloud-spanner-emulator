@@ -2,7 +2,7 @@
  * llvmjit.h
  *	  LLVM JIT provider.
  *
- * Copyright (c) 2016-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2016-2021, PostgreSQL Global Development Group
  *
  * src/include/jit/llvmjit.h
  *
@@ -93,6 +93,8 @@ extern LLVMModuleRef llvm_mutable_module(LLVMJitContext *context);
 extern char *llvm_expand_funcname(LLVMJitContext *context, const char *basename);
 extern void *llvm_get_function(LLVMJitContext *context, const char *funcname);
 extern void llvm_split_symbol_name(const char *name, char **modname, char **funcname);
+extern LLVMTypeRef llvm_pg_var_type(const char *varname);
+extern LLVMTypeRef llvm_pg_var_func_type(const char *varname);
 extern LLVMValueRef llvm_pg_func(LLVMModuleRef mod, const char *funcname);
 extern void llvm_copy_attributes(LLVMValueRef from, LLVMValueRef to);
 extern LLVMValueRef llvm_function_reference(LLVMJitContext *context,

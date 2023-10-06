@@ -286,6 +286,11 @@ class DatabaseTest : public ::testing::Test {
     return zetasql_base::testing::IsOkAndHolds(testing::ElementsAre(row));
   }
 
+  // Returns a matcher for a super set of rows returned by client library.
+  auto IsOkAndContainsRows(const std::vector<ValueRow>& rows) {
+    return zetasql_base::testing::IsOkAndHolds(testing::IsSupersetOf(rows));
+  }
+
   // Converts a list of literal key parts into a Key.
   template <typename... Ts>
   cloud::spanner::Key Key(Ts... ts) {

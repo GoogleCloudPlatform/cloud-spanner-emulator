@@ -168,6 +168,13 @@ class Column::Editor {
     return *this;
   }
 
+  Editor& add_change_stream_explicitly_tracking_column(
+      const ChangeStream* change_stream) {
+    instance_->change_streams_explicitly_tracking_column_.push_back(
+        change_stream);
+    return *this;
+  }
+
   Editor& remove_change_stream(const ChangeStream* change_stream) {
     auto itr = std::find_if(
         instance_->change_streams_.begin(), instance_->change_streams_.end(),

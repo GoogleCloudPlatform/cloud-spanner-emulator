@@ -418,6 +418,8 @@ std::vector<WriteOp> TestChangeStreamEffectsBuffer::GetWriteOps() {
   return writeops_;
 }
 
+void TestChangeStreamEffectsBuffer::ClearWriteOps() { writeops_.clear(); }
+
 WriteOp ActionsTest::Insert(const Table* table, const Key& key,
                             absl::Span<const Column* const> columns,
                             const std::vector<zetasql::Value> values) {

@@ -42,6 +42,7 @@
 #include "frontend/converters/chunking.h"
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -252,8 +253,13 @@ absl::StatusOr<zetasql::Value> CreateDataChangeRecord(
   //  "record_sequence(STRING)",
   //  "is_last_record_in_transaction_in_partition(BOOL)",
   //  "table_name(STRING)",
-  //  "column_types(ARRAY<JSON>)",
-  //  "mods(ARRAY<JSON>)",
+  //  "column_types_name(ARRAY<STRING>)",
+  //  "column_types_type(ARRAY<STRING>)",
+  //  "column_types_is_primary_key(ARRAY<BOOL>)"
+  //  "column_types_ordinal_position(ARRAY<INT64>)"
+  //  "mods_keys(ARRAY<STRING>)",
+  //  "mods_new_values(ARRAY<STRING>)",
+  //  "mods_old_values(ARRAY<STRING>)",
   //  "mod_type(STRING)",
   //  "value_capture_type(STRING)",
   //  "number_of_records_in_transaction(INT64)",
@@ -261,8 +267,8 @@ absl::StatusOr<zetasql::Value> CreateDataChangeRecord(
   //  "transaction_tag(STRING)",
   //  "is_system_transaction(BOOL)"},
   // due to the fixed shape of change stream internal data table.
-  ZETASQL_RET_CHECK(cursor->NumColumns() == 14);
-  values.reserve(13);
+  ZETASQL_RET_CHECK(cursor->NumColumns() == 19);
+  values.reserve(18);
   // Skip the first column partition_token(STRING) since partition token is not
   // part of the actual data change record that will be returned to the users.
   for (int i = 1; i < 6; i++) {
@@ -283,30 +289,28 @@ absl::StatusOr<zetasql::Value> CreateDataChangeRecord(
   //     type JSON,
   //     is_primary_key BOOL,
   //     ordinal_position INT64>>
-  zetasql::Value column_types_json_arr = cursor->ColumnValue(6);
-  std::vector<zetasql::Value> column_types_arr_vals;
-  for (int i = 0; i < column_types_json_arr.num_elements(); i++) {
-    zetasql::JSONValueConstRef curr_column_type =
-        column_types_json_arr.element(i).json_value();
+  zetasql::Value column_types_name_arr = cursor->ColumnValue(6);
+  zetasql::Value column_types_type_arr = cursor->ColumnValue(7);
+  zetasql::Value column_types_is_primary_key = cursor->ColumnValue(8);
+  zetasql::Value column_types_ordinal_position = cursor->ColumnValue(9);
+  std::vector<zetasql::Value> column_types_arr_structs;
+  for (int i = 0; i < column_types_name_arr.num_elements(); i++) {
     std::vector<zetasql::Value> curr_column_type_vals{
-        zetasql::Value::String(
-            curr_column_type.GetMember("name").GetString()),
+        column_types_name_arr.element(i),
         zetasql::Value::Json(
             zetasql::JSONValue::ParseJSONString(
-                curr_column_type.GetMember("type").GetString())
+                column_types_type_arr.element(i).string_value())
                 .value()),
-        zetasql::Value::Bool(
-            curr_column_type.GetMember("is_primary_key").GetBoolean()),
-        zetasql::Value::Int64(
-            curr_column_type.GetMember("ordinal_position").GetInt64())};
-    ZETASQL_ASSIGN_OR_RETURN(auto curr_column_type_val,
+        column_types_is_primary_key.element(i),
+        column_types_ordinal_position.element(i)};
+    ZETASQL_ASSIGN_OR_RETURN(auto curr_column_type_struct,
                      zetasql::Value::MakeStruct(types->column_types_struct,
                                                   curr_column_type_vals));
-    column_types_arr_vals.push_back(curr_column_type_val);
+    column_types_arr_structs.push_back(curr_column_type_struct);
   }
   ZETASQL_ASSIGN_OR_RETURN(auto column_types_struct_array_val,
                    zetasql::Value::MakeArray(types->column_types_arr,
-                                               column_types_arr_vals));
+                                               column_types_arr_structs));
   values.push_back(column_types_struct_array_val);
 
   // Reconstruct each column type JSON into a struct:
@@ -315,21 +319,22 @@ absl::StatusOr<zetasql::Value> CreateDataChangeRecord(
   //   new_values JSON,
   //   old_values JSON>>
   std::vector<zetasql::Value> mods_arr_vals;
-  zetasql::Value mods_json_arr = cursor->ColumnValue(7);
-  for (int i = 0; i < mods_json_arr.num_elements(); i++) {
-    zetasql::JSONValueConstRef curr_mod =
-        mods_json_arr.element(i).json_value();
-
+  zetasql::Value mods_keys_arr = cursor->ColumnValue(10);
+  zetasql::Value mods_new_values_arr = cursor->ColumnValue(11);
+  zetasql::Value mods_old_values_arr = cursor->ColumnValue(12);
+  for (int i = 0; i < mods_keys_arr.num_elements(); i++) {
     std::vector<zetasql::Value> curr_mod_vals{
         zetasql::Value::Json(zetasql::JSONValue::ParseJSONString(
-                                   curr_mod.GetMember("keys").GetString())
+                                   mods_keys_arr.element(i).string_value())
                                    .value()),
-        zetasql::Value::Json(zetasql::JSONValue::ParseJSONString(
-                                   curr_mod.GetMember("new_values").GetString())
-                                   .value()),
-        zetasql::Value::Json(zetasql::JSONValue::ParseJSONString(
-                                   curr_mod.GetMember("old_values").GetString())
-                                   .value()),
+        zetasql::Value::Json(
+            zetasql::JSONValue::ParseJSONString(
+                mods_new_values_arr.element(i).string_value())
+                .value()),
+        zetasql::Value::Json(
+            zetasql::JSONValue::ParseJSONString(
+                mods_old_values_arr.element(i).string_value())
+                .value()),
     };
 
     ZETASQL_ASSIGN_OR_RETURN(
@@ -341,7 +346,7 @@ absl::StatusOr<zetasql::Value> CreateDataChangeRecord(
   ZETASQL_ASSIGN_OR_RETURN(auto mods_struct_array_val,
                    zetasql::Value::MakeArray(types->mods_arr, mods_arr_vals));
   values.push_back(mods_struct_array_val);
-  for (int i = 8; i < 14; i++) {
+  for (int i = 13; i < 19; i++) {
     values.push_back(cursor->ColumnValue(i));
   }
   ZETASQL_ASSIGN_OR_RETURN(

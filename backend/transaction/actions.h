@@ -165,20 +165,23 @@ class ChangeStreamTransactionEffectsBuffer : public ChangeStreamEffectsBuffer {
 
   std::vector<WriteOp> GetWriteOps() override;
 
+  void ClearWriteOps() override;
+
  private:
   DataChangeRecord BuildDataChangeRecord(std::string tracked_table_name,
                                          std::string value_capture_type,
                                          const ChangeStream* change_stream);
   void LogTableMod(const Key& key, std::vector<const Column*> columns,
-                   const std::vector<zetasql::Value>& values,
-                   const Table* table, const ChangeStream* change_stream,
-                   std::string mod_type, zetasql::Value partition_token_str);
+                   std::vector<zetasql::Value> values, const Table* table,
+                   const ChangeStream* change_stream, std::string mod_type,
+                   zetasql::Value partition_token_str);
   absl::StatusOr<Key> ComputeChangeStreamDataTableKey(
       zetasql::Value partition_token_str, zetasql::Value commit_timestamp,
       std::string record_sequence, std::string server_transaction_id,
       std::string table_name);
   absl::StatusOr<WriteOp> ConvertDataChangeRecordToWriteOp(
-      const ChangeStream* change_stream, DataChangeRecord record);
+      const ChangeStream* change_stream, DataChangeRecord record,
+      std::vector<const Column*> columns);
   std::vector<WriteOp> writeops_;
   absl::flat_hash_map<const ChangeStream*, std::vector<DataChangeRecord>>
       data_change_records_in_transaction_by_change_stream_;

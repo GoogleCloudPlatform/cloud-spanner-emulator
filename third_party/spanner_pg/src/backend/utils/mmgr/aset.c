@@ -7,7 +7,7 @@
  * type.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -279,7 +279,8 @@ static Size AllocSetGetChunkSpace(MemoryContext context, void *pointer);
 static bool AllocSetIsEmpty(MemoryContext context);
 static void AllocSetStats(MemoryContext context,
 						  MemoryStatsPrintFunc printfunc, void *passthru,
-						  MemoryContextCounters *totals);
+						  MemoryContextCounters *totals,
+						  bool print_to_stderr);
 
 #ifdef MEMORY_CONTEXT_CHECKING
 static void AllocSetCheck(MemoryContext context);
@@ -1087,22 +1088,22 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 {
 	AllocSet	set = (AllocSet) context;
 	AllocChunk	chunk = AllocPointerGetChunk(pointer);
-	Size		oldsize;
+	Size		oldchksize;
 
 	/* Allow access to private part of chunk header. */
 	VALGRIND_MAKE_MEM_DEFINED(chunk, ALLOCCHUNK_PRIVATE_LEN);
 
-	oldsize = chunk->size;
+	oldchksize = chunk->size;
 
 #ifdef MEMORY_CONTEXT_CHECKING
 	/* Test for someone scribbling on unused space in chunk */
-	if (chunk->requested_size < oldsize)
+	if (chunk->requested_size < oldchksize)
 		if (!sentinel_ok(pointer, chunk->requested_size))
 			elog(WARNING, "detected write past chunk end in %s %p",
 				 set->header.name, chunk);
 #endif
 
-	if (oldsize > set->allocChunkLimit)
+	if (oldchksize > set->allocChunkLimit)
 	{
 		/*
 		 * The chunk must have been allocated as a single-chunk block.  Use
@@ -1122,7 +1123,7 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 		if (block->aset != set ||
 			block->freeptr != block->endptr ||
 			block->freeptr != ((char *) block) +
-			(oldsize + ALLOC_BLOCKHDRSZ + ALLOC_CHUNKHDRSZ))
+			(oldchksize + ALLOC_BLOCKHDRSZ + ALLOC_CHUNKHDRSZ))
 			elog(ERROR, "could not find block containing chunk %p", chunk);
 
 		/*
@@ -1137,9 +1138,8 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 		/* Do the realloc */
 		blksize = chksize + ALLOC_BLOCKHDRSZ + ALLOC_CHUNKHDRSZ;
 		oldblksize = block->endptr - ((char *) block);
-		block = (AllocBlock) reserved_realloc(
-			block, oldsize + ALLOC_BLOCKHDRSZ + ALLOC_CHUNKHDRSZ, blksize);
 
+		block = (AllocBlock) realloc(block, blksize);
 		if (block == NULL)
 		{
 			/* Disallow external access to private part of chunk header. */
@@ -1166,21 +1166,29 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 
 #ifdef MEMORY_CONTEXT_CHECKING
 #ifdef RANDOMIZE_ALLOCATED_MEMORY
-		/* We can only fill the extra space if we know the prior request */
+
+		/*
+		 * We can only randomize the extra space if we know the prior request.
+		 * When using Valgrind, randomize_mem() also marks memory UNDEFINED.
+		 */
 		if (size > chunk->requested_size)
 			randomize_mem((char *) pointer + chunk->requested_size,
 						  size - chunk->requested_size);
-#endif
+#else
 
 		/*
-		 * realloc() (or randomize_mem()) will have left any newly-allocated
-		 * part UNDEFINED, but we may need to adjust trailing bytes from the
-		 * old allocation.
+		 * If this is an increase, realloc() will have marked any
+		 * newly-allocated part (from oldchksize to chksize) UNDEFINED, but we
+		 * also need to adjust trailing bytes from the old allocation (from
+		 * chunk->requested_size to oldchksize) as they are marked NOACCESS.
+		 * Make sure not to mark too many bytes in case chunk->requested_size
+		 * < size < oldchksize.
 		 */
 #ifdef USE_VALGRIND
-		if (oldsize > chunk->requested_size)
+		if (Min(size, oldchksize) > chunk->requested_size)
 			VALGRIND_MAKE_MEM_UNDEFINED((char *) pointer + chunk->requested_size,
-										oldsize - chunk->requested_size);
+										Min(size, oldchksize) - chunk->requested_size);
+#endif
 #endif
 
 		chunk->requested_size = size;
@@ -1191,11 +1199,14 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 #else							/* !MEMORY_CONTEXT_CHECKING */
 
 		/*
-		 * We don't know how much of the old chunk size was the actual
-		 * allocation; it could have been as small as one byte.  We have to be
-		 * conservative and just mark the entire old portion DEFINED.
+		 * We may need to adjust marking of bytes from the old allocation as
+		 * some of them may be marked NOACCESS.  We don't know how much of the
+		 * old chunk size was the requested size; it could have been as small
+		 * as one byte.  We have to be conservative and just mark the entire
+		 * old portion DEFINED.  Make sure not to mark memory beyond the new
+		 * allocation in case it's smaller than the old one.
 		 */
-		VALGRIND_MAKE_MEM_DEFINED(pointer, oldsize);
+		VALGRIND_MAKE_MEM_DEFINED(pointer, Min(size, oldchksize));
 #endif
 
 		/* Ensure any padding bytes are marked NOACCESS. */
@@ -1212,7 +1223,7 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 	 * allocated area already is >= the new size.  (In particular, we will
 	 * fall out here if the requested size is a decrease.)
 	 */
-	else if (oldsize >= size)
+	else if (oldchksize >= size)
 	{
 #ifdef MEMORY_CONTEXT_CHECKING
 		Size		oldrequest = chunk->requested_size;
@@ -1235,10 +1246,10 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 										size - oldrequest);
 		else
 			VALGRIND_MAKE_MEM_NOACCESS((char *) pointer + size,
-									   oldsize - size);
+									   oldchksize - size);
 
 		/* set mark to catch clobber of "unused" space */
-		if (size < oldsize)
+		if (size < oldchksize)
 			set_sentinel(pointer, size);
 #else							/* !MEMORY_CONTEXT_CHECKING */
 
@@ -1247,7 +1258,7 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 		 * the old request or shrinking it, so we conservatively mark the
 		 * entire new allocation DEFINED.
 		 */
-		VALGRIND_MAKE_MEM_NOACCESS(pointer, oldsize);
+		VALGRIND_MAKE_MEM_NOACCESS(pointer, oldchksize);
 		VALGRIND_MAKE_MEM_DEFINED(pointer, size);
 #endif
 
@@ -1270,6 +1281,7 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 		 * memory indefinitely.  See pgsql-hackers archives for 2007-08-11.)
 		 */
 		AllocPointer newPointer;
+		Size		oldsize;
 
 		/* allocate new chunk */
 		newPointer = AllocSetAlloc((MemoryContext) set, size);
@@ -1294,6 +1306,7 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 #ifdef MEMORY_CONTEXT_CHECKING
 		oldsize = chunk->requested_size;
 #else
+		oldsize = oldchksize;
 		VALGRIND_MAKE_MEM_DEFINED(pointer, oldsize);
 #endif
 
@@ -1349,11 +1362,12 @@ AllocSetIsEmpty(MemoryContext context)
  * printfunc: if not NULL, pass a human-readable stats string to this.
  * passthru: pass this pointer through to printfunc.
  * totals: if not NULL, add stats about this context into *totals.
+ * print_to_stderr: print stats to stderr if true, elog otherwise.
  */
 static void
 AllocSetStats(MemoryContext context,
 			  MemoryStatsPrintFunc printfunc, void *passthru,
-			  MemoryContextCounters *totals)
+			  MemoryContextCounters *totals, bool print_to_stderr)
 {
 	AllocSet	set = (AllocSet) context;
 	Size		nblocks = 0;
@@ -1392,7 +1406,7 @@ AllocSetStats(MemoryContext context,
 				 "%zu total in %zd blocks; %zu free (%zd chunks); %zu used",
 				 totalspace, nblocks, freespace, freechunks,
 				 totalspace - freespace);
-		printfunc(context, passthru, stats_string);
+		printfunc(context, passthru, stats_string, print_to_stderr);
 	}
 
 	if (totals)

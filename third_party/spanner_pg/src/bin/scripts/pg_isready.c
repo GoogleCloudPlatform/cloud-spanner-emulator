@@ -2,7 +2,7 @@
  *
  * pg_isready --- checks the status of the PostgreSQL server
  *
- * Copyright (c) 2013-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2013-2021, PostgreSQL Global Development Group
  *
  * src/bin/scripts/pg_isready.c
  *
@@ -12,6 +12,7 @@
 #include "postgres_fe.h"
 #include "common.h"
 #include "common/logging.h"
+#include "fe_utils/option_utils.h"
 
 #define DEFAULT_CONNECT_TIMEOUT "3"
 

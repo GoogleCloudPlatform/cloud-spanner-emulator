@@ -134,6 +134,7 @@ cc_library(
         "//third_party/spanner_pg/src/backend/tcop",
         "//third_party/spanner_pg/src/backend/tsearch",
         "//third_party/spanner_pg/src/backend/utils",
+        "//third_party/spanner_pg/src/backend/utils/activity",
         "//third_party/spanner_pg/src/backend/utils/adt",
         "//third_party/spanner_pg/src/backend/utils/cache",
         "//third_party/spanner_pg/src/backend/utils/error",

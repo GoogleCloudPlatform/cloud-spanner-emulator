@@ -3,7 +3,7 @@
  * pg_recvlogical.c - receive data from a logical decoding slot in a streaming
  *					  fashion and write it to a local file.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/bin/pg_basebackup/pg_recvlogical.c
@@ -131,8 +131,8 @@ sendFeedback(PGconn *conn, TimestampTz now, bool force, bool replyRequested)
 
 	if (verbose)
 		pg_log_info("confirming write up to %X/%X, flush to %X/%X (slot %s)",
-					(uint32) (output_written_lsn >> 32), (uint32) output_written_lsn,
-					(uint32) (output_fsync_lsn >> 32), (uint32) output_fsync_lsn,
+					LSN_FORMAT_ARGS(output_written_lsn),
+					LSN_FORMAT_ARGS(output_fsync_lsn),
 					replication_slot);
 
 	replybuf[len] = 'r';
@@ -226,13 +226,13 @@ StreamLogicalLog(void)
 	 */
 	if (verbose)
 		pg_log_info("starting log streaming at %X/%X (slot %s)",
-					(uint32) (startpos >> 32), (uint32) startpos,
+					LSN_FORMAT_ARGS(startpos),
 					replication_slot);
 
 	/* Initiate the replication stream at specified location */
 	query = createPQExpBuffer();
 	appendPQExpBuffer(query, "START_REPLICATION SLOT \"%s\" LOGICAL %X/%X",
-					  replication_slot, (uint32) (startpos >> 32), (uint32) startpos);
+					  replication_slot, LSN_FORMAT_ARGS(startpos));
 
 	/* print options if there are any */
 	if (noptions)
@@ -285,7 +285,7 @@ StreamLogicalLog(void)
 		}
 
 		/*
-		 * Potentially send a status message to the master
+		 * Potentially send a status message to the primary.
 		 */
 		now = feGetCurrentTimestamp();
 
@@ -410,7 +410,7 @@ StreamLogicalLog(void)
 			}
 			else if (r < 0)
 			{
-				pg_log_error("select() failed: %m");
+				pg_log_error("%s() failed: %m", "select");
 				goto error;
 			}
 
@@ -1047,10 +1047,9 @@ prepareToTerminate(PGconn *conn, XLogRecPtr endpos, bool keepalive, XLogRecPtr l
 	{
 		if (keepalive)
 			pg_log_info("end position %X/%X reached by keepalive",
-						(uint32) (endpos >> 32), (uint32) endpos);
+						LSN_FORMAT_ARGS(endpos));
 		else
 			pg_log_info("end position %X/%X reached by WAL record at %X/%X",
-						(uint32) (endpos >> 32), (uint32) (endpos),
-						(uint32) (lsn >> 32), (uint32) lsn);
+						LSN_FORMAT_ARGS(endpos), LSN_FORMAT_ARGS(lsn));
 	}
 }

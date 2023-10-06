@@ -4,7 +4,7 @@
  *
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/parser/parse_func.h
@@ -32,15 +32,17 @@ typedef enum
 
 
 extern Node *ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *fargs,
-											   Node *last_srf, FuncCall *fn, bool proc_call, int location);
+							   Node *last_srf, FuncCall *fn, bool proc_call, int location);
 
 extern FuncDetailCode func_get_detail_UNUSED_SPANGRES(List *funcname,
-				List *fargs, List *fargnames,
-				int nargs, Oid *argtypes,
- 				bool expand_variadic, bool expand_defaults,
- 				Oid *funcid, Oid *rettype,
- 				bool *retset, int *nvargs, Oid *vatype,
- 				Oid **true_typeids, List **argdefaults);
+									  List *fargs, List *fargnames,
+									  int nargs, Oid *argtypes,
+									  bool expand_variadic, bool expand_defaults,
+									  bool include_out_arguments,
+									  Oid *funcid, Oid *rettype,
+									  bool *retset, int *nvargs, Oid *vatype,
+									  Oid **true_typeids, List **argdefaults);
+
 extern int	func_match_argtypes(int nargs,
 								Oid *input_typeids,
 								FuncCandidateList raw_candidates,

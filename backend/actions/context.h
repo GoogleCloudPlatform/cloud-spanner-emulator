@@ -85,6 +85,8 @@ class ChangeStreamEffectsBuffer {
   virtual void BuildMutation() = 0;
 
   virtual std::vector<WriteOp> GetWriteOps() = 0;
+
+  virtual void ClearWriteOps() = 0;
 };
 
 // ReadOnlyStore abstracts the storage environment in which an action lives.

@@ -1,9 +1,12 @@
+
+# Copyright (c) 2021, PostgreSQL Global Development Group
+
 # Tests for various bugs found over time
 use strict;
 use warnings;
 use PostgresNode;
 use TestLib;
-use Test::More tests => 7;
+use Test::More tests => 9;
 
 # Bug #15114
 
@@ -134,25 +137,88 @@ $node_twoways->safe_psql(
 	INSERT INTO t SELECT * FROM generate_series(1, $rows);
 	INSERT INTO t2 SELECT * FROM generate_series(1, $rows);
 	});
-$node_twoways->safe_psql(
-	'd1', 'ALTER PUBLICATION testpub ADD TABLE t2');
-$node_twoways->safe_psql(
-	'd2', 'ALTER SUBSCRIPTION testsub REFRESH PUBLICATION');
+$node_twoways->safe_psql('d1', 'ALTER PUBLICATION testpub ADD TABLE t2');
+$node_twoways->safe_psql('d2',
+	'ALTER SUBSCRIPTION testsub REFRESH PUBLICATION');
 
 # We cannot rely solely on wait_for_catchup() here; it isn't sufficient
 # when tablesync workers might still be running. So in addition to that,
 # verify that tables are synced.
-# XXX maybe this should be integrated in wait_for_catchup() itself.
-$node_twoways->wait_for_catchup('testsub');
-my $synced_query =
-  "SELECT count(1) = 0 FROM pg_subscription_rel WHERE srsubstate NOT IN ('r', 's');";
-$node_twoways->poll_query_until('d2', $synced_query)
-  or die "Timed out while waiting for subscriber to synchronize data";
+$node_twoways->wait_for_subscription_sync($node_twoways, 'testsub', 'd2');
 
 is($node_twoways->safe_psql('d2', "SELECT count(f) FROM t"),
 	$rows * 2, "2x$rows rows in t");
 is($node_twoways->safe_psql('d2', "SELECT count(f) FROM t2"),
 	$rows * 2, "2x$rows rows in t2");
+
+# Verify table data is synced with cascaded replication setup. This is mainly
+# to test whether the data written by tablesync worker gets replicated.
+my $node_pub = get_new_node('testpublisher1');
+$node_pub->init(allows_streaming => 'logical');
+$node_pub->start;
+
+my $node_pub_sub = get_new_node('testpublisher_subscriber');
+$node_pub_sub->init(allows_streaming => 'logical');
+$node_pub_sub->start;
+
+my $node_sub = get_new_node('testsubscriber1');
+$node_sub->init(allows_streaming => 'logical');
+$node_sub->start;
+
+# Create the tables in all nodes.
+$node_pub->safe_psql('postgres', "CREATE TABLE tab1 (a int)");
+$node_pub_sub->safe_psql('postgres', "CREATE TABLE tab1 (a int)");
+$node_sub->safe_psql('postgres', "CREATE TABLE tab1 (a int)");
+
+# Create a cascaded replication setup like:
+# N1 - Create publication testpub1.
+# N2 - Create publication testpub2 and also include subscriber which subscribes
+#      to testpub1.
+# N3 - Create subscription testsub2 subscribes to testpub2.
+#
+# Note that subscription on N3 needs to be created before subscription on N2 to
+# test whether the data written by tablesync worker of N2 gets replicated.
+$node_pub->safe_psql('postgres',
+	"CREATE PUBLICATION testpub1 FOR TABLE tab1");
+
+$node_pub_sub->safe_psql('postgres',
+	"CREATE PUBLICATION testpub2 FOR TABLE tab1");
+
+my $publisher1_connstr = $node_pub->connstr . ' dbname=postgres';
+my $publisher2_connstr = $node_pub_sub->connstr . ' dbname=postgres';
+
+$node_sub->safe_psql('postgres',
+	"CREATE SUBSCRIPTION testsub2 CONNECTION '$publisher2_connstr' PUBLICATION testpub2"
+);
+
+$node_pub_sub->safe_psql('postgres',
+	"CREATE SUBSCRIPTION testsub1 CONNECTION '$publisher1_connstr' PUBLICATION testpub1"
+);
+
+$node_pub->safe_psql('postgres',
+	"INSERT INTO tab1 values(generate_series(1,10))");
+
+# Verify that the data is cascaded from testpub1 to testsub1 and further from
+# testpub2 (which had testsub1) to testsub2.
+$node_pub->wait_for_catchup('testsub1');
+$node_pub_sub->wait_for_catchup('testsub2');
+
+# Drop subscriptions as we don't need them anymore
+$node_pub_sub->safe_psql('postgres', "DROP SUBSCRIPTION testsub1");
+$node_sub->safe_psql('postgres', "DROP SUBSCRIPTION testsub2");
+
+# Drop publications as we don't need them anymore
+$node_pub->safe_psql('postgres', "DROP PUBLICATION testpub1");
+$node_pub_sub->safe_psql('postgres', "DROP PUBLICATION testpub2");
+
+# Clean up the tables on both publisher and subscriber as we don't need them
+$node_pub->safe_psql('postgres', "DROP TABLE tab1");
+$node_pub_sub->safe_psql('postgres', "DROP TABLE tab1");
+$node_sub->safe_psql('postgres', "DROP TABLE tab1");
+
+$node_pub->stop('fast');
+$node_pub_sub->stop('fast');
+$node_sub->stop('fast');
 
 # https://postgr.es/m/OS0PR01MB61133CA11630DAE45BC6AD95FB939%40OS0PR01MB6113.jpnprd01.prod.outlook.com
 
@@ -207,11 +273,8 @@ $node_subscriber->safe_psql('postgres',
 	"CREATE SUBSCRIPTION tap_sub CONNECTION '$publisher_connstr' PUBLICATION tap_pub"
 );
 
-$node_publisher->wait_for_catchup('tap_sub');
-
-# Also wait for initial table sync to finish
-$node_subscriber->poll_query_until('postgres', $synced_query)
-  or die "Timed out while waiting for subscriber to synchronize data";
+# Wait for initial table sync to finish
+$node_subscriber->wait_for_subscription_sync($node_publisher, 'tap_sub');
 
 is( $node_subscriber->safe_psql(
 		'postgres', "SELECT * FROM tab_replidentity_index"),
@@ -235,3 +298,67 @@ is( $node_subscriber->safe_psql(
 
 $node_publisher->stop('fast');
 $node_subscriber->stop('fast');
+
+# The bug was that when the REPLICA IDENTITY FULL is used with dropped or
+# generated columns, we fail to apply updates and deletes
+my $node_publisher_d_cols = get_new_node('node_publisher_d_cols');
+$node_publisher_d_cols->init(allows_streaming => 'logical');
+$node_publisher_d_cols->start;
+
+my $node_subscriber_d_cols = get_new_node('node_subscriber_d_cols');
+$node_subscriber_d_cols->init(allows_streaming => 'logical');
+$node_subscriber_d_cols->start;
+
+$node_publisher_d_cols->safe_psql(
+	'postgres', qq(
+	CREATE TABLE dropped_cols (a int, b_drop int, c int);
+	ALTER TABLE dropped_cols REPLICA IDENTITY FULL;
+	CREATE TABLE generated_cols (a int, b_gen int GENERATED ALWAYS AS (5 * a) STORED, c int);
+	ALTER TABLE generated_cols REPLICA IDENTITY FULL;
+	CREATE PUBLICATION pub_dropped_cols FOR TABLE dropped_cols, generated_cols;
+	-- some initial data
+	INSERT INTO dropped_cols VALUES (1, 1, 1);
+	INSERT INTO generated_cols (a, c) VALUES (1, 1);
+));
+
+$node_subscriber_d_cols->safe_psql(
+	'postgres', qq(
+	 CREATE TABLE dropped_cols (a int, b_drop int, c int);
+	 CREATE TABLE generated_cols (a int, b_gen int GENERATED ALWAYS AS (5 * a) STORED, c int);
+));
+
+my $publisher_connstr_d_cols =
+  $node_publisher_d_cols->connstr . ' dbname=postgres';
+$node_subscriber_d_cols->safe_psql('postgres',
+	"CREATE SUBSCRIPTION sub_dropped_cols CONNECTION '$publisher_connstr_d_cols' PUBLICATION pub_dropped_cols"
+);
+$node_subscriber_d_cols->wait_for_subscription_sync;
+
+$node_publisher_d_cols->safe_psql(
+	'postgres', qq(
+		ALTER TABLE dropped_cols DROP COLUMN b_drop;
+));
+$node_subscriber_d_cols->safe_psql(
+	'postgres', qq(
+		ALTER TABLE dropped_cols DROP COLUMN b_drop;
+));
+
+$node_publisher_d_cols->safe_psql(
+	'postgres', qq(
+		UPDATE dropped_cols SET a = 100;
+		UPDATE generated_cols SET a = 100;
+));
+$node_publisher_d_cols->wait_for_catchup('sub_dropped_cols');
+
+is( $node_subscriber_d_cols->safe_psql(
+		'postgres', "SELECT count(*) FROM dropped_cols WHERE a = 100"),
+	qq(1),
+	'replication with RI FULL and dropped columns');
+
+is( $node_subscriber_d_cols->safe_psql(
+		'postgres', "SELECT count(*) FROM generated_cols WHERE a = 100"),
+	qq(1),
+	'replication with RI FULL and generated columns');
+
+$node_publisher_d_cols->stop('fast');
+$node_subscriber_d_cols->stop('fast');

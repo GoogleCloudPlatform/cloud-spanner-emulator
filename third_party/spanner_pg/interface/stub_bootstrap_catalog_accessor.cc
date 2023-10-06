@@ -40,6 +40,12 @@ const PgBootstrapCatalog* GetPgBootstrapCatalog() {
   return nullptr;
 }
 
+absl::StatusOr<PgCollationData> GetPgCollationDataFromBootstrap(
+    const PgBootstrapCatalog* catalog, absl::string_view collation_name) {
+  return absl::UnimplementedError(
+      "invoked stub GetPgCollationDataFromBootstrap");
+}
+
 absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
     const PgBootstrapCatalog* catalog, absl::string_view type_name) {
   return absl::UnimplementedError("invoked stub GetPgTypeDataFromBootstrap");

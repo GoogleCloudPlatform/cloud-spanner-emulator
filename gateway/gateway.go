@@ -27,8 +27,8 @@ import (
 	"os/signal"
 	"time"
 
-	"google.golang.org/grpc"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/grpc"
 
 	instancepb "cloud.google.com/go/spanner/admin/instance/apiv1/instancepb"
 	lrgw "cloud_spanner_emulator/gateway/longrunning_operations_gateway"

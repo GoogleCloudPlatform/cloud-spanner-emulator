@@ -51,6 +51,10 @@ CREATE TABLE row_deletion_policy (
   created_at TIMESTAMP,
 ) PRIMARY KEY (key), ROW DELETION POLICY (OLDER_THAN(created_at, INTERVAL 7 DAY));
 CREATE VIEW base_view SQL SECURITY INVOKER AS SELECT base.key1 FROM base;
+CREATE CHANGE STREAM test_stream FOR base(bool_value,int_value),no_action_child OPTIONS ( retention_period = '36h' );
+CREATE CHANGE STREAM test_stream2 FOR base,no_action_child(),cascade_child(value1,value2,created_at) OPTIONS ( retention_period = '2d' , value_capture_type = 'OLD_AND_NEW_VALUES' );
+CREATE CHANGE STREAM test_stream3 FOR ALL;
+CREATE CHANGE STREAM test_stream4;
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE base (
@@ -122,3 +126,8 @@ CREATE TABLE row_deletion_policy (
   PRIMARY KEY (key)
 ) TTL INTERVAL '7 days' on created_at;
 CREATE VIEW base_view SQL SECURITY INVOKER AS SELECT base.key1 FROM base;
+CREATE CHANGE STREAM test_stream FOR base(bool_value,int_value),no_action_child WITH ( retention_period = '36h' );
+CREATE CHANGE STREAM test_stream2 FOR base,no_action_child(),cascade_child(value1,value2,created_at) WITH ( retention_period = '2d' , value_capture_type = 'OLD_AND_NEW_VALUES' );
+CREATE CHANGE STREAM test_stream3 FOR ALL;
+CREATE CHANGE STREAM test_stream4;
+

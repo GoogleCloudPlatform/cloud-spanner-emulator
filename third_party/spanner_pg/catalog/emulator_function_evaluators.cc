@@ -31,16 +31,18 @@
 
 #include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
 
-#include <functional>
-#include <memory>
+#include <cstdint>
+#include <string>
 
 #include "zetasql/public/function.h"
 #include "zetasql/public/value.h"
 #include "absl/status/statusor.h"
-#include "absl/types/span.h"
+#include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"
 #include "third_party/spanner_pg/interface/pg_timezone.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"
+#include "third_party/spanner_pg/shims/error_shim.h"
 #include "zetasql/base/status_macros.h"
 
 namespace postgres_translator {
@@ -67,6 +69,51 @@ zetasql::FunctionEvaluator PGFunctionEvaluator(
 
     return result;
   };
+}
+
+absl::StatusOr<zetasql::Value> EmulatorJsonBArrayElementText(
+    absl::string_view jsonb, int32_t element) {
+  if (element < 0) {
+    return zetasql::Value::NullString();
+  }
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum jsonb_in_datum,
+      postgres_translator::CheckedNullableOidFunctionCall1(
+          F_JSONB_IN, CStringGetDatum(std::string(jsonb.data()).c_str())));
+  Datum element_in_datum = Int32GetDatum(element);
+
+  // Call `jsonb_array_element_text` on `jsonb_in_datum` and `element_in_datum`.
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum result_text_datum,
+      postgres_translator::CheckedNullableOidFunctionCall2(
+          F_JSONB_ARRAY_ELEMENT_TEXT, jsonb_in_datum, element_in_datum));
+  if (result_text_datum == NULL_DATUM) {
+    return zetasql::Value::NullString();
+  }
+  ZETASQL_ASSIGN_OR_RETURN(char* result,
+                   CheckedPgTextDatumGetCString(result_text_datum));
+  return zetasql::Value::String(result);
+}
+
+absl::StatusOr<zetasql::Value> EmulatorJsonBObjectFieldText(
+    absl::string_view jsonb, absl::string_view key) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum jsonb_in_datum,
+      postgres_translator::CheckedNullableOidFunctionCall1(
+          F_JSONB_IN, CStringGetDatum(std::string(jsonb.data()).c_str())));
+  Datum key_in_datum = CStringGetTextDatum(std::string(key.data()).c_str());
+
+  // Call `jsonb_object_field_text` on `jsonb_in_datum` and `key_in_datum`.
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum result_text_datum,
+      postgres_translator::CheckedNullableOidFunctionCall2(
+          F_JSONB_OBJECT_FIELD_TEXT, jsonb_in_datum, key_in_datum));
+  if (result_text_datum == NULL_DATUM) {
+    return zetasql::Value::NullString();
+  }
+  ZETASQL_ASSIGN_OR_RETURN(char* result,
+                   CheckedPgTextDatumGetCString(result_text_datum));
+  return zetasql::Value::String(result);
 }
 
 }  // namespace postgres_translator

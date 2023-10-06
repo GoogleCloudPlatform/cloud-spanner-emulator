@@ -33,6 +33,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 namespace {
+
 class QueryableChangeStreamTvfTest : public testing::Test {
  public:
   QueryableChangeStreamTvfTest()
@@ -63,7 +64,7 @@ TEST_F(QueryableChangeStreamTvfTest, CreateChangeStreamTvfOk) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       auto queryable_tvf,
       QueryableChangeStreamTvf::Create(schema_change_stream, analyzer_options_,
-                                       catalog_.get(), &type_factory_));
+                                       catalog_.get(), &type_factory_, false));
   EXPECT_EQ(queryable_tvf->Name(), "READ_change_stream_test_table");
   EXPECT_EQ(queryable_tvf->result_schema().num_columns(), 1);
   EXPECT_EQ(queryable_tvf->GetSignature(0)->arguments().size(), 5);

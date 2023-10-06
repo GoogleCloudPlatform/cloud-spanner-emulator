@@ -27,6 +27,7 @@
 #include "absl/time/clock.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
+#include "common/errors.h"
 
 namespace google {
 namespace spanner {
@@ -36,7 +37,8 @@ namespace test {
 
 namespace {
 
-TEST_P(SchemaUpdaterTest, CreateChangeStream) {
+using zetasql_base::testing::IsOk;
+TEST_P(SchemaUpdaterTest, CreateChangeStreamBasic) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -84,8 +86,16 @@ TEST_P(SchemaUpdaterTest, CreateChangeStream) {
                 "is_last_record_in_transaction_in_partition"),
             nullptr);
   EXPECT_NE(change_stream_data_table->FindColumn("table_name"), nullptr);
-  EXPECT_NE(change_stream_data_table->FindColumn("column_types"), nullptr);
-  EXPECT_NE(change_stream_data_table->FindColumn("mods"), nullptr);
+  EXPECT_NE(change_stream_data_table->FindColumn("column_types_name"), nullptr);
+  EXPECT_NE(change_stream_data_table->FindColumn("column_types_type"), nullptr);
+  EXPECT_NE(change_stream_data_table->FindColumn("column_types_is_primary_key"),
+            nullptr);
+  EXPECT_NE(
+      change_stream_data_table->FindColumn("column_types_ordinal_position"),
+      nullptr);
+  EXPECT_NE(change_stream_data_table->FindColumn("mods_keys"), nullptr);
+  EXPECT_NE(change_stream_data_table->FindColumn("mods_new_values"), nullptr);
+  EXPECT_NE(change_stream_data_table->FindColumn("mods_old_values"), nullptr);
   EXPECT_NE(change_stream_data_table->FindColumn("mod_type"), nullptr);
   EXPECT_NE(change_stream_data_table->FindColumn("value_capture_type"),
             nullptr);
@@ -100,7 +110,84 @@ TEST_P(SchemaUpdaterTest, CreateChangeStream) {
             nullptr);
 }
 
-TEST_P(SchemaUpdaterTest, CreateChangeStream_TrackInterleavedTables) {
+TEST_P(SchemaUpdaterTest, CanDropImplicitlyTrackedTablesColumns) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema({R"(
+          CREATE TABLE Users(
+            UserId     INT64 NOT NULL,
+            Name       STRING(MAX),
+            Age        INT64,
+          ) PRIMARY KEY (UserId)
+        )",
+                                     R"(CREATE CHANGE STREAM C FOR ALL)"}));
+  // It's allowed to drop a column when it's only tracked by a change stream
+  // tracking ALL.
+  EXPECT_THAT(UpdateSchema(schema.get(),
+                           {
+                               R"(
+      ALTER TABLE Users DROP Column Name)"})
+                  .status(),
+              IsOk());
+  // It's allowed to drop a table when it's only tracked by a change stream
+  // tracking ALL.
+  EXPECT_THAT(UpdateSchema(schema.get(),
+                           {
+                               R"(
+      Drop Table Users)"})
+                  .status(),
+              IsOk());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      schema, CreateSchema({R"(
+          CREATE TABLE Users(
+            UserId     INT64 NOT NULL,
+            Name       STRING(MAX),
+            Age        INT64,
+          ) PRIMARY KEY (UserId)
+        )",
+                            R"(CREATE CHANGE STREAM CS_Users FOR Users)"}));
+  // It's allowed to drop a column when it's only tracked by a change stream
+  // tracking the entire table implicitly.
+  EXPECT_THAT(UpdateSchema(schema.get(),
+                           {
+                               R"(
+      ALTER TABLE Users DROP Column Name)"})
+                  .status(),
+              IsOk());
+  // It's not allowed to drop a table when it's tracked by a change stream
+  // tracking the entire table by the table name.
+  EXPECT_THAT(
+      UpdateSchema(schema.get(),
+                   {
+                       R"(
+      Drop Table Users)"}),
+      StatusIs(error::DropTableWithChangeStream("Users", 1, "CS_Users")));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      schema,
+      CreateSchema({R"(
+          CREATE TABLE Users(
+            UserId     INT64 NOT NULL,
+            Name       STRING(MAX),
+            Age        INT64,
+          ) PRIMARY KEY (UserId)
+        )",
+                    R"(CREATE CHANGE STREAM CS_Users FOR Users(Name))"}));
+  // It's not allowed to drop a column when it's tracked by a change stream
+  // tracking the column explicitly.
+  EXPECT_THAT(UpdateSchema(schema.get(),
+                           {
+                               R"(
+      ALTER TABLE Users DROP Column Name)"}),
+              StatusIs(error::DropColumnWithChangeStream("Users", "Name", 1,
+                                                         "CS_Users")));
+  EXPECT_THAT(
+      UpdateSchema(schema.get(),
+                   {
+                       R"(
+      DROP TABLE Users)"}),
+      StatusIs(error::DropTableWithChangeStream("Users", 1, "CS_Users")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateChangeStreamTrackingInterleavedTables) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema({R"(
           CREATE TABLE Users(
@@ -131,7 +218,7 @@ TEST_P(SchemaUpdaterTest, CreateChangeStream_TrackInterleavedTables) {
   EXPECT_EQ(child->FindColumn("Starred")->change_streams().size(), 1);
 }
 
-TEST_P(SchemaUpdaterTest, CreateChangeStream_AlreadyExists) {
+TEST_P(SchemaUpdaterTest, CreateChangeStreamAlreadyExists) {
   EXPECT_THAT(CreateSchema({
                   R"(
       CREATE CHANGE STREAM C FOR ALL)",
@@ -140,7 +227,24 @@ TEST_P(SchemaUpdaterTest, CreateChangeStream_AlreadyExists) {
               StatusIs(error::SchemaObjectAlreadyExists("Change Stream", "C")));
 }
 
-TEST_P(SchemaUpdaterTest, CreateChangeStream_ObjectsTrackedSuccessfully) {
+TEST_P(SchemaUpdaterTest, CreateChangeStream_NullOptions) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+              CREATE TABLE Singers (
+  SingerId STRING(20) NOT NULL,
+  Name STRING(20),
+) PRIMARY KEY(SingerId)
+            )",
+                                                  R"(
+              CREATE CHANGE STREAM change_stream FOR Singers
+            )"}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      schema,
+      UpdateSchema(
+          schema.get(),
+          {R"(ALTER CHANGE STREAM change_stream SET OPTIONS (value_capture_type = NULL, retention_period = NULL))"}));
+}
+
+TEST_P(SchemaUpdaterTest, CreateChangeStreamRegisteredSuccessfully) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema({R"(
       CREATE TABLE T (
@@ -161,7 +265,190 @@ TEST_P(SchemaUpdaterTest, CreateChangeStream_ObjectsTrackedSuccessfully) {
   ASSERT_TRUE(schema->FindTable("T")->FindColumn("c1")->FindChangeStream("C"));
 }
 
-TEST_P(SchemaUpdaterTest, CreateChangeStream_ExplicitlyTrackColumns) {
+// Make sure change_streams of the table object is updated
+// after altering the change stream to track the entire database or track the
+// entire table by table name.
+TEST_P(SchemaUpdaterTest, AlterChangeStreamImplicitlyTrackingEntireTable) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+              CREATE TABLE test_table (
+                int64_col INT64 NOT NULL,
+                string_col STRING(MAX),
+                bool_col BOOL,
+              ) PRIMARY KEY (int64_col)
+            )",
+                                                  R"(
+              CREATE CHANGE STREAM change_stream_test_table FOR test_table(string_col)
+            )"}));
+  EXPECT_EQ(schema->FindTable("test_table")->change_streams().size(), 0);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+              ALTER CHANGE STREAM change_stream_test_table SET FOR ALL
+            )"}));
+  std::vector<std::string> tracked_columns =
+      schema->FindChangeStream("change_stream_test_table")
+          ->tracked_tables_columns()["test_table"];
+  EXPECT_FALSE(std::find(tracked_columns.begin(), tracked_columns.end(),
+                         "bool_col") == tracked_columns.end());
+  EXPECT_EQ(schema->FindTable("test_table")
+                ->FindColumn("bool_col")
+                ->change_streams()
+                .size(),
+            1);
+  EXPECT_EQ(schema->FindTable("test_table")->change_streams().size(), 1);
+  EXPECT_EQ(schema->FindTable("test_table")->change_streams()[0]->Name(),
+            "change_stream_test_table");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+              ALTER CHANGE STREAM change_stream_test_table SET FOR test_table(bool_col)
+            )"}));
+  EXPECT_EQ(schema->FindTable("test_table")->change_streams().size(), 0);
+  EXPECT_EQ(schema->FindTable("test_table")
+                ->FindColumn("bool_col")
+                ->change_streams()
+                .size(),
+            1);
+  EXPECT_EQ(schema->FindTable("test_table")
+                ->FindColumn("string_col")
+                ->change_streams()
+                .size(),
+            0);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+              ALTER CHANGE STREAM change_stream_test_table SET FOR test_table
+            )"}));
+  EXPECT_EQ(schema->FindTable("test_table")->change_streams().size(), 1);
+}
+
+// Make sure change_streams of the table object is updated
+// after dropping the change stream, which tracks the table by its name.
+TEST_P(SchemaUpdaterTest,
+       CreateChangeStreamImplicitlyTrackingEntireTableByTableName) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+              CREATE TABLE test_table (
+                int64_col INT64 NOT NULL,
+                string_col STRING(MAX)
+              ) PRIMARY KEY (int64_col)
+            )",
+                                                  R"(
+              CREATE CHANGE STREAM change_stream_test_table FOR test_table
+            )"}));
+  EXPECT_EQ(schema->FindTable("test_table")->change_streams()[0]->Name(),
+            "change_stream_test_table");
+  EXPECT_EQ(schema->FindTable("test_table")
+                ->FindColumn("string_col")
+                ->change_streams()
+                .size(),
+            1);
+  EXPECT_EQ(schema->FindTable("test_table")
+                ->FindColumn("string_col")
+                ->change_streams()[0]
+                ->Name(),
+            "change_stream_test_table");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      schema,
+      UpdateSchema(schema.get(),
+                   {R"(ALTER TABLE test_table ADD COLUMN added_col INT64)"}));
+  EXPECT_EQ(schema->FindTable("test_table")
+                ->FindColumn("added_col")
+                ->change_streams()[0]
+                ->Name(),
+            "change_stream_test_table");
+  EXPECT_EQ(schema->FindTable("test_table")->change_streams()[0]->Name(),
+            "change_stream_test_table");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      schema, UpdateSchema(schema.get(),
+                           {R"(DROP CHANGE STREAM change_stream_test_table)"}));
+  // Make sure table->change_streams() is updated when the
+  // change stream implicitly tracking the entire table is dropped
+  EXPECT_EQ(schema->FindTable("test_table")->change_streams().size(), 0);
+  EXPECT_EQ(schema->FindTable("test_table")
+                ->FindColumn("string_col")
+                ->change_streams()
+                .size(),
+            0);
+  EXPECT_EQ(schema->FindTable("test_table")
+                ->FindColumn("added_col")
+                ->change_streams()
+                .size(),
+            0);
+}
+
+// Make sure change_streams of each table object is
+// updated after dropping the change stream, which tracks the table by tracking
+// the entire database.
+TEST_P(SchemaUpdaterTest,
+       CreateChangeStreamImplicitlyTrackingEntireTableByAll) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+              CREATE TABLE test_table1 (
+                int64_col INT64 NOT NULL,
+                string_col STRING(MAX)
+              ) PRIMARY KEY (int64_col)
+            )",
+                                                  R"(
+              CREATE TABLE test_table2 (
+                int64_col INT64 NOT NULL,
+                string_col STRING(MAX)
+              ) PRIMARY KEY (int64_col)
+            )",
+                                                  R"(
+              CREATE CHANGE STREAM change_stream_test_table FOR ALL
+            )"}));
+  EXPECT_EQ(schema->FindTable("test_table1")->change_streams().size(), 1);
+  EXPECT_EQ(schema->FindTable("test_table1")->change_streams()[0]->Name(),
+            "change_stream_test_table");
+  EXPECT_EQ(schema->FindTable("test_table2")->change_streams().size(), 1);
+  EXPECT_EQ(schema->FindTable("test_table2")->change_streams()[0]->Name(),
+            "change_stream_test_table");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      schema,
+      UpdateSchema(schema.get(),
+                   {R"(ALTER TABLE test_table1 ADD COLUMN added_col INT64)"}));
+  EXPECT_EQ(schema->FindTable("test_table1")
+                ->FindColumn("added_col")
+                ->change_streams()[0]
+                ->Name(),
+            "change_stream_test_table");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      schema, UpdateSchema(schema.get(),
+                           {R"(DROP CHANGE STREAM change_stream_test_table)"}));
+  // Make sure table->change_streams() is updated when the
+  // change stream implicitly tracking the entire table is dropped
+  EXPECT_EQ(schema->FindTable("test_table1")->change_streams().size(), 0);
+  EXPECT_EQ(schema->FindTable("test_table2")->change_streams().size(), 0);
+  EXPECT_EQ(schema->FindTable("test_table1")
+                ->FindColumn("string_col")
+                ->change_streams()
+                .size(),
+            0);
+  EXPECT_EQ(schema->FindTable("test_table1")
+                ->FindColumn("added_col")
+                ->change_streams()
+                .size(),
+            0);
+}
+
+// Change stremas tracking the entire table by explicitly tracks all of the
+// table's columns should not be included in the table's list of
+// change_streams.
+TEST_P(SchemaUpdaterTest,
+       CreateChangeStreamExplicitlyTrackingAllColumnsInATable) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+              CREATE TABLE test_table (
+                int64_col INT64 NOT NULL,
+                string_col STRING(MAX)
+              ) PRIMARY KEY (int64_col)
+            )",
+                                                  R"(
+              CREATE CHANGE STREAM change_stream_test_table FOR test_table(string_col)
+            )"}));
+  // Make sure change stremas explicitly tracking columns of a table doesn't
+  // count to change streams tracking the entire table
+  EXPECT_EQ(schema->FindTable("test_table")->change_streams().size(), 0);
+  EXPECT_EQ(schema->FindTable("test_table")
+                ->FindColumn("string_col")
+                ->change_streams()[0]
+                ->Name(),
+            "change_stream_test_table");
+}
+
+TEST_P(SchemaUpdaterTest, CreateChangeStreamExplicitlyTrackingColumns) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
               CREATE TABLE test_table (
                 int64_col INT64 NOT NULL,
@@ -174,7 +461,7 @@ TEST_P(SchemaUpdaterTest, CreateChangeStream_ExplicitlyTrackColumns) {
   const ChangeStream* change_stream =
       schema->FindChangeStream("change_stream_test_table");
   EXPECT_EQ(change_stream->tracked_tables_columns()["test_table"].size(), 1);
-  ASSERT_TRUE(
+  ASSERT_FALSE(
       schema->FindTable("test_table")->FindChangeStream(change_stream->Name()));
   ASSERT_TRUE(schema->FindTable("test_table")
                   ->FindColumn("string_col")
@@ -185,25 +472,23 @@ TEST_P(SchemaUpdaterTest, CreateChangeStream_ExplicitlyTrackColumns) {
 }
 
 TEST_P(SchemaUpdaterTest,
-       CreateChangeStream_TrackOnlyPKWithOverLimitChangeStreams) {
-  EXPECT_THAT(CreateSchema({R"(
+       CreateChangeStreamTrackOnlyPKWithChangeStreamsNoLimit) {
+  ZETASQL_EXPECT_OK(CreateSchema({R"(
               CREATE TABLE test_table (
                 int64_col INT64 NOT NULL,
                 string_col STRING(MAX)
               ) PRIMARY KEY (int64_col)
             )",
-                            R"(
+                          R"(
               CREATE CHANGE STREAM c1 FOR test_table()
             )",
-                            R"(CREATE CHANGE STREAM c2 FOR test_table())",
-                            R"(CREATE CHANGE STREAM c3 FOR test_table())",
-                            R"(CREATE CHANGE STREAM c4 FOR test_table())"}),
-              StatusIs(error::TooManyChangeStreamsTrackingSameObject(
-                  "c4", 3, "test_table")));
+                          R"(CREATE CHANGE STREAM c2 FOR test_table())",
+                          R"(CREATE CHANGE STREAM c3 FOR test_table())",
+                          R"(CREATE CHANGE STREAM c4 FOR test_table())"}));
 }
 
 TEST_P(SchemaUpdaterTest,
-       CreateChangeStream_TrackNoObjectsOverLimitChangeStreams) {
+       CreateChangeStreamTrackNoObjectsOverLimitChangeStreams) {
   EXPECT_THAT(CreateSchema({R"(
               CREATE TABLE test_table (
                 int64_col INT64 NOT NULL,
@@ -221,7 +506,7 @@ TEST_P(SchemaUpdaterTest,
                   "c5", 3, "test_table")));
 }
 
-TEST_P(SchemaUpdaterTest, AlterChangeStreamSetOptions_TrackSameObjects) {
+TEST_P(SchemaUpdaterTest, AlterChangeStreamSetOptionsTrackSameObjects) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       auto schema,
       CreateSchema(
@@ -244,7 +529,7 @@ TEST_P(SchemaUpdaterTest, AlterChangeStreamSetOptions_TrackSameObjects) {
   EXPECT_NE(itr, tracked_columns.end());
 }
 
-TEST_P(SchemaUpdaterTest, AlterChangeStreamSetForClause_TrackDifferentObjects) {
+TEST_P(SchemaUpdaterTest, AlterChangeStreamSetForClauseTrackDifferentObjects) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema({R"(
       CREATE TABLE T (
@@ -271,7 +556,7 @@ TEST_P(SchemaUpdaterTest, AlterChangeStreamSetForClause_TrackDifferentObjects) {
   ASSERT_FALSE(schema->FindTable("T")->FindChangeStream("C"));
 }
 
-TEST_P(SchemaUpdaterTest, AlterChangeStreamSetForClause_TrackOnlyPK) {
+TEST_P(SchemaUpdaterTest, AlterChangeStreamSetForClauseTrackOnlyPK) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
               CREATE TABLE test_table (
                 int64_col INT64 NOT NULL,
@@ -293,12 +578,12 @@ TEST_P(SchemaUpdaterTest, AlterChangeStreamSetForClause_TrackOnlyPK) {
   EXPECT_EQ(col1->change_streams().size(), 0);
   EXPECT_EQ(col2->change_streams().size(), 0);
   EXPECT_EQ(pk_col->change_streams().size(), 0);
-  EXPECT_EQ(table->change_streams().size(), 1);
+  EXPECT_EQ(table->change_streams().size(), 0);
   const ChangeStream* change_stream =
       schema->FindChangeStream("change_stream_test_table");
   ASSERT_TRUE(!col1->FindChangeStream(change_stream->Name()));
   ASSERT_TRUE(!col2->FindChangeStream(change_stream->Name()));
-  ASSERT_TRUE(table->FindChangeStream(change_stream->Name()));
+  ASSERT_TRUE(!table->FindChangeStream(change_stream->Name()));
 }
 
 TEST_P(SchemaUpdaterTest, AlterChangeStreamDropForClause) {
@@ -319,7 +604,7 @@ TEST_P(SchemaUpdaterTest, AlterChangeStreamDropForClause) {
   ASSERT_FALSE(table->FindColumn("c1")->FindChangeStream("C"));
 }
 
-TEST_P(SchemaUpdaterTest, SetOptions_RetentionPeriod) {
+TEST_P(SchemaUpdaterTest, SetOptionsRetentionPeriod) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (

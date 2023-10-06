@@ -220,7 +220,7 @@ TEST_F(TrackedMemoryReservationTest, Parser) {
                                       "inner join s on t.d=s.d group by t.a, "
                                       "s.b order by s.b, t.a;"};
   for (const auto& test_case : test_cases) {
-    List* parse_tree = raw_parser(test_case.c_str());
+    List* parse_tree = raw_parser(test_case.c_str(), RAW_PARSE_DEFAULT);
     EXPECT_NE(parse_tree, nullptr);  // Parser dies if it can't allocate.
     std::string parse_tree_str =
         pretty_format_node_dump(nodeToString(parse_tree));

@@ -1,0 +1,6 @@
+@Dialect=POSTGRESQL
+CREATE TABLE values(
+  id              bigint NOT NULL PRIMARY KEY,
+  int_value       bigint,
+  double_value    float8
+);

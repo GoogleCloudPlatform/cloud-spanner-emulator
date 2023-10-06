@@ -3,7 +3,7 @@
  * pg_verifybackup.c
  *	  Verify a backup against a backup manifest.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/pg_verifybackup/pg_verifybackup.c
@@ -412,8 +412,8 @@ parse_manifest_file(char *manifest_path, manifest_files_hash **ht_p,
 			report_fatal_error("could not read file \"%s\": %m",
 							   manifest_path);
 		else
-			report_fatal_error("could not read file \"%s\": read %d of %zu",
-							   manifest_path, rc, (size_t) statbuf.st_size);
+			report_fatal_error("could not read file \"%s\": read %d of %lld",
+							   manifest_path, rc, (long long int) statbuf.st_size);
 	}
 
 	/* Close the manifest file. */
@@ -639,8 +639,8 @@ verify_backup_file(verifier_context *context, char *relpath, char *fullpath)
 	if (m->size != sb.st_size)
 	{
 		report_backup_error(context,
-							"\"%s\" has size %zu on disk but size %zu in the manifest",
-							relpath, (size_t) sb.st_size, m->size);
+							"\"%s\" has size %lld on disk but size %zu in the manifest",
+							relpath, (long long int) sb.st_size, m->size);
 		m->bad = true;
 	}
 
@@ -727,13 +727,27 @@ verify_file_checksum(verifier_context *context, manifest_file *m,
 	}
 
 	/* Initialize checksum context. */
-	pg_checksum_init(&checksum_ctx, m->checksum_type);
+	if (pg_checksum_init(&checksum_ctx, m->checksum_type) < 0)
+	{
+		report_backup_error(context, "could not initialize checksum of file \"%s\"",
+							relpath);
+		close(fd);
+		return;
+	}
 
 	/* Read the file chunk by chunk, updating the checksum as we go. */
 	while ((rc = read(fd, buffer, READ_CHUNK_SIZE)) > 0)
 	{
 		bytes_read += rc;
-		pg_checksum_update(&checksum_ctx, buffer, rc);
+		if (pg_checksum_update(&checksum_ctx, buffer, rc) < 0)
+		{
+			report_backup_error(context, "could not update checksum of file \"%s\"",
+								relpath);
+			close(fd);
+			return;
+		}
+
+
 	}
 	if (rc < 0)
 		report_backup_error(context, "could not read file \"%s\": %m",
@@ -768,6 +782,13 @@ verify_file_checksum(verifier_context *context, manifest_file *m,
 
 	/* Get the final checksum. */
 	checksumlen = pg_checksum_final(&checksum_ctx, checksumbuf);
+	if (checksumlen < 0)
+	{
+		report_backup_error(context,
+							"could not finalize checksum of file \"%s\"",
+							relpath);
+		return;
+	}
 
 	/* And check it against the manifest. */
 	if (checksumlen != m->checksum_length)
@@ -796,10 +817,8 @@ parse_required_wal(verifier_context *context, char *pg_waldump_path,
 
 		pg_waldump_cmd = psprintf("\"%s\" --quiet --path=\"%s\" --timeline=%u --start=%X/%X --end=%X/%X\n",
 								  pg_waldump_path, wal_directory, this_wal_range->tli,
-								  (uint32) (this_wal_range->start_lsn >> 32),
-								  (uint32) this_wal_range->start_lsn,
-								  (uint32) (this_wal_range->end_lsn >> 32),
-								  (uint32) this_wal_range->end_lsn);
+								  LSN_FORMAT_ARGS(this_wal_range->start_lsn),
+								  LSN_FORMAT_ARGS(this_wal_range->end_lsn));
 		if (system(pg_waldump_cmd) != 0)
 			report_backup_error(context,
 								"WAL parsing failed for timeline %u",

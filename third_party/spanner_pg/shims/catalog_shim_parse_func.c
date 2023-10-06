@@ -110,6 +110,7 @@ FuncDetailCode func_get_detail(List* funcname,
 				Oid *argtypes,
 				bool expand_variadic,
 				bool expand_defaults,
+				bool include_out_arguments,
 				Oid *funcid,	/* return value */
 				Oid *rettype,	/* return value */
 				bool *retset,	/* return value */
@@ -137,7 +138,7 @@ FuncDetailCode func_get_detail(List* funcname,
 	/* Get list of possible candidates from namespace search */
 	raw_candidates = FuncnameGetCandidates(funcname, nargs, fargnames,
 										   expand_variadic, expand_defaults,
-										   false);
+										   include_out_arguments, false);
 
 	/*
 	 * Quickly check if there is an exact match to the input datatypes (there
@@ -570,7 +571,7 @@ Node* ParseFuncOrColumn(ParseState* pstate, List* funcname,
 
 	fdresult = func_get_detail(funcname, fargs, argnames, nargs,
 							   actual_arg_types,
-							   !func_variadic, true,
+							   !func_variadic, true, proc_call,
 							   &funcid, &rettype, &retset,
 							   &nvargs, &vatype,
 							   &declared_arg_types, &argdefaults);

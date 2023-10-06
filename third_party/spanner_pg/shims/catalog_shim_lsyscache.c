@@ -592,3 +592,52 @@ get_typlenbyvalalign(Oid typid, int16_t *typlen, bool *typbyval,
 	*typbyval = typtup->typbyval;
 	*typalign = typtup->typalign;
 }
+
+/*
+ * get_typsubscript
+ *
+ *		Given the type OID, return the type's subscripting handler's OID,
+ *		if it has one.
+ *
+ * If typelemp isn't NULL, we also store the type's typelem value there.
+ * This saves some callers an extra catalog lookup.
+ */
+RegProcedure
+get_typsubscript(Oid typid, Oid *typelemp)
+{
+	const FormData_pg_type* typform = GetTypeFromBootstrapCatalog(typid);
+	if (typform == NULL) {
+		elog(ERROR, "catalog lookup failed for type %u", typid);
+	}
+	
+	if (typform->typelem == InvalidOid) {
+		ereport(ERROR,
+				(errcode(ERRCODE_DATATYPE_MISMATCH),
+				 errmsg("cannot subscript type %s because it is not an array",
+						format_type_be(typid))));
+	}
+
+	RegProcedure handler = typform->typsubscript;
+	if (typelemp) {
+		*typelemp = typform->typelem;
+	}
+
+	return handler;
+}
+
+/*
+ * get_multirange_range
+ *		Returns the range type of a given multirange
+ *
+ * Returns InvalidOid if the type is not a multirange.
+ */
+Oid
+get_multirange_range(Oid multirangeOid)
+{
+	const FormData_pg_type* typform = GetTypeFromBootstrapCatalog(multirangeOid);
+	if (typform == NULL) {
+		return InvalidOid;
+	}
+	
+	return typform->oid;
+}

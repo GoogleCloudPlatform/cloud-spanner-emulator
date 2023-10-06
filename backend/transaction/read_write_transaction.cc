@@ -356,6 +356,7 @@ absl::Status ReadWriteTransaction::ProcessWriteOps(
        action_context_->change_stream_effects()->GetWriteOps()) {
     ZETASQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(writeop));
   }
+  action_context_->change_stream_effects()->ClearWriteOps();
   return absl::OkStatus();
 }
 

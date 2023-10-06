@@ -57,6 +57,7 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
             .enable_check_constraint = true,
             .enable_column_default_values = true,
             .enable_views = true,
+            .enable_fk_delete_cascade_action = true,
         }) {}
   void SetUp() override {
     // Setup emulator server.

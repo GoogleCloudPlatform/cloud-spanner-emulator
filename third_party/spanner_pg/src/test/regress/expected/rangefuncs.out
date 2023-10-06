@@ -1556,7 +1556,7 @@ DROP FUNCTION dup(anyelement);
 CREATE FUNCTION bad (f1 int, out f2 anyelement, out f3 anyarray)
 AS 'select $1, array[$1,$1]' LANGUAGE sql;
 ERROR:  cannot determine result data type
-DETAIL:  A result of type anyelement requires at least one input of type anyelement, anyarray, anynonarray, anyenum, or anyrange.
+DETAIL:  A result of type anyelement requires at least one input of type anyelement, anyarray, anynonarray, anyenum, anyrange, or anymultirange.
 CREATE FUNCTION dup (f1 anycompatible, f2 anycompatiblearray, f3 out anycompatible, f4 out anycompatiblearray)
 AS 'select $1, $2' LANGUAGE sql;
 SELECT dup(22, array[44]);
@@ -1609,7 +1609,7 @@ DROP FUNCTION dup(f1 anycompatiblerange);
 CREATE FUNCTION bad (f1 anyarray, out f2 anycompatible, out f3 anycompatiblearray)
 AS 'select $1, array[$1,$1]' LANGUAGE sql;
 ERROR:  cannot determine result data type
-DETAIL:  A result of type anycompatible requires at least one input of type anycompatible, anycompatiblearray, anycompatiblenonarray, or anycompatiblerange.
+DETAIL:  A result of type anycompatible requires at least one input of type anycompatible, anycompatiblearray, anycompatiblenonarray, anycompatiblerange, or anycompatiblemultirange.
 --
 -- table functions
 --
@@ -2153,6 +2153,19 @@ select * from testrngfunc();
  3.000000 | 4.00
 (2 rows)
 
+-- Check a couple of error cases while we're here
+select * from testrngfunc() as t(f1 int8,f2 int8);  -- fail, composite result
+ERROR:  a column definition list is redundant for a function returning a named composite type
+LINE 1: select * from testrngfunc() as t(f1 int8,f2 int8);
+                                         ^
+select * from pg_get_keywords() as t(f1 int8,f2 int8);  -- fail, OUT params
+ERROR:  a column definition list is redundant for a function with OUT parameters
+LINE 1: select * from pg_get_keywords() as t(f1 int8,f2 int8);
+                                             ^
+select * from sin(3) as t(f1 int8,f2 int8);  -- fail, scalar result type
+ERROR:  a column definition list is only allowed for functions returning "record"
+LINE 1: select * from sin(3) as t(f1 int8,f2 int8);
+                                  ^
 drop type rngfunc_type cascade;
 NOTICE:  drop cascades to function testrngfunc()
 --

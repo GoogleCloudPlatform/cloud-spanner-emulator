@@ -50,6 +50,7 @@ cc_library(
     name = "executor",
     srcs = [
         "execAmi.c",
+        "execAsync.c",
         "execCurrent.c",
         "execExpr.c",
         "execExprInterp.c",
@@ -88,6 +89,7 @@ cc_library(
         "nodeLimit.c",
         "nodeLockRows.c",
         "nodeMaterial.c",
+        "nodeMemoize.c",
         "nodeMergeAppend.c",
         "nodeMergejoin.c",
         "nodeModifyTable.c",
@@ -103,6 +105,7 @@ cc_library(
         "nodeSubplan.c",
         "nodeSubqueryscan.c",
         "nodeTableFuncscan.c",
+        "nodeTidrangescan.c",
         "nodeTidscan.c",
         "nodeUnique.c",
         "nodeValuesscan.c",

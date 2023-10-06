@@ -34,7 +34,7 @@
  * same flex version, or if they don't use the same flex options.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/fe_utils/psqlscan_int.h
@@ -114,6 +114,14 @@ typedef struct PsqlScanStateData
 	int			paren_depth;	/* depth of nesting in parentheses */
 	int			xcdepth;		/* depth of nesting in slash-star comments */
 	char	   *dolqstart;		/* current $foo$ quote start string */
+
+	/*
+	 * State to track boundaries of BEGIN ... END blocks in function
+	 * definitions, so that semicolons do not send query too early.
+	 */
+	int			identifier_count;	/* identifiers since start of statement */
+	char		identifiers[4]; /* records the first few identifiers */
+	int			begin_depth;	/* depth of begin/end pairs */
 
 	/*
 	 * Callback functions provided by the program making use of the lexer,

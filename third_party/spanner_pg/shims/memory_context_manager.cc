@@ -42,10 +42,6 @@
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_builder.h"
 
-extern "C" {
-// Internal PG function for freeing memory inside PG's thread-local freelists
-void AsetDeleteFreelists(void);
-}
 
 namespace postgres_translator {
 
@@ -87,17 +83,19 @@ absl::StatusOr<ActiveMemoryContext> MemoryContextManager::Init(
 }
 
 // CacheMemoryContext is initialized on-demand. Clear it if necessary.
-static void DeleteCacheMemoryContext() {
+static absl::Status DeleteCacheMemoryContext() {
   if (MemoryContext temp_cache = CacheMemoryContext; temp_cache != nullptr) {
     CacheMemoryContext = nullptr;
-    MemoryContextDelete(temp_cache);
+    ZETASQL_RET_CHECK_OK(CheckedPgMemoryContextDelete(temp_cache));
   }
+  return absl::OkStatus();
 }
 
 absl::Status MemoryContextManager::Reset() {
   ZETASQL_RET_CHECK_NE(CurrentMemoryContext, nullptr) << "No memory context in slot.";
 
-  DeleteCacheMemoryContext();  // Must delete because it lives inside Current.
+  // Must delete because it lives inside Current.
+  ZETASQL_RET_CHECK_OK(DeleteCacheMemoryContext());
   CurrentMemoryContext = TopMemoryContext;  // Reset to the original context.
   MemoryContextReset(CurrentMemoryContext);
   return absl::OkStatus();
@@ -106,14 +104,14 @@ absl::Status MemoryContextManager::Reset() {
 absl::Status MemoryContextManager::Clear() {
   ZETASQL_RET_CHECK_NE(CurrentMemoryContext, nullptr) << "No memory context in slot.";
 
-  DeleteCacheMemoryContext();
+  ZETASQL_RET_CHECK_OK(DeleteCacheMemoryContext());
   MemoryContext context = TopMemoryContext;
   CurrentMemoryContext = nullptr;
   TopMemoryContext = nullptr;
-  MemoryContextDelete(context);
+  ZETASQL_RET_CHECK_OK(CheckedPgMemoryContextDelete(context));
 
   // Clear thread-local freelists as well
-  AsetDeleteFreelists();
+  ZETASQL_RET_CHECK_OK(CheckedPgAsetDeleteFreelists());
 
   return absl::OkStatus();
 }

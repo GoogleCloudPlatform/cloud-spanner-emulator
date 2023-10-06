@@ -189,6 +189,11 @@ absl::Status InvalidDatabaseName(absl::string_view database_id) {
           database_id));
 }
 
+absl::Status CannotCreatePostgreSQLDialectDatabase() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Cannot create a PostgreSQL database.");
+}
+
 // Operation errors.
 absl::Status InvalidOperationId(absl::string_view id) {
   return absl::Status(absl::StatusCode::kInvalidArgument,
@@ -1922,6 +1927,15 @@ absl::Status ForeignKeyReferencingKeyFound(absl::string_view foreign_key,
           "referenced key `$3` in table `$2`. A row with that key exists in "
           "the referencing table `$1`.",
           foreign_key, referencing_table, referenced_table, referencing_key));
+}
+
+absl::Status ForeignKeyOnDeleteActionUnsupported(
+    absl::string_view referential_action) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute(
+          "Foreign key referential action ON DELETE $0 is not supported.",
+          referential_action));
 }
 
 absl::Status CheckConstraintNotEnabled() {

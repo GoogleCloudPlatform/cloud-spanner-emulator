@@ -1,3 +1,6 @@
+
+# Copyright (c) 2021, PostgreSQL Global Development Group
+
 package Solution;
 
 #
@@ -62,7 +65,7 @@ sub DeterminePlatform
 	if ($^O eq "MSWin32")
 	{
 		# Examine CL help output to determine if we are in 32 or 64-bit mode.
-		my $output = `cl /? 2>&1`;
+		my $output = `cl /help 2>&1`;
 		$? >> 8 == 0 or die "cl command not found";
 		$self->{platform} =
 		  ($output =~ /^\/favor:<.+AMD64/m) ? 'x64' : 'Win32';
@@ -152,10 +155,12 @@ sub GenerateFiles
 	my $package_bugreport;
 	my $package_url;
 	my ($majorver, $minorver);
+	my $ac_define_openssl_api_compat_found = 0;
+	my $openssl_api_compat;
 
-	# Parse configure.in to get version numbers
-	open(my $c, '<', "configure.in")
-	  || confess("Could not open configure.in for reading\n");
+	# Parse configure.ac to get version numbers
+	open(my $c, '<', "configure.ac")
+	  || confess("Could not open configure.ac for reading\n");
 	while (<$c>)
 	{
 		if (/^AC_INIT\(\[([^\]]+)\], \[([^\]]+)\], \[([^\]]+)\], \[([^\]]*)\], \[([^\]]+)\]/
@@ -176,10 +181,15 @@ sub GenerateFiles
 			$majorver = sprintf("%d", $1);
 			$minorver = sprintf("%d", $2 ? $2 : 0);
 		}
+		elsif (/\bAC_DEFINE\(OPENSSL_API_COMPAT, \[([0-9xL]+)\]/)
+		{
+			$ac_define_openssl_api_compat_found = 1;
+			$openssl_api_compat                 = $1;
+		}
 	}
 	close($c);
-	confess "Unable to parse configure.in for all variables!"
-	  unless $ac_init_found;
+	confess "Unable to parse configure.ac for all variables!"
+	  unless $ac_init_found && $ac_define_openssl_api_compat_found;
 
 	if (IsNewer("src/include/pg_config_os.h", "src/include/port/win32.h"))
 	{
@@ -235,6 +245,8 @@ sub GenerateFiles
 		HAVE_DECL_LLVMGETHOSTCPUFEATURES            => 0,
 		HAVE_DECL_LLVMORCGETSYMBOLADDRESSIN         => 0,
 		HAVE_DECL_POSIX_FADVISE                     => 0,
+		HAVE_DECL_PREADV                            => 0,
+		HAVE_DECL_PWRITEV                           => 0,
 		HAVE_DECL_RTLD_GLOBAL                       => 0,
 		HAVE_DECL_RTLD_NOW                          => 0,
 		HAVE_DECL_STRLCAT                           => 0,
@@ -272,6 +284,8 @@ sub GenerateFiles
 		HAVE_GETTIMEOFDAY                           => undef,
 		HAVE_GSSAPI_GSSAPI_H                        => undef,
 		HAVE_GSSAPI_H                               => undef,
+		HAVE_HMAC_CTX_FREE                          => undef,
+		HAVE_HMAC_CTX_NEW                           => undef,
 		HAVE_HISTORY_H                              => undef,
 		HAVE_HISTORY_TRUNCATE_FILE                  => undef,
 		HAVE_IFADDRS_H                              => undef,
@@ -290,6 +304,7 @@ sub GenerateFiles
 		HAVE_LDAP_INITIALIZE                        => undef,
 		HAVE_LIBCRYPTO                              => undef,
 		HAVE_LIBLDAP                                => undef,
+		HAVE_LIBLZ4                                 => undef,
 		HAVE_LIBM                                   => undef,
 		HAVE_LIBPAM                                 => undef,
 		HAVE_LIBREADLINE                            => undef,
@@ -303,6 +318,7 @@ sub GenerateFiles
 		HAVE_LOCALE_T               => 1,
 		HAVE_LONG_INT_64            => undef,
 		HAVE_LONG_LONG_INT_64       => 1,
+		HAVE_LZ4_H                  => undef,
 		HAVE_MBARRIER_H             => undef,
 		HAVE_MBSTOWCS_L             => 1,
 		HAVE_MEMORY_H               => 1,
@@ -324,6 +340,7 @@ sub GenerateFiles
 		HAVE_PSTAT                  => undef,
 		HAVE_PS_STRINGS             => undef,
 		HAVE_PTHREAD                => undef,
+		HAVE_PTHREAD_BARRIER_WAIT   => undef,
 		HAVE_PTHREAD_IS_THREADED_NP => undef,
 		HAVE_PTHREAD_PRIO_INHERIT   => undef,
 		HAVE_PWRITE                 => undef,
@@ -332,6 +349,7 @@ sub GenerateFiles
 		HAVE_READLINE_HISTORY_H     => undef,
 		HAVE_READLINE_READLINE_H    => undef,
 		HAVE_READLINK               => undef,
+		HAVE_READV                  => undef,
 		HAVE_RL_COMPLETION_APPEND_CHARACTER      => undef,
 		HAVE_RL_COMPLETION_MATCHES               => undef,
 		HAVE_RL_COMPLETION_SUPPRESS_QUOTE        => undef,
@@ -376,10 +394,12 @@ sub GenerateFiles
 		HAVE_STRUCT_TM_TM_ZONE                   => undef,
 		HAVE_SYNC_FILE_RANGE                     => undef,
 		HAVE_SYMLINK                             => 1,
+		HAVE_SYNCFS                              => undef,
 		HAVE_SYSLOG                              => undef,
 		HAVE_SYS_EPOLL_H                         => undef,
 		HAVE_SYS_EVENT_H                         => undef,
 		HAVE_SYS_IPC_H                           => undef,
+		HAVE_SYS_PERSONALITY_H                   => undef,
 		HAVE_SYS_PRCTL_H                         => undef,
 		HAVE_SYS_PROCCTL_H                       => undef,
 		HAVE_SYS_PSTAT_H                         => undef,
@@ -387,11 +407,13 @@ sub GenerateFiles
 		HAVE_SYS_SELECT_H                        => undef,
 		HAVE_SYS_SEM_H                           => undef,
 		HAVE_SYS_SHM_H                           => undef,
+		HAVE_SYS_SIGNALFD_H                      => undef,
 		HAVE_SYS_SOCKIO_H                        => undef,
 		HAVE_SYS_STAT_H                          => 1,
 		HAVE_SYS_TAS_H                           => undef,
 		HAVE_SYS_TYPES_H                         => 1,
 		HAVE_SYS_UCRED_H                         => undef,
+		HAVE_SYS_UIO_H                           => undef,
 		HAVE_SYS_UN_H                            => undef,
 		HAVE_TERMIOS_H                           => undef,
 		HAVE_TYPEOF                              => undef,
@@ -410,7 +432,9 @@ sub GenerateFiles
 		HAVE_WINLDAP_H                           => undef,
 		HAVE_WCSTOMBS_L                          => 1,
 		HAVE_WCTYPE_H                            => 1,
+		HAVE_WRITEV                              => undef,
 		HAVE_X509_GET_SIGNATURE_NID              => 1,
+		HAVE_X509_GET_SIGNATURE_INFO             => undef,
 		HAVE_X86_64_POPCNTQ                      => undef,
 		HAVE__BOOL                               => undef,
 		HAVE__BUILTIN_BSWAP16                    => undef,
@@ -434,6 +458,7 @@ sub GenerateFiles
 		LOCALE_T_IN_XLOCALE                      => undef,
 		MAXIMUM_ALIGNOF                          => 8,
 		MEMSET_LOOP_LIMIT                        => 1024,
+		OPENSSL_API_COMPAT                       => $openssl_api_compat,
 		PACKAGE_BUGREPORT                        => qq{"$package_bugreport"},
 		PACKAGE_NAME                             => qq{"$package_name"},
 		PACKAGE_STRING      => qq{"$package_name $package_version"},
@@ -468,15 +493,14 @@ sub GenerateFiles
 		USE_ASSERT_CHECKING => $self->{options}->{asserts} ? 1 : undef,
 		USE_BONJOUR         => undef,
 		USE_BSD_AUTH        => undef,
-		USE_DEV_URANDOM     => undef,
 		USE_ICU => $self->{options}->{icu} ? 1 : undef,
 		USE_LIBXML                 => undef,
 		USE_LIBXSLT                => undef,
+		USE_LZ4                    => undef,
 		USE_LDAP                   => $self->{options}->{ldap} ? 1 : undef,
 		USE_LLVM                   => undef,
 		USE_NAMED_POSIX_SEMAPHORES => undef,
 		USE_OPENSSL                => undef,
-		USE_OPENSSL_RANDOM         => undef,
 		USE_PAM                    => undef,
 		USE_SLICING_BY_8_CRC32C    => undef,
 		USE_SSE42_CRC32C           => undef,
@@ -485,7 +509,6 @@ sub GenerateFiles
 		USE_SYSV_SEMAPHORES                 => undef,
 		USE_SYSV_SHARED_MEMORY              => undef,
 		USE_UNNAMED_POSIX_SEMAPHORES        => undef,
-		USE_WIN32_RANDOM                    => 1,
 		USE_WIN32_SEMAPHORES                => 1,
 		USE_WIN32_SHARED_MEMORY             => 1,
 		WCSTOMBS_L_IN_XLOCALE               => undef,
@@ -515,19 +538,34 @@ sub GenerateFiles
 		$define{HAVE_LIBXSLT} = 1;
 		$define{USE_LIBXSLT}  = 1;
 	}
+	if ($self->{options}->{lz4})
+	{
+		$define{HAVE_LIBLZ4} = 1;
+		$define{HAVE_LZ4_H}  = 1;
+		$define{USE_LZ4}     = 1;
+	}
 	if ($self->{options}->{openssl})
 	{
 		$define{USE_OPENSSL} = 1;
 
 		my ($digit1, $digit2, $digit3) = $self->GetOpenSSLVersion();
 
-		# More symbols are needed with OpenSSL 1.1.0 and above.
+		# Symbols needed with OpenSSL 1.1.1 and above.
+		if (   ($digit1 >= '3' && $digit2 >= '0' && $digit3 >= '0')
+			|| ($digit1 >= '1' && $digit2 >= '1' && $digit3 >= '1'))
+		{
+			$define{HAVE_X509_GET_SIGNATURE_INFO} = 1;
+		}
+
+		# Symbols needed with OpenSSL 1.1.0 and above.
 		if (   ($digit1 >= '3' && $digit2 >= '0' && $digit3 >= '0')
 			|| ($digit1 >= '1' && $digit2 >= '1' && $digit3 >= '0'))
 		{
 			$define{HAVE_ASN1_STRING_GET0_DATA} = 1;
 			$define{HAVE_BIO_GET_DATA}          = 1;
 			$define{HAVE_BIO_METH_NEW}          = 1;
+			$define{HAVE_HMAC_CTX_FREE}         = 1;
+			$define{HAVE_HMAC_CTX_NEW}          = 1;
 			$define{HAVE_OPENSSL_INIT_SSL}      = 1;
 		}
 	}
@@ -656,16 +694,6 @@ sub GenerateFiles
 		);
 	}
 
-	if (IsNewer(
-			'src/backend/utils/sort/qsort_tuple.c',
-			'src/backend/utils/sort/gen_qsort_tuple.pl'))
-	{
-		print "Generating qsort_tuple.c...\n";
-		system(
-			'perl src/backend/utils/sort/gen_qsort_tuple.pl > src/backend/utils/sort/qsort_tuple.c'
-		);
-	}
-
 	if (IsNewer('src/bin/psql/sql_help.h', 'src/bin/psql/create_help.pl'))
 	{
 		print "Generating sql_help.h...\n";
@@ -756,8 +784,6 @@ EOF
 	$mf =~ /^CATALOG_HEADERS\s*:?=(.*)$/gm
 	  || croak "Could not find CATALOG_HEADERS in Makefile\n";
 	my @bki_srcs = split /\s+/, $1;
-	push @bki_srcs, 'toasting.h';
-	push @bki_srcs, 'indexing.h';
 	$mf =~ /^POSTGRES_BKI_DATA\s*:?=[^,]+,(.*)\)$/gm
 	  || croak "Could not find POSTGRES_BKI_DATA in Makefile\n";
 	my @bki_data = split /\s+/, $1;
@@ -811,6 +837,9 @@ EOF
 		copyFile(
 			'src/backend/catalog/schemapg.h',
 			'src/include/catalog/schemapg.h');
+		copyFile(
+			'src/backend/catalog/system_fk_info.h',
+			'src/include/catalog/system_fk_info.h');
 		open(my $chs, '>', 'src/include/catalog/header-stamp')
 		  || confess "Could not touch header-stamp";
 		close($chs);
@@ -828,7 +857,7 @@ EOF
 
 # Read lines from input file and substitute symbols using the same
 # logic that config.status uses.  There should be one call of this for
-# each AC_CONFIG_HEADERS call in configure.in.
+# each AC_CONFIG_HEADERS call in configure.ac.
 #
 # If the "required" argument is true, we also keep track which of our
 # defines have been found and error out if any are left unused at the
@@ -1059,6 +1088,11 @@ sub AddProject
 		$proj->AddIncludeDir($self->{options}->{xslt} . '\include');
 		$proj->AddLibrary($self->{options}->{xslt} . '\lib\libxslt.lib');
 	}
+	if ($self->{options}->{lz4})
+	{
+		$proj->AddIncludeDir($self->{options}->{lz4} . '\include');
+		$proj->AddLibrary($self->{options}->{lz4} . '\lib\liblz4.lib');
+	}
 	if ($self->{options}->{uuid})
 	{
 		$proj->AddIncludeDir($self->{options}->{uuid} . '\include');
@@ -1166,10 +1200,11 @@ sub GetFakeConfigure
 	$cfg .= ' --with-ldap'        if ($self->{options}->{ldap});
 	$cfg .= ' --without-zlib' unless ($self->{options}->{zlib});
 	$cfg .= ' --with-extra-version' if ($self->{options}->{extraver});
-	$cfg .= ' --with-openssl'       if ($self->{options}->{openssl});
+	$cfg .= ' --with-ssl=openssl'   if ($self->{options}->{openssl});
 	$cfg .= ' --with-uuid'          if ($self->{options}->{uuid});
 	$cfg .= ' --with-libxml'        if ($self->{options}->{xml});
 	$cfg .= ' --with-libxslt'       if ($self->{options}->{xslt});
+	$cfg .= ' --with-lz4'           if ($self->{options}->{lz4});
 	$cfg .= ' --with-gssapi'        if ($self->{options}->{gss});
 	$cfg .= ' --with-icu'           if ($self->{options}->{icu});
 	$cfg .= ' --with-tcl'           if ($self->{options}->{tcl});

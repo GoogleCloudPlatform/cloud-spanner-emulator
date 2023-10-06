@@ -225,15 +225,15 @@ TEST_F(ErrorShimTest, CheckedOidFunctionCall2) {
                        CheckedPgStringToDatum("a", TEXTOID));
   ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
                        CheckedPgStringToDatum("(a)", TEXTOID));
-  ZETASQL_EXPECT_OK(
-      CheckedOidFunctionCall2(F_REGEXP_MATCH, input_string, input_pattern));
+  ZETASQL_EXPECT_OK(CheckedOidFunctionCall2(F_REGEXP_MATCH_TEXT_TEXT, input_string,
+                                    input_pattern));
 
   // CheckedOidFunctionCall* does not support NULL results
   ZETASQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
   ZETASQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
-  EXPECT_THAT(
-      CheckedOidFunctionCall2(F_REGEXP_MATCH, input_string, input_pattern),
-      StatusIs(absl::StatusCode::kUnknown, HasSubstr("returned NULL")));
+  EXPECT_THAT(CheckedOidFunctionCall2(F_REGEXP_MATCH_TEXT_TEXT, input_string,
+                                      input_pattern),
+              StatusIs(absl::StatusCode::kUnknown, HasSubstr("returned NULL")));
 }
 
 TEST_F(ErrorShimTest, CheckedOidFunctionCall3) {
@@ -243,13 +243,13 @@ TEST_F(ErrorShimTest, CheckedOidFunctionCall3) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
                        CheckedPgStringToDatum("(a)", TEXTOID));
   ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_flags, CheckedPgStringToDatum("i", TEXTOID));
-  ZETASQL_EXPECT_OK(CheckedOidFunctionCall3(F_REGEXP_MATCH, input_string, input_pattern,
-                                    input_flags));
+  ZETASQL_EXPECT_OK(CheckedOidFunctionCall3(F_REGEXP_MATCH_TEXT_TEXT, input_string,
+                                    input_pattern, input_flags));
 
   // CheckedOidFunctionCall* does not support NULL results
   ZETASQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
   ZETASQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
-  EXPECT_THAT(CheckedOidFunctionCall3(F_REGEXP_MATCH, input_string,
+  EXPECT_THAT(CheckedOidFunctionCall3(F_REGEXP_MATCH_TEXT_TEXT, input_string,
                                       input_pattern, input_flags),
               StatusIs(absl::StatusCode::kUnknown, HasSubstr("returned NULL")));
 }
@@ -275,14 +275,14 @@ TEST_F(ErrorShimTest, CheckedNullableOidFunctionCall2) {
                        CheckedPgStringToDatum("a", TEXTOID));
   ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
                        CheckedPgStringToDatum("(a)", TEXTOID));
-  ZETASQL_EXPECT_OK(CheckedNullableOidFunctionCall2(F_REGEXP_MATCH, input_string,
-                                            input_pattern));
+  ZETASQL_EXPECT_OK(CheckedNullableOidFunctionCall2(F_REGEXP_MATCH_TEXT_TEXT,
+                                            input_string, input_pattern));
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
   ZETASQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum result_datum,
-                       CheckedNullableOidFunctionCall2(
-                           F_REGEXP_MATCH, input_string, input_pattern));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum result_datum, CheckedNullableOidFunctionCall2(
+                                               F_REGEXP_MATCH_TEXT_TEXT,
+                                               input_string, input_pattern));
   EXPECT_EQ(result_datum, NULL_DATUM);
 }
 
@@ -293,14 +293,15 @@ TEST_F(ErrorShimTest, CheckedNullableOidFunctionCall3) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
                        CheckedPgStringToDatum("(a)", TEXTOID));
   ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_flags, CheckedPgStringToDatum("i", TEXTOID));
-  ZETASQL_EXPECT_OK(CheckedNullableOidFunctionCall3(F_REGEXP_MATCH, input_string,
-                                            input_pattern, input_flags));
+  ZETASQL_EXPECT_OK(CheckedNullableOidFunctionCall3(
+      F_REGEXP_MATCH_TEXT_TEXT, input_string, input_pattern, input_flags));
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
   ZETASQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum result_datum, CheckedNullableOidFunctionCall3(
-                                               F_REGEXP_MATCH, input_string,
-                                               input_pattern, input_flags));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      Datum result_datum,
+      CheckedNullableOidFunctionCall3(F_REGEXP_MATCH_TEXT_TEXT, input_string,
+                                      input_pattern, input_flags));
   EXPECT_EQ(result_datum, NULL_DATUM);
 }
 

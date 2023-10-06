@@ -347,6 +347,7 @@ cc_library(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:analyzer",
         "@com_google_zetasql//zetasql/public:analyzer_options",
         "@com_google_zetasql//zetasql/public:simple_catalog",

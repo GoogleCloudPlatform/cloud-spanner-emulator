@@ -9,7 +9,7 @@
  * contains variables.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -94,13 +94,7 @@ static Relids alias_relid_set(Query *query, Relids relids);
  * SubPlan, we only need to look at the parameters passed to the subplan.
  */
 Relids
-pull_varnos(Node *node)
-{
-	return pull_varnos_new(NULL, node);
-}
-
-Relids
-pull_varnos_new(PlannerInfo *root, Node *node)
+pull_varnos(PlannerInfo *root, Node *node)
 {
 	pull_varnos_context context;
 
@@ -126,13 +120,7 @@ pull_varnos_new(PlannerInfo *root, Node *node)
  *		Only Vars of the specified level are considered.
  */
 Relids
-pull_varnos_of_level(Node *node, int levelsup)
-{
-	return pull_varnos_of_level_new(NULL, node, levelsup);
-}
-
-Relids
-pull_varnos_of_level_new(PlannerInfo *root, Node *node, int levelsup)
+pull_varnos_of_level(PlannerInfo *root, Node *node, int levelsup)
 {
 	pull_varnos_context context;
 
@@ -213,7 +201,7 @@ pull_varnos_walker(Node *node, pull_varnos_context *context)
 			 */
 			PlaceHolderInfo *phinfo = NULL;
 
-			if (phv->phlevelsup == 0 && context->root)
+			if (phv->phlevelsup == 0)
 			{
 				ListCell   *lc;
 
@@ -591,7 +579,7 @@ locate_var_of_level_walker(Node *node,
  *	  Vars within a PHV's expression are included in the result only
  *	  when PVC_RECURSE_PLACEHOLDERS is specified.
  *
- *	  GroupingFuncs are treated mostly like Aggrefs, and so do not need
+ *	  GroupingFuncs are treated exactly like Aggrefs, and so do not need
  *	  their own flag bits.
  *
  *	  CurrentOfExpr nodes are ignored in all cases.
@@ -666,13 +654,7 @@ pull_var_clause_walker(Node *node, pull_var_clause_context *context)
 		}
 		else if (context->flags & PVC_RECURSE_AGGREGATES)
 		{
-			/*
-			 * We do NOT descend into the contained expression, even if the
-			 * caller asked for it, because we never actually evaluate it -
-			 * the result is driven entirely off the associated GROUP BY
-			 * clause, so we never need to extract the actual Vars here.
-			 */
-			return false;
+			/* fall through to recurse into the GroupingFunc's arguments */
 		}
 		else
 			elog(ERROR, "GROUPING found where not expected");
@@ -779,16 +761,13 @@ flatten_join_alias_vars_mutator(Node *node,
 			RowExpr    *rowexpr;
 			List	   *fields = NIL;
 			List	   *colnames = NIL;
-			AttrNumber	attnum;
 			ListCell   *lv;
 			ListCell   *ln;
 
-			attnum = 0;
 			Assert(list_length(rte->joinaliasvars) == list_length(rte->eref->colnames));
 			forboth(lv, rte->joinaliasvars, ln, rte->eref->colnames)
 			{
 				newvar = (Node *) lfirst(lv);
-				attnum++;
 				/* Ignore dropped columns */
 				if (newvar == NULL)
 					continue;

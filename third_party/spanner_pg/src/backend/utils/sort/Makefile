@@ -16,17 +16,10 @@ override CPPFLAGS := -I. -I$(srcdir) $(CPPFLAGS)
 
 OBJS = \
 	logtape.o \
+	qsort_interruptible.o \
 	sharedtuplestore.o \
 	sortsupport.o \
 	tuplesort.o \
 	tuplestore.o
 
-tuplesort.o: qsort_tuple.c
-
-qsort_tuple.c: gen_qsort_tuple.pl
-	$(PERL) $(srcdir)/gen_qsort_tuple.pl $< > $@
-
 include $(top_srcdir)/src/backend/common.mk
-
-maintainer-clean:
-	rm -f qsort_tuple.c

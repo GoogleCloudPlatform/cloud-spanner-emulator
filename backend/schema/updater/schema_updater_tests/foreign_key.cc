@@ -16,14 +16,23 @@
 
 #include "backend/schema/catalog/foreign_key.h"
 
-#include <initializer_list>
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
+#include "absl/algorithm/container.h"
+#include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
+#include "common/errors.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -31,7 +40,26 @@ namespace emulator {
 namespace backend {
 namespace test {
 
+using database_api::DatabaseDialect::GOOGLE_STANDARD_SQL;
+using database_api::DatabaseDialect::POSTGRESQL;
+using ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
+
 namespace {
+class ForeignKeyTest : public SchemaUpdaterTest {
+ public:
+  ForeignKeyTest()
+      : flag_setter_({
+            .enable_fk_delete_cascade_action = true,
+        }) {}
+  const ScopedEmulatorFeatureFlagsSetter flag_setter_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    SchemaUpdaterPerDialectTests, ForeignKeyTest,
+    testing::Values(GOOGLE_STANDARD_SQL, POSTGRESQL),
+    [](const testing::TestParamInfo<ForeignKeyTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
 
 struct Expected {
   std::string constraint_name;
@@ -44,6 +72,7 @@ struct Expected {
   const Table* referenced_table;
   std::vector<const Column*> referenced_columns;
   const Index* referenced_index;
+  const std::string foreign_key_delete_action;
 };
 
 Expected BuildExpected(const Schema* schema, const std::string& constraint_name,
@@ -53,6 +82,7 @@ Expected BuildExpected(const Schema* schema, const std::string& constraint_name,
                        const std::string& referenced_table_name,
                        const std::vector<std::string>& referenced_column_names,
                        const std::string& referenced_index_name,
+                       const std::string& foreign_key_delete_action,
                        int sequence_number = 1) {
   // Generates and returns a constraint name if one was not provided. Returns an
   // empty string if a name was provided.
@@ -104,7 +134,8 @@ Expected BuildExpected(const Schema* schema, const std::string& constraint_name,
           referencing_index,
           referenced_table,
           columns(referenced_table, referenced_column_names),
-          referenced_index};
+          referenced_index,
+          foreign_key_delete_action};
 }
 
 std::string Print(const Index* index) {
@@ -113,13 +144,17 @@ std::string Print(const Index* index) {
 
 std::string Print(const Expected& expected) {
   return absl::Substitute(
-      "FK:$0:$1($2)[$3]:$4($5)[$6]",
+      "FK:$0:$1($2)[$3]:$4($5)[$6][$7]",
       absl::StrCat(expected.constraint_name, expected.generated_name),
       expected.referencing_table->Name(),
       PrintNames(expected.referencing_columns),
       Print(expected.referencing_index), expected.referenced_table->Name(),
       PrintNames<Column>(expected.referenced_columns),
-      Print(expected.referenced_index));
+      Print(expected.referenced_index),
+      expected.foreign_key_delete_action.empty()
+          ? ""
+          : absl::StrCat(kDeleteAction, " ",
+                         expected.foreign_key_delete_action));
 }
 
 MATCHER_P2(IsForeignKeyOf, table, expected, Print(expected)) {
@@ -203,10 +238,16 @@ MATCHER_P2(IsForeignKeyOf, table, expected, Print(expected)) {
     check(contains_managing_node(expected.referenced_index, fk),
           "Foreign key not found in the referenced index managing nodes");
   }
+
+  if (!expected.foreign_key_delete_action.empty()) {
+    check(ForeignKey::ActionName(fk->on_delete_action()) ==
+              expected.foreign_key_delete_action,
+          "Wrong foreign key delete action");
+  }
   return match;
 }
 
-TEST_P(SchemaUpdaterTest, CreateTableWithForeignKey) {
+TEST_P(ForeignKeyTest, CreateTableWithForeignKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -228,10 +269,83 @@ TEST_P(SchemaUpdaterTest, CreateTableWithForeignKey) {
       c, IsForeignKeyOf(
              u, BuildExpected(schema.get(), "C", "U", {"A", "B"},
                               "IDX_U_A_B_N_8C11B65ACA7F01B9", "T", {"X", "Y"},
-                              "IDX_T_X_Y_U_5AD6E41B495C5BB9")));
+                              "IDX_T_X_Y_U_5AD6E41B495C5BB9", "")));
 }
 
-TEST_P(SchemaUpdaterTest, CreateTableWithUnnamedForeignKey) {
+TEST_P(ForeignKeyTest, CreateTableWithForeignKeyAction) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Skip PG test!";
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+      CREATE TABLE T (
+        X INT64,
+        Y INT64,
+      ) PRIMARY KEY (X)
+    )",
+                                        R"(
+      CREATE TABLE U (
+        A INT64,
+        B INT64,
+        CONSTRAINT C FOREIGN KEY (A, B) REFERENCES T (X, Y) ON DELETE CASCADE,
+      ) PRIMARY KEY (A)
+    )"}));
+
+  const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
+  const ForeignKey* c = ASSERT_NOT_NULL(u->FindForeignKey("C"));
+  EXPECT_THAT(
+      c, IsForeignKeyOf(
+             u, BuildExpected(schema.get(), "C", "U", {"A", "B"},
+                              "IDX_U_A_B_N_8C11B65ACA7F01B9", "T", {"X", "Y"},
+                              "IDX_T_X_Y_U_5AD6E41B495C5BB9", "CASCADE")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateTableWithForeignKeyActionWhenFlagDisabled) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Skip PG test!";
+  }
+  EXPECT_THAT(CreateSchema({
+                  R"(
+      CREATE TABLE T (
+        X INT64,
+        Y INT64,
+      ) PRIMARY KEY (X)
+    )",
+                  R"(
+      CREATE TABLE U (
+        A INT64,
+        B INT64,
+        CONSTRAINT C FOREIGN KEY (A, B)
+          REFERENCES T (X, Y) ON DELETE CASCADE,
+      ) PRIMARY KEY (A)
+    )"}),
+              StatusIs(error::ForeignKeyOnDeleteActionUnsupported("CASCADE")));
+}
+
+TEST_P(SchemaUpdaterTest,
+       CreateTableWithUnnamedForeignKeyActionWhenFlagDisabled) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Skip PG test!";
+  }
+  EXPECT_THAT(CreateSchema({
+                  R"(
+      CREATE TABLE T (
+        X INT64,
+        Y INT64,
+      ) PRIMARY KEY (X)
+    )",
+                  R"(
+      CREATE TABLE U (
+        A INT64,
+        B INT64,
+        FOREIGN KEY (A, B)
+          REFERENCES T (X, Y) ON DELETE CASCADE,
+      ) PRIMARY KEY (A)
+    )"}),
+              StatusIs(error::ForeignKeyOnDeleteActionUnsupported("CASCADE")));
+}
+
+TEST_P(ForeignKeyTest, CreateTableWithUnnamedForeignKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -246,7 +360,7 @@ TEST_P(SchemaUpdaterTest, CreateTableWithUnnamedForeignKey) {
     )"}));
 
   Expected expected =
-      BuildExpected(schema.get(), "", "U", {"A"}, "", "T", {"X"}, "");
+      BuildExpected(schema.get(), "", "U", {"A"}, "", "T", {"X"}, "", "");
 
   const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
   const ForeignKey* c =
@@ -254,7 +368,7 @@ TEST_P(SchemaUpdaterTest, CreateTableWithUnnamedForeignKey) {
   EXPECT_THAT(c, IsForeignKeyOf(u, expected));
 }
 
-TEST_P(SchemaUpdaterTest, CreateTableWithSelfReferencingForeignKey) {
+TEST_P(ForeignKeyTest, CreateTableWithSelfReferencingForeignKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE U (
@@ -268,10 +382,10 @@ TEST_P(SchemaUpdaterTest, CreateTableWithSelfReferencingForeignKey) {
   const ForeignKey* c = ASSERT_NOT_NULL(u->FindForeignKey("C"));
   EXPECT_THAT(c, IsForeignKeyOf(u, BuildExpected(schema.get(), "C", "U", {"B"},
                                                  "IDX_U_B_N_DC7E529471D378CF",
-                                                 "U", {"A"}, "")));
+                                                 "U", {"A"}, "", "")));
 }
 
-TEST_P(SchemaUpdaterTest, AddForeignKey) {
+TEST_P(ForeignKeyTest, AddForeignKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -291,11 +405,12 @@ TEST_P(SchemaUpdaterTest, AddForeignKey) {
   const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
   const ForeignKey* c = ASSERT_NOT_NULL(u->FindForeignKey("C"));
   EXPECT_THAT(
-      c, IsForeignKeyOf(u, BuildExpected(schema.get(), "C", "U", {"A"}, "", "T",
-                                         {"Y"}, "IDX_T_Y_U_3E1CA8A966CF5C7A")));
+      c, IsForeignKeyOf(
+             u, BuildExpected(schema.get(), "C", "U", {"A"}, "", "T", {"Y"},
+                              "IDX_T_Y_U_3E1CA8A966CF5C7A", "")));
 }
 
-TEST_P(SchemaUpdaterTest, DropForeignKey) {
+TEST_P(ForeignKeyTest, DropForeignKey) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -319,6 +434,35 @@ TEST_P(SchemaUpdaterTest, DropForeignKey) {
   EXPECT_EQ(t->referencing_foreign_keys().size(), 0);
 }
 
+TEST_P(ForeignKeyTest, AddForeignKeyAction) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Skip PG test!";
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+      CREATE TABLE T (
+        X INT64,
+        Y INT64,
+      ) PRIMARY KEY (X)
+    )",
+                                        R"(
+      CREATE TABLE U (
+        A INT64 NOT NULL,
+      ) PRIMARY KEY (A)
+    )",
+                                        R"(
+      ALTER TABLE U ADD CONSTRAINT C FOREIGN KEY (A) REFERENCES T (Y)
+        ON DELETE CASCADE
+    )"}));
+
+  const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
+  const ForeignKey* c = ASSERT_NOT_NULL(u->FindForeignKey("C"));
+  EXPECT_THAT(
+      c, IsForeignKeyOf(
+             u, BuildExpected(schema.get(), "C", "U", {"A"}, "", "T", {"Y"},
+                              "IDX_T_Y_U_3E1CA8A966CF5C7A", "CASCADE")));
+}
+
 std::vector<std::string> SchemaForCaseSensitivityTests() {
   return {
       R"sql(
@@ -329,7 +473,7 @@ std::vector<std::string> SchemaForCaseSensitivityTests() {
   };
 }
 
-TEST_P(SchemaUpdaterTest, TableNameIsCaseSensitive) {
+TEST_P(ForeignKeyTest, TableNameIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -342,7 +486,7 @@ TEST_P(SchemaUpdaterTest, TableNameIsCaseSensitive) {
               StatusIs(error::TableNotFound("t")));
 }
 
-TEST_P(SchemaUpdaterTest, ReferencedColumnNameIsCaseSensitive) {
+TEST_P(ForeignKeyTest, ReferencedColumnNameIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -366,7 +510,7 @@ TEST_P(SchemaUpdaterTest, ReferencedColumnNameIsCaseSensitive) {
               StatusIs(error::ForeignKeyColumnNotFound("x", "T", "C")));
 }
 
-TEST_P(SchemaUpdaterTest, ReferencingColumnNameIsCaseSensitive) {
+TEST_P(ForeignKeyTest, ReferencingColumnNameIsCaseSensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
@@ -390,7 +534,7 @@ TEST_P(SchemaUpdaterTest, ReferencingColumnNameIsCaseSensitive) {
               StatusIs(error::ForeignKeyColumnNotFound("a", "T2", "C")));
 }
 
-TEST_P(SchemaUpdaterTest, ConstraintNameIsCaseInsensitive) {
+TEST_P(ForeignKeyTest, ConstraintNameIsCaseInsensitive) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 

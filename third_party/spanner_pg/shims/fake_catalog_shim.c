@@ -46,9 +46,9 @@ ParseNamespaceItem* addRangeTableEntry(ParseState* pstate,
   abort();
 }
 
-int scanRTEForColumn(ParseState *pstate, RangeTblEntry *rte,
-                     const char *colname, int location, int fuzzy_rte_penalty,
-                     FuzzyAttrMatchState *fuzzystate) {
+int scanRTEForColumn(ParseState* pstate, RangeTblEntry* rte, Alias* eref,
+                     const char* colname, int location, int fuzzy_rte_penalty,
+                     FuzzyAttrMatchState* fuzzystate) {
   abort();
 }
 
@@ -127,10 +127,10 @@ char* get_attname(Oid relid, AttrNumber attnum, bool missing_ok) {
   abort();
 }
 
-FuncCandidateList FuncnameGetCandidates(List* names, int nargs,
-                                        List* argnames,
+FuncCandidateList FuncnameGetCandidates(List* names, int nargs, List* argnames,
                                         bool expand_variadic,
                                         bool expand_defaults,
+                                        bool include_out_arguments,
                                         bool missing_ok) {
   abort();
 }
@@ -177,11 +177,6 @@ Operator oper(ParseState* pstate, List* opname, Oid ltypeId,
 
 Operator left_oper(ParseState* pstate, List* op, Oid arg, bool noError,
                    int location) {
-  abort();
-}
-
-Operator right_oper(ParseState* pstate, List* op, Oid arg,
-                    bool noError, int location) {
   abort();
 }
 
@@ -236,12 +231,11 @@ void getTypeInputInfo(Oid type, Oid* typInput, Oid* typIOParam) {
   abort();
 }
 
-FuncDetailCode func_get_detail(List* funcname, List* fargs,
-                               List* fargnames, int nargs,
-                               Oid* argtypes, bool expand_variadic,
-                               bool expand_defaults, Oid* funcid,
-                               Oid* rettype, bool* retset, int* nvargs,
-                               Oid* vatype, Oid** true_typeids,
+FuncDetailCode func_get_detail(List* funcname, List* fargs, List* fargnames,
+                               int nargs, Oid* argtypes, bool expand_variadic,
+                               bool expand_defaults, bool include_out_arguments,
+                               Oid* funcid, Oid* rettype, bool* retset,
+                               int* nvargs, Oid* vatype, Oid** true_typeids,
                                List** argdefaults) {
   abort();
 }
@@ -442,11 +436,13 @@ CoercionPathType find_typmod_coercion_function(Oid typeId, Oid* funcid)
   abort();
 }
 
-void get_delete_query_def(Query* query, deparse_context* context) {
+void get_delete_query_def(Query* query, deparse_context* context,
+                          bool colNamesVisible) {
   abort();
 }
 
-void get_update_query_def(Query* query, deparse_context* context) {
+void get_update_query_def(Query* query, deparse_context* context,
+                          bool colNamesVisible) {
   abort();
 }
 
@@ -474,13 +470,13 @@ void get_typlenbyvalalign(Oid typid, int16_t* typlen, bool* typbyval,
   abort();
 }
 
-Oid transformContainerType(Oid *containerType, int32_t *containerTypmod) {
+void transformContainerType(Oid *containerType, int32_t *containerTypmod) {
   abort();
 }
 
 SubscriptingRef* transformContainerSubscripts(
-    ParseState* pstate, Node* containerBase, Oid containerType, Oid elementType,
-    int32_t containerTypMod, List* indirection, Node* assignFrom) {
+    ParseState* pstate, Node* containerBase, Oid containerType,
+    int32_t containerTypMod, List* indirection, bool isAssignment) {
   abort();
 }
 
@@ -503,7 +499,7 @@ Node* transformParamRef(ParseState *pstate, ParamRef *pref) {
 }
 
 void get_setop_query(Node *setOp, Query *query, deparse_context *context,
-                     TupleDesc resultDesc) {
+                     TupleDesc resultDesc, bool colNamesVisible) {
   abort();
 }
 
@@ -520,5 +516,25 @@ Datum date_in(PG_FUNCTION_ARGS) {
 }
 
 Datum timestamptz_in(PG_FUNCTION_ARGS) {
+  abort();
+}
+
+RegProcedure get_typsubscript(Oid typid, Oid *typelemp) {
+  abort();
+}
+
+Oid get_multirange_range(Oid multirangeOid) {
+  abort();
+}
+
+int
+DecodeDateTime(char **field, int *ftype, int nf,
+               int *dtype, struct pg_tm *tm, fsec_t *fsec, int *tzp) {
+  abort();
+}
+
+int
+DecodeTimezoneAbbrev(int field, char *lowtoken,
+					 int *offset, pg_tz **tz) {
   abort();
 }

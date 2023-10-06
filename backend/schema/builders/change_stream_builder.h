@@ -33,6 +33,7 @@
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "backend/schema/validators/change_stream_validator.h"
+#include "google/protobuf/repeated_ptr_field.h"
 
 namespace google {
 namespace spanner {
@@ -79,6 +80,11 @@ class ChangeStream::Builder {
   Builder& add_tracked_tables_columns(std::string table_name,
                                       std::vector<std::string> columns) {
     instance_->tracked_tables_columns_[table_name] = columns;
+    return *this;
+  }
+
+  Builder& set_options(::google::protobuf::RepeatedPtrField<ddl::SetOption> options) {
+    instance_->options_ = options;
     return *this;
   }
 
@@ -131,6 +137,12 @@ class ChangeStream::Editor {
 
   Editor& clear_tracked_tables_columns() {
     instance_->tracked_tables_columns_.clear();
+    return *this;
+  }
+
+  Editor& set_options(
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption> options) {
+    instance_->options_ = options;
     return *this;
   }
 

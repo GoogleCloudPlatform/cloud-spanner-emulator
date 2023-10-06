@@ -8,7 +8,7 @@
  *
  * This code is released under the terms of the PostgreSQL License.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/test/regress/pg_regress_main.c
@@ -78,11 +78,11 @@ psql_start_test(const char *testname,
 	 * against different AMs without unnecessary differences.
 	 */
 	offset += snprintf(psql_cmd + offset, sizeof(psql_cmd) - offset,
-					   "\"%s%spsql\" -X -a -q -d \"%s\" -v %s < \"%s\" > \"%s\" 2>&1",
+					   "\"%s%spsql\" -X -a -q -d \"%s\" %s < \"%s\" > \"%s\" 2>&1",
 					   bindir ? bindir : "",
 					   bindir ? "/" : "",
 					   dblist->str,
-					   "HIDE_TABLEAM=\"on\"",
+					   "-v HIDE_TABLEAM=on -v HIDE_TOAST_COMPRESSION=on",
 					   infile,
 					   outfile);
 	if (offset >= sizeof(psql_cmd))
@@ -91,8 +91,9 @@ psql_start_test(const char *testname,
 		exit(2);
 	}
 
-	appnameenv = psprintf("PGAPPNAME=pg_regress/%s", testname);
-	putenv(appnameenv);
+	appnameenv = psprintf("pg_regress/%s", testname);
+	setenv("PGAPPNAME", appnameenv, 1);
+	free(appnameenv);
 
 	pid = spawn_process(psql_cmd);
 
@@ -104,7 +105,6 @@ psql_start_test(const char *testname,
 	}
 
 	unsetenv("PGAPPNAME");
-	free(appnameenv);
 
 	return pid;
 }
@@ -119,5 +119,8 @@ psql_init(int argc, char **argv)
 int
 main(int argc, char *argv[])
 {
-	return regression_main(argc, argv, psql_init, psql_start_test);
+	return regression_main(argc, argv,
+						   psql_init,
+						   psql_start_test,
+						   NULL /* no postfunc needed */ );
 }

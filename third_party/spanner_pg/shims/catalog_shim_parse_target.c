@@ -72,13 +72,14 @@
 Node* transformAssignmentIndirection(ParseState* pstate,
 									 Node* basenode,
 									 const char* targetName,
-									 bool targetIsArray,
+									 bool targetIsSubscripting,
 									 Oid targetTypeId,
 									 int32_t targetTypMod,
 									 Oid targetCollation,
 									 List* indirection,
 									 ListCell* indirection_cell,
 									 Node* rhs,
+									 CoercionContext ccontext,
 									 int location);
 
 Expr* transformAssignedExpr(ParseState* pstate, Expr* expr,
@@ -200,6 +201,7 @@ Expr* transformAssignedExpr(ParseState* pstate, Expr* expr,
 										   indirection,
 										   list_head(indirection),
 										   (Node *) expr,
+											 COERCION_ASSIGNMENT,
 										   location);
 	}
 	else

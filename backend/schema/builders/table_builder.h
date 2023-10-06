@@ -170,9 +170,10 @@ class Table::Editor {
     return *this;
   }
 
-  Editor& add_change_streams_tracking_entire_table(
+  Editor& add_change_stream_explicitly_tracking_table(
       const ChangeStream* change_stream) {
-    instance_->change_streams_tracking_entire_table_.push_back(change_stream);
+    instance_->change_streams_explicitly_tracking_table_.push_back(
+        change_stream);
     return *this;
   }
 

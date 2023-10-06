@@ -665,9 +665,10 @@ TEST_F(CatalogShimCcWrappersTest, Int8Proc) {
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
   std::vector<Oid> oidlist = GetProcOids("int8");
 
-  EXPECT_THAT(oidlist, UnorderedElementsAre(F_INT48, F_DTOI8, F_FTOI8, F_INT28,
-                                            F_OIDTOI8, F_NUMERIC_INT8,
-                                            F_JSONB_INT8, F_BITTOINT8));
+  EXPECT_THAT(oidlist,
+              UnorderedElementsAre(F_INT8_INT4, F_INT8_FLOAT8, F_INT8_FLOAT4,
+                                   F_INT8_INT2, F_INT8_OID, F_INT8_NUMERIC,
+                                   F_INT8_JSONB, F_INT8_BIT));
 }
 
 TEST_F(CatalogShimCcWrappersTest, FailedProc) {
@@ -689,7 +690,7 @@ TEST(GetAmopList, SuccessfulAmop) {
   std::vector<const FormData_pg_amop*> amopList =
       GetAmopsByOprOid(int8_eq_oid);
 
-  EXPECT_EQ(amopList.size(), 3);
+  EXPECT_EQ(amopList.size(), 5);
   EXPECT_EQ(amopList[0]->amopopr, int8_eq_oid);
 }
 
@@ -1027,7 +1028,8 @@ absl::StatusOr<ParseNamespaceItem*> BuildPartialJoinNSItem(
   ParseNamespaceItem* nsitem = addRangeTableEntryForJoin(
       pstate, column_names, res_nscolumns, JOIN_INNER,
       /*nummergedcols=*/0, /*aliasvars=*/nullptr, /*leftcols=*/nullptr,
-      /*rightcols=*/nullptr, /*alias=*/nullptr, /*inFromCl=*/true);
+      /*rightcols=*/nullptr, /*joinalias=*/nullptr, /*alias=*/nullptr,
+      /*inFromCl=*/true);
   return nsitem;
 }
 
@@ -1063,54 +1065,6 @@ TEST_F(CatalogShimCcWrappersTest, ExpandJoinTableToTable) {
                                           /*sublevels_up=*/0,
                                           /*location=*/-1, &colnames, &error);
   ASSERT_FALSE(error);
-}
-
-// Very simple tests of the cc wrapper version of date_in. The behavior of the
-// function is tested elsewhere, so just test the wrapper for success and
-// failure.
-TEST_F(CatalogShimCcWrappersTest, DateParses) {
-  zetasql::AnalyzerOptions analyzer_options =
-      GetSpangresTestAnalyzerOptions();
-  std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
-      GetSpangresTestCatalogAdapterHolder(analyzer_options);
-
-  // PostgreSQL Epoch starts at 2000-01-01.
-  DateADT date = date_in_c(pstrdup("2000-01-01"));
-  EXPECT_EQ(date, 0);
-}
-
-TEST_F(CatalogShimCcWrappersTest, DateFailsToParse) {
-  zetasql::AnalyzerOptions analyzer_options =
-      GetSpangresTestAnalyzerOptions();
-  std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
-      GetSpangresTestCatalogAdapterHolder(analyzer_options);
-
-  EXPECT_THROW(date_in_c(pstrdup("xxxINVALID DATExxx")),
-               PostgresEreportException);
-}
-
-// Very simple tests of the cc wrapper version of timestamptz_in. The behavior
-// of the function is tested elsewhere, so just test the wrapper for success and
-// failure.
-TEST_F(CatalogShimCcWrappersTest, TimestampTZParses) {
-  zetasql::AnalyzerOptions analyzer_options =
-      GetSpangresTestAnalyzerOptions();
-  std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
-      GetSpangresTestCatalogAdapterHolder(analyzer_options);
-
-  // PostgreSQL Epoch starts at 2000-01-01.
-  TimestampTz timestamp = timestamptz_in_c(pstrdup("2000-01-01 00:00:00z"));
-  EXPECT_EQ(timestamp, 0);
-}
-
-TEST_F(CatalogShimCcWrappersTest, TimestampTZFailsToParse) {
-  zetasql::AnalyzerOptions analyzer_options =
-      GetSpangresTestAnalyzerOptions();
-  std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
-      GetSpangresTestCatalogAdapterHolder(analyzer_options);
-
-  EXPECT_THROW(timestamptz_in_c(pstrdup("xxxINVALID TIMESTAMPxxx")),
-               PostgresEreportException);
 }
 
 }  // namespace

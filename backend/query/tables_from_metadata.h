@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_TABLES_FROM_METADATA_H_
 
 #include "zetasql/public/simple_catalog.h"
+#include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
@@ -34,10 +35,13 @@ static const zetasql_base::NoDestructor<
     absl::flat_hash_map<std::string, const zetasql::Type*>>
     kSpannerTypeToGSQLType{{
         {"BOOL", zetasql::types::BoolType()},
+        {"DATE", zetasql::types::DateType()},
         {"INT64", zetasql::types::Int64Type()},
+        {"FLOAT64", zetasql::types::FloatType()},
         {"STRING(32)", zetasql::types::StringType()},
         {"STRING(100)", zetasql::types::StringType()},
         {"STRING(MAX)", zetasql::types::StringType()},
+        {"TIMESTAMP", zetasql::types::TimestampType()},
     }};
 
 // Maps the type specified in the information catalog metadata for a Spanner

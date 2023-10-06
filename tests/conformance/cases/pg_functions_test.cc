@@ -27,6 +27,8 @@
 #include "absl/strings/str_cat.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
+#include "google/cloud/spanner/json.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -38,18 +40,32 @@ namespace {
 
 using testing::HasSubstr;
 using zetasql_base::testing::StatusIs;
+using JsonB = cloud::spanner::JsonB;
 
 class PGFunctionsTest : public DatabaseTest {
  public:
+  PGFunctionsTest() : feature_flags_({.enable_postgresql_interface = true}) {}
+
   void SetUp() override {
     dialect_ = database_api::DatabaseDialect::POSTGRESQL;
     DatabaseTest::SetUp();
   }
 
-  absl::Status SetUpDatabase() override { return absl::OkStatus(); }
+  absl::Status SetUpDatabase() override {
+    return SetSchemaFromFile("pg_functions.test");
+  }
 
  protected:
-  absl::Status PopulateDatabase() { return absl::OkStatus(); }
+  void PopulateDatabase() {
+    ZETASQL_EXPECT_OK(MultiInsert("values", {"id", "int_value", "double_value"},
+                          {{1, 1, 2.1},
+                           {2, 0, 3.2},
+                           {3, 5, 1.2},
+                           {4, Null<int64_t>(), Null<double>()}}));
+  }
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
 
 TEST_F(PGFunctionsTest, CastToDate) {
@@ -60,7 +76,8 @@ TEST_F(PGFunctionsTest, CastToDate) {
               IsOkAndHoldsRows({Date(2000, 1, 1)}));
 }
 
-TEST_F(PGFunctionsTest, CastToDateUnsupportedDate) {
+// TODO: Re-enable after Spangres updates the error message.
+TEST_F(PGFunctionsTest, DISABLED_CastToDateUnsupportedDate) {
   EXPECT_THAT(Query(
                   R"sql(
           SELECT CAST(col1 AS date) AS date
@@ -82,7 +99,8 @@ TEST_F(PGFunctionsTest, CastToTimestamp) {
           absl::CivilSecond(2000, 1, 1, 1, 2, 3), time_zone)))}));
 }
 
-TEST_F(PGFunctionsTest, CastToTimestampUnsupportedTimestamp) {
+// TODO: Re-enable after Spangres updates the error message.
+TEST_F(PGFunctionsTest, DISABLED_CastToTimestampUnsupportedTimestamp) {
   EXPECT_THAT(Query(
                   R"sql(
           SELECT CAST(col1 AS timestamptz) AS timestamptz
@@ -115,6 +133,28 @@ TEST_F(PGFunctionsTest, DISABLED_LeastDoubles) {
 TEST_F(PGFunctionsTest, DISABLED_GreatestDoubles) {
   EXPECT_THAT(Query("SELECT GREATEST(2.1, 5.5, 'NaN'::float, NULL)"),
               IsOkAndHoldsRows({{std::numeric_limits<double>::quiet_NaN()}}));
+}
+
+// MIN for the double type uses a different aggregator function than for other
+// types so we test for doubles and not doubles.
+TEST_F(PGFunctionsTest, MinDoubles) {
+  EXPECT_THAT(Query("SELECT MIN('NaN'::float)"),
+              IsOkAndHoldsRows({{std::numeric_limits<double>::quiet_NaN()}}));
+}
+
+TEST_F(PGFunctionsTest, MinDoublesFromTable) {
+  PopulateDatabase();
+  EXPECT_THAT(Query("SELECT MIN(double_value) FROM values"),
+              IsOkAndHoldsRows({{1.2}}));
+}
+
+TEST_F(PGFunctionsTest, MinNotDoubles) {
+  EXPECT_THAT(Query("SELECT MIN(12345)"), IsOkAndHoldsRows({{12345}}));
+}
+
+TEST_F(PGFunctionsTest, MinNotDoublesFromTable) {
+  EXPECT_THAT(Query("SELECT MIN(int_value) FROM values"),
+              IsOkAndHoldsRows({{Null<int64_t>()}}));
 }
 
 TEST_F(PGFunctionsTest, ArrayUpper) {
@@ -298,6 +338,63 @@ TEST_F(PGFunctionsTest, RegexpSplitToArray) {
   EXPECT_THAT(Query("SELECT regexp_split_to_array('abcd', '(a.c')"),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("invalid regular expression")));
+}
+
+TEST_F(PGFunctionsTest, DISABLED_JsonBSubscriptText) {
+  EXPECT_THAT(
+      Query("select jsonb_object_field_text('{\"a\":1}'::jsonb, 'a'::text)"),
+      IsOkAndHoldsRows({{"1"}}));
+  EXPECT_THAT(Query("select jsonb_array_element_text('[1,2]'::jsonb, 1)"),
+              IsOkAndHoldsRows({"2"}));
+
+  // Error cases
+  // Less than 2 arguments
+  EXPECT_THAT(
+      Query("select jsonb_object_field_text('{\"a\":1}'::jsonb)"),
+      StatusIs(absl::StatusCode::kNotFound, HasSubstr("does not exist")));
+  // More than 2 arguments
+  EXPECT_THAT(
+      Query("select jsonb_array_element_text('[1,2]'::jsonb, 1, 2)"),
+      StatusIs(absl::StatusCode::kNotFound, HasSubstr("does not exist")));
+  // Invalid arguments
+  EXPECT_THAT(
+      Query("select jsonb_array_element_text(1, '[1,2]'::jsonb)"),
+      StatusIs(absl::StatusCode::kNotFound, HasSubstr("does not exist")));
+}
+
+TEST_F(PGFunctionsTest, DISABLED_ToJsonB) {
+  EXPECT_THAT(Query(R"(select to_jsonb(null::bigint))"),
+              IsOkAndHoldsRows({Null<JsonB>()}));
+  EXPECT_THAT(Query(R"(select to_jsonb(4))"), IsOkAndHoldsRows({JsonB("4")}));
+  EXPECT_THAT(Query(R"(select to_jsonb(fAlSe))"),
+              IsOkAndHoldsRows({JsonB("false")}));
+  EXPECT_THAT(Query(R"(select to_jsonb(10419.85))"),
+              IsOkAndHoldsRows({JsonB("10419.85")}));
+  EXPECT_THAT(Query(R"(select to_jsonb('this is a string'::text))"),
+              IsOkAndHoldsRows({JsonB("\"this is a string\"")}));
+  EXPECT_THAT(Query(R"(select to_jsonb('hello'::bytea))"),
+              IsOkAndHoldsRows({JsonB("\"\\\\x68656c6c6f\"")}));
+  EXPECT_THAT(Query(R"(select to_jsonb('1999-01-08'::date))"),
+              IsOkAndHoldsRows({JsonB("\"1999-01-08\"")}));
+  EXPECT_THAT(Query(R"(select to_jsonb('1986-01-01T00:00:01Z'::timestamptz))"),
+              IsOkAndHoldsRows({JsonB("\"1986-01-01T00:00:01+00:00\"")}));
+  EXPECT_THAT(Query(R"(select to_jsonb('{" ", "ab"}'::bytea[]))"),
+              IsOkAndHoldsRows({JsonB("[\"\\\\x20\", \"\\\\x6162\"]")}));
+  EXPECT_THAT(Query(R"(select to_jsonb('{"b":[1e0],"a":[20e-1]}'::jsonb))"),
+              IsOkAndHoldsRows({JsonB(R"({"a": [2.0], "b": [1]})")}));
+  EXPECT_THAT(
+      Query(R"(select to_jsonb('-15e1500'::numeric))"),
+      IsOkAndHoldsRows({JsonB(std::string("-15" + std::string(1500, '0')))}));
+
+  // Error cases
+  // Less than 1 argument
+  EXPECT_THAT(
+      Query(R"(select to_jsonb())"),
+      StatusIs(absl::StatusCode::kNotFound, HasSubstr("does not exist")));
+  // More than 1 argument
+  EXPECT_THAT(
+      Query(R"(select to_jsonb(1, 2))"),
+      StatusIs(absl::StatusCode::kNotFound, HasSubstr("does not exist")));
 }
 
 }  // namespace

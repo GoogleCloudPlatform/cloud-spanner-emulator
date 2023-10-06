@@ -3,7 +3,7 @@
  * pg_collation.c
  *	  routines to support manipulation of the pg_collation relation
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -78,15 +78,25 @@ CollationCreate(const char *collname, Oid collnamespace,
 	 * friendlier error message.  The unique index provides a backstop against
 	 * race conditions.
 	 */
-	if (SearchSysCacheExists3(COLLNAMEENCNSP,
-							  PointerGetDatum(collname),
-							  Int32GetDatum(collencoding),
-							  ObjectIdGetDatum(collnamespace)))
+	oid = GetSysCacheOid3(COLLNAMEENCNSP,
+						  Anum_pg_collation_oid,
+						  PointerGetDatum(collname),
+						  Int32GetDatum(collencoding),
+						  ObjectIdGetDatum(collnamespace));
+	if (OidIsValid(oid))
 	{
 		if (quiet)
 			return InvalidOid;
 		else if (if_not_exists)
 		{
+			/*
+			 * If we are in an extension script, insist that the pre-existing
+			 * object be a member of the extension, to avoid security risks.
+			 */
+			ObjectAddressSet(myself, CollationRelationId, oid);
+			checkMembershipInCurrentExtension(&myself);
+
+			/* OK to skip */
 			ereport(NOTICE,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 collencoding == -1
@@ -116,16 +126,19 @@ CollationCreate(const char *collname, Oid collnamespace,
 	 * so we take a ShareRowExclusiveLock earlier, to protect against
 	 * concurrent changes fooling this check.
 	 */
-	if ((collencoding == -1 &&
-		 SearchSysCacheExists3(COLLNAMEENCNSP,
-							   PointerGetDatum(collname),
-							   Int32GetDatum(GetDatabaseEncoding()),
-							   ObjectIdGetDatum(collnamespace))) ||
-		(collencoding != -1 &&
-		 SearchSysCacheExists3(COLLNAMEENCNSP,
-							   PointerGetDatum(collname),
-							   Int32GetDatum(-1),
-							   ObjectIdGetDatum(collnamespace))))
+	if (collencoding == -1)
+		oid = GetSysCacheOid3(COLLNAMEENCNSP,
+							  Anum_pg_collation_oid,
+							  PointerGetDatum(collname),
+							  Int32GetDatum(GetDatabaseEncoding()),
+							  ObjectIdGetDatum(collnamespace));
+	else
+		oid = GetSysCacheOid3(COLLNAMEENCNSP,
+							  Anum_pg_collation_oid,
+							  PointerGetDatum(collname),
+							  Int32GetDatum(-1),
+							  ObjectIdGetDatum(collnamespace));
+	if (OidIsValid(oid))
 	{
 		if (quiet)
 		{
@@ -134,6 +147,14 @@ CollationCreate(const char *collname, Oid collnamespace,
 		}
 		else if (if_not_exists)
 		{
+			/*
+			 * If we are in an extension script, insist that the pre-existing
+			 * object be a member of the extension, to avoid security risks.
+			 */
+			ObjectAddressSet(myself, CollationRelationId, oid);
+			checkMembershipInCurrentExtension(&myself);
+
+			/* OK to skip */
 			table_close(rel, NoLock);
 			ereport(NOTICE,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
@@ -202,40 +223,4 @@ CollationCreate(const char *collname, Oid collnamespace,
 	table_close(rel, NoLock);
 
 	return oid;
-}
-
-/*
- * RemoveCollationById
- *
- * Remove a tuple from pg_collation by Oid. This function is solely
- * called inside catalog/dependency.c
- */
-void
-RemoveCollationById(Oid collationOid)
-{
-	Relation	rel;
-	ScanKeyData scanKeyData;
-	SysScanDesc scandesc;
-	HeapTuple	tuple;
-
-	rel = table_open(CollationRelationId, RowExclusiveLock);
-
-	ScanKeyInit(&scanKeyData,
-				Anum_pg_collation_oid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(collationOid));
-
-	scandesc = systable_beginscan(rel, CollationOidIndexId, true,
-								  NULL, 1, &scanKeyData);
-
-	tuple = systable_getnext(scandesc);
-
-	if (HeapTupleIsValid(tuple))
-		CatalogTupleDelete(rel, &tuple->t_self);
-	else
-		elog(ERROR, "could not find tuple for collation %u", collationOid);
-
-	systable_endscan(scandesc);
-
-	table_close(rel, RowExclusiveLock);
 }

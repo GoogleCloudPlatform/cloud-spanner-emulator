@@ -19,6 +19,15 @@ type {
 }
 
 group {
+  code: "SYNTAX_ERROR"
+
+  message {
+    name: "MoreThanOneSubqueryColumn"
+    pg_message_id: "subquery must return only one column"
+  }
+}
+
+group {
   code: "SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION"
 
   message {
@@ -127,6 +136,11 @@ group {
     name: "ColumnTypeForRelationNotFound"
     pg_message_id: "Unable to get type of column \"%s\" of relation \"%s\". (Is the column type supported?)"
   }
+
+  message {
+    name: "ColumnOfRelationNotExist"
+    pg_message_id: "column \"%s\" of relation \"%s\" does not exist"
+  }
 }
 
 group {
@@ -211,6 +225,11 @@ group {
   }
 
   message {
+    name: "UnableToConvertNanToNumber"
+    pg_message_id: "cannot convert NaN to %s"
+  }
+
+  message {
     name: "UnableToConvertNanToInteger"
     pg_message_id: "cannot convert NaN to integer"
   }
@@ -249,6 +268,21 @@ group {
     name: "ConversionNotSupport"
     pg_message_id: "conversion between %s and %s is not supported"
   }
+
+  message {
+    name: "MonthYearBinsNotSupported"
+    pg_message_id: "timestamps cannot be binned into intervals containing months or years"
+  }
+
+  message {
+    name: "DateUnitsNotSupported"
+    pg_message_id: "date units \"%s\" not supported"
+  }
+
+  message {
+    name: "TimestamptzUnitsNotSupported"
+    pg_message_id: "timestamp with time zone units \"%s\" not supported"
+  }
 }
 
 group {
@@ -279,8 +313,13 @@ group {
   }
 
   message {
-    name: "InvalidBinaryDigit"
+    name: "InvalidCharBinaryDigit"
     pg_message_id: "\"%c\" is not a valid binary digit"
+  }
+
+  message {
+    name: "InvalidStringBinaryDigit"
+    pg_message_id: "\"%.*s\" is not a valid binary digit"
   }
 
   message {
@@ -447,8 +486,38 @@ group {
   }
 
   message {
-    name: "InvalidRegularExpressionOption"
+    name: "InvalidRegularExpressionCharacterOption"
     pg_message_id: "invalid regular expression option: \"%c\""
+  }
+
+  message {
+    name: "InvalidRegularExpressionStringOption"
+    pg_message_id: "invalid regular expression option: \"%.*s\""
+  }
+
+  message {
+    name: "TimezoneNotRecognized"
+    pg_message_id: "time zone \"%s\" not recognized"
+  }
+
+  message {
+    name: "CurrentRelativeDateTimes"
+    pg_message_id: "current/relative datetimes are not supported"
+  }
+
+  message {
+    name: "EpochNotSupported"
+    pg_message_id: "epoch is not supported"
+  }
+
+  message {
+    name: "InfinityNotSupported"
+    pg_message_id: "infinity and -infinity are not supported"
+  }
+
+  message {
+    name: "TimestamptzUnitsNotRecognized"
+    pg_message_id: "timestamp with time zone units \"%s\" not recognized"
   }
 }
 
@@ -523,6 +592,20 @@ group {
 }
 
 group {
+  code: "DATETIME_VALUE_OUT_OF_RANGE"
+
+  message {
+    name: "TimestampOutOfRange"
+    pg_message_id: "timestamp out of range"
+  }
+
+  message {
+    name: "StrideOutOfRange"
+    pg_message_id: "stride must be greater than zero"
+  }
+}
+
+group {
   code: "RESERVED_NAME"
 
   message {
@@ -561,7 +644,7 @@ group {
 
   message {
     name: "DateTimeFormatError"
-    pg_message_id: "%s"
+    pg_message_id: "invalid input syntax for type %s: \"%s\""
   }
 
   message {

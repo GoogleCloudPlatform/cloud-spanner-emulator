@@ -34,6 +34,7 @@
 #include "backend/actions/context.h"
 #include "backend/actions/existence.h"
 #include "backend/actions/foreign_key.h"
+#include "backend/actions/foreign_key_actions.h"
 #include "backend/actions/generated_column.h"
 #include "backend/actions/index.h"
 #include "backend/actions/interleave.h"
@@ -156,6 +157,10 @@ void ActionRegistry::BuildActionRegistry() {
     for (const ForeignKey* foreign_key : table->referencing_foreign_keys()) {
       table_verifiers_[foreign_key->referenced_data_table()].emplace_back(
           std::make_unique<ForeignKeyReferencedVerifier>(foreign_key));
+      if (foreign_key->on_delete_action() == ForeignKey::Action::kCascade) {
+        table_effectors_[table].emplace_back(
+            std::make_unique<ForeignKeyActionEffector>(foreign_key));
+      }
     }
 
     // Actions for check constraints.

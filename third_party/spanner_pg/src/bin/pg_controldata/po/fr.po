@@ -105,17 +105,17 @@ msgstr ""
 #: pg_controldata.c:39
 #, c-format
 msgid " [-D, --pgdata=]DATADIR  data directory\n"
-msgstr "  [-D, --pgdata] RÉP_DONNEES  répertoire de la base de données\n"
+msgstr "  [-D, --pgdata] RÉP_DONNEES   répertoire de la base de données\n"
 
 #: pg_controldata.c:40
 #, c-format
 msgid "  -V, --version          output version information, then exit\n"
-msgstr "  -V, --version               affiche la version puis quitte\n"
+msgstr "  -V, --version                affiche la version puis quitte\n"
 
 #: pg_controldata.c:41
 #, c-format
 msgid "  -?, --help             show this help, then exit\n"
-msgstr "  -?, --help                  affiche cette aide puis quitte\n"
+msgstr "  -?, --help                   affiche cette aide puis quitte\n"
 
 #: pg_controldata.c:42
 #, c-format

@@ -59,7 +59,7 @@ enum KeywordType {
 
 // To avoid importing and linking PG code, we define some of our own
 // preprocessor magic to make a lookup table for keywords.
-#define PG_KEYWORD(name, ignored, type) {name, type},
+#define PG_KEYWORD(name, ignored, type, collabel) {name, type},
 static auto kKeywordsMap =
     std::map<absl::string_view, KeywordType>({
 #include "third_party/spanner_pg/src/include/parser/kwlist.h"

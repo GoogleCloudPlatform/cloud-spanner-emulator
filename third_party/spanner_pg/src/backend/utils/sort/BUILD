@@ -50,6 +50,7 @@ cc_library(
     name = "sort",
     srcs = [
         "logtape.c",
+        "qsort_interruptible.c",
         "sharedtuplestore.c",
         "sortsupport.c",
         "tuplesort.c",

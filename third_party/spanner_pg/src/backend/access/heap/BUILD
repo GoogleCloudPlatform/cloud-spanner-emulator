@@ -56,7 +56,6 @@ cc_library(
         "hio.c",
         "pruneheap.c",
         "rewriteheap.c",
-        "syncscan.c",
         "vacuumlazy.c",
         "visibilitymap.c",
     ],

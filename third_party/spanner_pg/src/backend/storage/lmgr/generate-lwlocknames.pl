@@ -1,10 +1,10 @@
 #!/usr/bin/perl
 #
 # Generate lwlocknames.h and lwlocknames.c from lwlocknames.txt
-# Copyright (c) 2000-2020, PostgreSQL Global Development Group
+# Copyright (c) 2000-2021, PostgreSQL Global Development Group
 
-use warnings;
 use strict;
+use warnings;
 
 my $lastlockidx = -1;
 my $continue    = "\n";

@@ -3021,6 +3021,15 @@ absl::Status ForwardTransformer::CheckForUnsupportedFeatures(
         "Statements with DISTINCT clauses are not supported");
   }
 
+  if (query.groupDistinct) {
+    return absl::UnimplementedError(
+        "Statements with GROUP BY DISTINCT clauses are not supported");
+  }
+
+  if (query.isReturn) {
+    return absl::UnimplementedError("RETURN statements are not supported");
+  }
+
   if (query.hasDistinctOn) {
     return absl::UnimplementedError(
         "Statements with DISTINCT ON clauses are not supported");
@@ -3131,8 +3140,6 @@ ForwardTransformer::BuildGsqlResolvedStatement(const Query& query) {
 
     case CMD_UTILITY:
       ZETASQL_RET_CHECK(query.utilityStmt != NULL);
-      // TODO: Use a list/function from the DDL team that is
-      // automatically updated as new DDL statements are supported.
       switch (query.utilityStmt->type) {
         case T_CreatedbStmt:
         case T_CreateStmt:

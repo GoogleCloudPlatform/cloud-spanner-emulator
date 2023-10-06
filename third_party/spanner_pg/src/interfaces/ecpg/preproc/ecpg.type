@@ -9,7 +9,7 @@
 %type <str> ECPGDeallocateDescr
 %type <str> ECPGDeclaration
 %type <str> ECPGDeclare
-%type <str> ECPGDescribe
+%type <str> ECPGDeclareStmt
 %type <str> ECPGDisconnect
 %type <str> ECPGExecuteImmediateStmt
 %type <str> ECPGFree
@@ -142,3 +142,5 @@
 %type  <type>   var_type
 
 %type  <action> action
+
+%type  <describe> ECPGDescribe

@@ -24,6 +24,10 @@ test: deadlock-hard
 test: deadlock-soft
 test: deadlock-soft-2
 test: deadlock-parallel
+test: detach-partition-concurrently-1
+test: detach-partition-concurrently-2
+test: detach-partition-concurrently-3
+test: detach-partition-concurrently-4
 test: fk-contention
 test: fk-deadlock
 test: fk-deadlock2
@@ -51,6 +55,7 @@ test: lock-committed-keyupdate
 test: update-locked-tuple
 test: reindex-concurrently
 test: reindex-concurrently-toast
+test: reindex-schema
 test: propagate-lock-delete
 test: tuplelock-conflict
 test: tuplelock-update
@@ -80,6 +85,7 @@ test: timeouts
 test: vacuum-concurrent-drop
 test: vacuum-conflict
 test: vacuum-skip-locked
+test: horizons
 test: predicate-hash
 test: predicate-gist
 test: predicate-gin
@@ -93,3 +99,4 @@ test: plpgsql-toast
 test: truncate-conflict
 test: serializable-parallel
 test: serializable-parallel-2
+test: serializable-parallel-3

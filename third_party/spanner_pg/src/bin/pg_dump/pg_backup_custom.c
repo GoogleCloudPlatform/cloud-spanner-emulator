@@ -264,7 +264,6 @@ _ReadExtraToc(ArchiveHandle *AH, TocEntry *te)
  * that includes useful information about the TOC entry.
  *
  * Optional.
- *
  */
 static void
 _PrintExtraToc(ArchiveHandle *AH, TocEntry *te)
@@ -327,7 +326,6 @@ _WriteData(ArchiveHandle *AH, const void *data, size_t dLen)
  * finished.
  *
  * Optional.
- *
  */
 static void
 _EndData(ArchiveHandle *AH, TocEntry *te)
@@ -593,8 +591,8 @@ _LoadBlobs(ArchiveHandle *AH, bool drop)
 /*
  * Skip the BLOBs from the current file position.
  * BLOBS are written sequentially as data blocks (see below).
- * Each BLOB is preceded by it's original OID.
- * A zero OID indicated the end of the BLOBS
+ * Each BLOB is preceded by its original OID.
+ * A zero OID indicates the end of the BLOBS.
  */
 static void
 _skipBlobs(ArchiveHandle *AH)
@@ -612,7 +610,7 @@ _skipBlobs(ArchiveHandle *AH)
 /*
  * Skip data from current file position.
  * Data blocks are formatted as an integer length, followed by data.
- * A zero length denoted the end of the block.
+ * A zero length indicates the end of the block.
 */
 static void
 _skipData(ArchiveHandle *AH)
@@ -621,7 +619,6 @@ _skipData(ArchiveHandle *AH)
 	size_t		blkLen;
 	char	   *buf = NULL;
 	int			buflen = 0;
-	size_t		cnt;
 
 	blkLen = ReadInt(AH);
 	while (blkLen != 0)
@@ -640,7 +637,7 @@ _skipData(ArchiveHandle *AH)
 				buf = (char *) pg_malloc(blkLen);
 				buflen = blkLen;
 			}
-			if ((cnt = fread(buf, 1, blkLen, AH->FH)) != blkLen)
+			if (fread(buf, 1, blkLen, AH->FH) != blkLen)
 			{
 				if (feof(AH->FH))
 					fatal("could not read from input file: end of file");
@@ -666,9 +663,7 @@ _skipData(ArchiveHandle *AH)
 static int
 _WriteByte(ArchiveHandle *AH, const int i)
 {
-	int			res;
-
-	if ((res = fputc(i, AH->FH)) == EOF)
+	if (fputc(i, AH->FH) == EOF)
 		WRITE_ERROR_EXIT;
 
 	return 1;

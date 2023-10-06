@@ -1,7 +1,7 @@
 /*
  * PostgreSQL System Views
  *
- * Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  * src/backend/catalog/system_views.sql
  *
@@ -47,7 +47,7 @@ CREATE VIEW pg_shadow AS
     ON (pg_authid.oid = setrole AND setdatabase = 0)
     WHERE rolcanlogin;
 
-REVOKE ALL on pg_shadow FROM public;
+REVOKE ALL ON pg_shadow FROM public;
 
 CREATE VIEW pg_group AS
     SELECT
@@ -164,7 +164,7 @@ CREATE VIEW pg_indexes AS
          LEFT JOIN pg_tablespace T ON (T.oid = I.reltablespace)
     WHERE C.relkind IN ('r', 'm', 'p') AND I.relkind IN ('i', 'I');
 
-CREATE OR REPLACE VIEW pg_sequences AS
+CREATE VIEW pg_sequences AS
     SELECT
         N.nspname AS schemaname,
         C.relname AS sequencename,
@@ -251,7 +251,7 @@ CREATE VIEW pg_stats WITH (security_barrier) AS
     AND has_column_privilege(c.oid, a.attnum, 'select')
     AND (c.relrowsecurity = false OR NOT row_security_active(c.oid));
 
-REVOKE ALL on pg_statistic FROM public;
+REVOKE ALL ON pg_statistic FROM public;
 
 CREATE VIEW pg_stats_ext WITH (security_barrier) AS
     SELECT cn.nspname AS schemaname,
@@ -264,6 +264,7 @@ CREATE VIEW pg_stats_ext WITH (security_barrier) AS
                   JOIN pg_attribute a
                        ON (a.attrelid = s.stxrelid AND a.attnum = k)
            ) AS attnames,
+           pg_get_statisticsobjdef_expressions(s.oid) as exprs,
            s.stxkind AS kinds,
            sd.stxdndistinct AS n_distinct,
            sd.stxddependencies AS dependencies,
@@ -290,8 +291,76 @@ CREATE VIEW pg_stats_ext WITH (security_barrier) AS
                 WHERE NOT has_column_privilege(c.oid, a.attnum, 'select') )
     AND (c.relrowsecurity = false OR NOT row_security_active(c.oid));
 
+CREATE VIEW pg_stats_ext_exprs WITH (security_barrier) AS
+    SELECT cn.nspname AS schemaname,
+           c.relname AS tablename,
+           sn.nspname AS statistics_schemaname,
+           s.stxname AS statistics_name,
+           pg_get_userbyid(s.stxowner) AS statistics_owner,
+           stat.expr,
+           (stat.a).stanullfrac AS null_frac,
+           (stat.a).stawidth AS avg_width,
+           (stat.a).stadistinct AS n_distinct,
+           (CASE
+               WHEN (stat.a).stakind1 = 1 THEN (stat.a).stavalues1
+               WHEN (stat.a).stakind2 = 1 THEN (stat.a).stavalues2
+               WHEN (stat.a).stakind3 = 1 THEN (stat.a).stavalues3
+               WHEN (stat.a).stakind4 = 1 THEN (stat.a).stavalues4
+               WHEN (stat.a).stakind5 = 1 THEN (stat.a).stavalues5
+           END) AS most_common_vals,
+           (CASE
+               WHEN (stat.a).stakind1 = 1 THEN (stat.a).stanumbers1
+               WHEN (stat.a).stakind2 = 1 THEN (stat.a).stanumbers2
+               WHEN (stat.a).stakind3 = 1 THEN (stat.a).stanumbers3
+               WHEN (stat.a).stakind4 = 1 THEN (stat.a).stanumbers4
+               WHEN (stat.a).stakind5 = 1 THEN (stat.a).stanumbers5
+           END) AS most_common_freqs,
+           (CASE
+               WHEN (stat.a).stakind1 = 2 THEN (stat.a).stavalues1
+               WHEN (stat.a).stakind2 = 2 THEN (stat.a).stavalues2
+               WHEN (stat.a).stakind3 = 2 THEN (stat.a).stavalues3
+               WHEN (stat.a).stakind4 = 2 THEN (stat.a).stavalues4
+               WHEN (stat.a).stakind5 = 2 THEN (stat.a).stavalues5
+           END) AS histogram_bounds,
+           (CASE
+               WHEN (stat.a).stakind1 = 3 THEN (stat.a).stanumbers1[1]
+               WHEN (stat.a).stakind2 = 3 THEN (stat.a).stanumbers2[1]
+               WHEN (stat.a).stakind3 = 3 THEN (stat.a).stanumbers3[1]
+               WHEN (stat.a).stakind4 = 3 THEN (stat.a).stanumbers4[1]
+               WHEN (stat.a).stakind5 = 3 THEN (stat.a).stanumbers5[1]
+           END) correlation,
+           (CASE
+               WHEN (stat.a).stakind1 = 4 THEN (stat.a).stavalues1
+               WHEN (stat.a).stakind2 = 4 THEN (stat.a).stavalues2
+               WHEN (stat.a).stakind3 = 4 THEN (stat.a).stavalues3
+               WHEN (stat.a).stakind4 = 4 THEN (stat.a).stavalues4
+               WHEN (stat.a).stakind5 = 4 THEN (stat.a).stavalues5
+           END) AS most_common_elems,
+           (CASE
+               WHEN (stat.a).stakind1 = 4 THEN (stat.a).stanumbers1
+               WHEN (stat.a).stakind2 = 4 THEN (stat.a).stanumbers2
+               WHEN (stat.a).stakind3 = 4 THEN (stat.a).stanumbers3
+               WHEN (stat.a).stakind4 = 4 THEN (stat.a).stanumbers4
+               WHEN (stat.a).stakind5 = 4 THEN (stat.a).stanumbers5
+           END) AS most_common_elem_freqs,
+           (CASE
+               WHEN (stat.a).stakind1 = 5 THEN (stat.a).stanumbers1
+               WHEN (stat.a).stakind2 = 5 THEN (stat.a).stanumbers2
+               WHEN (stat.a).stakind3 = 5 THEN (stat.a).stanumbers3
+               WHEN (stat.a).stakind4 = 5 THEN (stat.a).stanumbers4
+               WHEN (stat.a).stakind5 = 5 THEN (stat.a).stanumbers5
+           END) AS elem_count_histogram
+    FROM pg_statistic_ext s JOIN pg_class c ON (c.oid = s.stxrelid)
+         LEFT JOIN pg_statistic_ext_data sd ON (s.oid = sd.stxoid)
+         LEFT JOIN pg_namespace cn ON (cn.oid = c.relnamespace)
+         LEFT JOIN pg_namespace sn ON (sn.oid = s.stxnamespace)
+         JOIN LATERAL (
+             SELECT unnest(pg_get_statisticsobjdef_expressions(s.oid)) AS expr,
+                    unnest(sd.stxdexpr)::pg_statistic AS a
+         ) stat ON (stat.expr IS NOT NULL);
+
 -- unprivileged users may read pg_statistic_ext but not pg_statistic_ext_data
-REVOKE ALL on pg_statistic_ext_data FROM public;
+REVOKE ALL ON pg_statistic_ext_data FROM public;
 
 CREATE VIEW pg_publication_tables AS
     SELECT
@@ -527,13 +596,13 @@ GRANT SELECT, UPDATE ON pg_settings TO PUBLIC;
 CREATE VIEW pg_file_settings AS
    SELECT * FROM pg_show_all_file_settings() AS A;
 
-REVOKE ALL on pg_file_settings FROM PUBLIC;
+REVOKE ALL ON pg_file_settings FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION pg_show_all_file_settings() FROM PUBLIC;
 
 CREATE VIEW pg_hba_file_rules AS
    SELECT * FROM pg_hba_file_rules() AS A;
 
-REVOKE ALL on pg_hba_file_rules FROM PUBLIC;
+REVOKE ALL ON pg_hba_file_rules FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION pg_hba_file_rules() FROM PUBLIC;
 
 CREATE VIEW pg_timezone_abbrevs AS
@@ -545,7 +614,7 @@ CREATE VIEW pg_timezone_names AS
 CREATE VIEW pg_config AS
     SELECT * FROM pg_config();
 
-REVOKE ALL on pg_config FROM PUBLIC;
+REVOKE ALL ON pg_config FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION pg_config() FROM PUBLIC;
 
 CREATE VIEW pg_shmem_allocations AS
@@ -553,6 +622,12 @@ CREATE VIEW pg_shmem_allocations AS
 
 REVOKE ALL ON pg_shmem_allocations FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION pg_get_shmem_allocations() FROM PUBLIC;
+
+CREATE VIEW pg_backend_memory_contexts AS
+    SELECT * FROM pg_get_backend_memory_contexts();
+
+REVOKE ALL ON pg_backend_memory_contexts FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION pg_get_backend_memory_contexts() FROM PUBLIC;
 
 -- Statistics views
 
@@ -585,7 +660,7 @@ CREATE VIEW pg_stat_all_tables AS
     FROM pg_class C LEFT JOIN
          pg_index I ON C.oid = I.indrelid
          LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace)
-    WHERE C.relkind IN ('r', 't', 'm')
+    WHERE C.relkind IN ('r', 't', 'm', 'p')
     GROUP BY C.oid, N.nspname, C.relname;
 
 CREATE VIEW pg_stat_xact_all_tables AS
@@ -605,7 +680,7 @@ CREATE VIEW pg_stat_xact_all_tables AS
     FROM pg_class C LEFT JOIN
          pg_index I ON C.oid = I.indrelid
          LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace)
-    WHERE C.relkind IN ('r', 't', 'm')
+    WHERE C.relkind IN ('r', 't', 'm', 'p')
     GROUP BY C.oid, N.nspname, C.relname;
 
 CREATE VIEW pg_stat_sys_tables AS
@@ -758,6 +833,7 @@ CREATE VIEW pg_stat_activity AS
             S.state,
             S.backend_xid,
             s.backend_xmin,
+            S.query_id,
             S.query,
             S.backend_type
     FROM pg_stat_get_activity(NULL) AS S
@@ -845,7 +921,6 @@ CREATE VIEW pg_stat_ssl AS
             S.sslversion AS version,
             S.sslcipher AS cipher,
             S.sslbits AS bits,
-            S.sslcompression AS compression,
             S.ssl_client_dn AS client_dn,
             S.ssl_client_serial AS client_serial,
             S.ssl_issuer_dn AS issuer_dn
@@ -876,9 +951,26 @@ CREATE VIEW pg_replication_slots AS
             L.restart_lsn,
             L.confirmed_flush_lsn,
             L.wal_status,
-            L.safe_wal_size
+            L.safe_wal_size,
+            L.two_phase
     FROM pg_get_replication_slots() AS L
             LEFT JOIN pg_database D ON (L.datoid = D.oid);
+
+CREATE VIEW pg_stat_replication_slots AS
+    SELECT
+            s.slot_name,
+            s.spill_txns,
+            s.spill_count,
+            s.spill_bytes,
+            s.stream_txns,
+            s.stream_count,
+            s.stream_bytes,
+            s.total_txns,
+            s.total_bytes,
+            s.stats_reset
+    FROM pg_replication_slots as r,
+        LATERAL pg_stat_get_replication_slot(slot_name) as s
+    WHERE r.datoid IS NOT NULL; -- excluding physical slots
 
 CREATE VIEW pg_stat_database AS
     SELECT
@@ -906,6 +998,13 @@ CREATE VIEW pg_stat_database AS
             pg_stat_get_db_checksum_last_failure(D.oid) AS checksum_last_failure,
             pg_stat_get_db_blk_read_time(D.oid) AS blk_read_time,
             pg_stat_get_db_blk_write_time(D.oid) AS blk_write_time,
+            pg_stat_get_db_session_time(D.oid) AS session_time,
+            pg_stat_get_db_active_time(D.oid) AS active_time,
+            pg_stat_get_db_idle_in_transaction_time(D.oid) AS idle_in_transaction_time,
+            pg_stat_get_db_sessions(D.oid) AS sessions,
+            pg_stat_get_db_sessions_abandoned(D.oid) AS sessions_abandoned,
+            pg_stat_get_db_sessions_fatal(D.oid) AS sessions_fatal,
+            pg_stat_get_db_sessions_killed(D.oid) AS sessions_killed,
             pg_stat_get_db_stat_reset_time(D.oid) AS stats_reset
     FROM (
         SELECT 0 AS oid, NULL::name AS datname
@@ -972,6 +1071,19 @@ CREATE VIEW pg_stat_bgwriter AS
         pg_stat_get_buf_fsync_backend() AS buffers_backend_fsync,
         pg_stat_get_buf_alloc() AS buffers_alloc,
         pg_stat_get_bgwriter_stat_reset_time() AS stats_reset;
+
+CREATE VIEW pg_stat_wal AS
+    SELECT
+        w.wal_records,
+        w.wal_fpi,
+        w.wal_bytes,
+        w.wal_buffers_full,
+        w.wal_write,
+        w.wal_sync,
+        w.wal_write_time,
+        w.wal_sync_time,
+        w.stats_reset
+    FROM pg_stat_get_wal() w;
 
 CREATE VIEW pg_stat_progress_analyze AS
     SELECT
@@ -1090,6 +1202,26 @@ CREATE VIEW pg_stat_progress_basebackup AS
         S.param5 AS tablespaces_streamed
     FROM pg_stat_get_progress_info('BASEBACKUP') AS S;
 
+
+CREATE VIEW pg_stat_progress_copy AS
+    SELECT
+        S.pid AS pid, S.datid AS datid, D.datname AS datname,
+        S.relid AS relid,
+        CASE S.param5 WHEN 1 THEN 'COPY FROM'
+                      WHEN 2 THEN 'COPY TO'
+                      END AS command,
+        CASE S.param6 WHEN 1 THEN 'FILE'
+                      WHEN 2 THEN 'PROGRAM'
+                      WHEN 3 THEN 'PIPE'
+                      WHEN 4 THEN 'CALLBACK'
+                      END AS "type",
+        S.param1 AS bytes_processed,
+        S.param2 AS bytes_total,
+        S.param3 AS tuples_processed,
+        S.param4 AS tuples_excluded
+    FROM pg_stat_get_progress_info('COPY') AS S
+        LEFT JOIN pg_database D ON S.datid = D.oid;
+
 CREATE VIEW pg_user_mappings AS
     SELECT
         U.oid       AS umid,
@@ -1112,7 +1244,7 @@ CREATE VIEW pg_user_mappings AS
         JOIN pg_foreign_server S ON (U.umserver = S.oid)
         LEFT JOIN pg_authid A ON (A.oid = U.umuser);
 
-REVOKE ALL on pg_user_mapping FROM public;
+REVOKE ALL ON pg_user_mapping FROM public;
 
 CREATE VIEW pg_replication_origin_status AS
     SELECT *
@@ -1120,361 +1252,8 @@ CREATE VIEW pg_replication_origin_status AS
 
 REVOKE ALL ON pg_replication_origin_status FROM public;
 
--- All columns of pg_subscription except subconninfo are readable.
+-- All columns of pg_subscription except subconninfo are publicly readable.
 REVOKE ALL ON pg_subscription FROM public;
-GRANT SELECT (subdbid, subname, subowner, subenabled, subslotname, subpublications)
+GRANT SELECT (oid, subdbid, subname, subowner, subenabled, subbinary,
+              substream, subslotname, subsynccommit, subpublications)
     ON pg_subscription TO public;
-
-
---
--- We have a few function definitions in here, too.
--- At some point there might be enough to justify breaking them out into
--- a separate "system_functions.sql" file.
---
-
--- Tsearch debug function.  Defined here because it'd be pretty unwieldy
--- to put it into pg_proc.h
-
-CREATE FUNCTION ts_debug(IN config regconfig, IN document text,
-    OUT alias text,
-    OUT description text,
-    OUT token text,
-    OUT dictionaries regdictionary[],
-    OUT dictionary regdictionary,
-    OUT lexemes text[])
-RETURNS SETOF record AS
-$$
-SELECT
-    tt.alias AS alias,
-    tt.description AS description,
-    parse.token AS token,
-    ARRAY ( SELECT m.mapdict::pg_catalog.regdictionary
-            FROM pg_catalog.pg_ts_config_map AS m
-            WHERE m.mapcfg = $1 AND m.maptokentype = parse.tokid
-            ORDER BY m.mapseqno )
-    AS dictionaries,
-    ( SELECT mapdict::pg_catalog.regdictionary
-      FROM pg_catalog.pg_ts_config_map AS m
-      WHERE m.mapcfg = $1 AND m.maptokentype = parse.tokid
-      ORDER BY pg_catalog.ts_lexize(mapdict, parse.token) IS NULL, m.mapseqno
-      LIMIT 1
-    ) AS dictionary,
-    ( SELECT pg_catalog.ts_lexize(mapdict, parse.token)
-      FROM pg_catalog.pg_ts_config_map AS m
-      WHERE m.mapcfg = $1 AND m.maptokentype = parse.tokid
-      ORDER BY pg_catalog.ts_lexize(mapdict, parse.token) IS NULL, m.mapseqno
-      LIMIT 1
-    ) AS lexemes
-FROM pg_catalog.ts_parse(
-        (SELECT cfgparser FROM pg_catalog.pg_ts_config WHERE oid = $1 ), $2
-    ) AS parse,
-     pg_catalog.ts_token_type(
-        (SELECT cfgparser FROM pg_catalog.pg_ts_config WHERE oid = $1 )
-    ) AS tt
-WHERE tt.tokid = parse.tokid
-$$
-LANGUAGE SQL STRICT STABLE PARALLEL SAFE;
-
-COMMENT ON FUNCTION ts_debug(regconfig,text) IS
-    'debug function for text search configuration';
-
-CREATE FUNCTION ts_debug(IN document text,
-    OUT alias text,
-    OUT description text,
-    OUT token text,
-    OUT dictionaries regdictionary[],
-    OUT dictionary regdictionary,
-    OUT lexemes text[])
-RETURNS SETOF record AS
-$$
-    SELECT * FROM pg_catalog.ts_debug( pg_catalog.get_current_ts_config(), $1);
-$$
-LANGUAGE SQL STRICT STABLE PARALLEL SAFE;
-
-COMMENT ON FUNCTION ts_debug(text) IS
-    'debug function for current text search configuration';
-
---
--- Redeclare built-in functions that need default values attached to their
--- arguments.  It's impractical to set those up directly in pg_proc.h because
--- of the complexity and platform-dependency of the expression tree
--- representation.  (Note that internal functions still have to have entries
--- in pg_proc.h; we are merely causing their proargnames and proargdefaults
--- to get filled in.)
---
-
-CREATE OR REPLACE FUNCTION
-  pg_start_backup(label text, fast boolean DEFAULT false, exclusive boolean DEFAULT true)
-  RETURNS pg_lsn STRICT VOLATILE LANGUAGE internal AS 'pg_start_backup'
-  PARALLEL RESTRICTED;
-
-CREATE OR REPLACE FUNCTION pg_stop_backup (
-        exclusive boolean, wait_for_archive boolean DEFAULT true,
-        OUT lsn pg_lsn, OUT labelfile text, OUT spcmapfile text)
-  RETURNS SETOF record STRICT VOLATILE LANGUAGE internal as 'pg_stop_backup_v2'
-  PARALLEL RESTRICTED;
-
-CREATE OR REPLACE FUNCTION
-  pg_promote(wait boolean DEFAULT true, wait_seconds integer DEFAULT 60)
-  RETURNS boolean STRICT VOLATILE LANGUAGE INTERNAL AS 'pg_promote'
-  PARALLEL SAFE;
-
--- legacy definition for compatibility with 9.3
-CREATE OR REPLACE FUNCTION
-  json_populate_record(base anyelement, from_json json, use_json_as_text boolean DEFAULT false)
-  RETURNS anyelement LANGUAGE internal STABLE AS 'json_populate_record' PARALLEL SAFE;
-
--- legacy definition for compatibility with 9.3
-CREATE OR REPLACE FUNCTION
-  json_populate_recordset(base anyelement, from_json json, use_json_as_text boolean DEFAULT false)
-  RETURNS SETOF anyelement LANGUAGE internal STABLE ROWS 100  AS 'json_populate_recordset' PARALLEL SAFE;
-
-CREATE OR REPLACE FUNCTION pg_logical_slot_get_changes(
-    IN slot_name name, IN upto_lsn pg_lsn, IN upto_nchanges int, VARIADIC options text[] DEFAULT '{}',
-    OUT lsn pg_lsn, OUT xid xid, OUT data text)
-RETURNS SETOF RECORD
-LANGUAGE INTERNAL
-VOLATILE ROWS 1000 COST 1000
-AS 'pg_logical_slot_get_changes';
-
-CREATE OR REPLACE FUNCTION pg_logical_slot_peek_changes(
-    IN slot_name name, IN upto_lsn pg_lsn, IN upto_nchanges int, VARIADIC options text[] DEFAULT '{}',
-    OUT lsn pg_lsn, OUT xid xid, OUT data text)
-RETURNS SETOF RECORD
-LANGUAGE INTERNAL
-VOLATILE ROWS 1000 COST 1000
-AS 'pg_logical_slot_peek_changes';
-
-CREATE OR REPLACE FUNCTION pg_logical_slot_get_binary_changes(
-    IN slot_name name, IN upto_lsn pg_lsn, IN upto_nchanges int, VARIADIC options text[] DEFAULT '{}',
-    OUT lsn pg_lsn, OUT xid xid, OUT data bytea)
-RETURNS SETOF RECORD
-LANGUAGE INTERNAL
-VOLATILE ROWS 1000 COST 1000
-AS 'pg_logical_slot_get_binary_changes';
-
-CREATE OR REPLACE FUNCTION pg_logical_slot_peek_binary_changes(
-    IN slot_name name, IN upto_lsn pg_lsn, IN upto_nchanges int, VARIADIC options text[] DEFAULT '{}',
-    OUT lsn pg_lsn, OUT xid xid, OUT data bytea)
-RETURNS SETOF RECORD
-LANGUAGE INTERNAL
-VOLATILE ROWS 1000 COST 1000
-AS 'pg_logical_slot_peek_binary_changes';
-
-CREATE OR REPLACE FUNCTION pg_create_physical_replication_slot(
-    IN slot_name name, IN immediately_reserve boolean DEFAULT false,
-    IN temporary boolean DEFAULT false,
-    OUT slot_name name, OUT lsn pg_lsn)
-RETURNS RECORD
-LANGUAGE INTERNAL
-STRICT VOLATILE
-AS 'pg_create_physical_replication_slot';
-
-CREATE OR REPLACE FUNCTION pg_create_logical_replication_slot(
-    IN slot_name name, IN plugin name,
-    IN temporary boolean DEFAULT false,
-    OUT slot_name name, OUT lsn pg_lsn)
-RETURNS RECORD
-LANGUAGE INTERNAL
-STRICT VOLATILE
-AS 'pg_create_logical_replication_slot';
-
-CREATE OR REPLACE FUNCTION
-  make_interval(years int4 DEFAULT 0, months int4 DEFAULT 0, weeks int4 DEFAULT 0,
-                days int4 DEFAULT 0, hours int4 DEFAULT 0, mins int4 DEFAULT 0,
-                secs double precision DEFAULT 0.0)
-RETURNS interval
-LANGUAGE INTERNAL
-STRICT IMMUTABLE PARALLEL SAFE
-AS 'make_interval';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_set(jsonb_in jsonb, path text[] , replacement jsonb,
-            create_if_missing boolean DEFAULT true)
-RETURNS jsonb
-LANGUAGE INTERNAL
-STRICT IMMUTABLE PARALLEL SAFE
-AS 'jsonb_set';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_set_lax(jsonb_in jsonb, path text[] , replacement jsonb,
-            create_if_missing boolean DEFAULT true,
-            null_value_treatment text DEFAULT 'use_json_null')
-RETURNS jsonb
-LANGUAGE INTERNAL
-CALLED ON NULL INPUT IMMUTABLE PARALLEL SAFE
-AS 'jsonb_set_lax';
-
-CREATE OR REPLACE FUNCTION
-  parse_ident(str text, strict boolean DEFAULT true)
-RETURNS text[]
-LANGUAGE INTERNAL
-STRICT IMMUTABLE PARALLEL SAFE
-AS 'parse_ident';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_insert(jsonb_in jsonb, path text[] , replacement jsonb,
-            insert_after boolean DEFAULT false)
-RETURNS jsonb
-LANGUAGE INTERNAL
-STRICT IMMUTABLE PARALLEL SAFE
-AS 'jsonb_insert';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_path_exists(target jsonb, path jsonpath, vars jsonb DEFAULT '{}',
-                    silent boolean DEFAULT false)
-RETURNS boolean
-LANGUAGE INTERNAL
-STRICT IMMUTABLE PARALLEL SAFE
-AS 'jsonb_path_exists';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_path_match(target jsonb, path jsonpath, vars jsonb DEFAULT '{}',
-                   silent boolean DEFAULT false)
-RETURNS boolean
-LANGUAGE INTERNAL
-STRICT IMMUTABLE PARALLEL SAFE
-AS 'jsonb_path_match';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_path_query(target jsonb, path jsonpath, vars jsonb DEFAULT '{}',
-                   silent boolean DEFAULT false)
-RETURNS SETOF jsonb
-LANGUAGE INTERNAL
-STRICT IMMUTABLE PARALLEL SAFE
-AS 'jsonb_path_query';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_path_query_array(target jsonb, path jsonpath, vars jsonb DEFAULT '{}',
-                         silent boolean DEFAULT false)
-RETURNS jsonb
-LANGUAGE INTERNAL
-STRICT IMMUTABLE PARALLEL SAFE
-AS 'jsonb_path_query_array';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_path_query_first(target jsonb, path jsonpath, vars jsonb DEFAULT '{}',
-                         silent boolean DEFAULT false)
-RETURNS jsonb
-LANGUAGE INTERNAL
-STRICT IMMUTABLE PARALLEL SAFE
-AS 'jsonb_path_query_first';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_path_exists_tz(target jsonb, path jsonpath, vars jsonb DEFAULT '{}',
-                    silent boolean DEFAULT false)
-RETURNS boolean
-LANGUAGE INTERNAL
-STRICT STABLE PARALLEL SAFE
-AS 'jsonb_path_exists_tz';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_path_match_tz(target jsonb, path jsonpath, vars jsonb DEFAULT '{}',
-                   silent boolean DEFAULT false)
-RETURNS boolean
-LANGUAGE INTERNAL
-STRICT STABLE PARALLEL SAFE
-AS 'jsonb_path_match_tz';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_path_query_tz(target jsonb, path jsonpath, vars jsonb DEFAULT '{}',
-                   silent boolean DEFAULT false)
-RETURNS SETOF jsonb
-LANGUAGE INTERNAL
-STRICT STABLE PARALLEL SAFE
-AS 'jsonb_path_query_tz';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_path_query_array_tz(target jsonb, path jsonpath, vars jsonb DEFAULT '{}',
-                         silent boolean DEFAULT false)
-RETURNS jsonb
-LANGUAGE INTERNAL
-STRICT STABLE PARALLEL SAFE
-AS 'jsonb_path_query_array_tz';
-
-CREATE OR REPLACE FUNCTION
-  jsonb_path_query_first_tz(target jsonb, path jsonpath, vars jsonb DEFAULT '{}',
-                         silent boolean DEFAULT false)
-RETURNS jsonb
-LANGUAGE INTERNAL
-STRICT STABLE PARALLEL SAFE
-AS 'jsonb_path_query_first_tz';
-
--- default normalization form is NFC, per SQL standard
-CREATE OR REPLACE FUNCTION
-  "normalize"(text, text DEFAULT 'NFC')
-RETURNS text
-LANGUAGE internal
-STRICT IMMUTABLE PARALLEL SAFE
-AS 'unicode_normalize_func';
-
-CREATE OR REPLACE FUNCTION
-  is_normalized(text, text DEFAULT 'NFC')
-RETURNS boolean
-LANGUAGE internal
-STRICT IMMUTABLE PARALLEL SAFE
-AS 'unicode_is_normalized';
-
---
--- The default permissions for functions mean that anyone can execute them.
--- A number of functions shouldn't be executable by just anyone, but rather
--- than use explicit 'superuser()' checks in those functions, we use the GRANT
--- system to REVOKE access to those functions at initdb time.  Administrators
--- can later change who can access these functions, or leave them as only
--- available to superuser / cluster owner, if they choose.
---
-REVOKE EXECUTE ON FUNCTION pg_start_backup(text, boolean, boolean) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_stop_backup() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_stop_backup(boolean, boolean) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_create_restore_point(text) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_switch_wal() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_wal_replay_pause() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_wal_replay_resume() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_rotate_logfile() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_reload_conf() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_current_logfile() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_current_logfile(text) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_promote(boolean, integer) FROM public;
-
-REVOKE EXECUTE ON FUNCTION pg_stat_reset() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_stat_reset_shared(text) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_stat_reset_slru(text) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_stat_reset_single_table_counters(oid) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_stat_reset_single_function_counters(oid) FROM public;
-
-REVOKE EXECUTE ON FUNCTION lo_import(text) FROM public;
-REVOKE EXECUTE ON FUNCTION lo_import(text, oid) FROM public;
-REVOKE EXECUTE ON FUNCTION lo_export(oid, text) FROM public;
-
-REVOKE EXECUTE ON FUNCTION pg_ls_logdir() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_ls_waldir() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_ls_archive_statusdir() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_ls_tmpdir() FROM public;
-REVOKE EXECUTE ON FUNCTION pg_ls_tmpdir(oid) FROM public;
-
-REVOKE EXECUTE ON FUNCTION pg_read_file(text) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_read_file(text,bigint,bigint) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_read_file(text,bigint,bigint,boolean) FROM public;
-
-REVOKE EXECUTE ON FUNCTION pg_read_binary_file(text) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_read_binary_file(text,bigint,bigint) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_read_binary_file(text,bigint,bigint,boolean) FROM public;
-
-REVOKE EXECUTE ON FUNCTION pg_stat_file(text) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_stat_file(text,boolean) FROM public;
-
-REVOKE EXECUTE ON FUNCTION pg_ls_dir(text) FROM public;
-REVOKE EXECUTE ON FUNCTION pg_ls_dir(text,boolean,boolean) FROM public;
-
---
--- We also set up some things as accessible to standard roles.
---
-GRANT EXECUTE ON FUNCTION pg_ls_logdir() TO pg_monitor;
-GRANT EXECUTE ON FUNCTION pg_ls_waldir() TO pg_monitor;
-GRANT EXECUTE ON FUNCTION pg_ls_archive_statusdir() TO pg_monitor;
-GRANT EXECUTE ON FUNCTION pg_ls_tmpdir() TO pg_monitor;
-GRANT EXECUTE ON FUNCTION pg_ls_tmpdir(oid) TO pg_monitor;
-
-GRANT pg_read_all_settings TO pg_monitor;
-GRANT pg_read_all_stats TO pg_monitor;
-GRANT pg_stat_scan_tables TO pg_monitor;

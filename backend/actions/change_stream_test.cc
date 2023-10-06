@@ -154,7 +154,7 @@ TEST_F(ChangeStreamTest, AddOneInsertOpAndCheckResultWriteOpContent) {
   // change_stream_data_table
   ASSERT_EQ(operation->columns,
             change_stream_->change_stream_data_table()->columns());
-  ASSERT_EQ(operation->columns.size(), 14);
+  ASSERT_EQ(operation->columns.size(), 19);
   ASSERT_EQ(operation->values.size(), 14);
   // Verify values in the rebuilt InsertOp are correct
   // Verify partition_token

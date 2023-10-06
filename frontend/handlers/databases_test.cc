@@ -33,6 +33,7 @@
 #include "common/constants.h"
 #include "common/limits.h"
 #include "frontend/common/uris.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/common/test_env.h"
 
 namespace google {
@@ -245,7 +246,17 @@ TEST_F(DatabaseApiTest, CreateDatabaseWithGSQLDialect) {
                            database_api::DatabaseDialect::GOOGLE_STANDARD_SQL));
 }
 
+TEST_F(DatabaseApiTest, CreateDatabaseWithPostgresDialectDisabledByDefault) {
+  EXPECT_THAT(CreateDatabase(test_instance_uri_,
+                             absl::StrCat(test_database_name_, "_pg_1"),
+                             /* extra_statements = */ {},
+                             database_api::DatabaseDialect::POSTGRESQL),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 TEST_F(DatabaseApiTest, CreateDatabaseWithPostgresDialect) {
+  test::ScopedEmulatorFeatureFlagsSetter enabled_flags(
+      {.enable_postgresql_interface = true});
   ZETASQL_EXPECT_OK(CreateDatabase(
       test_instance_uri_, absl::StrCat(test_database_name_, "_pg_1"),
       /* extra_statements = */ {}, database_api::DatabaseDialect::POSTGRESQL));

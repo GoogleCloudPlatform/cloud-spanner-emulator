@@ -20,8 +20,11 @@
 #include "gmock/gmock.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
-#include "absl/time/time.h"
+#include "absl/status/statusor.h"
+#include "google/cloud/spanner/value.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
+#include "re2/re2.h"
 #include "zetasql/base/no_destructor.h"
 
 namespace google {
@@ -50,33 +53,128 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
 
 class PGCatalogTest : public DatabaseTest {
  public:
+  PGCatalogTest() : feature_flags_({.enable_postgresql_interface = true}) {}
+
   void SetUp() override {
     dialect_ = database_api::DatabaseDialect::POSTGRESQL;
     DatabaseTest::SetUp();
   }
 
-  absl::Status SetUpDatabase() override { return absl::OkStatus(); }
+  absl::Status SetUpDatabase() override {
+    return SetSchemaFromFile("information_schema.test");
+  }
+
+  cloud::spanner::Value Ns() { return Null<std::string>(); }
+  cloud::spanner::Value Nb() { return Null<bool>(); }
+
+  // Returns the given rows, replacing matching string patterns with their
+  // actual values from the given results.
+  static std::vector<ValueRow> ExpectedRows(
+      const absl::StatusOr<std::vector<ValueRow>>& results,
+      const std::vector<ValueRow> rows) {
+    if (!results.ok()) {
+      return rows;
+    }
+    std::vector<ValueRow> expected;
+    for (const ValueRow& row : rows) {
+      ValueRow next;
+      for (int i = 0; i < row.values().size(); ++i) {
+        Value value = row.values()[i];
+        if (value.get<std::string>().ok()) {
+          std::string pattern = value.get<std::string>().value();
+          value = Value(FindString(results, i, pattern));
+        }
+        next.add(value);
+      }
+      expected.push_back(next);
+    }
+    return expected;
+  }
+
+  // Returns the first result string that matches a pattern. Returns the pattern
+  // if none match. One use case is to match generated names that have
+  // different signatures between production and emulator.
+  static std::string FindString(
+      const absl::StatusOr<std::vector<ValueRow>>& results, int field_index,
+      const std::string& pattern) {
+    for (const auto& row : results.value()) {
+      auto value = row.values()[field_index].get<std::string>().value();
+      if (RE2::FullMatch(value, pattern)) {
+        return value;
+      }
+    }
+    return pattern;
+  }
 
  protected:
   absl::Status PopulateDatabase() { return absl::OkStatus(); }
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
 
 TEST_F(PGCatalogTest, PGTables) {
-  EXPECT_THAT(Query(R"sql(SELECT schemaname, tablename, hasindexes
-                          FROM pg_catalog.pg_tables)sql"),
-              IsOkAndHoldsRows({}));
+  auto expected = std::vector<ValueRow>({
+      {"public", "base", Ns(), Ns(), true, Nb(), Nb(), Nb()},
+      {"public", "cascade_child", Ns(), Ns(), true, Nb(), Nb(), Nb()},
+      {"public", "no_action_child", Ns(), Ns(), true, Nb(), Nb(), Nb()},
+      {"public", "row_deletion_policy", Ns(), Ns(), false, Nb(), Nb(), Nb()},
+  });
+  EXPECT_THAT(Query(R"sql(
+      SELECT
+        schemaname,
+        tablename,
+        tableowner,
+        tablespace,
+        hasindexes,
+        hasrules,
+        hastriggers,
+        rowsecurity
+      FROM
+        pg_catalog.pg_tables
+      ORDER BY
+        tablename)sql"),
+              IsOkAndHoldsRows({expected}));
 }
 
 TEST_F(PGCatalogTest, PGViews) {
-  EXPECT_THAT(Query(R"sql(SELECT schemaname, viewname, definition
+  auto expected = std::vector<ValueRow>(
+      {{"public", "base_view", Ns(), "SELECT key1 FROM base"}});
+  EXPECT_THAT(Query(R"sql(SELECT schemaname, viewname, viewowner, definition
                           FROM pg_catalog.pg_views)sql"),
-              IsOkAndHoldsRows({}));
+              IsOkAndHoldsRows({expected}));
 }
 
 TEST_F(PGCatalogTest, PGIndexes) {
-  EXPECT_THAT(Query(R"sql(SELECT schemaname, tablename, indexname
-                          FROM pg_catalog.pg_indexes)sql"),
-              IsOkAndHoldsRows({}));
+  auto results = Query(R"sql(
+      SELECT
+        schemaname,
+        tablename,
+        indexname,
+        tablespace,
+        indexdef
+      FROM
+        pg_catalog.pg_indexes
+      ORDER BY
+        tablename,
+        indexname)sql");
+  // NOLINTBEGIN
+  EXPECT_THAT(
+      *results,
+      ExpectedRows(
+          *results,
+          {{"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", Ns(), Ns()},
+           {"public", "base", "PK_base", Ns(), Ns()},
+           {"public", "cascade_child",
+            "IDX_cascade_child_child_key_value1_U_\\w{16}", Ns(), Ns()},
+           {"public", "cascade_child", "PK_cascade_child", Ns(), Ns()},
+           {"public", "cascade_child", "cascade_child_by_value", Ns(), Ns()},
+           {"public", "no_action_child", "PK_no_action_child", Ns(), Ns()},
+           {"public", "no_action_child", "no_action_child_by_value", Ns(),
+            Ns()},
+           {"public", "row_deletion_policy", "PK_row_deletion_policy", Ns(),
+            Ns()}}));
+  // NOLINTEND
 }
 
 TEST_F(PGCatalogTest, PGSettings) {

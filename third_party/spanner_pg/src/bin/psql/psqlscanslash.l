@@ -8,7 +8,7 @@
  *
  * See fe_utils/psqlscan_int.h for additional commentary.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -27,8 +27,6 @@
 
 %{
 #include "fe_utils/psqlscan_int.h"
-
-#define PQmblenBounded(s, e)  strnlen(s, PQmblen(s, e))
 
 /*
  * We must have a typedef YYSTYPE for yylex's first argument, but this lexer

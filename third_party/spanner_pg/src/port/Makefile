@@ -35,9 +35,12 @@ include $(top_builddir)/src/Makefile.global
 override CPPFLAGS := -I$(top_builddir)/src/port -DFRONTEND $(CPPFLAGS)
 LIBS += $(PTHREAD_LIBS)
 
+# If you add objects here, see also src/tools/msvc/Mkvcbuild.pm
+
 OBJS = \
 	$(LIBOBJS) \
 	$(PG_CRC32C_OBJS) \
+	bsearch_arg.o \
 	chklocale.o \
 	erand48.o \
 	inet_net_ntop.o \
@@ -55,7 +58,6 @@ OBJS = \
 	qsort_arg.o \
 	quotes.o \
 	snprintf.o \
-	sprompt.o \
 	strerror.o \
 	tar.o \
 	thread.o

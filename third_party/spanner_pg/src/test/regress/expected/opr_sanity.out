@@ -16,55 +16,6 @@
 --
 -- NB: run this test earlier than the create_operator test, because
 -- that test creates some bogus operators...
--- Helper functions to deal with cases where binary-coercible matches are
--- allowed.
--- This should match IsBinaryCoercible() in parse_coerce.c.
--- It doesn't currently know about some cases, notably domains, anyelement,
--- anynonarray, anyenum, or record, but it doesn't need to (yet).
-create function binary_coercible(oid, oid) returns bool as $$
-begin
-  if $1 = $2 then return true; end if;
-  if EXISTS(select 1 from pg_catalog.pg_cast where
-            castsource = $1 and casttarget = $2 and
-            castmethod = 'b' and castcontext = 'i')
-  then return true; end if;
-  if $2 = 'pg_catalog.any'::pg_catalog.regtype then return true; end if;
-  if $2 = 'pg_catalog.anyarray'::pg_catalog.regtype then
-    if EXISTS(select 1 from pg_catalog.pg_type where
-              oid = $1 and typelem != 0 and typlen = -1)
-    then return true; end if;
-  end if;
-  if $2 = 'pg_catalog.anyrange'::pg_catalog.regtype then
-    if (select typtype from pg_catalog.pg_type where oid = $1) = 'r'
-    then return true; end if;
-  end if;
-  return false;
-end
-$$ language plpgsql strict stable;
--- This one ignores castcontext, so it will allow cases where an explicit
--- (but still binary) cast would be required to convert the input type.
--- We don't currently use this for any tests in this file, but it is a
--- reasonable alternative definition for some scenarios.
-create function explicitly_binary_coercible(oid, oid) returns bool as $$
-begin
-  if $1 = $2 then return true; end if;
-  if EXISTS(select 1 from pg_catalog.pg_cast where
-            castsource = $1 and casttarget = $2 and
-            castmethod = 'b')
-  then return true; end if;
-  if $2 = 'pg_catalog.any'::pg_catalog.regtype then return true; end if;
-  if $2 = 'pg_catalog.anyarray'::pg_catalog.regtype then
-    if EXISTS(select 1 from pg_catalog.pg_type where
-              oid = $1 and typelem != 0 and typlen = -1)
-    then return true; end if;
-  end if;
-  if $2 = 'pg_catalog.anyrange'::pg_catalog.regtype then
-    if (select typtype from pg_catalog.pg_type where oid = $1) = 'r'
-    then return true; end if;
-  end if;
-  return false;
-end
-$$ language plpgsql strict stable;
 -- **************** pg_proc ****************
 -- Look for illegal values in pg_proc fields.
 SELECT p1.oid, p1.proname
@@ -85,10 +36,17 @@ WHERE p1.prolang = 0 OR p1.prorettype = 0 OR
 -----+---------
 (0 rows)
 
--- prosrc should never be null or empty
+-- prosrc should never be null; it can be empty only if prosqlbody isn't null
 SELECT p1.oid, p1.proname
 FROM pg_proc as p1
-WHERE prosrc IS NULL OR prosrc = '' OR prosrc = '-';
+WHERE prosrc IS NULL;
+ oid | proname 
+-----+---------
+(0 rows)
+
+SELECT p1.oid, p1.proname
+FROM pg_proc as p1
+WHERE (prosrc = '' OR prosrc = '-') AND prosqlbody IS NULL;
  oid | proname 
 -----+---------
 (0 rows)
@@ -181,7 +139,8 @@ WHERE p1.oid < p2.oid AND
 -- need to be modified whenever new pairs of types are made binary-equivalent,
 -- or when new polymorphic built-in functions are added!
 -- Note: ignore aggregate functions here, since they all point to the same
--- dummy built-in function.  Likewise, ignore range constructor functions.
+-- dummy built-in function.  Likewise, ignore range and multirange constructor
+-- functions.
 SELECT DISTINCT p1.prorettype::regtype, p2.prorettype::regtype
 FROM pg_proc AS p1, pg_proc AS p2
 WHERE p1.oid != p2.oid AND
@@ -190,6 +149,8 @@ WHERE p1.oid != p2.oid AND
     p1.prokind != 'a' AND p2.prokind != 'a' AND
     p1.prosrc NOT LIKE E'range\\_constructor_' AND
     p2.prosrc NOT LIKE E'range\\_constructor_' AND
+    p1.prosrc NOT LIKE E'multirange\\_constructor_' AND
+    p2.prosrc NOT LIKE E'multirange\\_constructor_' AND
     (p1.prorettype < p2.prorettype)
 ORDER BY 1, 2;
          prorettype          |        prorettype        
@@ -208,6 +169,8 @@ WHERE p1.oid != p2.oid AND
     p1.prokind != 'a' AND p2.prokind != 'a' AND
     p1.prosrc NOT LIKE E'range\\_constructor_' AND
     p2.prosrc NOT LIKE E'range\\_constructor_' AND
+    p1.prosrc NOT LIKE E'multirange\\_constructor_' AND
+    p2.prosrc NOT LIKE E'multirange\\_constructor_' AND
     (p1.proargtypes[0] < p2.proargtypes[0])
 ORDER BY 1, 2;
          proargtypes         |       proargtypes        
@@ -228,6 +191,8 @@ WHERE p1.oid != p2.oid AND
     p1.prokind != 'a' AND p2.prokind != 'a' AND
     p1.prosrc NOT LIKE E'range\\_constructor_' AND
     p2.prosrc NOT LIKE E'range\\_constructor_' AND
+    p1.prosrc NOT LIKE E'multirange\\_constructor_' AND
+    p2.prosrc NOT LIKE E'multirange\\_constructor_' AND
     (p1.proargtypes[1] < p2.proargtypes[1])
 ORDER BY 1, 2;
          proargtypes         |       proargtypes        
@@ -340,7 +305,8 @@ WHERE p1.prorettype IN
      'anyarray'::regtype = ANY (p1.proargtypes) OR
      'anynonarray'::regtype = ANY (p1.proargtypes) OR
      'anyenum'::regtype = ANY (p1.proargtypes) OR
-     'anyrange'::regtype = ANY (p1.proargtypes))
+     'anyrange'::regtype = ANY (p1.proargtypes) OR
+     'anymultirange'::regtype = ANY (p1.proargtypes))
 ORDER BY 2;
  oid  |    proname     
 ------+----------------
@@ -355,20 +321,25 @@ ORDER BY 2;
  3532 | enum_recv
 (9 rows)
 
--- anyrange is tighter than the rest, can only resolve from anyrange input
+-- anyrange and anymultirange are tighter than the rest, can only resolve
+-- from each other
 SELECT p1.oid, p1.proname
 FROM pg_proc as p1
-WHERE p1.prorettype = 'anyrange'::regtype
+WHERE p1.prorettype IN ('anyrange'::regtype, 'anymultirange'::regtype)
   AND NOT
-     'anyrange'::regtype = ANY (p1.proargtypes)
+    ('anyrange'::regtype = ANY (p1.proargtypes) OR
+      'anymultirange'::regtype = ANY (p1.proargtypes))
 ORDER BY 2;
  oid  |     proname      
 ------+------------------
+ 4229 | anymultirange_in
  3832 | anyrange_in
+ 4231 | multirange_in
+ 4233 | multirange_recv
  3876 | range_gist_union
  3834 | range_in
  3836 | range_recv
-(4 rows)
+(7 rows)
 
 -- similarly for the anycompatible family
 SELECT p1.oid, p1.proname
@@ -572,6 +543,8 @@ int24ge(smallint,integer)
 int42ge(integer,smallint)
 oideq(oid,oid)
 oidne(oid,oid)
+float8(smallint)
+float4(smallint)
 nameeqtext(name,text)
 namelttext(name,text)
 nameletext(name,text)
@@ -610,6 +583,10 @@ float84lt(double precision,real)
 float84le(double precision,real)
 float84gt(double precision,real)
 float84ge(double precision,real)
+float8(real)
+int4(smallint)
+float8(integer)
+float4(integer)
 btint2cmp(smallint,smallint)
 btint4cmp(integer,integer)
 btfloat4cmp(real,real)
@@ -620,6 +597,9 @@ btnamecmp(name,name)
 bttextcmp(text,text)
 cash_cmp(money,money)
 btoidvectorcmp(oidvector,oidvector)
+text(name)
+name(text)
+name(character)
 text_larger(text,text)
 text_smaller(text,text)
 int8eq(bigint,bigint)
@@ -634,7 +614,10 @@ int84lt(bigint,integer)
 int84gt(bigint,integer)
 int84le(bigint,integer)
 int84ge(bigint,integer)
+int8(integer)
+float8(bigint)
 oidvectorne(oidvector,oidvector)
+float4(bigint)
 namelt(name,name)
 namele(name,name)
 namegt(name,name)
@@ -651,6 +634,7 @@ text_lt(text,text)
 text_le(text,text)
 text_gt(text,text)
 text_ge(text,text)
+int8(smallint)
 macaddr_eq(macaddr,macaddr)
 macaddr_lt(macaddr,macaddr)
 macaddr_le(macaddr,macaddr)
@@ -716,6 +700,7 @@ interval_ge(interval,interval)
 interval_gt(interval,interval)
 charlt("char","char")
 tidne(tid,tid)
+int8(oid)
 tideq(tid,tid)
 timestamptz_cmp(timestamp with time zone,timestamp with time zone)
 interval_cmp(interval,interval)
@@ -727,6 +712,9 @@ timetz_le(time with time zone,time with time zone)
 timetz_ge(time with time zone,time with time zone)
 timetz_gt(time with time zone,time with time zone)
 timetz_cmp(time with time zone,time with time zone)
+"interval"(time without time zone)
+name(character varying)
+"varchar"(name)
 circle_eq(circle,circle)
 circle_ne(circle,circle)
 circle_lt(circle,circle)
@@ -757,6 +745,11 @@ varbitcmp(bit varying,bit varying)
 boolle(boolean,boolean)
 boolge(boolean,boolean)
 btboolcmp(boolean,boolean)
+"numeric"(integer)
+"numeric"(real)
+"numeric"(double precision)
+"numeric"(bigint)
+"numeric"(smallint)
 int28eq(smallint,bigint)
 int28ne(smallint,bigint)
 int28lt(smallint,bigint)
@@ -803,6 +796,8 @@ btfloat48cmp(real,double precision)
 btfloat84cmp(double precision,real)
 md5(text)
 md5(bytea)
+bool(integer)
+int4(boolean)
 tidgt(tid,tid)
 tidlt(tid,tid)
 tidge(tid,tid)
@@ -837,6 +832,7 @@ macaddr8_gt(macaddr8,macaddr8)
 macaddr8_ge(macaddr8,macaddr8)
 macaddr8_ne(macaddr8,macaddr8)
 macaddr8_cmp(macaddr8,macaddr8)
+macaddr8(macaddr)
 xid8lt(xid8,xid8)
 xid8gt(xid8,xid8)
 xid8le(xid8,xid8)
@@ -1008,13 +1004,14 @@ WHERE p1.conproc = 0 OR
 SELECT p.oid, p.proname, c.oid, c.conname
 FROM pg_proc p, pg_conversion c
 WHERE p.oid = c.conproc AND
-    (p.prorettype != 'void'::regtype OR p.proretset OR
-     p.pronargs != 5 OR
+    (p.prorettype != 'int4'::regtype OR p.proretset OR
+     p.pronargs != 6 OR
      p.proargtypes[0] != 'int4'::regtype OR
      p.proargtypes[1] != 'int4'::regtype OR
      p.proargtypes[2] != 'cstring'::regtype OR
      p.proargtypes[3] != 'internal'::regtype OR
-     p.proargtypes[4] != 'int4'::regtype);
+     p.proargtypes[4] != 'int4'::regtype OR
+     p.proargtypes[5] != 'bool'::regtype);
  oid | proname | oid | conname 
 -----+---------+-----+---------
 (0 rows)
@@ -1041,7 +1038,7 @@ WHERE condefault AND
 -- Look for illegal values in pg_operator fields.
 SELECT p1.oid, p1.oprname
 FROM pg_operator as p1
-WHERE (p1.oprkind != 'b' AND p1.oprkind != 'l' AND p1.oprkind != 'r') OR
+WHERE (p1.oprkind != 'b' AND p1.oprkind != 'l') OR
     p1.oprresult = 0 OR p1.oprcode = 0;
  oid | oprname 
 -----+---------
@@ -1052,8 +1049,7 @@ SELECT p1.oid, p1.oprname
 FROM pg_operator as p1
 WHERE (p1.oprleft = 0 and p1.oprkind != 'l') OR
     (p1.oprleft != 0 and p1.oprkind = 'l') OR
-    (p1.oprright = 0 and p1.oprkind != 'r') OR
-    (p1.oprright != 0 and p1.oprkind = 'r');
+    p1.oprright = 0;
  oid | oprname 
 -----+---------
 (0 rows)
@@ -1139,14 +1135,13 @@ ORDER BY 1, 2;
  ?-|  | ?-|
  ?|   | ?|
  ?||  | ?||
- @    | ~
  @@   | @@
  @@@  | @@@
  |    | |
  ~<=~ | ~>=~
  ~<~  | ~>~
  ~=   | ~=
-(30 rows)
+(29 rows)
 
 -- Likewise for negator pairs.
 SELECT DISTINCT o1.oprname AS op1, o2.oprname AS op2
@@ -1256,18 +1251,6 @@ WHERE p1.oprcode = p2.oid AND
      OR NOT binary_coercible(p2.prorettype, p1.oprresult)
      OR NOT binary_coercible(p1.oprright, p2.proargtypes[0])
      OR p1.oprleft != 0);
- oid | oprname | oid | proname 
------+---------+-----+---------
-(0 rows)
-
-SELECT p1.oid, p1.oprname, p2.oid, p2.proname
-FROM pg_operator AS p1, pg_proc AS p2
-WHERE p1.oprcode = p2.oid AND
-    p1.oprkind = 'r' AND
-    (p2.pronargs != 1
-     OR NOT binary_coercible(p2.prorettype, p1.oprresult)
-     OR NOT binary_coercible(p1.oprleft, p2.proargtypes[0])
-     OR p1.oprright != 0);
  oid | oprname | oid | proname 
 -----+---------+-----+---------
 (0 rows)
@@ -1974,12 +1957,8 @@ ORDER BY 1, 2, 3;
         783 |            8 | <@
         783 |            9 | &<|
         783 |           10 | <<|
-        783 |           10 | <^
-        783 |           11 | >^
         783 |           11 | |>>
         783 |           12 | |&>
-        783 |           13 | ~
-        783 |           14 | @
         783 |           15 | <->
         783 |           16 | @>
         783 |           18 | =
@@ -1993,6 +1972,8 @@ ORDER BY 1, 2, 3;
         783 |           26 | >>
         783 |           27 | >>=
         783 |           28 | <@
+        783 |           29 | <^
+        783 |           30 | >^
         783 |           48 | <@
         783 |           68 | <@
        2742 |            1 | &&
@@ -2009,6 +1990,7 @@ ORDER BY 1, 2, 3;
        2742 |           16 | @@
        3580 |            1 | <
        3580 |            1 | <<
+       3580 |            1 | =
        3580 |            2 | &<
        3580 |            2 | <=
        3580 |            3 | &&
@@ -2051,9 +2033,7 @@ ORDER BY 1, 2, 3;
        4000 |            8 | <@
        4000 |            9 | &<|
        4000 |           10 | <<|
-       4000 |           10 | <^
        4000 |           11 | <
-       4000 |           11 | >^
        4000 |           11 | |>>
        4000 |           12 | <=
        4000 |           12 | |&>
@@ -2072,7 +2052,9 @@ ORDER BY 1, 2, 3;
        4000 |           26 | >>
        4000 |           27 | >>=
        4000 |           28 | ^@
-(125 rows)
+       4000 |           29 | <^
+       4000 |           30 | >^
+(124 rows)
 
 -- Check that all opclass search operators have selectivity estimators.
 -- This is not absolutely required, but it seems a reasonable thing
@@ -2193,13 +2175,14 @@ ORDER BY 1, 2, 3;
                     | float_ops        | float4_ops       | real
                     | float_ops        | float8_ops       | double precision
                     | jsonb_ops        | jsonb_ops        | jsonb
+                    | multirange_ops   | multirange_ops   | anymultirange
                     | numeric_ops      | numeric_ops      | numeric
                     | range_ops        | range_ops        | anyrange
                     | record_image_ops | record_image_ops | record
                     | record_ops       | record_ops       | record
                     | tsquery_ops      | tsquery_ops      | tsquery
                     | tsvector_ops     | tsvector_ops     | tsvector
-(14 rows)
+(15 rows)
 
 -- **************** pg_index ****************
 -- Look for illegal values in pg_index fields.

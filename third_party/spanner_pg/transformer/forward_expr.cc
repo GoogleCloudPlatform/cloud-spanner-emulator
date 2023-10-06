@@ -606,6 +606,10 @@ ForwardTransformer::BuildGsqlResolvedExpr(
           *PostgresConstCastNode(SubscriptingRef, &expr),
           expr_transformer_info);
     }
+    case T_ArrayCoerceExpr: {
+      return absl::UnimplementedError(
+          "Array casting / coercion is not supported");
+    }
 
     default:
       // This should really be an internal error default case with user-friendly
@@ -709,11 +713,13 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
   subquery_expr->set_hint_list(std::move(resolved_hints));
 
   // Every ResolvedOrderByScan is initially constructed with is_ordered set
-  // to true. However, a subquery never preserves order, so we clear
-  // is_ordered on the top level scan of the subquery, even if it is a
-  // ResolvedOrderByScan.
-  const_cast<zetasql::ResolvedScan*>(subquery_expr->subquery())
+  // to true. However, other than array-returning subqueries, other types of
+  // subqueries should not preserve order, so we clear is_ordered on the top
+  // level scan of other subquery types, even if they are ResolvedOrderByScan.
+  if (subquery_type != zetasql::ResolvedSubqueryExpr::ARRAY) {
+    const_cast<zetasql::ResolvedScan*>(subquery_expr->subquery())
       ->set_is_ordered(false);
+  }
   return subquery_expr;
 }
 
@@ -724,7 +730,7 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
     case EXISTS_SUBLINK: {
       return BuildGsqlResolvedSubqueryExpr(
           *PostgresConstCastNode(Query, pg_sublink.subselect),
-          /*in_expr=*/nullptr, /*hint_list=*/nullptr,
+          /*in_testexpr=*/nullptr, /*hint_list=*/nullptr,
           zetasql::types::BoolType(), zetasql::ResolvedSubqueryExpr::EXISTS,
           expr_transformer_info);
     }
@@ -747,9 +753,14 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
       ZETASQL_ASSIGN_OR_RETURN(const zetasql::Type* output_type,
                        BuildGsqlType(output_type_oid));
       return BuildGsqlResolvedSubqueryExpr(
-          *subquery, /*in_expr=*/nullptr, /*hint_list=*/nullptr, output_type,
-          zetasql::ResolvedSubqueryExpr::SCALAR, expr_transformer_info);
+          *subquery, /*in_testexpr=*/nullptr, /*hint_list=*/nullptr,
+          output_type, zetasql::ResolvedSubqueryExpr::SCALAR,
+          expr_transformer_info);
     }
+    case ARRAY_SUBLINK: {
+      return absl::UnimplementedError(
+          "Array Subquery expressions are not supported");
+      }
     // Error cases to cover the remaining enum types. We handle each
     // individually to provide helpful error messages.
     case ALL_SUBLINK: {
@@ -834,11 +845,6 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
           *subquery, PostgresConstCastToExpr(pg_sublink.testexpr),
           pg_sublink.joinHints, output_type,
           zetasql::ResolvedSubqueryExpr::IN, expr_transformer_info);
-    }
-    case ARRAY_SUBLINK: {
-      // ARRAY(SELECT with single targetlist item ...)
-      return absl::UnimplementedError(
-          "Array Subquery expressions are not supported");
     }
     case ROWCOMPARE_SUBLINK: {
       // (lefthand) op (SELECT ...)

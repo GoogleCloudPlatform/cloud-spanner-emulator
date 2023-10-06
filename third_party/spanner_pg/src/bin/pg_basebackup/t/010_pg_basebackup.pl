@@ -1,3 +1,6 @@
+
+# Copyright (c) 2021, PostgreSQL Global Development Group
+
 use strict;
 use warnings;
 use Cwd;
@@ -6,7 +9,7 @@ use File::Basename qw(basename dirname);
 use File::Path qw(rmtree);
 use PostgresNode;
 use TestLib;
-use Test::More tests => 109;
+use Test::More tests => 110;
 
 program_help_ok('pg_basebackup');
 program_version_ok('pg_basebackup');
@@ -211,87 +214,136 @@ $node->command_fails(
 	'pg_basebackup tar with long name fails');
 unlink "$pgdata/$superlongname";
 
-# The following tests test symlinks. Windows doesn't have symlinks, so
-# skip on Windows.
+# The following tests are for symlinks.
+
+# Move pg_replslot out of $pgdata and create a symlink to it.
+$node->stop;
+
+# Set umask so test directories and files are created with group permissions
+umask(0027);
+
+# Enable group permissions on PGDATA
+chmod_recursive("$pgdata", 0750, 0640);
+
+rename("$pgdata/pg_replslot", "$tempdir/pg_replslot")
+  or BAIL_OUT "could not move $pgdata/pg_replslot";
+dir_symlink("$tempdir/pg_replslot", "$pgdata/pg_replslot")
+  or BAIL_OUT "could not symlink to $pgdata/pg_replslot";
+
+$node->start;
+
+# Test backup of a tablespace using tar format.
+# Create a temporary directory in the system location and symlink it
+# to our physical temp location.  That way we can use shorter names
+# for the tablespace directories, which hopefully won't run afoul of
+# the 99 character length limit.
+my $sys_tempdir = TestLib::tempdir_short;
+my $real_sys_tempdir = "$sys_tempdir/tempdir";
+dir_symlink "$tempdir", $real_sys_tempdir;
+
+mkdir "$tempdir/tblspc1";
+my $realTsDir    = "$real_sys_tempdir/tblspc1";
+$node->safe_psql('postgres',
+	"CREATE TABLESPACE tblspc1 LOCATION '$realTsDir';");
+$node->safe_psql('postgres',
+	    "CREATE TABLE test1 (a int) TABLESPACE tblspc1;"
+	  . "INSERT INTO test1 VALUES (1234);");
+$node->backup('tarbackup2', backup_options => ['-Ft']);
+# empty test1, just so that it's different from the to-be-restored data
+$node->safe_psql('postgres', "TRUNCATE TABLE test1;");
+
+# basic checks on the output
+my $backupdir = $node->backup_dir . '/tarbackup2';
+ok(-f "$backupdir/base.tar",   'backup tar was created');
+ok(-f "$backupdir/pg_wal.tar", 'WAL tar was created');
+my @tblspc_tars = glob "$backupdir/[0-9]*.tar";
+is(scalar(@tblspc_tars), 1, 'one tablespace tar was created');
+
+# Try to verify the tar-format backup by restoring it.
+# For this, we use the tar program identified by configure.
 SKIP:
 {
-	skip "symlinks not supported on Windows", 18 if ($windows_os);
+	my $tar = $ENV{TAR};
+	# don't check for a working tar here, to accomodate various odd
+	# cases such as AIX. If tar doesn't work the init_from_backup below
+	# will fail.
+	skip "no tar program available", 1
+	  if (!defined $tar || $tar eq '');
 
-	# Move pg_replslot out of $pgdata and create a symlink to it.
-	$node->stop;
+	my $node2 = get_new_node('replica');
 
-	# Set umask so test directories and files are created with group permissions
-	umask(0027);
+	# Recover main data directory
+	$node2->init_from_backup($node, 'tarbackup2', tar_program => $tar);
 
-	# Enable group permissions on PGDATA
-	chmod_recursive("$pgdata", 0750, 0640);
+	# Recover tablespace into a new directory (not where it was!)
+	my $repTsDir     = "$tempdir/tblspc1replica";
+	my $realRepTsDir = "$real_sys_tempdir/tblspc1replica";
+	mkdir $repTsDir;
+	TestLib::system_or_bail($tar, 'xf', $tblspc_tars[0], '-C', $repTsDir);
 
-	rename("$pgdata/pg_replslot", "$tempdir/pg_replslot")
-	  or BAIL_OUT "could not move $pgdata/pg_replslot";
-	symlink("$tempdir/pg_replslot", "$pgdata/pg_replslot")
-	  or BAIL_OUT "could not symlink to $pgdata/pg_replslot";
+	# Update tablespace map to point to new directory.
+	# XXX Ideally pg_basebackup would handle this.
+	$tblspc_tars[0] =~ m|/([0-9]*)\.tar$|;
+	my $tblspcoid       = $1;
+	my $escapedRepTsDir = $realRepTsDir;
+	$escapedRepTsDir =~ s/\\/\\\\/g;
+	open my $mapfile, '>', $node2->data_dir . '/tablespace_map';
+	print $mapfile "$tblspcoid $escapedRepTsDir\n";
+	close $mapfile;
 
-	$node->start;
+	$node2->start;
+	my $result = $node2->safe_psql('postgres', 'SELECT * FROM test1');
+	is($result, '1234', "tablespace data restored from tar-format backup");
+	$node2->stop;
+}
 
-	# Create a temporary directory in the system location and symlink it
-	# to our physical temp location.  That way we can use shorter names
-	# for the tablespace directories, which hopefully won't run afoul of
-	# the 99 character length limit.
-	my $shorter_tempdir = TestLib::tempdir_short . "/tempdir";
-	symlink "$tempdir", $shorter_tempdir;
+# Create an unlogged table to test that forks other than init are not copied.
+$node->safe_psql('postgres',
+	'CREATE UNLOGGED TABLE tblspc1_unlogged (id int) TABLESPACE tblspc1;');
 
-	mkdir "$tempdir/tblspc1";
-	$node->safe_psql('postgres',
-		"CREATE TABLESPACE tblspc1 LOCATION '$shorter_tempdir/tblspc1';");
-	$node->safe_psql('postgres',
-		"CREATE TABLE test1 (a int) TABLESPACE tblspc1;");
-	$node->command_ok([ 'pg_basebackup', '-D', "$tempdir/tarbackup2", '-Ft' ],
-		'tar format with tablespaces');
-	ok(-f "$tempdir/tarbackup2/base.tar", 'backup tar was created');
-	my @tblspc_tars = glob "$tempdir/tarbackup2/[0-9]*.tar";
-	is(scalar(@tblspc_tars), 1, 'one tablespace tar was created');
-	rmtree("$tempdir/tarbackup2");
+my $tblspc1UnloggedPath = $node->safe_psql('postgres',
+	q{select pg_relation_filepath('tblspc1_unlogged')});
 
-	# Create an unlogged table to test that forks other than init are not copied.
-	$node->safe_psql('postgres',
-		'CREATE UNLOGGED TABLE tblspc1_unlogged (id int) TABLESPACE tblspc1;'
-	);
+# Make sure main and init forks exist
+ok( -f "$pgdata/${tblspc1UnloggedPath}_init",
+	'unlogged init fork in tablespace');
+ok(-f "$pgdata/$tblspc1UnloggedPath", 'unlogged main fork in tablespace');
 
-	my $tblspc1UnloggedPath = $node->safe_psql('postgres',
-		q{select pg_relation_filepath('tblspc1_unlogged')});
-
-	# Make sure main and init forks exist
-	ok( -f "$pgdata/${tblspc1UnloggedPath}_init",
-		'unlogged init fork in tablespace');
-	ok(-f "$pgdata/$tblspc1UnloggedPath", 'unlogged main fork in tablespace');
-
-	# Create files that look like temporary relations to ensure they are ignored
-	# in a tablespace.
-	my @tempRelationFiles = qw(t888_888 t888888_888888_vm.1);
-	my $tblSpc1Id         = basename(
+# Create files that look like temporary relations to ensure they are ignored
+# in a tablespace.
+@tempRelationFiles = qw(t888_888 t888888_888888_vm.1);
+my $tblSpc1Id = basename(
+	dirname(
 		dirname(
-			dirname(
-				$node->safe_psql(
-					'postgres', q{select pg_relation_filepath('test1')}))));
+			$node->safe_psql(
+				'postgres', q{select pg_relation_filepath('test1')}))));
 
-	foreach my $filename (@tempRelationFiles)
-	{
-		append_to_file(
-			"$shorter_tempdir/tblspc1/$tblSpc1Id/$postgresOid/$filename",
-			'TEMP_RELATION');
-	}
+foreach my $filename (@tempRelationFiles)
+{
+	append_to_file(
+		"$real_sys_tempdir/tblspc1/$tblSpc1Id/$postgresOid/$filename",
+		'TEMP_RELATION');
+}
 
-	$node->command_fails(
-		[ 'pg_basebackup', '-D', "$tempdir/backup1", '-Fp' ],
-		'plain format with tablespaces fails without tablespace mapping');
+$node->command_fails(
+	[ 'pg_basebackup', '-D', "$tempdir/backup1", '-Fp' ],
+	'plain format with tablespaces fails without tablespace mapping');
 
-	$node->command_ok(
-		[
-			'pg_basebackup', '-D', "$tempdir/backup1", '-Fp',
-			"-T$shorter_tempdir/tblspc1=$tempdir/tbackup/tblspc1"
-		],
-		'plain format with tablespaces succeeds with tablespace mapping');
-	ok(-d "$tempdir/tbackup/tblspc1", 'tablespace was relocated');
+$node->command_ok(
+	[
+		'pg_basebackup', '-D',
+		"$tempdir/backup1",  '-Fp',
+		"-T$realTsDir=$tempdir/tbackup/tblspc1",
+	],
+	'plain format with tablespaces succeeds with tablespace mapping');
+ok(-d "$tempdir/tbackup/tblspc1", 'tablespace was relocated');
+
+# This symlink check is not supported on Windows as -l
+# doesn't work with junctions
+SKIP:
+{
+	skip "symlink check not implemented on Windows", 1
+	  if ($windows_os);
 	opendir(my $dh, "$pgdata/pg_tblspc") or die;
 	ok( (   grep {
 				-l "$tempdir/backup1/pg_tblspc/$_"
@@ -300,64 +352,72 @@ SKIP:
 			} readdir($dh)),
 		"tablespace symlink was updated");
 	closedir $dh;
+}
 
-	# Group access should be enabled on all backup files
+# Group access should be enabled on all backup files
+SKIP:
+{
+	skip "unix-style permissions not supported on Windows", 1
+	  if ($windows_os);
+
 	ok(check_mode_recursive("$tempdir/backup1", 0750, 0640),
 		"check backup dir permissions");
-
-	# Unlogged relation forks other than init should not be copied
-	my ($tblspc1UnloggedBackupPath) =
-	  $tblspc1UnloggedPath =~ /[^\/]*\/[^\/]*\/[^\/]*$/g;
-
-	ok(-f "$tempdir/tbackup/tblspc1/${tblspc1UnloggedBackupPath}_init",
-		'unlogged init fork in tablespace backup');
-	ok(!-f "$tempdir/tbackup/tblspc1/$tblspc1UnloggedBackupPath",
-		'unlogged main fork not in tablespace backup');
-
-	# Temp relations should not be copied.
-	foreach my $filename (@tempRelationFiles)
-	{
-		ok( !-f "$tempdir/tbackup/tblspc1/$tblSpc1Id/$postgresOid/$filename",
-			"[tblspc1]/$postgresOid/$filename not copied");
-
-		# Also remove temp relation files or tablespace drop will fail.
-		my $filepath =
-		  "$shorter_tempdir/tblspc1/$tblSpc1Id/$postgresOid/$filename";
-
-		unlink($filepath)
-		  or BAIL_OUT("unable to unlink $filepath");
-	}
-
-	ok( -d "$tempdir/backup1/pg_replslot",
-		'pg_replslot symlink copied as directory');
-	rmtree("$tempdir/backup1");
-
-	mkdir "$tempdir/tbl=spc2";
-	$node->safe_psql('postgres', "DROP TABLE test1;");
-	$node->safe_psql('postgres', "DROP TABLE tblspc1_unlogged;");
-	$node->safe_psql('postgres', "DROP TABLESPACE tblspc1;");
-	$node->safe_psql('postgres',
-		"CREATE TABLESPACE tblspc2 LOCATION '$shorter_tempdir/tbl=spc2';");
-	$node->command_ok(
-		[
-			'pg_basebackup', '-D', "$tempdir/backup3", '-Fp',
-			"-T$shorter_tempdir/tbl\\=spc2=$tempdir/tbackup/tbl\\=spc2"
-		],
-		'mapping tablespace with = sign in path');
-	ok(-d "$tempdir/tbackup/tbl=spc2",
-		'tablespace with = sign was relocated');
-	$node->safe_psql('postgres', "DROP TABLESPACE tblspc2;");
-	rmtree("$tempdir/backup3");
-
-	mkdir "$tempdir/$superlongname";
-	$node->safe_psql('postgres',
-		"CREATE TABLESPACE tblspc3 LOCATION '$tempdir/$superlongname';");
-	$node->command_ok(
-		[ 'pg_basebackup', '-D', "$tempdir/tarbackup_l3", '-Ft' ],
-		'pg_basebackup tar with long symlink target');
-	$node->safe_psql('postgres', "DROP TABLESPACE tblspc3;");
-	rmtree("$tempdir/tarbackup_l3");
 }
+
+# Unlogged relation forks other than init should not be copied
+my ($tblspc1UnloggedBackupPath) =
+  $tblspc1UnloggedPath =~ /[^\/]*\/[^\/]*\/[^\/]*$/g;
+
+ok(-f "$tempdir/tbackup/tblspc1/${tblspc1UnloggedBackupPath}_init",
+	'unlogged init fork in tablespace backup');
+ok(!-f "$tempdir/tbackup/tblspc1/$tblspc1UnloggedBackupPath",
+	'unlogged main fork not in tablespace backup');
+
+# Temp relations should not be copied.
+foreach my $filename (@tempRelationFiles)
+{
+	ok(!-f "$tempdir/tbackup/tblspc1/$tblSpc1Id/$postgresOid/$filename",
+		"[tblspc1]/$postgresOid/$filename not copied");
+
+	# Also remove temp relation files or tablespace drop will fail.
+	my $filepath =
+	  "$real_sys_tempdir/tblspc1/$tblSpc1Id/$postgresOid/$filename";
+
+	unlink($filepath)
+	  or BAIL_OUT("unable to unlink $filepath");
+}
+
+ok( -d "$tempdir/backup1/pg_replslot",
+	'pg_replslot symlink copied as directory');
+rmtree("$tempdir/backup1");
+
+mkdir "$tempdir/tbl=spc2";
+$realTsDir = "$real_sys_tempdir/tbl=spc2";
+$node->safe_psql('postgres', "DROP TABLE test1;");
+$node->safe_psql('postgres', "DROP TABLE tblspc1_unlogged;");
+$node->safe_psql('postgres', "DROP TABLESPACE tblspc1;");
+$node->safe_psql('postgres',
+	"CREATE TABLESPACE tblspc2 LOCATION '$realTsDir';");
+$realTsDir =~ s/=/\\=/;
+$node->command_ok(
+	[
+		'pg_basebackup', '-D',
+		"$tempdir/backup3",  '-Fp',
+		"-T$realTsDir=$tempdir/tbackup/tbl\\=spc2",
+	],
+	'mapping tablespace with = sign in path');
+ok(-d "$tempdir/tbackup/tbl=spc2", 'tablespace with = sign was relocated');
+$node->safe_psql('postgres', "DROP TABLESPACE tblspc2;");
+rmtree("$tempdir/backup3");
+
+mkdir "$tempdir/$superlongname";
+$realTsDir = "$real_sys_tempdir/$superlongname";
+$node->safe_psql('postgres',
+	"CREATE TABLESPACE tblspc3 LOCATION '$realTsDir';");
+$node->command_ok([ 'pg_basebackup', '-D', "$tempdir/tarbackup_l3", '-Ft' ],
+	'pg_basebackup tar with long symlink target');
+$node->safe_psql('postgres', "DROP TABLESPACE tblspc3;");
+rmtree("$tempdir/tarbackup_l3");
 
 $node->command_ok([ 'pg_basebackup', '-D', "$tempdir/backupR", '-R' ],
 	'pg_basebackup -R runs');
@@ -488,10 +548,10 @@ rmtree("$tempdir/backupxs_sl_R");
 
 # create tables to corrupt and get their relfilenodes
 my $file_corrupt1 = $node->safe_psql('postgres',
-	q{SELECT a INTO corrupt1 FROM generate_series(1,10000) AS a; ALTER TABLE corrupt1 SET (autovacuum_enabled=false); SELECT pg_relation_filepath('corrupt1')}
+	q{CREATE TABLE corrupt1 AS SELECT a FROM generate_series(1,10000) AS a; ALTER TABLE corrupt1 SET (autovacuum_enabled=false); SELECT pg_relation_filepath('corrupt1')}
 );
 my $file_corrupt2 = $node->safe_psql('postgres',
-	q{SELECT b INTO corrupt2 FROM generate_series(1,2) AS b; ALTER TABLE corrupt2 SET (autovacuum_enabled=false); SELECT pg_relation_filepath('corrupt2')}
+	q{CREATE TABLE corrupt2 AS SELECT b FROM generate_series(1,2) AS b; ALTER TABLE corrupt2 SET (autovacuum_enabled=false); SELECT pg_relation_filepath('corrupt2')}
 );
 
 # get block size for corruption steps

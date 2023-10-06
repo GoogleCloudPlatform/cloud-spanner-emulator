@@ -35,6 +35,7 @@ cc_library(
         "delete_range.cc",
         "dml.cc",
         "dml_replay.cc",
+        "foreign_key_actions.cc",
         "foreign_key_transactions.cc",
         "foreign_key_verifiers.cc",
         "generated_column_read_write.cc",
@@ -65,6 +66,7 @@ cc_library(
         "single_row_writes.cc",
         "singleton_tables.cc",
         "snapshot_reads.cc",
+        "spanner_sys.cc",
         "tablesample.cc",
         "thread_safety.cc",
         "transaction_errors.cc",
@@ -92,6 +94,7 @@ cc_library(
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/container:flat_hash_set",  # buildcleaner: keep
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -104,6 +107,7 @@ cc_library(
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_zetasql//zetasql/base:no_destructor",  # buildcleaner: keep
         "@com_google_zetasql//zetasql/public:value",
+        "@com_googlesource_code_re2//:re2",
     ],
     alwayslink = 1,
 )

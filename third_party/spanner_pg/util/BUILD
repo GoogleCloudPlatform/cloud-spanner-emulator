@@ -229,6 +229,7 @@ cc_library(
     hdrs = ["unittest_utils.h"],
     deps = [
         "//third_party/spanner_pg/catalog:catalog_adapter_holder",
+        "//third_party/spanner_pg/catalog:spangres_type",
         "//third_party/spanner_pg/interface/test:postgres_transformer",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",

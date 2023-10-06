@@ -31,17 +31,16 @@
 
 #include "third_party/spanner_pg/catalog/builtin_rewrite_functions.h"
 
-#include <string>
 #include <vector>
 
 #include "zetasql/public/function_signature.h"
-#include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/builtin_spanner_functions.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 
 namespace postgres_translator {
 namespace spangres {
@@ -77,6 +76,16 @@ void AddTruncFunctionSignatures(
   auto existing_trunc_function =
       GetExistingPostgresFunctionArguments(functions, "trunc");
   ABSL_CHECK_NE(existing_trunc_function, nullptr) << "trunc function not found";
+  const zetasql::Type* gsql_pg_numeric =
+      postgres_translator::spangres::types::PgNumericMapping()->mapped_type();
+  existing_trunc_function->add_signature(
+      {ConstructSignatureWithRewrite(
+           gsql_pg_numeric,
+           {{gsql_pg_numeric,
+             zetasql::FunctionArgumentTypeOptions().set_argument_name(
+                 "arg1", zetasql::kPositionalOnly)}},
+           /*context_ptr=*/nullptr, "trunc(arg1, 0)"),
+       /*has_postgres_proc_oid=*/true, /*has_mapped_function=*/false});
 }
 
 void AddPgCatalogFunctions(std::vector<PostgresFunctionArguments>& functions) {

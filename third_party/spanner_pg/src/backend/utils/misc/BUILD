@@ -56,6 +56,7 @@ cc_library(
         "pg_rusage.c",
         "ps_status.c",
         "queryenvironment.c",
+        "queryjumble.c",
         "rls.c",
         "sampling.c",
         "superuser.c",

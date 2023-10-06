@@ -30,4 +30,13 @@
 { proname => 'timestamp_from_unix_millis', pronamespace => 'spanner',
   prorettype => 'timestamptz', proargtypes => 'timestamptz',
   prosrc => 'timestamp_from_unix_millis' },
+
+{ proname => 'timestamptz_add', pronamespace => 'spanner',
+  prorettype => 'timestamptz', proargtypes => 'timestamptz text',
+  prosrc => 'timestamptz_add' },
+
+{ proname => 'timestamptz_subtract', pronamespace => 'spanner',
+  prorettype => 'timestamptz', proargtypes => 'timestamptz text',
+  prosrc => 'timestamptz_subtract' },
+
 ]

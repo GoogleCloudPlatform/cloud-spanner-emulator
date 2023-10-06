@@ -116,16 +116,17 @@ class Table : public SchemaNode {
   // Returns the list of all indexes on this table.
   absl::Span<const Index* const> indexes() const { return indexes_; }
 
-  // Returns the list of all change streams tracking this table.
+  // Returns the list of change streams tracking this entire table (explicitly
+  // by table name or implicitly by ALL).
   absl::Span<const ChangeStream* const> change_streams() const {
     return change_streams_;
   }
 
-  // List of change streams that are tracking this entire table (explicitly or
-  // implicitly)
-  absl::Span<const ChangeStream* const> change_streams_tracking_entire_table()
-      const {
-    return change_streams_tracking_entire_table_;
+  // Returns the list of all change streams explicitly tracking this table by
+  // the table name.
+  absl::Span<const ChangeStream* const>
+  change_streams_explicitly_tracking_table() const {
+    return change_streams_explicitly_tracking_table_;
   }
 
   bool is_trackable_by_change_stream() const { return is_public(); }
@@ -260,13 +261,13 @@ class Table : public SchemaNode {
   // by the Table.
   std::vector<const Index*> indexes_;
 
-  // List of change streams tracking this table. These are owned by the
-  // Schema, not by the Table.
+  // List of change streams tracking this entire table (explicitly by table name
+  // or implicitly by ALL). These are owned by the Schema, not by the Table.
   std::vector<const ChangeStream*> change_streams_;
 
-  // List of change streams tracking to this entire table. These are owned by
-  // the Schema, not by the Table.
-  std::vector<const ChangeStream*> change_streams_tracking_entire_table_;
+  // List of change streams explicitly tracking this table by the table name.
+  // These are owned by the Schema, not by the Table.
+  std::vector<const ChangeStream*> change_streams_explicitly_tracking_table_;
 
   // The Change Stream that owns this table if one exists.
   const ChangeStream* owner_change_stream_ = nullptr;

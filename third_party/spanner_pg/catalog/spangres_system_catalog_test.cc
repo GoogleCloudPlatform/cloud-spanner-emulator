@@ -36,6 +36,8 @@
 #include <utility>
 #include <vector>
 
+#include "zetasql/public/function.h"
+#include "zetasql/public/input_argument_type.h"
 #include "zetasql/public/language_options.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/types/type.h"
@@ -54,7 +56,11 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
+#include "third_party/spanner_pg/catalog/engine_system_catalog.h"
+#include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/function_identifier.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
+#include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
 
@@ -113,32 +119,147 @@ zetasql::TypeFactory* GetTypeFactory() {
   return s_type_factory;
 }
 
+const zetasql::Type* GetPgNumericArrayType() {
+  static const zetasql::Type* s_pg_numeric_arr_type = []() {
+    const zetasql::Type* gsql_pg_numeric =
+        types::PgNumericMapping()->mapped_type();
+    const zetasql::Type* pg_numeric_array_type = nullptr;
+    ABSL_CHECK_OK(GetTypeFactory()->MakeArrayType(gsql_pg_numeric,
+                                             &pg_numeric_array_type));
+    return pg_numeric_array_type;
+  }();
+  return s_pg_numeric_arr_type;
+}
+
+const zetasql::Type* GetPgJsonbArrayType() {
+  static const zetasql::Type* s_pg_jsonb_arr_type = []() {
+    const zetasql::Type* gsql_pg_jsonb =
+        types::PgJsonbMapping()->mapped_type();
+    const zetasql::Type* pg_jsonb_array_type = nullptr;
+    ABSL_CHECK_OK(
+        GetTypeFactory()->MakeArrayType(gsql_pg_jsonb, &pg_jsonb_array_type));
+    return pg_jsonb_array_type;
+  }();
+  return s_pg_jsonb_arr_type;
+}
+
 MATCHER(TypeEquals, "") {
   return std::get<0>(arg) != nullptr &&
          std::get<0>(arg)->Equals(std::get<1>(arg));
 }
+
+struct ExtendedTypesTestCase
+{
+  const PostgresTypeMapping* pg_type;
+  std::string pg_type_name;
+  Oid pg_type_oid;
+  const zetasql::Type* mapped_type;
+};
+
+using ExtendedTypesTest = ::testing::TestWithParam<ExtendedTypesTestCase>;
+
+TEST_P(ExtendedTypesTest, SupportedTypes) {
+  ExtendedTypesTestCase test_case = GetParam();
+  const EngineSystemCatalog* catalog = GetSpangresSystemCatalog();
+  const PostgresTypeMapping* catalog_type;
+
+  // Look up the type by PG name.
+  catalog_type = catalog->GetType(test_case.pg_type_name);
+  EXPECT_EQ(catalog_type, test_case.pg_type);
+
+  // Look up the type by PG oid.
+  catalog_type = catalog->GetType(test_case.pg_type_oid);
+  EXPECT_EQ(catalog_type, test_case.pg_type);
+
+  // If there is a mapped ZetaSQL type, reverse look up the type.
+  // Otherwise, the type is not supported.
+  if (test_case.mapped_type != nullptr) {
+    catalog_type = catalog->GetTypeFromReverseMapping(test_case.mapped_type);
+    EXPECT_EQ(catalog_type, test_case.pg_type);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SpangresSystemCatalogTest, ExtendedTypesTest,
+    testing::ValuesIn<ExtendedTypesTestCase>({
+      {.pg_type = types::PgNumericMapping(),
+       .pg_type_name = "numeric",
+       .pg_type_oid = NUMERICOID,
+       .mapped_type = types::PgNumericMapping()->mapped_type()},
+      {.pg_type = types::PgNumericArrayMapping(),
+       .pg_type_name = "_numeric",
+       .pg_type_oid = NUMERICARRAYOID,
+       .mapped_type = GetPgNumericArrayType()},
+      {.pg_type = types::PgJsonbMapping(),
+       .pg_type_name = "jsonb",
+       .pg_type_oid = JSONBOID,
+       .mapped_type = types::PgJsonbMapping()->mapped_type()},
+      {.pg_type = types::PgJsonbArrayMapping(),
+       .pg_type_name = "_jsonb",
+       .pg_type_oid = JSONBARRAYOID,
+       .mapped_type = GetPgJsonbArrayType()},
+    }));
 
 TEST_F(SpangresSystemCatalogTest, GetTypes) {
   EngineSystemCatalog* catalog = GetSpangresSystemCatalog();
   absl::flat_hash_set<const zetasql::Type*> types;
   ZETASQL_ASSERT_OK(catalog->GetTypes(&types));
   std::vector<const zetasql::Type*> expected_types{
-      gsql_bool,
-      gsql_int64,
-      gsql_double,
-      gsql_string,
-      gsql_bytes,
-      gsql_timestamp,
-      gsql_date,
-      zetasql::types::BoolArrayType(),
-      zetasql::types::Int64ArrayType(),
-      zetasql::types::DoubleArrayType(),
-      zetasql::types::StringArrayType(),
-      zetasql::types::BytesArrayType(),
-      zetasql::types::TimestampArrayType(),
+      gsql_bool, gsql_int64, gsql_double, gsql_string, gsql_bytes,
+      gsql_timestamp, types::PgNumericMapping()->mapped_type(),
+      types::PgJsonbMapping()->mapped_type(),
+      gsql_date, zetasql::types::BoolArrayType(),
+      zetasql::types::Int64ArrayType(), zetasql::types::DoubleArrayType(),
+      zetasql::types::StringArrayType(), zetasql::types::BytesArrayType(),
+      zetasql::types::TimestampArrayType(), GetPgNumericArrayType(),
+      GetPgJsonbArrayType(),
       zetasql::types::DateArrayType()};
 
   EXPECT_THAT(types, UnorderedPointwise(TypeEquals(), expected_types));
+}
+
+  TEST_F(SpangresSystemCatalogTest, DISABLED_GetPgNumericCastFunction) {
+  struct CastTestCase {
+    const zetasql::Type* source_type;
+    const zetasql::Type* target_type;
+    bool valid_cast;
+  };
+  const zetasql::Type* gsql_pg_numeric =
+      types::PgNumericMapping()->mapped_type();
+  zetasql::LanguageOptions language_options = GetLanguageOptions();
+  EngineSystemCatalog* catalog = GetSpangresSystemCatalog();
+
+  std::vector<CastTestCase> tests{
+      // Fixed precision cast
+      {gsql_pg_numeric, gsql_pg_numeric, /*valid_cast=*/true},
+      // Valid casts to pg.numeric
+      {gsql_int64, gsql_pg_numeric, /*valid_cast=*/true},
+      {gsql_double, gsql_pg_numeric, /*valid_cast=*/true},
+      {gsql_string, gsql_pg_numeric, /*valid_cast=*/true},
+      // Valid casts from pg.numeric
+      {gsql_pg_numeric, gsql_int64, /*valid_cast=*/true},
+      {gsql_pg_numeric, gsql_double, /*valid_cast=*/true},
+      {gsql_pg_numeric, gsql_string, /*valid_cast=*/true},
+      // Invalid casts
+      {gsql_pg_numeric, gsql_bool, /*valid_cast=*/false},
+      {gsql_bytes, gsql_pg_numeric, /*valid_cast=*/false},
+      {gsql_bytes, gsql_string, /*valid_cast=*/false},
+  };
+
+  for (const CastTestCase& test_case : tests) {
+    if (test_case.valid_cast) {
+      ZETASQL_ASSERT_OK_AND_ASSIGN(
+          FunctionAndSignature func_and_sig,
+          catalog->GetPgNumericCastFunction(
+              test_case.source_type, test_case.target_type, language_options));
+      EXPECT_NE(func_and_sig.function(), nullptr);
+    } else {
+      EXPECT_THAT(
+          catalog->GetPgNumericCastFunction(
+              test_case.source_type, test_case.target_type, language_options),
+          StatusIs(absl::StatusCode::kNotFound));
+    }
+  }
 }
 
   // Disabling in the emulator as it doesn't block access to these functions,
@@ -305,6 +426,7 @@ TEST_F(SpangresSystemCatalogTest, ArrayCatFunctions) {
       zetasql::types::StringArrayType(),
       zetasql::types::BytesArrayType(),
       zetasql::types::TimestampArrayType(),
+      types::PgNumericArrayMapping()->mapped_type(),
       zetasql::types::DateArrayType()};
 
   for (const zetasql::Type* array_type : array_types) {
@@ -461,6 +583,103 @@ static void AssertPGFunctionIsRegistered(
   EXPECT_EQ(
       function_and_signature.function()->FullName(/*include_group=*/false),
       absl::StrCat("pg.", function_name));
+}
+
+TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
+  const zetasql::Type* gsql_pg_numeric =
+      types::PgNumericMapping()->mapped_type();
+  const zetasql::Type* gsql_pg_numeric_array = GetPgNumericArrayType();
+  const zetasql::Type* gsql_pg_jsonb_array = GetPgJsonbArrayType();
+
+  // Array functions
+  AssertPGFunctionIsRegistered("array_upper", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_int64_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_upper", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_string_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_upper", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_bool_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_upper", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_double_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_upper", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_bytes_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_upper", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_date_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered(
+      "array_upper", {ANYARRAYOID, INT8OID},
+      {zetasql::InputArgumentType(gsql_timestamp_array),
+       zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered(
+      "array_upper", {ANYARRAYOID, INT8OID},
+      {zetasql::InputArgumentType(gsql_pg_numeric_array),
+       zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered(
+      "array_upper", {ANYARRAYOID, INT8OID},
+      {zetasql::InputArgumentType(gsql_pg_jsonb_array),
+       zetasql::InputArgumentType(gsql_int64)});
+
+  // Comparison functions
+  AssertPGFunctionIsRegistered("textregexne", {TEXTOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_string)});
+  // Datetime functions
+  AssertPGFunctionIsRegistered("date_mi", {DATEOID, DATEOID},
+                               {zetasql::InputArgumentType(gsql_date),
+                                zetasql::InputArgumentType(gsql_date)});
+  AssertPGFunctionIsRegistered("date_mii", {DATEOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_date),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("date_pli", {DATEOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_date),
+                                zetasql::InputArgumentType(gsql_int64)});
+  // Formatting functions
+  AssertPGFunctionIsRegistered("to_date", {TEXTOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("to_number", {TEXTOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("to_timestamp", {TEXTOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("to_char", {INT8OID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_int64),
+                                zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("to_char", {TIMESTAMPTZOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_timestamp),
+                                zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("to_char", {FLOAT8OID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_double),
+                                zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("to_char", {NUMERICOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_pg_numeric),
+                                zetasql::InputArgumentType(gsql_string)});
+  // String functions
+  AssertPGFunctionIsRegistered("quote_ident", {TEXTOID},
+                               {zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("substring", {TEXTOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("regexp_match", {TEXTOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("regexp_match", {TEXTOID, TEXTOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("regexp_split_to_array", {TEXTOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("regexp_split_to_array",
+                               {TEXTOID, TEXTOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_string)});
 }
 }  // namespace
 

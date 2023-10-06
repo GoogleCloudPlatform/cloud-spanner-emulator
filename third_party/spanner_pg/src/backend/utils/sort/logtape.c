@@ -67,7 +67,7 @@
  * There will always be the same number of runs as input tapes, and the same
  * number of input tapes as participants (worker Tuplesortstates).
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -77,6 +77,8 @@
  */
 
 #include "postgres.h"
+
+#include <fcntl.h>
 
 #include "storage/buffile.h"
 #include "utils/builtins.h"
@@ -562,7 +564,7 @@ ltsConcatWorkerTapes(LogicalTapeSet *lts, TapeShare *shared,
 		lt = &lts->tapes[i];
 
 		pg_itoa(i, filename);
-		file = BufFileOpenShared(fileset, filename);
+		file = BufFileOpenShared(fileset, filename, O_RDONLY);
 		filesize = BufFileSize(file);
 
 		/*
@@ -1273,6 +1275,7 @@ LogicalTapeSetBlocks(LogicalTapeSet *lts)
 	for (int i = 0; i < lts->nTapes; i++)
 	{
 		LogicalTape *lt = &lts->tapes[i];
+
 		Assert(!lt->writing || lt->buffer == NULL);
 	}
 #endif

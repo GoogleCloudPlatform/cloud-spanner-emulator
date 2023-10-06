@@ -102,6 +102,12 @@ bool TypeIsVisible(Oid typid) {
  * of additional args (which can be retrieved from the function's
  * proargdefaults entry).
  *
+ * If include_out_arguments is true, then OUT-mode arguments are considered to
+ * be included in the argument list.  Their types are included in the returned
+ * arrays, and argnumbers are indexes in proallargtypes not proargtypes.
+ * We also set nominalnargs to be the length of proallargtypes not proargtypes.
+ * Otherwise OUT-mode arguments are ignored.
+ *
  * It is not possible for nvargs and ndargs to both be nonzero in the same
  * list entry, since default insertion allows matches to functions with more
  * than nargs arguments while the variadic transformation requires the same
@@ -112,13 +118,14 @@ bool TypeIsVisible(Oid typid) {
  * first any positional arguments, then the named arguments, then defaulted
  * arguments (if needed and allowed by expand_defaults).  The argnumbers[]
  * array can be used to map this back to the catalog information.
- * argnumbers[k] is set to the proargtypes index of the k'th call argument.
+ * argnumbers[k] is set to the proargtypes or proallargtypes index of the
+ * k'th call argument.
  *
  * We search a single namespace if the function name is qualified, else
  * all namespaces in the search path.  In the multiple-namespace case,
  * we arrange for entries in earlier namespaces to mask identical entries in
  * later namespaces.
- * NOTE: Spangres does not support qualified function names.
+ *
  * When expanding variadics, we arrange for non-variadic functions to mask
  * variadic ones if the expanded argument list is the same.  It is still
  * possible for there to be conflicts between different variadic functions,
@@ -136,13 +143,14 @@ bool TypeIsVisible(Oid typid) {
  * such an entry it should react as though the call were ambiguous.
  *
  * If missing_ok is true, an empty list (NULL) is returned if the name was
- * schema- qualified with a schema that does not exist.  Likewise if no
+ * schema-qualified with a schema that does not exist.  Likewise if no
  * candidate is found for other reasons.
  */
 FuncCandidateList FuncnameGetCandidates(List* names, int nargs,
 										List* argnames,
 										bool expand_variadic,
 										bool expand_defaults,
+										bool include_out_arguments,
 										bool missing_ok) {
 	FuncCandidateList resultList = NULL;
 	bool		any_special = false;
@@ -190,6 +198,18 @@ FuncCandidateList FuncnameGetCandidates(List* names, int nargs,
 		 */
 		if (procform->pronamespace != namespaceId)
 			continue;
+
+		/*
+		 * If we are asked to match to OUT arguments, then use the
+		 * proallargtypes array (which includes those); otherwise use
+		 * proargtypes (which doesn't).  Of course, if proallargtypes is null,
+		 * we always use proargtypes.
+		 */
+		if (include_out_arguments)
+		{
+			ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+											errmsg("Include out arguments are not supported")));
+		}
 
 		if (argnames != NIL) {
 			/*

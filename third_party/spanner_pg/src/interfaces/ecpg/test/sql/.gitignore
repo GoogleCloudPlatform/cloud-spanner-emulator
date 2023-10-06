@@ -8,6 +8,8 @@
 /copystdout.c
 /createtableas
 /createtableas.c
+/declare
+/declare.c
 /define
 /define.c
 /desc

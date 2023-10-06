@@ -18,14 +18,33 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
+#include "zetasql/public/simple_catalog.h"
+#include "zetasql/public/value.h"
 #include "absl/log/check.h"
+#include "absl/strings/match.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+namespace {
+
+std::unique_ptr<zetasql::SimpleTable> MakeEmptyTable(
+    std::string_view table_name,
+    std::vector<zetasql::SimpleTable::NameAndType> columns) {
+  auto table = std::make_unique<zetasql::SimpleTable>(table_name, columns);
+
+  std::vector<std::vector<zetasql::Value>> empty;
+  table.get()->SetContents(empty);
+
+  return table;
+}
+
+}  // namespace
 
 absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
 AddTablesFromMetadata(
@@ -44,6 +63,10 @@ AddTablesFromMetadata(
   std::vector<zetasql::SimpleTable::NameAndType> columns;
   for (auto it = metadata_entries.cbegin(); it != metadata_entries.cend();
        ++it) {
+    if (absl::StartsWith(it->spanner_type, "ARRAY<STRUCT")) {
+      // Struct array is not supported. Ignore such columns.
+      continue;
+    }
     // This is a table we're in the process of creating so add the next
     // column.
     if (!table_name.empty() && it->table_name == table_name) {
@@ -55,8 +78,7 @@ AddTablesFromMetadata(
     // It's a new table so if there was an existing table that we were in the
     // process of creating, create the table.
     if (!table_name.empty()) {
-      tables_by_name[table_name] =
-          std::make_unique<zetasql::SimpleTable>(table_name, columns);
+      tables_by_name[table_name] = MakeEmptyTable(table_name, columns);
 
       // Clear the table name and columns for the next table.
       table_name = "";
@@ -78,8 +100,7 @@ AddTablesFromMetadata(
   }
   // If the last supported table hasn't been created yet, create it now.
   if (!table_name.empty()) {
-    tables_by_name[table_name] =
-        std::make_unique<zetasql::SimpleTable>(table_name, columns);
+    tables_by_name[table_name] = MakeEmptyTable(table_name, columns);
   }
 
   return tables_by_name;

@@ -8,7 +8,7 @@
  * communications code calls, this file contains support routines that are
  * used by the library-specific implementations such as be-secure-openssl.c.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -160,9 +160,10 @@ check_ssl_key_file_permissions(const char *ssl_key_file, bool isServerStart)
 	 * allow read access through either our gid or a supplementary gid that
 	 * allows us to read system-wide certificates.
 	 *
-	 * Note that similar checks are performed in
+	 * Note that roughly similar checks are performed in
 	 * src/interfaces/libpq/fe-secure-openssl.c so any changes here may need
-	 * to be made there as well.
+	 * to be made there as well.  The environment is different though; this
+	 * code can assume that we're not running as root.
 	 *
 	 * Ideally we would do similar permissions checks on Windows, but it is
 	 * not clear how that would work since Unix-style permissions may not be

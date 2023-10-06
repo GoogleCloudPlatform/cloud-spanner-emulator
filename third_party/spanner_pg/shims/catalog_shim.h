@@ -110,6 +110,10 @@ typedef struct {
   List* outer_tlist; /* referent for OUTER_VAR Vars */
   List* inner_tlist; /* referent for INNER_VAR Vars */
   List* index_tlist; /* referent for INDEX_VAR Vars */
+  /* Special namespace representing a function signature: */
+  char* funcname;
+  int numargs;
+  char** argnames;
 } deparse_namespace;
 
 // Redefines the same struct as in PostgreSQL's utils/adt/ruleutils.c
@@ -390,6 +394,24 @@ typedef struct
 	AttrNumber	second;			/* Second closest attribute so far */
 } FuzzyAttrMatchState;
 
+/*
+ * SPANGRES: Hardcodes the set of supported timezone abbreviations rather than
+ * loading them from a file
+ *
+ * Note that this table must be strictly alphabetically ordered to allow an
+ * O(ln(N)) search algorithm to be used.
+ *
+ * The token field must be NUL-terminated; we truncate entries to TOKMAXLEN
+ * characters to fit.
+ *
+ */
+static const datetkn SpangresTimezoneAbbrevTable[] = {
+    {"z", TZ, 0}
+};
+
+static const int SpangresTimezoneAbbrevTableSize =
+    sizeof SpangresTimezoneAbbrevTable / sizeof SpangresTimezoneAbbrevTable[0];
+
 /*---------------------------------------------------------------------------*/
 /* Shimmed functions from catalog/namespace.c*/
 
@@ -404,7 +426,9 @@ bool TypeIsVisible(Oid typid);
 // that only exist in namespace.c
 FuncCandidateList FuncnameGetCandidates(List* names, int nargs, List* argnames,
                                         bool expand_variadic,
-                                        bool expand_defaults, bool missing_ok);
+                                        bool expand_defaults,
+                                        bool include_out_arguments,
+                                        bool missing_ok);
 
 // Given an Operator name, returns a list of candidate functions to be selected
 // from based on desired operand types.
@@ -601,7 +625,7 @@ Node* transformParamRef(ParseState *pstate, ParamRef *pref);
 // support for named arguments.
 FuncDetailCode func_get_detail(List* funcname, List* fargs, List* fargnames,
                                int nargs, Oid* argtypes, bool expand_variadic,
-                               bool expand_defaults,
+                               bool expand_defaults, bool include_out_arguments,
                                Oid* funcid,          // return value
                                Oid* rettype,         // return value
                                bool* retset,         // return value
@@ -649,8 +673,6 @@ Operator oper(ParseState* pstate, List* opname, Oid ltypeId, Oid rtypeId,
               bool noError, int location);
 Operator left_oper(ParseState* pstate, List* op, Oid arg, bool noError,
                    int location);
-Operator right_oper(ParseState* pstate, List* op, Oid arg, bool noError,
-                    int location);
 
 /*---------------------------------------------------------------------------*/
 /* Shimmed functions from parser/parse_relation.c */
@@ -669,9 +691,9 @@ Operator right_oper(ParseState* pstate, List* op, Oid arg, bool noError,
 // that usage, minimize the number of validity checks performed here.  It's
 // okay to complain about ambiguous-name cases, though, since if we are
 // working to complain about an invalid name, we've already eliminated that.
-int scanRTEForColumn(ParseState *pstate, RangeTblEntry *rte,
-                     const char *colname, int location, int fuzzy_rte_penalty,
-                     FuzzyAttrMatchState *fuzzystate);
+int scanRTEForColumn(ParseState* pstate, RangeTblEntry* rte, Alias* eref,
+                     const char* colname, int location, int fuzzy_rte_penalty,
+                     FuzzyAttrMatchState* fuzzystate);
 
 // This function is shimmed out to const false since dropped columns do not
 // exist in googlesql catalogs.
@@ -774,6 +796,15 @@ Oid get_role_oid(const char *rolname, bool missing_ok);
 Datum date_in(PG_FUNCTION_ARGS);
 
 /*---------------------------------------------------------------------------*/
+/* Shimmed functions from utils/adt/datetime.c */
+int
+DecodeDateTime(char **field, int *ftype, int nf,
+               int *dtype, struct pg_tm *tm, fsec_t *fsec, int *tzp);
+int
+DecodeTimezoneAbbrev(int field, char *lowtoken,
+                     int *offset, pg_tz **tz);
+
+/*---------------------------------------------------------------------------*/
 /* Shimmed functions from utils/adt/format_type.c */
 
 // format_type_extended
@@ -869,11 +900,13 @@ void get_utility_query_def(Query* query, deparse_context* context);
 
 // Parse back a DELETE parsetree. The shimmed version excludes the target
 // relation from the USING clause.
-void get_delete_query_def(Query* query, deparse_context* context);
+void get_delete_query_def(Query* query, deparse_context* context,
+                          bool colNamesVisible);
 
 // Parse back an UPDATE parsetree. The shimmed version excludes the target
 // relation from the FROM clause.
-void get_update_query_def(Query* query, deparse_context* context);
+void get_update_query_def(Query* query, deparse_context* context,
+                          bool colNamesVisible);
 
 /*---------------------------------------------------------------------------*/
 /* Shimmed functions from utils/cache/catcache.c */
@@ -1035,6 +1068,13 @@ Oid get_array_type(Oid typid);
 // Attempts to resolve a qualified relation name.
 Oid get_relname_relid(const char* relname, Oid namespace_oid);
 
+// Given the type OID, return the type's subscripting handler's OID,
+// if it has one.
+RegProcedure get_typsubscript(Oid typid, Oid *typelemp);
+
+// Returns the range type of a given multirange
+Oid get_multirange_range(Oid multirangeOid);
+
 /*---------------------------------------------------------------------------*/
 /* Shimmed functions from utils/cache/typcache.c */
 
@@ -1180,15 +1220,6 @@ void get_hint_list_def(List* hints, deparse_context* context, bool statement);
 void get_typlenbyvalalign(Oid typid, int16_t* typlen, bool* typbyval,
                           char* typalign);
 
-// If containerType is an array, gets the element type. Errors otherwise.
-Oid transformContainerType(Oid* containerType, int32_t* containerTypmod);
-
-// Resolves a container reference like array[5] into a SubscriptingRef node.
-// Spangres version uses INT8 for indices instead of INT4.
-SubscriptingRef* transformContainerSubscripts(
-    ParseState* pstate, Node* containerBase, Oid containerType, Oid elementType,
-    int32_t containerTypMod, List* indirection, Node* assignFrom);
-
 // Gets a namespace Oid from the name by looking up in catalog adapter.
 // Spangres version skips ACL checks and does not support pg_temp.
 Oid LookupExplicitNamespace(const char* nspname, bool missing_ok);
@@ -1204,7 +1235,7 @@ Oid LookupExplicitNamespace(const char* nspname, bool missing_ok);
 // for the parantheses to be correct.
 
 void get_setop_query(Node* setOp, Query* query, deparse_context* context,
-                     TupleDesc resultDesc);
+                     TupleDesc resultDesc, bool colNamesVisible);
 
 #ifdef __cplusplus
 }

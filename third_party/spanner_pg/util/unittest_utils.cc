@@ -37,6 +37,7 @@
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter_holder.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/interface/test/postgres_transformer.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
@@ -178,6 +179,12 @@ absl::StatusOr<const zetasql::Type*> ParseTypeName(const std::string& type) {
     return zetasql::types::TimestampType();
   } else if (type == "date") {
     return zetasql::types::DateType();
+  } else if (type == "pg_jsonb") {
+    return postgres_translator::spangres::types::PgJsonbMapping()
+        ->mapped_type();
+  } else if (type == "pg_numeric") {
+    return postgres_translator::spangres::types::PgNumericMapping()
+        ->mapped_type();
   } else if (type == "int64_array") {
     return zetasql::types::Int64ArrayType();
   } else if (type == "double_array") {
@@ -192,6 +199,12 @@ absl::StatusOr<const zetasql::Type*> ParseTypeName(const std::string& type) {
     return zetasql::types::TimestampArrayType();
   } else if (type == "date_array") {
     return zetasql::types::DateArrayType();
+  } else if (type == "pg_numeric_array") {
+    return postgres_translator::spangres::types::PgNumericArrayMapping()
+        ->mapped_type();
+  } else if (type == "pg_jsonb_array") {
+    return postgres_translator::spangres::types::PgJsonbArrayMapping()
+        ->mapped_type();
   } else {
     return absl::InvalidArgumentError(
         absl::StrCat("Bad option types input: ", type));

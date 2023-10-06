@@ -14,6 +14,7 @@ include $(top_builddir)/src/Makefile.global
 
 OBJS = \
 	execAmi.o \
+	execAsync.o \
 	execCurrent.o \
 	execExpr.o \
 	execExprInterp.o \
@@ -52,6 +53,7 @@ OBJS = \
 	nodeLimit.o \
 	nodeLockRows.o \
 	nodeMaterial.o \
+	nodeMemoize.o \
 	nodeMergeAppend.o \
 	nodeMergejoin.o \
 	nodeModifyTable.o \
@@ -67,6 +69,7 @@ OBJS = \
 	nodeSubplan.o \
 	nodeSubqueryscan.o \
 	nodeTableFuncscan.o \
+	nodeTidrangescan.o \
 	nodeTidscan.o \
 	nodeUnique.o \
 	nodeValuesscan.o \

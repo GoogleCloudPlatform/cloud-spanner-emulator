@@ -34,26 +34,13 @@
 
 licenses(["notice"])
 
+#TODO: Remove once on-branch no longer depends on this library.
 cc_library(
     name = "function_evaluators",
-    srcs = [
-        "function_evaluators.cc",
-    ],
     hdrs = [
         "function_evaluators.h",
     ],
     visibility = ["//:__subpackages__"],
-    deps = [
-        "//third_party/spanner_pg/datetime_parsing",
-        "//third_party/spanner_pg/util:datetime_conversion",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/public/functions:date_time_util",
-    ],
 )
 
 cc_library(
@@ -61,26 +48,32 @@ cc_library(
     srcs = [
         "datetime_evaluators.cc",
         "formatting_evaluators.cc",
+        "mathematical_evaluators.cc",
         "pg_arena_factory.cc",
         "pg_timezone.cc",
         "regexp_evaluators.cc",
     ],
     visibility = ["//:__subpackages__"],
     deps = [
+        "//third_party/spanner_pg/datatypes/common:pg_numeric_parse",
+        "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
         "//third_party/spanner_pg/interface:memory_reservation_manager",
         "//third_party/spanner_pg/interface:pg_evaluators",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/shims:memory_context_pg_arena",
         "//third_party/spanner_pg/shims:regex_shim_header",
+        "//third_party/spanner_pg/shims:stub_memory_reservation_manager",
         "//third_party/spanner_pg/shims:timezone_helper",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "//third_party/spanner_pg/src/backend/catalog:generated_catalog_headers",
+        "//third_party/spanner_pg/src/backend/utils:fmgr_sources_header",
         "//third_party/spanner_pg/util:datetime_conversion",
         "//third_party/spanner_pg/util:integral_helpers",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:cord",
         "@com_google_absl//absl/time",
         "@com_google_zetasql//zetasql/public/functions:date_time_util",
     ],

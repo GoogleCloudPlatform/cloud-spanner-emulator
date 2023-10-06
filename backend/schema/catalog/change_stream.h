@@ -86,7 +86,9 @@ class ChangeStream : public SchemaNode {
     return for_clause_.has_value() ? &for_clause_.value() : nullptr;
   }
 
-  const ddl::SetOption* options() const { return options_; }
+  const ::google::protobuf::RepeatedPtrField<ddl::SetOption> options() const {
+    return options_;
+  }
 
   // SchemaNode interface implementation.
   // ------------------------------------
@@ -144,7 +146,7 @@ class ChangeStream : public SchemaNode {
 
   std::optional<std::string> value_capture_type_;
 
-  bool track_all_;
+  bool track_all_ = false;
 
   // TODO: assign the ID during change stream creation
   // A unique ID for identifying this change stream in the schema that owns this
@@ -166,7 +168,7 @@ class ChangeStream : public SchemaNode {
   // passed to the new object.
   std::optional<ddl::ChangeStreamForClause> for_clause_;
 
-  const ddl::SetOption* options_ = nullptr;
+  ::google::protobuf::RepeatedPtrField<ddl::SetOption> options_;
 
   // The backing table that stores the change stream data.
   const Table* change_stream_data_table_;

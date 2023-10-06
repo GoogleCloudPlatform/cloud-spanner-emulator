@@ -4,7 +4,7 @@
  *	  handle target lists
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/parser/parse_target.h
@@ -33,12 +33,23 @@ extern Expr *transformAssignedExpr_UNUSED_SPANGRES(ParseState *pstate, Expr *exp
  					  List *indirection,
  					  int location);
 extern void updateTargetListEntry(ParseState *pstate, TargetEntry *tle,
-
-					  char *colname, int attrno,
-					  List *indirection,
-					  int location);
+								  char *colname, int attrno,
+								  List *indirection,
+								  int location);
+extern Node *transformAssignmentIndirection(ParseState *pstate,
+											Node *basenode,
+											const char *targetName,
+											bool targetIsSubscripting,
+											Oid targetTypeId,
+											int32 targetTypMod,
+											Oid targetCollation,
+											List *indirection,
+											ListCell *indirection_cell,
+											Node *rhs,
+											CoercionContext ccontext,
+											int location);
 extern List *checkInsertTargets_UNUSED_SPANGRES(ParseState *pstate, List *cols,
- 				   List **attrnos);
+								List **attrnos);
 extern TupleDesc expandRecordVariable(ParseState *pstate, Var *var,
 					 int levelsup);extern char *FigureColname(Node *node);
 extern char *FigureIndexColname(Node *node);

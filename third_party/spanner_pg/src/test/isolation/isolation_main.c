@@ -2,7 +2,7 @@
  *
  * isolation_main --- pg_regress test launcher for isolation tests
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/test/isolation/isolation_main.c
@@ -98,8 +98,9 @@ isolation_start_test(const char *testname,
 		exit(2);
 	}
 
-	appnameenv = psprintf("PGAPPNAME=isolation/%s", testname);
-	putenv(appnameenv);
+	appnameenv = psprintf("isolation/%s", testname);
+	setenv("PGAPPNAME", appnameenv, 1);
+	free(appnameenv);
 
 	pid = spawn_process(psql_cmd);
 
@@ -111,7 +112,6 @@ isolation_start_test(const char *testname,
 	}
 
 	unsetenv("PGAPPNAME");
-	free(appnameenv);
 
 	return pid;
 }
@@ -145,5 +145,8 @@ isolation_init(int argc, char **argv)
 int
 main(int argc, char *argv[])
 {
-	return regression_main(argc, argv, isolation_init, isolation_start_test);
+	return regression_main(argc, argv,
+						   isolation_init,
+						   isolation_start_test,
+						   NULL /* no postfunc needed */ );
 }

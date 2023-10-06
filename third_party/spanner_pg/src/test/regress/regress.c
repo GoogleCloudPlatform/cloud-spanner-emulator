@@ -6,7 +6,7 @@
  *
  * This code is released under the terms of the PostgreSQL License.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/test/regress/regress.c
@@ -23,16 +23,20 @@
 #include "access/htup_details.h"
 #include "access/transam.h"
 #include "access/xact.h"
+#include "catalog/namespace.h"
 #include "catalog/pg_operator.h"
 #include "catalog/pg_type.h"
 #include "commands/sequence.h"
 #include "commands/trigger.h"
 #include "executor/executor.h"
 #include "executor/spi.h"
+#include "funcapi.h"
+#include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "nodes/supportnodes.h"
 #include "optimizer/optimizer.h"
 #include "optimizer/plancat.h"
+#include "parser/parse_coerce.h"
 #include "port/atomics.h"
 #include "storage/spin.h"
 #include "utils/builtins.h"
@@ -624,22 +628,18 @@ make_tuple_indirect(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(newtup->t_data);
 }
 
-PG_FUNCTION_INFO_V1(regress_putenv);
+PG_FUNCTION_INFO_V1(regress_setenv);
 
 Datum
-regress_putenv(PG_FUNCTION_ARGS)
+regress_setenv(PG_FUNCTION_ARGS)
 {
-	MemoryContext oldcontext;
-	char	   *envbuf;
+	char	   *envvar = text_to_cstring(PG_GETARG_TEXT_PP(0));
+	char	   *envval = text_to_cstring(PG_GETARG_TEXT_PP(1));
 
 	if (!superuser())
 		elog(ERROR, "must be superuser to change environment variables");
 
-	oldcontext = MemoryContextSwitchTo(TopMemoryContext);
-	envbuf = text_to_cstring((text *) PG_GETARG_POINTER(0));
-	MemoryContextSwitchTo(oldcontext);
-
-	if (putenv(envbuf) != 0)
+	if (setenv(envvar, envval, 1) != 0)
 		elog(ERROR, "could not set environment variable: %m");
 
 	PG_RETURN_VOID();
@@ -824,7 +824,7 @@ test_spinlock(void)
 			char		data_before[4];
 			slock_t		lock;
 			char		data_after[4];
-		} struct_w_lock;
+		}			struct_w_lock;
 
 		memcpy(struct_w_lock.data_before, "abcd", 4);
 		memcpy(struct_w_lock.data_after, "ef12", 4);
@@ -872,28 +872,28 @@ test_spinlock(void)
 	}
 
 	/*
-	 * Ensure that allocating more than INT32_MAX emulated spinlocks
-	 * works. That's interesting because the spinlock emulation uses a 32bit
-	 * integer to map spinlocks onto semaphores. There've been bugs...
+	 * Ensure that allocating more than INT32_MAX emulated spinlocks works.
+	 * That's interesting because the spinlock emulation uses a 32bit integer
+	 * to map spinlocks onto semaphores. There've been bugs...
 	 */
 #ifndef HAVE_SPINLOCKS
 	{
 		/*
-		 * Initialize enough spinlocks to advance counter close to
-		 * wraparound. It's too expensive to perform acquire/release for each,
-		 * as those may be syscalls when the spinlock emulation is used (and
-		 * even just atomic TAS would be expensive).
+		 * Initialize enough spinlocks to advance counter close to wraparound.
+		 * It's too expensive to perform acquire/release for each, as those
+		 * may be syscalls when the spinlock emulation is used (and even just
+		 * atomic TAS would be expensive).
 		 */
 		for (uint32 i = 0; i < INT32_MAX - 100000; i++)
 		{
-			slock_t lock;
+			slock_t		lock;
 
 			SpinLockInit(&lock);
 		}
 
 		for (uint32 i = 0; i < 200000; i++)
 		{
-			slock_t lock;
+			slock_t		lock;
 
 			SpinLockInit(&lock);
 
@@ -923,7 +923,7 @@ test_spinlock(void)
 static void
 test_atomic_spin_nest(void)
 {
-	slock_t lock;
+	slock_t		lock;
 #define NUM_TEST_ATOMICS (NUM_SPINLOCK_SEMAPHORES + NUM_ATOMICS_SEMAPHORES + 27)
 	pg_atomic_uint32 atomics32[NUM_TEST_ATOMICS];
 	pg_atomic_uint64 atomics64[NUM_TEST_ATOMICS];
@@ -1063,4 +1063,146 @@ Datum
 test_opclass_options_func(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_NULL();
+}
+
+/*
+ * Call an encoding conversion or verification function.
+ *
+ * Arguments:
+ *	string	  bytea -- string to convert
+ *	src_enc	  name  -- source encoding
+ *	dest_enc  name  -- destination encoding
+ *	noError	  bool  -- if set, don't ereport() on invalid or untranslatable
+ *					   input
+ *
+ * Result is a tuple with two attributes:
+ *  int4	-- number of input bytes successfully converted
+ *  bytea	-- converted string
+ */
+PG_FUNCTION_INFO_V1(test_enc_conversion);
+Datum
+test_enc_conversion(PG_FUNCTION_ARGS)
+{
+	bytea	   *string = PG_GETARG_BYTEA_PP(0);
+	char	   *src_encoding_name = NameStr(*PG_GETARG_NAME(1));
+	int			src_encoding = pg_char_to_encoding(src_encoding_name);
+	char	   *dest_encoding_name = NameStr(*PG_GETARG_NAME(2));
+	int			dest_encoding = pg_char_to_encoding(dest_encoding_name);
+	bool		noError = PG_GETARG_BOOL(3);
+	TupleDesc	tupdesc;
+	char	   *src;
+	char	   *dst;
+	bytea	   *retval;
+	Size		srclen;
+	Size		dstsize;
+	Oid			proc;
+	int			convertedbytes;
+	int			dstlen;
+	Datum		values[2];
+	bool		nulls[2];
+	HeapTuple	tuple;
+
+	if (src_encoding < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid source encoding name \"%s\"",
+						src_encoding_name)));
+	if (dest_encoding < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid destination encoding name \"%s\"",
+						dest_encoding_name)));
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+	tupdesc = BlessTupleDesc(tupdesc);
+
+	srclen = VARSIZE_ANY_EXHDR(string);
+	src = VARDATA_ANY(string);
+
+	if (src_encoding == dest_encoding)
+	{
+		/* just check that the source string is valid */
+		int			oklen;
+
+		oklen = pg_encoding_verifymbstr(src_encoding, src, srclen);
+
+		if (oklen == srclen)
+		{
+			convertedbytes = oklen;
+			retval = string;
+		}
+		else if (!noError)
+		{
+			report_invalid_encoding(src_encoding, src + oklen, srclen - oklen);
+		}
+		else
+		{
+			/*
+			 * build bytea data type structure.
+			 */
+			Assert(oklen < srclen);
+			convertedbytes = oklen;
+			retval = (bytea *) palloc(oklen + VARHDRSZ);
+			SET_VARSIZE(retval, oklen + VARHDRSZ);
+			memcpy(VARDATA(retval), src, oklen);
+		}
+	}
+	else
+	{
+		proc = FindDefaultConversionProc(src_encoding, dest_encoding);
+		if (!OidIsValid(proc))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_FUNCTION),
+					 errmsg("default conversion function for encoding \"%s\" to \"%s\" does not exist",
+							pg_encoding_to_char(src_encoding),
+							pg_encoding_to_char(dest_encoding))));
+
+		if (srclen >= (MaxAllocSize / (Size) MAX_CONVERSION_GROWTH))
+			ereport(ERROR,
+					(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+					 errmsg("out of memory"),
+					 errdetail("String of %d bytes is too long for encoding conversion.",
+							   (int) srclen)));
+
+		dstsize = (Size) srclen * MAX_CONVERSION_GROWTH + 1;
+		dst = MemoryContextAlloc(CurrentMemoryContext, dstsize);
+
+		/* perform conversion */
+		convertedbytes = pg_do_encoding_conversion_buf(proc,
+													   src_encoding,
+													   dest_encoding,
+													   (unsigned char *) src, srclen,
+													   (unsigned char *) dst, dstsize,
+													   noError);
+		dstlen = strlen(dst);
+
+		/*
+		 * build bytea data type structure.
+		 */
+		retval = (bytea *) palloc(dstlen + VARHDRSZ);
+		SET_VARSIZE(retval, dstlen + VARHDRSZ);
+		memcpy(VARDATA(retval), dst, dstlen);
+
+		pfree(dst);
+	}
+
+	MemSet(nulls, 0, sizeof(nulls));
+	values[0] = Int32GetDatum(convertedbytes);
+	values[1] = PointerGetDatum(retval);
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
+}
+
+/* Provide SQL access to IsBinaryCoercible() */
+PG_FUNCTION_INFO_V1(binary_coercible);
+Datum
+binary_coercible(PG_FUNCTION_ARGS)
+{
+	Oid			srctype = PG_GETARG_OID(0);
+	Oid			targettype = PG_GETARG_OID(1);
+
+	PG_RETURN_BOOL(IsBinaryCoercible(srctype, targettype));
 }

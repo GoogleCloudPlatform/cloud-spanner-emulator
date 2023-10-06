@@ -33,17 +33,21 @@ TEST(EmulatorFeatureFlags, Basic) {
 
   EXPECT_TRUE(features.flags().enable_check_constraint);
   EXPECT_TRUE(features.flags().enable_column_default_values);
+  EXPECT_FALSE(features.flags().enable_fk_delete_cascade_action);
 
   {
     EmulatorFeatureFlags::Flags flags;
     flags.enable_check_constraint = false;
     flags.enable_column_default_values = false;
+    flags.enable_fk_delete_cascade_action = true;
     test::ScopedEmulatorFeatureFlagsSetter setter(flags);
     EXPECT_FALSE(features.flags().enable_check_constraint);
     EXPECT_FALSE(features.flags().enable_column_default_values);
+    EXPECT_TRUE(features.flags().enable_fk_delete_cascade_action);
   }
   EXPECT_TRUE(features.flags().enable_check_constraint);
   EXPECT_TRUE(features.flags().enable_column_default_values);
+  EXPECT_FALSE(features.flags().enable_fk_delete_cascade_action);
 }
 
 TEST(EmulatorFeatureFlags, DmlReturningFlag) {
@@ -59,6 +63,21 @@ TEST(EmulatorFeatureFlags, DmlReturningFlag) {
   }
 
   EXPECT_TRUE(features.flags().enable_dml_returning);
+}
+
+TEST(EmulatorFeatureFlags, PostgresqlInterfaceFlag) {
+  const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
+
+  EXPECT_FALSE(features.flags().enable_postgresql_interface);
+
+  {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_postgresql_interface = true;
+    test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+    EXPECT_TRUE(features.flags().enable_postgresql_interface);
+  }
+
+  EXPECT_FALSE(features.flags().enable_postgresql_interface);
 }
 
 }  // namespace

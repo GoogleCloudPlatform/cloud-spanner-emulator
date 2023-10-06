@@ -2,7 +2,7 @@
 #
 # Makefile for backend/catalog
 #
-# Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+# Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
 # Portions Copyright (c) 1994, Regents of the University of California
 #
 # src/backend/catalog/Makefile
@@ -49,15 +49,15 @@ include $(top_srcdir)/src/backend/common.mk
 
 # Note: the order of this list determines the order in which the catalog
 # header files are assembled into postgres.bki.  BKI_BOOTSTRAP catalogs
-# must appear first, and there are reputedly other, undocumented ordering
-# dependencies.
+# must appear first, and pg_statistic before pg_statistic_ext_data, and
+# there are reputedly other, undocumented ordering dependencies.
 CATALOG_HEADERS := \
 	pg_proc.h pg_type.h pg_attribute.h pg_class.h \
 	pg_attrdef.h pg_constraint.h pg_inherits.h pg_index.h pg_operator.h \
 	pg_opfamily.h pg_opclass.h pg_am.h pg_amop.h pg_amproc.h \
 	pg_language.h pg_largeobject_metadata.h pg_largeobject.h pg_aggregate.h \
-	pg_statistic_ext.h pg_statistic_ext_data.h \
-	pg_statistic.h pg_rewrite.h pg_trigger.h pg_event_trigger.h pg_description.h \
+	pg_statistic.h pg_statistic_ext.h pg_statistic_ext_data.h \
+	pg_rewrite.h pg_trigger.h pg_event_trigger.h pg_description.h \
 	pg_cast.h pg_enum.h pg_namespace.h pg_conversion.h pg_depend.h \
 	pg_database.h pg_db_role_setting.h pg_tablespace.h \
 	pg_authid.h pg_auth_members.h pg_shdepend.h pg_shdescription.h \
@@ -70,14 +70,9 @@ CATALOG_HEADERS := \
 	pg_sequence.h pg_publication.h pg_publication_rel.h pg_subscription.h \
 	pg_subscription_rel.h
 
-GENERATED_HEADERS := $(CATALOG_HEADERS:%.h=%_d.h) schemapg.h
+GENERATED_HEADERS := $(CATALOG_HEADERS:%.h=%_d.h) schemapg.h system_fk_info.h
 
-# In the list of headers used to assemble postgres.bki, indexing.h needs
-# be last, and toasting.h just before it.  This ensures we don't try to
-# create indexes or toast tables before their catalogs exist.
-POSTGRES_BKI_SRCS := $(addprefix $(top_srcdir)/src/include/catalog/,\
-	$(CATALOG_HEADERS) toasting.h indexing.h \
-	)
+POSTGRES_BKI_SRCS := $(addprefix $(top_srcdir)/src/include/catalog/, $(CATALOG_HEADERS))
 
 # The .dat files we need can just be listed alphabetically.
 POSTGRES_BKI_DATA = $(addprefix $(top_srcdir)/src/include/catalog/,\
@@ -103,10 +98,10 @@ generated-header-symlinks: $(top_builddir)/src/include/catalog/header-stamp
 # won't update them if they didn't change (to avoid unnecessary recompiles).
 # Technically, this should depend on Makefile.global which supplies
 # $(MAJORVERSION); but then genbki.pl would need to be re-run after every
-# configure run, even in distribution tarballs.  So depending on configure.in
+# configure run, even in distribution tarballs.  So depending on configure.ac
 # instead is cheating a bit, but it will achieve the goal of updating the
 # version number when it changes.
-bki-stamp: genbki.pl Catalog.pm $(POSTGRES_BKI_SRCS) $(POSTGRES_BKI_DATA) $(top_srcdir)/configure.in
+bki-stamp: genbki.pl Catalog.pm $(POSTGRES_BKI_SRCS) $(POSTGRES_BKI_DATA) $(top_srcdir)/configure.ac
 	$(PERL) $< --include-path=$(top_srcdir)/src/include/ \
 		--set-version=$(MAJORVERSION) $(POSTGRES_BKI_SRCS)
 	touch $@
@@ -126,6 +121,8 @@ $(top_builddir)/src/include/catalog/header-stamp: bki-stamp
 .PHONY: install-data
 install-data: bki-stamp installdirs
 	$(INSTALL_DATA) $(call vpathsearch,postgres.bki) '$(DESTDIR)$(datadir)/postgres.bki'
+	$(INSTALL_DATA) $(call vpathsearch,system_constraints.sql) '$(DESTDIR)$(datadir)/system_constraints.sql'
+	$(INSTALL_DATA) $(srcdir)/system_functions.sql '$(DESTDIR)$(datadir)/system_functions.sql'
 	$(INSTALL_DATA) $(srcdir)/system_views.sql '$(DESTDIR)$(datadir)/system_views.sql'
 	$(INSTALL_DATA) $(srcdir)/information_schema.sql '$(DESTDIR)$(datadir)/information_schema.sql'
 	$(INSTALL_DATA) $(srcdir)/sql_features.txt '$(DESTDIR)$(datadir)/sql_features.txt'
@@ -135,11 +132,11 @@ installdirs:
 
 .PHONY: uninstall-data
 uninstall-data:
-	rm -f $(addprefix '$(DESTDIR)$(datadir)'/, postgres.bki system_views.sql information_schema.sql sql_features.txt)
+	rm -f $(addprefix '$(DESTDIR)$(datadir)'/, postgres.bki system_constraints.sql system_functions.sql system_views.sql information_schema.sql sql_features.txt)
 
-# postgres.bki and the generated headers are in the distribution tarball,
-# so they are not cleaned here.
+# postgres.bki, system_constraints.sql, and the generated headers are
+# in the distribution tarball, so they are not cleaned here.
 clean:
 
 maintainer-clean: clean
-	rm -f bki-stamp postgres.bki $(GENERATED_HEADERS)
+	rm -f bki-stamp postgres.bki system_constraints.sql $(GENERATED_HEADERS)

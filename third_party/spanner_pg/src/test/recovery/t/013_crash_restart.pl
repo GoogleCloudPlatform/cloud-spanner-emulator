@@ -1,3 +1,6 @@
+
+# Copyright (c) 2021, PostgreSQL Global Development Group
+
 #
 # Tests restarts of postgres due to crashes of a subprocess.
 #
@@ -14,7 +17,6 @@ use PostgresNode;
 use TestLib;
 use Test::More;
 use Config;
-use Time::HiRes qw(usleep);
 
 plan tests => 18;
 
@@ -25,7 +27,7 @@ plan tests => 18;
 # is really wrong.
 my $psql_timeout = IPC::Run::timer($TestLib::timeout_default);
 
-my $node = get_new_node('master');
+my $node = get_new_node('primary');
 $node->init(allows_streaming => 1);
 $node->start();
 
@@ -116,7 +118,7 @@ ok( pump_until(
 		$killme,
 		$psql_timeout,
 		\$killme_stderr,
-		qr/WARNING:  terminating connection because of crash of another server process|server closed the connection unexpectedly|connection to server was lost/m
+		qr/WARNING:  terminating connection because of unexpected SIGQUIT signal|server closed the connection unexpectedly|connection to server was lost|could not send data to server/m
 	),
 	"psql query died successfully after SIGQUIT");
 $killme_stderr = '';
@@ -130,7 +132,7 @@ ok( pump_until(
 		$monitor,
 		$psql_timeout,
 		\$monitor_stderr,
-		qr/WARNING:  terminating connection because of crash of another server process|server closed the connection unexpectedly|connection to server was lost/m
+		qr/WARNING:  terminating connection because of crash of another server process|server closed the connection unexpectedly|connection to server was lost|could not send data to server/m
 	),
 	"psql monitor died successfully after SIGQUIT");
 $monitor->finish;
@@ -196,7 +198,7 @@ ok( pump_until(
 		$killme,
 		$psql_timeout,
 		\$killme_stderr,
-		qr/server closed the connection unexpectedly|connection to server was lost/m
+		qr/server closed the connection unexpectedly|connection to server was lost|could not send data to server/m
 	),
 	"psql query died successfully after SIGKILL");
 $killme->finish;
@@ -208,7 +210,7 @@ ok( pump_until(
 		$monitor,
 		$psql_timeout,
 		\$monitor_stderr,
-		qr/WARNING:  terminating connection because of crash of another server process|server closed the connection unexpectedly|connection to server was lost/m
+		qr/WARNING:  terminating connection because of crash of another server process|server closed the connection unexpectedly|connection to server was lost|could not send data to server/m
 	),
 	"psql monitor died successfully after SIGKILL");
 $monitor->finish;

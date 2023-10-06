@@ -1,3 +1,6 @@
+
+# Copyright (c) 2021, PostgreSQL Global Development Group
+
 package Mkvcbuild;
 
 #
@@ -33,12 +36,13 @@ my @unlink_on_exit;
 
 # Set of variables for modules in contrib/ and src/test/modules/
 my $contrib_defines = { 'refint' => 'REFINT_VERBOSE' };
-my @contrib_uselibpq = ('dblink', 'oid2name', 'postgres_fdw', 'vacuumlo');
-my @contrib_uselibpgport   = ('oid2name', 'pg_standby', 'vacuumlo');
-my @contrib_uselibpgcommon = ('oid2name', 'pg_standby', 'vacuumlo');
-my $contrib_extralibs      = undef;
-my $contrib_extraincludes = { 'dblink' => ['src/backend'] };
-my $contrib_extrasource = {
+my @contrib_uselibpq =
+  ('dblink', 'oid2name', 'postgres_fdw', 'vacuumlo', 'libpq_pipeline');
+my @contrib_uselibpgport   = ('libpq_pipeline', 'oid2name', 'vacuumlo');
+my @contrib_uselibpgcommon = ('libpq_pipeline', 'oid2name', 'vacuumlo');
+my $contrib_extralibs     = { 'libpq_pipeline' => ['ws2_32.lib'] };
+my $contrib_extraincludes = { 'dblink'         => ['src/backend'] };
+my $contrib_extrasource   = {
 	'cube' => [ 'contrib/cube/cubescan.l', 'contrib/cube/cubeparse.y' ],
 	'seg'  => [ 'contrib/seg/segscan.l',   'contrib/seg/segparse.y' ],
 };
@@ -54,17 +58,21 @@ my @contrib_excludes = (
 
 # Set of variables for frontend modules
 my $frontend_defines = { 'initdb' => 'FRONTEND' };
-my @frontend_uselibpq = ('pg_ctl', 'pg_upgrade', 'pgbench', 'psql', 'initdb');
+my @frontend_uselibpq =
+  ('pg_amcheck', 'pg_ctl', 'pg_upgrade', 'pgbench', 'psql', 'initdb');
 my @frontend_uselibpgport = (
-	'pg_archivecleanup', 'pg_test_fsync',
-	'pg_test_timing',    'pg_upgrade',
-	'pg_waldump',        'pgbench');
+	'pg_amcheck',    'pg_archivecleanup',
+	'pg_test_fsync', 'pg_test_timing',
+	'pg_upgrade',    'pg_waldump',
+	'pgbench');
 my @frontend_uselibpgcommon = (
-	'pg_archivecleanup', 'pg_test_fsync',
-	'pg_test_timing',    'pg_upgrade',
-	'pg_waldump',        'pgbench');
+	'pg_amcheck',    'pg_archivecleanup',
+	'pg_test_fsync', 'pg_test_timing',
+	'pg_upgrade',    'pg_waldump',
+	'pgbench');
 my $frontend_extralibs = {
 	'initdb'     => ['ws2_32.lib'],
+	'pg_amcheck' => ['ws2_32.lib'],
 	'pg_restore' => ['ws2_32.lib'],
 	'pgbench'    => ['ws2_32.lib'],
 	'psql'       => ['ws2_32.lib']
@@ -99,11 +107,12 @@ sub mkvcbuild
 	  srandom.c getaddrinfo.c gettimeofday.c inet_net_ntop.c kill.c open.c
 	  erand48.c snprintf.c strlcat.c strlcpy.c dirmod.c noblock.c path.c
 	  dirent.c dlopen.c getopt.c getopt_long.c link.c
-	  pread.c pwrite.c pg_bitutils.c
+	  pread.c preadv.c pwrite.c pwritev.c pg_bitutils.c
 	  pg_strong_random.c pgcheckdir.c pgmkdirp.c pgsleep.c pgstrcasecmp.c
-	  pqsignal.c mkdtemp.c qsort.c qsort_arg.c quotes.c setenv.c system.c
-	  sprompt.c strerror.c tar.c thread.c
-	  win32env.c win32error.c win32security.c win32setlocale.c);
+	  pqsignal.c mkdtemp.c qsort.c qsort_arg.c bsearch_arg.c quotes.c system.c
+	  strerror.c tar.c thread.c
+	  win32common.c win32env.c win32error.c win32fseek.c win32security.c
+	  win32setlocale.c win32stat.c);
 
 	push(@pgportfiles, 'strtof.c') if ($vsVersion < '14.00');
 
@@ -121,31 +130,37 @@ sub mkvcbuild
 	our @pgcommonallfiles = qw(
 	  archive.c base64.c checksum_helper.c
 	  config_info.c controldata_utils.c d2s.c encnames.c exec.c
-	  f2s.c file_perm.c hashfn.c ip.c jsonapi.c
-	  keywords.c kwlookup.c link-canary.c md5.c
-	  pg_lzcompress.c pgfnames.c psprintf.c relpath.c rmtree.c
+	  f2s.c file_perm.c file_utils.c hashfn.c ip.c jsonapi.c
+	  keywords.c kwlookup.c link-canary.c md5_common.c
+	  pg_get_line.c pg_lzcompress.c pgfnames.c psprintf.c relpath.c rmtree.c
 	  saslprep.c scram-common.c string.c stringinfo.c unicode_norm.c username.c
 	  wait_error.c wchar.c);
 
 	if ($solution->{options}->{openssl})
 	{
-		push(@pgcommonallfiles, 'sha2_openssl.c');
+		push(@pgcommonallfiles, 'cryptohash_openssl.c');
+		push(@pgcommonallfiles, 'hmac_openssl.c');
 		push(@pgcommonallfiles, 'protocol_openssl.c');
 	}
 	else
 	{
+		push(@pgcommonallfiles, 'cryptohash.c');
+		push(@pgcommonallfiles, 'hmac.c');
+		push(@pgcommonallfiles, 'md5.c');
+		push(@pgcommonallfiles, 'sha1.c');
 		push(@pgcommonallfiles, 'sha2.c');
 	}
 
 	our @pgcommonfrontendfiles = (
-		@pgcommonallfiles, qw(fe_memutils.c file_utils.c
-		  logging.c restricted_token.c));
+		@pgcommonallfiles, qw(fe_memutils.c
+		  logging.c restricted_token.c sprompt.c));
 
 	our @pgcommonbkndfiles = @pgcommonallfiles;
 
 	our @pgfeutilsfiles = qw(
-	  archive.c cancel.c conditional.c mbprint.c print.c psqlscan.l
-	  psqlscan.c simple_list.c string_utils.c recovery_gen.c);
+	  archive.c cancel.c conditional.c connect_utils.c mbprint.c option_utils.c
+	  parallel_slot.c print.c psqlscan.l psqlscan.c query_utils.c simple_list.c
+	  string_utils.c recovery_gen.c);
 
 	$libpgport = $solution->AddProject('libpgport', 'lib', 'misc');
 	$libpgport->AddDefine('FRONTEND');
@@ -463,8 +478,7 @@ sub mkvcbuild
 	else
 	{
 		$pgcrypto->AddFiles(
-			'contrib/pgcrypto', 'md5.c',
-			'sha1.c',           'internal.c',
+			'contrib/pgcrypto', 'internal.c',
 			'internal-sha2.c',  'blf.c',
 			'rijndael.c',       'pgp-mpi-internal.c',
 			'imath.c');
@@ -574,6 +588,9 @@ sub mkvcbuild
 
 		# hack to prevent duplicate definitions of uid_t/gid_t
 		push(@perl_embed_ccflags, 'PLPERL_HAVE_UID_GID');
+		# prevent binary mismatch between MSVC built plperl and
+		# Strawberry or msys ucrt perl libraries
+		push(@perl_embed_ccflags, 'NO_THREAD_SAFE_LOCALE');
 
 		# Windows offers several 32-bit ABIs.  Perl is sensitive to
 		# sizeof(time_t), one of the ABI dimensions.  To get 32-bit time_t,

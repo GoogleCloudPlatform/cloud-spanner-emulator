@@ -32,6 +32,7 @@
 #include "backend/datamodel/key_range.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/schema/catalog/schema.h"
+#include "tests/common/proto_matchers.h"
 #include "tests/common/row_cursor.h"
 #include "tests/common/schema_constructor.h"
 #include "absl/status/status.h"

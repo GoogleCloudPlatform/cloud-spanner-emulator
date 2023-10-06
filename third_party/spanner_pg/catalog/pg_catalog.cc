@@ -37,14 +37,19 @@
 #include "zetasql/public/simple_catalog.h"
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/strings/str_cat.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/query/tables_from_metadata.h"
+#include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/view.h"
 #include "zetasql/base/no_destructor.h"
 
 namespace postgres_translator {
 
 namespace {
 
+static constexpr char kDefaultSchema[] = "public";
 static constexpr char kPGAvailableExtensionVersions[] =
     "pg_available_extension_versions";
 static constexpr char kPGAvailableExtensions[] = "pg_available_extensions";
@@ -64,10 +69,14 @@ static constexpr char kPGShmemAllocations[] = "pg_shmem_allocations";
 static constexpr char kPGTables[] = "pg_tables";
 static constexpr char kPGViews[] = "pg_views";
 
+using google::spanner::emulator::backend::Index;
 using google::spanner::emulator::backend::kSpannerPGTypeToGSQLType;
 using google::spanner::emulator::backend::PGCatalogColumnsMetadata;
 using google::spanner::emulator::backend::Schema;
+using google::spanner::emulator::backend::Table;
+using google::spanner::emulator::backend::View;
 using ::zetasql::values::Bool;
+using ::zetasql::values::NullBool;
 using ::zetasql::values::NullInt64;
 using ::zetasql::values::NullString;
 using ::zetasql::values::String;
@@ -94,6 +103,11 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
         kPGViews,
     }};
 
+template <typename T>
+std::string PrimaryKeyName(const T* table) {
+  return absl::StrCat("PK_", table->Name());
+}
+
 }  // namespace
 
 PGCatalog::PGCatalog(const Schema* default_schema)
@@ -106,7 +120,77 @@ PGCatalog::PGCatalog(const Schema* default_schema)
     AddTable(table.get());
   }
 
+  FillPGTablesTable();
+  FillPGIndexesTable();
   FillPGSettingsTable();
+  FillPGViewsTable();
+}
+
+void PGCatalog::FillPGIndexesTable() {
+  auto pg_indexes = tables_by_name_.at(kPGIndexes).get();
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const Table* table : default_schema_->tables()) {
+    // Add normal indexes.
+    for (const Index* index : table->indexes()) {
+      rows.push_back({
+          // schemaname
+          String(kDefaultSchema),
+          // tablename
+          String(table->Name()),
+          // indexname
+          String(index->Name()),
+          // tablespace
+          NullString(),
+          // indexdef
+          NullString(),
+      });
+    }
+
+    // Add the primary key index.
+    rows.push_back({
+        // schemaname
+        String(kDefaultSchema),
+        // tablename
+        String(table->Name()),
+        // indexname
+        String(PrimaryKeyName(table)),
+        // tablespace
+        NullString(),
+        // indexdef
+        NullString(),
+    });
+  }
+
+  pg_indexes->SetContents(rows);
+}
+
+void PGCatalog::FillPGTablesTable() {
+  auto pg_tables = tables_by_name_.at(kPGTables).get();
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const Table* table : default_schema_->tables()) {
+    rows.push_back({
+        // schemaname
+        String(kDefaultSchema),
+        // tablename
+        String(table->Name()),
+        // tableowner
+        NullString(),
+        // tablespace
+        NullString(),
+        // hasindexes
+        Bool(!table->indexes().empty()),
+        // hasrules
+        NullBool(),
+        // hastriggers
+        NullBool(),
+        // rowsecurity
+        NullBool(),
+    });
+  }
+
+  pg_tables->SetContents(rows);
 }
 
 void PGCatalog::FillPGSettingsTable() {
@@ -151,8 +235,27 @@ void PGCatalog::FillPGSettingsTable() {
       Bool(false),
   });
 
-  // Add table to catalog.
   pg_settings->SetContents(rows);
+}
+
+void PGCatalog::FillPGViewsTable() {
+  auto pg_views = tables_by_name_.at(kPGViews).get();
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const View* view : default_schema_->views()) {
+    rows.push_back({
+        // schemaname
+        String(kDefaultSchema),
+        // viewname
+        String(view->Name()),
+        // viewowner
+        NullString(),
+        // definition
+        String(view->body_origin().value()),
+    });
+  }
+
+  pg_views->SetContents(rows);
 }
 
 }  // namespace postgres_translator

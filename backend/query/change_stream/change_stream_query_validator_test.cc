@@ -167,13 +167,13 @@ TEST_F(ChangeStreamQueryValidatorTest, ValidateArgumentLiteralsValid) {
 TEST_F(ChangeStreamQueryValidatorTest, ValidateArgumentParametersValid) {
   auto stmt = AnalyzeQuery(
       "SELECT * FROM "
-      "READ_change_stream_test_table (@start_timestamp, "
-      "@end_timestamp, @partition_token, @heartbeat_millisecond )");
-  params_.insert({"heartbeat_millisecond", zetasql::Value::Int64(1000)});
-  params_.insert({"partition_token", zetasql::Value::String("test_token")});
-  params_.insert({"end_timestamp",
+      "READ_change_stream_test_table (@startTimestamp, "
+      "@endTimestamp, @partitionToken, @heartbeatMillisecond )");
+  params_.insert({"heartbeatMillisecond", zetasql::Value::Int64(1000)});
+  params_.insert({"partitionToken", zetasql::Value::String("test_token")});
+  params_.insert({"endTimestamp",
                   zetasql::Value::Timestamp(absl::Now() + absl::Minutes(1))});
-  params_.insert({"start_timestamp", zetasql::Value::Timestamp(absl::Now())});
+  params_.insert({"startTimestamp", zetasql::Value::Timestamp(absl::Now())});
   ChangeStreamQueryValidator validator{
       schema_.get(),
       absl::Now(),

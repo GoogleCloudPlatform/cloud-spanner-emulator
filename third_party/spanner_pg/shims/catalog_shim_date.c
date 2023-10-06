@@ -65,7 +65,6 @@
 #include "third_party/spanner_pg/shims/catalog_shim.h"
 
 #include "third_party/spanner_pg/postgres_includes/all.h"
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 /* date_in()
  * Given date text string, convert to internal date format.
@@ -74,7 +73,61 @@ Datum
 date_in(PG_FUNCTION_ARGS)
 {
 	char	   *str = PG_GETARG_CSTRING(0);
-	DateADT		date = date_in_c(str);
+	DateADT		date;
+	fsec_t		fsec;
+	struct pg_tm tt,
+			   *tm = &tt;
+	int			tzp;
+	int			dtype;
+	int			nf;
+	int			dterr;
+	char	   *field[MAXDATEFIELDS];
+	int			ftype[MAXDATEFIELDS];
+	char		workbuf[MAXDATELEN + 1];
+
+	dterr = ParseDateTime(str, workbuf, sizeof(workbuf),
+						  field, ftype, MAXDATEFIELDS, &nf);
+	if (dterr == 0)
+		dterr = DecodeDateTime(field, ftype, nf, &dtype, tm, &fsec, &tzp);
+	if (dterr != 0)
+		DateTimeParseError(dterr, str, "date");
+
+	switch (dtype)
+	{
+		case DTK_DATE:
+			break;
+
+		case DTK_EPOCH:
+			/* SPANGRES: remove support for epoch */
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("epoch is not supported")));
+
+		case DTK_LATE:
+		case DTK_EARLY:
+			/* SPANGRES: remove support for infinity and -infinity */
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("infinity and -infinity are not supported")));
+
+		default:
+			DateTimeParseError(DTERR_BAD_FORMAT, str, "date");
+			break;
+	}
+
+	/* Prevent overflow in Julian-day routines */
+	if (!IS_VALID_JULIAN(tm->tm_year, tm->tm_mon, tm->tm_mday))
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("date out of range: \"%s\"", str)));
+
+	date = date2j(tm->tm_year, tm->tm_mon, tm->tm_mday) - POSTGRES_EPOCH_JDATE;
+
+	/* Now check for just-out-of-range dates */
+	if (!IS_VALID_DATE(date))
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("date out of range: \"%s\"", str)));
 
 	PG_RETURN_DATEADT(date);
 }

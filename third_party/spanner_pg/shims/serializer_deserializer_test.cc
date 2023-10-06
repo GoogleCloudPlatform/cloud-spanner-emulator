@@ -261,9 +261,9 @@ TEST_F(SerializationDeserializationTest, TypeName) {
 }
 
 TEST_F(SerializationDeserializationTest, FuncCall) {
-  FuncCall* func_call =
-      makeFuncCall(SystemFuncName(pstrdup("TestFunction")),
-                   list_make1(PlaceHolderNode()), /*location=*/5);
+  FuncCall* func_call = makeFuncCall(SystemFuncName(pstrdup("TestFunction")),
+                                     list_make1(PlaceHolderNode()),
+                                     COERCE_EXPLICIT_CALL, /*location=*/5);
 
   func_call->agg_order = list_make1(PlaceHolderNode());
   func_call->agg_filter = PlaceHolderNode();
@@ -639,7 +639,7 @@ TEST_F(SerializationDeserializationTest, AlterTableStmt) {
   alter_table_stmt->relation =
       makeRangeVar(pstrdup("test_schema"), pstrdup("test_sequence"), 123);
   alter_table_stmt->cmds = list_make1(PlaceHolderNode());
-  alter_table_stmt->relkind = OBJECT_TABLE;
+  alter_table_stmt->objtype = OBJECT_TABLE;
   alter_table_stmt->missing_ok = true;
 
   EXPECT_THAT(alter_table_stmt, CanSerializeAndDeserialize());
@@ -709,7 +709,6 @@ TEST_F(SerializationDeserializationTest, AExpr) {
       AEXPR_DISTINCT,         // IS DISTINCT FROM - name must be "="
       AEXPR_NOT_DISTINCT,     // IS NOT DISTINCT FROM - name must be "="
       AEXPR_NULLIF,           // NULLIF - name must be "="
-      AEXPR_OF,               // IS [NOT] OF - name must be "=" or "<>"
       AEXPR_IN,               // [NOT] IN - name must be "=" or "<>"
       AEXPR_LIKE,             // [NOT] LIKE - name must be "~~" or "!~~"
       AEXPR_ILIKE,            // [NOT] ILIKE - name must be "~~*" or "!~~*"
@@ -718,16 +717,11 @@ TEST_F(SerializationDeserializationTest, AExpr) {
       AEXPR_NOT_BETWEEN,      // name must be "NOT BETWEEN"
       AEXPR_BETWEEN_SYM,      // name must be "BETWEEN SYMMETRIC"
       AEXPR_NOT_BETWEEN_SYM,  // name must be "NOT BETWEEN SYMMETRIC"
-      AEXPR_PAREN             // nameless dummy node for parentheses
   };
   for (A_Expr_Kind kind : all_a_expr_kinds) {
     A_Expr* a_expr = makeNode(A_Expr);
     a_expr->kind = kind;
-    if (kind != AEXPR_PAREN) {
-      // The serializer does not write the name field for A_Expr's with kind
-      // AEXPR_PAREN.
-      a_expr->name = list_make1(PlaceHolderNode());
-    }
+    a_expr->name = list_make1(PlaceHolderNode());
     a_expr->lexpr = PlaceHolderNode();
     a_expr->rexpr = PlaceHolderNode();
     a_expr->location = -1;

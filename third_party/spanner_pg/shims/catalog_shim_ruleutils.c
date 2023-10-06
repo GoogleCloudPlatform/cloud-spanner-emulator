@@ -192,10 +192,6 @@ char* generate_operator_name(Oid operid, Oid arg1, Oid arg2)
 			p_result = left_oper(NULL, list_make1(makeString(oprname)), arg2,
 								 true, -1);
 			break;
-		case 'r':
-			p_result = right_oper(NULL, list_make1(makeString(oprname)), arg1,
-								  true, -1);
-			break;
 		default:
 			elog(ERROR, "unrecognized oprkind: %d", operform->oprkind);
 			p_result = NULL;	/* keep compiler quiet */
@@ -282,7 +278,7 @@ char* generate_function_name(Oid funcid, int nargs, List* argnames, Oid* argtype
 	if (!force_qualify)
 		p_result = func_get_detail(list_make1(makeString(proname)),
 											NIL, argnames, nargs, argtypes,
-											!use_variadic, true,
+											!use_variadic, true, false,
 											&p_funcid, &p_rettype,
 											&p_retset, &p_nvargs, &p_vatype,
 											&p_true_typeids, NULL);
@@ -424,8 +420,8 @@ void set_relation_column_names(deparse_namespace *dpns,
 // output tuple descriptor for the view represented by a SELECT query. This 
 // function is forward declared to make it accessible by get_setop_query.
 void get_query_def(Query* query, StringInfo buf, List* parentnamespace,
-                   TupleDesc resultDesc, int prettyFlags, int wrapColumn,
-                   int startIndent);
+                   TupleDesc resultDesc, bool colNamesVisible, int prettyFlags,
+                   int wrapColumn, int startIndent);
 
 // Append a keyword to the buffer. If prettyPrint is enabled, perform a line
 // break and adjust indentation. Otherwise, just append the keyword. This 
@@ -434,7 +430,7 @@ void appendContextKeyword(deparse_context* context, const char* str,
                           int indentBefore, int indentAfter, int indentPlus);
 
 void get_setop_query(Node *setOp, Query *query, deparse_context *context,
-				TupleDesc resultDesc)
+				TupleDesc resultDesc, bool colNamesVisible)
 {
 	StringInfo	buf = context->buf;
 	bool		need_paren;
@@ -468,8 +464,9 @@ void get_setop_query(Node *setOp, Query *query, deparse_context *context,
 		if (need_paren)
 			appendStringInfoChar(buf, '(');
 		get_query_def(subquery, buf, context->namespaces, resultDesc,
-					  context->prettyFlags, context->wrapColumn,
-					  context->indentLevel);
+									colNamesVisible,
+									context->prettyFlags, context->wrapColumn,
+									context->indentLevel);
 		if (need_paren)
 			appendStringInfoChar(buf, ')');
 	}
@@ -510,7 +507,7 @@ void get_setop_query(Node *setOp, Query *query, deparse_context *context,
 		else
 			subindent = 0;
 
-		get_setop_query(op->larg, query, context, resultDesc);
+		get_setop_query(op->larg, query, context, resultDesc, colNamesVisible);
 
 		if (need_paren)
 			appendContextKeyword(context, ") ", -subindent, 0, 0);
@@ -554,7 +551,7 @@ void get_setop_query(Node *setOp, Query *query, deparse_context *context,
 			subindent = 0;
 		appendContextKeyword(context, "", subindent, 0, 0);
 
-		get_setop_query(op->rarg, query, context, resultDesc);
+		get_setop_query(op->rarg, query, context, resultDesc, false);
 
 		if (POSTGRES_PRETTY_INDENT(context))
 			context->indentLevel -= subindent;

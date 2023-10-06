@@ -64,6 +64,10 @@ class SpangresSystemCatalog : public EngineSystemCatalog {
 
   const PostgresTypeMapping* GetType(const std::string& name) const override;
 
+  absl::StatusOr<FunctionAndSignature> GetPgNumericCastFunction(
+      const zetasql::Type* source_type, const zetasql::Type* target_type,
+      const zetasql::LanguageOptions& language_options) override;
+
   bool IsTransformationRequiredForComparison(
       const zetasql::ResolvedExpr& gsql_expr) override;
 

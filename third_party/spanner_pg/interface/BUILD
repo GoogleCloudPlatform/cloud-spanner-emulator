@@ -82,8 +82,9 @@ cc_library(
         ":memory_reservation_manager",
         ":parser_interface",
         ":pg_evaluators_stubs",  # buildcleaner: keep
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/flags:parse",  # buildcleaner: keep
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -94,11 +95,11 @@ cc_library(
         "@com_google_zetasql//zetasql/public:analyzer",
         "@com_google_zetasql//zetasql/public:analyzer_options",
         "@com_google_zetasql//zetasql/public:builtin_function",
+        "@com_google_zetasql//zetasql/public:builtin_function_options",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:language_options",
         "@com_google_zetasql//zetasql/public:type",
-        "@com_google_zetasql//zetasql/public:type_cc_proto",
     ],
 )
 
@@ -291,6 +292,7 @@ cc_library(
     hdrs = [
         "datetime_evaluators.h",
         "formatting_evaluators.h",
+        "mathematical_evaluators.h",
         "pg_arena.h",
         "pg_arena_factory.h",
         "pg_timezone.h",
@@ -302,6 +304,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:cord",
         "@com_google_absl//absl/time",
     ],
 )
@@ -311,6 +314,7 @@ cc_library(
     srcs = [
         "stub_datetime_evaluators.cc",
         "stub_formatting_evaluators.cc",
+        "stub_mathematical_evaluators.cc",
         "stub_pg_arena_factory.cc",
         "stub_pg_timezone.cc",
         "stub_regexp_evaluators.cc",
@@ -345,6 +349,20 @@ cc_test(
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "stub_mathematical_evaluators_test",
+    srcs = [
+        "stub_mathematical_evaluators_test.cc",
+    ],
+    deps = [
+        ":pg_evaluators",
+        ":pg_evaluators_stubs",  # buildcleaner: keep
+        "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],

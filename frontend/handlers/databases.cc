@@ -33,6 +33,7 @@
 #include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "common/errors.h"
+#include "common/feature_flags.h"
 #include "frontend/common/uris.h"
 #include "frontend/converters/time.h"
 #include "frontend/entities/database.h"
@@ -110,6 +111,12 @@ absl::Status CreateDatabase(RequestContext* ctx,
   if (request->database_dialect() ==
       database_api::DatabaseDialect::DATABASE_DIALECT_UNSPECIFIED) {
     dialect = database_api::DatabaseDialect::GOOGLE_STANDARD_SQL;
+  } else if (!EmulatorFeatureFlags::instance()
+                  .flags()
+                  .enable_postgresql_interface &&
+             request->database_dialect() ==
+                 database_api::DatabaseDialect::POSTGRESQL) {
+    return error::CannotCreatePostgreSQLDialectDatabase();
   } else {
     dialect = request->database_dialect();
   }

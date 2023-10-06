@@ -173,6 +173,13 @@ class TestSystemCatalog : public EngineSystemCatalog {
     return absl::OkStatus();
   }
 
+  absl::StatusOr<FunctionAndSignature> GetPgNumericCastFunction(
+      const zetasql::Type* source_type, const zetasql::Type* target_type,
+      const zetasql::LanguageOptions& language_options) override {
+    return absl::UnimplementedError(
+        "PgNumeric casts not present in TestSystemCatalog");
+  }
+
  private:
   TestSystemCatalog(zetasql::LanguageOptions language_options)
       : EngineSystemCatalog(

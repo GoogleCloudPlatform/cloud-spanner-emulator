@@ -3,7 +3,7 @@
  *
  *	server checks and output routines
  *
- *	Copyright (c) 2010-2020, PostgreSQL Global Development Group
+ *	Copyright (c) 2010-2021, PostgreSQL Global Development Group
  *	src/bin/pg_upgrade/check.c
  */
 
@@ -22,12 +22,15 @@ static void check_is_install_user(ClusterInfo *cluster);
 static void check_proper_datallowconn(ClusterInfo *cluster);
 static void check_for_prepared_transactions(ClusterInfo *cluster);
 static void check_for_isn_and_int8_passing_mismatch(ClusterInfo *cluster);
+static void check_for_user_defined_postfix_ops(ClusterInfo *cluster);
+static void check_for_incompatible_polymorphics(ClusterInfo *cluster);
 static void check_for_tables_with_oids(ClusterInfo *cluster);
 static void check_for_composite_data_type_usage(ClusterInfo *cluster);
 static void check_for_reg_data_type_usage(ClusterInfo *cluster);
 static void check_for_jsonb_9_4_usage(ClusterInfo *cluster);
 static void check_for_pg_role_prefix(ClusterInfo *cluster);
 static void check_for_new_tablespace_dir(ClusterInfo *new_cluster);
+static void check_for_user_defined_encoding_conversions(ClusterInfo *cluster);
 static char *get_canonical_locale_name(int category, const char *locale);
 
 
@@ -102,6 +105,29 @@ check_and_dump_old_cluster(bool live_check)
 	check_for_composite_data_type_usage(&old_cluster);
 	check_for_reg_data_type_usage(&old_cluster);
 	check_for_isn_and_int8_passing_mismatch(&old_cluster);
+
+	/*
+	 * PG 14 changed the function signature of encoding conversion functions.
+	 * Conversions from older versions cannot be upgraded automatically
+	 * because the user-defined functions used by the encoding conversions
+	 * need to be changed to match the new signature.
+	 */
+	if (GET_MAJOR_VERSION(old_cluster.major_version) <= 1300)
+		check_for_user_defined_encoding_conversions(&old_cluster);
+
+	/*
+	 * Pre-PG 14 allowed user defined postfix operators, which are not
+	 * supported anymore.  Verify there are none, iff applicable.
+	 */
+	if (GET_MAJOR_VERSION(old_cluster.major_version) <= 1300)
+		check_for_user_defined_postfix_ops(&old_cluster);
+
+	/*
+	 * PG 14 changed polymorphic functions from anyarray to
+	 * anycompatiblearray.
+	 */
+	if (GET_MAJOR_VERSION(old_cluster.major_version) <= 1300)
+		check_for_incompatible_polymorphics(&old_cluster);
 
 	/*
 	 * Pre-PG 12 allowed tables to be declared WITH OIDS, which is not
@@ -230,13 +256,22 @@ issue_warnings_and_set_wal_level(void)
 
 
 void
-output_completion_banner(char *analyze_script_file_name,
-						 char *deletion_script_file_name)
+output_completion_banner(char *deletion_script_file_name)
 {
+	PQExpBufferData user_specification;
+
+	initPQExpBuffer(&user_specification);
+	if (os_info.user_specified)
+	{
+		appendPQExpBufferStr(&user_specification, "-U ");
+		appendShellString(&user_specification, os_info.user);
+		appendPQExpBufferChar(&user_specification, ' ');
+	}
+
 	pg_log(PG_REPORT,
-		   "Optimizer statistics are not transferred by pg_upgrade so,\n"
-		   "once you start the new server, consider running:\n"
-		   "    %s\n\n", analyze_script_file_name);
+		   "Optimizer statistics are not transferred by pg_upgrade.\n"
+		   "Once you start the new server, consider running:\n"
+		   "    %s/vacuumdb %s--all --analyze-in-stages\n\n", new_cluster.bindir, user_specification.data);
 
 	if (deletion_script_file_name)
 		pg_log(PG_REPORT,
@@ -249,6 +284,8 @@ output_completion_banner(char *analyze_script_file_name,
 			   "because user-defined tablespaces or the new cluster's data directory\n"
 			   "exist in the old cluster directory.  The old cluster's contents must\n"
 			   "be deleted manually.\n");
+
+	termPQExpBuffer(&user_specification);
 }
 
 
@@ -442,90 +479,6 @@ check_databases_are_compatible(void)
 	}
 }
 
-
-/*
- * create_script_for_cluster_analyze()
- *
- *	This incrementally generates better optimizer statistics
- */
-void
-create_script_for_cluster_analyze(char **analyze_script_file_name)
-{
-	FILE	   *script = NULL;
-	PQExpBufferData user_specification;
-
-	prep_status("Creating script to analyze new cluster");
-
-	initPQExpBuffer(&user_specification);
-	if (os_info.user_specified)
-	{
-		appendPQExpBufferStr(&user_specification, "-U ");
-		appendShellString(&user_specification, os_info.user);
-		appendPQExpBufferChar(&user_specification, ' ');
-	}
-
-	*analyze_script_file_name = psprintf("%sanalyze_new_cluster.%s",
-										 SCRIPT_PREFIX, SCRIPT_EXT);
-
-	if ((script = fopen_priv(*analyze_script_file_name, "w")) == NULL)
-		pg_fatal("could not open file \"%s\": %s\n",
-				 *analyze_script_file_name, strerror(errno));
-
-#ifndef WIN32
-	/* add shebang header */
-	fprintf(script, "#!/bin/sh\n\n");
-#else
-	/* suppress command echoing */
-	fprintf(script, "@echo off\n");
-#endif
-
-	fprintf(script, "echo %sThis script will generate minimal optimizer statistics rapidly%s\n",
-			ECHO_QUOTE, ECHO_QUOTE);
-	fprintf(script, "echo %sso your system is usable, and then gather statistics twice more%s\n",
-			ECHO_QUOTE, ECHO_QUOTE);
-	fprintf(script, "echo %swith increasing accuracy.  When it is done, your system will%s\n",
-			ECHO_QUOTE, ECHO_QUOTE);
-	fprintf(script, "echo %shave the default level of optimizer statistics.%s\n",
-			ECHO_QUOTE, ECHO_QUOTE);
-	fprintf(script, "echo%s\n\n", ECHO_BLANK);
-
-	fprintf(script, "echo %sIf you have used ALTER TABLE to modify the statistics target for%s\n",
-			ECHO_QUOTE, ECHO_QUOTE);
-	fprintf(script, "echo %sany tables, you might want to remove them and restore them after%s\n",
-			ECHO_QUOTE, ECHO_QUOTE);
-	fprintf(script, "echo %srunning this script because they will delay fast statistics generation.%s\n",
-			ECHO_QUOTE, ECHO_QUOTE);
-	fprintf(script, "echo%s\n\n", ECHO_BLANK);
-
-	fprintf(script, "echo %sIf you would like default statistics as quickly as possible, cancel%s\n",
-			ECHO_QUOTE, ECHO_QUOTE);
-	fprintf(script, "echo %sthis script and run:%s\n",
-			ECHO_QUOTE, ECHO_QUOTE);
-	fprintf(script, "echo %s    \"%s/vacuumdb\" %s--all --analyze-only%s\n", ECHO_QUOTE,
-			new_cluster.bindir, user_specification.data, ECHO_QUOTE);
-	fprintf(script, "echo%s\n\n", ECHO_BLANK);
-
-	fprintf(script, "\"%s/vacuumdb\" %s--all --analyze-in-stages\n",
-			new_cluster.bindir, user_specification.data);
-
-	fprintf(script, "echo%s\n\n", ECHO_BLANK);
-	fprintf(script, "echo %sDone%s\n",
-			ECHO_QUOTE, ECHO_QUOTE);
-
-	fclose(script);
-
-#ifndef WIN32
-	if (chmod(*analyze_script_file_name, S_IRWXU) != 0)
-		pg_fatal("could not add execute permission to file \"%s\": %s\n",
-				 *analyze_script_file_name, strerror(errno));
-#endif
-
-	termPQExpBuffer(&user_specification);
-
-	check_ok();
-}
-
-
 /*
  * A previous run of pg_upgrade might have failed and the new cluster
  * directory recreated, but they might have forgotten to remove
@@ -543,8 +496,8 @@ create_script_for_cluster_analyze(char **analyze_script_file_name)
 static void
 check_for_new_tablespace_dir(ClusterInfo *new_cluster)
 {
-	int		tblnum;
-	char	new_tablespace_dir[MAXPGPATH];
+	int			tblnum;
+	char		new_tablespace_dir[MAXPGPATH];
 
 	prep_status("Checking for new cluster tablespace directories");
 
@@ -553,8 +506,8 @@ check_for_new_tablespace_dir(ClusterInfo *new_cluster)
 		struct stat statbuf;
 
 		snprintf(new_tablespace_dir, MAXPGPATH, "%s%s",
-				os_info.old_tablespaces[tblnum],
-				new_cluster->tablespace_suffix);
+				 os_info.old_tablespaces[tblnum],
+				 new_cluster->tablespace_suffix);
 
 		if (stat(new_tablespace_dir, &statbuf) == 0 || errno != ENOENT)
 			pg_fatal("new cluster tablespace directory already exists: \"%s\"\n",
@@ -659,7 +612,7 @@ create_script_for_old_cluster_deletion(char **deletion_script_file_name)
 						PATH_SEPARATOR);
 
 			for (dbnum = 0; dbnum < old_cluster.dbarr.ndbs; dbnum++)
-				fprintf(script, RMDIR_CMD " %c%s%c%d%c\n", PATH_QUOTE,
+				fprintf(script, RMDIR_CMD " %c%s%c%u%c\n", PATH_QUOTE,
 						fix_path_separator(os_info.old_tablespaces[tblnum]),
 						PATH_SEPARATOR, old_cluster.dbarr.dbs[dbnum].db_oid,
 						PATH_QUOTE);
@@ -926,6 +879,233 @@ check_for_isn_and_int8_passing_mismatch(ClusterInfo *cluster)
 		check_ok();
 }
 
+/*
+ * Verify that no user defined postfix operators exist.
+ */
+static void
+check_for_user_defined_postfix_ops(ClusterInfo *cluster)
+{
+	int			dbnum;
+	FILE	   *script = NULL;
+	bool		found = false;
+	char		output_path[MAXPGPATH];
+
+	prep_status("Checking for user-defined postfix operators");
+
+	snprintf(output_path, sizeof(output_path),
+			 "postfix_ops.txt");
+
+	/* Find any user defined postfix operators */
+	for (dbnum = 0; dbnum < cluster->dbarr.ndbs; dbnum++)
+	{
+		PGresult   *res;
+		bool		db_used = false;
+		int			ntups;
+		int			rowno;
+		int			i_oproid,
+					i_oprnsp,
+					i_oprname,
+					i_typnsp,
+					i_typname;
+		DbInfo	   *active_db = &cluster->dbarr.dbs[dbnum];
+		PGconn	   *conn = connectToServer(cluster, active_db->db_name);
+
+		/*
+		 * The query below hardcodes FirstNormalObjectId as 16384 rather than
+		 * interpolating that C #define into the query because, if that
+		 * #define is ever changed, the cutoff we want to use is the value
+		 * used by pre-version 14 servers, not that of some future version.
+		 */
+		res = executeQueryOrDie(conn,
+								"SELECT o.oid AS oproid, "
+								"       n.nspname AS oprnsp, "
+								"       o.oprname, "
+								"       tn.nspname AS typnsp, "
+								"       t.typname "
+								"FROM pg_catalog.pg_operator o, "
+								"     pg_catalog.pg_namespace n, "
+								"     pg_catalog.pg_type t, "
+								"     pg_catalog.pg_namespace tn "
+								"WHERE o.oprnamespace = n.oid AND "
+								"      o.oprleft = t.oid AND "
+								"      t.typnamespace = tn.oid AND "
+								"      o.oprright = 0 AND "
+								"      o.oid >= 16384");
+		ntups = PQntuples(res);
+		i_oproid = PQfnumber(res, "oproid");
+		i_oprnsp = PQfnumber(res, "oprnsp");
+		i_oprname = PQfnumber(res, "oprname");
+		i_typnsp = PQfnumber(res, "typnsp");
+		i_typname = PQfnumber(res, "typname");
+		for (rowno = 0; rowno < ntups; rowno++)
+		{
+			found = true;
+			if (script == NULL &&
+				(script = fopen_priv(output_path, "w")) == NULL)
+				pg_fatal("could not open file \"%s\": %s\n",
+						 output_path, strerror(errno));
+			if (!db_used)
+			{
+				fprintf(script, "In database: %s\n", active_db->db_name);
+				db_used = true;
+			}
+			fprintf(script, "  (oid=%s) %s.%s (%s.%s, NONE)\n",
+					PQgetvalue(res, rowno, i_oproid),
+					PQgetvalue(res, rowno, i_oprnsp),
+					PQgetvalue(res, rowno, i_oprname),
+					PQgetvalue(res, rowno, i_typnsp),
+					PQgetvalue(res, rowno, i_typname));
+		}
+
+		PQclear(res);
+
+		PQfinish(conn);
+	}
+
+	if (script)
+		fclose(script);
+
+	if (found)
+	{
+		pg_log(PG_REPORT, "fatal\n");
+		pg_fatal("Your installation contains user-defined postfix operators, which are not\n"
+				 "supported anymore.  Consider dropping the postfix operators and replacing\n"
+				 "them with prefix operators or function calls.\n"
+				 "A list of user-defined postfix operators is in the file:\n"
+				 "    %s\n\n", output_path);
+	}
+	else
+		check_ok();
+}
+
+/*
+ *	check_for_incompatible_polymorphics()
+ *
+ *	Make sure nothing is using old polymorphic functions with
+ *	anyarray/anyelement rather than the new anycompatible variants.
+ */
+static void
+check_for_incompatible_polymorphics(ClusterInfo *cluster)
+{
+	PGresult   *res;
+	FILE	   *script = NULL;
+	char		output_path[MAXPGPATH];
+	PQExpBufferData old_polymorphics;
+
+	prep_status("Checking for incompatible polymorphic functions");
+
+	snprintf(output_path, sizeof(output_path),
+			 "incompatible_polymorphics.txt");
+
+	/* The set of problematic functions varies a bit in different versions */
+	initPQExpBuffer(&old_polymorphics);
+
+	appendPQExpBufferStr(&old_polymorphics,
+						 "'array_append(anyarray,anyelement)'"
+						 ", 'array_cat(anyarray,anyarray)'"
+						 ", 'array_prepend(anyelement,anyarray)'");
+
+	if (GET_MAJOR_VERSION(cluster->major_version) >= 903)
+		appendPQExpBufferStr(&old_polymorphics,
+							 ", 'array_remove(anyarray,anyelement)'"
+							 ", 'array_replace(anyarray,anyelement,anyelement)'");
+
+	if (GET_MAJOR_VERSION(cluster->major_version) >= 905)
+		appendPQExpBufferStr(&old_polymorphics,
+							 ", 'array_position(anyarray,anyelement)'"
+							 ", 'array_position(anyarray,anyelement,integer)'"
+							 ", 'array_positions(anyarray,anyelement)'"
+							 ", 'width_bucket(anyelement,anyarray)'");
+
+	for (int dbnum = 0; dbnum < cluster->dbarr.ndbs; dbnum++)
+	{
+		bool		db_used = false;
+		DbInfo	   *active_db = &cluster->dbarr.dbs[dbnum];
+		PGconn	   *conn = connectToServer(cluster, active_db->db_name);
+		int			ntups;
+		int			i_objkind,
+					i_objname;
+
+		/*
+		 * The query below hardcodes FirstNormalObjectId as 16384 rather than
+		 * interpolating that C #define into the query because, if that
+		 * #define is ever changed, the cutoff we want to use is the value
+		 * used by pre-version 14 servers, not that of some future version.
+		 */
+		res = executeQueryOrDie(conn,
+		/* Aggregate transition functions */
+								"SELECT 'aggregate' AS objkind, p.oid::regprocedure::text AS objname "
+								"FROM pg_proc AS p "
+								"JOIN pg_aggregate AS a ON a.aggfnoid=p.oid "
+								"JOIN pg_proc AS transfn ON transfn.oid=a.aggtransfn "
+								"WHERE p.oid >= 16384 "
+								"AND a.aggtransfn = ANY(ARRAY[%s]::regprocedure[]) "
+								"AND a.aggtranstype = ANY(ARRAY['anyarray', 'anyelement']::regtype[]) "
+
+		/* Aggregate final functions */
+								"UNION ALL "
+								"SELECT 'aggregate' AS objkind, p.oid::regprocedure::text AS objname "
+								"FROM pg_proc AS p "
+								"JOIN pg_aggregate AS a ON a.aggfnoid=p.oid "
+								"JOIN pg_proc AS finalfn ON finalfn.oid=a.aggfinalfn "
+								"WHERE p.oid >= 16384 "
+								"AND a.aggfinalfn = ANY(ARRAY[%s]::regprocedure[]) "
+								"AND a.aggtranstype = ANY(ARRAY['anyarray', 'anyelement']::regtype[]) "
+
+		/* Operators */
+								"UNION ALL "
+								"SELECT 'operator' AS objkind, op.oid::regoperator::text AS objname "
+								"FROM pg_operator AS op "
+								"WHERE op.oid >= 16384 "
+								"AND oprcode = ANY(ARRAY[%s]::regprocedure[]) "
+								"AND oprleft = ANY(ARRAY['anyarray', 'anyelement']::regtype[]);",
+								old_polymorphics.data,
+								old_polymorphics.data,
+								old_polymorphics.data);
+
+		ntups = PQntuples(res);
+
+		i_objkind = PQfnumber(res, "objkind");
+		i_objname = PQfnumber(res, "objname");
+
+		for (int rowno = 0; rowno < ntups; rowno++)
+		{
+			if (script == NULL &&
+				(script = fopen_priv(output_path, "w")) == NULL)
+				pg_fatal("could not open file \"%s\": %s\n",
+						 output_path, strerror(errno));
+			if (!db_used)
+			{
+				fprintf(script, "In database: %s\n", active_db->db_name);
+				db_used = true;
+			}
+
+			fprintf(script, "  %s: %s\n",
+					PQgetvalue(res, rowno, i_objkind),
+					PQgetvalue(res, rowno, i_objname));
+		}
+
+		PQclear(res);
+		PQfinish(conn);
+	}
+
+	if (script)
+	{
+		fclose(script);
+		pg_log(PG_REPORT, "fatal\n");
+		pg_fatal("Your installation contains user-defined objects that refer to internal\n"
+				 "polymorphic functions with arguments of type \"anyarray\" or \"anyelement\".\n"
+				 "These user-defined objects must be dropped before upgrading and restored\n"
+				 "afterwards, changing them to refer to the new corresponding functions with\n"
+				 "arguments of type \"anycompatiblearray\" and \"anycompatible\".\n"
+				 "A list of the problematic objects is in the file:\n"
+				 "    %s\n\n", output_path);
+	}
+	else
+		check_ok();
+
+	termPQExpBuffer(&old_polymorphics);
+}
 
 /*
  * Verify that no tables are declared WITH OIDS.
@@ -1112,8 +1292,8 @@ check_for_reg_data_type_usage(ClusterInfo *cluster)
 		pg_fatal("Your installation contains one of the reg* data types in user tables.\n"
 				 "These data types reference system OIDs that are not preserved by\n"
 				 "pg_upgrade, so this cluster cannot currently be upgraded.  You can\n"
-				 "remove the problem tables and restart the upgrade.  A list of the\n"
-				 "problem columns is in the file:\n"
+				 "drop the problem columns and restart the upgrade.\n"
+				 "A list of the problem columns is in the file:\n"
 				 "    %s\n\n", output_path);
 	}
 	else
@@ -1140,9 +1320,9 @@ check_for_jsonb_9_4_usage(ClusterInfo *cluster)
 		pg_log(PG_REPORT, "fatal\n");
 		pg_fatal("Your installation contains the \"jsonb\" data type in user tables.\n"
 				 "The internal format of \"jsonb\" changed during 9.4 beta so this\n"
-				 "cluster cannot currently be upgraded.  You can remove the problem\n"
-				 "tables and restart the upgrade.  A list of the problem columns is\n"
-				 "in the file:\n"
+				 "cluster cannot currently be upgraded.  You can\n"
+				 "drop the problem columns and restart the upgrade.\n"
+				 "A list of the problem columns is in the file:\n"
 				 "    %s\n\n", output_path);
 	}
 	else
@@ -1180,6 +1360,91 @@ check_for_pg_role_prefix(ClusterInfo *cluster)
 	PQfinish(conn);
 
 	check_ok();
+}
+
+/*
+ * Verify that no user-defined encoding conversions exist.
+ */
+static void
+check_for_user_defined_encoding_conversions(ClusterInfo *cluster)
+{
+	int			dbnum;
+	FILE	   *script = NULL;
+	bool		found = false;
+	char		output_path[MAXPGPATH];
+
+	prep_status("Checking for user-defined encoding conversions");
+
+	snprintf(output_path, sizeof(output_path),
+			 "encoding_conversions.txt");
+
+	/* Find any user defined encoding conversions */
+	for (dbnum = 0; dbnum < cluster->dbarr.ndbs; dbnum++)
+	{
+		PGresult   *res;
+		bool		db_used = false;
+		int			ntups;
+		int			rowno;
+		int			i_conoid,
+					i_conname,
+					i_nspname;
+		DbInfo	   *active_db = &cluster->dbarr.dbs[dbnum];
+		PGconn	   *conn = connectToServer(cluster, active_db->db_name);
+
+		/*
+		 * The query below hardcodes FirstNormalObjectId as 16384 rather than
+		 * interpolating that C #define into the query because, if that
+		 * #define is ever changed, the cutoff we want to use is the value
+		 * used by pre-version 14 servers, not that of some future version.
+		 */
+		res = executeQueryOrDie(conn,
+								"SELECT c.oid as conoid, c.conname, n.nspname "
+								"FROM pg_catalog.pg_conversion c, "
+								"     pg_catalog.pg_namespace n "
+								"WHERE c.connamespace = n.oid AND "
+								"      c.oid >= 16384");
+		ntups = PQntuples(res);
+		i_conoid = PQfnumber(res, "conoid");
+		i_conname = PQfnumber(res, "conname");
+		i_nspname = PQfnumber(res, "nspname");
+		for (rowno = 0; rowno < ntups; rowno++)
+		{
+			found = true;
+			if (script == NULL &&
+				(script = fopen_priv(output_path, "w")) == NULL)
+				pg_fatal("could not open file \"%s\": %s\n",
+						 output_path, strerror(errno));
+			if (!db_used)
+			{
+				fprintf(script, "In database: %s\n", active_db->db_name);
+				db_used = true;
+			}
+			fprintf(script, "  (oid=%s) %s.%s\n",
+					PQgetvalue(res, rowno, i_conoid),
+					PQgetvalue(res, rowno, i_nspname),
+					PQgetvalue(res, rowno, i_conname));
+		}
+
+		PQclear(res);
+
+		PQfinish(conn);
+	}
+
+	if (script)
+		fclose(script);
+
+	if (found)
+	{
+		pg_log(PG_REPORT, "fatal\n");
+		pg_fatal("Your installation contains user-defined encoding conversions.\n"
+				 "The conversion function parameters changed in PostgreSQL version 14\n"
+				 "so this cluster cannot currently be upgraded.  You can remove the\n"
+				 "encoding conversions in the old cluster and restart the upgrade.\n"
+				 "A list of user-defined encoding conversions is in the file:\n"
+				 "    %s\n\n", output_path);
+	}
+	else
+		check_ok();
 }
 
 

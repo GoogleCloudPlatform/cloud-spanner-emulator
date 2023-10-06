@@ -16,7 +16,6 @@
 
 #include "backend/query/function_catalog.h"
 
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -28,14 +27,18 @@
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/types/type_factory.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/query/analyzer_options.h"
 #include "common/constants.h"
 #include "third_party/spanner_pg/catalog/emulator_functions.h"
 #include "zetasql/base/ret_check.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -70,6 +73,7 @@ std::unique_ptr<zetasql::Function> PendingCommitTimestampFunction(
           zetasql::types::TimestampType(), {}, nullptr}},
       function_options);
 }
+
 }  // namespace
 
 FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory,
@@ -87,15 +91,23 @@ FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory,
 void FunctionCatalog::AddZetaSQLBuiltInFunctions(
     zetasql::TypeFactory* type_factory) {
   // Get all the ZetaSQL built-in functions.
-  std::map<std::string, std::unique_ptr<zetasql::Function>> function_map;
-  zetasql::GetZetaSQLFunctions(type_factory, MakeGoogleSqlLanguageOptions(),
-                                   &function_map);
+  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
+      function_map;
+  absl::flat_hash_map<std::string, const zetasql::Type*> type_map_unused;
+  absl::Status status = zetasql::GetBuiltinFunctionsAndTypes(
+      zetasql::BuiltinFunctionOptions(MakeGoogleSqlLanguageOptions()),
+      *type_factory, function_map, type_map_unused);
+  // `status` can be an error when `BuiltinFunctionOptions` is misconfigured.
+  // The call above only supplies a `LangaugeOptions` and is low risk. If that
+  // configuration becomes more complex, then this `status` should probably be
+  // propagated out, which requires changing `FunctionCatalog` to use a factory
+  // function rather than a constructor that is doing work.
+  ABSL_DCHECK_OK(status);
 
   // Move the data from the temporary function_map into functions_, keeping only
   // the functions that are available in Cloud Spanner.
-  for (auto iter = function_map.begin(); iter != function_map.end();
-       iter = function_map.erase(iter)) {
-    functions_[iter->first] = std::move(iter->second);
+  for (auto& [name, function] : function_map) {
+    functions_.emplace(name, std::move(function));
   }
 }
 

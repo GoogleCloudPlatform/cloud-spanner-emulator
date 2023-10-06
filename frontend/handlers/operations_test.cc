@@ -20,6 +20,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
 #include "grpcpp/client_context.h"
 

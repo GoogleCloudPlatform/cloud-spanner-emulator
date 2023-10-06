@@ -3,7 +3,7 @@
  * foreigncmds.c
  *	  foreign-data wrapper/server creation/manipulation commands
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -836,30 +836,6 @@ AlterForeignDataWrapper(AlterFdwStmt *stmt)
 
 
 /*
- * Drop foreign-data wrapper by OID
- */
-void
-RemoveForeignDataWrapperById(Oid fdwId)
-{
-	HeapTuple	tp;
-	Relation	rel;
-
-	rel = table_open(ForeignDataWrapperRelationId, RowExclusiveLock);
-
-	tp = SearchSysCache1(FOREIGNDATAWRAPPEROID, ObjectIdGetDatum(fdwId));
-
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for foreign-data wrapper %u", fdwId);
-
-	CatalogTupleDelete(rel, &tp->t_self);
-
-	ReleaseSysCache(tp);
-
-	table_close(rel, RowExclusiveLock);
-}
-
-
-/*
  * Create a foreign server
  */
 ObjectAddress
@@ -883,13 +859,22 @@ CreateForeignServer(CreateForeignServerStmt *stmt)
 	ownerId = GetUserId();
 
 	/*
-	 * Check that there is no other foreign server by this name. Do nothing if
-	 * IF NOT EXISTS was enforced.
+	 * Check that there is no other foreign server by this name.  If there is
+	 * one, do nothing if IF NOT EXISTS was specified.
 	 */
-	if (GetForeignServerByName(stmt->servername, true) != NULL)
+	srvId = get_foreign_server_oid(stmt->servername, true);
+	if (OidIsValid(srvId))
 	{
 		if (stmt->if_not_exists)
 		{
+			/*
+			 * If we are in an extension script, insist that the pre-existing
+			 * object be a member of the extension, to avoid security risks.
+			 */
+			ObjectAddressSet(myself, ForeignServerRelationId, srvId);
+			checkMembershipInCurrentExtension(&myself);
+
+			/* OK to skip */
 			ereport(NOTICE,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("server \"%s\" already exists, skipping",
@@ -1086,30 +1071,6 @@ AlterForeignServer(AlterForeignServerStmt *stmt)
 
 
 /*
- * Drop foreign server by OID
- */
-void
-RemoveForeignServerById(Oid srvId)
-{
-	HeapTuple	tp;
-	Relation	rel;
-
-	rel = table_open(ForeignServerRelationId, RowExclusiveLock);
-
-	tp = SearchSysCache1(FOREIGNSERVEROID, ObjectIdGetDatum(srvId));
-
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for foreign server %u", srvId);
-
-	CatalogTupleDelete(rel, &tp->t_self);
-
-	ReleaseSysCache(tp);
-
-	table_close(rel, RowExclusiveLock);
-}
-
-
-/*
  * Common routine to check permission for user-mapping-related DDL
  * commands.  We allow server owners to operate on any mapping, and
  * users to operate on their own mapping.
@@ -1178,6 +1139,10 @@ CreateUserMapping(CreateUserMappingStmt *stmt)
 	{
 		if (stmt->if_not_exists)
 		{
+			/*
+			 * Since user mappings aren't members of extensions (see comments
+			 * below), no need for checkMembershipInCurrentExtension here.
+			 */
 			ereport(NOTICE,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("user mapping for \"%s\" already exists for server \"%s\", skipping",
@@ -1436,29 +1401,6 @@ RemoveUserMapping(DropUserMappingStmt *stmt)
 
 
 /*
- * Drop user mapping by OID.  This is called to clean up dependencies.
- */
-void
-RemoveUserMappingById(Oid umId)
-{
-	HeapTuple	tp;
-	Relation	rel;
-
-	rel = table_open(UserMappingRelationId, RowExclusiveLock);
-
-	tp = SearchSysCache1(USERMAPPINGOID, ObjectIdGetDatum(umId));
-
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for user mapping %u", umId);
-
-	CatalogTupleDelete(rel, &tp->t_self);
-
-	ReleaseSysCache(tp);
-
-	table_close(rel, RowExclusiveLock);
-}
-
-/*
  * Create a foreign table
  * call after DefineRelation().
  */
@@ -1641,8 +1583,7 @@ ImportForeignSchema(ImportForeignSchemaStmt *stmt)
 			pstmt->stmt_len = rs->stmt_len;
 
 			/* Execute statement */
-			ProcessUtility(pstmt,
-						   cmd,
+			ProcessUtility(pstmt, cmd, false,
 						   PROCESS_UTILITY_SUBCOMMAND, NULL, NULL,
 						   None_Receiver, NULL);
 

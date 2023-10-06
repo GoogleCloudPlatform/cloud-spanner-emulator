@@ -37,6 +37,7 @@
 #include <string>
 
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 
@@ -72,6 +73,22 @@ absl::StatusOr<absl::Time> ToTimestamp(absl::string_view timestamp_string,
 // Converts timestamp to string according to the given format.
 absl::StatusOr<std::unique_ptr<std::string>> PgTimestampTzToChar(
     absl::Time timestamp, absl::string_view format);
+
+// TODO: Remove once on-branch is using PgDateIn
+ABSL_DEPRECATED("Use PgDateIn instead")
+absl::StatusOr<int32_t> DateIn(absl::string_view input_string,
+                               absl::string_view default_timezone);
+
+// TODO: Remove once on-branch is using PgTimestamptzIn
+ABSL_DEPRECATED("Use PgTimestamptzIn instead")
+absl::StatusOr<absl::Time> TimestamptzIn(absl::string_view input_string,
+                                         absl::string_view default_timezone);
+
+// Casts a string to a date.
+absl::StatusOr<int32_t> PgDateIn(absl::string_view date_string);
+
+// Casts a string to a timestamptz.
+absl::StatusOr<absl::Time> PgTimestamptzIn(absl::string_view timestamp_string);
 
 }  // namespace postgres_translator::function_evaluators
 

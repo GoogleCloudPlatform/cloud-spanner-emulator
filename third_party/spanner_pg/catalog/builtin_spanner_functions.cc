@@ -31,15 +31,31 @@
 
 #include "third_party/spanner_pg/catalog/builtin_spanner_functions.h"
 
+#include <algorithm>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "zetasql/public/function.h"
+#include "zetasql/public/types/type.h"
+#include "zetasql/public/types/type_factory.h"
+#include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/flags/flag.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
+#include "third_party/spanner_pg/catalog/function_identifier.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"
 
 namespace postgres_translator {
 namespace spangres {
 
 namespace {
+
 const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
 const zetasql::Type* gsql_string = zetasql::types::StringType();
 const zetasql::Type* gsql_bool = zetasql::types::BoolType();
@@ -84,7 +100,170 @@ void AddNewSignaturesForExistingFunctions(
 
 }  // namespace
 
+static void AddPgNumericSignaturesForExistingFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_pg_numeric =
+      types::PgNumericMapping()->mapped_type();
+  const zetasql::Type* gsql_pg_numeric_array =
+      types::PgNumericArrayMapping()->mapped_type();
+  std::vector<FunctionNameWithSignature> functions_with_new_signatures = {
+      {"min",
+       {{{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}}},
+      {"max",
+       {{{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}}},
+      {"array_cat",
+       {{{gsql_pg_numeric_array,
+          {gsql_pg_numeric_array, gsql_pg_numeric_array},
+          /*context_ptr=*/nullptr}}}},
+  };
+
+    functions_with_new_signatures.push_back({"count",
+                                             {{{gsql_int64,
+                                                {gsql_pg_numeric},
+                                                /*context_ptr=*/nullptr}}}});
+
+    functions_with_new_signatures.push_back({"count",
+                                             {{{gsql_int64,
+                                                {gsql_pg_numeric_array},
+                                                /*context_ptr=*/nullptr}}}});
+
+  AddNewSignaturesForExistingFunctions(functions,
+                                       functions_with_new_signatures);
+}
+
+static void AddPgNumericNewFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_pg_numeric =
+      types::PgNumericMapping()->mapped_type();
+
+  // Basic comparison functions
+  functions.push_back({"numeric_eq",
+                       "$equal",
+                       {{{gsql_bool,
+                          {gsql_pg_numeric, gsql_pg_numeric},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"numeric_ne",
+                       "$not_equal",
+                       {{{gsql_bool,
+                          {gsql_pg_numeric, gsql_pg_numeric},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"numeric_lt",
+                       "$less",
+                       {{{gsql_bool,
+                          {gsql_pg_numeric, gsql_pg_numeric},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"numeric_le",
+                       "$less_or_equal",
+                       {{{gsql_bool,
+                          {gsql_pg_numeric, gsql_pg_numeric},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"numeric_ge",
+                       "$greater_or_equal",
+                       {{{gsql_bool,
+                          {gsql_pg_numeric, gsql_pg_numeric},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"numeric_gt",
+                       "$greater",
+                       {{{gsql_bool,
+                          {gsql_pg_numeric, gsql_pg_numeric},
+                          /*context_ptr=*/nullptr}}}});
+
+  constexpr zetasql::Function::Mode AGGREGATE =
+      zetasql::Function::AGGREGATE;
+
+  // Remove existing function registration for sum.
+  functions.erase(std::remove_if(functions.begin(), functions.end(),
+                                 [](const PostgresFunctionArguments& args) {
+                                   return args.postgres_function_name() ==
+                                          "sum";
+                                 }),
+                  functions.end());
+  // Register new function mapping for sum.
+  functions.push_back(
+      {"sum",
+       "pg.sum",
+       {{{gsql_pg_numeric, {gsql_int64}, /*context_ptr=*/nullptr}},
+        {{gsql_double, {gsql_double}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}},
+       AGGREGATE});
+
+  // Remove existing function registration for avg.
+  functions.erase(std::remove_if(functions.begin(), functions.end(),
+                                 [](const PostgresFunctionArguments& args) {
+                                   return args.postgres_function_name() ==
+                                          "avg";
+                                 }),
+                  functions.end());
+  functions.push_back(
+      {"avg",
+       "pg.avg",
+       {{{gsql_pg_numeric, {gsql_int64}, /*context_ptr=*/nullptr}},
+        {{gsql_double, {gsql_double}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}},
+       AGGREGATE});
+}
+
+void AddPgNumericFunctions(std::vector<PostgresFunctionArguments>& functions) {
+  AddPgNumericSignaturesForExistingFunctions(functions);
+  AddPgNumericNewFunctions(functions);
+}
+
+static void AddPgJsonbSignaturesForExistingFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_pg_jsonb =
+      types::PgJsonbMapping()->mapped_type();
+  const zetasql::Type* gsql_pg_jsonb_arr = nullptr;
+  ABSL_CHECK_OK(
+      GetTypeFactory()->MakeArrayType(gsql_pg_jsonb, &gsql_pg_jsonb_arr));
+
+    std::vector<FunctionNameWithSignature>
+        existing_jsonb_functions_with_signature = {
+            {"array_agg",
+             {{{gsql_pg_jsonb_arr,
+                {gsql_pg_jsonb},
+                /*context_ptr=*/nullptr}}}}};
+      existing_jsonb_functions_with_signature.push_back(
+          {"count",
+           {{{gsql_int64,
+              {gsql_pg_jsonb},
+              /*context_ptr=*/nullptr}}}});
+
+      existing_jsonb_functions_with_signature.push_back({
+        "count",
+        {{{gsql_int64, {gsql_pg_jsonb_arr},
+           /*context_ptr=*/nullptr}}}
+      });
+
+    AddNewSignaturesForExistingFunctions(
+        functions, existing_jsonb_functions_with_signature);
+}
+
+static void AddPgJsonbNewFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_pg_jsonb = types::PgJsonbMapping()->mapped_type();
+
+  functions.push_back(
+      {"jsonb_typeof",
+       "json_type",
+       {{{gsql_string, {gsql_pg_jsonb}, /*context_ptr=*/nullptr}}}});
+}
+
+void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions) {
+  AddPgJsonbSignaturesForExistingFunctions(functions);
+  AddPgJsonbNewFunctions(functions);
+}
+
 void AddPgArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_pg_jsonb =
+      types::PgJsonbMapping()->mapped_type();
+  const zetasql::Type* gsql_pg_jsonb_arr = nullptr;
+  ABSL_CHECK_OK(
+      GetTypeFactory()->MakeArrayType(gsql_pg_jsonb, &gsql_pg_jsonb_arr));
+  const zetasql::Type* gsql_pg_numeric =
+      types::PgNumericMapping()->mapped_type();
+  const zetasql::Type* gsql_pg_numeric_arr = nullptr;
+  ABSL_CHECK_OK(
+      GetTypeFactory()->MakeArrayType(gsql_pg_numeric, &gsql_pg_numeric_arr));
   PostgresFunctionArguments array_upper_function(
       {"array_upper",
        "pg.array_upper",
@@ -110,6 +289,21 @@ void AddPgArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
           {gsql_timestamp_array, gsql_int64},
           /*context_ptr=*/nullptr}}}});
 
+    array_upper_function.add_signature(
+        {{gsql_int64,
+          {gsql_pg_numeric_arr, gsql_int64},
+          /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/"pg.array_upper"});
+
+    array_upper_function.add_signature(
+        {{gsql_int64,
+          {gsql_pg_jsonb_arr, gsql_int64},
+          /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/"pg.array_upper"});
   functions.push_back(array_upper_function);
 }
 
@@ -149,6 +343,18 @@ void AddPgFormattingFunctions(
         {{gsql_string, {gsql_timestamp, gsql_string}, /*context_ptr=*/nullptr}},
         {{gsql_string, {gsql_double, gsql_string}, /*context_ptr=*/nullptr}}}});
 
+    const zetasql::Type* gsql_pg_numeric =
+        types::PgNumericMapping()->mapped_type();
+    functions.push_back({"to_number",
+                         "pg.to_number",
+                         {{{gsql_pg_numeric,
+                            {gsql_string, gsql_string},
+                            /*context_ptr=*/nullptr}}}});
+    to_char_function.add_signature(
+        {{gsql_string, {gsql_pg_numeric, gsql_string}, /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/"pg.to_char"});
   functions.push_back(to_char_function);
 
   // We need to find whether to_timestamp has already been registered and update

@@ -1,9 +1,9 @@
-# Alexander Lakhin <a.lakhin@postgrespro.ru>, 2020, 2021.
+# Alexander Lakhin <a.lakhin@postgrespro.ru>, 2020, 2021, 2022.
 msgid ""
 msgstr ""
 "Project-Id-Version: pg_verifybackup (PostgreSQL) 13\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@lists.postgresql.org\n"
-"POT-Creation-Date: 2021-08-14 06:30+0300\n"
+"POT-Creation-Date: 2023-05-03 05:56+0300\n"
 "PO-Revision-Date: 2021-09-17 07:33+0300\n"
 "Last-Translator: Alexander Lakhin <a.lakhin@postgrespro.ru>\n"
 "Language-Team: Russian <pgsql-ru-general@postgresql.org>\n"
@@ -11,21 +11,21 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
-"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 "X-Generator: Lokalize 19.12.3\n"
 
-#: ../../../src/common/logging.c:236
+#: ../../../src/common/logging.c:259
 #, c-format
 msgid "fatal: "
 msgstr "важно: "
 
-#: ../../../src/common/logging.c:243
+#: ../../../src/common/logging.c:266
 #, c-format
 msgid "error: "
 msgstr "ошибка: "
 
-#: ../../../src/common/logging.c:250
+#: ../../../src/common/logging.c:273
 #, c-format
 msgid "warning: "
 msgstr "предупреждение: "
@@ -41,74 +41,74 @@ msgstr "нехватка памяти\n"
 msgid "cannot duplicate null pointer (internal error)\n"
 msgstr "попытка дублирования нулевого указателя (внутренняя ошибка)\n"
 
-#: ../../common/jsonapi.c:1064
+#: ../../common/jsonapi.c:1083
 #, c-format
 msgid "Escape sequence \"\\%s\" is invalid."
 msgstr "Неверная спецпоследовательность: \"\\%s\"."
 
-#: ../../common/jsonapi.c:1067
+#: ../../common/jsonapi.c:1086
 #, c-format
 msgid "Character with value 0x%02x must be escaped."
 msgstr "Символ с кодом 0x%02x необходимо экранировать."
 
-#: ../../common/jsonapi.c:1070
+#: ../../common/jsonapi.c:1089
 #, c-format
 msgid "Expected end of input, but found \"%s\"."
 msgstr "Ожидался конец текста, но обнаружено продолжение \"%s\"."
 
-#: ../../common/jsonapi.c:1073
+#: ../../common/jsonapi.c:1092
 #, c-format
 msgid "Expected array element or \"]\", but found \"%s\"."
 msgstr "Ожидался элемент массива или \"]\", но обнаружено \"%s\"."
 
-#: ../../common/jsonapi.c:1076
+#: ../../common/jsonapi.c:1095
 #, c-format
 msgid "Expected \",\" or \"]\", but found \"%s\"."
 msgstr "Ожидалась \",\" или \"]\", но обнаружено \"%s\"."
 
-#: ../../common/jsonapi.c:1079
+#: ../../common/jsonapi.c:1098
 #, c-format
 msgid "Expected \":\", but found \"%s\"."
 msgstr "Ожидалось \":\", но обнаружено \"%s\"."
 
-#: ../../common/jsonapi.c:1082
+#: ../../common/jsonapi.c:1101
 #, c-format
 msgid "Expected JSON value, but found \"%s\"."
 msgstr "Ожидалось значение JSON, но обнаружено \"%s\"."
 
-#: ../../common/jsonapi.c:1085
+#: ../../common/jsonapi.c:1104
 msgid "The input string ended unexpectedly."
 msgstr "Неожиданный конец входной строки."
 
-#: ../../common/jsonapi.c:1087
+#: ../../common/jsonapi.c:1106
 #, c-format
 msgid "Expected string or \"}\", but found \"%s\"."
 msgstr "Ожидалась строка или \"}\", но обнаружено \"%s\"."
 
-#: ../../common/jsonapi.c:1090
+#: ../../common/jsonapi.c:1109
 #, c-format
 msgid "Expected \",\" or \"}\", but found \"%s\"."
 msgstr "Ожидалась \",\" или \"}\", но обнаружено \"%s\"."
 
-#: ../../common/jsonapi.c:1093
+#: ../../common/jsonapi.c:1112
 #, c-format
 msgid "Expected string, but found \"%s\"."
 msgstr "Ожидалась строка, но обнаружено \"%s\"."
 
-#: ../../common/jsonapi.c:1096
+#: ../../common/jsonapi.c:1115
 #, c-format
 msgid "Token \"%s\" is invalid."
 msgstr "Ошибочный элемент текста \"%s\"."
 
-#: ../../common/jsonapi.c:1099
+#: ../../common/jsonapi.c:1118
 msgid "\\u0000 cannot be converted to text."
 msgstr "\\u0000 нельзя преобразовать в текст."
 
-#: ../../common/jsonapi.c:1101
+#: ../../common/jsonapi.c:1120
 msgid "\"\\u\" must be followed by four hexadecimal digits."
 msgstr "За \"\\u\" должны следовать четыре шестнадцатеричные цифры."
 
-#: ../../common/jsonapi.c:1104
+#: ../../common/jsonapi.c:1123
 msgid ""
 "Unicode escape values cannot be used for code point values above 007F when "
 "the encoding is not UTF8."
@@ -116,12 +116,12 @@ msgstr ""
 "Спецкоды Unicode для значений выше 007F можно использовать только с "
 "кодировкой UTF8."
 
-#: ../../common/jsonapi.c:1106
+#: ../../common/jsonapi.c:1125
 msgid "Unicode high surrogate must not follow a high surrogate."
 msgstr ""
 "Старшее слово суррогата Unicode не может следовать за другим старшим словом."
 
-#: ../../common/jsonapi.c:1108
+#: ../../common/jsonapi.c:1127
 msgid "Unicode low surrogate must follow a high surrogate."
 msgstr "Младшее слово суррогата Unicode должно следовать за старшим словом."
 
@@ -239,22 +239,42 @@ msgstr "ожидалось как минимум 2 строки"
 msgid "last line not newline-terminated"
 msgstr "последняя строка не оканчивается символом новой строки"
 
+#: parse_manifest.c:657
+#, c-format
+msgid "out of memory"
+msgstr "нехватка памяти"
+
+#: parse_manifest.c:659
+#, c-format
+msgid "could not initialize checksum of manifest"
+msgstr "не удалось подготовить контекст контрольной суммы манифеста"
+
 #: parse_manifest.c:661
+#, c-format
+msgid "could not update checksum of manifest"
+msgstr "не удалось изменить контекст контрольной суммы манифеста"
+
+#: parse_manifest.c:664
+#, c-format
+msgid "could not finalize checksum of manifest"
+msgstr "не удалось завершить расчёт контрольной суммы манифеста"
+
+#: parse_manifest.c:668
 #, c-format
 msgid "manifest has no checksum"
 msgstr "в манифесте нет контрольной суммы"
 
-#: parse_manifest.c:665
+#: parse_manifest.c:672
 #, c-format
 msgid "invalid manifest checksum: \"%s\""
 msgstr "неверная контрольная сумма в манифесте: \"%s\""
 
-#: parse_manifest.c:669
+#: parse_manifest.c:676
 #, c-format
 msgid "manifest checksum mismatch"
 msgstr "ошибка контрольной суммы манифеста"
 
-#: parse_manifest.c:683
+#: parse_manifest.c:691
 #, c-format
 msgid "could not parse backup manifest: %s"
 msgstr "не удалось разобрать манифест копии: %s"
@@ -311,15 +331,15 @@ msgstr "не удалось открыть файл \"%s\": %m"
 msgid "could not stat file \"%s\": %m"
 msgstr "не удалось получить информацию о файле \"%s\": %m"
 
-#: pg_verifybackup.c:412 pg_verifybackup.c:739
+#: pg_verifybackup.c:412 pg_verifybackup.c:753
 #, c-format
 msgid "could not read file \"%s\": %m"
 msgstr "не удалось прочитать файл \"%s\": %m"
 
 #: pg_verifybackup.c:415
 #, c-format
-msgid "could not read file \"%s\": read %d of %zu"
-msgstr "не удалось прочитать файл \"%s\" (прочитано байт: %d из %zu)"
+msgid "could not read file \"%s\": read %d of %lld"
+msgstr "не удалось прочитать файл \"%s\" (прочитано байт: %d из %lld)"
 
 #: pg_verifybackup.c:475
 #, c-format
@@ -353,43 +373,58 @@ msgstr "файл \"%s\" присутствует на диске, но отсу�
 
 #: pg_verifybackup.c:642
 #, c-format
-msgid "\"%s\" has size %zu on disk but size %zu in the manifest"
+msgid "\"%s\" has size %lld on disk but size %zu in the manifest"
 msgstr ""
-"файл \"%s\" имеет размер на диске: %zu, тогда как размер в манифесте: %zu"
+"файл \"%s\" имеет размер на диске: %lld, тогда как размер в манифесте: %zu"
 
 #: pg_verifybackup.c:669
 #, c-format
 msgid "\"%s\" is present in the manifest but not on disk"
 msgstr "файл \"%s\" присутствует в манифесте, но отсутствует на диске"
 
-#: pg_verifybackup.c:745
+#: pg_verifybackup.c:732
+#, c-format
+msgid "could not initialize checksum of file \"%s\""
+msgstr "не удалось подготовить контекст контрольной суммы файла \"%s\""
+
+#: pg_verifybackup.c:744
+#, c-format
+msgid "could not update checksum of file \"%s\""
+msgstr "не удалось изменить контекст контрольной суммы файла \"%s\""
+
+#: pg_verifybackup.c:759
 #, c-format
 msgid "could not close file \"%s\": %m"
 msgstr "не удалось закрыть файл \"%s\": %m"
 
-#: pg_verifybackup.c:764
+#: pg_verifybackup.c:778
 #, c-format
 msgid "file \"%s\" should contain %zu bytes, but read %zu bytes"
 msgstr "файл \"%s\" должен содержать байт: %zu, но фактически прочитано: %zu"
 
-#: pg_verifybackup.c:775
+#: pg_verifybackup.c:788
+#, c-format
+msgid "could not finalize checksum of file \"%s\""
+msgstr "не удалось завершить расчёт контрольной суммы файла \"%s\""
+
+#: pg_verifybackup.c:796
 #, c-format
 msgid "file \"%s\" has checksum of length %d, but expected %d"
 msgstr ""
 "для файла \"%s\" задана контрольная сумма размером %d, но ожидаемый размер: "
 "%d"
 
-#: pg_verifybackup.c:779
+#: pg_verifybackup.c:800
 #, c-format
 msgid "checksum mismatch for file \"%s\""
 msgstr "ошибка контрольной суммы для файла \"%s\""
 
-#: pg_verifybackup.c:805
+#: pg_verifybackup.c:824
 #, c-format
 msgid "WAL parsing failed for timeline %u"
 msgstr "не удалось разобрать WAL для линии времени %u"
 
-#: pg_verifybackup.c:891
+#: pg_verifybackup.c:910
 #, c-format
 msgid ""
 "%s verifies a backup against the backup manifest.\n"
@@ -398,7 +433,7 @@ msgstr ""
 "%s проверяет резервную копию, используя манифест копии.\n"
 "\n"
 
-#: pg_verifybackup.c:892
+#: pg_verifybackup.c:911
 #, c-format
 msgid ""
 "Usage:\n"
@@ -409,62 +444,62 @@ msgstr ""
 "  %s [ПАРАМЕТР]... КАТАЛОГ_КОПИИ\n"
 "\n"
 
-#: pg_verifybackup.c:893
+#: pg_verifybackup.c:912
 #, c-format
 msgid "Options:\n"
 msgstr "Параметры:\n"
 
-#: pg_verifybackup.c:894
+#: pg_verifybackup.c:913
 #, c-format
 msgid "  -e, --exit-on-error         exit immediately on error\n"
 msgstr "  -e, --exit-on-error         немедленный выход при ошибке\n"
 
-#: pg_verifybackup.c:895
+#: pg_verifybackup.c:914
 #, c-format
 msgid "  -i, --ignore=RELATIVE_PATH  ignore indicated path\n"
 msgstr ""
 "  -i, --ignore=ОТНОСИТЕЛЬНЫЙ_ПУТЬ\n"
 "                              игнорировать заданный путь\n"
 
-#: pg_verifybackup.c:896
+#: pg_verifybackup.c:915
 #, c-format
 msgid "  -m, --manifest-path=PATH    use specified path for manifest\n"
 msgstr "  -m, --manifest-path=ПУТЬ    использовать заданный файл манифеста\n"
 
-#: pg_verifybackup.c:897
+#: pg_verifybackup.c:916
 #, c-format
 msgid "  -n, --no-parse-wal          do not try to parse WAL files\n"
 msgstr "  -n, --no-parse-wal          не пытаться разбирать файлы WAL\n"
 
-#: pg_verifybackup.c:898
+#: pg_verifybackup.c:917
 #, c-format
 msgid ""
 "  -q, --quiet                 do not print any output, except for errors\n"
 msgstr ""
 "  -q, --quiet                 не выводить никаких сообщений, кроме ошибок\n"
 
-#: pg_verifybackup.c:899
+#: pg_verifybackup.c:918
 #, c-format
 msgid "  -s, --skip-checksums        skip checksum verification\n"
 msgstr "  -s, --skip-checksums        пропустить проверку контрольных сумм\n"
 
-#: pg_verifybackup.c:900
+#: pg_verifybackup.c:919
 #, c-format
 msgid "  -w, --wal-directory=PATH    use specified path for WAL files\n"
 msgstr ""
 "  -w, --wal-directory=ПУТЬ    использовать заданный путь к файлам WAL\n"
 
-#: pg_verifybackup.c:901
+#: pg_verifybackup.c:920
 #, c-format
 msgid "  -V, --version               output version information, then exit\n"
 msgstr "  -V, --version               показать версию и выйти\n"
 
-#: pg_verifybackup.c:902
+#: pg_verifybackup.c:921
 #, c-format
 msgid "  -?, --help                  show this help, then exit\n"
 msgstr "  -?, --help                  показать эту справку и выйти\n"
 
-#: pg_verifybackup.c:903
+#: pg_verifybackup.c:922
 #, c-format
 msgid ""
 "\n"
@@ -473,7 +508,7 @@ msgstr ""
 "\n"
 "Об ошибках сообщайте по адресу <%s>.\n"
 
-#: pg_verifybackup.c:904
+#: pg_verifybackup.c:923
 #, c-format
 msgid "%s home page: <%s>\n"
 msgstr "Домашняя страница %s: <%s>\n"

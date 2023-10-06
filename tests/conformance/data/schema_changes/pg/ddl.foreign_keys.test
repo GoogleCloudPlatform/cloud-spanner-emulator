@@ -430,3 +430,4 @@ CREATE TABLE Users (
 );
 --
 ERROR: At least one referenced column is required in foreign key.
+==

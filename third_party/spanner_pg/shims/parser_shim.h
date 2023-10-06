@@ -171,6 +171,7 @@ typedef struct AlterTableCmd /* one subcommand of an ALTER TABLE */
   Node *def; /* definition of new column, index, constraint, or parent table */
   DropBehavior behavior; /* RESTRICT or CASCADE for DROP cases */
   bool missing_ok;       /* skip error if missing? */
+	bool		recurse;		/* exec-time recursion */
 
   /* BEGIN SPANGRES ADDITIONAL FIELDS */
   char *raw_expr_string;  // `raw_expr` in its SQL text representation
@@ -182,6 +183,7 @@ typedef struct AlterTableCmd /* one subcommand of an ALTER TABLE */
 // Like raw_parser from PostgreSQL, but also fills in token locations.  Defined
 // in src/backend/parser/parser.c.
 struct List* raw_parser_spangres(const char* str,
+                                 RawParseMode mode,
                                  struct SpangresTokenLocations* locations);
 
 // If locations is non-null, add location as both the (exclusive) end of the

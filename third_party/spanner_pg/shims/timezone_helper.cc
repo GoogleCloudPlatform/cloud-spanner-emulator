@@ -52,12 +52,6 @@ absl::Status InitTimezone(const char* time_zone_name) {
   if (time_zone_name && *time_zone_name &&
       absl::string_view(time_zone_name) != gmt_timezone &&
       absl::string_view(time_zone_name) != utc_timezone) {
-    // TODO: currently code that loads timezone metadata from local
-    // config is not thread safe, thus we need to guard initialization with a
-    // mutex. This can affect query performance, so we should remove this mutex
-    // as soon as b/181916151 is fixed.
-    static absl::Mutex* time_zone_initialization_mutex = new absl::Mutex;
-    absl::MutexLock initialization_scope(time_zone_initialization_mutex);
     ZETASQL_ASSIGN_OR_RETURN(session_timezone, CheckedPgTZSet(time_zone_name));
     log_timezone = session_timezone;
   } else {

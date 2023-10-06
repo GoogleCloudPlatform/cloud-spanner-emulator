@@ -167,8 +167,6 @@ absl::Status ChangeStreamsHandler::ExecuteInitialQuery(
   return txn->GuardedCall(Transaction::OpType::kSql, [&]() -> absl::Status {
     ZETASQL_RETURN_IF_ERROR(VerifyChangeStreamExistence(metadata().change_stream_name,
                                                 txn->schema()));
-    // TODO : change temporary partition table to actual partition
-    // table of current change stream after partition token churning is done.
     backend::Query initial_query = backend::Query{absl::Substitute(
         "SELECT start_time, partition_token, parents "
         "FROM $0 "
@@ -353,6 +351,7 @@ absl::Status ChangeStreamsHandler::ExecutePartitionQuery(
                 ConvertChildPartitionRecordsToPartialResultSetProto(
                     tail_partition_records_results.rows.get(),
                     /*initial_start_time=*/std::nullopt, expect_metadata));
+            expect_metadata = false;
             for (auto& response : responses) {
               stream->Send(response);
             }
@@ -367,6 +366,16 @@ absl::Status ChangeStreamsHandler::ExecutePartitionQuery(
         {current_start +
              absl::GetFlag(FLAGS_change_streams_partition_query_chop_interval),
          tvf_end, partition_token_end_time});
+  }
+
+  // If expect_metadata is still true, stub a heartbeat record.
+  if (expect_metadata == true) {
+    ZETASQL_ASSIGN_OR_RETURN(auto extra_heartbeat,
+                     ConvertHeartbeatTimestampToPartialResultSetProto(
+                         tvf_end, expect_metadata));
+    for (auto& response : extra_heartbeat) {
+      stream->Send(response);
+    }
   }
   return absl::OkStatus();
 }

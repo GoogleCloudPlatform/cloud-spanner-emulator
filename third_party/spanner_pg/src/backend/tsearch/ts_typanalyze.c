@@ -3,7 +3,7 @@
  * ts_typanalyze.c
  *	  functions for gathering statistics from tsvector columns
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -44,8 +44,10 @@ static void prune_lexemes_hashtable(HTAB *lexemes_tab, int b_current);
 static uint32 lexeme_hash(const void *key, Size keysize);
 static int	lexeme_match(const void *key1, const void *key2, Size keysize);
 static int	lexeme_compare(const void *key1, const void *key2);
-static int	trackitem_compare_frequencies_desc(const void *e1, const void *e2);
-static int	trackitem_compare_lexemes(const void *e1, const void *e2);
+static int	trackitem_compare_frequencies_desc(const void *e1, const void *e2,
+											   void *arg);
+static int	trackitem_compare_lexemes(const void *e1, const void *e2,
+									  void *arg);
 
 
 /*
@@ -180,7 +182,6 @@ compute_tsvector_stats(VacAttrStats *stats,
 	 * worry about overflowing the initial size. Also we don't need to pay any
 	 * attention to locking and memory management.
 	 */
-	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(LexemeHashKey);
 	hash_ctl.entrysize = sizeof(TrackItem);
 	hash_ctl.hash = lexeme_hash;
@@ -348,8 +349,8 @@ compute_tsvector_stats(VacAttrStats *stats,
 		 */
 		if (num_mcelem < track_len)
 		{
-			qsort(sort_table, track_len, sizeof(TrackItem *),
-				  trackitem_compare_frequencies_desc);
+			qsort_interruptible(sort_table, track_len, sizeof(TrackItem *),
+								trackitem_compare_frequencies_desc, NULL);
 			/* reset minfreq to the smallest frequency we're keeping */
 			minfreq = sort_table[num_mcelem - 1]->frequency;
 		}
@@ -377,8 +378,8 @@ compute_tsvector_stats(VacAttrStats *stats,
 			 * presorted we can employ binary search for that.  See
 			 * ts_selfuncs.c for a real usage scenario.
 			 */
-			qsort(sort_table, num_mcelem, sizeof(TrackItem *),
-				  trackitem_compare_lexemes);
+			qsort_interruptible(sort_table, num_mcelem, sizeof(TrackItem *),
+								trackitem_compare_lexemes, NULL);
 
 			/* Must copy the target values into anl_context */
 			old_context = MemoryContextSwitchTo(stats->anl_context);
@@ -511,10 +512,10 @@ lexeme_compare(const void *key1, const void *key2)
 }
 
 /*
- *	qsort() comparator for sorting TrackItems on frequencies (descending sort)
+ *	Comparator for sorting TrackItems on frequencies (descending sort)
  */
 static int
-trackitem_compare_frequencies_desc(const void *e1, const void *e2)
+trackitem_compare_frequencies_desc(const void *e1, const void *e2, void *arg)
 {
 	const TrackItem *const *t1 = (const TrackItem *const *) e1;
 	const TrackItem *const *t2 = (const TrackItem *const *) e2;
@@ -523,10 +524,10 @@ trackitem_compare_frequencies_desc(const void *e1, const void *e2)
 }
 
 /*
- *	qsort() comparator for sorting TrackItems on lexemes
+ *	Comparator for sorting TrackItems on lexemes
  */
 static int
-trackitem_compare_lexemes(const void *e1, const void *e2)
+trackitem_compare_lexemes(const void *e1, const void *e2, void *arg)
 {
 	const TrackItem *const *t1 = (const TrackItem *const *) e1;
 	const TrackItem *const *t2 = (const TrackItem *const *) e2;

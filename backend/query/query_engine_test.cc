@@ -37,6 +37,7 @@
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/actions/manager.h"
+#include "backend/datamodel/key.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
 #include "backend/query/catalog.h"

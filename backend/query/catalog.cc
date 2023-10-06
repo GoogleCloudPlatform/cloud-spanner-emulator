@@ -31,6 +31,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/synchronization/mutex.h"
 #include "backend/access/read.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/change_stream/queryable_change_stream_tvf.h"
@@ -38,6 +39,7 @@
 #include "backend/query/information_schema_catalog.h"
 #include "backend/query/queryable_table.h"
 #include "backend/query/queryable_view.h"
+#include "backend/query/spanner_sys_catalog.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/errors.h"
 #include "third_party/spanner_pg/catalog/pg_catalog.h"
@@ -147,8 +149,9 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
   // Register a table valued function for each active change stream
   for (const auto* change_stream : schema->change_streams()) {
     tvfs_[change_stream->tvf_name()] =
-        std::move(*QueryableChangeStreamTvf::Create(change_stream, options,
-                                                    this, type_factory));
+        std::move(*QueryableChangeStreamTvf::Create(
+            change_stream, options, this, type_factory,
+            schema->dialect() == database_api::DatabaseDialect::POSTGRESQL));
   }
 }
 
@@ -159,6 +162,8 @@ absl::Status Catalog::GetCatalog(const std::string& name,
     *catalog = GetInformationSchemaCatalog();
   } else if (absl::EqualsIgnoreCase(name, InformationSchemaCatalog::kPGName)) {
     *catalog = GetPGInformationSchemaCatalog();
+  } else if (absl::EqualsIgnoreCase(name, SpannerSysCatalog::kName)) {
+    *catalog = GetSpannerSysCatalog();
   } else if (absl::EqualsIgnoreCase(name, NetCatalog::kName)) {
     *catalog = GetNetFunctionsCatalog();
   } else if (absl::EqualsIgnoreCase(name, PGFunctionCatalog::kName)) {
@@ -208,6 +213,7 @@ absl::Status Catalog::GetFunction(const std::string& name,
 absl::Status Catalog::GetCatalogs(
     absl::flat_hash_set<const zetasql::Catalog*>* output) const {
   output->insert(GetInformationSchemaCatalog());
+  output->insert(GetSpannerSysCatalog());
   output->insert(GetNetFunctionsCatalog());
   return absl::OkStatus();
 }
@@ -237,18 +243,32 @@ absl::Status Catalog::GetFunctions(
 
 zetasql::Catalog* Catalog::GetInformationSchemaCatalog() const {
   absl::MutexLock lock(&mu_);
+  auto spanner_sys_catalog = GetSpannerSysCatalogWithoutLocks();
   if (!information_schema_catalog_) {
     information_schema_catalog_ = std::make_unique<InformationSchemaCatalog>(
-        InformationSchemaCatalog::kName, schema_);
+        InformationSchemaCatalog::kName, schema_, spanner_sys_catalog);
   }
   return information_schema_catalog_.get();
 }
 
+SpannerSysCatalog* Catalog::GetSpannerSysCatalog() const {
+  absl::MutexLock lock(&mu_);
+  return GetSpannerSysCatalogWithoutLocks();
+}
+
+SpannerSysCatalog* Catalog::GetSpannerSysCatalogWithoutLocks() const {
+  if (!spanner_sys_catalog_) {
+    spanner_sys_catalog_ = std::make_unique<SpannerSysCatalog>();
+  }
+  return spanner_sys_catalog_.get();
+}
+
 zetasql::Catalog* Catalog::GetPGInformationSchemaCatalog() const {
   absl::MutexLock lock(&mu_);
+  auto spanner_sys_catalog = GetSpannerSysCatalogWithoutLocks();
   if (!pg_information_schema_catalog_) {
     pg_information_schema_catalog_ = std::make_unique<InformationSchemaCatalog>(
-        InformationSchemaCatalog::kPGName, schema_);
+        InformationSchemaCatalog::kPGName, schema_, spanner_sys_catalog);
   }
   return pg_information_schema_catalog_.get();
 }

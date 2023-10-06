@@ -2,7 +2,7 @@
  *
  * pg_waldump.c - decode and display WAL
  *
- * Copyright (c) 2013-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2013-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/bin/pg_waldump/pg_waldump.c
@@ -473,8 +473,8 @@ XLogDumpDisplayRecord(XLogDumpConfig *config, XLogReaderState *record)
 		   desc->rm_name,
 		   rec_len, XLogRecGetTotalLen(record),
 		   XLogRecGetXid(record),
-		   (uint32) (record->ReadRecPtr >> 32), (uint32) record->ReadRecPtr,
-		   (uint32) (xl_prev >> 32), (uint32) xl_prev);
+		   LSN_FORMAT_ARGS(record->ReadRecPtr),
+		   LSN_FORMAT_ARGS(xl_prev));
 
 	id = desc->rm_identify(info);
 	if (id == NULL)
@@ -617,14 +617,9 @@ XLogDumpDisplayStats(XLogDumpConfig *config, XLogDumpStats *stats)
 	double		rec_len_pct,
 				fpi_len_pct;
 
-	/* ---
-	 * Make a first pass to calculate column totals:
-	 * count(*),
-	 * sum(xl_len+SizeOfXLogRecord),
-	 * sum(xl_tot_len-xl_len-SizeOfXLogRecord), and
-	 * sum(xl_tot_len).
-	 * These are used to calculate percentages for each record type.
-	 * ---
+	/*
+	 * Each row shows its percentages of the total, so make a first pass to
+	 * calculate column totals.
 	 */
 
 	for (ri = 0; ri < RM_NEXT_ID; ri++)
@@ -983,8 +978,7 @@ main(int argc, char **argv)
 		else if (!XLByteInSeg(private.startptr, segno, WalSegSz))
 		{
 			pg_log_error("start WAL location %X/%X is not inside file \"%s\"",
-						 (uint32) (private.startptr >> 32),
-						 (uint32) private.startptr,
+						 LSN_FORMAT_ARGS(private.startptr),
 						 fname);
 			goto bad_argument;
 		}
@@ -1026,8 +1020,7 @@ main(int argc, char **argv)
 			private.endptr != (segno + 1) * WalSegSz)
 		{
 			pg_log_error("end WAL location %X/%X is not inside file \"%s\"",
-						 (uint32) (private.endptr >> 32),
-						 (uint32) private.endptr,
+						 LSN_FORMAT_ARGS(private.endptr),
 						 argv[argc - 1]);
 			goto bad_argument;
 		}
@@ -1059,8 +1052,7 @@ main(int argc, char **argv)
 
 	if (first_record == InvalidXLogRecPtr)
 		fatal_error("could not find a valid record after %X/%X",
-					(uint32) (private.startptr >> 32),
-					(uint32) private.startptr);
+					LSN_FORMAT_ARGS(private.startptr));
 
 	/*
 	 * Display a message that we're skipping data if `from` wasn't a pointer
@@ -1072,8 +1064,8 @@ main(int argc, char **argv)
 		printf(ngettext("first record is after %X/%X, at %X/%X, skipping over %u byte\n",
 						"first record is after %X/%X, at %X/%X, skipping over %u bytes\n",
 						(first_record - private.startptr)),
-			   (uint32) (private.startptr >> 32), (uint32) private.startptr,
-			   (uint32) (first_record >> 32), (uint32) first_record,
+			   LSN_FORMAT_ARGS(private.startptr),
+			   LSN_FORMAT_ARGS(first_record),
 			   (uint32) (first_record - private.startptr));
 
 	for (;;)
@@ -1121,8 +1113,7 @@ main(int argc, char **argv)
 
 	if (errormsg)
 		fatal_error("error in WAL record at %X/%X: %s",
-					(uint32) (xlogreader_state->ReadRecPtr >> 32),
-					(uint32) xlogreader_state->ReadRecPtr,
+					LSN_FORMAT_ARGS(xlogreader_state->ReadRecPtr),
 					errormsg);
 
 	XLogReaderFree(xlogreader_state);

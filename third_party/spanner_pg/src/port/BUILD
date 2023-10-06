@@ -47,6 +47,7 @@ licenses(["notice"])
 filegroup(
     name = "_common_files",
     srcs = [
+        "bsearch_arg.c",
         "chklocale.c",
         "erand48.c",
         "explicit_bzero.c",
@@ -67,11 +68,11 @@ filegroup(
         "pqsignal.c",
         "pread.c",
         "pwrite.c",
+        "pwritev.c",
         "qsort.c",
         "qsort_arg.c",
         "quotes.c",
         "snprintf.c",
-        "sprompt.c",
         "strerror.c",
         "strlcat.c",
         "strlcpy.c",
@@ -127,9 +128,18 @@ cc_library(
     copts = [
         "-D_GNU_SOURCE",
         "-fexceptions",
-        # _mm_crc32_* calls can't be inlined without this compiler option in GCC.
-        "-msse4.2",
-    ],
+    ] + select({
+        # _mm_crc32_* calls can't be inlined without this compiler option in
+        # GCC.
+        "@platforms//cpu:aarch64": [
+            "-march=armv8-a+crc",
+        ],
+        # __crc32* calls can't be inlined without this compiler option in GCC.
+        "@platforms//cpu:x86_64": [
+            "-msse4.2",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         "//third_party/spanner_pg/src/include",
     ],

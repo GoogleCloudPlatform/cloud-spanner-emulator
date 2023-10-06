@@ -1,4 +1,6 @@
 
+# Copyright (c) 2021, PostgreSQL Global Development Group
+
 =pod
 
 =head1 NAME
@@ -42,6 +44,7 @@ package TestLib;
 use strict;
 use warnings;
 
+use Carp;
 use Config;
 use Cwd;
 use Exporter 'import';
@@ -66,6 +69,7 @@ our @EXPORT = qw(
   check_mode_recursive
   chmod_recursive
   check_pg_config
+  dir_symlink
   system_or_bail
   system_log
   run_log
@@ -84,11 +88,12 @@ our @EXPORT = qw(
   command_checks_all
 
   $windows_os
+  $is_msys2
   $use_unix_sockets
 );
 
-our ($windows_os, $use_unix_sockets, $timeout_default,
-	 $tmp_check, $log_path, $test_logfile);
+our ($windows_os, $is_msys2, $use_unix_sockets, $timeout_default,
+	$tmp_check, $log_path, $test_logfile);
 
 BEGIN
 {
@@ -118,11 +123,13 @@ BEGIN
 	  PGSERVICEFILE
 	  PGSSLCERT
 	  PGSSLCRL
+	  PGSSLCRLDIR
 	  PGSSLKEY
 	  PGSSLMAXPROTOCOLVERSION
 	  PGSSLMINPROTOCOLVERSION
 	  PGSSLMODE
 	  PGSSLROOTCERT
+	  PGSSLSNI
 	  PGTARGETSESSIONATTRS
 	  PGUSER
 	  PGPORT
@@ -135,10 +142,15 @@ BEGIN
 
 	# Must be set early
 	$windows_os = $Config{osname} eq 'MSWin32' || $Config{osname} eq 'msys';
+	# Check if this environment is MSYS2.
+	$is_msys2 = $windows_os && -x '/usr/bin/uname'  &&
+	  `uname -or` =~ /^[2-9].*Msys/;
+
 	if ($windows_os)
 	{
 		require Win32API::File;
-		Win32API::File->import(qw(createFile OsFHandleOpen CloseHandle));
+		Win32API::File->import(
+			qw(createFile OsFHandleOpen CloseHandle));
 	}
 
 	# Specifies whether to use Unix sockets for test setups.  On
@@ -161,6 +173,10 @@ BEGIN
 =item C<$windows_os>
 
 Set to true when running under Windows, except on Cygwin.
+
+=item C<$is_msys2>
+
+Set to true when running under MSYS2.
 
 =back
 
@@ -438,7 +454,7 @@ sub slurp_dir
 {
 	my ($dir) = @_;
 	opendir(my $dh, $dir)
-	  or die "could not opendir \"$dir\": $!";
+	  or croak "could not opendir \"$dir\": $!";
 	my @direntries = readdir $dh;
 	closedir $dh;
 	return @direntries;
@@ -466,20 +482,20 @@ sub slurp_file
 	if ($Config{osname} ne 'MSWin32')
 	{
 		open($fh, '<', $filename)
-		  or die "could not read \"$filename\": $!";
+		  or croak "could not read \"$filename\": $!";
 	}
 	else
 	{
 		my $fHandle = createFile($filename, "r", "rwd")
-		  or die "could not open \"$filename\": $^E";
+		  or croak "could not open \"$filename\": $^E";
 		OsFHandleOpen($fh = IO::Handle->new(), $fHandle, 'r')
-		  or die "could not read \"$filename\": $^E\n";
+		  or croak "could not read \"$filename\": $^E\n";
 	}
 
 	if (defined($offset))
 	{
 		seek($fh, $offset, SEEK_SET)
-		  or die "could not seek \"$filename\": $!";
+		  or croak "could not seek \"$filename\": $!";
 	}
 
 	$contents = <$fh>;
@@ -501,7 +517,7 @@ sub append_to_file
 {
 	my ($filename, $str) = @_;
 	open my $fh, ">>", $filename
-	  or die "could not write \"$filename\": $!";
+	  or croak "could not write \"$filename\": $!";
 	print $fh $str;
 	close $fh;
 	return;
@@ -656,6 +672,38 @@ sub check_pg_config
 
 =pod
 
+=item dir_symlink(oldname, newname)
+
+Portably create a symlink for a directory. On Windows this creates a junction
+point. Elsewhere it just calls perl's builtin symlink.
+
+=cut
+
+sub dir_symlink
+{
+	my $oldname = shift;
+	my $newname = shift;
+	if ($windows_os)
+	{
+		$oldname =~ s,/,\\,g;
+		$newname =~ s,/,\\,g;
+		my $cmd = qq{mklink /j "$newname" "$oldname"};
+		if ($Config{osname} eq 'msys')
+		{
+			# need some indirection on msys
+			$cmd = qq{echo '$cmd' | \$COMSPEC /Q};
+		}
+		system($cmd);
+	}
+	else
+	{
+		symlink $oldname, $newname;
+	}
+	die "No $newname" unless -e $newname;
+}
+
+=pod
+
 =back
 
 =head1 Test::More-LIKE METHODS
@@ -710,15 +758,11 @@ sub command_exit_is
 	my $h = IPC::Run::start $cmd;
 	$h->finish();
 
-	# On Windows, the exit status of the process is returned directly as the
-	# process's exit code, while on Unix, it's returned in the high bits
-	# of the exit code (see WEXITSTATUS macro in the standard <sys/wait.h>
-	# header file). IPC::Run's result function always returns exit code >> 8,
-	# assuming the Unix convention, which will always return 0 on Windows as
-	# long as the process was not terminated by an exception. To work around
-	# that, use $h->full_results on Windows instead.
+	# Normally, if the child called exit(N), IPC::Run::result() returns N.  On
+	# Windows, with IPC::Run v20220807.0 and earlier, full_results() is the
+	# method that returns N (https://github.com/toddr/IPC-Run/issues/161).
 	my $result =
-	    ($Config{osname} eq "MSWin32")
+	  ($Config{osname} eq "MSWin32" && $IPC::Run::VERSION <= 20220807.0)
 	  ? ($h->full_results)[0]
 	  : $h->result(0);
 	is($result, $expected, $test_name);
@@ -930,45 +974,5 @@ sub command_checks_all
 =back
 
 =cut
-
-# support release 15+ perl module namespace
-
-package PostgreSQL::Test::Utils; ## no critic (ProhibitMultiplePackages)
-
-# we don't want to export anything here, but we want to support things called
-# via this package name explicitly.
-
-# use typeglobs to alias these functions and variables
-
-no warnings qw(once);
-
-*generate_ascii_string = *TestLib::generate_ascii_string;
-*slurp_dir = *TestLib::slurp_dir;
-*slurp_file = *TestLib::slurp_file;
-*append_to_file = *TestLib::append_to_file;
-*check_mode_recursive = *TestLib::check_mode_recursive;
-*chmod_recursive = *TestLib::chmod_recursive;
-*check_pg_config = *TestLib::check_pg_config;
-*system_or_bail = *TestLib::system_or_bail;
-*system_log = *TestLib::system_log;
-*run_log = *TestLib::run_log;
-*run_command = *TestLib::run_command;
-*command_ok = *TestLib::command_ok;
-*command_fails = *TestLib::command_fails;
-*command_exit_is = *TestLib::command_exit_is;
-*program_help_ok = *TestLib::program_help_ok;
-*program_version_ok = *TestLib::program_version_ok;
-*program_options_handling_ok = *TestLib::program_options_handling_ok;
-*command_like = *TestLib::command_like;
-*command_like_safe = *TestLib::command_like_safe;
-*command_fails_like = *TestLib::command_fails_like;
-*command_checks_all = *TestLib::command_checks_all;
-
-*windows_os = *TestLib::windows_os;
-*use_unix_sockets = *TestLib::use_unix_sockets;
-*timeout_default = *TestLib::timeout_default;
-*tmp_check = *TestLib::tmp_check;
-*log_path = *TestLib::log_path;
-*test_logfile = *TestLib::test_log_file;
 
 1;

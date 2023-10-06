@@ -6,7 +6,7 @@
  * Note this is read in MinGW as well as native Windows builds,
  * but not in Cygwin builds.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/port/win32_port.h
@@ -51,7 +51,13 @@
 #include <signal.h>
 #include <direct.h>
 #undef near
-#include <sys/stat.h>			/* needed before sys/stat hacking below */
+
+/* needed before sys/stat hacking below: */
+#define fstat microsoft_native_fstat
+#define stat microsoft_native_stat
+#include <sys/stat.h>
+#undef fstat
+#undef stat
 
 /* Must be here to avoid conflicting with prototype in windows.h */
 #define mkdir(a,b)	mkdir(a)
@@ -187,15 +193,21 @@ struct itimerval
 
 int			setitimer(int which, const struct itimerval *value, struct itimerval *ovalue);
 
+/* Convenience wrapper for GetFileType() */
+extern DWORD pgwin32_get_file_type(HANDLE hFile);
+
 /*
  * WIN32 does not provide 64-bit off_t, but does provide the functions operating
- * with 64-bit offsets.
+ * with 64-bit offsets.  Also, fseek() might not give an error for unseekable
+ * streams, so harden that function with our version.
  */
 #define pgoff_t __int64
 
 #ifdef _MSC_VER
-#define fseeko(stream, offset, origin) _fseeki64(stream, offset, origin)
-#define ftello(stream) _ftelli64(stream)
+extern int	_pgfseeko64(FILE *stream, pgoff_t offset, int origin);
+extern pgoff_t _pgftello64(FILE *stream);
+#define fseeko(stream, offset, origin) _pgfseeko64(stream, offset, origin)
+#define ftello(stream) _pgftello64(stream)
 #else
 #ifndef fseeko
 #define fseeko(stream, offset, origin) fseeko64(stream, offset, origin)
@@ -240,20 +252,34 @@ typedef int pid_t;
  * Supplement to <sys/stat.h>.
  *
  * We must pull in sys/stat.h before this part, else our overrides lose.
- */
-#define lstat(path, sb) stat(path, sb)
-
-/*
- * stat() is not guaranteed to set the st_size field on win32, so we
- * redefine it to our own implementation that is.
  *
- * Some frontends don't need the size from stat, so if UNSAFE_STAT_OK
- * is defined we don't bother with this.
+ * stat() is not guaranteed to set the st_size field on win32, so we
+ * redefine it to our own implementation.  See src/port/win32stat.c.
+ *
+ * The struct stat is 32 bit in MSVC, so we redefine it as a copy of
+ * struct __stat64.  This also fixes the struct size for MINGW builds.
  */
-#ifndef UNSAFE_STAT_OK
-extern int	pgwin32_safestat(const char *path, struct stat *buf);
-#define stat(a,b) pgwin32_safestat(a,b)
-#endif
+struct stat						/* This should match struct __stat64 */
+{
+	_dev_t		st_dev;
+	_ino_t		st_ino;
+	unsigned short st_mode;
+	short		st_nlink;
+	short		st_uid;
+	short		st_gid;
+	_dev_t		st_rdev;
+	__int64		st_size;
+	__time64_t	st_atime;
+	__time64_t	st_mtime;
+	__time64_t	st_ctime;
+};
+
+extern int	_pgfstat64(int fileno, struct stat *buf);
+extern int	_pgstat64(const char *name, struct stat *buf);
+
+#define fstat(fileno, sb)	_pgfstat64(fileno, sb)
+#define stat(path, sb)		_pgstat64(path, sb)
+#define lstat(path, sb)		_pgstat64(path, sb)
 
 /* These macros are not provided by older MinGW, nor by MSVC */
 #ifndef S_IRUSR
@@ -349,8 +375,16 @@ extern int	pgwin32_safestat(const char *path, struct stat *buf);
 #define EADDRINUSE WSAEADDRINUSE
 #undef EADDRNOTAVAIL
 #define EADDRNOTAVAIL WSAEADDRNOTAVAIL
+#undef EHOSTDOWN
+#define EHOSTDOWN WSAEHOSTDOWN
 #undef EHOSTUNREACH
 #define EHOSTUNREACH WSAEHOSTUNREACH
+#undef ENETDOWN
+#define ENETDOWN WSAENETDOWN
+#undef ENETRESET
+#define ENETRESET WSAENETRESET
+#undef ENETUNREACH
+#define ENETUNREACH WSAENETUNREACH
 #undef ENOTCONN
 #define ENOTCONN WSAENOTCONN
 
@@ -462,7 +496,12 @@ extern void _dosmaperr(unsigned long);
 
 /* in port/win32env.c */
 extern int	pgwin32_putenv(const char *);
-extern void pgwin32_unsetenv(const char *);
+extern int	pgwin32_setenv(const char *name, const char *value, int overwrite);
+extern int	pgwin32_unsetenv(const char *name);
+
+#define putenv(x) pgwin32_putenv(x)
+#define setenv(x,y,z) pgwin32_setenv(x,y,z)
+#define unsetenv(x) pgwin32_unsetenv(x)
 
 /* in port/win32security.c */
 extern int	pgwin32_is_service(void);
@@ -470,9 +509,6 @@ extern int	pgwin32_is_admin(void);
 
 /* Windows security token manipulation (in src/common/exec.c) */
 extern BOOL AddUserToTokenDacl(HANDLE hToken);
-
-#define putenv(x) pgwin32_putenv(x)
-#define unsetenv(x) pgwin32_unsetenv(x)
 
 /* Things that exist in MinGW headers, but need to be added to MSVC */
 #ifdef _MSC_VER

@@ -2,7 +2,7 @@
 #
 # Makefile for src/interfaces/libpq library
 #
-# Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+# Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
 # Portions Copyright (c) 1994, Regents of the University of California
 #
 # src/interfaces/libpq/Makefile
@@ -37,17 +37,22 @@ OBJS = \
 	fe-lobj.o \
 	fe-misc.o \
 	fe-print.o \
-	fe-protocol2.o \
 	fe-protocol3.o \
 	fe-secure.o \
+	fe-trace.o \
 	legacy-pqsignal.o \
 	libpq-events.o \
 	pqexpbuffer.o \
 	fe-auth.o
 
-ifeq ($(with_openssl),yes)
+# File shared across all SSL implementations supported.
+ifneq ($(with_ssl),no)
 OBJS += \
-	fe-secure-common.o \
+	fe-secure-common.o
+endif
+
+ifeq ($(with_ssl),openssl)
+OBJS += \
 	fe-secure-openssl.o
 endif
 
@@ -88,6 +93,10 @@ endif
 SHLIB_PREREQS = submake-libpgport
 
 SHLIB_EXPORTS = exports.txt
+
+ifeq ($(with_ssl),openssl)
+PKG_CONFIG_REQUIRES_PRIVATE = libssl libcrypto
+endif
 
 all: all-lib
 

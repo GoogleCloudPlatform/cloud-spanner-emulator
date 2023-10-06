@@ -65,11 +65,6 @@ class ChangeStreamResultConverterTest : public testing::Test {
     one_min_from_now_ = absl::Now() + absl::Minutes(1);
     now_str_ = test::EncodeTimestampString(now_);
     one_min_from_now_str_ = test::EncodeTimestampString(one_min_from_now_);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(bool_col_json_,
-                         zetasql::JSONValue::ParseJSONString(R"(
-      { "name": "IsPrimaryUser", "type": "{\"code\": \"BOOL\"}","is_primary_key": false, "ordinal_position": 1 })"));
-    ZETASQL_ASSERT_OK_AND_ASSIGN(pk_col_json_, zetasql::JSONValue::ParseJSONString(R"(
-      { "name": "UserId", "type": "{ \"code\": \"STRING\" }","is_primary_key": true, "ordinal_position": 2 })"));
   }
   google::spanner::v1::ResultSet ConvertPartialResultSetToResultSet(
       PartialResultSet& partial_result) {
@@ -85,8 +80,6 @@ class ChangeStreamResultConverterTest : public testing::Test {
   absl::Time one_min_from_now_;
   std::string now_str_;
   std::string one_min_from_now_str_;
-  zetasql::JSONValue pk_col_json_;
-  zetasql::JSONValue bool_col_json_;
 };
 TEST_F(ChangeStreamResultConverterTest,
        PopulateFixedOutputColumnTypeMetadataForFirstResponse) {
@@ -635,42 +628,57 @@ TEST_F(ChangeStreamResultConverterTest, ParseChunkedPartialResultSetProto) {
 
 TEST_F(ChangeStreamResultConverterTest,
        ConvertNewValuesDataTableRowCursorToChangeRecordResultSet) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto test_mod_json_1,
-                       zetasql::JSONValue::ParseJSONString(R"(
-      { "keys" : "{\"UserId\": \"User2\"}",
-        "new_values": "{ \"IsPrimaryUser\": true, \"UserId\": \"User2\" }",
-        "old_values": "{}" }
-  )"));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto test_mod_json_2,
-                       zetasql::JSONValue::ParseJSONString(R"(
-      { "keys" : "{\"UserId\": \"User2\"}",
-        "new_values": "{ \"IsPrimaryUser\": false }",
-        "old_values": "{}" }
-  )"));
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto col_types_arr_val,
-                       zetasql::Value::MakeArray(
-                           JsonArrayType(), {Json(std::move(bool_col_json_)),
-                                             Json(std::move(pk_col_json_))}));
   ZETASQL_ASSERT_OK_AND_ASSIGN(
-      auto mods_arr_val,
-      zetasql::Value::MakeArray(JsonArrayType(),
-                                  {Json(std::move(test_mod_json_1)),
-                                   Json(std::move(test_mod_json_2))}));
+      auto col_types_name_arr_val,
+      zetasql::Value::MakeArray(StringArrayType(),
+                                  {String("IsPrimaryUser"), String("UserId")}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto col_types_type_arr_val,
+      zetasql::Value::MakeArray(
+          StringArrayType(),
+          {String("{\"code\":\"BOOL\"}"), String("{\"code\":\"STRING\"}")}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto col_types_is_primary_key_arr_val,
+      zetasql::Value::MakeArray(zetasql::types::BoolArrayType(),
+                                  {Bool(false), Bool(true)}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto col_types_ordinal_position_arr_val,
+      zetasql::Value::MakeArray(zetasql::types::Int64ArrayType(),
+                                  {Int64(1), Int64(2)}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto mods_keys,
+      zetasql::Value::MakeArray(StringArrayType(),
+                                  {String("{\"UserId\": \"User2\"}"),
+                                   String("{\"UserId\": \"User2\"}")}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto mods_new_values,
+      zetasql::Value::MakeArray(
+          StringArrayType(),
+          {String("{\"IsPrimaryUser\": true,\"UserId\": \"User2\"}"),
+           String("{\"IsPrimaryUser\": false}")}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto mods_old_values,
+                       zetasql::Value::MakeArray(
+                           StringArrayType(), {String("{}"), String("{}")}));
   TestRowCursor cursor(
       {"partition_token", "commit_timestamp", "server_transaction_id",
        "record_sequence", "is_last_record_in_transaction_in_partition",
-       "table_name", "column_types", "mods", "mod_type", "value_capture_type",
-       "number_of_records_in_transaction",
+       "table_name", "column_types_name", "column_types_type",
+       "column_type_is_primary_key", "column_types_ordinal_position",
+       "mods_keys", "mods_new_values", "mods_old_values", "mod_type",
+       "value_capture_type", "number_of_records_in_transaction",
        "number_of_partitions_in_transaction", "transaction_tag",
        "is_system_transaction"},
       {StringType(), TimestampType(), StringType(), StringType(), BoolType(),
-       StringType(), JsonArrayType(), JsonArrayType(), StringType(),
-       StringType(), Int64Type(), Int64Type(), StringType(), BoolType()},
+       StringType(), StringType(), StringType(), BoolType(), Int64Type(),
+       StringType(), StringType(), StringType(), StringType(), StringType(),
+       Int64Type(), Int64Type(), StringType(), BoolType()},
       {{String("test_token"), Timestamp(now_), String("test_id"),
         String("00000001"), Bool(false), String("test_table"),
-        col_types_arr_val, mods_arr_val, String("UPDATE"), String("NEW_VALUES"),
-        Int64(3), Int64(2), String("test_tag"), Bool(false)}});
+        col_types_name_arr_val, col_types_type_arr_val,
+        col_types_is_primary_key_arr_val, col_types_ordinal_position_arr_val,
+        mods_keys, mods_new_values, mods_old_values, String("UPDATE"),
+        String("NEW_VALUES"), Int64(3), Int64(2), String("test_tag"),
+        Bool(false)}});
   std::vector<PartialResultSet> results;
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       results, ConvertDataTableRowCursorToPartialResultSetProto(&cursor));

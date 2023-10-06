@@ -24,7 +24,7 @@
  * See psqlscan_int.h for additional commentary.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -645,10 +645,11 @@ other			.
 
 ";"				{
 					ECHO;
-					if (cur_state->paren_depth == 0)
+					if (cur_state->paren_depth == 0 && cur_state->begin_depth == 0)
 					{
 						/* Terminate lexing temporarily */
 						cur_state->start_state = YY_START;
+						cur_state->identifier_count = 0;
 						return LEXRES_SEMI;
 					}
 				}
@@ -661,6 +662,8 @@ other			.
 "\\"[;:]		{
 					/* Force a semi-colon or colon into the query buffer */
 					psqlscan_emit(cur_state, yytext + 1, 1);
+					if (yytext[1] == ';')
+						cur_state->identifier_count = 0;
 				}
 
 "\\"			{
@@ -867,6 +870,55 @@ other			.
 
 
 {identifier}	{
+					/*
+					 * We need to track if we are inside a BEGIN .. END block
+					 * in a function definition, so that semicolons contained
+					 * therein don't terminate the whole statement.  Short of
+					 * writing a full parser here, the following heuristic
+					 * should work.  First, we track whether the beginning of
+					 * the statement matches CREATE [OR REPLACE]
+					 * {FUNCTION|PROCEDURE}
+					 */
+
+					if (cur_state->identifier_count == 0)
+						memset(cur_state->identifiers, 0, sizeof(cur_state->identifiers));
+
+					if (pg_strcasecmp(yytext, "create") == 0 ||
+						pg_strcasecmp(yytext, "function") == 0 ||
+						pg_strcasecmp(yytext, "procedure") == 0 ||
+						pg_strcasecmp(yytext, "or") == 0 ||
+						pg_strcasecmp(yytext, "replace") == 0)
+					{
+						if (cur_state->identifier_count < sizeof(cur_state->identifiers))
+							cur_state->identifiers[cur_state->identifier_count] = pg_tolower((unsigned char) yytext[0]);
+					}
+
+					cur_state->identifier_count++;
+
+					if (cur_state->identifiers[0] == 'c' &&
+						(cur_state->identifiers[1] == 'f' || cur_state->identifiers[1] == 'p' ||
+						 (cur_state->identifiers[1] == 'o' && cur_state->identifiers[2] == 'r' &&
+						  (cur_state->identifiers[3] == 'f' || cur_state->identifiers[3] == 'p'))) &&
+						cur_state->paren_depth == 0)
+					{
+						if (pg_strcasecmp(yytext, "begin") == 0)
+							cur_state->begin_depth++;
+						else if (pg_strcasecmp(yytext, "case") == 0)
+						{
+							/*
+							 * CASE also ends with END.  We only need to track
+							 * this if we are already inside a BEGIN.
+							 */
+							if (cur_state->begin_depth >= 1)
+								cur_state->begin_depth++;
+						}
+						else if (pg_strcasecmp(yytext, "end") == 0)
+						{
+							if (cur_state->begin_depth > 0)
+								cur_state->begin_depth--;
+						}
+					}
+
 					ECHO;
 				}
 
@@ -1054,6 +1106,11 @@ psql_scan(PsqlScanState state,
 						result = PSCAN_INCOMPLETE;
 						*prompt = PROMPT_PAREN;
 					}
+					else if (state->begin_depth > 0)
+					{
+						result = PSCAN_INCOMPLETE;
+						*prompt = PROMPT_CONTINUE;
+					}
 					else if (query_buf->len > 0)
 					{
 						result = PSCAN_EOL;
@@ -1170,6 +1227,8 @@ psql_scan_reset(PsqlScanState state)
 	if (state->dolqstart)
 		free(state->dolqstart);
 	state->dolqstart = NULL;
+	state->identifier_count = 0;
+	state->begin_depth = 0;
 }
 
 /*

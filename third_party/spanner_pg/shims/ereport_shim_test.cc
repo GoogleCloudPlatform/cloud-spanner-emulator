@@ -52,7 +52,6 @@ using ::zetasql_base::testing::StatusIs;
 void ValidateMostlyEmptyErrorData(const ErrorData &error_data) {
   EXPECT_EQ(error_data.output_to_server, false);
   EXPECT_EQ(error_data.output_to_client, false);
-  EXPECT_EQ(error_data.show_funcname, false);
   EXPECT_EQ(error_data.hide_stmt, false);
   EXPECT_EQ(error_data.hide_ctx, false);
   EXPECT_EQ(error_data.filename, nullptr);

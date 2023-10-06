@@ -23,6 +23,7 @@
 
 #include "absl/memory/memory.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "backend/schema/validators/foreign_key_validator.h"
@@ -71,6 +72,11 @@ class ForeignKey::Builder {
 
   Builder& add_referenced_column(const Column* column) {
     instance_->referenced_columns_.push_back(column);
+    return *this;
+  }
+
+  Builder& set_delete_action(Action action) {
+    instance_->on_delete_action_ = action;
     return *this;
   }
 

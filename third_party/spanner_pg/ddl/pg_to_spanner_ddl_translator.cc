@@ -768,8 +768,6 @@ absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::
     GetChangeStreamTableName(
     const RangeVar& range_var, absl::string_view parent_statement_type) const {
   ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
-  // TODO: Make sure GoogleSql change streams does not allow for
-  // non-public schemas as well.
   if (range_var.schemaname != nullptr &&
       strcmp(range_var.schemaname, "public") != 0) {
     return absl::InvalidArgumentError(absl::Substitute(
@@ -1334,7 +1332,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
     const AlterTableStmt& alter_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::AlterTable& out) const {
-  ZETASQL_RET_CHECK_EQ(alter_statement.relkind, OBJECT_TABLE);
+  ZETASQL_RET_CHECK_EQ(alter_statement.objtype, OBJECT_TABLE);
   ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_statement, options));
 
   ZETASQL_ASSIGN_OR_RETURN(*out.mutable_table_name(),
@@ -1980,6 +1978,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
   google::spanner::emulator::backend::ddl::DDLStatement result_statement;
 
   switch (raw_statement.stmt->type) {
+    //LINT.IfChange
     case T_CreatedbStmt: {
       ZETASQL_ASSIGN_OR_RETURN(
           const CreatedbStmt* statement,
@@ -2005,7 +2004,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
           const AlterTableStmt* statement,
           (DowncastNode<AlterTableStmt, T_AlterTableStmt>(raw_statement.stmt)));
 
-      switch (statement->relkind) {
+      switch (statement->objtype) {
         case OBJECT_TABLE: {
           ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterTable(
               *statement, options_, *result_statement.mutable_alter_table()));
@@ -2086,6 +2085,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
     default:
       return ddl_translator_.UnsupportedTranslationError(
           "Statement is not supported.");
+    // LINT.ThenChange(../transformer/forward_query.cc)
   }
 
   AddStatementToOutput(std::move(result_statement));

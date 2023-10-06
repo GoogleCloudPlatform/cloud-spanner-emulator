@@ -47,6 +47,8 @@ class QueryTest
     : public DatabaseTest,
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
+  QueryTest() : feature_flags_({.enable_postgresql_interface = true}) {}
+
   void SetUp() override {
     dialect_ = GetParam();
     DatabaseTest::SetUp();
@@ -122,6 +124,9 @@ class QueryTest
                        {cloud::spanner::MakeNumeric("12.3").value(), 1}}));
     }
   }
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
 
 INSTANTIATE_TEST_SUITE_P(

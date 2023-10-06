@@ -3,7 +3,7 @@
  * execReplication.c
  *	  miscellaneous executor routines for logical replication
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -245,6 +245,15 @@ tuples_equal(TupleTableSlot *slot1, TupleTableSlot *slot2,
 		Form_pg_attribute att;
 		TypeCacheEntry *typentry;
 
+		att = TupleDescAttr(slot1->tts_tupleDescriptor, attrnum);
+
+		/*
+		 * Ignore dropped and generated columns as the publisher doesn't send
+		 * those
+		 */
+		if (att->attisdropped || att->attgenerated)
+			continue;
+
 		/*
 		 * If one value is NULL and other is not, then they are certainly not
 		 * equal
@@ -257,8 +266,6 @@ tuples_equal(TupleTableSlot *slot1, TupleTableSlot *slot2,
 		 */
 		if (slot1->tts_isnull[attrnum] || slot2->tts_isnull[attrnum])
 			continue;
-
-		att = TupleDescAttr(slot1->tts_tupleDescriptor, attrnum);
 
 		typentry = eq[attrnum];
 		if (typentry == NULL)
@@ -406,10 +413,10 @@ retry:
  * Caller is responsible for opening the indexes.
  */
 void
-ExecSimpleRelationInsert(EState *estate, TupleTableSlot *slot)
+ExecSimpleRelationInsert(ResultRelInfo *resultRelInfo,
+						 EState *estate, TupleTableSlot *slot)
 {
 	bool		skip_tuple = false;
-	ResultRelInfo *resultRelInfo = estate->es_result_relation_info;
 	Relation	rel = resultRelInfo->ri_RelationDesc;
 
 	/* For now we support only tables. */
@@ -432,20 +439,22 @@ ExecSimpleRelationInsert(EState *estate, TupleTableSlot *slot)
 		/* Compute stored generated columns */
 		if (rel->rd_att->constr &&
 			rel->rd_att->constr->has_generated_stored)
-			ExecComputeStoredGenerated(estate, slot, CMD_INSERT);
+			ExecComputeStoredGenerated(resultRelInfo, estate, slot,
+									   CMD_INSERT);
 
 		/* Check the constraints of the tuple */
 		if (rel->rd_att->constr)
 			ExecConstraints(resultRelInfo, slot, estate);
-		if (resultRelInfo->ri_PartitionCheck)
+		if (rel->rd_rel->relispartition)
 			ExecPartitionCheck(resultRelInfo, slot, estate, true);
 
 		/* OK, store the tuple and create index entries for it */
 		simple_table_tuple_insert(resultRelInfo->ri_RelationDesc, slot);
 
 		if (resultRelInfo->ri_NumIndices > 0)
-			recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL,
-												   NIL);
+			recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
+												   slot, estate, false, false,
+												   NULL, NIL);
 
 		/* AFTER ROW INSERT Triggers */
 		ExecARInsertTriggers(estate, resultRelInfo, slot,
@@ -468,11 +477,11 @@ ExecSimpleRelationInsert(EState *estate, TupleTableSlot *slot)
  * Caller is responsible for opening the indexes.
  */
 void
-ExecSimpleRelationUpdate(EState *estate, EPQState *epqstate,
+ExecSimpleRelationUpdate(ResultRelInfo *resultRelInfo,
+						 EState *estate, EPQState *epqstate,
 						 TupleTableSlot *searchslot, TupleTableSlot *slot)
 {
 	bool		skip_tuple = false;
-	ResultRelInfo *resultRelInfo = estate->es_result_relation_info;
 	Relation	rel = resultRelInfo->ri_RelationDesc;
 	ItemPointer tid = &(searchslot->tts_tid);
 
@@ -498,20 +507,22 @@ ExecSimpleRelationUpdate(EState *estate, EPQState *epqstate,
 		/* Compute stored generated columns */
 		if (rel->rd_att->constr &&
 			rel->rd_att->constr->has_generated_stored)
-			ExecComputeStoredGenerated(estate, slot, CMD_UPDATE);
+			ExecComputeStoredGenerated(resultRelInfo, estate, slot,
+									   CMD_UPDATE);
 
 		/* Check the constraints of the tuple */
 		if (rel->rd_att->constr)
 			ExecConstraints(resultRelInfo, slot, estate);
-		if (resultRelInfo->ri_PartitionCheck)
+		if (rel->rd_rel->relispartition)
 			ExecPartitionCheck(resultRelInfo, slot, estate, true);
 
 		simple_table_tuple_update(rel, tid, slot, estate->es_snapshot,
 								  &update_indexes);
 
 		if (resultRelInfo->ri_NumIndices > 0 && update_indexes)
-			recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL,
-												   NIL);
+			recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
+												   slot, estate, true, false,
+												   NULL, NIL);
 
 		/* AFTER ROW UPDATE Triggers */
 		ExecARUpdateTriggers(estate, resultRelInfo,
@@ -529,11 +540,11 @@ ExecSimpleRelationUpdate(EState *estate, EPQState *epqstate,
  * Caller is responsible for opening the indexes.
  */
 void
-ExecSimpleRelationDelete(EState *estate, EPQState *epqstate,
+ExecSimpleRelationDelete(ResultRelInfo *resultRelInfo,
+						 EState *estate, EPQState *epqstate,
 						 TupleTableSlot *searchslot)
 {
 	bool		skip_tuple = false;
-	ResultRelInfo *resultRelInfo = estate->es_result_relation_info;
 	Relation	rel = resultRelInfo->ri_RelationDesc;
 	ItemPointer tid = &searchslot->tts_tid;
 
@@ -566,6 +577,13 @@ void
 CheckCmdReplicaIdentity(Relation rel, CmdType cmd)
 {
 	PublicationActions *pubactions;
+
+	/*
+	 * Skip checking the replica identity for partitioned tables, because the
+	 * operations are actually performed on the leaf partitions.
+	 */
+	if (rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE)
+		return;
 
 	/* We only need to do checks for UPDATE and DELETE. */
 	if (cmd != CMD_UPDATE && cmd != CMD_DELETE)

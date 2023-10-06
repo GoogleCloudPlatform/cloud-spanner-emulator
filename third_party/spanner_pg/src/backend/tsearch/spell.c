@@ -3,7 +3,7 @@
  * spell.c
  *		Normalizing word with ISpell
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  * Ispell dictionary
  * -----------------
@@ -63,6 +63,7 @@
 #include "postgres.h"
 
 #include "catalog/pg_collation.h"
+#include "miscadmin.h"
 #include "tsearch/dicts/spell.h"
 #include "tsearch/ts_locale.h"
 #include "utils/memutils.h"
@@ -1736,7 +1737,7 @@ void
 NISortDictionary(IspellDict *Conf)
 {
 	int			i;
-	int			naffix = 0;
+	int			naffix;
 	int			curaffix;
 
 	/* compress affixes */
@@ -2020,7 +2021,7 @@ NISortAffixes(IspellDict *Conf)
 						 (const unsigned char *) Affix->repl,
 						 (ptr - 1)->len))
 			{
-				/* leave only unique and minimals suffixes */
+				/* leave only unique and minimal suffixes */
 				ptr->affix = Affix->repl;
 				ptr->len = Affix->replen;
 				ptr->issuffix = issuffix;
@@ -2398,6 +2399,9 @@ SplitToVariants(IspellDict *Conf, SPNode *snode, SplitVar *orig, char *word, int
 	CMPDAffix  *caff;
 	char	   *notprobed;
 	int			compoundflag = 0;
+
+	/* since this function recurses, it could be driven to stack overflow */
+	check_stack_depth();
 
 	notprobed = (char *) palloc(wordlen);
 	memset(notprobed, 1, wordlen);

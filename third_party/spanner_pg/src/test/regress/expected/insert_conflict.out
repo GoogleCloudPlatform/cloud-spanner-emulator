@@ -50,14 +50,12 @@ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on con
  Insert on insertconflicttest
    Conflict Resolution: UPDATE
    Conflict Arbiter Indexes: op_index_key, collation_index_key, both_index_key
-   Conflict Filter: (alternatives: SubPlan 1 or hashed SubPlan 2)
+   Conflict Filter: (SubPlan 1)
    ->  Result
    SubPlan 1
      ->  Index Only Scan using both_index_expr_key on insertconflicttest ii
            Index Cond: (key = excluded.key)
-   SubPlan 2
-     ->  Seq Scan on insertconflicttest ii_1
-(10 rows)
+(8 rows)
 
 -- Neither collation nor operator class specifications are required --
 -- supplying them merely *limits* matches to indexes with matching opclasses
@@ -206,6 +204,7 @@ explain (costs off, format json) insert into insertconflicttest values (0, 'Bilb
        "Node Type": "ModifyTable",                                     +
        "Operation": "Insert",                                          +
        "Parallel Aware": false,                                        +
+       "Async Capable": false,                                         +
        "Relation Name": "insertconflicttest",                          +
        "Alias": "insertconflicttest",                                  +
        "Conflict Resolution": "UPDATE",                                +
@@ -214,8 +213,9 @@ explain (costs off, format json) insert into insertconflicttest values (0, 'Bilb
        "Plans": [                                                      +
          {                                                             +
            "Node Type": "Result",                                      +
-           "Parent Relationship": "Member",                            +
-           "Parallel Aware": false                                     +
+           "Parent Relationship": "Outer",                             +
+           "Parallel Aware": false,                                    +
+           "Async Capable": false                                      +
          }                                                             +
        ]                                                               +
      }                                                                 +
@@ -248,7 +248,7 @@ insert into insertconflicttest values (1, 'Apple') on conflict (keyy) do update 
 ERROR:  column "keyy" does not exist
 LINE 1: ...nsertconflicttest values (1, 'Apple') on conflict (keyy) do ...
                                                              ^
-HINT:  Perhaps you meant to reference the column "insertconflicttest.key".
+HINT:  Perhaps you meant to reference the column "insertconflicttest.key" or the column "excluded.key".
 -- Have useful HINT for EXCLUDED.* RTE within UPDATE:
 insert into insertconflicttest values (1, 'Apple') on conflict (key) do update set fruit = excluded.fruitt;
 ERROR:  column excluded.fruitt does not exist
@@ -373,7 +373,7 @@ drop index fruit_index;
 create unique index partial_key_index on insertconflicttest(key) where fruit like '%berry';
 -- Succeeds
 insert into insertconflicttest values (23, 'Blackberry') on conflict (key) where fruit like '%berry' do update set fruit = excluded.fruit;
-insert into insertconflicttest values (23, 'Blackberry') on conflict (key) where fruit like '%berry' and fruit = 'inconsequential' do nothing;
+insert into insertconflicttest as t values (23, 'Blackberry') on conflict (key) where fruit like '%berry' and t.fruit = 'inconsequential' do nothing;
 -- fails
 insert into insertconflicttest values (23, 'Blackberry') on conflict (key) do update set fruit = excluded.fruit;
 ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification

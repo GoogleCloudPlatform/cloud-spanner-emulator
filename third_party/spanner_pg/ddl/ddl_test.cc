@@ -31,36 +31,24 @@
 
 #include <memory>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 #include "zetasql/base/logging.h"
-#include "google/protobuf/text_format.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "third_party/spanner_pg/ddl/ddl_test_helper.h"
 #include "third_party/spanner_pg/ddl/ddl_translator.h"
-#include "third_party/spanner_pg/ddl/pg_to_spanner_ddl_translator.h"
-#include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 #include "third_party/spanner_pg/ddl/translation_utils.h"
-#include "third_party/spanner_pg/interface/memory_reservation_manager.h"
 #include "third_party/spanner_pg/interface/parser_interface.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
-#include "third_party/spanner_pg/postgres_includes/all.h"
-#include "third_party/spanner_pg/shims/error_shim.h"
-#include "third_party/spanner_pg/shims/memory_context_manager.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
-#include "third_party/spanner_pg/shims/memory_reservation_holder.h"
-#include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
-#include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "google/protobuf/text_format.h"
 
 namespace postgres_translator::spangres {
 namespace {
@@ -205,10 +193,7 @@ TEST_F(DdlTest, DisableCreateView) {
                               "<CREATE VIEW> statement is not supported."));
 }
 
-// TODO: This test case only tests one unsupported type, beter
-// solution should be test all un-supported type which depends on we should have
-// a string lists of the enums.
-TEST_F(DdlTest, UnsupportedDropType) {
+TEST_F(DdlTest, UnsupportedDropTypeDomain) {
   const std::string input = "DROP DOMAIN admin";
 
   interfaces::ParserBatchOutput parsed_statements =
@@ -225,8 +210,9 @@ TEST_F(DdlTest, UnsupportedDropType) {
       statements,
       zetasql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
-          "Only <DROP TABLE>, <DROP INDEX>, <DROP SCHEMA>, <DROP VIEW>, <DROP "
-          "SEQUENCE>, and <DROP CHANGE STREAM> statements are supported."));
+          "<DROP DOMAIN> is not supported. Only <DROP TABLE>, <DROP INDEX>, "
+          "<DROP SCHEMA>, <DROP VIEW>, <DROP SEQUENCE>, and "
+          "<DROP CHANGE STREAM> statements are supported."));
 }
 
 // For unsupported by Spangres statements SchemaPrinter should error out

@@ -164,15 +164,9 @@ my $GenbkiNextOid = $FirstGenbkiObjectId;
 # within a given Postgres release, such as fixed OIDs.  Do not substitute
 # anything that could depend on platform or configuration.  (The right place
 # to handle those sorts of things is in initdb.c's bootstrap_template1().)
-my $BOOTSTRAP_SUPERUSERID =
-  Catalog::FindDefinedSymbolFromData($catalog_data{pg_authid},
-	'BOOTSTRAP_SUPERUSERID');
 my $C_COLLATION_OID =
   Catalog::FindDefinedSymbolFromData($catalog_data{pg_collation},
 	'C_COLLATION_OID');
-my $PG_CATALOG_NAMESPACE =
-  Catalog::FindDefinedSymbolFromData($catalog_data{pg_namespace},
-	'PG_CATALOG_NAMESPACE');
 
 # Fill in pg_class.relnatts by looking at the referenced catalog's schema.
 # This is ugly but there's no better place; Catalog::AddDefaultValues
@@ -190,6 +184,13 @@ my %amoids;
 foreach my $row (@{ $catalog_data{pg_am} })
 {
 	$amoids{ $row->{amname} } = $row->{oid};
+}
+
+# role OID lookup
+my %authidoids;
+foreach my $row (@{ $catalog_data{pg_authid} })
+{
+	$authidoids{ $row->{rolname} } = $row->{oid};
 }
 
 # class (relation) OID lookup (note this only covers bootstrap catalogs!)
@@ -365,6 +366,7 @@ close $ef;
 # Map lookup name to the corresponding hash table.
 my %lookup_kind = (
 	pg_am          => \%amoids,
+	pg_authid      => \%authidoids,
 	pg_class       => \%classoids,
 	pg_collation   => \%collationoids,
 	pg_language    => \%langoids,
@@ -513,11 +515,6 @@ foreach my $catname (@catnames)
 				$GenbkiNextOid++;
 			}
 
-			# Substitute constant values we acquired above.
-			# (It's intentional that this can apply to parts of a field).
-			$bki_values{$attname} =~ s/\bPGUID\b/$BOOTSTRAP_SUPERUSERID/g;
-			$bki_values{$attname} =~ s/\bPGNSP\b/$PG_CATALOG_NAMESPACE/g;
-
 			# Replace OID synonyms with OIDs per the appropriate lookup rule.
 			#
 			# If the column type is oidvector or _oid, we have to replace
@@ -525,6 +522,7 @@ foreach my $catname (@catnames)
 			if ($column->{lookup})
 			{
 				my $lookup = $lookup_kind{ $column->{lookup} };
+				my $lookup_opt = $column->{lookup_opt};
 				my @lookupnames;
 				my @lookupoids;
 
@@ -534,8 +532,8 @@ foreach my $catname (@catnames)
 				if ($atttype eq 'oidvector')
 				{
 					@lookupnames = split /\s+/, $bki_values{$attname};
-					@lookupoids = lookup_oids($lookup, $catname, \%bki_values,
-						@lookupnames);
+					@lookupoids = lookup_oids($lookup, $catname, $attname, $lookup_opt,
+					  \%bki_values, @lookupnames);
 					$bki_values{$attname} = join(' ', @lookupoids);
 				}
 				elsif ($atttype eq '_oid')
@@ -545,8 +543,8 @@ foreach my $catname (@catnames)
 						$bki_values{$attname} =~ s/[{}]//g;
 						@lookupnames = split /,/, $bki_values{$attname};
 						@lookupoids =
-						  lookup_oids($lookup, $catname, \%bki_values,
-							@lookupnames);
+						  lookup_oids($lookup, $catname, $attname,
+							  $lookup_opt, \%bki_values, @lookupnames);
 						$bki_values{$attname} = sprintf "{%s}",
 						  join(',', @lookupoids);
 					}
@@ -554,8 +552,8 @@ foreach my $catname (@catnames)
 				else
 				{
 					$lookupnames[0] = $bki_values{$attname};
-					@lookupoids = lookup_oids($lookup, $catname, \%bki_values,
-						@lookupnames);
+					@lookupoids = lookup_oids($lookup, $catname, $attname, $lookup_opt,
+					  \%bki_values, @lookupnames);
 					$bki_values{$attname} = $lookupoids[0];
 				}
 			}
@@ -590,9 +588,9 @@ print $header "#endif  // __cplusplus\n";
 print $header "\n";
 print $header "#endif  // GENERATED__GEN_CATALOG_INFO_PL__BOOTSTRAP_CATALOG_INFO_H_\n";
 
-		
 # We're done emitting data
 close $cc;
+close $header;
 
 # Finally, rename the completed files into place.
 Catalog::RenameTempFile($ccfile,    $tmpext);
@@ -1166,7 +1164,8 @@ sub morph_row_for_schemapg
 # within this genbki.pl run.)
 sub lookup_oids
 {
-	my ($lookup, $catname, $bki_values, @lookupnames) = @_;
+	my ($lookup, $catname, $attname, $lookup_opt, $bki_values, @lookupnames)
+		= @_;
 
 	my @lookupoids;
 	foreach my $lookupname (@lookupnames)
@@ -1179,10 +1178,19 @@ sub lookup_oids
 		else
 		{
 			push @lookupoids, $lookupname;
-			Carp::confess sprintf
-			  "unresolved OID reference \"%s\" in %s.dat line %s\n",
-			  $lookupname, $catname, $bki_values->{line_number}
-			  if $lookupname ne '-' and $lookupname ne '0';
+			if ($lookupname eq '-' or $lookupname eq '0')
+			{
+				Carp::confess sprintf
+				  "invalid zero OID reference in %s.dat field %s line %s\n",
+				  $catname, $attname, $bki_values->{line_number}
+				  if !$lookup_opt;
+			}
+			else
+			{
+				Carp::confess sprintf
+				  "unresolved OID reference \"%s\" in %s.dat field %s line %s\n",
+				  $lookupname, $catname, $attname, $bki_values->{line_number};
+			}
 		}
 	}
 	return @lookupoids;

@@ -23,6 +23,7 @@
 #include "absl/memory/memory.h"
 #include "absl/types/optional.h"
 #include "absl/types/span.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
@@ -45,6 +46,12 @@ std::string PrintIndex(const Index* index);
 
 // Prints the DDL statements for a table.
 std::string PrintTable(const Table* table);
+
+// Prints the DDL statemetns for options.
+std::string PrintOptions(::google::protobuf::RepeatedPtrField<ddl::SetOption> options);
+
+// Prints the DDL statements for a change stream.
+std::string PrintChangeStream(const ChangeStream* change_stream);
 
 // Prints the DDL statements for a check constraint.
 std::string PrintCheckConstraint(const CheckConstraint* check_constraint);

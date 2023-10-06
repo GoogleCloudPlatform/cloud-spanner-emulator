@@ -49,8 +49,9 @@ namespace {
 
 using cloud::spanner::Bytes;
 using cloud::spanner::InsertMutationBuilder;
-using zetasql_base::testing::StatusIs;
 using ::google::spanner::admin::database::v1::DatabaseDialect;
+using ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
+using zetasql_base::testing::StatusIs;
 
 template <class T>
 using optional = google::cloud::optional<T>;
@@ -98,6 +99,8 @@ class SchemaChangeTest
  public:
   SchemaChangeTest()
       : flag_setter_({
+            .enable_postgresql_interface = true,
+            .enable_fk_delete_cascade_action = true,
         }) {}
   const ScopedEmulatorFeatureFlagsSetter flag_setter_;
   absl::Status SetUpDatabase() override { return absl::OkStatus(); }

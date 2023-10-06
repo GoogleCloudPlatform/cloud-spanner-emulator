@@ -73,7 +73,7 @@ void updateFuzzyAttrMatchState(int fuzzy_rte_penalty,
 						  FuzzyAttrMatchState *fuzzystate, RangeTblEntry *rte,
 						  const char *actual, const char *match, int attnum);
 
-int scanRTEForColumn(ParseState *pstate, RangeTblEntry *rte,
+int scanRTEForColumn(ParseState *pstate, RangeTblEntry *rte, Alias *eref,
 				 const char *colname, int location,
 				 int fuzzy_rte_penalty,
 				 FuzzyAttrMatchState *fuzzystate)
@@ -95,7 +95,7 @@ int scanRTEForColumn(ParseState *pstate, RangeTblEntry *rte,
 	 * Callers interested in finding match with shortest distance need to
 	 * defend against this directly, though.
 	 */
-	foreach(c, rte->eref->colnames)
+	foreach(c, eref->colnames)
 	{
 		const char *attcolname = strVal(lfirst(c));
 

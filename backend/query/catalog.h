@@ -25,6 +25,7 @@
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
 #include "zetasql/public/simple_catalog.h"
+#include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -34,6 +35,7 @@
 #include "backend/query/function_catalog.h"
 #include "backend/query/queryable_table.h"
 #include "backend/query/queryable_view.h"
+#include "backend/query/spanner_sys_catalog.h"
 #include "backend/schema/catalog/schema.h"
 #include "third_party/spanner_pg/catalog/pg_catalog.h"
 #include "absl/status/status.h"
@@ -104,6 +106,12 @@ class Catalog : public zetasql::EnumerableCatalog {
   zetasql::Catalog* GetPGInformationSchemaCatalog() const
       ABSL_LOCKS_EXCLUDED(mu_);
 
+  // Returns the spanner sys catalog (creating one if needed).
+  SpannerSysCatalog* GetSpannerSysCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
+  // Returns the spanner sys catalog (creating one if needed).
+  SpannerSysCatalog* GetSpannerSysCatalogWithoutLocks() const
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
   // Returns the NET catalog.
   zetasql::Catalog* GetNetFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
 
@@ -142,6 +150,10 @@ class Catalog : public zetasql::EnumerableCatalog {
 
   // PG information schema catalog (created only if accessed).
   mutable std::unique_ptr<zetasql::Catalog> pg_information_schema_catalog_
+      ABSL_GUARDED_BY(mu_);
+
+  // Spanner sys catalog (created only if accessed).
+  mutable std::unique_ptr<SpannerSysCatalog> spanner_sys_catalog_
       ABSL_GUARDED_BY(mu_);
 
   // Sub-catalog for resolving NET function lookup.

@@ -51,9 +51,10 @@ absl::StatusOr<std::string> Int8ToChar(int64_t value,
       Datum number_format_in_datum,
       CheckedPgStringToDatum(std::string(number_format).c_str(), TEXTOID));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum formatted_number_datum,
-                   postgres_translator::CheckedOidFunctionCall2(
-                       F_INT8_TO_CHAR, value_in_datum, number_format_in_datum));
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum formatted_number_datum,
+      postgres_translator::CheckedOidFunctionCall2(
+          F_TO_CHAR_INT8_TEXT, value_in_datum, number_format_in_datum));
 
   return CheckedPgTextDatumGetCString(formatted_number_datum);
 }
@@ -68,7 +69,7 @@ absl::StatusOr<std::string> Float8ToChar(double value,
   ZETASQL_ASSIGN_OR_RETURN(
       Datum formatted_number_datum,
       postgres_translator::CheckedOidFunctionCall2(
-          F_FLOAT8_TO_CHAR, value_in_datum, number_format_in_datum));
+          F_TO_CHAR_FLOAT8_TEXT, value_in_datum, number_format_in_datum));
 
   return CheckedPgTextDatumGetCString(formatted_number_datum);
 }
@@ -90,7 +91,7 @@ absl::StatusOr<std::string> NumericToChar(
   ZETASQL_ASSIGN_OR_RETURN(
       Datum formatted_number_datum,
       postgres_translator::CheckedOidFunctionCall2(
-          F_NUMERIC_TO_CHAR, numeric_in_datum, number_format_in_datum));
+          F_TO_CHAR_NUMERIC_TEXT, numeric_in_datum, number_format_in_datum));
 
   return CheckedPgTextDatumGetCString(formatted_number_datum);
 }
@@ -106,7 +107,7 @@ absl::StatusOr<std::unique_ptr<std::string>> NumericToNumber(
   ZETASQL_ASSIGN_OR_RETURN(
       Datum result_numeric_datum,
       postgres_translator::CheckedNullableOidFunctionCall2(
-          F_NUMERIC_TO_NUMBER, value_in_datum, number_format_in_datum));
+          F_TO_NUMBER, value_in_datum, number_format_in_datum));
 
   if (result_numeric_datum == (Datum)NULL) return nullptr;
 

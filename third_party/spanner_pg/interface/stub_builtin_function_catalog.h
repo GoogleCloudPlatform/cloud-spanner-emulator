@@ -32,11 +32,15 @@
 #ifndef INTERFACE_STUB_BUILTIN_FUNCTION_CATALOG_H_
 #define INTERFACE_STUB_BUILTIN_FUNCTION_CATALOG_H_
 
+#include <memory>
 #include <string>
 
 #include "zetasql/public/builtin_function.h"
+#include "zetasql/public/builtin_function_options.h"
 #include "zetasql/public/function.h"
 #include "zetasql/public/language_options.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
 #include "third_party/spanner_pg/interface/engine_builtin_function_catalog.h"
 
 namespace postgres_translator {
@@ -48,8 +52,17 @@ class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
   explicit StubBuiltinFunctionCatalog(
       const zetasql::LanguageOptions& language_options)
       : EngineBuiltinFunctionCatalog() {
-    zetasql::GetZetaSQLFunctions(type_factory(), language_options,
-                                     &googlesql_builtin_functions_);
+    absl::flat_hash_map<std::string, const zetasql::Type*>
+        googlesql_builtin_types_unused_;
+    absl::Status status = zetasql::GetBuiltinFunctionsAndTypes(
+        zetasql::BuiltinFunctionOptions(language_options), *type_factory(),
+        googlesql_builtin_functions_, googlesql_builtin_types_unused_);
+    // `status` can be an error when `BuiltinFunctionOptions` is misconfigured.
+    // The call above only supplies a `LangaugeOptions` and is low risk. If that
+    // configuration becomes more complex, then this `status` should probably be
+    // propagated out, which requires changing `StubBuiltinFunctionCatalog` to
+    // use a factory function rather than a constructor that is doing work.
+    ABSL_DCHECK_OK(status);
   }
 
   absl::StatusOr<const zetasql::Function*> GetFunction(
@@ -68,7 +81,7 @@ class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
   // PostgreSQL interface.
   // Each PostgresExtendedFunction must have its own implementation in the
   // storage engine or map to a ZetaSQL function in this set.
-  std::map<std::string, std::unique_ptr<zetasql::Function>>
+  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
       googlesql_builtin_functions_;
 };
 
