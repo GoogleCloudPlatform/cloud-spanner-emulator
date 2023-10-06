@@ -114,6 +114,7 @@ struct exec
 
 struct this_type
 {
+	char	   *type_storage;
 	enum ECPGttype type_enum;
 	char	   *type_str;
 	char	   *type_dimension;
@@ -139,6 +140,13 @@ struct cursor
 	struct arguments *argsresult;
 	struct arguments *argsresult_oos;
 	struct cursor *next;
+};
+
+struct declared_list
+{
+	char	   *name;
+	char	   *connection;
+	struct declared_list *next;
 };
 
 struct typedefs
@@ -198,6 +206,12 @@ struct fetch_desc
 {
 	char	   *str;
 	char	   *name;
+};
+
+struct describe
+{
+	int			input;
+	char	   *stmt_name;
 };
 
 #endif							/* _ECPG_PREPROC_TYPE_H */

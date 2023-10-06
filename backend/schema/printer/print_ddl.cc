@@ -29,11 +29,14 @@
 #include "absl/strings/substitute.h"
 #include "backend/common/case.h"
 #include "backend/datamodel/types.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
+#include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/ddl_reserved_words.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
+#include "google/protobuf/repeated_ptr_field.h"
 
 namespace google {
 namespace spanner {
@@ -176,6 +179,53 @@ std::string PrintView(const View* view) {
   return view_string;
 }
 
+std::string PrintOptions(::google::protobuf::RepeatedPtrField<ddl::SetOption> options) {
+  return absl::StrJoin(options, ", ",
+                       [](std::string* out, const ddl::SetOption& option) {
+                         absl::StrAppend(out, option.option_name(), " = '",
+                                         option.string_value(), "'");
+                       });
+}
+
+std::string PrintChangeStream(const ChangeStream* change_stream) {
+  std::string change_stream_string = absl::Substitute(
+      "CREATE CHANGE STREAM $0", PrintName(change_stream->Name()));
+  if (change_stream->for_clause() != nullptr) {
+    absl::StrAppend(&change_stream_string, " ", "FOR ");
+    const ddl::ChangeStreamForClause* for_clause = change_stream->for_clause();
+    if (for_clause->has_all()) {
+      absl::StrAppend(&change_stream_string, "ALL");
+    } else if (for_clause->has_tracked_tables()) {
+      absl::StrAppend(
+          &change_stream_string,
+          absl::StrJoin(
+              for_clause->tracked_tables().table_entry(), ", ",
+              [](std::string* out,
+                 ddl::ChangeStreamForClause_TrackedTables_Entry entry) {
+                absl::StrAppend(out, PrintName(entry.table_name()));
+                if (entry.has_tracked_columns()) {
+                  absl::StrAppend(
+                      out, "(",
+                      absl::StrJoin(
+                          entry.tracked_columns().column_name(), ", ",
+                          [](std::string* out, std::string column_name) {
+                            absl::StrAppend(out, PrintName(column_name));
+                          }),
+                      ")");
+                }
+              }));
+    }
+  }
+  // Options with null values shouldn't be printed out.
+  if (change_stream->value_capture_type().has_value() ||
+      change_stream->retention_period().has_value()) {
+    absl::StrAppend(&change_stream_string, " ", "OPTIONS ( ",
+                    PrintOptions(change_stream->options()), " )");
+  }
+
+  return change_stream_string;
+}
+
 std::string PrintTable(const Table* table) {
   std::string table_string =
       absl::Substitute("CREATE TABLE $0 (\n", PrintName(table->Name()));
@@ -254,6 +304,11 @@ std::string PrintForeignKey(const ForeignKey* foreign_key) {
                   ") REFERENCES ",
                   PrintName(foreign_key->referenced_table()->Name()), "(",
                   PrintColumnNameList(foreign_key->referenced_columns()), ")");
+  if (foreign_key->on_delete_action() !=
+      ForeignKey::Action::kActionUnspecified) {
+    absl::StrAppend(&out, " ", kDeleteAction, " ",
+                    ForeignKey::ActionName(foreign_key->on_delete_action()));
+  }
   return out;
 }
 
@@ -291,7 +346,9 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
       }
     }
   }
-
+  for (auto change_stream : schema->change_streams()) {
+    statements.push_back(PrintChangeStream(change_stream));
+  }
   // Print views that depend on the tables/indexes.
   absl::flat_hash_set<const SchemaNode*> visited;
   std::vector<const View*> views;

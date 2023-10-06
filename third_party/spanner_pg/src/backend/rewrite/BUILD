@@ -53,6 +53,7 @@ cc_library(
         "rewriteHandler.c",
         "rewriteManip.c",
         "rewriteRemove.c",
+        "rewriteSearchCycle.c",
         "rewriteSupport.c",
         "rowsecurity.c",
     ],

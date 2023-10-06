@@ -34,6 +34,8 @@ class EmulatorFeatureFlags {
     bool enable_column_default_values = true;
     bool enable_dml_returning = true;
     bool enable_views = true;
+    bool enable_postgresql_interface = false;
+    bool enable_fk_delete_cascade_action = false;
   };
 
   static const EmulatorFeatureFlags& instance() {

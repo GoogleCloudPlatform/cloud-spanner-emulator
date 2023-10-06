@@ -62,6 +62,7 @@ absl::Status InvalidCreateDatabaseStatement(absl::string_view statement);
 absl::Status UpdateDatabaseMissingStatements();
 absl::Status TooManyDatabasesPerInstance(absl::string_view instance_uri);
 absl::Status InvalidDatabaseName(absl::string_view database_id);
+absl::Status CannotCreatePostgreSQLDialectDatabase();
 
 // Operation errors.
 absl::Status InvalidOperationId(absl::string_view id);
@@ -489,6 +490,8 @@ absl::Status ForeignKeyReferencingKeyFound(absl::string_view foreign_key,
                                            absl::string_view referencing_table,
                                            absl::string_view referenced_table,
                                            absl::string_view referencing_key);
+absl::Status ForeignKeyOnDeleteActionUnsupported(
+    absl::string_view referential_action);
 
 absl::Status NumericTypeNotEnabled();
 absl::Status JsonTypeNotEnabled();

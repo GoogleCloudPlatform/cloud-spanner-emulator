@@ -68,13 +68,13 @@ RegexpSplitToArray(absl::string_view string, absl::string_view pattern,
         CheckedPgStringToDatum(std::string(flags.value()).c_str(), TEXTOID));
     ZETASQL_ASSIGN_OR_RETURN(matches_datum,
                      postgres_translator::CheckedOidFunctionCall3(
-                         F_REGEXP_SPLIT_TO_ARRAY, string_in_datum,
-                         pattern_in_datum, flags_in_datum));
+                         F_REGEXP_SPLIT_TO_ARRAY_TEXT_TEXT_TEXT,
+                         string_in_datum, pattern_in_datum, flags_in_datum));
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(
-        matches_datum,
-        postgres_translator::CheckedOidFunctionCall2(
-            F_REGEXP_SPLIT_TO_ARRAY, string_in_datum, pattern_in_datum));
+    ZETASQL_ASSIGN_OR_RETURN(matches_datum,
+                     postgres_translator::CheckedOidFunctionCall2(
+                         F_REGEXP_SPLIT_TO_ARRAY_TEXT_TEXT, string_in_datum,
+                         pattern_in_datum));
   }
 
   ZETASQL_ASSIGN_OR_RETURN(ArrayType * matches_array,
@@ -137,15 +137,15 @@ RegexpMatch(absl::string_view string, absl::string_view pattern,
     ZETASQL_ASSIGN_OR_RETURN(
         Datum flags_in_datum,
         CheckedPgStringToDatum(std::string(flags.value()).c_str(), TEXTOID));
-    ZETASQL_ASSIGN_OR_RETURN(
-        matches_datum,
-        postgres_translator::CheckedNullableOidFunctionCall3(
-            F_REGEXP_MATCH, string_in_datum, pattern_in_datum, flags_in_datum));
+    ZETASQL_ASSIGN_OR_RETURN(matches_datum,
+                     postgres_translator::CheckedNullableOidFunctionCall3(
+                         F_REGEXP_MATCH_TEXT_TEXT_TEXT, string_in_datum,
+                         pattern_in_datum, flags_in_datum));
   } else {
     ZETASQL_ASSIGN_OR_RETURN(
         matches_datum,
         postgres_translator::CheckedNullableOidFunctionCall2(
-            F_REGEXP_MATCH_NO_FLAGS, string_in_datum, pattern_in_datum));
+            F_REGEXP_MATCH_TEXT_TEXT, string_in_datum, pattern_in_datum));
   }
   if (matches_datum == kNullDatum) {
     return nullptr;
@@ -236,9 +236,10 @@ absl::StatusOr<std::unique_ptr<std::string>> Textregexsubstr(
       Datum pattern_in_datum,
       CheckedPgStringToDatum(std::string(pattern).c_str(), TEXTOID));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum substring_datum,
-                   postgres_translator::CheckedNullableOidFunctionCall2(
-                       F_TEXTREGEXSUBSTR, string_in_datum, pattern_in_datum));
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum substring_datum,
+      postgres_translator::CheckedNullableOidFunctionCall2(
+          F_SUBSTRING_TEXT_TEXT, string_in_datum, pattern_in_datum));
 
   if (substring_datum == kNullDatum) {
     return nullptr;
@@ -266,14 +267,14 @@ absl::StatusOr<std::string> Textregexreplace(
     ZETASQL_ASSIGN_OR_RETURN(
         Datum flags_in_datum,
         CheckedPgStringToDatum(std::string(flags.value()).c_str(), TEXTOID));
-    ZETASQL_ASSIGN_OR_RETURN(result_datum,
-                     postgres_translator::CheckedOidFunctionCall4(
-                         F_TEXTREGEXREPLACE, source_in_datum, pattern_in_datum,
-                         replacement_in_datum, flags_in_datum));
+    ZETASQL_ASSIGN_OR_RETURN(result_datum, postgres_translator::CheckedOidFunctionCall4(
+                                       F_REGEXP_REPLACE_TEXT_TEXT_TEXT_TEXT,
+                                       source_in_datum, pattern_in_datum,
+                                       replacement_in_datum, flags_in_datum));
   } else {
     ZETASQL_ASSIGN_OR_RETURN(result_datum,
                      postgres_translator::CheckedOidFunctionCall3(
-                         F_TEXTREGEXREPLACE_NOOPT, source_in_datum,
+                         F_REGEXP_REPLACE_TEXT_TEXT_TEXT, source_in_datum,
                          pattern_in_datum, replacement_in_datum));
   }
   return CheckedPgTextDatumGetCString(result_datum);

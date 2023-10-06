@@ -58,7 +58,10 @@ class PGCatalog : public zetasql::SimpleCatalog {
   absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
       tables_by_name_;
 
+  void FillPGIndexesTable();
+  void FillPGTablesTable();
   void FillPGSettingsTable();
+  void FillPGViewsTable();
 };
 
 }  // namespace postgres_translator

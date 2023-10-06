@@ -3,7 +3,7 @@
  * port.h
  *	  Header for src/port/ compatibility functions.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/port.h
@@ -75,34 +75,61 @@ extern void get_parent_directory(char *path);
 extern char **pgfnames(const char *path);
 extern void pgfnames_cleanup(char **filenames);
 
+#define IS_NONWINDOWS_DIR_SEP(ch)	((ch) == '/')
+#define is_nonwindows_absolute_path(filename) \
+( \
+	IS_NONWINDOWS_DIR_SEP((filename)[0]) \
+)
+
+#define IS_WINDOWS_DIR_SEP(ch)	((ch) == '/' || (ch) == '\\')
+/* See path_is_relative_and_below_cwd() for how we handle 'E:abc'. */
+#define is_windows_absolute_path(filename) \
+( \
+	IS_WINDOWS_DIR_SEP((filename)[0]) || \
+	(isalpha((unsigned char) ((filename)[0])) && (filename)[1] == ':' && \
+	 IS_WINDOWS_DIR_SEP((filename)[2])) \
+)
+
 /*
- *	is_absolute_path
+ *	is_absolute_path and IS_DIR_SEP
  *
- *	By making this a macro we avoid needing to include path.c in libpq.
+ *	By using macros here we avoid needing to include path.c in libpq.
  */
 #ifndef WIN32
-#define IS_DIR_SEP(ch)	((ch) == '/')
-
-#define is_absolute_path(filename) \
-( \
-	IS_DIR_SEP((filename)[0]) \
-)
+#define IS_DIR_SEP(ch) IS_NONWINDOWS_DIR_SEP(ch)
+#define is_absolute_path(filename) is_nonwindows_absolute_path(filename)
 #else
-#define IS_DIR_SEP(ch)	((ch) == '/' || (ch) == '\\')
-
-/* See path_is_relative_and_below_cwd() for how we handle 'E:abc'. */
-#define is_absolute_path(filename) \
-( \
-	IS_DIR_SEP((filename)[0]) || \
-	(isalpha((unsigned char) ((filename)[0])) && (filename)[1] == ':' && \
-	 IS_DIR_SEP((filename)[2])) \
-)
+#define IS_DIR_SEP(ch) IS_WINDOWS_DIR_SEP(ch)
+#define is_absolute_path(filename) is_windows_absolute_path(filename)
 #endif
+
+/*
+ * This macro provides a centralized list of all errnos that identify
+ * hard failure of a previously-established network connection.
+ * The macro is intended to be used in a switch statement, in the form
+ * "case ALL_CONNECTION_FAILURE_ERRNOS:".
+ *
+ * Note: this groups EPIPE and ECONNRESET, which we take to indicate a
+ * probable server crash, with other errors that indicate loss of network
+ * connectivity without proving much about the server's state.  Places that
+ * are actually reporting errors typically single out EPIPE and ECONNRESET,
+ * while allowing the network failures to be reported generically.
+ */
+#define ALL_CONNECTION_FAILURE_ERRNOS \
+	EPIPE: \
+	case ECONNRESET: \
+	case ECONNABORTED: \
+	case EHOSTDOWN: \
+	case EHOSTUNREACH: \
+	case ENETDOWN: \
+	case ENETRESET: \
+	case ENETUNREACH
 
 /* Portable locale initialization (in exec.c) */
 extern void set_pglocale_pgservice(const char *argv0, const char *app);
 
 /* Portable way to find and execute binaries (in exec.c) */
+extern int	validate_exec(const char *path);
 extern int	find_my_exec(const char *argv0, char *retpath);
 extern int	find_other_exec(const char *argv0, const char *target,
 							const char *versionstr, char *retpath);
@@ -110,6 +137,11 @@ extern char *pipe_read_line(char *cmd, char *line, int maxsize);
 
 /* Doesn't belong here, but this is used with find_other_exec(), so... */
 #define PG_BACKEND_VERSIONSTR "postgres (PostgreSQL) " PG_VERSION "\n"
+
+#ifdef EXEC_BACKEND
+/* Disable ASLR before exec, for developer builds only (in exec.c) */
+extern int pg_disable_aslr(void);
+#endif
 
 
 #if defined(WIN32) || defined(__CYGWIN__)
@@ -212,10 +244,6 @@ extern char *pg_strerror_r(int errnum, char *buf, size_t buflen);
 
 /* Wrap strsignal(), or provide our own version if necessary */
 extern const char *pg_strsignal(int signum);
-
-/* Portable prompt handling */
-extern void simple_prompt(const char *prompt, char *destination, size_t destlen,
-						  bool echo);
 
 extern int	pclose_check(FILE *stream);
 
@@ -413,6 +441,8 @@ extern ssize_t pg_pread(int fd, void *buf, size_t nbyte, off_t offset);
 extern ssize_t pg_pwrite(int fd, const void *buf, size_t nbyte, off_t offset);
 #endif
 
+/* For pg_pwritev() and pg_preadv(), see port/pg_iovec.h. */
+
 #if !HAVE_DECL_STRLCAT
 extern size_t strlcat(char *dst, const char *src, size_t siz);
 #endif
@@ -430,11 +460,11 @@ extern long random(void);
 #endif
 
 #ifndef HAVE_SETENV
-extern int setenv(const char *name, const char *value, int overwrite);
+extern int	setenv(const char *name, const char *value, int overwrite);
 #endif
 
 #ifndef HAVE_UNSETENV
-extern void unsetenv(const char *name);
+extern int	unsetenv(const char *name);
 #endif
 
 #ifndef HAVE_SRANDOM
@@ -487,6 +517,14 @@ typedef int (*qsort_arg_comparator) (const void *a, const void *b, void *arg);
 extern void qsort_arg(void *base, size_t nel, size_t elsize,
 					  qsort_arg_comparator cmp, void *arg);
 
+extern void qsort_interruptible(void *base, size_t nel, size_t elsize,
+								qsort_arg_comparator cmp, void *arg);
+
+extern void *bsearch_arg(const void *key, const void *base,
+						 size_t nmemb, size_t size,
+						 int (*compar) (const void *, const void *, void *),
+						 void *arg);
+
 /* port/chklocale.c */
 extern int	pg_get_encoding_from_locale(const char *ctype, bool write_message);
 
@@ -499,6 +537,7 @@ extern char *pg_inet_net_ntop(int af, const void *src, int bits,
 							  char *dst, size_t size);
 
 /* port/pg_strong_random.c */
+extern void pg_strong_random_init(void);
 extern bool pg_strong_random(void *buf, size_t len);
 
 /*

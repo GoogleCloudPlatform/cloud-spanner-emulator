@@ -409,7 +409,7 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
                           return out->append(child->Name());
                         }));
     }
-    if (!table->change_streams().empty()) {
+    if (!table->change_streams_explicitly_tracking_table().empty()) {
       return error::DropTableWithDependentChangeStreams(
           table->name_,
           absl::StrJoin(table->change_streams().begin(),

@@ -141,6 +141,7 @@ absl::StatusOr<MemoryContext> CheckedPgAllocSetContextCreateInternal(
     MemoryContext parent, const char* name, Size minContextSize,
     Size initBlockSize, Size maxBlockSize);
 absl::StatusOr<char*> CheckedPgTextDatumGetCString(Datum datum);
+absl::StatusOr<char*> CheckedPgCStringDatumToCString(Datum cstr);
 absl::StatusOr<char*> CheckedPgFormatTypeBe(Oid type_oid);
 absl::StatusOr<ArrayIterator> CheckedPgArrayCreateIterator(
     ArrayType* arr, int slice_ndim, ArrayMetaState* mstate);
@@ -155,6 +156,7 @@ absl::StatusOr<ArrayType*> CheckedPgConstructEmptyArray(Oid elmtype);
 absl::Status CheckedPgGetTyplenbyvalalign(Oid typid, int16_t* typlen,
                                           bool* typbyval, char* typalign);
 absl::StatusOr<ArrayType*> CheckedPgDatumGetArrayTypeP(Datum datum);
+absl::StatusOr<Type> CheckedPgTypeidType(Oid id);
 
 #define CheckedPgMakeNode(_type_) \
   CheckedPgMakeNodeTemplate<_type_>(sizeof(_type_), T_##_type_)
@@ -194,6 +196,8 @@ absl::StatusOr<void*> CheckedPgMemoryContextAllocZeroAligned(
     MemoryContext context, size_t size);
 absl::StatusOr<void*> CheckedPgMemoryContextAllocHuge(MemoryContext context,
                                                       size_t size);
+absl::Status CheckedPgMemoryContextDelete(MemoryContext context);
+absl::Status CheckedPgAsetDeleteFreelists();
 absl::StatusOr<ArrayType*> CheckedPgDatumGetArrayTypeP(Datum datum);
 
 absl::StatusOr<pg_tz*> CheckedPgTZSet(const char *tzname);

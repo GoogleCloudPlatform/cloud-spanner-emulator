@@ -309,6 +309,8 @@ void create_generated_columns_table(zetasql::TypeFactory& type_factory,
           .add_column(value_column.get())
           .add_key_column(primary_key_constraint.get())
           .build();
+  const_cast<Column*>(value_column.get())->PopulateDependentColumns();
+
   graph->Add(std::move(key_column));
   graph->Add(std::move(primary_key_constraint));
   graph->Add(std::move(value_column));

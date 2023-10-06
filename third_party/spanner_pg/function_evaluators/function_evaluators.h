@@ -32,31 +32,10 @@
 #ifndef FUNCTION_EVALUATORS_FUNCTION_EVALUATORS_H_
 #define FUNCTION_EVALUATORS_FUNCTION_EVALUATORS_H_
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
-#include "absl/time/time.h"
 
 namespace postgres_translator::function_evaluators {
 
-// A placeholder which always returns an unsupported error.
-// Allows the on-branch evaluators to depend on this library while the real
-// functions are being implemented, and assists in on-branch/off-branch
-// development synchronization.
-absl::Status UnsupportedFunctionEvaluator(absl::string_view function_name);
-
-// A mirrored implementation of PostgreSQL's date_in function that is safe to
-// run during Spanner execution. Returns an int32_t which represents the ZetaSQL
-// date offset. Input is an std::string to ensure NULL-termination.
-absl::StatusOr<int32_t> DateIn(absl::string_view input_string,
-                               absl::string_view default_timezone);
-
-// A mirrored implementation of PostgreSQL's timestamptz_in function that is
-// safe to run during Spanner execution. Returns an absl::Time, which is the
-// internal representation of a ZetaSQL Timestamp value. Input is an
-// std::string to ensure NULL-termination.
-absl::StatusOr<absl::Time> TimestamptzIn(absl::string_view input_string,
-                                         absl::string_view default_timezone);
+// TODO: Remove once on-branch no longer depends on this file.
 
 }  // namespace postgres_translator::function_evaluators
 

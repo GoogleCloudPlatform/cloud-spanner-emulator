@@ -5,7 +5,7 @@
  * Basically this is stuff that is useful in both pg_dump and pg_dumpall.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/pg_dump/dumputils.c
@@ -668,7 +668,7 @@ AddAcl(PQExpBuffer aclbuf, const char *keyword, const char *subname)
  * keep this file free of assumptions about how to deal with SQL errors.)
  */
 void
-buildShSecLabelQuery(PGconn *conn, const char *catalog_name, Oid objectId,
+buildShSecLabelQuery(const char *catalog_name, Oid objectId,
 					 PQExpBuffer sql)
 {
 	appendPQExpBuffer(sql,
@@ -848,11 +848,12 @@ buildACLQueries(PQExpBuffer acl_subquery, PQExpBuffer racl_subquery,
 bool
 variable_is_guc_list_quote(const char *name)
 {
-	if (pg_strcasecmp(name, "temp_tablespaces") == 0 ||
+	if (pg_strcasecmp(name, "local_preload_libraries") == 0 ||
+		pg_strcasecmp(name, "search_path") == 0 ||
 		pg_strcasecmp(name, "session_preload_libraries") == 0 ||
 		pg_strcasecmp(name, "shared_preload_libraries") == 0 ||
-		pg_strcasecmp(name, "local_preload_libraries") == 0 ||
-		pg_strcasecmp(name, "search_path") == 0)
+		pg_strcasecmp(name, "temp_tablespaces") == 0 ||
+		pg_strcasecmp(name, "unix_socket_directories") == 0)
 		return true;
 	else
 		return false;

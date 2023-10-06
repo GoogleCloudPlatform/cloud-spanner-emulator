@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "zetasql/public/catalog.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
@@ -35,8 +36,11 @@
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
+#include "backend/query/spanner_sys_catalog.h"
 #include "backend/query/tables_from_metadata.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
@@ -163,6 +167,15 @@ static constexpr char kCharacterMaximumLength[] = "CHARACTER_MAXIMUM_LENGTH";
 static constexpr char kNumericPrecision[] = "NUMERIC_PRECISION";
 static constexpr char kNumericPrecisionRadix[] = "NUMERIC_PRECISION_RADIX";
 static constexpr char kNumericScale[] = "NUMERIC_SCALE";
+static constexpr char kChangeStreams[] = "CHANGE_STREAMS";
+static constexpr char kChangeStreamTables[] = "CHANGE_STREAM_TABLES";
+static constexpr char kChangeStreamColumns[] = "CHANGE_STREAM_COLUMNS";
+static constexpr char kChangeStreamOptions[] = "CHANGE_STREAM_OPTIONS";
+static constexpr char kChangeStreamRetentionPeriodOptionName[] =
+    "retention_period";
+static constexpr char kChangeStreamValueCaptureTypeOptionName[] =
+    "value_capture_type";
+
 static int kDoubleNumericPrecision = 53;
 static int kBigintNumericPrecision = 64;
 static int kDoubleNumericPrecisionRadix = 2;
@@ -172,8 +185,13 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
     // migration to auto-create tables is complete, it'll be the tables from
     // https://cloud.google.com/spanner/docs/information-schema.
     kSupportedGSQLTables{{
+        kChangeStreams,
+        kChangeStreamColumns,
+        kChangeStreamOptions,
+        kChangeStreamTables,
         kCheckConstraints,
         kColumnColumnUsage,
+        kColumnOptions,
         kColumns,
         kConstraintColumnUsage,
         kConstraintTableUsage,
@@ -194,8 +212,13 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
     // migration to auto-create tables is complete, it'll be the tables from
     // https://cloud.google.com/spanner/docs/information-schema-pg.
     kSupportedPGTables{{
+        absl::AsciiStrToLower(kChangeStreams),
+        absl::AsciiStrToLower(kChangeStreamColumns),
+        absl::AsciiStrToLower(kChangeStreamOptions),
+        absl::AsciiStrToLower(kChangeStreamTables),
         absl::AsciiStrToLower(kCheckConstraints),
         absl::AsciiStrToLower(kColumnColumnUsage),
+        absl::AsciiStrToLower(kColumnOptions),
         absl::AsciiStrToLower(kColumns),
         absl::AsciiStrToLower(kConstraintColumnUsage),
         absl::AsciiStrToLower(kConstraintTableUsage),
@@ -364,6 +387,26 @@ absl::flat_hash_map<std::string, zetasql::Value> GetColumnsWithDefault(
 // Note that the keys in row_kvs are expected to be created from the column name
 // constants defined in this file and hence must be all upper-case. Otherwise
 // this function will crash.
+//
+// Also note that whenever possible, populate the rows of a table as follows for
+// improved readability:
+//
+// std::vector<std::vector<zetasql::Value>> rows;
+// for (const Table* table : default_schema_->tables()) {
+//   rows.push_back({
+//       // table_catalog
+//       String(""),
+//       // table_schema
+//       DialectDefaultSchema(),
+//       // table_name
+//       String(table->Name()),
+//   });
+// }
+//
+// Only use this function when a table definition for the ZetaSQL dialect
+// differs from the PostgreSQL dialect where some of the columns values are
+// shared between the two dialects and others are not. See FillTablesTable() for
+// an example.
 std::vector<zetasql::Value> GetRowFromRowKVs(
     const zetasql::Table* table,
     const absl::flat_hash_map<std::string, zetasql::Value>& row_kvs) {
@@ -388,14 +431,23 @@ std::vector<zetasql::Value> GetRowFromRowKVs(
   return row;
 }
 
+std::vector<zetasql::Value> GetSchemaRow(const zetasql::Table* table,
+                                           zetasql::Value value) {
+  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+  specific_kvs[kSchemaName] = value;
+  return GetRowFromRowKVs(table, specific_kvs);
+}
+
 }  // namespace
 
 InformationSchemaCatalog::InformationSchemaCatalog(
-    const std::string& catalog_name, const Schema* default_schema)
+    const std::string& catalog_name, const Schema* default_schema,
+    const SpannerSysCatalog* spanner_sys_catalog)
     : zetasql::SimpleCatalog(catalog_name),
       default_schema_(default_schema),
+      spanner_sys_catalog_(spanner_sys_catalog),
       dialect_(catalog_name == kPGName ? DatabaseDialect::POSTGRESQL
-                               : DatabaseDialect::GOOGLE_STANDARD_SQL) {
+                                       : DatabaseDialect::GOOGLE_STANDARD_SQL) {
   // Create a subset of tables using columns metadata.
   if (dialect_ == DatabaseDialect::POSTGRESQL) {
     absl::StatusOr<
@@ -420,8 +472,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   // kSpannerStatistics currently has no rows in the emulator so we don't call a
   // function to fill the table.
   FillDatabaseOptionsTable();
-
-  AddColumnOptionsTable();
+  FillColumnOptionsTable();
 
   // These tables are populated only after all tables have been added to the
   // catalog (including meta tables) because they add rows based on the tables
@@ -438,6 +489,10 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   FillKeyColumnUsageTable();
   FillConstraintColumnUsageTable();
   FillViewsTable();
+  FillChangeStreamsTable();
+  FillChangeStreamColumnsTable();
+  FillChangeStreamOptionsTable();
+  FillChangeStreamTablesTable();
 }
 
 inline std::string InformationSchemaCatalog::GetNameForDialect(
@@ -459,16 +514,17 @@ inline zetasql::Value InformationSchemaCatalog::DialectDefaultSchema() {
 void InformationSchemaCatalog::FillSchemataTable() {
   auto table = tables_by_name_.at(GetNameForDialect(kSchemata)).get();
   std::vector<std::vector<zetasql::Value>> rows;
-  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
 
   // Row for the unnamed default schema.
-  specific_kvs[kSchemaName] = DialectDefaultSchema();
-  rows.push_back(GetRowFromRowKVs(table, specific_kvs));
+  rows.push_back(GetSchemaRow(table, DialectDefaultSchema()));
 
   // Row for the information schema.
-  specific_kvs.clear();
-  specific_kvs[kSchemaName] = String(GetNameForDialect(kInformationSchema));
-  rows.push_back(GetRowFromRowKVs(table, specific_kvs));
+  rows.push_back(
+      GetSchemaRow(table, String(GetNameForDialect(kInformationSchema))));
+
+  // Row for the spanner_sys schema.
+  rows.push_back(
+      GetSchemaRow(table, String(GetNameForDialect(SpannerSysCatalog::kName))));
 
   table->SetContents(rows);
 }
@@ -502,8 +558,8 @@ void InformationSchemaCatalog::FillTablesTable() {
 
   // Add table rows.
   std::vector<std::vector<zetasql::Value>> rows;
-  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
   for (const Table* table : default_schema_->tables()) {
+    absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
     if (dialect_ == DatabaseDialect::POSTGRESQL) {
       zetasql::Value row_deletion_policy_value = NullString();
       if (table->row_deletion_policy().has_value()) {
@@ -538,10 +594,10 @@ void InformationSchemaCatalog::FillTablesTable() {
     specific_kvs[kInterleaveType] = String(kInParent);
 
     rows.push_back(GetRowFromRowKVs(tables, specific_kvs));
-    specific_kvs.clear();
   }
 
   for (const View* view : default_schema_->views()) {
+    absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
     specific_kvs[kTableSchema] = DialectDefaultSchema();
     specific_kvs[kTableName] = String(view->Name());
     specific_kvs[kTableType] = String(kView);
@@ -551,10 +607,24 @@ void InformationSchemaCatalog::FillTablesTable() {
     specific_kvs[kRowDeletionPolicyExpression] = NullString();
 
     rows.push_back(GetRowFromRowKVs(tables, specific_kvs));
-    specific_kvs.clear();
+  }
+
+  for (const auto& table : spanner_sys_catalog_->tables()) {
+    absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+    specific_kvs[kTableSchema] =
+        String(GetNameForDialect(SpannerSysCatalog::kName));
+    specific_kvs[kTableType] = String(kView);
+    specific_kvs[kTableName] = String(table->Name());
+    specific_kvs[kParentTableName] = NullString();
+    specific_kvs[kOnDeleteAction] = NullString();
+    specific_kvs[kSpannerState] = NullString();
+    specific_kvs[kRowDeletionPolicyExpression] = NullString();
+
+    rows.push_back(GetRowFromRowKVs(tables, specific_kvs));
   }
 
   for (const auto& table : this->tables()) {
+    absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
     specific_kvs[kTableSchema] = String(GetNameForDialect(kInformationSchema));
     specific_kvs[kTableName] = String(GetNameForDialect(table->Name()));
     specific_kvs[kTableType] = String(kView);
@@ -564,7 +634,6 @@ void InformationSchemaCatalog::FillTablesTable() {
     specific_kvs[kRowDeletionPolicyExpression] = NullString();
 
     rows.push_back(GetRowFromRowKVs(tables, specific_kvs));
-    specific_kvs.clear();
   }
 
   tables->SetContents(rows);
@@ -583,7 +652,6 @@ zetasql::Value InformationSchemaCatalog::GetSpannerType(
     if (length != std::nullopt) {
       column_def.set_length(length.value());
     }
-    ABSL_LOG(ERROR) << type->DebugString();
     absl::StatusOr<std::string> spanner_type =
         pg_schema_printer_->PrintTypeForEmulator(column_def);
     ABSL_CHECK_OK(spanner_type.status());  // crash ok
@@ -1122,19 +1190,28 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
   index_columns->SetContents(rows);
 }
 
-void InformationSchemaCatalog::AddColumnOptionsTable() {
-  // Setup table schema.
-  auto columns = new zetasql::SimpleTable(kColumnOptions,
-                                            {{kTableCatalog, StringType()},
-                                             {kTableSchema, StringType()},
-                                             {kTableName, StringType()},
-                                             {kColumnName, StringType()},
-                                             {kOptionName, StringType()},
-                                             {kOptionType, StringType()},
-                                             {kOptionValue, StringType()}});
+// Fills the "information_schema.column_options" table based on the
+// specifications provided for each dialect:
+// ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#column_options
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#column_options
+//
+// Rows are added for each table defined in the default schema for just the GSQL
+// dialect.
+void InformationSchemaCatalog::FillColumnOptionsTable() {
+  auto column_options =
+      tables_by_name_.at(GetNameForDialect(kColumnOptions)).get();
 
-  // Add table rows.
   std::vector<std::vector<zetasql::Value>> rows;
+
+  // Only add rows for ZetaSQL dialect as the PostgreSQL dialect doesn't have
+  // rows in this table by default.
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    column_options->SetContents(rows);
+    return;
+  }
+
   for (const Table* table : default_schema_->tables()) {
     for (const Column* column : table->columns()) {
       if (column->allows_commit_timestamp()) {
@@ -1154,9 +1231,7 @@ void InformationSchemaCatalog::AddColumnOptionsTable() {
     }
   }
 
-  // Add table to catalog.
-  columns->SetContents(rows);
-  AddOwnedTable(columns);
+  column_options->SetContents(rows);
 }
 
 // Fills the "information_schema.table_constraints" table based on the
@@ -2024,6 +2099,180 @@ void InformationSchemaCatalog::FillViewsTable() {
   }
 
   views->SetContents(rows);
+}
+
+// Fills the "information_schema.change_treams" table based on the
+// specifications provided for each dialect: ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#change-streams
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#change-streams
+//
+// Rows are added for each change stream defined in the default schema.
+void InformationSchemaCatalog::FillChangeStreamsTable() {
+  auto change_streams =
+      tables_by_name_.at(GetNameForDialect(kChangeStreams)).get();
+  std::vector<std::vector<zetasql::Value>> rows;
+  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+  for (const ChangeStream* change_stream : default_schema_->change_streams()) {
+    rows.push_back({// change_stream_catalog
+                    String(""),
+                    // change_stream_schema
+                    DialectDefaultSchema(),
+                    // change_stream_name
+                    String(change_stream->Name()),
+                    // all
+                    DialectBoolValue(change_stream->track_all())});
+  }
+  change_streams->SetContents(rows);
+}
+
+// Fills the "information_schema.change_tream_columns" table based on the
+// specifications provided for each dialect: ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#change-stream-columns
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#change-strea-columns
+//
+// Rows are added for each column tracked explicitly by each change stream
+// defined in the default schema.
+void InformationSchemaCatalog::FillChangeStreamColumnsTable() {
+  auto change_stream_columns =
+      tables_by_name_.at(GetNameForDialect(kChangeStreamColumns)).get();
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const ChangeStream* change_stream : default_schema_->change_streams()) {
+    // Skip change streams tracking the entire database.
+    if (change_stream->track_all()) {
+      continue;
+    }
+    for (const auto& table_to_columns :
+         change_stream->tracked_tables_columns()) {
+      const std::string table_name = table_to_columns.first;
+      const Table* tracking_table =
+          default_schema_->FindTableCaseSensitive(table_name);
+      const bool is_tracking_all_cols =
+          tracking_table->FindChangeStream(change_stream->Name());
+      // Skip change streams tracking the entire table.
+      if (is_tracking_all_cols) {
+        continue;
+      }
+      for (const auto& column : table_to_columns.second) {
+        rows.push_back({
+            // change_stream_catalog
+            String(""),
+            // change_stream_schema
+            DialectDefaultSchema(),
+            // change_stream_name
+            String(change_stream->Name()),
+            // table_catalog
+            String(""),
+            // table_schema
+            DialectDefaultSchema(),
+            // table_name
+            String(table_name),
+            // column_name
+            String(column),
+        });
+      }
+    }
+  }
+  change_stream_columns->SetContents(rows);
+}
+
+// Fills the "information_schema.change_tream_options" table based on the
+// specifications provided for each dialect: ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#change-stream-options
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#change-streams-options
+//
+// Rows are added for each explicitly specified option for each change stream
+// defined in the default schema.
+void InformationSchemaCatalog::FillChangeStreamOptionsTable() {
+  auto change_stream_options =
+      tables_by_name_.at(GetNameForDialect(kChangeStreamOptions)).get();
+  std::vector<std::vector<zetasql::Value>> rows;
+  std::string string_type = (dialect_ == DatabaseDialect::POSTGRESQL)
+                                ? "character varying"
+                                : "STRING";
+  for (const ChangeStream* change_stream : default_schema_->change_streams()) {
+    if (change_stream->retention_period().has_value()) {
+      rows.push_back({
+          // change_stream_catalog
+          String(""),
+          // change_stream_schema
+          DialectDefaultSchema(),
+          // change_stream_name
+          String(change_stream->Name()),
+          // option_name
+          String(kChangeStreamRetentionPeriodOptionName),
+          // option_type
+          String(string_type),
+          // option_value
+          String(change_stream->retention_period().value()),
+      });
+    }
+    if (change_stream->value_capture_type().has_value()) {
+      rows.push_back({
+          // change_stream_catalog
+          String(""),
+          // change_stream_schema
+          DialectDefaultSchema(),
+          // change_stream_name
+          String(change_stream->Name()),
+          // option_name
+          String(kChangeStreamValueCaptureTypeOptionName),
+          // option_type
+          String(string_type),
+          // option_value
+          String(change_stream->value_capture_type().value()),
+      });
+    }
+  }
+  change_stream_options->SetContents(rows);
+}
+
+// Fills the "information_schema.change_tream_tables" table based on the
+// specifications provided for each dialect: ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#change-stream-tables
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#change-strea-tables
+//
+// Rows are added for each table tracked explicitly by each change stream
+// defined in the default schema.
+void InformationSchemaCatalog::FillChangeStreamTablesTable() {
+  auto change_stream_tables =
+      tables_by_name_.at(GetNameForDialect(kChangeStreamTables)).get();
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const ChangeStream* change_stream : default_schema_->change_streams()) {
+    // Skip change streams tracking the entire database.
+    if (change_stream->track_all()) {
+      continue;
+    }
+    for (const auto& table_to_columns :
+         change_stream->tracked_tables_columns()) {
+      const std::string table_name = table_to_columns.first;
+      // A change stream is tracking entire table if it is created for the table
+      // without explicit columns.
+      const bool is_tracking_all_cols =
+          default_schema_->FindTableCaseSensitive(table_name)
+              ->FindChangeStream(change_stream->Name());
+      rows.push_back({
+          // change_stream_catalog
+          String(""),
+          // change_stream_schema
+          DialectDefaultSchema(),
+          // change_stream_name
+          String(change_stream->Name()),
+          // table_catalog
+          String(""),
+          // table_schema
+          DialectDefaultSchema(),
+          // table_name
+          String(table_name),
+          // all_columns
+          DialectBoolValue(is_tracking_all_cols),
+      });
+    }
+  }
+  change_stream_tables->SetContents(rows);
 }
 
 }  // namespace backend

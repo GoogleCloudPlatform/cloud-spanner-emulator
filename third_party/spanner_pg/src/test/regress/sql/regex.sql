@@ -144,6 +144,14 @@ select 'xyz' ~ '((.)){0}(\2){0}' as t;
 select 'abcdef' ~ '^(.)\1|\1.' as f;
 select 'abadef' ~ '^((.)\2|..)\2' as f;
 
+-- Add coverage for some cases in checkmatchall
+select regexp_match('xy', '.|...');
+select regexp_match('xyz', '.|...');
+select regexp_match('xy', '.*');
+select regexp_match('fooba', '(?:..)*');
+select regexp_match('xyz', repeat('.', 260));
+select regexp_match('foo', '(?:.|){99}');
+
 -- Error conditions
 select 'xyz' ~ 'x(\w)(?=\1)';  -- no backrefs in LACONs
 select 'xyz' ~ 'x(\w)(?=(\1))';

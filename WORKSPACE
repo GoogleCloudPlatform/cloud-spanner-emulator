@@ -78,7 +78,7 @@ http_archive(
 
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 
-go_register_toolchains(version = "1.20.7")
+go_register_toolchains(version = "1.20.8")
 
 _bazel_gazelle_version = "0.31.1"
 
@@ -129,8 +129,8 @@ go_repository(
     importpath = "google.golang.org/protobuf",
     patch_args = ["-p1"],
     patches = ["//build/bazel:golang_protobuf.patch"],
-    sum = "h1:kPPoIgf3TsEvrm0PFe15JQ+570QVxYzEvvHqChK+cng=",
-    version = "v1.30.0",
+    sum = "h1:g0LDEJHgrBl9N9r17Ru3sqWhkIx2NB67okBHPwC7hs8=",
+    version = "v1.31.0",
 )
 
 go_rules_dependencies()
@@ -163,24 +163,24 @@ go_repository(
     name = "org_golang_x_net",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/net",
-    sum = "h1:BONx9s002vGdD9umnlX1Po8vOZmrgH34qlHcD1MfK14=",
-    version = "v0.14.0",
+    sum = "h1:ugBLEUaxABaB5AJqW9enI0ACdci2RUd4eP51NTBvuJ8=",
+    version = "v0.15.0",
 )
 
 go_repository(
     name = "org_golang_x_sys",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/sys",
-    sum = "h1:eG7RXZHdqOJ1i+0lgLgCpSXAp6M3LYlAo6osgSi0xOM=",
-    version = "v0.11.0",
+    sum = "h1:CM0HF96J0hcLAwsHPJZjfdNzs0gftsLfgKt57wWHJ0o=",
+    version = "v0.12.0",
 )
 
 go_repository(
     name = "org_golang_x_text",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/text",
-    sum = "h1:k+n5B8goJNdU7hSvEtMUz3d1Q6D/XW4COJSJR6fN0mc=",
-    version = "v0.12.0",
+    sum = "h1:ablQoSUd0tRdKxZewP80B+BaqeKJuVhuRxj/dkrun3k=",
+    version = "v0.13.0",
 )
 
 ################################################################################
@@ -368,9 +368,9 @@ google_cloud_cpp_deps()
 http_archive(
     name = "org_python_pypi_portpicker",
     build_file = "//build/bazel:portpicker.BUILD",
-    sha256 = "c55683ad725f5c00a41bc7db0225223e8be024b1fa564d039ed3390e4fd48fb3",
-    strip_prefix = "portpicker-1.5.2/src",
+    sha256 = "bd507fd6f96f65ee02781f2e674e9dc6c99bbfa6e3c39992e3916204c9d431fa",
+    strip_prefix = "portpicker-1.6.0/src",
     urls = [
-        "https://files.pythonhosted.org/packages/3b/34/bfbd5236c7726452080a92a9f6ea9770cd65f51b05cef319ccb767ed32bf/portpicker-1.5.2.tar.gz",
+        "https://files.pythonhosted.org/packages/4d/d0/cda2fc582f09510c84cd6b7d7b9e22a02d4e45dbad2b2ef1c6edd7847e00/portpicker-1.6.0.tar.gz",
     ],
 )

@@ -3,7 +3,7 @@
  * test_rls_hooks.c
  *		Code for testing RLS hooks.
  *
- * Copyright (c) 2015-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2015-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		src/test/modules/test_rls_hooks/test_rls_hooks.c
@@ -97,7 +97,10 @@ test_rls_hooks_permissive(CmdType cmdtype, Relation relation)
 	 */
 
 	n = makeFuncCall(list_make2(makeString("pg_catalog"),
-								makeString("current_user")), NIL, 0);
+								makeString("current_user")),
+					 NIL,
+					 COERCE_EXPLICIT_CALL,
+					 -1);
 
 	c = makeNode(ColumnRef);
 	c->fields = list_make1(makeString("username"));
@@ -157,7 +160,10 @@ test_rls_hooks_restrictive(CmdType cmdtype, Relation relation)
 	policy->roles = construct_array(&role, 1, OIDOID, sizeof(Oid), true, TYPALIGN_INT);
 
 	n = makeFuncCall(list_make2(makeString("pg_catalog"),
-								makeString("current_user")), NIL, 0);
+								makeString("current_user")),
+					 NIL,
+					 COERCE_EXPLICIT_CALL,
+					 -1);
 
 	c = makeNode(ColumnRef);
 	c->fields = list_make1(makeString("supervisor"));

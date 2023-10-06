@@ -77,6 +77,11 @@ class QueryableTable : public zetasql::Table {
       absl::Span<const int> column_idxs) const override;
 
  private:
+  absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+  AnalyzeColumnExpression(
+      const Column* column, zetasql::TypeFactory* type_factory,
+      zetasql::Catalog* catalog,
+      std::optional<const zetasql::AnalyzerOptions> opt_options) const;
   // The underlying Table object which backes the QueryableTable.
   const backend::Table* wrapped_table_;
 

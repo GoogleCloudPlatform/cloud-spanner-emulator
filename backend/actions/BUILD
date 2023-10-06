@@ -356,23 +356,67 @@ cc_test(
 )
 
 cc_library(
+    name = "foreign_key_actions",
+    srcs = ["foreign_key_actions.cc"],
+    hdrs = ["foreign_key_actions.h"],
+    deps = [
+        ":action",
+        ":context",
+        ":ops",
+        "//backend/common:case",
+        "//backend/datamodel:key",
+        "//backend/datamodel:key_range",
+        "//backend/schema/catalog:schema",
+        "//backend/storage:iterator",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/types:span",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "foreign_key_actions_test",
+    srcs = ["foreign_key_actions_test.cc"],
+    deps = [
+        ":action",
+        ":foreign_key_actions",
+        ":ops",
+        "//backend/datamodel:key",
+        "//backend/schema/catalog:schema",
+        "//tests/common:actions",
+        "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
+        "//tests/common:test_schema_constructor",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_library(
     name = "manager",
     srcs = ["manager.cc"],
     hdrs = ["manager.h"],
     deps = [
         ":action",
+        ":change_stream",
         ":check_constraint",
         ":column_value",
         ":context",
         ":existence",
         ":foreign_key",
+        ":foreign_key_actions",
         ":generated_column",
         ":index",
         ":interleave",
         ":ops",
         ":unique_index",
         "//backend/access:write",
-        "//backend/actions:change_stream",
         "//backend/query:catalog",
         "//backend/query:function_catalog",
         "//backend/schema/catalog:schema",

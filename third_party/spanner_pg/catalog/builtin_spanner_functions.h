@@ -37,6 +37,11 @@
 namespace postgres_translator {
 namespace spangres {
 
+// In addition to adding any potential new functions for pg.numeric, existing
+// functions are also augmented with appropriate signatures for pg.numeric.
+void AddPgNumericFunctions(std::vector<PostgresFunctionArguments>& functions);
+void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions);
+
 void AddPgComparisonFunctions(
     std::vector<PostgresFunctionArguments>& functions);
 

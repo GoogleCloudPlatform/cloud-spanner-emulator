@@ -59,6 +59,7 @@ cc_library(
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
@@ -104,6 +105,7 @@ cc_test(
         "//common:errors",
         "//common:limits",
         "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
         "//tests/common:test_schema_constructor",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/time",
@@ -125,6 +127,20 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "foreign_key_test",
+    srcs = [
+        "foreign_key_test.cc",
+    ],
+    deps = [
+        ":schema",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],

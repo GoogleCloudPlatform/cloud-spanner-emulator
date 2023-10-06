@@ -1,10 +1,10 @@
 /*-------------------------------------------------------------------------
  *
  * pmsignal.c
- *	  routines for signaling the postmaster from its child processes
+ *	  routines for signaling between the postmaster and its child processes
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -26,6 +26,7 @@
 #include "replication/walsender.h"
 #include "storage/pmsignal.h"
 #include "storage/shmem.h"
+#include "utils/memutils.h"
 
 
 /*
@@ -55,6 +56,10 @@
  * but carries the extra information that the child is a WAL sender.
  * WAL senders too start in ACTIVE state, but switch to WALSENDER once they
  * start streaming the WAL (and they never go back to ACTIVE after that).
+ *
+ * We also have a shared-memory field that is used for communication in
+ * the opposite direction, from postmaster to children: it tells why the
+ * postmaster has broadcasted SIGQUIT signals, if indeed it has done so.
  */
 
 #define PM_CHILD_UNUSED		0	/* these values must fit in sig_atomic_t */
@@ -65,15 +70,26 @@
 /* "typedef struct PMSignalData PMSignalData" appears in pmsignal.h */
 struct PMSignalData
 {
-	/* per-reason flags */
+	/* per-reason flags for signaling the postmaster */
 	sig_atomic_t PMSignalFlags[NUM_PMSIGNALS];
+	/* global flags for signals from postmaster to children */
+	QuitSignalReason sigquit_reason;	/* why SIGQUIT was sent */
 	/* per-child-process flags */
 	int			num_child_flags;	/* # of entries in PMChildFlags[] */
-	int			next_child_flag;	/* next slot to try to assign */
 	sig_atomic_t PMChildFlags[FLEXIBLE_ARRAY_MEMBER];
 };
 
+/* PMSignalState pointer is valid in both postmaster and child processes */
 NON_EXEC_STATIC volatile PMSignalData *PMSignalState = NULL;
+
+/*
+ * These static variables are valid only in the postmaster.  We keep a
+ * duplicative private array so that we can trust its state even if some
+ * failing child has clobbered the PMSignalData struct in shared memory.
+ */
+static int	num_child_inuse;	/* # of entries in PMChildInUse[] */
+static int	next_child_inuse;	/* next slot to try to assign */
+static bool *PMChildInUse;		/* true if i'th flag slot is assigned */
 
 /*
  * Signal handler to be notified if postmaster dies.
@@ -134,8 +150,27 @@ PMSignalShmemInit(void)
 
 	if (!found)
 	{
+		/* initialize all flags to zeroes */
 		MemSet(unvolatize(PMSignalData *, PMSignalState), 0, PMSignalShmemSize());
-		PMSignalState->num_child_flags = MaxLivePostmasterChildren();
+		num_child_inuse = MaxLivePostmasterChildren();
+		PMSignalState->num_child_flags = num_child_inuse;
+
+		/*
+		 * Also allocate postmaster's private PMChildInUse[] array.  We
+		 * might've already done that in a previous shared-memory creation
+		 * cycle, in which case free the old array to avoid a leak.  (Do it
+		 * like this to support the possibility that MaxLivePostmasterChildren
+		 * changed.)  In a standalone backend, we do not need this.
+		 */
+		if (PostmasterContext != NULL)
+		{
+			if (PMChildInUse)
+				pfree(PMChildInUse);
+			PMChildInUse = (bool *)
+				MemoryContextAllocZero(PostmasterContext,
+									   num_child_inuse * sizeof(bool));
+		}
+		next_child_inuse = 0;
 	}
 }
 
@@ -171,6 +206,34 @@ CheckPostmasterSignal(PMSignalReason reason)
 	return false;
 }
 
+/*
+ * SetQuitSignalReason - broadcast the reason for a system shutdown.
+ * Should be called by postmaster before sending SIGQUIT to children.
+ *
+ * Note: in a crash-and-restart scenario, the "reason" field gets cleared
+ * as a part of rebuilding shared memory; the postmaster need not do it
+ * explicitly.
+ */
+void
+SetQuitSignalReason(QuitSignalReason reason)
+{
+	PMSignalState->sigquit_reason = reason;
+}
+
+/*
+ * GetQuitSignalReason - obtain the reason for a system shutdown.
+ * Called by child processes when they receive SIGQUIT.
+ * If the postmaster hasn't actually sent SIGQUIT, will return PMQUIT_NOT_SENT.
+ */
+QuitSignalReason
+GetQuitSignalReason(void)
+{
+	/* This is called in signal handlers, so be extra paranoid. */
+	if (!IsUnderPostmaster || PMSignalState == NULL)
+		return PMQUIT_NOT_SENT;
+	return PMSignalState->sigquit_reason;
+}
+
 
 /*
  * AssignPostmasterChildSlot - select an unused slot for a new postmaster
@@ -183,21 +246,24 @@ CheckPostmasterSignal(PMSignalReason reason)
 int
 AssignPostmasterChildSlot(void)
 {
-	int			slot = PMSignalState->next_child_flag;
+	int			slot = next_child_inuse;
 	int			n;
 
 	/*
-	 * Scan for a free slot.  We track the last slot assigned so as not to
-	 * waste time repeatedly rescanning low-numbered slots.
+	 * Scan for a free slot.  Notice that we trust nothing about the contents
+	 * of PMSignalState, but use only postmaster-local data for this decision.
+	 * We track the last slot assigned so as not to waste time repeatedly
+	 * rescanning low-numbered slots.
 	 */
-	for (n = PMSignalState->num_child_flags; n > 0; n--)
+	for (n = num_child_inuse; n > 0; n--)
 	{
 		if (--slot < 0)
-			slot = PMSignalState->num_child_flags - 1;
-		if (PMSignalState->PMChildFlags[slot] == PM_CHILD_UNUSED)
+			slot = num_child_inuse - 1;
+		if (!PMChildInUse[slot])
 		{
+			PMChildInUse[slot] = true;
 			PMSignalState->PMChildFlags[slot] = PM_CHILD_ASSIGNED;
-			PMSignalState->next_child_flag = slot;
+			next_child_inuse = slot;
 			return slot + 1;
 		}
 	}
@@ -219,7 +285,7 @@ ReleasePostmasterChildSlot(int slot)
 {
 	bool		result;
 
-	Assert(slot > 0 && slot <= PMSignalState->num_child_flags);
+	Assert(slot > 0 && slot <= num_child_inuse);
 	slot--;
 
 	/*
@@ -229,17 +295,18 @@ ReleasePostmasterChildSlot(int slot)
 	 */
 	result = (PMSignalState->PMChildFlags[slot] == PM_CHILD_ASSIGNED);
 	PMSignalState->PMChildFlags[slot] = PM_CHILD_UNUSED;
+	PMChildInUse[slot] = false;
 	return result;
 }
 
 /*
  * IsPostmasterChildWalSender - check if given slot is in use by a
- * walsender process.
+ * walsender process.  This is called only by the postmaster.
  */
 bool
 IsPostmasterChildWalSender(int slot)
 {
-	Assert(slot > 0 && slot <= PMSignalState->num_child_flags);
+	Assert(slot > 0 && slot <= num_child_inuse);
 	slot--;
 
 	if (PMSignalState->PMChildFlags[slot] == PM_CHILD_WALSENDER)

@@ -483,7 +483,7 @@ EngineSystemCatalog::BuildGsqlFunctionArgumentType(
       type_oid == ANYNONARRAYOID) {
     return zetasql::FunctionArgumentType(zetasql::ARG_TYPE_ANY_1,
                                            cardinality);
-  } else if (type_oid == ANYARRAYOID) {
+  } else if (type_oid == ANYARRAYOID || type_oid == ANYCOMPATIBLEARRAYOID) {
     return zetasql::FunctionArgumentType(zetasql::ARG_ARRAY_TYPE_ANY_1,
                                            cardinality);
   } else {
@@ -574,7 +574,9 @@ absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
     // If the return type doesn't match, skip it, but permit pseudo ANYARRAY
     // type to match any particular array type.
     if (postgres_signature->result_type().type() != return_type) {
-      if (pg_proc->prorettype != ANYARRAYOID || !return_type->IsArray()) {
+      if ((pg_proc->prorettype != ANYARRAYOID &&
+           pg_proc->prorettype != ANYCOMPATIBLEARRAYOID) ||
+          !return_type->IsArray()) {
         continue;
       }
     }

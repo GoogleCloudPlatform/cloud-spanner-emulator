@@ -77,6 +77,7 @@
 #include "third_party/spanner_pg/src/include/catalog/pg_type.h"
 #include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
 #include "third_party/spanner_pg/src/include/commands/defrem.h"
+#include "third_party/spanner_pg/src/include/common/string.h"
 #include "third_party/spanner_pg/src/include/nodes/pg_list.h"
 #include "third_party/spanner_pg/src/include/nodes/execnodes.h"
 #include "third_party/spanner_pg/src/include/nodes/makefuncs.h"
@@ -87,6 +88,7 @@
 #include "third_party/spanner_pg/src/include/nodes/primnodes.h"
 #include "third_party/spanner_pg/src/include/nodes/print.h"
 #include "third_party/spanner_pg/src/include/nodes/readfuncs.h"
+#include "third_party/spanner_pg/src/include/nodes/subscripting.h"
 #include "third_party/spanner_pg/src/include/nodes/value.h"
 #include "third_party/spanner_pg/src/include/optimizer/tlist.h"
 #include "third_party/spanner_pg/src/include/parser/analyze.h"
@@ -114,6 +116,7 @@
 #include "third_party/spanner_pg/src/include/utils/int8.h"  // DO_NOT_TRANSFORM
 #include "third_party/spanner_pg/src/include/utils/lsyscache.h"
 #include "third_party/spanner_pg/src/include/utils/memutils.h"
+#include "third_party/spanner_pg/src/include/utils/numeric.h"
 #include "third_party/spanner_pg/src/include/utils/ruleutils.h"
 // TODO: remove syscache when get_func_arg_info_spangres is done
 // with it.

@@ -68,7 +68,7 @@ class ActionsTest : public testing::Test {
                     type_factory_.get())
                     .value()),
         change_stream_effects_buffer_(
-            std::make_unique<ChangeStreamTransactionEffectsBuffer>(id_)),
+            std::make_unique<ChangeStreamTransactionEffectsBuffer>(5)),
         test_table_(schema_->FindTable("TestTable")),
         test_table2_(schema_->FindTable("TestTable2")),
         int_col_(test_table_->FindColumn("Int64Col")),
@@ -81,7 +81,6 @@ class ActionsTest : public testing::Test {
  protected:
   std::unique_ptr<zetasql::TypeFactory> type_factory_;
   std::unique_ptr<const Schema> schema_;
-  int64_t id_;
   std::unique_ptr<ChangeStreamEffectsBuffer> change_stream_effects_buffer_;
   const Table* test_table_;
   const Table* test_table2_;
@@ -114,8 +113,6 @@ TEST_F(ActionsTest, TestSingleInsert) {
                                  .values = {values}};
   change_stream_effects_buffer_->Insert(partition_token_str, change_stream_,
                                         insert_op_2);
-  // change_stream_effects_buffer_->BuildMutation();
-  // EXPECT_EQ(change_stream_effects_buffer_->GetWriteOps().size(), 1);
   std::vector<const Column*> update_columns = {
       test_table_->FindColumn("StringCol")};
   std::vector<zetasql::Value> update_values = {
@@ -131,6 +128,8 @@ TEST_F(ActionsTest, TestSingleInsert) {
                                         delete_op);
   change_stream_effects_buffer_->BuildMutation();
   EXPECT_EQ(change_stream_effects_buffer_->GetWriteOps().size(), 4);
+  change_stream_effects_buffer_->ClearWriteOps();
+  EXPECT_EQ(change_stream_effects_buffer_->GetWriteOps().size(), 0);
 }
 
 }  // namespace

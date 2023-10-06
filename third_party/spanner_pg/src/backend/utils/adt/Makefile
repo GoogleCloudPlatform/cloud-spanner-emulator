@@ -19,12 +19,13 @@ OBJS = \
 	array_typanalyze.o \
 	array_userfuncs.o \
 	arrayfuncs.o \
+	arraysubs.o \
 	arrayutils.o \
 	ascii.o \
 	bool.o \
 	cash.o \
 	char.o \
-	cryptohashes.o \
+	cryptohashfuncs.o \
 	date.o \
 	datetime.o \
 	datum.o \
@@ -51,6 +52,7 @@ OBJS = \
 	jsonb_op.o \
 	jsonb_util.o \
 	jsonfuncs.o \
+	jsonbsubs.o \
 	jsonpath.o \
 	jsonpath_exec.o \
 	jsonpath_gram.o \
@@ -59,7 +61,10 @@ OBJS = \
 	lockfuncs.o \
 	mac.o \
 	mac8.o \
+	mcxtfuncs.o \
 	misc.o \
+	multirangetypes.o \
+	multirangetypes_selfuncs.o \
 	name.o \
 	network.o \
 	network_gist.o \
@@ -125,6 +130,9 @@ clean distclean maintainer-clean:
 	rm -f lex.backup
 
 like.o: like.c like_match.c
+
+# Some code in numeric.c benefits from auto-vectorization
+numeric.o: CFLAGS += ${CFLAGS_VECTORIZE}
 
 varlena.o: varlena.c levenshtein.c
 

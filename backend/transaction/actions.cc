@@ -19,12 +19,15 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "zetasql/public/json_value.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.pb.h"
+#include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -149,19 +152,14 @@ ChangeStreamTransactionEffectsBuffer::ComputeChangeStreamDataTableKey(
 
 absl::StatusOr<WriteOp>
 ChangeStreamTransactionEffectsBuffer::ConvertDataChangeRecordToWriteOp(
-    const ChangeStream* change_stream, DataChangeRecord record) {
+    const ChangeStream* change_stream, DataChangeRecord record,
+    std::vector<const Column*> columns) {
   // Compute change_stream_data_table key
   ZETASQL_ASSIGN_OR_RETURN(Key change_stream_data_table_key,
                    ComputeChangeStreamDataTableKey(
                        record.partition_token, record.commit_timestamp,
                        record.server_transaction_id, record.record_sequence,
                        change_stream->change_stream_data_table()->Name()));
-  std::vector<const Column*> columns;
-  for (const Column* column :
-       change_stream->change_stream_data_table()->columns()) {
-    columns.push_back(column);
-  }
-
   std::vector<zetasql::Value> values;
   values.push_back(record.partition_token);
   values.push_back(record.commit_timestamp);
@@ -170,21 +168,31 @@ ChangeStreamTransactionEffectsBuffer::ConvertDataChangeRecordToWriteOp(
   values.push_back(zetasql::Value::Bool(
       record.is_last_record_in_transaction_in_partition));
   values.push_back(zetasql::Value::String(record.tracked_table_name));
-
-  std::vector<zetasql::JSONValue> column_types;
+  std::vector<zetasql::Value> column_types_name;
+  std::vector<zetasql::Value> column_types_type;
+  std::vector<zetasql::Value> column_types_is_primary_key;
+  std::vector<zetasql::Value> column_types_ordinal_position;
   for (const ColumnType& column_type : record.column_types) {
-    JSON column_type_json;
-    column_type_json["name"] = column_type.name;
+    column_types_name.push_back(zetasql::Value::String(column_type.name));
     JSON type_json;
     type_json["code"] = column_type.type;
-    column_type_json["type"] = type_json.dump();
-    column_type_json["is_primary_key"] = column_type.is_primary_key;
-    column_type_json["ordinal_position"] = column_type.ordinal_position;
-    column_types.push_back(
-        zetasql::JSONValue::ParseJSONString(column_type_json.dump()).value());
+    column_types_type.push_back(zetasql::Value::String(type_json.dump()));
+    column_types_is_primary_key.push_back(
+        zetasql::Value::Bool(column_type.is_primary_key));
+    column_types_ordinal_position.push_back(
+        zetasql::Value::Int64(column_type.ordinal_position));
   }
-  values.push_back(zetasql::values::JsonArray(column_types));
-  std::vector<zetasql::JSONValue> mods;
+  values.push_back(zetasql::values::Array(zetasql::types::StringArrayType(),
+                                            column_types_name));
+  values.push_back(zetasql::values::Array(zetasql::types::StringArrayType(),
+                                            column_types_type));
+  values.push_back(zetasql::values::Array(zetasql::types::BoolArrayType(),
+                                            column_types_is_primary_key));
+  values.push_back(zetasql::values::Array(zetasql::types::Int64ArrayType(),
+                                            column_types_ordinal_position));
+  std::vector<zetasql::Value> mods_keys;
+  std::vector<zetasql::Value> mods_new_values;
+  std::vector<zetasql::Value> mods_old_values;
   for (const Mod& mod : record.mods) {
     JSON mod_json;
     JSON keys_json;
@@ -211,18 +219,23 @@ ChangeStreamTransactionEffectsBuffer::ConvertDataChangeRecordToWriteOp(
                 : mod.new_values[i].GetSQLLiteral();
       }
     }
-    mod_json["keys"] = keys_json.dump();
-    mod_json["new_values"] = new_values_json.dump();
+    mods_keys.push_back(zetasql::Value::String(keys_json.dump()));
     if (mod.new_values.empty()) {
-      mod_json["new_values"] = kMinimumValidJson;
+      mods_new_values.push_back(zetasql::Value::String(kMinimumValidJson));
+    } else {
+      mods_new_values.push_back(
+          zetasql::Value::String(new_values_json.dump()));
     }
     // OLD_AND_NEW_VALUES is not supported yet so field old_value is always an
     // empty "{}"
-    mod_json["old_values"] = kMinimumValidJson;
-    mods.push_back(
-        zetasql::JSONValue::ParseJSONString(mod_json.dump()).value());
+    mods_old_values.push_back(zetasql::Value::String(kMinimumValidJson));
   }
-  values.push_back(zetasql::values::JsonArray(mods));
+  values.push_back(
+      zetasql::values::Array(zetasql::types::StringArrayType(), mods_keys));
+  values.push_back(zetasql::values::Array(zetasql::types::StringArrayType(),
+                                            mods_new_values));
+  values.push_back(zetasql::values::Array(zetasql::types::StringArrayType(),
+                                            mods_old_values));
   values.push_back(zetasql::Value::String(record.mod_type));
   values.push_back(zetasql::Value::String(record.value_capture_type));
   values.push_back(
@@ -289,7 +302,7 @@ bool CheckIfNonKeyColumnsRemainSame(std::vector<const Column*> op_columns,
 // Accumulate tracked column types and values for same DataChangeRecord
 void ChangeStreamTransactionEffectsBuffer::LogTableMod(
     const Key& key, std::vector<const Column*> columns,
-    const std::vector<zetasql::Value>& values, const Table* tracked_table,
+    std::vector<zetasql::Value> values, const Table* tracked_table,
     const ChangeStream* change_stream, std::string mod_type,
     zetasql::Value partition_token_str) {
   if (last_mod_group_by_change_stream_.contains(change_stream)) {
@@ -314,6 +327,31 @@ void ChangeStreamTransactionEffectsBuffer::LogTableMod(
   std::vector<zetasql::Value> new_values_for_tracked_cols;
   std::vector<ColumnType> column_types;
   std::vector<std::string> non_key_cols;
+  // For DELETE, column_types should contain all tracked columns in the table
+  if (mod_type == kDelete) {
+    columns = {tracked_table->columns().begin(),
+               tracked_table->columns().end()};
+  }
+  // For INSERT, column_types should also contain all tracked but not populated
+  // columns in the table
+  if (mod_type == kInsert) {
+    std::vector<const Column*> all_columns;
+    std::vector<zetasql::Value> all_values;
+    absl::flat_hash_map<const Column*, zetasql::Value> col_to_value;
+    for (int i = 0; i < columns.size(); ++i) {
+      col_to_value[columns[i]] = values[i];
+    }
+    for (const Column* col : tracked_table->columns()) {
+      all_columns.push_back(col);
+      if (col_to_value.contains(col)) {
+        all_values.push_back(col_to_value[col]);
+      } else {
+        all_values.push_back(zetasql::Value::NullString());
+      }
+    }
+    columns = std::move(all_columns);
+    values = std::move(all_values);
+  }
   for (int i = 0; i < columns.size(); ++i) {
     const Column* column = columns[i];
     bool is_primary_key = IsPrimaryKey(tracked_table, column);
@@ -326,7 +364,7 @@ void ChangeStreamTransactionEffectsBuffer::LogTableMod(
           column->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL),
           is_primary_key, ordinal_position};
       column_types.push_back(column_type);
-      if (!is_primary_key) {
+      if (!is_primary_key && mod_type != kDelete) {
         new_values_for_tracked_cols.push_back(values[i]);
         non_key_cols.push_back(column->Name());
       }
@@ -409,8 +447,14 @@ void ChangeStreamTransactionEffectsBuffer::BuildMutation() {
         .push_back(record);
   }
   last_mod_group_by_change_stream_.clear();
+  std::vector<const Column*> columns;
   for (auto& [change_stream, records] :
        data_change_records_in_transaction_by_change_stream_) {
+    // Each change_stream has one change_stream_data_table
+    for (const Column* column :
+         change_stream->change_stream_data_table()->columns()) {
+      columns.push_back(column);
+    }
     int64_t number_of_records_in_transaction = records.size();
     data_change_records_in_transaction_by_change_stream_
         [change_stream][number_of_records_in_transaction - 1]
@@ -419,13 +463,20 @@ void ChangeStreamTransactionEffectsBuffer::BuildMutation() {
       record.number_of_records_in_transaction =
           number_of_records_in_transaction;
       writeops_.push_back(
-          ConvertDataChangeRecordToWriteOp(change_stream, record).value());
+          ConvertDataChangeRecordToWriteOp(change_stream, record, columns)
+              .value());
     }
+    columns.clear();
   }
+  data_change_records_in_transaction_by_change_stream_.clear();
 }
 
 std::vector<WriteOp> ChangeStreamTransactionEffectsBuffer::GetWriteOps() {
   return writeops_;
+}
+
+void ChangeStreamTransactionEffectsBuffer::ClearWriteOps() {
+  writeops_.clear();
 }
 
 }  // namespace backend

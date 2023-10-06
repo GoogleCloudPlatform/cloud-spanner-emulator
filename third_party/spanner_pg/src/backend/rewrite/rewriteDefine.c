@@ -3,7 +3,7 @@
  * rewriteDefine.c
  *	  routines for defining a rewrite rule
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -23,7 +23,6 @@
 #include "catalog/catalog.h"
 #include "catalog/dependency.h"
 #include "catalog/heap.h"
-#include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "catalog/objectaccess.h"
 #include "catalog/pg_inherits.h"
@@ -534,6 +533,18 @@ DefineQueryRewrite(const char *rulename,
 								RelationGetDescr(event_relation),
 								false, false);
 		}
+
+		/*
+		 * And finally, if it's not an ON SELECT rule then it must *not* be
+		 * named _RETURN.  This prevents accidentally or maliciously replacing
+		 * a view's ON SELECT rule with some other kind of rule.
+		 */
+		if (strcmp(rulename, ViewSelectRuleName) == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+					 errmsg("non-view rule for \"%s\" must not be named \"%s\"",
+							RelationGetRelationName(event_relation),
+							ViewSelectRuleName)));
 	}
 
 	/*
@@ -634,7 +645,7 @@ DefineQueryRewrite(const char *rulename,
 		classForm->relam = InvalidOid;
 		classForm->reltablespace = InvalidOid;
 		classForm->relpages = 0;
-		classForm->reltuples = 0;
+		classForm->reltuples = -1;
 		classForm->relallvisible = 0;
 		classForm->reltoastrelid = InvalidOid;
 		classForm->relhasindex = false;

@@ -32,6 +32,7 @@
 #include "common/errors.h"
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
+#include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
 
 namespace google {

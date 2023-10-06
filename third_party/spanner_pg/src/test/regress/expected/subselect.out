@@ -86,131 +86,131 @@ INSERT INTO SUBSELECT_TBL VALUES (2, 2, 2);
 INSERT INTO SUBSELECT_TBL VALUES (3, 3, 3);
 INSERT INTO SUBSELECT_TBL VALUES (6, 7, 8);
 INSERT INTO SUBSELECT_TBL VALUES (8, 9, NULL);
-SELECT '' AS eight, * FROM SUBSELECT_TBL;
- eight | f1 | f2 | f3 
--------+----+----+----
-       |  1 |  2 |  3
-       |  2 |  3 |  4
-       |  3 |  4 |  5
-       |  1 |  1 |  1
-       |  2 |  2 |  2
-       |  3 |  3 |  3
-       |  6 |  7 |  8
-       |  8 |  9 |   
+SELECT * FROM SUBSELECT_TBL;
+ f1 | f2 | f3 
+----+----+----
+  1 |  2 |  3
+  2 |  3 |  4
+  3 |  4 |  5
+  1 |  1 |  1
+  2 |  2 |  2
+  3 |  3 |  3
+  6 |  7 |  8
+  8 |  9 |   
 (8 rows)
 
 -- Uncorrelated subselects
-SELECT '' AS two, f1 AS "Constant Select" FROM SUBSELECT_TBL
+SELECT f1 AS "Constant Select" FROM SUBSELECT_TBL
   WHERE f1 IN (SELECT 1);
- two | Constant Select 
------+-----------------
-     |               1
-     |               1
+ Constant Select 
+-----------------
+               1
+               1
 (2 rows)
 
-SELECT '' AS six, f1 AS "Uncorrelated Field" FROM SUBSELECT_TBL
+SELECT f1 AS "Uncorrelated Field" FROM SUBSELECT_TBL
   WHERE f1 IN (SELECT f2 FROM SUBSELECT_TBL);
- six | Uncorrelated Field 
------+--------------------
-     |                  1
-     |                  2
-     |                  3
-     |                  1
-     |                  2
-     |                  3
+ Uncorrelated Field 
+--------------------
+                  1
+                  2
+                  3
+                  1
+                  2
+                  3
 (6 rows)
 
-SELECT '' AS six, f1 AS "Uncorrelated Field" FROM SUBSELECT_TBL
+SELECT f1 AS "Uncorrelated Field" FROM SUBSELECT_TBL
   WHERE f1 IN (SELECT f2 FROM SUBSELECT_TBL WHERE
     f2 IN (SELECT f1 FROM SUBSELECT_TBL));
- six | Uncorrelated Field 
------+--------------------
-     |                  1
-     |                  2
-     |                  3
-     |                  1
-     |                  2
-     |                  3
+ Uncorrelated Field 
+--------------------
+                  1
+                  2
+                  3
+                  1
+                  2
+                  3
 (6 rows)
 
-SELECT '' AS three, f1, f2
+SELECT f1, f2
   FROM SUBSELECT_TBL
   WHERE (f1, f2) NOT IN (SELECT f2, CAST(f3 AS int4) FROM SUBSELECT_TBL
                          WHERE f3 IS NOT NULL);
- three | f1 | f2 
--------+----+----
-       |  1 |  2
-       |  6 |  7
-       |  8 |  9
+ f1 | f2 
+----+----
+  1 |  2
+  6 |  7
+  8 |  9
 (3 rows)
 
 -- Correlated subselects
-SELECT '' AS six, f1 AS "Correlated Field", f2 AS "Second Field"
+SELECT f1 AS "Correlated Field", f2 AS "Second Field"
   FROM SUBSELECT_TBL upper
   WHERE f1 IN (SELECT f2 FROM SUBSELECT_TBL WHERE f1 = upper.f1);
- six | Correlated Field | Second Field 
------+------------------+--------------
-     |                1 |            2
-     |                2 |            3
-     |                3 |            4
-     |                1 |            1
-     |                2 |            2
-     |                3 |            3
+ Correlated Field | Second Field 
+------------------+--------------
+                1 |            2
+                2 |            3
+                3 |            4
+                1 |            1
+                2 |            2
+                3 |            3
 (6 rows)
 
-SELECT '' AS six, f1 AS "Correlated Field", f3 AS "Second Field"
+SELECT f1 AS "Correlated Field", f3 AS "Second Field"
   FROM SUBSELECT_TBL upper
   WHERE f1 IN
     (SELECT f2 FROM SUBSELECT_TBL WHERE CAST(upper.f2 AS float) = f3);
- six | Correlated Field | Second Field 
------+------------------+--------------
-     |                2 |            4
-     |                3 |            5
-     |                1 |            1
-     |                2 |            2
-     |                3 |            3
+ Correlated Field | Second Field 
+------------------+--------------
+                2 |            4
+                3 |            5
+                1 |            1
+                2 |            2
+                3 |            3
 (5 rows)
 
-SELECT '' AS six, f1 AS "Correlated Field", f3 AS "Second Field"
+SELECT f1 AS "Correlated Field", f3 AS "Second Field"
   FROM SUBSELECT_TBL upper
   WHERE f3 IN (SELECT upper.f1 + f2 FROM SUBSELECT_TBL
                WHERE f2 = CAST(f3 AS integer));
- six | Correlated Field | Second Field 
------+------------------+--------------
-     |                1 |            3
-     |                2 |            4
-     |                3 |            5
-     |                6 |            8
+ Correlated Field | Second Field 
+------------------+--------------
+                1 |            3
+                2 |            4
+                3 |            5
+                6 |            8
 (4 rows)
 
-SELECT '' AS five, f1 AS "Correlated Field"
+SELECT f1 AS "Correlated Field"
   FROM SUBSELECT_TBL
   WHERE (f1, f2) IN (SELECT f2, CAST(f3 AS int4) FROM SUBSELECT_TBL
                      WHERE f3 IS NOT NULL);
- five | Correlated Field 
-------+------------------
-      |                2
-      |                3
-      |                1
-      |                2
-      |                3
+ Correlated Field 
+------------------
+                2
+                3
+                1
+                2
+                3
 (5 rows)
 
 --
 -- Use some existing tables in the regression test
 --
-SELECT '' AS eight, ss.f1 AS "Correlated Field", ss.f3 AS "Second Field"
+SELECT ss.f1 AS "Correlated Field", ss.f3 AS "Second Field"
   FROM SUBSELECT_TBL ss
   WHERE f1 NOT IN (SELECT f1+1 FROM INT4_TBL
                    WHERE f1 != ss.f1 AND f1 < 2147483647);
- eight | Correlated Field | Second Field 
--------+------------------+--------------
-       |                2 |            4
-       |                3 |            5
-       |                2 |            2
-       |                3 |            3
-       |                6 |            8
-       |                8 |             
+ Correlated Field | Second Field 
+------------------+--------------
+                2 |            4
+                3 |            5
+                2 |            2
+                3 |            3
+                6 |            8
+                8 |             
 (6 rows)
 
 select q1, float8(count(*)) / (select count(*) from int8_tbl)
@@ -790,6 +790,29 @@ select 'foo'::text in (select 'bar'::name union all select 'bar'::name);
 (1 row)
 
 --
+-- Test that we don't try to hash nested records (bug #17363)
+-- (Hashing could be supported, but for now we don't)
+--
+explain (verbose, costs off)
+select row(row(row(1))) = any (select row(row(1)));
+                QUERY PLAN                 
+-------------------------------------------
+ Result
+   Output: (SubPlan 1)
+   SubPlan 1
+     ->  Materialize
+           Output: '("(1)")'::record
+           ->  Result
+                 Output: '("(1)")'::record
+(7 rows)
+
+select row(row(row(1))) = any (select row(row(1)));
+ ?column? 
+----------
+ t
+(1 row)
+
+--
 -- Test case for premature memory release during hashing of subplan output
 --
 select '1'::text in (select '1'::name union all select '1'::name);
@@ -874,6 +897,93 @@ select * from int8_tbl where q1 in (select c1 from inner_text);
 (2 rows)
 
 rollback;  -- to get rid of the bogus operator
+--
+-- Test resolution of hashed vs non-hashed implementation of EXISTS subplan
+--
+explain (costs off)
+select count(*) from tenk1 t
+where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0);
+                          QUERY PLAN                          
+--------------------------------------------------------------
+ Aggregate
+   ->  Seq Scan on tenk1 t
+         Filter: ((hashed SubPlan 2) OR (ten < 0))
+         SubPlan 2
+           ->  Index Only Scan using tenk1_unique1 on tenk1 k
+(5 rows)
+
+select count(*) from tenk1 t
+where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0);
+ count 
+-------
+ 10000
+(1 row)
+
+explain (costs off)
+select count(*) from tenk1 t
+where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0)
+  and thousand = 1;
+                          QUERY PLAN                          
+--------------------------------------------------------------
+ Aggregate
+   ->  Bitmap Heap Scan on tenk1 t
+         Recheck Cond: (thousand = 1)
+         Filter: ((SubPlan 1) OR (ten < 0))
+         ->  Bitmap Index Scan on tenk1_thous_tenthous
+               Index Cond: (thousand = 1)
+         SubPlan 1
+           ->  Index Only Scan using tenk1_unique1 on tenk1 k
+                 Index Cond: (unique1 = t.unique2)
+(9 rows)
+
+select count(*) from tenk1 t
+where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0)
+  and thousand = 1;
+ count 
+-------
+    10
+(1 row)
+
+-- It's possible for the same EXISTS to get resolved both ways
+create temp table exists_tbl (c1 int, c2 int, c3 int) partition by list (c1);
+create temp table exists_tbl_null partition of exists_tbl for values in (null);
+create temp table exists_tbl_def partition of exists_tbl default;
+insert into exists_tbl select x, x/2, x+1 from generate_series(0,10) x;
+analyze exists_tbl;
+explain (costs off)
+select * from exists_tbl t1
+  where (exists(select 1 from exists_tbl t2 where t1.c1 = t2.c2) or c3 < 0);
+                      QUERY PLAN                      
+------------------------------------------------------
+ Append
+   ->  Seq Scan on exists_tbl_null t1_1
+         Filter: ((SubPlan 1) OR (c3 < 0))
+         SubPlan 1
+           ->  Append
+                 ->  Seq Scan on exists_tbl_null t2_1
+                       Filter: (t1_1.c1 = c2)
+                 ->  Seq Scan on exists_tbl_def t2_2
+                       Filter: (t1_1.c1 = c2)
+   ->  Seq Scan on exists_tbl_def t1_2
+         Filter: ((hashed SubPlan 2) OR (c3 < 0))
+         SubPlan 2
+           ->  Append
+                 ->  Seq Scan on exists_tbl_null t2_4
+                 ->  Seq Scan on exists_tbl_def t2_5
+(15 rows)
+
+select * from exists_tbl t1
+  where (exists(select 1 from exists_tbl t2 where t1.c1 = t2.c2) or c3 < 0);
+ c1 | c2 | c3 
+----+----+----
+  0 |  0 |  1
+  1 |  0 |  2
+  2 |  1 |  3
+  3 |  1 |  4
+  4 |  2 |  5
+  5 |  2 |  6
+(6 rows)
+
 --
 -- Test case for planner bug with nested EXISTS handling
 --
@@ -1044,19 +1154,22 @@ select sum(o.four), sum(ss.a) from
     select * from x
   ) ss
 where o.ten = 1;
-                    QUERY PLAN                     
----------------------------------------------------
+                       QUERY PLAN                        
+---------------------------------------------------------
  Aggregate
    ->  Nested Loop
          ->  Seq Scan on onek o
                Filter: (ten = 1)
-         ->  CTE Scan on x
-               CTE x
-                 ->  Recursive Union
-                       ->  Result
-                       ->  WorkTable Scan on x x_1
-                             Filter: (a < 10)
-(10 rows)
+         ->  Memoize
+               Cache Key: o.four
+               Cache Mode: binary
+               ->  CTE Scan on x
+                     CTE x
+                       ->  Recursive Union
+                             ->  Result
+                             ->  WorkTable Scan on x x_1
+                                   Filter: (a < 10)
+(13 rows)
 
 select sum(o.four), sum(ss.a) from
   onek o cross join lateral (

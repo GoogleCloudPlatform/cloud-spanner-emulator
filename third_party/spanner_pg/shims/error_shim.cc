@@ -54,6 +54,9 @@ extern "C" __thread jmp_buf* error_jump_buffer;
 extern "C" __thread const char* error_string_buffer;
 extern "C" __thread int error_code_buffer;
 
+// Internal PG function for freeing memory inside PG's thread-local freelists
+extern "C" void AsetDeleteFreelists(void);
+
 namespace postgres_translator {
 
 // Hardcodes the collation for all function calls
@@ -136,7 +139,8 @@ absl::StatusOr<interfaces::ParserOutput> CheckedPgRawParserFullOutput(
   ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   SpangresTokenLocations locations;
   ZETASQL_ASSIGN_OR_RETURN(List * parse_tree,
-                   ErrorCheckedPgCall(raw_parser_spangres, sql, &locations));
+                   ErrorCheckedPgCall(raw_parser_spangres, sql,
+                                      RAW_PARSE_DEFAULT, &locations));
   return interfaces::ParserOutput(parse_tree,
                                   std::move(locations.start_end_pairs));
 }
@@ -265,6 +269,15 @@ absl::StatusOr<Datum> CheckedPgStringToDatum(const char* str, Oid datatype) {
   }
 }
 
+absl::StatusOr<char*> CheckedPgCStringDatumToCString(Datum cstr) {
+  try {
+    // DatumGetCString is a macro, so we can not use ErrorCheckedPgCall
+    return DatumGetCString(cstr);
+  } catch (const postgres_translator::PostgresEreportException& exc) {
+    return ConvertPostgresError(exc);
+  }
+}
+
 absl::StatusOr<text*> CheckedPgCStringToTextWithLen(const char* str, int len) {
   return ErrorCheckedPgCall(cstring_to_text_with_len, str, len);
 }
@@ -327,6 +340,14 @@ absl::StatusOr<void*> CheckedPgMemoryContextAllocZeroAligned(
 absl::StatusOr<void*> CheckedPgMemoryContextAllocHuge(MemoryContext context,
                                                       size_t size) {
   return ErrorCheckedPgCall(MemoryContextAllocHuge, context, size);
+}
+
+absl::Status CheckedPgMemoryContextDelete(MemoryContext context) {
+  return ErrorCheckedPgCallNoReturnValue(MemoryContextDelete, context);
+}
+
+absl::Status CheckedPgAsetDeleteFreelists() {
+  return ErrorCheckedPgCallNoReturnValue(AsetDeleteFreelists);
 }
 
 absl::StatusOr<TargetEntry*> CheckedPgGetSortGroupTargetEntry(
@@ -563,6 +584,10 @@ absl::StatusOr<ArrayType*> CheckedPgDatumGetArrayTypeP(Datum datum) {
   ZETASQL_ASSIGN_OR_RETURN(void* p,
                    ErrorCheckedPgCall(pg_detoast_datum, datum_as_varlena));
   return reinterpret_cast<ArrayType*>(p);
+}
+
+absl::StatusOr<Type> CheckedPgTypeidType(Oid id) {
+  return ErrorCheckedPgCall(typeidType, id);
 }
 
 // Simple test functions that generate a PostgreSQL error when called.

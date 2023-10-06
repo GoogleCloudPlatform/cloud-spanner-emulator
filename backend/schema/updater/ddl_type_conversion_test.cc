@@ -29,6 +29,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/schema/ddl/operations.pb.h"
+#include "tests/common/proto_matchers.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {

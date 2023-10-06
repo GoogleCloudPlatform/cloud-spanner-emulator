@@ -31,13 +31,20 @@
 
 #include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
 
+#include <cstdint>
+#include <memory>
+
 #include "zetasql/public/function.h"
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
+#include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
+#include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
 
 namespace postgres_translator {
 namespace {
@@ -72,7 +79,6 @@ TEST(PGFunctionEvaluators, CallsGivenCleanupFunction) {
               IsOkAndHolds(zetasql::values::Int64(123)));
   EXPECT_TRUE(function_called);
 }
-
 }  // namespace
 }  // namespace postgres_translator
 

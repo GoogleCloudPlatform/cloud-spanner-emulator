@@ -36,7 +36,7 @@ max_standby_streaming_delay = 50ms
 # Some of the recovery conflict logging code only gets exercised after
 # deadlock_timeout. The test doesn't rely on that additional output, but it's
 # nice to get some minimal coverage of that code.
-#log_recovery_conflict_waits = on # doesn't exist < 14.
+log_recovery_conflict_waits = on
 deadlock_timeout = 10ms
 ]);
 $node_primary->start;

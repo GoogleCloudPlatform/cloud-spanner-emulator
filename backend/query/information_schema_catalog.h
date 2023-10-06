@@ -24,6 +24,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/simple_catalog.h"
 #include "absl/container/flat_hash_map.h"
+#include "backend/query/spanner_sys_catalog.h"
 #include "backend/schema/catalog/schema.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 
@@ -54,11 +55,13 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   static constexpr char kName[] = "INFORMATION_SCHEMA";
   static constexpr char kPGName[] = "PG_INFORMATION_SCHEMA";
 
-  explicit InformationSchemaCatalog(const std::string& catalog_name,
-                                    const Schema* default_schema);
+  explicit InformationSchemaCatalog(
+      const std::string& catalog_name, const Schema* default_schema,
+      const SpannerSysCatalog* spanner_sys_catalog);
 
  private:
   const Schema* default_schema_;
+  const SpannerSysCatalog* spanner_sys_catalog_;
   const ::google::spanner::admin::database::v1::DatabaseDialect dialect_;
   absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
       tables_by_name_;
@@ -80,15 +83,13 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   void FillSchemataTable();
   void FillSpannerStatisticsTable();
   void FillDatabaseOptionsTable();
+  void FillColumnOptionsTable();
 
   void FillTablesTable();
   void FillColumnsTable();
   void FillColumnColumnUsageTable();
   void FillIndexesTable();
   void FillIndexColumnsTable();
-
-  void AddColumnOptionsTable();
-
   void FillTableConstraintsTable();
   void FillCheckConstraintsTable();
   void FillConstraintTableUsageTable();
@@ -96,6 +97,11 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   void FillKeyColumnUsageTable();
   void FillConstraintColumnUsageTable();
   void FillViewsTable();
+
+  void FillChangeStreamsTable();
+  void FillChangeStreamTablesTable();
+  void FillChangeStreamOptionsTable();
+  void FillChangeStreamColumnsTable();
 };
 
 }  // namespace backend

@@ -34,22 +34,14 @@
 #include <string.h>
 
 #include <cstdint>
-#include <memory>
-#include <set>
 #include <string>
-#include <tuple>
-#include <type_traits>
-#include <utility>
-#include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
-#include "absl/types/optional.h"
+#include "third_party/spanner_pg/ddl/ddl_translator.h"
 #include "third_party/spanner_pg/ddl/translation_utils.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
@@ -65,6 +57,114 @@ using internal::FieldTypeChecker;
 
 // Returns true if PG list is empty or nullptr
 bool IsListEmpty(const List* list) { return list_length(list) == 0; }
+
+absl::StatusOr<std::string> ObjectTypeToString(ObjectType object_type) {
+  switch (object_type) {
+    case OBJECT_TABLE:
+      return "TABLE";
+    case OBJECT_ACCESS_METHOD:
+      return "ACCESS METHOD";
+    case OBJECT_AGGREGATE:
+      return "AGGREGATE";
+    case OBJECT_AMOP:
+      return "AMOP";
+    case OBJECT_AMPROC:
+      return "AMPROC";
+    case OBJECT_ATTRIBUTE:
+      return "ATTRIBUTE";
+    case OBJECT_CAST:
+      return "CAST";
+    case OBJECT_CHANGE_STREAM:
+      return "CHANGE STREAM";
+    case OBJECT_COLUMN:
+      return "COLUMN";
+    case OBJECT_COLLATION:
+      return "COLLATION";
+    case OBJECT_CONVERSION:
+      return "CONVERSION";
+    case OBJECT_DATABASE:
+      return "DATABASE";
+    case OBJECT_DEFAULT:
+      return "DEFAULT";
+    case OBJECT_DEFACL:
+      return "DEFACL";
+    case OBJECT_DOMAIN:
+      return "DOMAIN";
+    case OBJECT_DOMCONSTRAINT:
+      return "DOMCONSTRAINT";
+    case OBJECT_EVENT_TRIGGER:
+      return "EVENT TRIGGER";
+    case OBJECT_EXTENSION:
+      return "EXTENSION";
+    case OBJECT_FDW:
+      return "FDW";
+    case OBJECT_FOREIGN_SERVER:
+      return "FOREIGN_SERVER";
+    case OBJECT_FOREIGN_TABLE:
+      return "FOREIGN_TABLE";
+    case OBJECT_FUNCTION:
+      return "FUNCTION";
+    case OBJECT_INDEX:
+      return "INDEX";
+    case OBJECT_LANGUAGE:
+      return "LANGUAGE";
+    case OBJECT_LARGEOBJECT:
+      return "LARGEOBJECT";
+    case OBJECT_MATVIEW:
+      return "MATVIEW";
+    case OBJECT_OPCLASS:
+      return "OPCLASS";
+    case OBJECT_OPERATOR:
+      return "OPERATOR";
+    case OBJECT_OPFAMILY:
+      return "OPFAMILY";
+    case OBJECT_POLICY:
+      return "POLICY";
+    case OBJECT_PROCEDURE:
+      return "PROCEDURE";
+    case OBJECT_PUBLICATION:
+      return "PUBLICATION";
+    case OBJECT_PUBLICATION_REL:
+      return "PUBLICATION_REL";
+    case OBJECT_ROLE:
+      return "ROLE";
+    case OBJECT_ROUTINE:
+      return "ROUTINE";
+    case OBJECT_RULE:
+      return "RULE";
+    case OBJECT_SCHEMA:
+      return "SCHEMA";
+    case OBJECT_SEQUENCE:
+      return "SEQUENCE";
+    case OBJECT_SUBSCRIPTION:
+      return "SUBSCRIPTION";
+    case OBJECT_STATISTIC_EXT:
+      return "STATISTIC_EXT";
+    case OBJECT_TABCONSTRAINT:
+      return "TABCONSTRAINT";
+    case OBJECT_TABLESPACE:
+      return "TABLESPACE";
+    case OBJECT_TRANSFORM:
+      return "TRANSFORM";
+    case OBJECT_TRIGGER:
+      return "TRIGGER";
+    case OBJECT_TSCONFIGURATION:
+      return "TSCONFIGURATION";
+    case OBJECT_TSDICTIONARY:
+      return "TSDICTIONARY";
+    case OBJECT_TSPARSER:
+      return "TSPARSER";
+    case OBJECT_TSTEMPLATE:
+      return "TSTEMPLATE";
+    case OBJECT_TYPE:
+      return "TYPE";
+    case OBJECT_USER_MAPPING:
+      return "USER_MAPPING";
+    case OBJECT_VIEW:
+      return "VIEW";
+  }
+  return UnsupportedTranslationError("Unknown object type");
+}
 
 // Returns the first and only element of the single-item list cast to
 // <NodeType*>. Checks that element's type is equal to NodeTypeTag.
@@ -115,7 +215,7 @@ absl::Status ValidateAlterColumnType(const AlterTableStmt& node,
         const AlterTableCmd* second_cmd,
         (GetListItemAsNode<AlterTableCmd, T_AlterTableCmd>(node.cmds, 1)));
 
-    ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*second_cmd, node.relkind, options));
+    ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*second_cmd, node.objtype, options));
 
     if (second_cmd->subtype != AT_SetNotNull &&
         second_cmd->subtype != AT_DropNotNull) {
@@ -124,7 +224,7 @@ absl::Status ValidateAlterColumnType(const AlterTableStmt& node,
           "COLUMN> "
           "action of <ALTER TABLE> statement.");
     }
-    ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*second_cmd, node.relkind, options));
+    ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*second_cmd, node.objtype, options));
 
     if (strcmp(first_cmd->name, second_cmd->name)) {
       return UnsupportedTranslationError(
@@ -153,6 +253,7 @@ absl::Status ValidateParseTreeNode(const ColumnDef& node,
   // Make sure that if ColumnDef structure changes we update the translator.
   AssertPGNodeConsistsOf(node, FieldTypeChecker<char*>(node.colname),
                          FieldTypeChecker<TypeName*>(node.typeName),
+                         FieldTypeChecker<char*>(node.compression),
                          FieldTypeChecker<int>(node.inhcount),
                          FieldTypeChecker<bool>(node.is_local),
                          FieldTypeChecker<bool>(node.is_not_null),
@@ -180,6 +281,10 @@ absl::Status ValidateParseTreeNode(const ColumnDef& node,
 
   // `typeName` defines type of the column, validated separately.
   ZETASQL_RET_CHECK_NE(node.typeName, nullptr);
+
+  // `compression` defines the method to compress the given column. Not
+  // supported.
+  ZETASQL_RET_CHECK_EQ(node.compression, nullptr);
 
   // `inhcount` shows how many times the column is inherited. Not used during
   // parsing.
@@ -735,7 +840,7 @@ absl::Status ValidateParseTreeNode(const AlterTableStmt& node,
   // translator.
   AssertPGNodeConsistsOf(node, FieldTypeChecker<RangeVar*>(node.relation),
                          FieldTypeChecker<List*>(node.cmds),
-                         FieldTypeChecker<ObjectType>(node.relkind),
+                         FieldTypeChecker<ObjectType>(node.objtype),
                          FieldTypeChecker<bool>(node.missing_ok));
 
   ZETASQL_RET_CHECK_EQ(node.type, T_AlterTableStmt);
@@ -750,14 +855,14 @@ absl::Status ValidateParseTreeNode(const AlterTableStmt& node,
   // last to make sure we fail on more important errors first.
   ZETASQL_RET_CHECK(!IsListEmpty(node.cmds));
 
-  switch (node.relkind) {
+  switch (node.objtype) {
     case OBJECT_TABLE: {
       // Validating command here to allow failures for statements like ALTER
       // INDEX..., ALTER TABLE IF EXISTS... happen first.
       ZETASQL_ASSIGN_OR_RETURN(
           const AlterTableCmd* first_cmd,
           (GetListItemAsNode<AlterTableCmd, T_AlterTableCmd>(node.cmds, 0)));
-      ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*first_cmd, node.relkind, options));
+      ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*first_cmd, node.objtype, options));
 
       if (first_cmd->subtype == AT_SetNotNull ||
           first_cmd->subtype == AT_DropNotNull) {
@@ -788,7 +893,7 @@ absl::Status ValidateParseTreeNode(const AlterTableStmt& node,
           const AlterTableCmd* first_cmd,
           (GetListItemAsNode<AlterTableCmd, T_AlterTableCmd>(node.cmds, 0)));
       ZETASQL_RET_CHECK_NE(first_cmd, nullptr);
-      ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*first_cmd, node.relkind, options));
+      ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*first_cmd, node.objtype, options));
       break;
     }
     default: {
@@ -797,10 +902,10 @@ absl::Status ValidateParseTreeNode(const AlterTableStmt& node,
     }
   }
 
-  // `relkind` defines the type of object to alter (and the type of ALTER, e.g.
+  // `objtype` defines the type of object to alter (and the type of ALTER, e.g.
   // ALTER TABLE, ALTER INDEX, ALTER VIEW, etc.). Only tables or indexes are
   // supported (e.g. only ALTER TABLE).
-  if (!(node.relkind == OBJECT_TABLE || node.relkind == OBJECT_INDEX)) {
+  if (!(node.objtype == OBJECT_TABLE || node.objtype == OBJECT_INDEX)) {
     return UnsupportedTranslationError(
         "Object type is not supported in <ALTER> statement.");
   }
@@ -841,7 +946,14 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
       node.removeType != OBJECT_SCHEMA && node.removeType != OBJECT_VIEW &&
       node.removeType != OBJECT_CHANGE_STREAM &&
       node.removeType != OBJECT_SEQUENCE) {
+    auto object_type = ObjectTypeToString(node.removeType);
+    if (!object_type.ok()) {
+          return UnsupportedTranslationError(
+        "Only <DROP TABLE>, <DROP INDEX>, <DROP SCHEMA>, <DROP VIEW>, "
+        "<DROP SEQUENCE>, and <DROP CHANGE STREAM> statements are supported.");
+    }
     return UnsupportedTranslationError(
+        "<DROP " + *object_type + "> is not supported. "
         "Only <DROP TABLE>, <DROP INDEX>, <DROP SCHEMA>, <DROP VIEW>, "
         "<DROP SEQUENCE>, and <DROP CHANGE STREAM> statements are supported.");
   }
@@ -1498,6 +1610,7 @@ absl::Status ValidateParseTreeNode(const GrantStmt& node) {
                          FieldTypeChecker<List*>(node.privileges),
                          FieldTypeChecker<List*>(node.grantees),
                          FieldTypeChecker<bool>(node.grant_option),
+                         FieldTypeChecker<RoleSpec*>(node.grantor),
                          FieldTypeChecker<DropBehavior>(node.behavior));
 
   absl::string_view grant_type;
@@ -1582,6 +1695,12 @@ absl::Status ValidateParseTreeNode(const GrantStmt& node) {
     }()));
   }
 
+  // `grantor` is not supported
+  if (node.grantor) {
+    return UnsupportedTranslationError(absl::Substitute(
+        "<GRANT BY> clause is not supported in <$0> statement.", grant_type));
+  }
+
   return absl::OkStatus();
 }
 
@@ -1621,6 +1740,7 @@ absl::Status ValidateParseTreeNode(const ObjectWithArgs& node, bool is_grant) {
   // translator.
   AssertPGNodeConsistsOf(node, FieldTypeChecker<List*>(node.objname),
                          FieldTypeChecker<List*>(node.objargs),
+                         FieldTypeChecker<List*>(node.objfuncargs),
                          FieldTypeChecker<bool>(node.args_unspecified));
 
   // `objname` must contain an object name, and it can optionally contain a
@@ -1631,6 +1751,10 @@ absl::Status ValidateParseTreeNode(const ObjectWithArgs& node, bool is_grant) {
     return UnsupportedTranslationError(
         "Function contains too many dotted names.");
   }
+
+  // `objfuncargs` contains the full specification of the parameter list (if not
+  // NULL). This is not supported.
+  ZETASQL_RET_CHECK_EQ(node.objfuncargs, nullptr);
 
   // `args_unspecified` and `objargs` must indicate that no function arguments
   // are provided.

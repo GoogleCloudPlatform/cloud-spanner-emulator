@@ -3,7 +3,7 @@
  * pgtz.c
  *	  Timezone Library Integration Functions
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/timezone/pgtz.c
@@ -157,9 +157,25 @@ scan_directory_ci(const char *dirname, const char *fname, int fnamelen,
 	DIR		   *dirdesc;
 	struct dirent *direntry;
 
-	dirdesc = AllocateDir(dirname);
+	/*
+	 * SPANGRES: replace AllocateDir with opendir and ReadDirExtended with
+	 * readdir.
+	 * AllocateDir relies on PostgreSQL's global fd cache that preserves an fd
+	 * for the duration of the transaction, but is not thread-safe.
+	 * Spangres calls opendir and closedir to release the fd before the function
+	 * returns.
+	 *
+	 * AllocateDir and ReadDirExtended also rely on PostgreSQL's elog and
+	 * ereport for handling cases where the directory cannot be opened or
+	 * read. Spangres will return false here and treat an unreadable
+	 * directory the same way as a timezone file that could not be found.
+	 */
+	dirdesc = opendir(dirname);
+	if (dirdesc == NULL) {
+		return false;
+	}
 
-	while ((direntry = ReadDirExtended(dirdesc, dirname, LOG)) != NULL)
+	while ((direntry = readdir(dirdesc)) != NULL)
 	{
 		/*
 		 * Ignore . and .., plus any other "hidden" files.  This is a security
@@ -178,7 +194,7 @@ scan_directory_ci(const char *dirname, const char *fname, int fnamelen,
 		}
 	}
 
-	FreeDir(dirdesc);
+	closedir(dirdesc);
 
 	return found;
 }
@@ -214,8 +230,6 @@ init_timezone_hashtable(void)
 {
 	HASHCTL		hash_ctl;
 
-	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
-
 	hash_ctl.keysize = TZ_STRLEN_MAX + 1;
 	hash_ctl.entrysize = sizeof(pg_tz_cache);
   /* SPANGRES BEGIN */
@@ -235,7 +249,7 @@ init_timezone_hashtable(void)
 	timezone_cache = hash_create("Timezones",
 								 4,
 								 &hash_ctl,
-								 HASH_ELEM | HASH_CONTEXT);
+								 HASH_ELEM | HASH_STRINGS | HASH_CONTEXT);
   /* SPANGRES END */
 	if (!timezone_cache)
 		return false;

@@ -48,6 +48,7 @@
 #include "third_party/spanner_pg/catalog/builtin_spanner_functions.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include <map>
@@ -59,7 +60,7 @@ namespace postgres_translator {
 namespace spangres {
 
 namespace builtin_types = ::postgres_translator::types;
-
+namespace spangres_types = ::postgres_translator::spangres::types;
 
 const auto kComparisonOidMap = std::map<Oid, Oid>({
     {F_FLOAT8LT, F_INT8LT},
@@ -141,7 +142,113 @@ void SpangresSystemCatalog::ResetEngineSystemCatalogForTest() {
 const PostgresTypeMapping* SpangresSystemCatalog::GetType(
     const std::string& name) const {
   const PostgresTypeMapping* type = EngineSystemCatalog::GetType(name);
+  const zetasql::Type* gsql_pg_numeric =
+      types::PgNumericMapping()->mapped_type();
+
   return type;
+}
+
+static absl::StatusOr<std::string> GetPgNumericCastFunctionName(
+    const zetasql::Type* source_type, const zetasql::Type* target_type,
+    const zetasql::ProductMode product_mode, bool& is_fixed_precision_cast) {
+  const zetasql::Type* gsql_pg_numeric =
+      types::PgNumericMapping()->mapped_type();
+
+  if (source_type->Equals(gsql_pg_numeric) &&
+      target_type->Equals(gsql_pg_numeric)) {
+    is_fixed_precision_cast = true;
+    return "pg.cast_to_numeric";
+  }
+
+  is_fixed_precision_cast = false;
+  std::string function_name;
+  if (source_type->Equals(gsql_pg_numeric)) {
+    switch (target_type->kind()) {
+      case zetasql::TypeKind::TYPE_INT64:
+        return "pg.cast_to_int64";
+      case zetasql::TypeKind::TYPE_DOUBLE:
+        return "pg.cast_to_double";
+      case zetasql::TypeKind::TYPE_STRING:
+        return "pg.cast_to_string";
+      default:
+        break;
+    }
+  }
+
+  if (target_type->Equals(gsql_pg_numeric)) {
+    switch (source_type->kind()) {
+      case zetasql::TypeKind::TYPE_INT64:
+      case zetasql::TypeKind::TYPE_DOUBLE:
+      case zetasql::TypeKind::TYPE_STRING:
+        return "pg.cast_to_numeric";
+      default:
+        break;
+    }
+  }
+
+  return absl::NotFoundError(
+      absl::StrCat("No cast found from ", source_type->TypeName(product_mode),
+                   " to ", target_type->TypeName(product_mode)));
+}
+
+absl::StatusOr<FunctionAndSignature>
+SpangresSystemCatalog::GetPgNumericCastFunction(
+    const zetasql::Type* source_type, const zetasql::Type* target_type,
+    const zetasql::LanguageOptions& language_options) {
+  bool is_fixed_precision_cast;
+  ZETASQL_ASSIGN_OR_RETURN(std::string function_name,
+                   GetPgNumericCastFunctionName(source_type, target_type,
+                                                language_options.product_mode(),
+                                                is_fixed_precision_cast));
+  ZETASQL_ASSIGN_OR_RETURN(const zetasql::Function* builtin_function,
+                   GetBuiltinFunction(function_name));
+
+  // Try find the matching signature. Run the ZetaSQL Function Signature
+  // Matcher to determine if the input arguments exactly match the signature
+  bool found_signature = false;
+  std::vector<zetasql::InputArgumentType> input_argument_types;
+  input_argument_types.push_back(zetasql::InputArgumentType(source_type));
+  if (is_fixed_precision_cast) {
+    input_argument_types.push_back(
+        zetasql::InputArgumentType(zetasql::types::Int64Type()));
+    input_argument_types.push_back(
+        zetasql::InputArgumentType(zetasql::types::Int64Type()));
+  }
+
+  zetasql::Coercer coercer(type_factory(), &language_options);
+  const std::vector<const zetasql::ASTNode*> arg_ast_nodes = {};
+  std::unique_ptr<zetasql::FunctionSignature> result_signature;
+
+  for (const zetasql::FunctionSignature& signature :
+       builtin_function->signatures()) {
+    zetasql::SignatureMatchResult signature_match_result;
+
+    absl::StatusOr<bool> function_signature_matches_or =
+        zetasql::FunctionSignatureMatchesWithStatus(
+            language_options, coercer, arg_ast_nodes, input_argument_types,
+            signature, /*allow_argument_coercion=*/false, type_factory(),
+            /*resolve_lambda_callback=*/nullptr, &result_signature,
+            &signature_match_result,
+            /*arg_index_mapping=*/nullptr, /*arg_overrides=*/nullptr);
+    ABSL_DCHECK_OK(function_signature_matches_or.status());
+
+    found_signature = function_signature_matches_or.value_or(false) &&
+                      signature_match_result.non_matched_arguments() == 0 &&
+                      signature_match_result.non_literals_coerced() == 0 &&
+                      signature_match_result.literals_coerced() == 0;
+    if (found_signature) {
+      break;
+    }
+  }
+
+  if (!found_signature) {
+    return absl::NotFoundError(absl::StrCat(
+        "No cast signature found from ",
+        source_type->TypeName(language_options.product_mode()), " to ",
+        target_type->TypeName(language_options.product_mode())));
+  }
+
+  return FunctionAndSignature(builtin_function, *result_signature);
 }
 
 bool SpangresSystemCatalog::IsTransformationRequiredForComparison(
@@ -314,6 +421,16 @@ absl::Status SpangresSystemCatalog::AddTypes(
   ZETASQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgDateArrayMapping(), language_options));
 
+    ZETASQL_RETURN_IF_ERROR(
+        AddType(spangres_types::PgNumericMapping(), language_options));
+    ZETASQL_RETURN_IF_ERROR(
+        AddType(spangres_types::PgNumericArrayMapping(), language_options));
+
+    ZETASQL_RETURN_IF_ERROR(
+        AddType(spangres_types::PgJsonbMapping(), language_options));
+    ZETASQL_RETURN_IF_ERROR(
+        AddType(spangres_types::PgJsonbArrayMapping(), language_options));
+
   return absl::OkStatus();
 }
 
@@ -346,6 +463,12 @@ absl::Status SpangresSystemCatalog::AddFunctions(
   AddSpannerFunctions(functions);
   AddSequenceFunctions(functions);
 
+    spangres::AddPgNumericFunctions(functions);
+      ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_numeric"));
+      ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_int64"));
+      ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_double"));
+      ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_string"));
+
   // Add casting override functions for STRING->DATE and STRING->TIMESTAMP.
   ZETASQL_RETURN_IF_ERROR(AddCastOverrideFunction(
       zetasql::types::StringType(), zetasql::types::DateType(),
@@ -353,6 +476,8 @@ absl::Status SpangresSystemCatalog::AddFunctions(
   ZETASQL_RETURN_IF_ERROR(AddCastOverrideFunction(
       zetasql::types::StringType(), zetasql::types::TimestampType(),
       "pg.cast_to_timestamp", language_options));
+
+    spangres::AddPgJsonbFunctions(functions);
 
     spangres::AddPgArrayFunctions(functions);
     spangres::AddPgComparisonFunctions(functions);

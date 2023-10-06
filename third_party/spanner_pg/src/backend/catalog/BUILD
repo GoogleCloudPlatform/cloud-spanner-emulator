@@ -173,6 +173,7 @@ GENERATED_CATALOG_HEADER_FILES = [
     "pg_type_d.h",
     "pg_user_mapping_d.h",
     "schemapg.h",
+    "system_fk_info.h",
 ]
 
 genrule(
@@ -269,6 +270,7 @@ genrule(
             fi
         done
         mv -v "/tmp/schemapg.h" "$(location schemapg.h)"
+        mv -v "/tmp/system_fk_info.h" "$(location system_fk_info.h)"
     """,
     tools = [
         "genbki.pl",

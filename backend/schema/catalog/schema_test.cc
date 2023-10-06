@@ -35,12 +35,14 @@
 #include "backend/schema/builders/view_builder.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "tests/common/schema_constructor.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -48,6 +50,7 @@ namespace emulator {
 namespace backend {
 namespace {
 
+using test::ScopedEmulatorFeatureFlagsSetter;
 using ::testing::ElementsAre;
 using ::zetasql_base::testing::IsOkAndHolds;
 
@@ -58,7 +61,10 @@ class SchemaTest : public testing::Test {
                  /*type_factory =*/nullptr,
                  /*pending_commit_timestamp =*/absl::Now()),
         type_factory_(std::make_unique<zetasql::TypeFactory>()),
-        base_schema_(test::CreateSchemaWithOneTable(type_factory_.get())) {}
+        base_schema_(test::CreateSchemaWithOneTable(type_factory_.get())),
+        flag_setter_({
+            .enable_fk_delete_cascade_action = true,
+        }) {}
 
  protected:
   Table::Builder table_builder(const std::string& name) {
@@ -90,6 +96,8 @@ class SchemaTest : public testing::Test {
 
   // Base schema for use in tests.
   std::unique_ptr<const Schema> base_schema_;
+
+  const ScopedEmulatorFeatureFlagsSetter flag_setter_;
 };
 
 // TODO: Move this test to the unit test for
@@ -171,7 +179,6 @@ TEST_F(SchemaTest, ChangeStreamBasic) {
   ASSERT_TRUE(col->is_trackable_by_change_stream());
   ASSERT_NE(table->FindChangeStream("change_stream_test_table"), nullptr);
   ASSERT_TRUE(table->FindChangeStream("change_stream_test") == nullptr);
-  EXPECT_EQ(table->change_streams_tracking_entire_table().size(), 1);
   ASSERT_TRUE(table->is_trackable_by_change_stream());
   EXPECT_EQ(table->trackable_columns().size(), 2);
   ASSERT_NE(change_stream, nullptr);
@@ -545,6 +552,30 @@ TEST_F(SchemaTest, PrintDDLStatementsTestOneTable) {
           "CREATE UNIQUE INDEX test_index ON test_table(string_col DESC)")));
 }
 
+TEST_F(SchemaTest, PrintDDLStatementsTestOneTableDrop) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+                       test::CreateSchemaFromDDL(
+                           {
+                               R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+) PRIMARY KEY(col1))",
+                               R"(CREATE TABLE T1 (
+  col1 INT64,
+  col2 STRING(MAX),
+) PRIMARY KEY(col1))",
+                               R"(DROP TABLE T)"},
+                           type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
+                              R"(CREATE TABLE T1 (
+  col1 INT64,
+  col2 STRING(MAX),
+) PRIMARY KEY(col1))")));
+}
+
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestOneTable) {
   std::unique_ptr<const Schema> schema = test::CreateSchemaWithOneTable(
       type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL);
@@ -618,18 +649,19 @@ TEST_F(SchemaTest, PrintDDLStatementsTestForeignKey) {
   absl::StatusOr<std::vector<std::string>> statements =
       PrintDDLStatements(schema.get());
 
-  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(R"(CREATE TABLE test_table (
+  EXPECT_THAT(statements,
+              IsOkAndHolds(ElementsAre(R"(CREATE TABLE referenced_table (
   k1 INT64 NOT NULL,
   c1 STRING(20),
   c2 STRING(20),
 ) PRIMARY KEY(k1))",
-                                                   R"(CREATE TABLE child_table (
-  child_k1 INT64 NOT NULL,
-  child_c1 STRING(20),
-  child_c2 STRING(20),
-  CONSTRAINT C FOREIGN KEY(child_k1, child_c1) REFERENCES test_table(k1, c1),
-  FOREIGN KEY(child_c2) REFERENCES test_table(c2),
-) PRIMARY KEY(child_k1))")));
+                                       R"(CREATE TABLE referencing_table (
+  k1 INT64 NOT NULL,
+  c1 STRING(20),
+  c2 STRING(20),
+  CONSTRAINT C FOREIGN KEY(k1, c1) REFERENCES referenced_table(k1, c1),
+  FOREIGN KEY(c2) REFERENCES referenced_table(c2),
+) PRIMARY KEY(k1))")));
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestForeignKey) {
@@ -639,20 +671,74 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestForeignKey) {
       PrintDDLStatements(schema.get());
 
   EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
-                              R"(CREATE TABLE test_table (
+                              R"(CREATE TABLE referenced_table (
   k1 bigint NOT NULL,
   c1 character varying(20),
   c2 character varying(20),
   PRIMARY KEY(k1)
 ))",
-                              R"(CREATE TABLE child_table (
-  child_k1 bigint NOT NULL,
-  child_c1 character varying(20),
-  child_c2 character varying(20),
-  PRIMARY KEY(child_k1),
-  CONSTRAINT c FOREIGN KEY (child_k1, child_c1) REFERENCES test_table(k1, c1),
-  FOREIGN KEY (child_c2) REFERENCES test_table(c2)
+                              R"(CREATE TABLE referencing_table (
+  k1 bigint NOT NULL,
+  c1 character varying(20),
+  c2 character varying(20),
+  PRIMARY KEY(k1),
+  CONSTRAINT c FOREIGN KEY (k1, c1) REFERENCES referenced_table(k1, c1),
+  FOREIGN KEY (c2) REFERENCES referenced_table(c2)
 ))")));
+}
+
+TEST_F(SchemaTest, PrintDDLStatementsTestForeignKeyOnDeleteAction) {
+  std::unique_ptr<const Schema> schema =
+      test::CreateSchemaWithForeignKeyOnDelete(type_factory_.get());
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements,
+              IsOkAndHolds(ElementsAre(R"(CREATE TABLE referenced_table (
+  k1 INT64 NOT NULL,
+  c1 STRING(20),
+  c2 STRING(20),
+) PRIMARY KEY(k1))",
+                                       R"(CREATE TABLE referencing_table (
+  k1 INT64 NOT NULL,
+  c1 STRING(20),
+  c2 STRING(20),
+  CONSTRAINT C1 FOREIGN KEY(k1) REFERENCES referenced_table(k1) ON DELETE CASCADE,
+  CONSTRAINT C2 FOREIGN KEY(k1, c1) REFERENCES referenced_table(k1, c1) ON DELETE CASCADE,
+) PRIMARY KEY(k1))")));
+}
+
+TEST_F(SchemaTest, TestForeignKeyDebugString) {
+  std::unique_ptr<const Schema> schema =
+      test::CreateSchemaWithForeignKey(type_factory_.get());
+  // Verify the foreign key debug info.
+  const Table* table = schema->FindTable("referencing_table");
+  ASSERT_NE(table, nullptr);
+  const ForeignKey* fk1 = table->FindForeignKey("C");
+  std::string fk_debug_info1 = fk1->DebugString();
+  EXPECT_THAT(fk_debug_info1,
+              "FK:C:referencing_table(k1,c1)[IDX_referencing_table_k1_c1_N_"
+              "0384119846ECD68B]:referenced_table(k1,c1)[IDX_referenced_table_"
+              "k1_c1_U_E4AC4992000E770F][]");
+}
+
+TEST_F(SchemaTest, TestForeignKeyActionDebugString) {
+  std::unique_ptr<const Schema> schema =
+      test::CreateSchemaWithForeignKeyOnDelete(type_factory_.get());
+  // Verify the foreign key debug info.
+  const Table* table = schema->FindTable("referencing_table");
+  ASSERT_NE(table, nullptr);
+  const ForeignKey* fk1 = table->FindForeignKey("C1");
+  std::string fk_debug_info1 = fk1->DebugString();
+  EXPECT_THAT(fk_debug_info1,
+              "FK:C1:referencing_table(k1)[PK]:referenced_table(k1)[PK][ON "
+              "DELETE CASCADE]");
+  const ForeignKey* fk2 = table->FindForeignKey("C2");
+  std::string fk_debug_info2 = fk2->DebugString();
+  EXPECT_THAT(fk_debug_info2,
+              "FK:C2:referencing_table(k1,c1)[IDX_referencing_table_k1_c1_N_"
+              "0384119846ECD68B]:referenced_table(k1,c1)[IDX_referenced_table_"
+              "k1_c1_U_E4AC4992000E770F][ON DELETE CASCADE]");
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestColumnExpressions) {
@@ -976,6 +1062,290 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestStoredIndex) {
 ))",
                   "CREATE INDEX col2_idx ON t (col2) INCLUDE "
                   "(col3, col4)")));
+}
+
+TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestCreateChangeStreams) {
+  // Test CREATE CHANGE STREAM statements tracking nothing, pk columns
+  // implicitly, one entire table, and ALL.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+                       test::CreateSchemaFromDDL(
+                           {
+                               R"(CREATE TABLE T1 (
+      col1 INT64,
+      col2 STRING(MAX),
+      col3 STRING(MAX)
+    ) PRIMARY KEY(col1))",
+                               R"(CREATE TABLE T2 (
+      col1 INT64,
+      col2 STRING(MAX),
+      col3 STRING(MAX)
+    ) PRIMARY KEY(col1))",
+                               R"(CREATE CHANGE STREAM cs)",
+                               R"(CREATE CHANGE STREAM cs_T1_col1 FOR T1())",
+                               R"(CREATE CHANGE STREAM cs_T1 FOR T1)",
+                               R"(CREATE CHANGE STREAM cs_ALL FOR ALL)",
+                               R"(CREATE CHANGE STREAM cs_T1_T2 FOR T1, T2)"},
+                           type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
+                              R"(CREATE TABLE T1 (
+  col1 INT64,
+  col2 STRING(MAX),
+  col3 STRING(MAX),
+) PRIMARY KEY(col1))",
+                              R"(CREATE TABLE T2 (
+  col1 INT64,
+  col2 STRING(MAX),
+  col3 STRING(MAX),
+) PRIMARY KEY(col1))",
+                              R"(CREATE CHANGE STREAM cs)",
+                              R"(CREATE CHANGE STREAM cs_T1_col1 FOR T1())",
+                              R"(CREATE CHANGE STREAM cs_T1 FOR T1)",
+                              R"(CREATE CHANGE STREAM cs_ALL FOR ALL)",
+                              R"(CREATE CHANGE STREAM cs_T1_T2 FOR T1, T2)")));
+
+  // Test CREATE CHANGE STREAM statements tracking columns specifically.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      schema,
+      test::CreateSchemaFromDDL(
+          {
+              R"(CREATE TABLE T1 (
+      col1 INT64,
+      col2 STRING(MAX),
+      col3 STRING(MAX)
+    ) PRIMARY KEY(col1))",
+              R"(CREATE TABLE T2 (
+      col1 INT64,
+      col2 STRING(MAX),
+      col3 STRING(MAX)
+    ) PRIMARY KEY(col1))",
+              R"(CREATE CHANGE STREAM cs_T1_col2 FOR T1(col2))",
+              R"(CREATE CHANGE STREAM cs_T1_col2_col3 FOR T1(col2, col3))",
+              R"(CREATE CHANGE STREAM cs_T1_col2_T2_col2 FOR T1(col2), T2(col2))"},
+          type_factory_.get()));
+  statements = PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(
+      statements,
+      IsOkAndHolds(ElementsAre(
+          R"(CREATE TABLE T1 (
+  col1 INT64,
+  col2 STRING(MAX),
+  col3 STRING(MAX),
+) PRIMARY KEY(col1))",
+          R"(CREATE TABLE T2 (
+  col1 INT64,
+  col2 STRING(MAX),
+  col3 STRING(MAX),
+) PRIMARY KEY(col1))",
+          R"(CREATE CHANGE STREAM cs_T1_col2 FOR T1(col2))",
+          R"(CREATE CHANGE STREAM cs_T1_col2_col3 FOR T1(col2, col3))",
+          R"(CREATE CHANGE STREAM cs_T1_col2_T2_col2 FOR T1(col2), T2(col2))")));
+}
+
+TEST_F(
+    SchemaTest,
+    ZetaSQLPrintDDLStatementsTestCreateChangeStreamsWithSpecialTableNames) {
+  // Test CREATE CHANGE STREAM statements tracking nothing, pk columns
+  // implicitly, one entire table, and ALL.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE TABLE `ALL` (Id STRING(20) NOT NULL,`All` STRING(20),) PRIMARY KEY(Id))",
+           R"(CREATE CHANGE STREAM change_stream FOR `ALL`(`All`))"},
+          type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements,
+              IsOkAndHolds(ElementsAre(
+                  R"(CREATE TABLE `ALL` (
+  Id STRING(20) NOT NULL,
+  `All` STRING(20),
+) PRIMARY KEY(Id))",
+                  R"(CREATE CHANGE STREAM change_stream FOR `ALL`(`All`))")));
+}
+
+TEST_F(SchemaTest,
+       ZetaSQLPrintDDLStatementsTestCreateChangeStreamsValueCaptureTypes) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(
+    CREATE TABLE T (
+      col1 INT64,
+      col2 STRING(MAX),
+      col3 STRING(MAX)
+    ) PRIMARY KEY(col1))",
+           R"(CREATE CHANGE STREAM cs_T_old_and_new_values FOR T OPTIONS ( value_capture_type = 'OLD_AND_NEW_VALUES' ))",
+           R"(CREATE CHANGE STREAM cs_T_new_row FOR T OPTIONS ( value_capture_type = 'NEW_ROW' ))",
+           R"(CREATE CHANGE STREAM cs_T_new_values FOR T OPTIONS ( value_capture_type = 'NEW_VALUES' ))"},
+          type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(
+      statements,
+      IsOkAndHolds(ElementsAre(
+          R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+  col3 STRING(MAX),
+) PRIMARY KEY(col1))",
+          R"(CREATE CHANGE STREAM cs_T_old_and_new_values FOR T OPTIONS ( value_capture_type = 'OLD_AND_NEW_VALUES' ))",
+          R"(CREATE CHANGE STREAM cs_T_new_row FOR T OPTIONS ( value_capture_type = 'NEW_ROW' ))",
+          R"(CREATE CHANGE STREAM cs_T_new_values FOR T OPTIONS ( value_capture_type = 'NEW_VALUES' ))")));
+}
+
+TEST_F(SchemaTest,
+       ZetaSQLPrintDDLStatementsTestCreateChangeStreamsTwoOptions) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(
+    CREATE TABLE T (
+      col1 INT64,
+      col2 STRING(MAX),
+      col3 STRING(MAX)
+    ) PRIMARY KEY(col1))",
+           R"(CREATE CHANGE STREAM cs_T_new_row_36h FOR T OPTIONS ( value_capture_type = 'NEW_ROW', retention_period = '36h' ))",
+           R"(CREATE CHANGE STREAM cs_T_36h_new_row FOR T OPTIONS ( retention_period = '36h', value_capture_type = 'NEW_ROW' ))"},
+          type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(
+      statements,
+      IsOkAndHolds(ElementsAre(
+          R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+  col3 STRING(MAX),
+) PRIMARY KEY(col1))",
+          R"(CREATE CHANGE STREAM cs_T_new_row_36h FOR T OPTIONS ( value_capture_type = 'NEW_ROW', retention_period = '36h' ))",
+          R"(CREATE CHANGE STREAM cs_T_36h_new_row FOR T OPTIONS ( retention_period = '36h', value_capture_type = 'NEW_ROW' ))")));
+}
+
+TEST_F(SchemaTest,
+       ZetaSQLPrintDDLStatementsTestAlterChangeStreamsSetOptions) {
+  // ALTER retention_period
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(
+    CREATE TABLE T (
+      col1 INT64,
+      col2 STRING(MAX)
+    ) PRIMARY KEY(col1))",
+           R"(CREATE CHANGE STREAM cs_T FOR T)",
+           R"(ALTER CHANGE STREAM cs_T SET OPTIONS ( retention_period = '36h' ))"},
+          type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(
+      statements,
+      IsOkAndHolds(ElementsAre(
+          R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+) PRIMARY KEY(col1))",
+          R"(CREATE CHANGE STREAM cs_T FOR T OPTIONS ( retention_period = '36h' ))")));
+
+  // ALTER value_capture_type
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      schema,
+      test::CreateSchemaFromDDL(
+          {R"(
+    CREATE TABLE T (
+      col1 INT64,
+      col2 STRING(MAX)
+    ) PRIMARY KEY(col1))",
+           R"(CREATE CHANGE STREAM cs_T FOR T)",
+           R"(ALTER CHANGE STREAM cs_T SET OPTIONS ( value_capture_type = 'NEW_VALUES' ))"},
+          type_factory_.get()));
+  statements = PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(
+      statements,
+      IsOkAndHolds(ElementsAre(
+          R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+) PRIMARY KEY(col1))",
+          R"(CREATE CHANGE STREAM cs_T FOR T OPTIONS ( value_capture_type = 'NEW_VALUES' ))")));
+}
+
+TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestAlterChangeStreamsSetFor) {
+  // ALTER tracked object
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL({R"(
+    CREATE TABLE T (
+      col1 INT64,
+      col2 STRING(MAX)
+    ) PRIMARY KEY(col1))",
+                                 R"(CREATE CHANGE STREAM cs_T FOR T)",
+                                 R"(ALTER CHANGE STREAM cs_T SET FOR ALL)"},
+                                type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
+                              R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+) PRIMARY KEY(col1))",
+                              R"(CREATE CHANGE STREAM cs_T FOR ALL)")));
+}
+
+TEST_F(SchemaTest,
+       ZetaSQLPrintDDLStatementsTestAlterChangeStreamsDropForAll) {
+  // ALTER drop for all
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(
+    CREATE TABLE T (
+      col1 INT64,
+      col2 STRING(MAX)
+    ) PRIMARY KEY(col1))",
+           R"(CREATE CHANGE STREAM cs_T FOR T OPTIONS ( value_capture_type = 'NEW_VALUES' ))",
+           R"(ALTER CHANGE STREAM cs_T DROP FOR ALL)"},
+          type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+  EXPECT_THAT(
+      statements,
+      IsOkAndHolds(ElementsAre(
+          R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+) PRIMARY KEY(col1))",
+          R"(CREATE CHANGE STREAM cs_T OPTIONS ( value_capture_type = 'NEW_VALUES' ))")));
+}
+
+TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestDropChangeStreams) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(
+    CREATE TABLE T (
+      col1 INT64,
+      col2 STRING(MAX)
+    ) PRIMARY KEY(col1))",
+           R"(CREATE CHANGE STREAM cs_T FOR T)", R"(DROP CHANGE STREAM cs_T)"},
+          type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
+                              R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+) PRIMARY KEY(col1))")));
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestChangeStreams) {

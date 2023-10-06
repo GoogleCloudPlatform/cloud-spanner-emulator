@@ -194,6 +194,21 @@ cc_test(
 )
 
 cc_test(
+    name = "spangres_expr_test",
+    srcs = ["spangres_expr_test.cc"],
+    deps = [
+        ":transformer_test",
+        "//third_party/spanner_pg/catalog:catalog_adapter",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "//third_party/spanner_pg/test_catalog",
+        "//third_party/spanner_pg/util:postgres",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/resolved_ast",
+    ],
+)
+
+cc_test(
     name = "function_test",
     srcs = ["function_test.cc"],
     deps = [

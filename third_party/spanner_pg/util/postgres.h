@@ -81,6 +81,11 @@ absl::StatusOr<Param*> makeParam(ParamKind paramkind, int paramid,
 absl::StatusOr<FuncExpr*> makeFuncExpr(Oid funcid, Oid rettype, List* args,
                                        CoercionForm funcformat);
 
+absl::StatusOr<JoinExpr*> makeJoinExpr(Index rtindex, JoinType join_type,
+                                       Node* left_arg, Node* right_arg,
+                                       List* using_clause, Node* quals,
+                                       List* join_hints);
+
 absl::StatusOr<OpExpr*> makeOpExpr(Oid opno, Oid funcid, Oid rettype,
                                    List* args);
 
@@ -169,9 +174,9 @@ absl::StatusOr<SQLValueFunction*> makeSQLValueFunction(
     int location = -1);
 
 absl::StatusOr<SubscriptingRef*> makeSubscriptingRef(
-    Oid container_type, Oid element_type, int32_t typmod, Oid ref_collid,
-    List* upper_index_exprs, List* lower_index_exprs, Expr* ref_expr,
-    Expr* assign_expr);
+    Oid container_type, Oid element_type, Oid result_type, int32_t typmod,
+    Oid ref_collid, List* upper_index_exprs, List* lower_index_exprs,
+    Expr* ref_expr, Expr* assign_expr);
 
 absl::StatusOr<RangeTblRef*> makeRangeTblRef(Index rtindex);
 

@@ -558,6 +558,7 @@ select jsonb_pretty(explain_analyze_inc_sort_nodes_without_memory('select * from
          "Node Type": "Incremental Sort",       +
          "Actual Rows": 55,                     +
          "Actual Loops": 1,                     +
+         "Async Capable": false,                +
          "Presorted Key": [                     +
              "t.a"                              +
          ],                                     +
@@ -760,6 +761,7 @@ select jsonb_pretty(explain_analyze_inc_sort_nodes_without_memory('select * from
          "Node Type": "Incremental Sort",       +
          "Actual Rows": 70,                     +
          "Actual Loops": 1,                     +
+         "Async Capable": false,                +
          "Presorted Key": [                     +
              "t.a"                              +
          ],                                     +
@@ -1671,16 +1673,4 @@ order by 1, 2;
                ->  Parallel Index Scan using tenk1_unique1 on tenk1
                ->  Function Scan on generate_series
 (7 rows)
-
--- Disallow pushing down sort when pathkey is an SRF.
-explain (costs off) select unique1 from tenk1 order by unnest('{1,2}'::int[]);
-                               QUERY PLAN                                
--------------------------------------------------------------------------
- Sort
-   Sort Key: (unnest('{1,2}'::integer[]))
-   ->  Gather
-         Workers Planned: 2
-         ->  ProjectSet
-               ->  Parallel Index Only Scan using tenk1_unique1 on tenk1
-(6 rows)
 

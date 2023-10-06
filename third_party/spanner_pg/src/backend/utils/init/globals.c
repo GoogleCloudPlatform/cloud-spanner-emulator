@@ -3,7 +3,7 @@
  * globals.c
  *	  global variable declarations
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -30,9 +30,12 @@ ProtocolVersion FrontendProtocol;
 volatile sig_atomic_t InterruptPending = false;
 volatile sig_atomic_t QueryCancelPending = false;
 volatile sig_atomic_t ProcDiePending = false;
+volatile sig_atomic_t CheckClientConnectionPending = false;
 volatile sig_atomic_t ClientConnectionLost = false;
 volatile sig_atomic_t IdleInTransactionSessionTimeoutPending = false;
+volatile sig_atomic_t IdleSessionTimeoutPending = false;
 volatile sig_atomic_t ProcSignalBarrierPending = false;
+volatile sig_atomic_t LogMemoryContextPending = false;
 volatile uint32 InterruptHoldoffCount = 0;
 volatile uint32 QueryCancelHoldoffCount = 0;
 volatile uint32 CritSectionCount = 0;
@@ -80,7 +83,7 @@ char		postgres_exec_path[MAXPGPATH];	/* full path to backend */
 
 BackendId	MyBackendId = InvalidBackendId;
 
-BackendId	ParallelMasterBackendId = InvalidBackendId;
+BackendId	ParallelLeaderBackendId = InvalidBackendId;
 
 Oid			MyDatabaseId = InvalidOid;
 
@@ -118,9 +121,9 @@ int			IntervalStyle = INTSTYLE_POSTGRES;
 
 bool		enableFsync = true;
 bool		allowSystemTableMods = false;
-int			work_mem = 1024;
+int			work_mem = 4096;
 double		hash_mem_multiplier = 1.0;
-int			maintenance_work_mem = 16384;
+int			maintenance_work_mem = 65536;
 int			max_parallel_maintenance_workers = 2;
 
 /*
@@ -136,7 +139,7 @@ int			max_parallel_workers = 8;
 int			MaxBackends = 0;
 
 int			VacuumCostPageHit = 1;	/* GUC parameters for vacuum */
-int			VacuumCostPageMiss = 10;
+int			VacuumCostPageMiss = 2;
 int			VacuumCostPageDirty = 20;
 int			VacuumCostLimit = 200;
 double		VacuumCostDelay = 0;
@@ -147,5 +150,3 @@ int64		VacuumPageDirty = 0;
 
 int			VacuumCostBalance = 0;	/* working state for vacuum */
 bool		VacuumCostActive = false;
-
-double		vacuum_cleanup_index_scale_factor;

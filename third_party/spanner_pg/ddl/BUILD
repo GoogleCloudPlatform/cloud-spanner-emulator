@@ -118,25 +118,16 @@ cc_test(
     deps = [
         ":ddl_test_helper",
         ":ddl_translator",
-        ":pg_to_spanner_ddl_translator",
-        ":spangres_direct_schema_printer_impl",
         ":spangres_schema_printer",
         ":translation_utils",
         "//backend/schema/ddl:operations_cc_proto",
-        "//third_party/spanner_pg/interface:memory_reservation_manager",
         "//third_party/spanner_pg/interface:parser_interface",
-        "//third_party/spanner_pg/postgres_includes",
-        "//third_party/spanner_pg/shims:error_shim",
-        "//third_party/spanner_pg/shims:memory_context_manager",
         "//third_party/spanner_pg/shims:memory_context_pg_arena",
-        "//third_party/spanner_pg/shims:memory_reservation_holder",
-        "//third_party/spanner_pg/shims:stub_memory_reservation_manager",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
-        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_googletest//:gtest_main",
-        "@com_google_protobuf//:protobuf_headers",
+        "@com_google_protobuf//:protobuf",
         "@com_google_zetasql//zetasql/base:logging",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
@@ -180,6 +171,12 @@ cc_library(
     ],
 )
 
+filegroup(
+    name = "exported_jsondata",
+    srcs = glob(["types/testdata/*.json"]),
+    visibility = ["//third_party/spanner_pg/datatypes/common/jsonb:__subpackages__"],
+)
+
 cc_library(
     name = "pg_parse_tree_validator",
     srcs = ["pg_parse_tree_validator.cc"],
@@ -188,17 +185,12 @@ cc_library(
         ":ddl_translator",
         ":translation_utils",
         "//third_party/spanner_pg/postgres_includes",
-        "//third_party/spanner_pg/shims:catalog_shim",
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/util:pg_list_iterators",
         "//third_party/spanner_pg/util:postgres",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/types:optional",
-        "@com_google_zetasql//zetasql/base",
         "@com_google_zetasql//zetasql/base:ret_check",
     ],
 )

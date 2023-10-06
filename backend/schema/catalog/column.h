@@ -128,6 +128,13 @@ class Column : public SchemaNode {
     return change_streams_;
   }
 
+  // Returns the list of all change streams explicitly tracking this column by
+  // the column name.
+  absl::Span<const ChangeStream* const>
+  change_streams_explicitly_tracking_column() const {
+    return change_streams_explicitly_tracking_column_;
+  }
+
   bool is_trackable_by_change_stream() const { return !is_generated(); }
 
   // Finds a change stream on the column by its name. Name comparison is
@@ -230,6 +237,10 @@ class Column : public SchemaNode {
   // List of change streams referring to this column. These are owned by the
   // Schema, not by the Column.
   std::vector<const ChangeStream*> change_streams_;
+
+  // List of change streams explicitly tracking this column by the column name.
+  // These are owned by the Schema, not by the column.
+  std::vector<const ChangeStream*> change_streams_explicitly_tracking_column_;
 
   // Indicate if the column is hidden. If true, the column will be excluded from
   // star expansion (SELECT *).

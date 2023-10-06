@@ -46,7 +46,6 @@
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter_holder.h"
 #include "third_party/spanner_pg/catalog/udf_support.h"
-#include "third_party/spanner_pg/datetime_parsing/datetime_exports.h"
 #include "third_party/spanner_pg/errors/error_catalog.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/catalog_shim.h"
@@ -1071,49 +1070,5 @@ extern "C" const FormData_pg_proc* GetProcByOid(Oid oid) {
   } else {
     // Not found, return NULL.
     return nullptr;
-  }
-}
-
-extern "C" DateADT date_in_c(char* input_string) {
-  const auto adapter = postgres_translator::GetCatalogAdapter();
-  if (!adapter.ok()) {
-    postgres_translator::ereport_helper(adapter.status(),
-                                        ERRCODE_INTERNAL_ERROR,
-                                        "Failed to get catalog adapter");
-  }
-  auto result = date_in(
-      input_string, (*adapter)->analyzer_options().default_time_zone().name());
-  if (!result.ok()) {
-    constexpr int ERROR = PG_ERROR;
-    int sqlerrcode = absl::IsInvalidArgument(result.status())
-                         ? ERRCODE_INVALID_DATETIME_FORMAT
-                         : ERRCODE_INTERNAL_ERROR;
-    ereport(ERROR, errcode(sqlerrcode),
-            errmsg("%s", result.status().ToString()));
-            // clang-format on
-  } else {
-    return *result;
-  }
-}
-
-extern "C" TimestampTz timestamptz_in_c(char* input_string) {
-  const auto adapter = postgres_translator::GetCatalogAdapter();
-  if (!adapter.ok()) {
-    postgres_translator::ereport_helper(adapter.status(),
-                                        ERRCODE_INTERNAL_ERROR,
-                                        "Failed to get catalog adapter");
-  }
-  auto result = timestamptz_in(
-      input_string, (*adapter)->analyzer_options().default_time_zone().name());
-  if (!result.ok()) {
-    constexpr int ERROR = PG_ERROR;
-    int sqlerrcode = absl::IsInvalidArgument(result.status())
-                         ? ERRCODE_INVALID_DATETIME_FORMAT
-                         : ERRCODE_INTERNAL_ERROR;
-    ereport(ERROR, errcode(sqlerrcode),
-            errmsg("%s", result.status().ToString()));
-            // clang-format on
-  } else {
-    return *result;
   }
 }

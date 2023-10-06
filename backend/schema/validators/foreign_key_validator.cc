@@ -25,6 +25,7 @@
 #include "backend/common/ids.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"

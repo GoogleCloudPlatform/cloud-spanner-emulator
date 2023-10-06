@@ -243,7 +243,7 @@ F312	MERGE statement			NO	consider INSERT ... ON CONFLICT DO UPDATE
 F313	Enhanced MERGE statement			NO	
 F314	MERGE statement with DELETE branch			NO	
 F321	User authorization			YES	
-F341	Usage tables			NO	no ROUTINE_*_USAGE tables
+F341	Usage tables			YES	
 F361	Subprogram support			YES	
 F381	Extended schema manipulation			YES	
 F381	Extended schema manipulation	01	ALTER TABLE statement: ALTER COLUMN clause	YES	
@@ -264,7 +264,7 @@ F401	Extended joined table	02	FULL OUTER JOIN	YES
 F401	Extended joined table	04	CROSS JOIN	YES	
 F402	Named column joins for LOBs, arrays, and multisets			YES	
 F403	Partitioned joined tables			NO	
-F404	Range variable for common column names			NO	
+F404	Range variable for common column names			YES	
 F411	Time zone specification			YES	differences regarding literal interpretation
 F421	National character			YES	
 F431	Read-only scrollable cursors			YES	
@@ -373,7 +373,7 @@ S096	Optional array bounds			YES
 S097	Array element assignment			NO	
 S098	ARRAY_AGG			YES	
 S111	ONLY in query expressions			YES	
-S151	Type predicate			NO	
+S151	Type predicate			NO	see pg_typeof()
 S161	Subtype treatment			NO	
 S162	Subtype treatment for references			NO	
 S201	SQL-invoked routines on arrays			YES	
@@ -398,7 +398,7 @@ S301	Enhanced UNNEST			YES
 S401	Distinct types based on array types			NO	
 S402	Distinct types based on distinct types			NO	
 S403	ARRAY_MAX_CARDINALITY			NO	
-S404	TRIM_ARRAY			NO	
+S404	TRIM_ARRAY			YES	
 T011	Timestamp in Information Schema			NO	
 T021	BINARY and VARBINARY data types			NO	
 T022	Advanced support for BINARY and VARBINARY data types			NO	
@@ -425,6 +425,7 @@ T121	WITH (excluding RECURSIVE) in query expression			YES
 T122	WITH (excluding RECURSIVE) in subquery			YES	
 T131	Recursive query			YES	
 T132	Recursive query in subquery			YES	
+T133	Enhanced cycle mark values			YES	SQL:202x draft
 T141	SIMILAR predicate			YES	
 T151	DISTINCT predicate			YES	
 T152	DISTINCT predicate with negation			YES	
@@ -451,7 +452,7 @@ T211	Basic trigger capability	07	TRIGGER privilege	YES
 T211	Basic trigger capability	08	Multiple triggers for the same event are executed in the order in which they were created in the catalog	NO	intentionally omitted
 T212	Enhanced trigger capability			YES	
 T213	INSTEAD OF triggers			YES	
-T231	Sensitive cursors			YES	
+T231	Sensitive cursors			NO	
 T241	START TRANSACTION statement			YES	
 T251	SET TRANSACTION statement: LOCAL option			NO	
 T261	Chained transactions			YES	
@@ -475,13 +476,13 @@ T324	Explicit security for SQL routines			NO
 T325	Qualified SQL parameter references			YES	
 T326	Table functions			NO	
 T331	Basic roles			YES	
-T332	Extended roles			NO	mostly supported
+T332	Extended roles			YES	
 T341	Overloading of SQL-invoked functions and procedures			YES	
 T351	Bracketed SQL comments (/*...*/ comments)			YES	
 T431	Extended grouping capabilities			YES	
 T432	Nested and concatenated GROUPING SETS			YES	
 T433	Multiargument GROUPING function			YES	
-T434	GROUP BY DISTINCT			NO	
+T434	GROUP BY DISTINCT			YES	
 T441	ABS and MOD functions			YES	
 T461	Symmetric BETWEEN predicate			YES	
 T471	Result sets return value			NO	

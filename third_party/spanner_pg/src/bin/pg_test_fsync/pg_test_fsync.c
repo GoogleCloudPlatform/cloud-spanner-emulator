@@ -5,6 +5,7 @@
 
 #include "postgres_fe.h"
 
+#include <limits.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <fcntl.h>
@@ -62,7 +63,7 @@ do { \
 
 static const char *progname;
 
-static int	secs_per_test = 5;
+static unsigned int secs_per_test = 5;
 static int	needs_unlink = 0;
 static char full_buf[DEFAULT_XLOG_SEG_SIZE],
 		   *buf,
@@ -148,6 +149,8 @@ handle_args(int argc, char *argv[])
 
 	int			option;			/* Command line option */
 	int			optindex = 0;	/* used by getopt_long */
+	unsigned long optval;		/* used for option parsing */
+	char	   *endptr;
 
 	if (argc > 1)
 	{
@@ -173,7 +176,24 @@ handle_args(int argc, char *argv[])
 				break;
 
 			case 's':
-				secs_per_test = atoi(optarg);
+				errno = 0;
+				optval = strtoul(optarg, &endptr, 10);
+
+				if (endptr == optarg || *endptr != '\0' ||
+					errno != 0 || optval != (unsigned int) optval)
+				{
+					pg_log_error("invalid argument for option %s", "--secs-per-test");
+					fprintf(stderr, _("Try \"%s --help\" for more information.\n"), progname);
+					exit(1);
+				}
+
+				secs_per_test = (unsigned int) optval;
+				if (secs_per_test == 0)
+				{
+					pg_log_error("%s must be in range %u..%u",
+								 "--secs-per-test", 1, UINT_MAX);
+					exit(1);
+				}
 				break;
 
 			default:
@@ -193,8 +213,8 @@ handle_args(int argc, char *argv[])
 		exit(1);
 	}
 
-	printf(ngettext("%d second per test\n",
-					"%d seconds per test\n",
+	printf(ngettext("%u second per test\n",
+					"%u seconds per test\n",
 					secs_per_test),
 		   secs_per_test);
 #if PG_O_DIRECT != 0
@@ -270,10 +290,11 @@ test_sync(int writes_per_op)
 		for (ops = 0; alarm_triggered == false; ops++)
 		{
 			for (writes = 0; writes < writes_per_op; writes++)
-				if (write(tmpfile, buf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+				if (pg_pwrite(tmpfile,
+							  buf,
+							  XLOG_BLCKSZ,
+							  writes * XLOG_BLCKSZ) != XLOG_BLCKSZ)
 					die("write failed");
-			if (lseek(tmpfile, 0, SEEK_SET) == -1)
-				die("seek failed");
 		}
 		STOP_TIMER;
 		close(tmpfile);
@@ -295,11 +316,12 @@ test_sync(int writes_per_op)
 	for (ops = 0; alarm_triggered == false; ops++)
 	{
 		for (writes = 0; writes < writes_per_op; writes++)
-			if (write(tmpfile, buf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+			if (pg_pwrite(tmpfile,
+						  buf,
+						  XLOG_BLCKSZ,
+						  writes * XLOG_BLCKSZ) != XLOG_BLCKSZ)
 				die("write failed");
 		fdatasync(tmpfile);
-		if (lseek(tmpfile, 0, SEEK_SET) == -1)
-			die("seek failed");
 	}
 	STOP_TIMER;
 	close(tmpfile);
@@ -319,12 +341,13 @@ test_sync(int writes_per_op)
 	for (ops = 0; alarm_triggered == false; ops++)
 	{
 		for (writes = 0; writes < writes_per_op; writes++)
-			if (write(tmpfile, buf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+			if (pg_pwrite(tmpfile,
+						  buf,
+						  XLOG_BLCKSZ,
+						  writes * XLOG_BLCKSZ) != XLOG_BLCKSZ)
 				die("write failed");
 		if (fsync(tmpfile) != 0)
 			die("fsync failed");
-		if (lseek(tmpfile, 0, SEEK_SET) == -1)
-			die("seek failed");
 	}
 	STOP_TIMER;
 	close(tmpfile);
@@ -342,12 +365,13 @@ test_sync(int writes_per_op)
 	for (ops = 0; alarm_triggered == false; ops++)
 	{
 		for (writes = 0; writes < writes_per_op; writes++)
-			if (write(tmpfile, buf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+			if (pg_pwrite(tmpfile,
+						  buf,
+						  XLOG_BLCKSZ,
+						  writes * XLOG_BLCKSZ) != XLOG_BLCKSZ)
 				die("write failed");
 		if (pg_fsync_writethrough(tmpfile) != 0)
 			die("fsync failed");
-		if (lseek(tmpfile, 0, SEEK_SET) == -1)
-			die("seek failed");
 	}
 	STOP_TIMER;
 	close(tmpfile);
@@ -373,7 +397,10 @@ test_sync(int writes_per_op)
 		for (ops = 0; alarm_triggered == false; ops++)
 		{
 			for (writes = 0; writes < writes_per_op; writes++)
-				if (write(tmpfile, buf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+				if (pg_pwrite(tmpfile,
+							  buf,
+							  XLOG_BLCKSZ,
+							  writes * XLOG_BLCKSZ) != XLOG_BLCKSZ)
 
 					/*
 					 * This can generate write failures if the filesystem has
@@ -382,8 +409,6 @@ test_sync(int writes_per_op)
 					 * size, e.g. XFS.
 					 */
 					die("write failed");
-			if (lseek(tmpfile, 0, SEEK_SET) == -1)
-				die("seek failed");
 		}
 		STOP_TIMER;
 		close(tmpfile);
@@ -437,11 +462,12 @@ test_open_sync(const char *msg, int writes_size)
 		for (ops = 0; alarm_triggered == false; ops++)
 		{
 			for (writes = 0; writes < 16 / writes_size; writes++)
-				if (write(tmpfile, buf, writes_size * 1024) !=
+				if (pg_pwrite(tmpfile,
+							  buf,
+							  writes_size * 1024,
+							  writes * writes_size * 1024) !=
 					writes_size * 1024)
 					die("write failed");
-			if (lseek(tmpfile, 0, SEEK_SET) == -1)
-				die("seek failed");
 		}
 		STOP_TIMER;
 		close(tmpfile);
@@ -533,16 +559,16 @@ test_non_sync(void)
 	printf(LABEL_FORMAT, "write");
 	fflush(stdout);
 
+	if ((tmpfile = open(filename, O_RDWR | PG_BINARY, 0)) == -1)
+		die("could not open output file");
 	START_TIMER;
 	for (ops = 0; alarm_triggered == false; ops++)
 	{
-		if ((tmpfile = open(filename, O_RDWR | PG_BINARY, 0)) == -1)
-			die("could not open output file");
-		if (write(tmpfile, buf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+		if (pg_pwrite(tmpfile, buf, XLOG_BLCKSZ, 0) != XLOG_BLCKSZ)
 			die("write failed");
-		close(tmpfile);
 	}
 	STOP_TIMER;
+	close(tmpfile);
 }
 
 static void

@@ -5,7 +5,7 @@
  *	  in a page which can be different when the WAL is generated
  *	  and when the WAL is applied.
  *
- * Portions Copyright (c) 2016-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2016-2021, PostgreSQL Global Development Group
  *
  * Contains common routines required for masking a page.
  *
@@ -78,7 +78,7 @@ mask_unused_space(Page page)
 	if (pd_lower > pd_upper || pd_special < pd_upper ||
 		pd_lower < SizeOfPageHeaderData || pd_special > BLCKSZ)
 	{
-		elog(ERROR, "invalid page pd_lower %u pd_upper %u pd_special %u\n",
+		elog(ERROR, "invalid page pd_lower %u pd_upper %u pd_special %u",
 			 pd_lower, pd_upper, pd_special);
 	}
 
@@ -88,8 +88,8 @@ mask_unused_space(Page page)
 /*
  * mask_lp_flags
  *
- * In some index AMs, line pointer flags can be modified in master without
- * emitting any WAL record.
+ * In some index AMs, line pointer flags can be modified on the primary
+ * without emitting any WAL record.
  */
 void
 mask_lp_flags(Page page)

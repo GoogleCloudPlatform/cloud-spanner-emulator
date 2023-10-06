@@ -64,13 +64,14 @@ bool IsDisabledAggregateFunction(const SqlFeaturesView& query_features,
 
   static const auto* enabled_aggregate_functions =
       new absl::flat_hash_set<absl::string_view>{
-          "any_value",  "array_agg",   "array_concat_agg",
-          "avg",        "bit_and",     "bit_or",
-          "bit_xor",    "count",       "$count_star",
-          "countif",    "logical_and", "logical_or",
-          "logical_or", "max",         "min",
-          "sum",        "stddev",      "stddev_samp",
-          "string_agg", "variance",    "var_samp",
+          "any_value",   "array_agg",   "array_concat_agg",
+          "avg",         "bit_and",     "bit_or",
+          "bit_xor",     "count",       "$count_star",
+          "countif",     "logical_and", "logical_or",
+          "logical_or",  "max",         "min",
+          "pg.min",      "sum",         "stddev",
+          "stddev_samp", "string_agg",  "variance",
+          "var_samp",
       };
   return !enabled_aggregate_functions->contains(name);
 }

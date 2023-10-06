@@ -67,6 +67,19 @@ absl::StatusOr<std::vector<Oid>> GetProcOids(absl::string_view name) {
   return proc_oids;
 }
 
+TEST(BootstrapCatalog, GetCollationByName) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      const FormData_pg_collation* collation,
+      PgBootstrapCatalog::Default()->GetCollationByName("default"));
+  EXPECT_EQ(collation->oid, DEFAULT_COLLATION_OID);
+}
+
+TEST(BootstrapCatalog, FailedGetCollationByName) {
+  EXPECT_THAT(
+      PgBootstrapCatalog::Default()->GetCollationByName("FAKECOLLATION"),
+      StatusIs(absl::StatusCode::kNotFound));
+}
+
 TEST(BootstrapCatalog, GetCollationOid) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(const Oid collation_oid,
                        PgBootstrapCatalog::Default()->GetCollationOid("C"));
@@ -284,28 +297,29 @@ TEST(BootstrapCatalog, GetOperatorOidsEquals) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Span<const Oid> equals_oids,
                        PgBootstrapCatalog::Default()->GetOperatorOids("="));
   // There are lots of equals oids. Just check count and a few examples.
-  EXPECT_THAT(equals_oids, SizeIs(62));
+  EXPECT_THAT(equals_oids, SizeIs(63));
   EXPECT_THAT(equals_oids, IsSupersetOf({91, 92, 410, 670, 1804, 3240}));
 }
 
-TEST(BootstrapCatalog, GetOperatorOidsPolyContain) {
-  // Get the "@>" operator for poly_contain.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_operator* poly_contain_new,
-                       PgBootstrapCatalog::Default()->GetOperator(490));
-  // Get the "~" operator for poly_contain.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_operator* poly_contain_old,
-                       PgBootstrapCatalog::Default()->GetOperator(2861));
+TEST(BootstrapCatalog, GetOperatorOidsBoxOverlap) {
+  // Get the "&&" operator for box_overlap.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_operator* box_overlap_new,
+                       PgBootstrapCatalog::Default()->GetOperator(500));
+  // Get the "?#" operator for box_overlap.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_operator* box_overlap_old,
+                       PgBootstrapCatalog::Default()->GetOperator(802));
 
-  // The oprcode for both operators should be the function oid for poly_contain.
-  EXPECT_EQ(poly_contain_new->oprcode, 340);
-  EXPECT_EQ(poly_contain_old->oprcode, 340);
+  // The oprcode for both operators should be the function oid for box_overlap.
+  EXPECT_EQ(box_overlap_new->oprcode, 125);
+  EXPECT_EQ(box_overlap_old->oprcode, 125);
 
   // Check that the reverse lookup from oprcode to operator oid finds both oids.
   ZETASQL_ASSERT_OK_AND_ASSIGN(
-      absl::Span<const Oid> poly_contain_oids,
-      PgBootstrapCatalog::Default()->GetOperatorOidsByOprcode(340));
-  EXPECT_THAT(poly_contain_oids, UnorderedElementsAre(490, 2861));
+      absl::Span<const Oid> box_overlap_oids_new,
+      PgBootstrapCatalog::Default()->GetOperatorOidsByOprcode(125));
+  EXPECT_THAT(box_overlap_oids_new, UnorderedElementsAre(500, 802));
 }
+
 // Test verifies that the expected operator is returned when INT8OIDs are both
 // the left and right values.
 TEST(BootstrapCatalog, GetOperatorOidByOprLeftRightEqualsInt) {
@@ -420,7 +434,7 @@ TEST(BootstrapCatalog, AmopsByOprOid) {
       absl::Span<const FormData_pg_amop* const> amops,
       PgBootstrapCatalog::Default()->GetAmopsByAmopOpId(int8_eq_oid));
 
-  ASSERT_EQ(amops.size(), 3);
+  ASSERT_EQ(amops.size(), 5);
   EXPECT_EQ(amops[0]->amopopr, int8_eq_oid);
 }
 

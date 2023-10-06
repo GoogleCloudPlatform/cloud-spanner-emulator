@@ -3,7 +3,7 @@
  *
  *	Postgres-version-specific routines
  *
- *	Copyright (c) 2010-2020, PostgreSQL Global Development Group
+ *	Copyright (c) 2010-2021, PostgreSQL Global Development Group
  *	src/bin/pg_upgrade/version.c
  */
 
@@ -163,33 +163,33 @@ check_for_data_types_usage(ClusterInfo *cluster,
 
 		/* Ranges were introduced in 9.2 */
 		if (GET_MAJOR_VERSION(cluster->major_version) >= 902)
-			appendPQExpBuffer(&querybuf,
-							  "			UNION ALL "
+			appendPQExpBufferStr(&querybuf,
+								 "			UNION ALL "
 			/* ranges containing any type selected so far */
-							  "			SELECT t.oid FROM pg_catalog.pg_type t, pg_catalog.pg_range r, x "
-							  "			WHERE t.typtype = 'r' AND r.rngtypid = t.oid AND r.rngsubtype = x.oid");
+								 "			SELECT t.oid FROM pg_catalog.pg_type t, pg_catalog.pg_range r, x "
+								 "			WHERE t.typtype = 'r' AND r.rngtypid = t.oid AND r.rngsubtype = x.oid");
 
-		appendPQExpBuffer(&querybuf,
-						  "	) foo "
-						  ") "
+		appendPQExpBufferStr(&querybuf,
+							 "	) foo "
+							 ") "
 		/* now look for stored columns of any such type */
-						  "SELECT n.nspname, c.relname, a.attname "
-						  "FROM	pg_catalog.pg_class c, "
-						  "		pg_catalog.pg_namespace n, "
-						  "		pg_catalog.pg_attribute a "
-						  "WHERE	c.oid = a.attrelid AND "
-						  "		NOT a.attisdropped AND "
-						  "		a.atttypid IN (SELECT oid FROM oids) AND "
-						  "		c.relkind IN ("
-						  CppAsString2(RELKIND_RELATION) ", "
-						  CppAsString2(RELKIND_MATVIEW) ", "
-						  CppAsString2(RELKIND_INDEX) ") AND "
-						  "		c.relnamespace = n.oid AND "
+							 "SELECT n.nspname, c.relname, a.attname "
+							 "FROM	pg_catalog.pg_class c, "
+							 "		pg_catalog.pg_namespace n, "
+							 "		pg_catalog.pg_attribute a "
+							 "WHERE	c.oid = a.attrelid AND "
+							 "		NOT a.attisdropped AND "
+							 "		a.atttypid IN (SELECT oid FROM oids) AND "
+							 "		c.relkind IN ("
+							 CppAsString2(RELKIND_RELATION) ", "
+							 CppAsString2(RELKIND_MATVIEW) ", "
+							 CppAsString2(RELKIND_INDEX) ") AND "
+							 "		c.relnamespace = n.oid AND "
 		/* exclude possible orphaned temp tables */
-						  "		n.nspname !~ '^pg_temp_' AND "
-						  "		n.nspname !~ '^pg_toast_temp_' AND "
+							 "		n.nspname !~ '^pg_temp_' AND "
+							 "		n.nspname !~ '^pg_toast_temp_' AND "
 		/* exclude system catalogs, too */
-						  "		n.nspname NOT IN ('pg_catalog', 'information_schema')");
+							 "		n.nspname NOT IN ('pg_catalog', 'information_schema')");
 
 		res = executeQueryOrDie(conn, "%s", querybuf.data);
 
@@ -276,11 +276,12 @@ old_9_3_check_for_line_data_type_usage(ClusterInfo *cluster)
 	if (check_for_data_type_usage(cluster, "pg_catalog.line", output_path))
 	{
 		pg_log(PG_REPORT, "fatal\n");
-		pg_fatal("Your installation contains the \"line\" data type in user tables.  This\n"
-				 "data type changed its internal and input/output format between your old\n"
-				 "and new clusters so this cluster cannot currently be upgraded.  You can\n"
-				 "remove the problem tables and restart the upgrade.  A list of the problem\n"
-				 "columns is in the file:\n"
+		pg_fatal("Your installation contains the \"line\" data type in user tables.\n"
+				 "This data type changed its internal and input/output format\n"
+				 "between your old and new versions so this\n"
+				 "cluster cannot currently be upgraded.  You can\n"
+				 "drop the problem columns and restart the upgrade.\n"
+				 "A list of the problem columns is in the file:\n"
 				 "    %s\n\n", output_path);
 	}
 	else
@@ -313,9 +314,10 @@ old_9_6_check_for_unknown_data_type_usage(ClusterInfo *cluster)
 	if (check_for_data_type_usage(cluster, "pg_catalog.unknown", output_path))
 	{
 		pg_log(PG_REPORT, "fatal\n");
-		pg_fatal("Your installation contains the \"unknown\" data type in user tables.  This\n"
-				 "data type is no longer allowed in tables, so this cluster cannot currently\n"
-				 "be upgraded.  You can remove the problem tables and restart the upgrade.\n"
+		pg_fatal("Your installation contains the \"unknown\" data type in user tables.\n"
+				 "This data type is no longer allowed in tables, so this\n"
+				 "cluster cannot currently be upgraded.  You can\n"
+				 "drop the problem columns and restart the upgrade.\n"
 				 "A list of the problem columns is in the file:\n"
 				 "    %s\n\n", output_path);
 	}
@@ -456,10 +458,10 @@ old_11_check_for_sql_identifier_data_type_usage(ClusterInfo *cluster)
 								  output_path))
 	{
 		pg_log(PG_REPORT, "fatal\n");
-		pg_fatal("Your installation contains the \"sql_identifier\" data type in user tables\n"
-				 "and/or indexes.  The on-disk format for this data type has changed, so this\n"
-				 "cluster cannot currently be upgraded.  You can remove the problem tables or\n"
-				 "change the data type to \"name\" and restart the upgrade.\n"
+		pg_fatal("Your installation contains the \"sql_identifier\" data type in user tables.\n"
+				 "The on-disk format for this data type has changed, so this\n"
+				 "cluster cannot currently be upgraded.  You can\n"
+				 "drop the problem columns and restart the upgrade.\n"
 				 "A list of the problem columns is in the file:\n"
 				 "    %s\n\n", output_path);
 	}

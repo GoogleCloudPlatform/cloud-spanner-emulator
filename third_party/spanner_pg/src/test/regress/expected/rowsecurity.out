@@ -1632,19 +1632,21 @@ EXPLAIN (COSTS OFF) EXECUTE p2(2);
 --
 SET SESSION AUTHORIZATION regress_rls_bob;
 EXPLAIN (COSTS OFF) UPDATE t1 SET b = b || b WHERE f_leak(b);
-                  QUERY PLAN                   
------------------------------------------------
+                        QUERY PLAN                         
+-----------------------------------------------------------
  Update on t1
-   Update on t1
-   Update on t2 t1_1
-   Update on t3 t1_2
-   ->  Seq Scan on t1
-         Filter: (((a % 2) = 0) AND f_leak(b))
-   ->  Seq Scan on t2 t1_1
-         Filter: (((a % 2) = 0) AND f_leak(b))
-   ->  Seq Scan on t3 t1_2
-         Filter: (((a % 2) = 0) AND f_leak(b))
-(10 rows)
+   Update on t1 t1_1
+   Update on t2 t1_2
+   Update on t3 t1_3
+   ->  Result
+         ->  Append
+               ->  Seq Scan on t1 t1_1
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on t2 t1_2
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on t3 t1_3
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+(12 rows)
 
 UPDATE t1 SET b = b || b WHERE f_leak(b);
 NOTICE:  f_leak => bbb
@@ -1722,31 +1724,27 @@ NOTICE:  f_leak => cde
 NOTICE:  f_leak => yyyyyy
 EXPLAIN (COSTS OFF) UPDATE t1 SET b=t1.b FROM t2
 WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
-                           QUERY PLAN                            
------------------------------------------------------------------
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
  Update on t1
-   Update on t1
-   Update on t2 t1_1
-   Update on t3 t1_2
+   Update on t1 t1_1
+   Update on t2 t1_2
+   Update on t3 t1_3
    ->  Nested Loop
-         ->  Seq Scan on t1
-               Filter: ((a = 3) AND ((a % 2) = 0) AND f_leak(b))
          ->  Seq Scan on t2
                Filter: ((a = 3) AND ((a % 2) = 1) AND f_leak(b))
-   ->  Nested Loop
-         ->  Seq Scan on t2 t1_1
-               Filter: ((a = 3) AND ((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on t2
-               Filter: ((a = 3) AND ((a % 2) = 1) AND f_leak(b))
-   ->  Nested Loop
-         ->  Seq Scan on t3 t1_2
-               Filter: ((a = 3) AND ((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on t2
-               Filter: ((a = 3) AND ((a % 2) = 1) AND f_leak(b))
-(19 rows)
+         ->  Append
+               ->  Seq Scan on t1 t1_1
+                     Filter: ((a = 3) AND ((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on t2 t1_2
+                     Filter: ((a = 3) AND ((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on t3 t1_3
+                     Filter: ((a = 3) AND ((a % 2) = 0) AND f_leak(b))
+(14 rows)
 
 UPDATE t1 SET b=t1.b FROM t2
 WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
+NOTICE:  f_leak => cde
 EXPLAIN (COSTS OFF) UPDATE t2 SET b=t2.b FROM t1
 WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
                               QUERY PLAN                               
@@ -1795,46 +1793,30 @@ NOTICE:  f_leak => cde
 EXPLAIN (COSTS OFF) UPDATE t1 t1_1 SET b = t1_2.b FROM t1 t1_2
 WHERE t1_1.a = 4 AND t1_2.a = t1_1.a AND t1_2.b = t1_1.b
 AND f_leak(t1_1.b) AND f_leak(t1_2.b) RETURNING *, t1_1, t1_2;
-                              QUERY PLAN                               
------------------------------------------------------------------------
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
  Update on t1 t1_1
-   Update on t1 t1_1
-   Update on t2 t1_1_1
-   Update on t3 t1_1_2
+   Update on t1 t1_1_1
+   Update on t2 t1_1_2
+   Update on t3 t1_1_3
    ->  Nested Loop
          Join Filter: (t1_1.b = t1_2.b)
-         ->  Seq Scan on t1 t1_1
-               Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
          ->  Append
-               ->  Seq Scan on t1 t1_2_1
+               ->  Seq Scan on t1 t1_1_1
                      Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on t2 t1_2_2
+               ->  Seq Scan on t2 t1_1_2
                      Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on t3 t1_2_3
+               ->  Seq Scan on t3 t1_1_3
                      Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
-   ->  Nested Loop
-         Join Filter: (t1_1_1.b = t1_2.b)
-         ->  Seq Scan on t2 t1_1_1
-               Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
-         ->  Append
-               ->  Seq Scan on t1 t1_2_1
-                     Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on t2 t1_2_2
-                     Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on t3 t1_2_3
-                     Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
-   ->  Nested Loop
-         Join Filter: (t1_1_2.b = t1_2.b)
-         ->  Seq Scan on t3 t1_1_2
-               Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
-         ->  Append
-               ->  Seq Scan on t1 t1_2_1
-                     Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on t2 t1_2_2
-                     Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on t3 t1_2_3
-                     Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
-(37 rows)
+         ->  Materialize
+               ->  Append
+                     ->  Seq Scan on t1 t1_2_1
+                           Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
+                     ->  Seq Scan on t2 t1_2_2
+                           Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
+                     ->  Seq Scan on t3 t1_2_3
+                           Filter: ((a = 4) AND ((a % 2) = 0) AND f_leak(b))
+(21 rows)
 
 UPDATE t1 t1_1 SET b = t1_2.b FROM t1 t1_2
 WHERE t1_1.a = 4 AND t1_2.a = t1_1.a AND t1_2.b = t1_1.b
@@ -1842,8 +1824,6 @@ AND f_leak(t1_1.b) AND f_leak(t1_2.b) RETURNING *, t1_1, t1_2;
 NOTICE:  f_leak => daddad_updt
 NOTICE:  f_leak => daddad_updt
 NOTICE:  f_leak => defdef
-NOTICE:  f_leak => defdef
-NOTICE:  f_leak => daddad_updt
 NOTICE:  f_leak => defdef
  id  | a |      b      | id  | a |      b      |        t1_1         |        t1_2         
 -----+---+-------------+-----+---+-------------+---------------------+---------------------
@@ -1880,19 +1860,20 @@ EXPLAIN (COSTS OFF) DELETE FROM only t1 WHERE f_leak(b);
 (3 rows)
 
 EXPLAIN (COSTS OFF) DELETE FROM t1 WHERE f_leak(b);
-                  QUERY PLAN                   
------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Delete on t1
-   Delete on t1
-   Delete on t2 t1_1
-   Delete on t3 t1_2
-   ->  Seq Scan on t1
-         Filter: (((a % 2) = 0) AND f_leak(b))
-   ->  Seq Scan on t2 t1_1
-         Filter: (((a % 2) = 0) AND f_leak(b))
-   ->  Seq Scan on t3 t1_2
-         Filter: (((a % 2) = 0) AND f_leak(b))
-(10 rows)
+   Delete on t1 t1_1
+   Delete on t2 t1_2
+   Delete on t3 t1_3
+   ->  Append
+         ->  Seq Scan on t1 t1_1
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on t2 t1_2
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on t3 t1_3
+               Filter: (((a % 2) = 0) AND f_leak(b))
+(11 rows)
 
 DELETE FROM only t1 WHERE f_leak(b) RETURNING tableoid::regclass, *, t1;
 NOTICE:  f_leak => bbbbbb_updt
@@ -3274,6 +3255,42 @@ ERROR:  permission denied for table copy_rel_to
 SET row_security TO ON;
 COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - permission denied
 ERROR:  permission denied for table copy_rel_to
+-- Check behavior with a child table.
+RESET SESSION AUTHORIZATION;
+SET row_security TO ON;
+CREATE TABLE copy_rel_to_child () INHERITS (copy_rel_to);
+INSERT INTO copy_rel_to_child VALUES (1, 'one'), (2, 'two');
+-- Check COPY TO as Superuser/owner.
+RESET SESSION AUTHORIZATION;
+SET row_security TO OFF;
+COPY copy_rel_to TO STDOUT WITH DELIMITER ',';
+1,c4ca4238a0b923820dcc509a6f75849b
+SET row_security TO ON;
+COPY copy_rel_to TO STDOUT WITH DELIMITER ',';
+1,c4ca4238a0b923820dcc509a6f75849b
+-- Check COPY TO as user with permissions.
+SET SESSION AUTHORIZATION regress_rls_bob;
+SET row_security TO OFF;
+COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - would be affected by RLS
+ERROR:  query would be affected by row-level security policy for table "copy_rel_to"
+SET row_security TO ON;
+COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --ok
+-- Check COPY TO as user with permissions and BYPASSRLS
+SET SESSION AUTHORIZATION regress_rls_exempt_user;
+SET row_security TO OFF;
+COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --ok
+1,c4ca4238a0b923820dcc509a6f75849b
+SET row_security TO ON;
+COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --ok
+1,c4ca4238a0b923820dcc509a6f75849b
+-- Check COPY TO as user without permissions. SET row_security TO OFF;
+SET SESSION AUTHORIZATION regress_rls_carol;
+SET row_security TO OFF;
+COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - permission denied
+ERROR:  permission denied for table copy_rel_to
+SET row_security TO ON;
+COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - permission denied
+ERROR:  permission denied for table copy_rel_to
 -- Check COPY FROM as Superuser/owner.
 RESET SESSION AUTHORIZATION;
 SET row_security TO OFF;
@@ -3304,6 +3321,7 @@ ERROR:  permission denied for table copy_t
 RESET SESSION AUTHORIZATION;
 DROP TABLE copy_t;
 DROP TABLE copy_rel_to CASCADE;
+NOTICE:  drop cascades to table copy_rel_to_child
 -- Check WHERE CURRENT OF
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE current_check (currentid int, payload text, rlsuser text);
@@ -3533,7 +3551,7 @@ CREATE POLICY p ON t USING (c % 2 = 1);
 ALTER TABLE t ENABLE ROW LEVEL SECURITY;
 SAVEPOINT q;
 CREATE RULE "_RETURN" AS ON SELECT TO t DO INSTEAD
-  SELECT * FROM generate_series(1,5) t0(c); -- fails due to row level security enabled
+  SELECT * FROM generate_series(1,5) t0(c); -- fails due to row-level security enabled
 ERROR:  could not convert table "t" to a view because it has row security enabled
 ROLLBACK TO q;
 ALTER TABLE t DISABLE ROW LEVEL SECURITY;
@@ -4001,6 +4019,33 @@ SELECT * FROM rls_tbl;
 
 DROP TABLE rls_tbl;
 RESET SESSION AUTHORIZATION;
+-- CVE-2023-2455: inlining an SRF may introduce an RLS dependency
+create table rls_t (c text);
+insert into rls_t values ('invisible to bob');
+alter table rls_t enable row level security;
+grant select on rls_t to regress_rls_alice, regress_rls_bob;
+create policy p1 on rls_t for select to regress_rls_alice using (true);
+create policy p2 on rls_t for select to regress_rls_bob using (false);
+create function rls_f () returns setof rls_t
+  stable language sql
+  as $$ select * from rls_t $$;
+prepare q as select current_user, * from rls_f();
+set role regress_rls_alice;
+execute q;
+   current_user    |        c         
+-------------------+------------------
+ regress_rls_alice | invisible to bob
+(1 row)
+
+set role regress_rls_bob;
+execute q;
+ current_user | c 
+--------------+---
+(0 rows)
+
+RESET ROLE;
+DROP FUNCTION rls_f();
+DROP TABLE rls_t;
 --
 -- Clean up objects
 --

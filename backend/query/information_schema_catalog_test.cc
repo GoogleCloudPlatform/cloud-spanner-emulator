@@ -21,6 +21,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
+#include "backend/query/spanner_sys_catalog.h"
 
 namespace google::spanner::emulator::backend {
 
@@ -28,39 +29,50 @@ namespace {
 
 TEST(InformationSchemaCatalogTest, ColumnsMetadataCount) {
   Schema schema;
-  InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema);
+  SpannerSysCatalog spanner_sys_catalog;
+  InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema,
+                                   &spanner_sys_catalog);
   EXPECT_EQ(ColumnsMetadata().size(), 238);
 }
 
 TEST(InformationSchemaCatalogTest, IndexColumnsMetadataCount) {
   Schema schema;
-  InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema);
+  SpannerSysCatalog spanner_sys_catalog;
+  InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema,
+                                   &spanner_sys_catalog);
   EXPECT_EQ(IndexColumnsMetadata().size(), 156);
 }
 
 TEST(InformationSchemaCatalogTest, SpannerSysColumnsMetadataCount) {
   Schema schema;
-  InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema);
+  SpannerSysCatalog spanner_sys_catalog;
+  InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema,
+                                   &spanner_sys_catalog);
   EXPECT_EQ(SpannerSysColumnsMetadata().size(), 293);
 }
 
 TEST(InformationSchemaCatalogTest, PGColumnsMetadataCount) {
   Schema schema;
-  InformationSchemaCatalog catalog(InformationSchemaCatalog::kPGName, &schema);
+  SpannerSysCatalog spanner_sys_catalog;
+  InformationSchemaCatalog catalog(InformationSchemaCatalog::kPGName, &schema,
+                                   &spanner_sys_catalog);
   EXPECT_EQ(PGColumnsMetadata().size(), 388);
 }
 
 TEST(InformationSchemaCatalogTest, PGIndexColumnsMetadataCount) {
   Schema schema;
-  InformationSchemaCatalog catalog(InformationSchemaCatalog::kPGName, &schema);
+  SpannerSysCatalog spanner_sys_catalog;
+  InformationSchemaCatalog catalog(InformationSchemaCatalog::kPGName, &schema,
+                                   &spanner_sys_catalog);
   EXPECT_EQ(PGIndexColumnsMetadata().size(), 1);
 }
 
 TEST(InformationSchemaCatalogTest, PGSpannerSysColumnsMetadataCount) {
   Schema schema;
-  InformationSchemaCatalog catalog(InformationSchemaCatalog::kPGName, &schema);
+  SpannerSysCatalog spanner_sys_catalog;
+  InformationSchemaCatalog catalog(InformationSchemaCatalog::kPGName, &schema,
+                                   &spanner_sys_catalog);
   EXPECT_EQ(SpannerSysColumnsMetadata().size(), 293);
 }
-
 }  // namespace
 }  // namespace google::spanner::emulator::backend

@@ -154,6 +154,8 @@ class TestChangeStreamEffectsBuffer : public ChangeStreamEffectsBuffer {
   // Accessor.
   std::vector<WriteOp> GetWriteOps() override;
 
+  void ClearWriteOps() override;
+
  private:
   DataChangeRecord BuildDataChangeRecord(std::string tracked_table_name,
                                          std::string value_capture_type,

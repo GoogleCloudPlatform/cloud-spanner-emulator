@@ -99,16 +99,18 @@ cc_library(
 cc_library(
     name = "test_schema_constructor",
     testonly = 1,
-    hdrs = [
-        "schema_constructor.h",
-    ],
+    srcs = ["schema_constructor.cc"],
+    hdrs = ["schema_constructor.h"],
     deps = [
         ":scoped_feature_flags_setter",
+        "//backend/common:ids",
         "//backend/schema/catalog:schema",
         "//backend/schema/updater:schema_updater",
-        "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )

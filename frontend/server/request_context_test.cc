@@ -27,6 +27,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/str_cat.h"
 #include "frontend/common/uris.h"
+#include "tests/common/proto_matchers.h"
 
 namespace google {
 namespace spanner {

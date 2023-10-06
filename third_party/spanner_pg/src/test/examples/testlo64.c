@@ -3,7 +3,7 @@
  * testlo64.c
  *	  test using large objects with libpq using 64-bit APIs
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -249,8 +249,7 @@ main(int argc, char **argv)
 	/* check to see that the backend connection was successfully made */
 	if (PQstatus(conn) != CONNECTION_OK)
 	{
-		fprintf(stderr, "Connection to database failed: %s",
-				PQerrorMessage(conn));
+		fprintf(stderr, "%s", PQerrorMessage(conn));
 		exit_nicely(conn);
 	}
 

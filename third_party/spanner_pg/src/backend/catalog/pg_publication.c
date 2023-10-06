@@ -3,7 +3,7 @@
  * pg_publication.c
  *		publication C API manipulation
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -68,7 +68,7 @@ check_publication_add_relation(Relation targetrel)
 				 errdetail("System tables cannot be added to publications.")));
 
 	/* UNLOGGED and TEMP relations cannot be part of publication. */
-	if (targetrel->rd_rel->relpersistence != RELPERSISTENCE_PERMANENT)
+	if (!RelationIsPermanent(targetrel))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("table \"%s\" cannot be replicated",

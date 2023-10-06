@@ -29,6 +29,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
 #include "common/feature_flags.h"
+#include "tests/common/proto_matchers.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "zetasql/base/status_macros.h"
 

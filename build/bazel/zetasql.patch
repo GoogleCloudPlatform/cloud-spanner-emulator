@@ -31,6 +31,19 @@ index b88b3aa..df9d6ea 100644
  
  # A drop in replacement for gtest_main that parsers absl flags
  cc_library(
+diff --git a/zetasql/common/BUILD b/zetasql/common/BUILD
+index b88b3aa..df9d6ea 100644
+--- a/zetasql/common/BUILD
++++ b/zetasql/common/BUILD
+@@ -15,7 +15,7 @@
+
+ package(
+-    default_visibility = ["//zetasql/base:zetasql_implementation"],
++    default_visibility = ["//visibility:public"],
+     features = ["parse_headers"],
+ )
+
+ cc_library(
 diff --git a/zetasql/common/internal_value.h b/zetasql/common/internal_value.h
 index 9d91e28..38e654c 100644
 --- a/zetasql/common/internal_value.h

@@ -3,7 +3,7 @@
  * datetime.c
  *	  Support functions for date/time types.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -33,17 +33,20 @@
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
 
-static int	DecodeNumber(int flen, char *field, bool haveTextMonth,
+// SPANGRES BEGIN
+// We've made these functions non-static to call them from catalog_shim.
+int	DecodeNumber(int flen, char *field, bool haveTextMonth,
 						 int fmask, int *tmask,
 						 struct pg_tm *tm, fsec_t *fsec, bool *is2digits);
-static int	DecodeNumberField(int len, char *str,
+int	DecodeNumberField(int len, char *str,
 							  int fmask, int *tmask,
 							  struct pg_tm *tm, fsec_t *fsec, bool *is2digits);
-static int	DecodeTime(char *str, int fmask, int range,
+int	DecodeTime(char *str, int fmask, int range,
 					   int *tmask, struct pg_tm *tm, fsec_t *fsec);
-static const datetkn *datebsearch(const char *key, const datetkn *base, int nel);
-static int	DecodeDate(char *str, int fmask, int *tmask, bool *is2digits,
+const datetkn *datebsearch(const char *key, const datetkn *base, int nel);
+int	DecodeDate(char *str, int fmask, int *tmask, bool *is2digits,
 					   struct pg_tm *tm);
+// SPANGRES END
 static char *AppendSeconds(char *cp, int sec, fsec_t fsec,
 						   int precision, bool fillzeros);
 static void AdjustFractSeconds(double frac, struct pg_tm *tm, fsec_t *fsec,
@@ -346,35 +349,85 @@ j2day(int date)
 /*
  * GetCurrentDateTime()
  *
- * Get the transaction start time ("now()") broken down as a struct pg_tm.
+ * Get the transaction start time ("now()") broken down as a struct pg_tm,
+ * converted according to the session timezone setting.
+ *
+ * This is just a convenience wrapper for GetCurrentTimeUsec, to cover the
+ * case where caller doesn't need either fractional seconds or tz offset.
  */
 void
 GetCurrentDateTime(struct pg_tm *tm)
 {
-	int			tz;
 	fsec_t		fsec;
 
-	timestamp2tm(GetCurrentTransactionStartTimestamp(), &tz, tm, &fsec,
-				 NULL, NULL);
-	/* Note: don't pass NULL tzp to timestamp2tm; affects behavior */
+	GetCurrentTimeUsec(tm, &fsec, NULL);
 }
 
 /*
  * GetCurrentTimeUsec()
  *
  * Get the transaction start time ("now()") broken down as a struct pg_tm,
- * including fractional seconds and timezone offset.
+ * including fractional seconds and timezone offset.  The time is converted
+ * according to the session timezone setting.
+ *
+ * Callers may pass tzp = NULL if they don't need the offset, but this does
+ * not affect the conversion behavior (unlike timestamp2tm()).
+ *
+ * Internally, we cache the result, since this could be called many times
+ * in a transaction, within which now() doesn't change.
  */
 void
 GetCurrentTimeUsec(struct pg_tm *tm, fsec_t *fsec, int *tzp)
 {
-	int			tz;
+	TimestampTz cur_ts = GetCurrentTransactionStartTimestamp();
 
-	timestamp2tm(GetCurrentTransactionStartTimestamp(), &tz, tm, fsec,
-				 NULL, NULL);
-	/* Note: don't pass NULL tzp to timestamp2tm; affects behavior */
+	/*
+	 * The cache key must include both current time and current timezone.  By
+	 * representing the timezone by just a pointer, we're assuming that
+	 * distinct timezone settings could never have the same pointer value.
+	 * This is true by virtue of the hashtable used inside pg_tzset();
+	 * however, it might need another look if we ever allow entries in that
+	 * hash to be recycled.
+	 */
+	/* SPANGRES BEGIN */
+	// Make these caches thread-local.
+	// Note that unlike other PostgreSQL caches, these are backed by static data
+	// and remain valid across invocations, so they do not need to be cleared
+	// after use.
+	static __thread TimestampTz cache_ts = 0;
+	static __thread pg_tz *cache_timezone = NULL;
+	static __thread struct pg_tm cache_tm;
+	static __thread fsec_t cache_fsec;
+	static __thread int	cache_tz;
+
+	if (cur_ts != cache_ts || session_timezone != cache_timezone)
+	{
+		/*
+		 * Make sure cache is marked invalid in case of error after partial
+		 * update within timestamp2tm.
+		 */
+		cache_timezone = NULL;
+
+		/*
+		 * Perform the computation, storing results into cache.  We do not
+		 * really expect any error here, since current time surely ought to be
+		 * within range, but check just for sanity's sake.
+		 */
+		if (timestamp2tm(cur_ts, &cache_tz, &cache_tm, &cache_fsec,
+						 NULL, session_timezone) != 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+					 errmsg("timestamp out of range")));
+
+		/* OK, so mark the cache valid. */
+		cache_ts = cur_ts;
+		cache_timezone = session_timezone;
+	}
+
+	*tm = cache_tm;
+	*fsec = cache_fsec;
 	if (tzp != NULL)
-		*tzp = tz;
+		*tzp = cache_tz;
 }
 
 
@@ -492,8 +545,11 @@ AdjustFractDays(double frac, struct pg_tm *tm, fsec_t *fsec, int scale)
 }
 
 /* Fetch a fractional-second value with suitable error checking */
-static int
+// SPANGRES BEGIN
+// We've made this function non-static to call it from catalog_shim.
+int
 ParseFractionalSecond(char *cp, fsec_t *fsec)
+// SPANGRES END
 {
 	double		frac;
 
@@ -762,7 +818,7 @@ ParseDateTime(const char *timestr, char *workbuf, size_t buflen,
  * 1997-05-27
  */
 int
-DecodeDateTime(char **field, int *ftype, int nf,
+DecodeDateTime_UNUSED_SPANGRES(char **field, int *ftype, int nf,
 			   int *dtype, struct pg_tm *tm, fsec_t *fsec, int *tzp)
 {
 	int			fmask = 0,
@@ -2328,9 +2384,12 @@ DecodeTimeOnly(char **field, int *ftype, int nf,
  *	*is2digits: set to true if we find 2-digit year
  *	*tm: field values are stored into appropriate members of this struct
  */
-static int
+// SPANGRES BEGIN
+// We've made this function non-static to call it from catalog_shim.
+int
 DecodeDate(char *str, int fmask, int *tmask, bool *is2digits,
 		   struct pg_tm *tm)
+// SPANGRES END
 {
 	fsec_t		fsec;
 	int			nf = 0;
@@ -2517,9 +2576,12 @@ ValidateDate(int fmask, bool isjulian, bool is2digits, bool bc,
  * Only check the lower limit on hours, since this same code can be
  * used to represent time spans.
  */
-static int
+// SPANGRES BEGIN
+// We've made this function non-static to call it from catalog_shim.
+int
 DecodeTime(char *str, int fmask, int range,
 		   int *tmask, struct pg_tm *tm, fsec_t *fsec)
+// SPANGRES END
 {
 	char	   *cp;
 	int			dterr;
@@ -2593,9 +2655,12 @@ DecodeTime(char *str, int fmask, int range,
  * Interpret plain numeric field as a date value in context.
  * Return 0 if okay, a DTERR code if not.
  */
-static int
+// SPANGRES BEGIN
+// We've made this function non-static to call it from catalog_shim.
+int
 DecodeNumber(int flen, char *str, bool haveTextMonth, int fmask,
 			 int *tmask, struct pg_tm *tm, fsec_t *fsec, bool *is2digits)
+// SPANGRES END
 {
 	int			val;
 	char	   *cp;
@@ -2778,9 +2843,12 @@ DecodeNumber(int flen, char *str, bool haveTextMonth, int fmask,
  * Use the context of previously decoded fields to help with
  * the interpretation.
  */
-static int
+// SPANGRES BEGIN
+// We've made this function non-static to call it from catalog_shim.
+int
 DecodeNumberField(int len, char *str, int fmask,
 				  int *tmask, struct pg_tm *tm, fsec_t *fsec, bool *is2digits)
+// SPANGRES END
 {
 	char	   *cp;
 
@@ -2944,7 +3012,7 @@ DecodeTimezone(char *str, int *tzp)
  *	will be related in format.
  */
 int
-DecodeTimezoneAbbrev(int field, char *lowtoken,
+DecodeTimezoneAbbrev_UNUSED_SPANGRES(int field, char *lowtoken,
 					 int *offset, pg_tz **tz)
 {
 	int			type;
@@ -3771,8 +3839,11 @@ DateTimeParseError(int dterr, const char *str, const char *datatype)
  * Binary search -- from Knuth (6.2.1) Algorithm B.  Special case like this
  * is WAY faster than the generic bsearch().
  */
-static const datetkn *
+// SPANGRES BEGIN
+// We've made this function non-static to call it from catalog_shim.
+const datetkn *
 datebsearch(const char *key, const datetkn *base, int nel)
+// SPANGRES END
 {
 	if (nel > 0)
 	{
@@ -4020,7 +4091,8 @@ EncodeDateTime(struct pg_tm *tm, fsec_t fsec, bool print_tz, int tz, const char 
 
 			/*
 			 * Note: the uses of %.*s in this function would be risky if the
-			 * timezone names ever contain non-ASCII characters.  However, all
+			 * timezone names ever contain non-ASCII characters, since we are
+			 * not being careful to do encoding-aware clipping.  However, all
 			 * TZ abbreviations in the IANA database are plain ASCII.
 			 */
 			if (print_tz)
@@ -4375,6 +4447,7 @@ EncodeInterval(struct pg_tm *tm, fsec_t fsec, int style, char *str)
 				else if (is_before)
 					*cp++ = '-';
 				cp = AppendSeconds(cp, sec, fsec, MAX_INTERVAL_PRECISION, false);
+				/* We output "ago", not negatives, so use abs(). */
 				sprintf(cp, " sec%s",
 						(abs(sec) != 1 || fsec != 0) ? "s" : "");
 				is_zero = false;

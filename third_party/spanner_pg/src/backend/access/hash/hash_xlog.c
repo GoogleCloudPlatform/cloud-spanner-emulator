@@ -4,7 +4,7 @@
  *	  WAL replay logic for hash index.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -352,11 +352,10 @@ hash_xlog_split_allocate_page(XLogReaderState *record)
 	}
 
 	/* replay the record for new bucket */
-	newbuf = XLogInitBufferForRedo(record, 1);
+	XLogReadBufferForRedoExtended(record, 1, RBM_ZERO_AND_CLEANUP_LOCK, true,
+								  &newbuf);
 	_hash_initbuf(newbuf, xlrec->new_bucket, xlrec->new_bucket,
 				  xlrec->new_bucket_flag, true);
-	if (!IsBufferCleanupOK(newbuf))
-		elog(PANIC, "hash_xlog_split_allocate_page: failed to acquire cleanup lock");
 	MarkBufferDirty(newbuf);
 	PageSetLSN(BufferGetPage(newbuf), lsn);
 
@@ -992,10 +991,10 @@ hash_xlog_vacuum_one_page(XLogReaderState *record)
 	 * Hash index records that are marked as LP_DEAD and being removed during
 	 * hash index tuple insertion can conflict with standby queries. You might
 	 * think that vacuum records would conflict as well, but we've handled
-	 * that already.  XLOG_HEAP2_CLEANUP_INFO records provide the highest xid
-	 * cleaned by the vacuum of the heap and so we can resolve any conflicts
-	 * just once when that arrives.  After that we know that no conflicts
-	 * exist from individual hash index vacuum records on that index.
+	 * that already.  XLOG_HEAP2_PRUNE records provide the highest xid cleaned
+	 * by the vacuum of the heap and so we can resolve any conflicts just once
+	 * when that arrives.  After that we know that no conflicts exist from
+	 * individual hash index vacuum records on that index.
 	 */
 	if (InHotStandby)
 	{

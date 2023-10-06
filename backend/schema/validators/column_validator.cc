@@ -26,6 +26,7 @@
 #include "absl/strings/substitute.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/backfills/column_value_backfill.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/updater/schema_validation_context.h"
@@ -190,6 +191,19 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
                                              column->table()->Name());
   }
 
+  if (!column->change_streams_explicitly_tracking_column().empty() &&
+      column->is_deleted()) {
+    std::string change_stream_names;
+    for (int i = 0;
+         i < column->change_streams_explicitly_tracking_column().size(); ++i) {
+      change_stream_names.append(
+          column->change_streams_explicitly_tracking_column()[i]->Name());
+    }
+    return error::DropColumnWithChangeStream(
+        column->table()->Name(), column->Name(),
+        column->change_streams_explicitly_tracking_column().size(),
+        change_stream_names);
+  }
   if (column->is_deleted()) {
     return absl::OkStatus();
   }

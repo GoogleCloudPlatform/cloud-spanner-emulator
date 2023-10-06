@@ -1,23 +1,24 @@
 # pg_config spanish translation
 #
-# Copyright (c) 2004-2019, PostgreSQL Global Development Group
+# Copyright (c) 2004-2021, PostgreSQL Global Development Group
 # This file is distributed under the same license as the PostgreSQL package.
 #
 # Alvaro Herrera <alvherre@alvh.no-ip.org>, 2004-2013
+# Carlos Chapi <carloswaldo@babelruins.org>, 2021
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: pg_config (PostgreSQL) 12\n"
+"Project-Id-Version: pg_config (PostgreSQL) 14\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@lists.postgresql.org\n"
-"POT-Creation-Date: 2020-09-13 10:45+0000\n"
-"PO-Revision-Date: 2020-09-12 22:54-0300\n"
-"Last-Translator: Carlos Chapi <carlos.chapi@2ndquadrant.com>\n"
+"POT-Creation-Date: 2023-05-07 17:01+0000\n"
+"PO-Revision-Date: 2021-05-20 23:11-0500\n"
+"Last-Translator: Carlos Chapi <carloswaldo@babelruins.org>\n"
 "Language-Team: PgSQL-es-Ayuda <pgsql-es-ayuda@lists.postgresql.org>\n"
 "Language: es\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Generator: Poedit 1.8.7\n"
+"X-Generator: Poedit 2.4.2\n"
 
 #: ../../common/config_info.c:134 ../../common/config_info.c:142
 #: ../../common/config_info.c:150 ../../common/config_info.c:158
@@ -26,42 +27,42 @@ msgstr ""
 msgid "not recorded"
 msgstr "no registrado"
 
-#: ../../common/exec.c:137 ../../common/exec.c:254 ../../common/exec.c:300
+#: ../../common/exec.c:149 ../../common/exec.c:266 ../../common/exec.c:312
 #, c-format
 msgid "could not identify current directory: %m"
 msgstr "no se pudo identificar el directorio actual: %m"
 
-#: ../../common/exec.c:156
+#: ../../common/exec.c:168
 #, c-format
 msgid "invalid binary \"%s\""
 msgstr "el binario «%s» no es válido"
 
-#: ../../common/exec.c:206
+#: ../../common/exec.c:218
 #, c-format
 msgid "could not read binary \"%s\""
 msgstr "no se pudo leer el binario «%s»"
 
-#: ../../common/exec.c:214
+#: ../../common/exec.c:226
 #, c-format
 msgid "could not find a \"%s\" to execute"
 msgstr "no se pudo encontrar un «%s» para ejecutar"
 
-#: ../../common/exec.c:270 ../../common/exec.c:309
+#: ../../common/exec.c:282 ../../common/exec.c:321
 #, c-format
 msgid "could not change directory to \"%s\": %m"
 msgstr "no se pudo cambiar al directorio «%s»: %m"
 
-#: ../../common/exec.c:287
+#: ../../common/exec.c:299
 #, c-format
 msgid "could not read symbolic link \"%s\": %m"
 msgstr "no se pudo leer el enlace simbólico «%s»: %m"
 
-#: ../../common/exec.c:410
+#: ../../common/exec.c:422
 #, c-format
-msgid "pclose failed: %m"
-msgstr "pclose falló: %m"
+msgid "%s() failed: %m"
+msgstr "%s() falló: %m"
 
-#: ../../common/exec.c:539 ../../common/exec.c:584 ../../common/exec.c:676
+#: ../../common/exec.c:560 ../../common/exec.c:605 ../../common/exec.c:697
 msgid "out of memory"
 msgstr "memoria agotada"
 

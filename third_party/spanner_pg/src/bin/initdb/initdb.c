@@ -38,7 +38,7 @@
  *
  * This code is released under the terms of the PostgreSQL License.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/initdb/initdb.c
@@ -67,6 +67,7 @@
 #include "common/file_utils.h"
 #include "common/logging.h"
 #include "common/restricted_token.h"
+#include "common/string.h"
 #include "common/username.h"
 #include "fe_utils/string_utils.h"
 #include "getaddrinfo.h"
@@ -138,6 +139,7 @@ static const char *authmethodhost = NULL;
 static const char *authmethodlocal = NULL;
 static bool debug = false;
 static bool noclean = false;
+static bool noinstructions = false;
 static bool do_sync = true;
 static bool sync_only = false;
 static bool show_setting = false;
@@ -157,6 +159,8 @@ static char *conf_file;
 static char *dictionary_file;
 static char *info_schema_file;
 static char *features_file;
+static char *system_constraints_file;
+static char *system_functions_file;
 static char *system_views_file;
 static bool success = false;
 static bool made_new_pgdata = false;
@@ -197,6 +201,9 @@ static bool authwarning = false;
  */
 static const char *boot_options = "-F";
 static const char *backend_options = "--single -F -O -j -c search_path=pg_catalog -c exit_on_error=true";
+
+/* Additional switches to pass to backend (either boot or standalone) */
+static char *extra_options = "";
 
 static const char *const subdirs[] = {
 	"global",
@@ -249,10 +256,9 @@ static void bootstrap_template1(void);
 static void setup_auth(FILE *cmdfd);
 static void get_su_pwd(void);
 static void setup_depend(FILE *cmdfd);
-static void setup_sysviews(FILE *cmdfd);
+static void setup_run_file(FILE *cmdfd, const char *filename);
 static void setup_description(FILE *cmdfd);
 static void setup_collation(FILE *cmdfd);
-static void setup_dictionary(FILE *cmdfd);
 static void setup_privileges(FILE *cmdfd);
 static void set_info_version(void);
 static void setup_schema(FILE *cmdfd);
@@ -330,12 +336,9 @@ escape_quotes(const char *src)
 
 /*
  * Escape a field value to be inserted into the BKI data.
- * Here, we first run the value through escape_quotes (which
- * will be inverted by the backend's scanstr() function) and
- * then overlay special processing of double quotes, which
- * bootscanner.l will only accept as data if converted to octal
- * representation ("\042").  We always wrap the value in double
- * quotes, even if that isn't strictly necessary.
+ * Run the value through escape_quotes (which will be inverted
+ * by the backend's DeescapeQuotedString() function), then wrap
+ * the value in single quotes, even if that isn't strictly necessary.
  */
 static char *
 escape_quotes_bki(const char *src)
@@ -344,30 +347,13 @@ escape_quotes_bki(const char *src)
 	char	   *data = escape_quotes(src);
 	char	   *resultp;
 	char	   *datap;
-	int			nquotes = 0;
 
-	/* count double quotes in data */
-	datap = data;
-	while ((datap = strchr(datap, '"')) != NULL)
-	{
-		nquotes++;
-		datap++;
-	}
-
-	result = (char *) pg_malloc(strlen(data) + 3 + nquotes * 3);
+	result = (char *) pg_malloc(strlen(data) + 3);
 	resultp = result;
-	*resultp++ = '"';
+	*resultp++ = '\'';
 	for (datap = data; *datap; datap++)
-	{
-		if (*datap == '"')
-		{
-			strcpy(resultp, "\\042");
-			resultp += 4;
-		}
-		else
-			*resultp++ = *datap;
-	}
-	*resultp++ = '"';
+		*resultp++ = *datap;
+	*resultp++ = '\'';
 	*resultp = '\0';
 
 	free(data);
@@ -467,14 +453,11 @@ filter_lines_with_token(char **lines, const char *token)
 static char **
 readfile(const char *path)
 {
-	FILE	   *infile;
-	int			maxlength = 1,
-				linelen = 0;
-	int			nlines = 0;
-	int			n;
 	char	  **result;
-	char	   *buffer;
-	int			c;
+	FILE	   *infile;
+	StringInfoData line;
+	int			maxlines;
+	int			n;
 
 	if ((infile = fopen(path, "r")) == NULL)
 	{
@@ -482,39 +465,28 @@ readfile(const char *path)
 		exit(1);
 	}
 
-	/* pass over the file twice - the first time to size the result */
+	initStringInfo(&line);
 
-	while ((c = fgetc(infile)) != EOF)
-	{
-		linelen++;
-		if (c == '\n')
-		{
-			nlines++;
-			if (linelen > maxlength)
-				maxlength = linelen;
-			linelen = 0;
-		}
-	}
+	maxlines = 1024;
+	result = (char **) pg_malloc(maxlines * sizeof(char *));
 
-	/* handle last line without a terminating newline (yuck) */
-	if (linelen)
-		nlines++;
-	if (linelen > maxlength)
-		maxlength = linelen;
-
-	/* set up the result and the line buffer */
-	result = (char **) pg_malloc((nlines + 1) * sizeof(char *));
-	buffer = (char *) pg_malloc(maxlength + 1);
-
-	/* now reprocess the file and store the lines */
-	rewind(infile);
 	n = 0;
-	while (fgets(buffer, maxlength + 1, infile) != NULL && n < nlines)
-		result[n++] = pg_strdup(buffer);
+	while (pg_get_line_buf(infile, &line))
+	{
+		/* make sure there will be room for a trailing NULL pointer */
+		if (n >= maxlines - 1)
+		{
+			maxlines *= 2;
+			result = (char **) pg_realloc(result, maxlines * sizeof(char *));
+		}
+
+		result[n++] = pg_strdup(line.data);
+	}
+	result[n] = NULL;
+
+	pfree(line.data);
 
 	fclose(infile);
-	free(buffer);
-	result[n] = NULL;
 
 	return result;
 }
@@ -688,6 +660,12 @@ static const struct tsearch_config_match tsearch_config_languages[] =
 {
 	{"arabic", "ar"},
 	{"arabic", "Arabic"},
+	{"armenian", "hy"},
+	{"armenian", "Armenian"},
+	{"basque", "eu"},
+	{"basque", "Basque"},
+	{"catalan", "ca"},
+	{"catalan", "Catalan"},
 	{"danish", "da"},
 	{"danish", "Danish"},
 	{"dutch", "nl"},
@@ -704,6 +682,8 @@ static const struct tsearch_config_match tsearch_config_languages[] =
 	{"german", "German"},
 	{"greek", "el"},
 	{"greek", "Greek"},
+	{"hindi", "hi"},
+	{"hindi", "Hindi"},
 	{"hungarian", "hu"},
 	{"hungarian", "Hungarian"},
 	{"indonesian", "id"},
@@ -723,6 +703,8 @@ static const struct tsearch_config_match tsearch_config_languages[] =
 	{"romanian", "ro"},
 	{"russian", "ru"},
 	{"russian", "Russian"},
+	{"serbian", "sr"},
+	{"serbian", "Serbian"},
 	{"spanish", "es"},
 	{"spanish", "Spanish"},
 	{"swedish", "sv"},
@@ -731,6 +713,8 @@ static const struct tsearch_config_match tsearch_config_languages[] =
 	{"tamil", "Tamil"},
 	{"turkish", "tr"},
 	{"turkish", "Turkish"},
+	{"yiddish", "yi"},
+	{"yiddish", "Yiddish"},
 	{NULL, NULL}				/* end marker */
 };
 
@@ -981,12 +965,12 @@ test_config_settings(void)
 		test_buffs = MIN_BUFS_FOR_CONNS(test_conns);
 
 		snprintf(cmd, sizeof(cmd),
-				 "\"%s\" --boot -x0 %s "
+				 "\"%s\" --boot -x0 %s %s "
 				 "-c max_connections=%d "
 				 "-c shared_buffers=%d "
 				 "-c dynamic_shared_memory_type=%s "
 				 "< \"%s\" > \"%s\" 2>&1",
-				 backend_exec, boot_options,
+				 backend_exec, boot_options, extra_options,
 				 test_conns, test_buffs,
 				 dynamic_shared_memory_type,
 				 DEVNULL, DEVNULL);
@@ -1017,12 +1001,12 @@ test_config_settings(void)
 		}
 
 		snprintf(cmd, sizeof(cmd),
-				 "\"%s\" --boot -x0 %s "
+				 "\"%s\" --boot -x0 %s %s "
 				 "-c max_connections=%d "
 				 "-c shared_buffers=%d "
 				 "-c dynamic_shared_memory_type=%s "
 				 "< \"%s\" > \"%s\" 2>&1",
-				 backend_exec, boot_options,
+				 backend_exec, boot_options, extra_options,
 				 n_connections, test_buffs,
 				 dynamic_shared_memory_type,
 				 DEVNULL, DEVNULL);
@@ -1198,12 +1182,18 @@ setup_config(void)
 							  "#update_process_title = off");
 #endif
 
-	if (strcmp(authmethodlocal, "scram-sha-256") == 0 ||
-		strcmp(authmethodhost, "scram-sha-256") == 0)
+	/*
+	 * Change password_encryption setting to md5 if md5 was chosen as an
+	 * authentication method, unless scram-sha-256 was also chosen.
+	 */
+	if ((strcmp(authmethodlocal, "md5") == 0 &&
+		 strcmp(authmethodhost, "scram-sha-256") != 0) ||
+		(strcmp(authmethodhost, "md5") == 0 &&
+		 strcmp(authmethodlocal, "scram-sha-256") != 0))
 	{
 		conflines = replace_token(conflines,
-								  "#password_encryption = md5",
-								  "password_encryption = scram-sha-256");
+								  "#password_encryption = scram-sha-256",
+								  "password_encryption = md5");
 	}
 
 	/*
@@ -1416,11 +1406,11 @@ bootstrap_template1(void)
 	unsetenv("PGCLIENTENCODING");
 
 	snprintf(cmd, sizeof(cmd),
-			 "\"%s\" --boot -x1 -X %u %s %s %s",
+			 "\"%s\" --boot -x1 -X %u %s %s %s %s",
 			 backend_exec,
 			 wal_segment_size_mb * (1024 * 1024),
 			 data_checksums ? "-k" : "",
-			 boot_options,
+			 boot_options, extra_options,
 			 debug ? "-d 5" : "");
 
 
@@ -1451,7 +1441,7 @@ setup_auth(FILE *cmdfd)
 		 * The authid table shouldn't be readable except through views, to
 		 * ensure passwords are not publicly visible.
 		 */
-		"REVOKE ALL on pg_authid FROM public;\n\n",
+		"REVOKE ALL ON pg_authid FROM public;\n\n",
 		NULL
 	};
 
@@ -1469,23 +1459,25 @@ setup_auth(FILE *cmdfd)
 static void
 get_su_pwd(void)
 {
-	char		pwd1[100];
-	char		pwd2[100];
+	char	   *pwd1;
 
 	if (pwprompt)
 	{
 		/*
 		 * Read password from terminal
 		 */
+		char	   *pwd2;
+
 		printf("\n");
 		fflush(stdout);
-		simple_prompt("Enter new superuser password: ", pwd1, sizeof(pwd1), false);
-		simple_prompt("Enter it again: ", pwd2, sizeof(pwd2), false);
+		pwd1 = simple_prompt("Enter new superuser password: ", false);
+		pwd2 = simple_prompt("Enter it again: ", false);
 		if (strcmp(pwd1, pwd2) != 0)
 		{
 			fprintf(stderr, _("Passwords didn't match.\n"));
 			exit(1);
 		}
+		free(pwd2);
 	}
 	else
 	{
@@ -1498,7 +1490,6 @@ get_su_pwd(void)
 		 * for now.
 		 */
 		FILE	   *pwf = fopen(pwfilename, "r");
-		int			i;
 
 		if (!pwf)
 		{
@@ -1506,7 +1497,8 @@ get_su_pwd(void)
 						 pwfilename);
 			exit(1);
 		}
-		if (!fgets(pwd1, sizeof(pwd1), pwf))
+		pwd1 = pg_get_line(pwf);
+		if (!pwd1)
 		{
 			if (ferror(pwf))
 				pg_log_error("could not read password from file \"%s\": %m",
@@ -1518,12 +1510,10 @@ get_su_pwd(void)
 		}
 		fclose(pwf);
 
-		i = strlen(pwd1);
-		while (i > 0 && (pwd1[i - 1] == '\r' || pwd1[i - 1] == '\n'))
-			pwd1[--i] = '\0';
+		(void) pg_strip_crlf(pwd1);
 	}
 
-	superuser_password = pg_strdup(pwd1);
+	superuser_password = pwd1;
 }
 
 /*
@@ -1620,17 +1610,16 @@ setup_depend(FILE *cmdfd)
 }
 
 /*
- * set up system views
+ * Run external file
  */
 static void
-setup_sysviews(FILE *cmdfd)
+setup_run_file(FILE *cmdfd, const char *filename)
 {
-	char	  **line;
-	char	  **sysviews_setup;
+	char	  **lines;
 
-	sysviews_setup = readfile(system_views_file);
+	lines = readfile(filename);
 
-	for (line = sysviews_setup; *line != NULL; line++)
+	for (char **line = lines; *line != NULL; line++)
 	{
 		PG_CMD_PUTS(*line);
 		free(*line);
@@ -1638,7 +1627,7 @@ setup_sysviews(FILE *cmdfd)
 
 	PG_CMD_PUTS("\n\n");
 
-	free(sysviews_setup);
+	free(lines);
 }
 
 /*
@@ -1679,27 +1668,6 @@ setup_collation(FILE *cmdfd)
 
 	/* Now import all collations we can find in the operating system */
 	PG_CMD_PUTS("SELECT pg_import_system_collations('pg_catalog');\n\n");
-}
-
-/*
- * load extra dictionaries (Snowball stemmers)
- */
-static void
-setup_dictionary(FILE *cmdfd)
-{
-	char	  **line;
-	char	  **conv_lines;
-
-	conv_lines = readfile(dictionary_file);
-	for (line = conv_lines; *line != NULL; line++)
-	{
-		PG_CMD_PUTS(*line);
-		free(*line);
-	}
-
-	PG_CMD_PUTS("\n\n");
-
-	free(conv_lines);
 }
 
 /*
@@ -1902,20 +1870,7 @@ set_info_version(void)
 static void
 setup_schema(FILE *cmdfd)
 {
-	char	  **line;
-	char	  **lines;
-
-	lines = readfile(info_schema_file);
-
-	for (line = lines; *line != NULL; line++)
-	{
-		PG_CMD_PUTS(*line);
-		free(*line);
-	}
-
-	PG_CMD_PUTS("\n\n");
-
-	free(lines);
+	setup_run_file(cmdfd, info_schema_file);
 
 	PG_CMD_PRINTF("UPDATE information_schema.sql_implementation_info "
 				  "  SET character_value = '%s' "
@@ -2296,6 +2251,7 @@ usage(const char *progname)
 	printf(_(" [-D, --pgdata=]DATADIR     location for this database cluster\n"));
 	printf(_("  -E, --encoding=ENCODING   set default encoding for new databases\n"));
 	printf(_("  -g, --allow-group-access  allow group read/execute on data directory\n"));
+	printf(_("  -k, --data-checksums      use data page checksums\n"));
 	printf(_("      --locale=LOCALE       set default locale for new databases\n"));
 	printf(_("      --lc-collate=, --lc-ctype=, --lc-messages=LOCALE\n"
 			 "      --lc-monetary=, --lc-numeric=, --lc-time=LOCALE\n"
@@ -2311,10 +2267,11 @@ usage(const char *progname)
 	printf(_("      --wal-segsize=SIZE    size of WAL segments, in megabytes\n"));
 	printf(_("\nLess commonly used options:\n"));
 	printf(_("  -d, --debug               generate lots of debugging output\n"));
-	printf(_("  -k, --data-checksums      use data page checksums\n"));
+	printf(_("      --discard-caches      set debug_discard_caches=1\n"));
 	printf(_("  -L DIRECTORY              where to find the input files\n"));
 	printf(_("  -n, --no-clean            do not clean up after errors\n"));
 	printf(_("  -N, --no-sync             do not wait for changes to be written safely to disk\n"));
+	printf(_("      --no-instructions     do not print instructions for next steps\n"));
 	printf(_("  -s, --show                show internal settings\n"));
 	printf(_("  -S, --sync-only           only sync data directory\n"));
 	printf(_("\nOther options:\n"));
@@ -2367,12 +2324,7 @@ check_need_password(const char *authmethodlocal, const char *authmethodhost)
 		 strcmp(authmethodhost, "scram-sha-256") == 0) &&
 		!(pwprompt || pwfilename))
 	{
-		pg_log_error("must specify a password for the superuser to enable %s authentication",
-					 (strcmp(authmethodlocal, "md5") == 0 ||
-					  strcmp(authmethodlocal, "password") == 0 ||
-					  strcmp(authmethodlocal, "scram-sha-256") == 0)
-					 ? authmethodlocal
-					 : authmethodhost);
+		pg_log_error("must specify a password for the superuser to enable password authentication");
 		exit(1);
 	}
 }
@@ -2381,8 +2333,7 @@ check_need_password(const char *authmethodlocal, const char *authmethodhost)
 void
 setup_pgdata(void)
 {
-	char	   *pgdata_get_env,
-			   *pgdata_set_env;
+	char	   *pgdata_get_env;
 
 	if (!pg_data)
 	{
@@ -2412,8 +2363,11 @@ setup_pgdata(void)
 	 * need quotes otherwise on Windows because paths there are most likely to
 	 * have embedded spaces.
 	 */
-	pgdata_set_env = psprintf("PGDATA=%s", pg_data);
-	putenv(pgdata_set_env);
+	if (setenv("PGDATA", pg_data, 1) != 0)
+	{
+		pg_log_error("could not set environment");
+		exit(1);
+	}
 }
 
 
@@ -2556,6 +2510,8 @@ setup_data_file_paths(void)
 	set_input(&dictionary_file, "snowball_create.sql");
 	set_input(&info_schema_file, "information_schema.sql");
 	set_input(&features_file, "sql_features.txt");
+	set_input(&system_constraints_file, "system_constraints.sql");
+	set_input(&system_functions_file, "system_functions.sql");
 	set_input(&system_views_file, "system_views.sql");
 
 	if (show_setting || debug)
@@ -2582,6 +2538,8 @@ setup_data_file_paths(void)
 	check_input(dictionary_file);
 	check_input(info_schema_file);
 	check_input(features_file);
+	check_input(system_constraints_file);
+	check_input(system_functions_file);
 	check_input(system_views_file);
 }
 
@@ -2909,13 +2867,17 @@ initialize_data_directory(void)
 	fflush(stdout);
 
 	snprintf(cmd, sizeof(cmd),
-			 "\"%s\" %s template1 >%s",
-			 backend_exec, backend_options,
+			 "\"%s\" %s %s template1 >%s",
+			 backend_exec, backend_options, extra_options,
 			 DEVNULL);
 
 	PG_CMD_OPEN;
 
 	setup_auth(cmdfd);
+
+	setup_run_file(cmdfd, system_constraints_file);
+
+	setup_run_file(cmdfd, system_functions_file);
 
 	setup_depend(cmdfd);
 
@@ -2924,13 +2886,13 @@ initialize_data_directory(void)
 	 * They are all droppable at the whim of the DBA.
 	 */
 
-	setup_sysviews(cmdfd);
+	setup_run_file(cmdfd, system_views_file);
 
 	setup_description(cmdfd);
 
 	setup_collation(cmdfd);
 
-	setup_dictionary(cmdfd);
+	setup_run_file(cmdfd, dictionary_file);
 
 	setup_privileges(cmdfd);
 
@@ -2979,11 +2941,13 @@ main(int argc, char *argv[])
 		{"no-clean", no_argument, NULL, 'n'},
 		{"nosync", no_argument, NULL, 'N'}, /* for backwards compatibility */
 		{"no-sync", no_argument, NULL, 'N'},
+		{"no-instructions", no_argument, NULL, 13},
 		{"sync-only", no_argument, NULL, 'S'},
 		{"waldir", required_argument, NULL, 'X'},
 		{"wal-segsize", required_argument, NULL, 12},
 		{"data-checksums", no_argument, NULL, 'k'},
 		{"allow-group-access", no_argument, NULL, 'g'},
+		{"discard-caches", no_argument, NULL, 14},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -3119,8 +3083,16 @@ main(int argc, char *argv[])
 			case 12:
 				str_wal_segment_size_mb = pg_strdup(optarg);
 				break;
+			case 13:
+				noinstructions = true;
+				break;
 			case 'g':
 				SetDataDirectoryCreatePerm(PG_DIR_MODE_GROUP);
+				break;
+			case 14:
+				extra_options = psprintf("%s %s",
+										 extra_options,
+										 "-c debug_discard_caches=1");
 				break;
 			default:
 				/* getopt_long already emitted a complaint */
@@ -3269,37 +3241,41 @@ main(int argc, char *argv[])
 						  "--auth-local and --auth-host, the next time you run initdb.\n"));
 	}
 
-	/*
-	 * Build up a shell command to tell the user how to start the server
-	 */
-	start_db_cmd = createPQExpBuffer();
+	if (!noinstructions)
+	{
+		/*
+		 * Build up a shell command to tell the user how to start the server
+		 */
+		start_db_cmd = createPQExpBuffer();
 
-	/* Get directory specification used to start initdb ... */
-	strlcpy(pg_ctl_path, argv[0], sizeof(pg_ctl_path));
-	canonicalize_path(pg_ctl_path);
-	get_parent_directory(pg_ctl_path);
-	/* ... and tag on pg_ctl instead */
-	join_path_components(pg_ctl_path, pg_ctl_path, "pg_ctl");
+		/* Get directory specification used to start initdb ... */
+		strlcpy(pg_ctl_path, argv[0], sizeof(pg_ctl_path));
+		canonicalize_path(pg_ctl_path);
+		get_parent_directory(pg_ctl_path);
+		/* ... and tag on pg_ctl instead */
+		join_path_components(pg_ctl_path, pg_ctl_path, "pg_ctl");
 
-	/* Convert the path to use native separators */
-	make_native_path(pg_ctl_path);
+		/* Convert the path to use native separators */
+		make_native_path(pg_ctl_path);
 
-	/* path to pg_ctl, properly quoted */
-	appendShellString(start_db_cmd, pg_ctl_path);
+		/* path to pg_ctl, properly quoted */
+		appendShellString(start_db_cmd, pg_ctl_path);
 
-	/* add -D switch, with properly quoted data directory */
-	appendPQExpBufferStr(start_db_cmd, " -D ");
-	appendShellString(start_db_cmd, pgdata_native);
+		/* add -D switch, with properly quoted data directory */
+		appendPQExpBufferStr(start_db_cmd, " -D ");
+		appendShellString(start_db_cmd, pgdata_native);
 
-	/* add suggested -l switch and "start" command */
-	/* translator: This is a placeholder in a shell command. */
-	appendPQExpBuffer(start_db_cmd, " -l %s start", _("logfile"));
+		/* add suggested -l switch and "start" command */
+		/* translator: This is a placeholder in a shell command. */
+		appendPQExpBuffer(start_db_cmd, " -l %s start", _("logfile"));
 
-	printf(_("\nSuccess. You can now start the database server using:\n\n"
-			 "    %s\n\n"),
-		   start_db_cmd->data);
+		printf(_("\nSuccess. You can now start the database server using:\n\n"
+				 "    %s\n\n"),
+			   start_db_cmd->data);
 
-	destroyPQExpBuffer(start_db_cmd);
+		destroyPQExpBuffer(start_db_cmd);
+	}
+
 
 	success = true;
 	return 0;

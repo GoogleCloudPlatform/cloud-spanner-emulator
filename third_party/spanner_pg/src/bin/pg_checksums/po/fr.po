@@ -38,8 +38,8 @@ msgid ""
 "%s enables, disables, or verifies data checksums in a PostgreSQL database cluster.\n"
 "\n"
 msgstr ""
-"%s active, désactive  ou vérifie les sommes de contrôle de données\n"
-"dans une instance PostgreSQL.\n"
+"%s active, désactive ou vérifie les sommes de contrôle de données dans\n"
+"une instance PostgreSQL.\n"
 "\n"
 
 #: pg_checksums.c:76
@@ -124,8 +124,8 @@ msgid ""
 "\n"
 msgstr ""
 "\n"
-"Si aucun répertoire (RÉP_DONNÉES) n'est indiqué, la variable\n"
-"d'environnement PGDATA est utilisée.\n"
+"Si aucun répertoire (RÉP_DONNÉES) n'est indiqué, la variable d'environnement\n"
+"PGDATA est utilisée.\n"
 "\n"
 
 #: pg_checksums.c:91

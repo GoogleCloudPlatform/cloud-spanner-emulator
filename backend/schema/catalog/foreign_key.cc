@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
@@ -83,11 +84,15 @@ std::string ForeignKey::DebugString() const {
                          });
   };
   return absl::Substitute(
-      "FK:$0:$1($2)[$3]:$4($5)[$6]", Name(), referencing_table_->Name(),
+      "FK:$0:$1($2)[$3]:$4($5)[$6][$7]", Name(), referencing_table_->Name(),
       column_names(referencing_columns_),
       referencing_index_ == nullptr ? "PK" : referencing_index_->Name(),
       referenced_table_->Name(), column_names(referenced_columns_),
-      referenced_index_ == nullptr ? "PK" : referenced_index_->Name());
+      referenced_index_ == nullptr ? "PK" : referenced_index_->Name(),
+      on_delete_action_ == ForeignKey::Action::kActionUnspecified
+          ? ""
+          : absl::StrCat(kDeleteAction, " ",
+                         ForeignKey::ActionName(on_delete_action_)));
 }
 
 }  // namespace backend

@@ -36,12 +36,15 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
+#include "zetasql/public/function.pb.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
+#include "absl/base/attributes.h"
 #include "absl/base/const_init.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -315,6 +318,10 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
       absl::flat_hash_set<const zetasql::Function*>* output) const {
     return builtin_function_catalog_->GetFunctions(output);
   }
+
+  virtual absl::StatusOr<FunctionAndSignature> GetPgNumericCastFunction(
+      const zetasql::Type* source_type, const zetasql::Type* target_type,
+      const zetasql::LanguageOptions& language_options) = 0;
 
   // Checks whether a given expression requires transformation for comparison.
   // For some types native comparison semantics doesn't match with Postgres'

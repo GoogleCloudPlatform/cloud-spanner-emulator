@@ -38,11 +38,17 @@
 #include "zetasql/public/functions/date_time_util.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
 #include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
+#include "third_party/spanner_pg/datatypes/common/pg_numeric_parse.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
+#include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
+#include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
+#include "third_party/spanner_pg/shims/timezone_helper.h"
 #include "third_party/spanner_pg/util/datetime_conversion.h"
 #include "third_party/spanner_pg/util/integral_helpers.h"
 #include "zetasql/base/status_macros.h"
@@ -50,6 +56,7 @@
 namespace postgres_translator::function_evaluators {
 
 using ::zetasql::functions::IsValidDate;
+using ::postgres_translator::spangres::datatypes::common::NormalizePgNumeric;
 
 inline constexpr char kPgTimestampOutOfRangeMessage[] =
     "date/time field value out of range";
@@ -59,6 +66,38 @@ void CleanupPostgresDateTimeCache() { CleanupDateTimeCache(); }
 static bool is_out_of_range_error(absl::Status status) {
   return status.code() == absl::StatusCode::kInvalidArgument &&
          absl::StrContains(status.message(), kPgTimestampOutOfRangeMessage);
+}
+
+absl::StatusOr<int32_t> DateFromDatumOr(absl::StatusOr<Datum>& date_or_error) {
+  // Remaps the pg out of range error message
+  if (is_out_of_range_error(date_or_error.status())) {
+    return kInvalidDate;
+  }
+  ZETASQL_ASSIGN_OR_RETURN(Datum pg_date, date_or_error);
+  ZETASQL_ASSIGN_OR_RETURN(int32_t gsql_date,
+                   SafePgDateOffsetToGsqlDateOffset(pg_date));
+  if (!IsValidDate(gsql_date)) {
+    return kInvalidDate;
+  }
+
+  return gsql_date;
+}
+
+absl::StatusOr<absl::Time> TimestampFromDatumOr(
+    absl::StatusOr<Datum>& timestamp_or_error) {
+  // Remaps the pg out of range error message
+  if (is_out_of_range_error(timestamp_or_error.status())) {
+    return kInvalidTimestamp;
+  }
+  ZETASQL_ASSIGN_OR_RETURN(Datum pg_timestamptz, timestamp_or_error);
+
+  absl::Time gsql_timestamp =
+      PgTimestamptzToAbslTime(DatumGetTimestampTz(pg_timestamptz));
+
+  if (!zetasql::functions::IsValidTime(gsql_timestamp)) {
+    return kInvalidTimestamp;
+  }
+  return gsql_timestamp;
 }
 
 absl::StatusOr<DateADT> PgToDate(absl::string_view date_string,
@@ -130,21 +169,10 @@ absl::StatusOr<absl::Time> ToTimestamp(absl::string_view timestamp_string,
       CheckedPgStringToDatum(std::string(timestamp_format).c_str(), TEXTOID));
 
   absl::StatusOr<Datum> timestamp_or_error =
-      postgres_translator::CheckedOidFunctionCall2(
-          F_TO_TIMESTAMP, timestamp_string_datum, timestamp_format_datum);
-  // Remaps the pg out of range error message
-  if (is_out_of_range_error(timestamp_or_error.status())) {
-    return kInvalidTimestamp;
-  }
-  ZETASQL_ASSIGN_OR_RETURN(Datum timestamp_datum, timestamp_or_error);
-
-  absl::Time result =
-      PgTimestamptzToAbslTime(DatumGetTimestampTz(timestamp_datum));
-
-  if (!zetasql::functions::IsValidTime(result)) {
-    return kInvalidTimestamp;
-  }
-  return result;
+      postgres_translator::CheckedOidFunctionCall2(F_TO_TIMESTAMP_TEXT_TEXT,
+                                                   timestamp_string_datum,
+                                                   timestamp_format_datum);
+  return TimestampFromDatumOr(timestamp_or_error);
 }
 
 absl::StatusOr<std::unique_ptr<std::string>> PgTimestampTzToChar(
@@ -157,7 +185,7 @@ absl::StatusOr<std::unique_ptr<std::string>> PgTimestampTzToChar(
   ZETASQL_ASSIGN_OR_RETURN(
       Datum formatted_timestamp_datum,
       postgres_translator::CheckedNullableOidFunctionCall2(
-          F_TIMESTAMPTZ_TO_CHAR, timestamp_in_datum, format_in_datum));
+          F_TO_CHAR_TIMESTAMPTZ_TEXT, timestamp_in_datum, format_in_datum));
 
   if (formatted_timestamp_datum == NULL_DATUM) {
     return nullptr;
@@ -166,6 +194,41 @@ absl::StatusOr<std::unique_ptr<std::string>> PgTimestampTzToChar(
                    CheckedPgTextDatumGetCString(formatted_timestamp_datum));
 
   return std::make_unique<std::string>(formatted_timestamp);
+}
+
+absl::StatusOr<int32_t> DateIn(absl::string_view input_string,
+                               absl::string_view default_timezone) {
+  return PgDateIn(input_string);
+}
+
+absl::StatusOr<absl::Time> TimestamptzIn(absl::string_view input_string,
+                                         absl::string_view default_timezone) {
+  return PgTimestamptzIn(input_string);
+}
+
+absl::StatusOr<int32_t> PgDateIn(absl::string_view date_string) {
+  ZETASQL_ASSIGN_OR_RETURN(Type date_type, CheckedPgTypeidType(DATEOID));
+  // StringTypeDatum expects the string to be NUL terminated, so the string_view
+  // must be copied into a NUL terminated std::string.
+  absl::StatusOr<Datum> pg_date_or_error =
+      postgres_translator::CheckedPgStringTypeDatum(
+          date_type, const_cast<char*>(std::string(date_string).c_str()),
+          /*atttypmod=*/-1);
+
+  return DateFromDatumOr(pg_date_or_error);
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzIn(absl::string_view timestamp_string) {
+  ZETASQL_ASSIGN_OR_RETURN(Type timestamptz_type, CheckedPgTypeidType(TIMESTAMPTZOID));
+  // StringTypeDatum expects the string to be NUL terminated, so the string_view
+  // must be copied into a NUL terminated std::string.
+  absl::StatusOr<Datum> pg_timestamptz_or_error =
+      postgres_translator::CheckedPgStringTypeDatum(
+          timestamptz_type,
+          const_cast<char*>(std::string(timestamp_string).c_str()),
+          /*atttypmod=*/-1);
+
+  return TimestampFromDatumOr(pg_timestamptz_or_error);
 }
 
 }  // namespace postgres_translator::function_evaluators

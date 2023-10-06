@@ -16,15 +16,22 @@
 
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_CHANGE_STREAM_CHANGE_STREAM_QUERY_VALIDATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_CHANGE_STREAM_CHANGE_STREAM_QUERY_VALIDATOR_H_
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "zetasql/public/value.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_ast_visitor.h"
+#include "zetasql/resolved_ast/resolved_node.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/str_cat.h"
+#include "absl/time/time.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/constants.h"
 
@@ -74,7 +81,13 @@ class ChangeStreamQueryValidator : public zetasql::ResolvedASTVisitor {
   explicit ChangeStreamQueryValidator(
       const Schema* schema, absl::Time query_start_time,
       const absl::flat_hash_map<std::string, zetasql::Value>& params)
-      : schema_(schema), query_start_time_(query_start_time), params_(params) {}
+      : schema_(schema), query_start_time_(query_start_time) {
+    // Change the parameters' names to lowercase because all parameter names are
+    // lowercase in tvf scan.
+    for (auto& [param_name, param_val] : params) {
+      params_[absl::AsciiStrToLower(param_name)] = param_val;
+    }
+  }
 
   absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override {
     ZETASQL_RET_CHECK_EQ(node->node_kind(), zetasql::RESOLVED_QUERY_STMT)
@@ -118,7 +131,7 @@ class ChangeStreamQueryValidator : public zetasql::ResolvedASTVisitor {
   // into the future
   const absl::Time query_start_time_;
   // parameters and their values if arguments are binded with parameters
-  const absl::flat_hash_map<std::string, zetasql::Value> params_;
+  absl::flat_hash_map<std::string, zetasql::Value> params_;
   // name of the tvf this validator is validating, used for outputting
   // informational error logs
   std::string tvf_name_;

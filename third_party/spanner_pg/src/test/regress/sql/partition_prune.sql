@@ -158,6 +158,7 @@ create table boolpart (a bool) partition by list (a);
 create table boolpart_default partition of boolpart default;
 create table boolpart_t partition of boolpart for values in ('true');
 create table boolpart_f partition of boolpart for values in ('false');
+insert into boolpart values (true), (false), (null);
 
 explain (costs off) select * from boolpart where a in (true, false);
 explain (costs off) select * from boolpart where a = false;
@@ -167,6 +168,41 @@ explain (costs off) select * from boolpart where a is not true;
 explain (costs off) select * from boolpart where a is not true and a is not false;
 explain (costs off) select * from boolpart where a is unknown;
 explain (costs off) select * from boolpart where a is not unknown;
+
+select * from boolpart where a in (true, false);
+select * from boolpart where a = false;
+select * from boolpart where not a = false;
+select * from boolpart where a is true or a is not true;
+select * from boolpart where a is not true;
+select * from boolpart where a is not true and a is not false;
+select * from boolpart where a is unknown;
+select * from boolpart where a is not unknown;
+
+-- inverse boolean partitioning - a seemingly unlikely design, but we've got
+-- code for it, so we'd better test it.
+create table iboolpart (a bool) partition by list ((not a));
+create table iboolpart_default partition of iboolpart default;
+create table iboolpart_f partition of iboolpart for values in ('true');
+create table iboolpart_t partition of iboolpart for values in ('false');
+insert into iboolpart values (true), (false), (null);
+
+explain (costs off) select * from iboolpart where a in (true, false);
+explain (costs off) select * from iboolpart where a = false;
+explain (costs off) select * from iboolpart where not a = false;
+explain (costs off) select * from iboolpart where a is true or a is not true;
+explain (costs off) select * from iboolpart where a is not true;
+explain (costs off) select * from iboolpart where a is not true and a is not false;
+explain (costs off) select * from iboolpart where a is unknown;
+explain (costs off) select * from iboolpart where a is not unknown;
+
+select * from iboolpart where a in (true, false);
+select * from iboolpart where a = false;
+select * from iboolpart where not a = false;
+select * from iboolpart where a is true or a is not true;
+select * from iboolpart where a is not true;
+select * from iboolpart where a is not true and a is not false;
+select * from iboolpart where a is unknown;
+select * from iboolpart where a is not unknown;
 
 create table boolrangep (a bool, b bool, c int) partition by range (a,b,c);
 create table boolrangep_tf partition of boolrangep for values from ('true', 'false', 0) to ('true', 'false', 100);
@@ -294,7 +330,7 @@ create table rparted_by_int2_maxvalue partition of rparted_by_int2 for values fr
 -- all partitions but rparted_by_int2_maxvalue pruned
 explain (costs off) select * from rparted_by_int2 where a > 100000000000000;
 
-drop table lp, coll_pruning, rlp, mc3p, mc2p, boolpart, boolrangep, rp, coll_pruning_multi, like_op_noprune, lparted_by_int2, rparted_by_int2;
+drop table lp, coll_pruning, rlp, mc3p, mc2p, boolpart, iboolpart, boolrangep, rp, coll_pruning_multi, like_op_noprune, lparted_by_int2, rparted_by_int2;
 
 --
 -- Test Partition pruning for HASH partitioning
@@ -515,6 +551,7 @@ create index ab_a3_b3_a_idx on ab_a3_b3 (a);
 
 set enable_hashjoin = 0;
 set enable_mergejoin = 0;
+set enable_memoize = 0;
 
 select explain_parallel_append('select avg(ab.a) from ab inner join lprt_a a on ab.a = a.a where a.a in(0, 0, 1)');
 
@@ -533,6 +570,7 @@ select explain_parallel_append('select avg(ab.a) from ab inner join lprt_a a on 
 
 reset enable_hashjoin;
 reset enable_mergejoin;
+reset enable_memoize;
 reset parallel_setup_cost;
 reset parallel_tuple_cost;
 reset min_parallel_table_scan_size;
@@ -1061,6 +1099,54 @@ reset constraint_exclusion;
 reset enable_partition_pruning;
 
 drop table listp;
+
+-- Ensure run-time pruning works correctly for nested Append nodes
+set parallel_setup_cost to 0;
+set parallel_tuple_cost to 0;
+
+create table listp (a int) partition by list(a);
+create table listp_12 partition of listp for values in(1,2) partition by list(a);
+create table listp_12_1 partition of listp_12 for values in(1);
+create table listp_12_2 partition of listp_12 for values in(2);
+
+-- Force the 2nd subnode of the Append to be non-parallel.  This results in
+-- a nested Append node because the mixed parallel / non-parallel paths cannot
+-- be pulled into the top-level Append.
+alter table listp_12_1 set (parallel_workers = 0);
+
+-- Ensure that listp_12_2 is not scanned.  (The nested Append is not seen in
+-- the plan as it's pulled in setref.c due to having just a single subnode).
+select explain_parallel_append('select * from listp where a = (select 1);');
+
+-- Like the above but throw some more complexity at the planner by adding
+-- a UNION ALL.  We expect both sides of the union not to scan the
+-- non-required partitions.
+select explain_parallel_append(
+'select * from listp where a = (select 1)
+  union all
+select * from listp where a = (select 2);');
+
+drop table listp;
+reset parallel_tuple_cost;
+reset parallel_setup_cost;
+
+-- Test case for run-time pruning with a nested Merge Append
+set enable_sort to 0;
+create table rangep (a int, b int) partition by range (a);
+create table rangep_0_to_100 partition of rangep for values from (0) to (100) partition by list (b);
+-- We need 3 sub-partitions. 1 to validate pruning worked and another two
+-- because a single remaining partition would be pulled up to the main Append.
+create table rangep_0_to_100_1 partition of rangep_0_to_100 for values in(1);
+create table rangep_0_to_100_2 partition of rangep_0_to_100 for values in(2);
+create table rangep_0_to_100_3 partition of rangep_0_to_100 for values in(3);
+create table rangep_100_to_200 partition of rangep for values from (100) to (200);
+create index on rangep (a);
+
+-- Ensure run-time pruning works on the nested Merge Append
+explain (analyze on, costs off, timing off, summary off)
+select * from rangep where b IN((select 1),(select 2)) order by a;
+reset enable_sort;
+drop table rangep;
 
 --
 -- Check that gen_prune_steps_from_opexps() works well for various cases of

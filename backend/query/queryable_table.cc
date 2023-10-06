@@ -26,7 +26,9 @@
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/analyzer_output.h"
+#include "zetasql/public/catalog.h"
 #include "zetasql/public/evaluator_table_iterator.h"
+#include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "absl/log/check.h"
 #include "absl/memory/memory.h"
@@ -38,8 +40,11 @@
 #include "absl/types/span.h"
 #include "backend/access/read.h"
 #include "backend/query/queryable_column.h"
+#include "backend/schema/catalog/column.h"
 #include "common/constants.h"
+#include "common/feature_flags.h"
 #include "absl/status/status.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -98,21 +103,42 @@ class RowCursorEvaluatorTableIterator
   std::vector<zetasql::Value> values_;
 };
 
+absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+QueryableTable::AnalyzeColumnExpression(
+    const Column* column, zetasql::TypeFactory* type_factory,
+    zetasql::Catalog* catalog,
+    std::optional<const zetasql::AnalyzerOptions> opt_options) const {
+  std::unique_ptr<const zetasql::AnalyzerOutput> output = nullptr;
+  if (opt_options.has_value() && (column->has_default_value()
+                                  )) {
+    zetasql::AnalyzerOptions options = opt_options.value();
+    absl::Status s = zetasql::AnalyzeExpressionForAssignmentToType(
+        column->expression().value(), options, catalog, type_factory,
+        column->GetType(), &output);
+    std::string expression_type = "default";
+    ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeExpressionForAssignmentToType(
+        column->expression().value(), options, catalog, type_factory,
+        column->GetType(), &output))
+        << "Failed to analyze " << expression_type << " expression for column "
+        << column->FullName();
+  }
+  return std::move(output);
+}
+
 QueryableTable::QueryableTable(
     const backend::Table* table, RowReader* reader,
-    std::optional<const zetasql::AnalyzerOptions> options,
+    std::optional<const zetasql::AnalyzerOptions> opt_options,
     zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory)
     : wrapped_table_(table), reader_(reader) {
   for (const auto* column : table->columns()) {
-    std::unique_ptr<const zetasql::AnalyzerOutput> output = nullptr;
-    if (options.has_value() && column->has_default_value()) {
-      absl::Status s = zetasql::AnalyzeExpressionForAssignmentToType(
-          column->expression().value(), options.value(), catalog, type_factory,
-          column->GetType(), &output);
-      ABSL_CHECK_OK(s) << "Failed to analyze default expression"  // Crash OK
-                  << " for column " << column->FullName() << "\n";
-    }
-    if (column->has_default_value()) {
+    absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+        analyzer_output =
+            AnalyzeColumnExpression(column, type_factory, catalog, opt_options);
+    ABSL_CHECK_OK(analyzer_output.status());  // Crash OK
+    std::unique_ptr<const zetasql::AnalyzerOutput> output =
+        std::move(analyzer_output.value());
+    if (column->has_default_value()
+    ) {
       zetasql::Column::ExpressionAttributes::ExpressionKind expression_kind =
           zetasql::Column::ExpressionAttributes::ExpressionKind::DEFAULT;
       zetasql::Column::ExpressionAttributes expression_attributes =

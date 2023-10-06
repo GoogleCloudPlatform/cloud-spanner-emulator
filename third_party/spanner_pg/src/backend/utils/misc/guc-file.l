@@ -2,7 +2,7 @@
 /*
  * Scanner for the configuration file
  *
- * Copyright (c) 2000-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2021, PostgreSQL Global Development Group
  *
  * src/backend/utils/misc/guc-file.l
  */
@@ -55,7 +55,6 @@ static void record_config_file_error(const char *errmsg,
 						 ConfigVariable **tail_p);
 
 static int	GUC_flex_fatal(const char *msg);
-static char *GUC_scanstr(const char *s);
 
 /* LCOV_EXCL_START */
 
@@ -283,7 +282,7 @@ ProcessConfigFileInternal(GucContext context, bool applySettings, int elevel)
 		 * Try to find the variable; but do not create a custom placeholder if
 		 * it's not there already.
 		 */
-		record = find_option(item->name, false, elevel);
+		record = find_option(item->name, false, true, elevel);
 
 		if (record)
 		{
@@ -307,12 +306,12 @@ ProcessConfigFileInternal(GucContext context, bool applySettings, int elevel)
 			/* Now mark it as present in file */
 			record->status |= GUC_IS_IN_FILE;
 		}
-		else if (strchr(item->name, GUC_QUALIFIER_SEPARATOR) == NULL)
+		else if (!valid_custom_variable_name(item->name))
 		{
 			/* Invalid non-custom variable, so complain */
 			ereport(elevel,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("unrecognized configuration parameter \"%s\" in file \"%s\" line %u",
+					 errmsg("unrecognized configuration parameter \"%s\" in file \"%s\" line %d",
 							item->name,
 							item->filename, item->sourceline)));
 			item->errmsg = pstrdup("unrecognized configuration parameter");
@@ -799,7 +798,7 @@ ParseConfigFp(FILE *fp, const char *config_file, int depth, int elevel,
 			token != GUC_UNQUOTED_STRING)
 			goto parse_error;
 		if (token == GUC_STRING)	/* strip quotes and escapes */
-			opt_value = GUC_scanstr(yytext);
+			opt_value = DeescapeQuotedString(yytext);
 		else
 			opt_value = pstrdup(yytext);
 
@@ -1134,22 +1133,25 @@ FreeConfigVariable(ConfigVariable *item)
 
 
 /*
- *		scanstr
+ *		DeescapeQuotedString
  *
  * Strip the quotes surrounding the given string, and collapse any embedded
  * '' sequences and backslash escapes.
  *
- * the string returned is palloc'd and should eventually be pfree'd by the
+ * The string returned is palloc'd and should eventually be pfree'd by the
  * caller.
+ *
+ * This is exported because it is also used by the bootstrap scanner.
  */
-static char *
-GUC_scanstr(const char *s)
+char *
+DeescapeQuotedString(const char *s)
 {
 	char	   *newStr;
 	int			len,
 				i,
 				j;
 
+	/* We just Assert that there are leading and trailing quotes */
 	Assert(s != NULL && s[0] == '\'');
 	len = strlen(s);
 	Assert(len >= 2);

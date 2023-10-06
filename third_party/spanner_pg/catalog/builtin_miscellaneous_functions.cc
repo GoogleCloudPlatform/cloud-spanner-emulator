@@ -30,10 +30,14 @@
 //------------------------------------------------------------------------------
 
 #include <string>
+#include <vector>
 
+#include "zetasql/public/function.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
+#include "absl/flags/flag.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 
 namespace postgres_translator {
 
@@ -48,6 +52,8 @@ void AddAggregateFunctions(std::vector<PostgresFunctionArguments>& functions) {
   const zetasql::Type* gsql_string = zetasql::types::StringType();
   const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
   const zetasql::Type* gsql_date = zetasql::types::DateType();
+  const zetasql::Type* gsql_pg_numeric =
+      spangres::types::PgNumericMapping()->mapped_type();
   const zetasql::Type* gsql_int64_arr = zetasql::types::Int64ArrayType();
   const zetasql::Type* gsql_string_arr = zetasql::types::StringArrayType();
   const zetasql::Type* gsql_bool_arr = zetasql::types::BoolArrayType();
@@ -56,6 +62,8 @@ void AddAggregateFunctions(std::vector<PostgresFunctionArguments>& functions) {
   const zetasql::Type* gsql_timestamp_arr =
       zetasql::types::TimestampArrayType();
   const zetasql::Type* gsql_date_arr = zetasql::types::DateArrayType();
+  const zetasql::Type* gsql_pg_numeric_array =
+      spangres::types::PgNumericArrayMapping()->mapped_type();
 
   const zetasql::Function::Mode AGGREGATE = zetasql::Function::AGGREGATE;
 
@@ -137,6 +145,7 @@ void AddAggregateFunctions(std::vector<PostgresFunctionArguments>& functions) {
         {{gsql_string_arr, {gsql_string}, /*context_ptr=*/nullptr}},
         {{gsql_bytes_arr, {gsql_bytes}, /*context_ptr=*/nullptr}},
         {{gsql_date_arr, {gsql_date}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_numeric_array, {gsql_pg_numeric}, /*context_ptr=*/nullptr}},
         {{gsql_timestamp_arr, {gsql_timestamp}, /*context_ptr=*/nullptr}}},
        AGGREGATE});
 }
@@ -367,6 +376,8 @@ void AddMiscellaneousFunctions(
   const zetasql::Type* gsql_timestamp_arr =
       zetasql::types::TimestampArrayType();
   const zetasql::Type* gsql_date_arr = zetasql::types::DateArrayType();
+  const zetasql::Type* gsql_pg_numeric_array =
+      spangres::types::PgNumericArrayMapping()->mapped_type();
 
   functions.push_back(
       {"random", "rand", {{{gsql_double, {}, /*context_ptr=*/nullptr}}}});
@@ -389,6 +400,9 @@ void AddMiscellaneousFunctions(
                           /*context_ptr=*/nullptr}},
                         {{gsql_timestamp_arr,
                           {gsql_timestamp_arr, gsql_timestamp_arr},
+                          /*context_ptr=*/nullptr}},
+                        {{gsql_pg_numeric_array,
+                          {gsql_pg_numeric_array, gsql_pg_numeric_array},
                           /*context_ptr=*/nullptr}},
                         {{gsql_date_arr,
                           {gsql_date_arr, gsql_date_arr},

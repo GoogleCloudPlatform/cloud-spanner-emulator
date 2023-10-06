@@ -2,7 +2,7 @@
 #
 # Makefile for src/backend/utils/mb/Unicode
 #
-# Copyright (c) 2001-2020, PostgreSQL Global Development Group
+# Copyright (c) 2001-2021, PostgreSQL Global Development Group
 #
 # src/backend/utils/mb/Unicode/Makefile
 #
@@ -122,7 +122,7 @@ euc-jis-2004-std.txt sjis-0213-2004-std.txt:
 	$(DOWNLOAD) http://x0213.org/codetable/$(@F)
 
 gb-18030-2000.xml windows-949-2000.xml:
-	$(DOWNLOAD) https://ssl.icu-project.org/repos/icu/data/trunk/charset/data/xml/$(@F)
+	$(DOWNLOAD) https://raw.githubusercontent.com/unicode-org/icu-data/master/charset/data/xml/$(@F)
 
 GB2312.TXT:
 	$(DOWNLOAD) 'http://trac.greenstone.org/browser/trunk/gsdl/unicode/MAPPINGS/EASTASIA/GB/GB2312.TXT?rev=1842&format=txt'

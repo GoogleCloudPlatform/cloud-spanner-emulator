@@ -26,8 +26,11 @@
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/types/array_type.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/substitute.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "common/constants.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -37,14 +40,24 @@ absl::StatusOr<std::unique_ptr<QueryableChangeStreamTvf>>
 QueryableChangeStreamTvf::Create(const backend::ChangeStream* change_stream,
                                  const zetasql::AnalyzerOptions options,
                                  zetasql::Catalog* catalog,
-                                 zetasql::TypeFactory* type_factory) {
+                                 zetasql::TypeFactory* type_factory,
+                                 bool is_pg) {
   std::vector<zetasql::FunctionArgumentType> args;
   std::vector<zetasql::TVFSchemaColumn> output_columns;
   std::vector<std::pair<std::string, const zetasql::Type*>> columns;
   const zetasql::Type* output_type = nullptr;
-  ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeType(
-      absl::Substitute(kChangeStreamTvfOutputFormat, "JSON"), options, catalog,
-      type_factory, &output_type));
+  std::string tvf_name;
+  if (is_pg) {
+    tvf_name = absl::StrCat(kChangeStreamTvfJsonPrefix, change_stream->Name());
+    output_type =
+        postgres_translator::spangres::types::PgJsonbMapping()->mapped_type();
+  } else {
+    tvf_name =
+        absl::StrCat(kChangeStreamTvfStructPrefix, change_stream->Name());
+    ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeType(
+        absl::Substitute(kChangeStreamTvfOutputFormat, "JSON"), options,
+        catalog, type_factory, &output_type));
+  }
   const zetasql::ArrayType* read_options_array;
   ZETASQL_RETURN_IF_ERROR(type_factory->MakeArrayType(type_factory->get_string(),
                                               &read_options_array));
@@ -79,8 +92,6 @@ QueryableChangeStreamTvf::Create(const backend::ChangeStream* change_stream,
       result_schema, /*extra_relation_input_columns_allowed=*/false);
   const auto signature = zetasql::FunctionSignature(result_type, args,
                                                       /*context_ptr=*/nullptr);
-  const std::string tvf_name =
-      absl::StrCat(kChangeStreamTvfStructPrefix, change_stream->Name());
   return std::make_unique<QueryableChangeStreamTvf>(
       absl::StrSplit(tvf_name, '.'), signature, result_schema, change_stream);
 }

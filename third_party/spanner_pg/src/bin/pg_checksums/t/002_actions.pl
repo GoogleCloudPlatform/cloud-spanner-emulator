@@ -1,3 +1,6 @@
+
+# Copyright (c) 2021, PostgreSQL Global Development Group
+
 # Do basic sanity checks supported by pg_checksums using
 # an initialized cluster.
 
@@ -5,6 +8,7 @@ use strict;
 use warnings;
 use PostgresNode;
 use TestLib;
+
 use Test::More tests => 63;
 
 
@@ -22,7 +26,7 @@ sub check_relation_corruption
 	# Create table and discover its filesystem location.
 	$node->safe_psql(
 		'postgres',
-		"SELECT a INTO $table FROM generate_series(1,10000) AS a;
+		"CREATE TABLE $table AS SELECT a FROM generate_series(1,10000) AS a;
 		ALTER TABLE $table SET (autovacuum_enabled=false);");
 
 	$node->safe_psql('postgres',

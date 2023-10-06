@@ -204,17 +204,6 @@ void GetProcsByName(const char* name, const FormData_pg_proc*** outlist,
 // Returns NULL on lookup failure.
 const FormData_pg_proc* GetProcByOid(Oid oid);
 
-// C-compatible interface for the datetime parsing library functions. These
-// functions nearly replace PG's builtin date_in and timestamptz_in SQL
-// functions, except that they use our C++ implementations (which exclude some
-// features), and they return the internal PG types, not the Datum column type
-// wrappers.
-// These look up the default time zone from CatalogAdapter->analyzer_options
-// and pass it into the C++ implementations.
-// These functions throw exceptions on error.
-DateADT date_in_c(char* input_string);
-TimestampTz timestamptz_in_c(char* input_string);
-
 #ifdef __cplusplus
 }
 #endif  // ifdef __cplusplus

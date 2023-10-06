@@ -113,7 +113,8 @@ bool FunctionFound(const char* namespace_name, const char* function_name,
   List* funcname = MakeFunctionName(namespace_name, function_name);
   FuncCandidateList candidate_list = FuncnameGetCandidates(
       funcname, nargs, /*argnames=*/NIL, /*expand_variadic=*/false,
-      /*expand_defaults=*/false, /*missing_ok=*/false);
+      /*expand_defaults=*/false, /*include_out_arguments=*/false,
+      /*missing_ok=*/false);
   return candidate_list != nullptr;
 }
 
@@ -742,65 +743,6 @@ TEST_F(CatalogShimTestWithMemory, LeftOperNoErrorFailureTest) {
   EXPECT_FALSE(HeapTupleIsValid(oper));
 }
 
-// Test that right_oper() produces the expected operator for exactly matching
-// args.
-TEST_F(CatalogShimTestWithMemory, RightOperFactorialTest) {
-  List* name_list = MakeNamespacedName("!");
-  const Oid left_arg = INT8OID;
-
-  Operator oper = right_oper(/*pstate=*/nullptr, name_list, left_arg,
-                             /*noError=*/false, /*location=*/-1);
-
-  ASSERT_TRUE(HeapTupleIsValid(oper));
-  FormData_pg_operator* operator_struct =
-      reinterpret_cast<FormData_pg_operator*>(GETSTRUCT(oper));
-  EXPECT_EQ(operator_struct->oid, 388);  // Factorial operator.
-}
-
-// Test that right_oper() produces the expected operator when coercion is
-// required to match arg types.
-TEST_F(CatalogShimTestWithMemory, RightOperCoerceTest) {
-  List* name_list = MakeNamespacedName("!");
-  const Oid left_arg = INT4OID;
-
-  Operator oper = right_oper(/*pstate=*/nullptr, name_list, left_arg,
-                             /*noError=*/false, /*location=*/-1);
-
-  ASSERT_TRUE(HeapTupleIsValid(oper));
-  FormData_pg_operator* operator_struct =
-      reinterpret_cast<FormData_pg_operator*>(GETSTRUCT(oper));
-  EXPECT_EQ(operator_struct->oid, 388);  // Factorial operator.
-  auto oper_form =
-      reinterpret_cast<const FormData_pg_operator*>(GETSTRUCT(oper));
-  EXPECT_EQ(oper_form->oprleft, INT8OID);
-}
-
-// Tests for right_oper() failure modes.
-
-TEST_F(CatalogShimTestWithMemory, RightOperErrorFailureTest) {
-  List* name_list = MakeNamespacedName("!");
-  const Oid left_arg = TEXTOID;
-
-  // There is no INT4 = TEXT operator and coercion cannot come up with one.
-  // Verify that with noError=false, it throws an error.
-  EXPECT_THROW(right_oper(/*pstate=*/nullptr, name_list, left_arg,
-                          /*noError=*/false, /*location=*/-1),
-               PostgresEreportException);
-}
-
-TEST_F(CatalogShimTestWithMemory, RightOperNoErrorFailureTest) {
-  List* name_list = MakeNamespacedName("!");
-  const Oid left_arg = TEXTOID;
-
-  // There is no TEXT ! operator and coercion cannot come up with one.
-  // Verify that with noError=true, we just get an invalid pointer back (no
-  // throw).
-  Operator oper = right_oper(/*pstate=*/nullptr, name_list, left_arg,
-                             /*noError=*/true, /*location=*/-1);
-
-  EXPECT_FALSE(HeapTupleIsValid(oper));
-}
-
 TEST_F(CatalogShimTestWithMemory, GetTypeInputInfoSpangresBool) {
   Oid typInput;
   Oid typIOParam;
@@ -953,7 +895,8 @@ TEST_F(CatalogShimTestWithMemory, FuncnameGetCandidatesSum) {
 
   FuncCandidateList candidate_list = FuncnameGetCandidates(
       funcname, /*nargs=*/1, /*argnames=*/NIL, /*expand_variadic=*/false,
-      /*expand_defaults=*/false, /*missing_ok=*/false);
+      /*expand_defaults=*/false, /*include_out_arguments=*/false,
+      /*missing_ok=*/false);
 
   EXPECT_NE(candidate_list, nullptr);
   // Loop through the list and make sure each entry has the right name and args.
@@ -1037,10 +980,11 @@ TEST_F(CatalogShimTestWithMemory, FuncGetDetailInt4Minus) {
   Oid* true_typeids;
   List* argdefaults;
 
-  FuncDetailCode code = func_get_detail(
-      funcname, fargs, /*fargnames=*/NIL, /*nargs=*/1, argtypes,
-      /*expand_variadic=*/false, /*expand_defaults=*/false, &funcid, &rettype,
-      &retset, &nvargs, &vatype, &true_typeids, &argdefaults);
+  FuncDetailCode code =
+      func_get_detail(funcname, fargs, /*fargnames=*/NIL, /*nargs=*/1, argtypes,
+                      /*expand_variadic=*/false, /*expand_defaults=*/false,
+                      /*include_out_arguments=*/false, &funcid, &rettype,
+                      &retset, &nvargs, &vatype, &true_typeids, &argdefaults);
 
   EXPECT_EQ(code, FUNCDETAIL_NORMAL);
   EXPECT_EQ(funcid, int4um_oid);
@@ -1075,10 +1019,11 @@ TEST_F(CatalogShimTestWithMemory, FuncGetDetailSum) {
   Oid* true_typeids;
   List* argdefaults;
 
-  FuncDetailCode code = func_get_detail(
-      funcname, fargs, /*fargnames=*/NIL, /*nargs=*/1, argtypes,
-      /*expand_variadic=*/false, /*expand_defaults=*/false, &funcid, &rettype,
-      &retset, &nvargs, &vatype, &true_typeids, &argdefaults);
+  FuncDetailCode code =
+      func_get_detail(funcname, fargs, /*fargnames=*/NIL, /*nargs=*/1, argtypes,
+                      /*expand_variadic=*/false, /*expand_defaults=*/false,
+                      /*include_out_arguments=*/false, &funcid, &rettype,
+                      &retset, &nvargs, &vatype, &true_typeids, &argdefaults);
 
   EXPECT_EQ(code, FUNCDETAIL_AGGREGATE);
   EXPECT_EQ(funcid, int_sum_oid);
@@ -1101,7 +1046,7 @@ TEST_F(CatalogShimTestWithMemory, ParseFuncOrColumn) {
   List* funcname = MakeNamespacedName("sum");
   List* fargs = list_make1(MakeInt4Const(1, /*isnull=*/false));
   const int location = -1;  // "Unknown location"
-  FuncCall* fn = makeFuncCall(funcname, fargs, location);
+  FuncCall* fn = makeFuncCall(funcname, fargs, COERCE_EXPLICIT_CALL, location);
 
   // This calling convention (passing fields redundantly) matches the real
   // PostgreSQL call we are supporting. It is redundant for functions but other
@@ -1136,7 +1081,8 @@ TEST_F(CatalogShimTestWithMemory, ParseFuncOrColumnError) {
   pstate->p_expr_kind = EXPR_KIND_SELECT_TARGET;
   List* funcname = MakeNamespacedName("no_such_function");
   List* fargs = list_make1(MakeInt4Const(1, /*isnull=*/false));
-  FuncCall* fn = makeFuncCall(funcname, fargs, /*location=*/-1);
+  FuncCall* fn =
+      makeFuncCall(funcname, fargs, COERCE_EXPLICIT_CALL, /*location=*/-1);
 
   // When fn is not NULL, this should throw on failure.
   EXPECT_THROW(
@@ -2076,7 +2022,8 @@ TEST_F(CatalogShimTestWithMemory, StatementHintGrammarParsesOneHint) {
   const char* test_string = "/*@ statement_hint = 1 */ select 1";
   SpangresTokenLocations locations;
 
-  List* parse_tree = raw_parser_spangres(test_string, &locations);
+  List* parse_tree =
+      raw_parser_spangres(test_string, RAW_PARSE_DEFAULT, &locations);
 
   ASSERT_EQ(list_length(parse_tree), 1);
   RawStmt* stmt = list_nth_node(RawStmt, parse_tree, 0);
@@ -2093,7 +2040,8 @@ TEST_F(CatalogShimTestWithMemory, StatementHintGrammarParsesNamespacedHint) {
   const char* test_string = "/*@ hint_namespace.statement_hint = 1 */ select 1";
   SpangresTokenLocations locations;
 
-  List* parse_tree = raw_parser_spangres(test_string, &locations);
+  List* parse_tree =
+      raw_parser_spangres(test_string, RAW_PARSE_DEFAULT, &locations);
 
   ASSERT_EQ(list_length(parse_tree), 1);
   RawStmt* stmt = list_nth_node(RawStmt, parse_tree, 0);
@@ -2112,7 +2060,8 @@ TEST_F(CatalogShimTestWithMemory, StatementHintGrammarParsesTwoHints) {
       "/*@ statement_hint1 = 1, statement_hint2 = 2 */ select 1";
   SpangresTokenLocations locations;
 
-  List* parse_tree = raw_parser_spangres(test_string, &locations);
+  List* parse_tree =
+      raw_parser_spangres(test_string, RAW_PARSE_DEFAULT, &locations);
 
   ASSERT_EQ(list_length(parse_tree), 1);
   RawStmt* stmt = list_nth_node(RawStmt, parse_tree, 0);
@@ -2143,7 +2092,8 @@ TEST_F(CatalogShimTestWithMemory, TableHintGrammarParsesHint) {
   for (const std::string& test_case : test_strings) {
     SpangresTokenLocations locations;
 
-    List* parse_tree = raw_parser_spangres(test_case.c_str(), &locations);
+    List* parse_tree =
+        raw_parser_spangres(test_case.c_str(), RAW_PARSE_DEFAULT, &locations);
 
     ASSERT_EQ(list_length(parse_tree), 1);
     RawStmt* stmt = list_nth_node(RawStmt, parse_tree, 0);
@@ -2172,7 +2122,8 @@ TEST_F(CatalogShimTestWithMemory, UnreservedKeywordsAreUnreserved) {
   for (const std::string& test_case : test_strings) {
     SpangresTokenLocations locations;
 
-    List* parse_tree = raw_parser_spangres(test_case.c_str(), &locations);
+    List* parse_tree =
+        raw_parser_spangres(test_case.c_str(), RAW_PARSE_DEFAULT, &locations);
 
     ASSERT_EQ(list_length(parse_tree), 1);
   }
@@ -2191,7 +2142,8 @@ TEST_F(CatalogShimTestWithMemory, TableJoinGrammarParsesHint) {
   for (const std::string& test_case : test_strings) {
     SpangresTokenLocations locations;
 
-    List* parse_tree = raw_parser_spangres(test_case.c_str(), &locations);
+    List* parse_tree =
+        raw_parser_spangres(test_case.c_str(), RAW_PARSE_DEFAULT, &locations);
 
     ASSERT_EQ(list_length(parse_tree), 1);
     RawStmt* stmt = list_nth_node(RawStmt, parse_tree, 0);
@@ -2214,7 +2166,8 @@ TEST_F(CatalogShimTestWithMemory, InListGrammarParsesHint) {
 
   SpangresTokenLocations locations;
 
-  List* parse_tree = raw_parser_spangres(test_string.c_str(), &locations);
+  List* parse_tree =
+      raw_parser_spangres(test_string.c_str(), RAW_PARSE_DEFAULT, &locations);
 
   ASSERT_EQ(list_length(parse_tree), 1);
   RawStmt* stmt = list_nth_node(RawStmt, parse_tree, 0);
@@ -2238,7 +2191,8 @@ TEST_F(CatalogShimTestWithMemory, NotInListGrammarParsesHint) {
 
   SpangresTokenLocations locations;
 
-  List* parse_tree = raw_parser_spangres(test_string.c_str(), &locations);
+  List* parse_tree =
+      raw_parser_spangres(test_string.c_str(), RAW_PARSE_DEFAULT, &locations);
 
   ASSERT_EQ(list_length(parse_tree), 1);
   RawStmt* stmt = list_nth_node(RawStmt, parse_tree, 0);
@@ -2278,7 +2232,8 @@ TEST_F(CatalogShimTestWithMemory, InValuesListHintErrors) {
 void VerifyViewStmtText(absl::string_view expected, std::string& input,
                         int rawstmt_index) {
   SpangresTokenLocations locations;
-  List* parse_tree = raw_parser_spangres(input.c_str(), &locations);
+  List* parse_tree =
+      raw_parser_spangres(input.c_str(), RAW_PARSE_DEFAULT, &locations);
   RawStmt* stmt = list_nth_node(RawStmt, parse_tree, rawstmt_index);
   ViewStmt* view = castNode(ViewStmt, stmt->stmt);
   ASSERT_EQ(expected, absl::StripAsciiWhitespace(view->query_string));
@@ -2330,7 +2285,8 @@ TEST_F(CatalogShimTestWithMemory, ExprStringCheckConstraint) {
       "create table users (age bigint check(age > 0) not null); create table "
       "users2 (id bigint, age bigint, check(age > id));";
   SpangresTokenLocations locations;
-  List* parse_tree = raw_parser_spangres(create_table.c_str(), &locations);
+  List* parse_tree =
+      raw_parser_spangres(create_table.c_str(), RAW_PARSE_DEFAULT, &locations);
   ASSERT_EQ(list_length(parse_tree), 2);
   RawStmt* stmt = list_nth_node(RawStmt, parse_tree, 0);
   VerifyColumnConstraintExprString(castNode(CreateStmt, stmt->stmt), 0,
@@ -2349,7 +2305,8 @@ TEST_F(CatalogShimTestWithMemory, ExprStringDefault) {
       "  not null);"
       "alter table users2 alter column age set default 30;";
   SpangresTokenLocations locations;
-  List* parse_tree = raw_parser_spangres(create_table.c_str(), &locations);
+  List* parse_tree =
+      raw_parser_spangres(create_table.c_str(), RAW_PARSE_DEFAULT, &locations);
   RawStmt* stmt = list_nth_node(RawStmt, parse_tree, 0);
   VerifyColumnConstraintExprString(castNode(CreateStmt, stmt->stmt), 1, "9");
 
@@ -2370,7 +2327,8 @@ TEST_F(CatalogShimTestWithMemory, ExprStringGeneratedColumn) {
       "as (id+1) stored);create table users2 (id bigint primary key, age "
       "bigint generated always as ('100'::bigint) stored);";
   SpangresTokenLocations locations;
-  List* parse_tree = raw_parser_spangres(create_table.c_str(), &locations);
+  List* parse_tree =
+      raw_parser_spangres(create_table.c_str(), RAW_PARSE_DEFAULT, &locations);
   RawStmt* stmt = list_nth_node(RawStmt, parse_tree, 0);
   VerifyColumnConstraintExprString(castNode(CreateStmt, stmt->stmt), 1, "id+1");
 
@@ -2466,7 +2424,7 @@ TEST(CatalogShimTest, GetsFuncVariadicType) {
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
   // Valid cases: {variadic, non-variadic}
-  std::vector<Oid> test_cases = {F_TEXT_CONCAT, F_BOOLEQ};
+  std::vector<Oid> test_cases = {F_CONCAT, F_BOOLEQ};
 
   for (const Oid funcid : test_cases) {
     Oid variadictype = get_func_variadictype(funcid);
@@ -2488,7 +2446,7 @@ TEST(CatalogShimTest, GetsRetSet) {
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
   // Valid cases: {true, false}
-  std::vector<Oid> test_cases = {F_ARRAY_UNNEST, F_BOOLEQ};
+  std::vector<Oid> test_cases = {F_UNNEST_ANYARRAY, F_BOOLEQ};
 
   for (const Oid funcid : test_cases) {
     Oid retset = get_func_retset(funcid);
@@ -2509,28 +2467,20 @@ TEST_F(CatalogShimTestWithMemory, TransformContainerType) {
 
   // Simple cases just get the element type and leave container type unchanged.
   Oid containerType = INT8ARRAYOID;
-  EXPECT_EQ(INT8OID, transformContainerType(&containerType, &containerTypmod));
+  transformContainerType(&containerType, &containerTypmod);
   EXPECT_EQ(containerType, INT8ARRAYOID);
   containerType = TEXTARRAYOID;
-  EXPECT_EQ(TEXTOID, transformContainerType(&containerType, &containerTypmod));
+  transformContainerType(&containerType, &containerTypmod);
   EXPECT_EQ(containerType, TEXTARRAYOID);
 
   // Special cases will modify VECTOR containerType to the more common ARRAY
   // type for INT2 and OID.
   containerType = INT2VECTOROID;
-  EXPECT_EQ(INT2OID, transformContainerType(&containerType, &containerTypmod));
+  transformContainerType(&containerType, &containerTypmod);
   EXPECT_EQ(containerType, INT2ARRAYOID);
   containerType = OIDVECTOROID;
-  EXPECT_EQ(OIDOID, transformContainerType(&containerType, &containerTypmod));
+  transformContainerType(&containerType, &containerTypmod);
   EXPECT_EQ(containerType, OIDARRAYOID);
-
-  // Should error if input is not a container.
-  containerType = InvalidOid;
-  EXPECT_THROW(transformContainerType(&containerType, &containerTypmod),
-               PostgresEreportException);
-  containerType = INT8OID;
-  EXPECT_THROW(transformContainerType(&containerType, &containerTypmod),
-               PostgresEreportException);
 }
 
 // Helper function to create a A_Const (parse tree) node containing a specified
@@ -2553,10 +2503,7 @@ static Const* MakeInt8Const(int value, bool isnull) {
                    /*constbyval=*/true);
 }
 
-// transformContainerSubscripts is used for both Fetch (SELECT arr[1]) and
-// Assignment (UPDATE...SET arr[1] = 15). They're identical except that
-// Assignment also transforms/uses the source expression, so we test Assignment
-// to cover all code paths.
+// transformContainerSubscripts is used for (SELECT arr[1]).
 //
 // We're only testing supported functionality here:
 //   Single indirection, no multi-dimensionality
@@ -2571,13 +2518,10 @@ TEST_F(CatalogShimTestWithMemory, TransformContainerSubscripts) {
   a_indices->lidx = nullptr;    // Not a slice
   a_indices->uidx = MakeIntConst(/*val=*/13, /*location=*/-1);
   List* indirection = list_make1(a_indices);
-  Node* assignFrom =
-      reinterpret_cast<Node*>(MakeInt8Const(8, /*isnull=*/false));
 
   const SubscriptingRef* result = transformContainerSubscripts(
       pstate, containerBase, /*containerType=*/INT8ARRAYOID,
-      /*elementType=*/InvalidOid,
-      /*containerTypMod=*/-1, indirection, assignFrom);
+      /*containerTypMod=*/-1, indirection, /*isAssignment=*/false);
 
   ASSERT_NE(result, nullptr);
   ASSERT_TRUE(IsA(result, SubscriptingRef));
@@ -2591,9 +2535,19 @@ TEST_F(CatalogShimTestWithMemory, TransformContainerSubscripts) {
       << nodeToString(linitial_node(Const, result->refupperindexpr))
       << " does not match expected: " << nodeToString(thirteen_const);
   EXPECT_EQ(reinterpret_cast<Node*>(result->refexpr), containerBase);
-  EXPECT_TRUE(equal(reinterpret_cast<Node*>(result->refassgnexpr), assignFrom))
-      << nodeToString(result->refupperindexpr)
-      << " does not match expected: " << nodeToString(assignFrom);
+  EXPECT_TRUE(result->refassgnexpr == NULL)
+      << " is not null: "
+      << nodeToString(reinterpret_cast<Node*>(result->refassgnexpr));
+
+  // Should error if input is not a container.
+  EXPECT_THROW(transformContainerSubscripts(
+                   pstate, containerBase, /*containerType=*/InvalidOid,
+                   /*containerTypMod=*/-1, indirection, /*isAssignment=*/false),
+               PostgresEreportException);
+  EXPECT_THROW(transformContainerSubscripts(
+                   pstate, containerBase, /*containerType=*/INT8OID,
+                   /*containerTypMod=*/-1, indirection, /*isAssignment=*/false),
+               PostgresEreportException);
 }
 
 TEST_F(CatalogShimTestWithMemory, LookupExplicitNamespace) {

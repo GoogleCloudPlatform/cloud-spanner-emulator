@@ -850,7 +850,7 @@ void GetAlterTableCmdAlterColumnType(AlterTableCmd* cmd,
 void GetAlterTableStmtDef(AlterTableStmt* stmt, deparse_context* context) {
   StringInfo buf = context->buf;
 
-  if (stmt->relkind != OBJECT_TABLE) {
+  if (stmt->objtype != OBJECT_TABLE) {
     elog(ERROR,
          "invalid parse tree: only tables are supported in <ALTER TABLE> "
          "statement");
@@ -1119,14 +1119,14 @@ void get_from_clause(Query *query, const char *prefix,
 void get_rule_expr(Node *node, deparse_context *context,
 				   bool showimplicit);
 void get_target_list(List *targetList, deparse_context *context,
-					 TupleDesc resultDesc);
+					 TupleDesc resultDesc, bool colNamesVisible);
 void get_update_query_targetlist_def(Query *query, List *targetList,
 									 deparse_context *context,
 									 RangeTblEntry *rte);
 void get_with_clause(Query *query, deparse_context *context);
 
 
-void get_delete_query_def(Query *query, deparse_context *context)
+void get_delete_query_def(Query *query, deparse_context *context, bool colNamesVisible)
 {
 	StringInfo	buf = context->buf;
 	RangeTblEntry *rte;
@@ -1147,7 +1147,7 @@ void get_delete_query_def(Query *query, deparse_context *context)
 	appendStringInfo(buf, "DELETE FROM %s%s",
 					 only_marker(rte),
 					 generate_relation_name(rte->relid, NIL));
-	if (rte->alias != NULL)
+  if (rte->alias != NULL)
 		appendStringInfo(buf, " %s",
 						 quote_identifier(rte->alias->aliasname));
 
@@ -1175,11 +1175,12 @@ void get_delete_query_def(Query *query, deparse_context *context)
 	{
 		appendContextKeyword(context, " RETURNING",
 							 -POSTGRES_PRETTYINDENT_STD, POSTGRES_PRETTYINDENT_STD, 1);
-		get_target_list(query->returningList, context, NULL);
+		get_target_list(query->returningList, context, NULL, colNamesVisible);
 	}
 }
 
-void get_update_query_def(Query *query, deparse_context *context)
+void get_update_query_def(Query *query, deparse_context *context,
+                          bool colNamesVisible)
 {
 	StringInfo	buf = context->buf;
 	RangeTblEntry *rte;
@@ -1232,6 +1233,6 @@ void get_update_query_def(Query *query, deparse_context *context)
 	{
 		appendContextKeyword(context, " RETURNING",
 							 -POSTGRES_PRETTYINDENT_STD, POSTGRES_PRETTYINDENT_STD, 1);
-		get_target_list(query->returningList, context, NULL);
+		get_target_list(query->returningList, context, NULL, colNamesVisible);
 	}
 }

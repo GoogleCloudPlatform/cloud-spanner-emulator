@@ -26,6 +26,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "frontend/common/protos.h"
 #include "frontend/common/uris.h"
+#include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
 
 namespace google {

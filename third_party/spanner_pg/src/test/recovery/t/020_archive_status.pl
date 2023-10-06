@@ -1,3 +1,6 @@
+
+# Copyright (c) 2021, PostgreSQL Global Development Group
+
 #
 # Tests related to WAL archiving and recovery.
 #
@@ -8,7 +11,7 @@ use TestLib;
 use Test::More tests => 16;
 use Config;
 
-my $primary = get_new_node('master');
+my $primary = get_new_node('primary');
 $primary->init(
 	has_archiving    => 1,
 	allows_streaming => 1);
@@ -145,7 +148,7 @@ $standby1->start;
 # that all segments needed are restored from the archives.
 $standby1->poll_query_until('postgres',
 	qq{ SELECT pg_wal_lsn_diff(pg_last_wal_replay_lsn(), '$primary_lsn') >= 0 }
-) or die "Timed out while waiting for xlog replay on standby2";
+) or die "Timed out while waiting for xlog replay on standby1";
 
 $standby1->safe_psql('postgres', q{CHECKPOINT});
 

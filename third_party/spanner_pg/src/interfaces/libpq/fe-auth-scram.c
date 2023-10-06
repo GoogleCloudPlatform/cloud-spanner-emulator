@@ -3,7 +3,7 @@
  * fe-auth-scram.c
  *	   The front-end (client) implementation of SCRAM authentication.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -15,6 +15,7 @@
 #include "postgres_fe.h"
 
 #include "common/base64.h"
+#include "common/hmac.h"
 #include "common/saslprep.h"
 #include "common/scram-common.h"
 #include "fe-auth.h"
@@ -63,8 +64,8 @@ static bool read_server_first_message(fe_scram_state *state, char *input);
 static bool read_server_final_message(fe_scram_state *state, char *input);
 static char *build_client_first_message(fe_scram_state *state);
 static char *build_client_final_message(fe_scram_state *state);
-static bool verify_server_signature(fe_scram_state *state);
-static void calculate_client_proof(fe_scram_state *state,
+static bool verify_server_signature(fe_scram_state *state, bool *match);
+static bool calculate_client_proof(fe_scram_state *state,
 								   const char *client_final_message_without_proof,
 								   uint8 *result);
 
@@ -208,14 +209,14 @@ pg_fe_scram_exchange(void *opaq, char *input, int inputlen,
 	{
 		if (inputlen == 0)
 		{
-			printfPQExpBuffer(&conn->errorMessage,
-							  libpq_gettext("malformed SCRAM message (empty message)\n"));
+			appendPQExpBufferStr(&conn->errorMessage,
+								 libpq_gettext("malformed SCRAM message (empty message)\n"));
 			goto error;
 		}
 		if (inputlen != strlen(input))
 		{
-			printfPQExpBuffer(&conn->errorMessage,
-							  libpq_gettext("malformed SCRAM message (length mismatch)\n"));
+			appendPQExpBufferStr(&conn->errorMessage,
+								 libpq_gettext("malformed SCRAM message (length mismatch)\n"));
 			goto error;
 		}
 	}
@@ -256,13 +257,17 @@ pg_fe_scram_exchange(void *opaq, char *input, int inputlen,
 			 * Verify server signature, to make sure we're talking to the
 			 * genuine server.
 			 */
-			if (verify_server_signature(state))
-				*success = true;
-			else
+			if (!verify_server_signature(state, success))
 			{
-				*success = false;
-				printfPQExpBuffer(&conn->errorMessage,
-								  libpq_gettext("incorrect server signature\n"));
+				appendPQExpBufferStr(&conn->errorMessage,
+									 libpq_gettext("could not verify server signature\n"));
+				goto error;
+			}
+
+			if (!*success)
+			{
+				appendPQExpBufferStr(&conn->errorMessage,
+									 libpq_gettext("incorrect server signature\n"));
 			}
 			*done = true;
 			state->state = FE_SCRAM_FINISHED;
@@ -270,8 +275,8 @@ pg_fe_scram_exchange(void *opaq, char *input, int inputlen,
 
 		default:
 			/* shouldn't happen */
-			printfPQExpBuffer(&conn->errorMessage,
-							  libpq_gettext("invalid SCRAM exchange state\n"));
+			appendPQExpBufferStr(&conn->errorMessage,
+								 libpq_gettext("invalid SCRAM exchange state\n"));
 			goto error;
 	}
 	return;
@@ -283,6 +288,11 @@ error:
 
 /*
  * Read value for an attribute part of a SCRAM message.
+ *
+ * The buffer at **input is destructively modified, and *input is
+ * advanced over the "attr=value" string and any following comma.
+ *
+ * On failure, append an error message to *errorMessage and return NULL.
  */
 static char *
 read_attr_value(char **input, char attr, PQExpBuffer errorMessage)
@@ -292,7 +302,7 @@ read_attr_value(char **input, char attr, PQExpBuffer errorMessage)
 
 	if (*begin != attr)
 	{
-		printfPQExpBuffer(errorMessage,
+		appendPQExpBuffer(errorMessage,
 						  libpq_gettext("malformed SCRAM message (attribute \"%c\" expected)\n"),
 						  attr);
 		return NULL;
@@ -301,7 +311,7 @@ read_attr_value(char **input, char attr, PQExpBuffer errorMessage)
 
 	if (*begin != '=')
 	{
-		printfPQExpBuffer(errorMessage,
+		appendPQExpBuffer(errorMessage,
 						  libpq_gettext("malformed SCRAM message (expected character \"=\" for attribute \"%c\")\n"),
 						  attr);
 		return NULL;
@@ -342,8 +352,8 @@ build_client_first_message(fe_scram_state *state)
 	 */
 	if (!pg_strong_random(raw_nonce, SCRAM_RAW_NONCE_LEN))
 	{
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("could not generate nonce\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("could not generate nonce\n"));
 		return NULL;
 	}
 
@@ -352,16 +362,16 @@ build_client_first_message(fe_scram_state *state)
 	state->client_nonce = malloc(encoded_len + 1);
 	if (state->client_nonce == NULL)
 	{
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("out of memory\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("out of memory\n"));
 		return NULL;
 	}
 	encoded_len = pg_b64_encode(raw_nonce, SCRAM_RAW_NONCE_LEN,
 								state->client_nonce, encoded_len);
 	if (encoded_len < 0)
 	{
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("could not encode nonce\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("could not encode nonce\n"));
 		return NULL;
 	}
 	state->client_nonce[encoded_len] = '\0';
@@ -427,8 +437,8 @@ build_client_first_message(fe_scram_state *state)
 
 oom_error:
 	termPQExpBuffer(&buf);
-	printfPQExpBuffer(&conn->errorMessage,
-					  libpq_gettext("out of memory\n"));
+	appendPQExpBufferStr(&conn->errorMessage,
+						 libpq_gettext("out of memory\n"));
 	return NULL;
 }
 
@@ -504,8 +514,8 @@ build_client_final_message(fe_scram_state *state)
 			free(cbind_data);
 			free(cbind_input);
 			termPQExpBuffer(&buf);
-			printfPQExpBuffer(&conn->errorMessage,
-							  "could not encode cbind data for channel binding\n");
+			appendPQExpBufferStr(&conn->errorMessage,
+								 "could not encode cbind data for channel binding\n");
 			return NULL;
 		}
 		buf.len += encoded_cbind_len;
@@ -519,8 +529,8 @@ build_client_final_message(fe_scram_state *state)
 		 * Shouldn't happen.
 		 */
 		termPQExpBuffer(&buf);
-		printfPQExpBuffer(&conn->errorMessage,
-						  "channel binding not supported by this build\n");
+		appendPQExpBufferStr(&conn->errorMessage,
+							 "channel binding not supported by this build\n");
 		return NULL;
 #endif							/* HAVE_PGTLS_GET_PEER_CERTIFICATE_HASH */
 	}
@@ -544,9 +554,15 @@ build_client_final_message(fe_scram_state *state)
 		goto oom_error;
 
 	/* Append proof to it, to form client-final-message. */
-	calculate_client_proof(state,
-						   state->client_final_message_without_proof,
-						   client_proof);
+	if (!calculate_client_proof(state,
+								state->client_final_message_without_proof,
+								client_proof))
+	{
+		termPQExpBuffer(&buf);
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("could not calculate client proof\n"));
+		return NULL;
+	}
 
 	appendPQExpBufferStr(&buf, ",p=");
 	encoded_len = pg_b64_enc_len(SCRAM_KEY_LEN);
@@ -559,8 +575,8 @@ build_client_final_message(fe_scram_state *state)
 	if (encoded_len < 0)
 	{
 		termPQExpBuffer(&buf);
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("could not encode client proof\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("could not encode client proof\n"));
 		return NULL;
 	}
 	buf.len += encoded_len;
@@ -575,8 +591,8 @@ build_client_final_message(fe_scram_state *state)
 
 oom_error:
 	termPQExpBuffer(&buf);
-	printfPQExpBuffer(&conn->errorMessage,
-					  libpq_gettext("out of memory\n"));
+	appendPQExpBufferStr(&conn->errorMessage,
+						 libpq_gettext("out of memory\n"));
 	return NULL;
 }
 
@@ -596,8 +612,8 @@ read_server_first_message(fe_scram_state *state, char *input)
 	state->server_first_message = strdup(input);
 	if (state->server_first_message == NULL)
 	{
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("out of memory\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("out of memory\n"));
 		return false;
 	}
 
@@ -606,7 +622,7 @@ read_server_first_message(fe_scram_state *state, char *input)
 							&conn->errorMessage);
 	if (nonce == NULL)
 	{
-		/* read_attr_value() has generated an error string */
+		/* read_attr_value() has appended an error string */
 		return false;
 	}
 
@@ -614,31 +630,31 @@ read_server_first_message(fe_scram_state *state, char *input)
 	if (strlen(nonce) < strlen(state->client_nonce) ||
 		memcmp(nonce, state->client_nonce, strlen(state->client_nonce)) != 0)
 	{
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("invalid SCRAM response (nonce mismatch)\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("invalid SCRAM response (nonce mismatch)\n"));
 		return false;
 	}
 
 	state->nonce = strdup(nonce);
 	if (state->nonce == NULL)
 	{
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("out of memory\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("out of memory\n"));
 		return false;
 	}
 
 	encoded_salt = read_attr_value(&input, 's', &conn->errorMessage);
 	if (encoded_salt == NULL)
 	{
-		/* read_attr_value() has generated an error string */
+		/* read_attr_value() has appended an error string */
 		return false;
 	}
 	decoded_salt_len = pg_b64_dec_len(strlen(encoded_salt));
 	state->salt = malloc(decoded_salt_len);
 	if (state->salt == NULL)
 	{
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("out of memory\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("out of memory\n"));
 		return false;
 	}
 	state->saltlen = pg_b64_decode(encoded_salt,
@@ -647,28 +663,28 @@ read_server_first_message(fe_scram_state *state, char *input)
 								   decoded_salt_len);
 	if (state->saltlen < 0)
 	{
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("malformed SCRAM message (invalid salt)\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("malformed SCRAM message (invalid salt)\n"));
 		return false;
 	}
 
 	iterations_str = read_attr_value(&input, 'i', &conn->errorMessage);
 	if (iterations_str == NULL)
 	{
-		/* read_attr_value() has generated an error string */
+		/* read_attr_value() has appended an error string */
 		return false;
 	}
 	state->iterations = strtol(iterations_str, &endptr, 10);
 	if (*endptr != '\0' || state->iterations < 1)
 	{
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("malformed SCRAM message (invalid iteration count)\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("malformed SCRAM message (invalid iteration count)\n"));
 		return false;
 	}
 
 	if (*input != '\0')
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("malformed SCRAM message (garbage at end of server-first-message)\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("malformed SCRAM message (garbage at end of server-first-message)\n"));
 
 	return true;
 }
@@ -687,8 +703,8 @@ read_server_final_message(fe_scram_state *state, char *input)
 	state->server_final_message = strdup(input);
 	if (!state->server_final_message)
 	{
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("out of memory\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("out of memory\n"));
 		return false;
 	}
 
@@ -698,7 +714,12 @@ read_server_final_message(fe_scram_state *state, char *input)
 		char	   *errmsg = read_attr_value(&input, 'e',
 											 &conn->errorMessage);
 
-		printfPQExpBuffer(&conn->errorMessage,
+		if (errmsg == NULL)
+		{
+			/* read_attr_value() has appended an error message */
+			return false;
+		}
+		appendPQExpBuffer(&conn->errorMessage,
 						  libpq_gettext("error received from server in SCRAM exchange: %s\n"),
 						  errmsg);
 		return false;
@@ -709,20 +730,20 @@ read_server_final_message(fe_scram_state *state, char *input)
 											   &conn->errorMessage);
 	if (encoded_server_signature == NULL)
 	{
-		/* read_attr_value() has generated an error message */
+		/* read_attr_value() has appended an error message */
 		return false;
 	}
 
 	if (*input != '\0')
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("malformed SCRAM message (garbage at end of server-final-message)\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("malformed SCRAM message (garbage at end of server-final-message)\n"));
 
 	server_signature_len = pg_b64_dec_len(strlen(encoded_server_signature));
 	decoded_server_signature = malloc(server_signature_len);
 	if (!decoded_server_signature)
 	{
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("out of memory\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("out of memory\n"));
 		return false;
 	}
 
@@ -733,8 +754,8 @@ read_server_final_message(fe_scram_state *state, char *input)
 	if (server_signature_len != SCRAM_KEY_LEN)
 	{
 		free(decoded_server_signature);
-		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("malformed SCRAM message (invalid server signature)\n"));
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("malformed SCRAM message (invalid server signature)\n"));
 		return false;
 	}
 	memcpy(state->ServerSignature, decoded_server_signature, SCRAM_KEY_LEN);
@@ -745,9 +766,9 @@ read_server_final_message(fe_scram_state *state, char *input)
 
 /*
  * Calculate the client proof, part of the final exchange message sent
- * by the client.
+ * by the client.  Returns true on success, false on failure.
  */
-static void
+static bool
 calculate_client_proof(fe_scram_state *state,
 					   const char *client_final_message_without_proof,
 					   uint8 *result)
@@ -756,66 +777,90 @@ calculate_client_proof(fe_scram_state *state,
 	uint8		ClientKey[SCRAM_KEY_LEN];
 	uint8		ClientSignature[SCRAM_KEY_LEN];
 	int			i;
-	scram_HMAC_ctx ctx;
+	pg_hmac_ctx *ctx;
+
+	ctx = pg_hmac_create(PG_SHA256);
+	if (ctx == NULL)
+		return false;
 
 	/*
 	 * Calculate SaltedPassword, and store it in 'state' so that we can reuse
 	 * it later in verify_server_signature.
 	 */
-	scram_SaltedPassword(state->password, state->salt, state->saltlen,
-						 state->iterations, state->SaltedPassword);
-
-	scram_ClientKey(state->SaltedPassword, ClientKey);
-	scram_H(ClientKey, SCRAM_KEY_LEN, StoredKey);
-
-	scram_HMAC_init(&ctx, StoredKey, SCRAM_KEY_LEN);
-	scram_HMAC_update(&ctx,
-					  state->client_first_message_bare,
-					  strlen(state->client_first_message_bare));
-	scram_HMAC_update(&ctx, ",", 1);
-	scram_HMAC_update(&ctx,
-					  state->server_first_message,
-					  strlen(state->server_first_message));
-	scram_HMAC_update(&ctx, ",", 1);
-	scram_HMAC_update(&ctx,
-					  client_final_message_without_proof,
-					  strlen(client_final_message_without_proof));
-	scram_HMAC_final(ClientSignature, &ctx);
+	if (scram_SaltedPassword(state->password, state->salt, state->saltlen,
+							 state->iterations, state->SaltedPassword) < 0 ||
+		scram_ClientKey(state->SaltedPassword, ClientKey) < 0 ||
+		scram_H(ClientKey, SCRAM_KEY_LEN, StoredKey) < 0 ||
+		pg_hmac_init(ctx, StoredKey, SCRAM_KEY_LEN) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) state->client_first_message_bare,
+					   strlen(state->client_first_message_bare)) < 0 ||
+		pg_hmac_update(ctx, (uint8 *) ",", 1) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) state->server_first_message,
+					   strlen(state->server_first_message)) < 0 ||
+		pg_hmac_update(ctx, (uint8 *) ",", 1) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) client_final_message_without_proof,
+					   strlen(client_final_message_without_proof)) < 0 ||
+		pg_hmac_final(ctx, ClientSignature, sizeof(ClientSignature)) < 0)
+	{
+		pg_hmac_free(ctx);
+		return false;
+	}
 
 	for (i = 0; i < SCRAM_KEY_LEN; i++)
 		result[i] = ClientKey[i] ^ ClientSignature[i];
+
+	pg_hmac_free(ctx);
+	return true;
 }
 
 /*
  * Validate the server signature, received as part of the final exchange
- * message received from the server.
+ * message received from the server.  *match tracks if the server signature
+ * matched or not. Returns true if the server signature got verified, and
+ * false for a processing error.
  */
 static bool
-verify_server_signature(fe_scram_state *state)
+verify_server_signature(fe_scram_state *state, bool *match)
 {
 	uint8		expected_ServerSignature[SCRAM_KEY_LEN];
 	uint8		ServerKey[SCRAM_KEY_LEN];
-	scram_HMAC_ctx ctx;
+	pg_hmac_ctx *ctx;
 
-	scram_ServerKey(state->SaltedPassword, ServerKey);
-
-	/* calculate ServerSignature */
-	scram_HMAC_init(&ctx, ServerKey, SCRAM_KEY_LEN);
-	scram_HMAC_update(&ctx,
-					  state->client_first_message_bare,
-					  strlen(state->client_first_message_bare));
-	scram_HMAC_update(&ctx, ",", 1);
-	scram_HMAC_update(&ctx,
-					  state->server_first_message,
-					  strlen(state->server_first_message));
-	scram_HMAC_update(&ctx, ",", 1);
-	scram_HMAC_update(&ctx,
-					  state->client_final_message_without_proof,
-					  strlen(state->client_final_message_without_proof));
-	scram_HMAC_final(expected_ServerSignature, &ctx);
-
-	if (memcmp(expected_ServerSignature, state->ServerSignature, SCRAM_KEY_LEN) != 0)
+	ctx = pg_hmac_create(PG_SHA256);
+	if (ctx == NULL)
 		return false;
+
+	if (scram_ServerKey(state->SaltedPassword, ServerKey) < 0 ||
+	/* calculate ServerSignature */
+		pg_hmac_init(ctx, ServerKey, SCRAM_KEY_LEN) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) state->client_first_message_bare,
+					   strlen(state->client_first_message_bare)) < 0 ||
+		pg_hmac_update(ctx, (uint8 *) ",", 1) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) state->server_first_message,
+					   strlen(state->server_first_message)) < 0 ||
+		pg_hmac_update(ctx, (uint8 *) ",", 1) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) state->client_final_message_without_proof,
+					   strlen(state->client_final_message_without_proof)) < 0 ||
+		pg_hmac_final(ctx, expected_ServerSignature,
+					  sizeof(expected_ServerSignature)) < 0)
+	{
+		pg_hmac_free(ctx);
+		return false;
+	}
+
+	pg_hmac_free(ctx);
+
+	/* signature processed, so now check after it */
+	if (memcmp(expected_ServerSignature, state->ServerSignature, SCRAM_KEY_LEN) != 0)
+		*match = false;
+	else
+		*match = true;
 
 	return true;
 }
@@ -834,7 +879,8 @@ pg_fe_scram_build_secret(const char *password)
 	/*
 	 * Normalize the password with SASLprep.  If that doesn't work, because
 	 * the password isn't valid UTF-8 or contains prohibited characters, just
-	 * proceed with the original password.  (See comments at top of file.)
+	 * proceed with the original password.  (See comments at the top of
+	 * auth-scram.c.)
 	 */
 	rc = pg_saslprep(password, &prep_password);
 	if (rc == SASLPREP_OOM)

@@ -2,7 +2,7 @@
 #
 # Makefile for backend/utils
 #
-# Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+# Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
 # Portions Copyright (c) 1994, Regents of the University of California
 #
 # src/backend/utils/Makefile
@@ -14,7 +14,20 @@ top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
 OBJS        = fmgrtab.o
-SUBDIRS     = adt cache error fmgr hash init mb misc mmgr resowner sort time
+SUBDIRS     = \
+	activity \
+	adt \
+	cache \
+	error \
+	fmgr \
+	hash \
+	init \
+	mb \
+	misc \
+	mmgr \
+	resowner \
+	sort \
+	time
 
 # location of Catalog.pm
 catalogdir  = $(top_srcdir)/src/backend/catalog
@@ -75,6 +88,16 @@ $(top_builddir)/src/include/utils/probes.h: probes.h
 	cd '$(dir $@)' && rm -f $(notdir $@) && \
 	    $(LN_S) "../../../$(subdir)/probes.h" .
 
+# Recipe for rebuilding the Perl version of Gen_dummy_probes
+# Nothing depends on it, so it will never be called unless explicitly requested
+# The last two lines of the recipe format the script according to  our
+# standard and put back some blank lines for improved readability.
+Gen_dummy_probes.pl: Gen_dummy_probes.sed Gen_dummy_probes.pl.prolog
+	cp $(srcdir)/Gen_dummy_probes.pl.prolog $@
+	s2p -f $<  | sed -e 1,3d -e '/# #/ d' -e '$$d' >> $@
+	perltidy --profile=$(srcdir)/../../tools/pgindent/perltidyrc $@
+	perl -pi -e '!$$lb && ( /^\t+#/  || /^# prototypes/ ) && print qq{\n};'\
+		-e '$$lb = m/^\n/; ' $@
 
 .PHONY: install-data
 install-data: errcodes.txt installdirs

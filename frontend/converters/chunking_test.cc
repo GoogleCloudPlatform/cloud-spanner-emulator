@@ -32,6 +32,7 @@
 #include "common/limits.h"
 #include "frontend/converters/reads.h"
 #include "tests/common/chunking.h"
+#include "tests/common/proto_matchers.h"
 #include "tests/common/row_cursor.h"
 #include "absl/status/status.h"
 

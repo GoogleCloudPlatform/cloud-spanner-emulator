@@ -52,17 +52,22 @@ filegroup(
         "checksum_helper.c",
         "config_info.c",
         "controldata_utils.c",
+        "cryptohash.c",
         "encnames.c",
         "exec.c",
         "f2s.c",
         "file_perm.c",
+        "file_utils.c",
         "hashfn.c",
+        "hmac.c",
         "ip.c",
         "jsonapi.c",
         "keywords.c",
         "kwlookup.c",
         "link-canary.c",
         "md5.c",
+        "md5_common.c",
+        "pg_get_line.c",
         "pg_lzcompress.c",
         "pgfnames.c",
         "psprintf.c",
@@ -70,6 +75,7 @@ filegroup(
         "rmtree.c",
         "saslprep.c",
         "scram-common.c",
+        "sha1.c",
         "sha2.c",
         "string.c",
         "stringinfo.c",
@@ -81,9 +87,17 @@ filegroup(
 )
 
 filegroup(
+    name = "_common_hdrs",
+    srcs = [
+        "md5_int.h",
+        "sha1_int.h",
+        "sha2_int.h",
+    ],
+)
+
+filegroup(
     name = "unused",
     srcs = [
-        "sha2_openssl.c",
         "unicode/norm_test.c",
     ],
 )
@@ -92,9 +106,9 @@ filegroup(
     name = "_frontend",
     srcs = [
         "fe_memutils.c",
-        "file_utils.c",
         "logging.c",
         "restricted_token.c",
+        "sprompt.c",
     ],
 )
 
@@ -102,6 +116,9 @@ cc_library(
     name = "common_srv",
     srcs = [
         ":_common",
+    ],
+    hdrs = [
+        ":_common_hdrs",
     ],
     copts = [
         "-D_GNU_SOURCE",
@@ -121,6 +138,9 @@ cc_library(
     srcs = [
         ":_common",
         ":_frontend",
+    ],
+    hdrs = [
+        ":_common_hdrs",
     ],
     copts = [
         "-DFRONTEND",

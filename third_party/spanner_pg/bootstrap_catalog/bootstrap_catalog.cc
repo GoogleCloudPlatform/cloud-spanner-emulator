@@ -67,9 +67,9 @@ PgBootstrapCatalog::PgBootstrapCatalog(
     absl::Span<const FormData_pg_am> pg_am_data,
     absl::Span<const FormData_pg_amop> pg_amop_data,
     absl::Span<const FormData_pg_amproc> pg_amproc_data) {
-  collation_name_to_oid_.reserve(pg_collation_data.size());
+  collation_by_name_.reserve(pg_collation_data.size());
   for (const FormData_pg_collation& data : pg_collation_data) {
-    collation_name_to_oid_[NameStr(data.collname)] = data.oid;
+    collation_by_name_[NameStr(data.collname)] = &data;
   }
 
   namespace_by_oid_.reserve(pg_namespace_data.size());
@@ -190,14 +190,21 @@ const PgBootstrapCatalog* PgBootstrapCatalog::Default() {
   return &default_catalog;
 }
 
-absl::StatusOr<Oid> PgBootstrapCatalog::GetCollationOid(
+absl::StatusOr<const FormData_pg_collation*>
+PgBootstrapCatalog::GetCollationByName(
     absl::string_view collation_name) const {
-  auto it = collation_name_to_oid_.find(collation_name);
-  if (it == collation_name_to_oid_.end()) {
+  auto it = collation_by_name_.find(collation_name);
+  if (it == collation_by_name_.end()) {
     return absl::NotFoundError(absl::StrCat("Collation ", collation_name,
                                             " is not found or not supported"));
   }
   return it->second;
+}
+
+absl::StatusOr<Oid> PgBootstrapCatalog::GetCollationOid(
+    absl::string_view collation_name) const {
+  ZETASQL_ASSIGN_OR_RETURN(auto collation, GetCollationByName(collation_name));
+  return collation->oid;
 }
 
 absl::StatusOr<const char*> PgBootstrapCatalog::GetNamespaceName(

@@ -460,7 +460,7 @@ std::string SpangresSchemaPrinterImpl::PrintChangeStreamTrackedTables(
        list) {
     StrAppend(&output, sep);
     sep = ", ";
-    StrAppend(&output, QuoteIdentifier(item.table_name()));
+    StrAppend(&output, QuoteQualifiedIdentifier(item.table_name()));
     if (!item.has_all_columns()) {
       StrAppend(&output, "(");
       const char* sep2 = "";

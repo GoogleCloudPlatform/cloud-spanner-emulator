@@ -193,6 +193,102 @@ TEST_F(LimitsTest, MaxChangeStreamsPerTable) {
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
+TEST_F(LimitsTest,
+       CreateChangeStreamsTrackingPkColsOnlyNotCountTowardCSNumLimitPerObject) {
+  std::vector<std::string> statements = {R"(
+     CREATE TABLE test_table (
+       int64_col INT64 NOT NULL,
+       bool_col BOOL NOT NULL,
+       string_col1 STRING(MAX),
+       string_col2 STRING(MAX),
+     ) PRIMARY KEY(int64_col, bool_col)
+  )"};
+  for (int i = 0; i < 3; ++i) {
+    statements.emplace_back(absl::StrFormat(
+        "CREATE CHANGE STREAM change_stream_%d FOR test_table()", i));
+  }
+  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"CREATE CHANGE STREAM change_stream_3 FOR test_table()"}));
+  ZETASQL_EXPECT_OK(UpdateSchema({"CREATE CHANGE STREAM change_stream_all FOR ALL"}));
+  ZETASQL_EXPECT_OK(UpdateSchema(
+      {"CREATE CHANGE STREAM change_stream_test_table FOR test_table"}));
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"CREATE CHANGE STREAM change_stream_test_table_string_col1 "
+                    "FOR test_table(string_col1)"}));
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({"CREATE CHANGE STREAM change_stream_test_table_string_col2 "
+                    "FOR test_table(string_col2)"}));
+  EXPECT_THAT(
+      UpdateSchema(
+          {"CREATE CHANGE STREAM change_stream_test_table_string_col1_again "
+           "FOR test_table(string_col1)"}),
+      StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(LimitsTest,
+       AlterChangeStreamsTrackingPkColsOnlyNotCountTowardCSNumLimitPerObject) {
+  std::vector<std::string> statements = {R"(
+     CREATE TABLE test_table (
+       int64_col INT64 NOT NULL,
+       bool_col BOOL NOT NULL,
+       string_col STRING(MAX),
+     ) PRIMARY KEY(int64_col, bool_col)
+  )"};
+  for (int i = 0; i < 3; ++i) {
+    statements.emplace_back(absl::StrFormat(
+        "CREATE CHANGE STREAM change_stream_%d FOR test_table", i));
+  }
+  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+  EXPECT_THAT(
+      UpdateSchema({"CREATE CHANGE STREAM change_stream_too_many FOR ALL"}),
+      StatusIs(absl::StatusCode::kFailedPrecondition));
+  ZETASQL_EXPECT_OK(UpdateSchema(
+      {"ALTER CHANGE STREAM change_stream_0 SET FOR test_table()"}));
+  ZETASQL_EXPECT_OK(UpdateSchema({"CREATE CHANGE STREAM change_stream_all FOR ALL"}));
+}
+
+TEST_F(LimitsTest,
+       ChangeStreamsTrackingPkColsOnlyStillCountTowardMaxCSNumPerDataBase) {
+  std::vector<std::string> statements = {R"(
+     CREATE TABLE test_table (
+       int64_col INT64 NOT NULL,
+       string_col STRING(MAX),
+     ) PRIMARY KEY(int64_col)
+  )"};
+  for (int i = 0; i < 10; ++i) {
+    statements.emplace_back(absl::StrFormat(
+        "CREATE CHANGE STREAM change_stream_%d FOR test_table()", i));
+  }
+  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+
+  EXPECT_THAT(
+      UpdateSchema({"CREATE CHANGE STREAM change_stream_too_many FOR ALL"}),
+      StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(LimitsTest, AllowFourChangeStreamsTrackingDiffNonKeyColOfSameTable) {
+  std::vector<std::string> statements = {
+      R"(
+     CREATE TABLE test_table (
+       int64_col INT64 NOT NULL,
+       string_col1 STRING(MAX),
+       string_col2 STRING(MAX),
+       string_col3 STRING(MAX),
+       string_col4 STRING(MAX),
+     ) PRIMARY KEY(int64_col)
+  )",
+      R"(CREATE CHANGE STREAM cs1 FOR test_table(string_col1))",
+      R"(CREATE CHANGE STREAM cs2 FOR test_table(string_col2))",
+      R"(CREATE CHANGE STREAM cs3 FOR test_table(string_col3))"};
+  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+  ZETASQL_EXPECT_OK(UpdateSchema(
+      {R"(CREATE CHANGE STREAM cs4 FOR test_table(string_col4))"}));
+  ZETASQL_EXPECT_OK(UpdateSchema({R"(CREATE CHANGE STREAM cs_all FOR ALL)"}));
+  ZETASQL_EXPECT_OK(
+      UpdateSchema({R"(CREATE CHANGE STREAM cs_test_table FOR test_table)"}));
+}
+
 TEST_F(LimitsTest, MaxChangeStreamsPerColumn) {
   std::vector<std::string> statements = {R"(
      CREATE TABLE test_table (

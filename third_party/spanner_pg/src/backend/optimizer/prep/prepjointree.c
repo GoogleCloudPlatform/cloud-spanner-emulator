@@ -14,7 +14,7 @@
  *		remove_useless_result_rtes
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -27,6 +27,7 @@
 
 #include "catalog/pg_type.h"
 #include "funcapi.h"
+#include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/clauses.h"
@@ -39,10 +40,6 @@
 #include "parser/parsetree.h"
 #include "rewrite/rewriteManip.h"
 
-
-/* source-code-compatibility hacks for pull_varnos() API change */
-#define pull_varnos(a,b) pull_varnos_new(a,b)
-#define pull_varnos_of_level(a,b,c) pull_varnos_of_level_new(a,b,c)
 
 typedef struct pullup_replace_vars_context
 {
@@ -239,6 +236,9 @@ static Node *
 pull_up_sublinks_jointree_recurse(PlannerInfo *root, Node *jtnode,
 								  Relids *relids)
 {
+	/* Since this function recurses, it could be driven to stack overflow. */
+	check_stack_depth();
+
 	if (jtnode == NULL)
 	{
 		*relids = NULL;
@@ -736,6 +736,11 @@ pull_up_subqueries_recurse(PlannerInfo *root, Node *jtnode,
 						   JoinExpr *lowest_nulling_outer_join,
 						   AppendRelInfo *containing_appendrel)
 {
+	/* Since this function recurses, it could be driven to stack overflow. */
+	check_stack_depth();
+	/* Also, since it's a bit expensive, let's check for query cancel. */
+	CHECK_FOR_INTERRUPTS();
+
 	Assert(jtnode != NULL);
 	if (IsA(jtnode, RangeTblRef))
 	{
@@ -924,15 +929,18 @@ pull_up_simple_subquery(PlannerInfo *root, Node *jtnode, RangeTblEntry *rte,
 	subroot->multiexpr_params = NIL;
 	subroot->eq_classes = NIL;
 	subroot->ec_merging_done = false;
+	subroot->all_result_relids = NULL;
+	subroot->leaf_result_relids = NULL;
 	subroot->append_rel_list = NIL;
+	subroot->row_identity_vars = NIL;
 	subroot->rowMarks = NIL;
 	memset(subroot->upper_rels, 0, sizeof(subroot->upper_rels));
 	memset(subroot->upper_targets, 0, sizeof(subroot->upper_targets));
 	subroot->processed_tlist = NIL;
+	subroot->update_colnos = NIL;
 	subroot->grouping_map = NULL;
 	subroot->minmax_aggs = NIL;
 	subroot->qual_security_level = 0;
-	subroot->inhTargetKind = INHKIND_NONE;
 	subroot->hasRecursion = false;
 	subroot->wt_param_id = -1;
 	subroot->non_recursive_path = NULL;
@@ -1855,6 +1863,9 @@ is_simple_union_all(Query *subquery)
 static bool
 is_simple_union_all_recurse(Node *setOp, Query *setOpQuery, List *colTypes)
 {
+	/* Since this function recurses, it could be driven to stack overflow. */
+	check_stack_depth();
+
 	if (IsA(setOp, RangeTblRef))
 	{
 		RangeTblRef *rtr = (RangeTblRef *) setOp;
@@ -3176,16 +3187,6 @@ remove_useless_results_recurse(PlannerInfo *root, Node *jtnode)
 					jtnode = j->larg;
 				}
 				break;
-			case JOIN_RIGHT:
-				/* Mirror-image of the JOIN_LEFT case */
-				if ((varno = get_result_relid(root, j->larg)) != 0 &&
-					(j->quals == NULL ||
-					 !find_dependent_phvs(root, varno)))
-				{
-					remove_result_refs(root, varno, j->rarg);
-					jtnode = j->rarg;
-				}
-				break;
 			case JOIN_SEMI:
 
 				/*
@@ -3194,14 +3195,17 @@ remove_useless_results_recurse(PlannerInfo *root, Node *jtnode)
 				 * LHS, since we should either return the LHS row or not.  For
 				 * simplicity we inject the filter qual into a new FromExpr.
 				 *
-				 * Unlike the LEFT/RIGHT cases, we just Assert that there are
-				 * no PHVs that need to be evaluated at the semijoin's RHS,
-				 * since the rest of the query couldn't reference any outputs
-				 * of the semijoin's RHS.
+				 * There is a fine point about PHVs that are supposed to be
+				 * evaluated at the RHS.  Such PHVs could only appear in the
+				 * semijoin's qual, since the rest of the query cannot
+				 * reference any outputs of the semijoin's RHS.  Therefore,
+				 * they can't actually go to null before being examined, and
+				 * it'd be OK to just remove the PHV wrapping.  We don't have
+				 * infrastructure for that, but remove_result_refs() will
+				 * relabel them as to be evaluated at the LHS, which is fine.
 				 */
 				if ((varno = get_result_relid(root, j->rarg)) != 0)
 				{
-					Assert(!find_dependent_phvs(root, varno));
 					remove_result_refs(root, varno, j->larg);
 					if (j->quals)
 						jtnode = (Node *)
@@ -3215,6 +3219,7 @@ remove_useless_results_recurse(PlannerInfo *root, Node *jtnode)
 				/* We have no special smarts for these cases */
 				break;
 			default:
+				/* Note: JOIN_RIGHT should be gone at this point */
 				elog(ERROR, "unrecognized join type: %d",
 					 (int) j->jointype);
 				break;

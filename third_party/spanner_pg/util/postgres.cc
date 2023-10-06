@@ -146,6 +146,25 @@ absl::StatusOr<FuncExpr*> makeFuncExpr(Oid funcid, Oid rettype, List* args,
                                /*inputcollid=*/InvalidOid, funcformat);
 }
 
+absl::StatusOr<JoinExpr*> makeJoinExpr(Index rtindex, JoinType join_type,
+                                       Node* left_arg, Node* right_arg,
+                                       List* using_clause, Node* quals,
+                                       List* join_hints) {
+  JoinExpr* join_expr;
+  ZETASQL_ASSIGN_OR_RETURN(join_expr, CheckedPgMakeNode(JoinExpr));
+
+  join_expr->rtindex = rtindex;
+  join_expr->jointype = join_type;
+  // TODO : Natural joins will be supported later.
+  join_expr->isNatural = false;
+  join_expr->larg = left_arg;
+  join_expr->rarg = right_arg;
+  join_expr->usingClause = using_clause;
+  join_expr->quals = quals;
+  join_expr->joinHints = join_hints;
+  return join_expr;
+}
+
 absl::StatusOr<OpExpr*> makeOpExpr(Oid opno, Oid funcid, Oid rettype,
                                    List* args) {
   OpExpr* pg_op;
@@ -401,13 +420,14 @@ absl::StatusOr<SQLValueFunction*> makeSQLValueFunction(
 }
 
 absl::StatusOr<SubscriptingRef*> makeSubscriptingRef(
-    Oid container_type, Oid element_type, int32_t typmod, Oid ref_collid,
-    List* upper_index_exprs, List* lower_index_exprs, Expr* ref_expr,
-    Expr* assign_expr) {
+    Oid container_type, Oid element_type, Oid result_type, int32_t typmod,
+    Oid ref_collid, List* upper_index_exprs, List* lower_index_exprs,
+    Expr* ref_expr, Expr* assign_expr) {
   SubscriptingRef* subscripting_ref;
   ZETASQL_ASSIGN_OR_RETURN(subscripting_ref, CheckedPgMakeNode(SubscriptingRef));
   subscripting_ref->refcontainertype = container_type;
   subscripting_ref->refelemtype = element_type;
+  subscripting_ref->refrestype = result_type;
   subscripting_ref->reftypmod = typmod;
   subscripting_ref->refcollid = ref_collid;
   subscripting_ref->refupperindexpr = upper_index_exprs;

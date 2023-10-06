@@ -3,7 +3,7 @@
  * be-secure-gssapi.c
  *  GSSAPI encryption support
  *
- * Portions Copyright (c) 2018-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2018-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *  src/backend/libpq/be-secure-gssapi.c
@@ -227,7 +227,7 @@ be_gssapi_write(Port *port, void *ptr, size_t len)
 		PqGSSSendConsumed += input.length;
 
 		/* 4 network-order bytes of length, then payload */
-		netlen = htonl(output.length);
+		netlen = pg_hton32(output.length);
 		memcpy(PqGSSSendBuffer + PqGSSSendLength, &netlen, sizeof(uint32));
 		PqGSSSendLength += sizeof(uint32);
 
@@ -343,7 +343,7 @@ be_gssapi_read(Port *port, void *ptr, size_t len)
 		}
 
 		/* Decode the packet length and check for overlength packet */
-		input.length = ntohl(*(uint32 *) PqGSSRecvBuffer);
+		input.length = pg_ntoh32(*(uint32 *) PqGSSRecvBuffer);
 
 		if (input.length > PQ_GSS_RECV_BUFFER_SIZE - sizeof(uint32))
 		{
@@ -553,7 +553,7 @@ secure_open_gssapi(Port *port)
 		/*
 		 * Get the length for this packet from the length header.
 		 */
-		input.length = ntohl(*(uint32 *) PqGSSRecvBuffer);
+		input.length = pg_ntoh32(*(uint32 *) PqGSSRecvBuffer);
 
 		/* Done with the length, reset our buffer */
 		PqGSSRecvLength = 0;
@@ -614,7 +614,7 @@ secure_open_gssapi(Port *port)
 		 */
 		if (output.length > 0)
 		{
-			uint32		netlen = htonl(output.length);
+			uint32		netlen = pg_hton32(output.length);
 
 			if (output.length > PQ_GSS_SEND_BUFFER_SIZE - sizeof(uint32))
 			{

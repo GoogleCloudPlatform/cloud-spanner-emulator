@@ -8,7 +8,7 @@
  *
  * This code is released under the terms of the PostgreSQL License.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/test/regress/pg_regress.c
@@ -31,8 +31,10 @@
 
 #include "common/logging.h"
 #include "common/restricted_token.h"
+#include "common/string.h"
 #include "common/username.h"
 #include "getopt_long.h"
+#include "lib/stringinfo.h"
 #include "libpq/pqcomm.h"		/* needed for UNIXSOCK_PATH() */
 #include "pg_config_paths.h"
 #include "pg_regress.h"
@@ -435,22 +437,32 @@ string_matches_pattern(const char *str, const char *pattern)
 }
 
 /*
- * Replace all occurrences of a string in a string with a different string.
- * NOTE: Assumes there is enough room in the target buffer!
+ * Replace all occurrences of "replace" in "string" with "replacement".
+ * The StringInfo will be suitably enlarged if necessary.
+ *
+ * Note: this is optimized on the assumption that most calls will find
+ * no more than one occurrence of "replace", and quite likely none.
  */
 void
-replace_string(char *string, const char *replace, const char *replacement)
+replace_string(StringInfo string, const char *replace, const char *replacement)
 {
+	int			pos = 0;
 	char	   *ptr;
 
-	while ((ptr = strstr(string, replace)) != NULL)
+	while ((ptr = strstr(string->data + pos, replace)) != NULL)
 	{
-		char	   *dup = pg_strdup(string);
+		/* Must copy the remainder of the string out of the StringInfo */
+		char	   *suffix = pg_strdup(ptr + strlen(replace));
 
-		strlcpy(string, dup, ptr - string + 1);
-		strcat(string, replacement);
-		strcat(string, dup + (ptr - string) + strlen(replace));
-		free(dup);
+		/* Truncate StringInfo at start of found string ... */
+		string->len = ptr - string->data;
+		/* ... and append the replacement (this restores the trailing '\0') */
+		appendStringInfoString(string, replacement);
+		/* Next search should start after the replacement */
+		pos = string->len;
+		/* Put back the remainder of the string */
+		appendStringInfoString(string, suffix);
+		free(suffix);
 	}
 }
 
@@ -465,8 +477,7 @@ convert_sourcefiles_in(const char *source_subdir, const char *dest_dir, const ch
 {
 	char		testtablespace[MAXPGPATH];
 	char		indir[MAXPGPATH];
-	struct stat st;
-	int			ret;
+	char		outdir_sub[MAXPGPATH];
 	char	  **name;
 	char	  **names;
 	int			count = 0;
@@ -474,8 +485,7 @@ convert_sourcefiles_in(const char *source_subdir, const char *dest_dir, const ch
 	snprintf(indir, MAXPGPATH, "%s/%s", inputdir, source_subdir);
 
 	/* Check that indir actually exists and is a directory */
-	ret = stat(indir, &st);
-	if (ret != 0 || !S_ISDIR(st.st_mode))
+	if (!directory_exists(indir))
 	{
 		/*
 		 * No warning, to avoid noise in tests that do not have these
@@ -489,29 +499,13 @@ convert_sourcefiles_in(const char *source_subdir, const char *dest_dir, const ch
 		/* Error logged in pgfnames */
 		exit(2);
 
+	/* Create the "dest" subdirectory if not present */
+	snprintf(outdir_sub, MAXPGPATH, "%s/%s", dest_dir, dest_subdir);
+	if (!directory_exists(outdir_sub))
+		make_directory(outdir_sub);
+
+	/* We might need to replace @testtablespace@ */
 	snprintf(testtablespace, MAXPGPATH, "%s/testtablespace", outputdir);
-
-#ifdef WIN32
-
-	/*
-	 * On Windows only, clean out the test tablespace dir, or create it if it
-	 * doesn't exist.  On other platforms we expect the Makefile to take care
-	 * of that.  (We don't migrate that functionality in here because it'd be
-	 * harder to cope with platform-specific issues such as SELinux.)
-	 *
-	 * XXX it would be better if pg_regress.c had nothing at all to do with
-	 * testtablespace, and this were handled by a .BAT file or similar on
-	 * Windows.  See pgsql-hackers discussion of 2008-01-18.
-	 */
-	if (directory_exists(testtablespace))
-		if (!rmtree(testtablespace, true))
-		{
-			fprintf(stderr, _("\n%s: could not remove test tablespace \"%s\"\n"),
-					progname, testtablespace);
-			exit(2);
-		}
-	make_directory(testtablespace);
-#endif
 
 	/* finally loop on each file and do the replacement */
 	for (name = names; *name; name++)
@@ -521,7 +515,7 @@ convert_sourcefiles_in(const char *source_subdir, const char *dest_dir, const ch
 		char		prefix[MAXPGPATH];
 		FILE	   *infile,
 				   *outfile;
-		char		line[1024];
+		StringInfoData line;
 
 		/* reject filenames not finishing in ".source" */
 		if (strlen(*name) < 8)
@@ -551,15 +545,20 @@ convert_sourcefiles_in(const char *source_subdir, const char *dest_dir, const ch
 					progname, destfile, strerror(errno));
 			exit(2);
 		}
-		while (fgets(line, sizeof(line), infile))
+
+		initStringInfo(&line);
+
+		while (pg_get_line_buf(infile, &line))
 		{
-			replace_string(line, "@abs_srcdir@", inputdir);
-			replace_string(line, "@abs_builddir@", outputdir);
-			replace_string(line, "@testtablespace@", testtablespace);
-			replace_string(line, "@libdir@", dlpath);
-			replace_string(line, "@DLSUFFIX@", DLSUFFIX);
-			fputs(line, outfile);
+			replace_string(&line, "@abs_srcdir@", inputdir);
+			replace_string(&line, "@abs_builddir@", outputdir);
+			replace_string(&line, "@testtablespace@", testtablespace);
+			replace_string(&line, "@libdir@", dlpath);
+			replace_string(&line, "@DLSUFFIX@", DLSUFFIX);
+			fputs(line.data, outfile);
 		}
+
+		pfree(line.data);
 		fclose(infile);
 		fclose(outfile);
 	}
@@ -584,6 +583,32 @@ convert_sourcefiles(void)
 {
 	convert_sourcefiles_in("input", outputdir, "sql", "sql");
 	convert_sourcefiles_in("output", outputdir, "expected", "out");
+}
+
+/*
+ * Clean out the test tablespace dir, or create it if it doesn't exist.
+ *
+ * On Windows, doing this cleanup here makes it possible to run the
+ * regression tests under a Windows administrative user account with the
+ * restricted token obtained when starting pg_regress.
+ */
+static void
+prepare_testtablespace_dir(void)
+{
+	char		testtablespace[MAXPGPATH];
+
+	snprintf(testtablespace, MAXPGPATH, "%s/testtablespace", outputdir);
+
+	if (directory_exists(testtablespace))
+	{
+		if (!rmtree(testtablespace, true))
+		{
+			fprintf(stderr, _("\n%s: could not remove test tablespace \"%s\"\n"),
+					progname, testtablespace);
+			exit(2);
+		}
+	}
+	make_directory(testtablespace);
 }
 
 /*
@@ -708,28 +733,16 @@ get_expectfile(const char *testname, const char *file)
 }
 
 /*
- * Handy subroutine for setting an environment variable "var" to "val"
- */
-static void
-doputenv(const char *var, const char *val)
-{
-	char	   *s;
-
-	s = psprintf("%s=%s", var, val);
-	putenv(s);
-}
-
-/*
  * Prepare environment variables for running regression tests
  */
 static void
 initialize_environment(void)
 {
 	/*
-	 * Set default application_name.  (The test_function may choose to
+	 * Set default application_name.  (The test_start_function may choose to
 	 * override this, but if it doesn't, we have something useful in place.)
 	 */
-	putenv("PGAPPNAME=pg_regress");
+	setenv("PGAPPNAME", "pg_regress", 1);
 
 	if (nolocale)
 	{
@@ -752,7 +765,7 @@ initialize_environment(void)
 		 * variables unset; see PostmasterMain().
 		 */
 #if defined(WIN32) || defined(__CYGWIN__) || defined(__darwin__)
-		putenv("LANG=C");
+		setenv("LANG", "C", 1);
 #endif
 	}
 
@@ -764,21 +777,21 @@ initialize_environment(void)
 	 */
 	unsetenv("LANGUAGE");
 	unsetenv("LC_ALL");
-	putenv("LC_MESSAGES=C");
+	setenv("LC_MESSAGES", "C", 1);
 
 	/*
 	 * Set encoding as requested
 	 */
 	if (encoding)
-		doputenv("PGCLIENTENCODING", encoding);
+		setenv("PGCLIENTENCODING", encoding, 1);
 	else
 		unsetenv("PGCLIENTENCODING");
 
 	/*
 	 * Set timezone and datestyle for datetime-related tests
 	 */
-	putenv("PGTZ=PST8PDT");
-	putenv("PGDATESTYLE=Postgres, MDY");
+	setenv("PGTZ", "PST8PDT", 1);
+	setenv("PGDATESTYLE", "Postgres, MDY", 1);
 
 	/*
 	 * Likewise set intervalstyle to ensure consistent results.  This is a bit
@@ -792,9 +805,10 @@ initialize_environment(void)
 
 		if (!old_pgoptions)
 			old_pgoptions = "";
-		new_pgoptions = psprintf("PGOPTIONS=%s %s",
+		new_pgoptions = psprintf("%s %s",
 								 old_pgoptions, my_pgoptions);
-		putenv(new_pgoptions);
+		setenv("PGOPTIONS", new_pgoptions, 1);
+		free(new_pgoptions);
 	}
 
 	if (temp_instance)
@@ -825,11 +839,13 @@ initialize_environment(void)
 		unsetenv("PGSERVICEFILE");
 		unsetenv("PGSSLCERT");
 		unsetenv("PGSSLCRL");
+		unsetenv("PGSSLCRLDIR");
 		unsetenv("PGSSLKEY");
 		unsetenv("PGSSLMAXPROTOCOLVERSION");
 		unsetenv("PGSSLMINPROTOCOLVERSION");
 		unsetenv("PGSSLMODE");
 		unsetenv("PGSSLROOTCERT");
+		unsetenv("PGSSLSNI");
 		unsetenv("PGTARGETSESSIONATTRS");
 		unsetenv("PGUSER");
 		/* PGPORT, see below */
@@ -837,17 +853,17 @@ initialize_environment(void)
 
 #ifdef HAVE_UNIX_SOCKETS
 		if (hostname != NULL)
-			doputenv("PGHOST", hostname);
+			setenv("PGHOST", hostname, 1);
 		else
 		{
 			sockdir = getenv("PG_REGRESS_SOCK_DIR");
 			if (!sockdir)
 				sockdir = make_temp_sockdir();
-			doputenv("PGHOST", sockdir);
+			setenv("PGHOST", sockdir, 1);
 		}
 #else
 		Assert(hostname != NULL);
-		doputenv("PGHOST", hostname);
+		setenv("PGHOST", hostname, 1);
 #endif
 		unsetenv("PGHOSTADDR");
 		if (port != -1)
@@ -855,7 +871,7 @@ initialize_environment(void)
 			char		s[16];
 
 			sprintf(s, "%d", port);
-			doputenv("PGPORT", s);
+			setenv("PGPORT", s, 1);
 		}
 	}
 	else
@@ -869,7 +885,7 @@ initialize_environment(void)
 		 */
 		if (hostname != NULL)
 		{
-			doputenv("PGHOST", hostname);
+			setenv("PGHOST", hostname, 1);
 			unsetenv("PGHOSTADDR");
 		}
 		if (port != -1)
@@ -877,10 +893,10 @@ initialize_environment(void)
 			char		s[16];
 
 			sprintf(s, "%d", port);
-			doputenv("PGPORT", s);
+			setenv("PGPORT", s, 1);
 		}
 		if (user != NULL)
-			doputenv("PGUSER", user);
+			setenv("PGUSER", user, 1);
 
 		/*
 		 * However, we *don't* honor PGDATABASE, since we certainly don't wish
@@ -1190,6 +1206,10 @@ spawn_process(const char *cmdline)
 	fflush(stderr);
 	if (logfile)
 		fflush(logfile);
+
+#ifdef EXEC_BACKEND
+	pg_disable_aslr();
+#endif
 
 	pid = fork();
 	if (pid == -1)
@@ -1638,7 +1658,8 @@ log_child_failure(int exitstatus)
  * Run all the tests specified in one schedule file
  */
 static void
-run_schedule(const char *schedule, test_function tfunc)
+run_schedule(const char *schedule, test_start_function startfunc,
+			 postprocess_result_function postfunc)
 {
 #define MAX_PARALLEL_TESTS 100
 	char	   *tests[MAX_PARALLEL_TESTS];
@@ -1752,7 +1773,7 @@ run_schedule(const char *schedule, test_function tfunc)
 		if (num_tests == 1)
 		{
 			status(_("test %-28s ... "), tests[0]);
-			pids[0] = (tfunc) (tests[0], &resultfiles[0], &expectfiles[0], &tags[0]);
+			pids[0] = (startfunc) (tests[0], &resultfiles[0], &expectfiles[0], &tags[0]);
 			INSTR_TIME_SET_CURRENT(starttimes[0]);
 			wait_for_tests(pids, statuses, stoptimes, NULL, 1);
 			/* status line is finished below */
@@ -1778,7 +1799,7 @@ run_schedule(const char *schedule, test_function tfunc)
 								   tests + oldest, i - oldest);
 					oldest = i;
 				}
-				pids[i] = (tfunc) (tests[i], &resultfiles[i], &expectfiles[i], &tags[i]);
+				pids[i] = (startfunc) (tests[i], &resultfiles[i], &expectfiles[i], &tags[i]);
 				INSTR_TIME_SET_CURRENT(starttimes[i]);
 			}
 			wait_for_tests(pids + oldest, statuses + oldest,
@@ -1791,7 +1812,7 @@ run_schedule(const char *schedule, test_function tfunc)
 			status(_("parallel group (%d tests): "), num_tests);
 			for (i = 0; i < num_tests; i++)
 			{
-				pids[i] = (tfunc) (tests[i], &resultfiles[i], &expectfiles[i], &tags[i]);
+				pids[i] = (startfunc) (tests[i], &resultfiles[i], &expectfiles[i], &tags[i]);
 				INSTR_TIME_SET_CURRENT(starttimes[i]);
 			}
 			wait_for_tests(pids, statuses, stoptimes, tests, num_tests);
@@ -1823,6 +1844,8 @@ run_schedule(const char *schedule, test_function tfunc)
 			{
 				bool		newdiff;
 
+				if (postfunc)
+					(*postfunc) (rl->str);
 				newdiff = results_differ(tests[i], rl->str, el->str);
 				if (newdiff && tl)
 				{
@@ -1889,7 +1912,8 @@ run_schedule(const char *schedule, test_function tfunc)
  * Run a single test
  */
 static void
-run_single_test(const char *test, test_function tfunc)
+run_single_test(const char *test, test_start_function startfunc,
+				postprocess_result_function postfunc)
 {
 	PID_TYPE	pid;
 	instr_time	starttime;
@@ -1904,7 +1928,7 @@ run_single_test(const char *test, test_function tfunc)
 	bool		differ = false;
 
 	status(_("test %-28s ... "), test);
-	pid = (tfunc) (test, &resultfiles, &expectfiles, &tags);
+	pid = (startfunc) (test, &resultfiles, &expectfiles, &tags);
 	INSTR_TIME_SET_CURRENT(starttime);
 	wait_for_tests(&pid, &exit_status, &stoptime, NULL, 1);
 
@@ -1922,6 +1946,8 @@ run_single_test(const char *test, test_function tfunc)
 	{
 		bool		newdiff;
 
+		if (postfunc)
+			(*postfunc) (rl->str);
 		newdiff = results_differ(test, rl->str, el->str);
 		if (newdiff && tl)
 		{
@@ -2076,6 +2102,7 @@ help(void)
 	printf(_("      --launcher=CMD            use CMD as launcher of psql\n"));
 	printf(_("      --load-extension=EXT      load the named extension before running the\n"));
 	printf(_("                                tests; can appear multiple times\n"));
+	printf(_("      --make-testtablespace-dir create testtablespace directory\n"));
 	printf(_("      --max-connections=N       maximum number of concurrent connections\n"));
 	printf(_("                                (default is 0, meaning unlimited)\n"));
 	printf(_("      --max-concurrent-tests=N  maximum number of concurrent tests in schedule\n"));
@@ -2105,7 +2132,10 @@ help(void)
 }
 
 int
-regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc)
+regression_main(int argc, char *argv[],
+				init_function ifunc,
+				test_start_function startfunc,
+				postprocess_result_function postfunc)
 {
 	static struct option long_options[] = {
 		{"help", no_argument, NULL, 'h'},
@@ -2131,10 +2161,12 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		{"load-extension", required_argument, NULL, 22},
 		{"config-auth", required_argument, NULL, 24},
 		{"max-concurrent-tests", required_argument, NULL, 25},
+		{"make-testtablespace-dir", no_argument, NULL, 26},
 		{NULL, 0, NULL, 0}
 	};
 
 	bool		use_unix_sockets;
+	bool		make_testtablespace_dir = false;
 	_stringlist *sl;
 	int			c;
 	int			i;
@@ -2260,6 +2292,9 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 			case 25:
 				max_concurrent_tests = atoi(optarg);
 				break;
+			case 26:
+				make_testtablespace_dir = true;
+				break;
 			default:
 				/* getopt_long already emitted a complaint */
 				fprintf(stderr, _("\nTry \"%s -h\" for more information.\n"),
@@ -2275,6 +2310,17 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 	{
 		add_stringlist_item(&extra_tests, argv[optind]);
 		optind++;
+	}
+
+	/*
+	 * We must have a database to run the tests in; either a default name, or
+	 * one supplied by the --dbname switch.
+	 */
+	if (!(dblist && dblist->str && dblist->str[0]))
+	{
+		fprintf(stderr, _("%s: no database name was specified\n"),
+				progname);
+		exit(2);
 	}
 
 	if (config_auth_datadir)
@@ -2311,6 +2357,9 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 #if defined(HAVE_GETRLIMIT) && defined(RLIMIT_CORE)
 	unlimit_core_size();
 #endif
+
+	if (make_testtablespace_dir)
+		prepare_testtablespace_dir();
 
 	if (temp_instance)
 	{
@@ -2442,7 +2491,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				fprintf(stderr, _("port %d apparently in use, trying %d\n"), port, port + 1);
 				port++;
 				sprintf(s, "%d", port);
-				doputenv("PGPORT", s);
+				setenv("PGPORT", s, 1);
 			}
 			else
 				break;
@@ -2576,12 +2625,12 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 
 	for (sl = schedulelist; sl != NULL; sl = sl->next)
 	{
-		run_schedule(sl->str, tfunc);
+		run_schedule(sl->str, startfunc, postfunc);
 	}
 
 	for (sl = extra_tests; sl != NULL; sl = sl->next)
 	{
-		run_single_test(sl->str, tfunc);
+		run_single_test(sl->str, startfunc, postfunc);
 	}
 
 	/*

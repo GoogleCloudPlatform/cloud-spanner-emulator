@@ -32,15 +32,18 @@
 #ifndef FUNCTION_EVALUATORS_TEST_BASE_H_
 #define FUNCTION_EVALUATORS_TEST_BASE_H_
 
+#include <cstdint>
 #include <memory>
+#include <string>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/functional/any_invocable.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
-#include "zetasql/base/status_macros.h"
 
 namespace postgres_translator::function_evaluators {
 

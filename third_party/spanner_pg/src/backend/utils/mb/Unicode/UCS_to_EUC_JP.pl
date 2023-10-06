@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 #
-# Copyright (c) 2001-2020, PostgreSQL Global Development Group
+# Copyright (c) 2001-2021, PostgreSQL Global Development Group
 #
 # src/backend/utils/mb/Unicode/UCS_to_EUC_JP.pl
 #
@@ -80,7 +80,8 @@ foreach my $i (@$ct932)
 	}
 }
 
-foreach my $i (@mapping)
+# extract only SJIS characters
+foreach my $i (grep defined $_->{sjis}, @mapping)
 {
 	my $sjis = $i->{sjis};
 

@@ -4,7 +4,7 @@
  *	  internal structures for hash joins
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/executor/hashjoin.h
@@ -258,7 +258,8 @@ typedef struct ParallelHashJoinState
 #define PHJ_BUILD_ALLOCATING			1
 #define PHJ_BUILD_HASHING_INNER			2
 #define PHJ_BUILD_HASHING_OUTER			3
-#define PHJ_BUILD_DONE					4
+#define PHJ_BUILD_RUNNING				4
+#define PHJ_BUILD_DONE					5
 
 /* The phases for probing each batch, used by for batch_barrier. */
 #define PHJ_BATCH_ELECTING				0

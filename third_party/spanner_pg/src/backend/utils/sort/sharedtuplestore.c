@@ -10,7 +10,7 @@
  * scan where each backend reads an arbitrary subset of the tuples that were
  * written.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -158,6 +158,7 @@ sts_initialize(SharedTuplestore *sts, int participants,
 		LWLockInitialize(&sts->participants[i].lock,
 						 LWTRANCHE_SHARED_TUPLESTORE);
 		sts->participants[i].read_page = 0;
+		sts->participants[i].npages = 0;
 		sts->participants[i].writing = false;
 	}
 
@@ -319,7 +320,7 @@ sts_puttuple(SharedTuplestoreAccessor *accessor, void *meta_data,
 
 	/* Do we have space? */
 	size = accessor->sts->meta_data_size + tuple->t_len;
-	if (accessor->write_pointer + size >= accessor->write_end)
+	if (accessor->write_pointer + size > accessor->write_end)
 	{
 		if (accessor->write_chunk == NULL)
 		{
@@ -339,7 +340,7 @@ sts_puttuple(SharedTuplestoreAccessor *accessor, void *meta_data,
 		}
 
 		/* It may still not be enough in the case of a gigantic tuple. */
-		if (accessor->write_pointer + size >= accessor->write_end)
+		if (accessor->write_pointer + size > accessor->write_end)
 		{
 			size_t		written;
 
@@ -559,7 +560,7 @@ sts_parallel_scan_next(SharedTuplestoreAccessor *accessor, void *meta_data)
 
 				sts_filename(name, accessor, accessor->read_participant);
 				accessor->read_file =
-					BufFileOpenShared(accessor->fileset, name);
+					BufFileOpenShared(accessor->fileset, name, O_RDONLY);
 			}
 
 			/* Seek and load the chunk header. */

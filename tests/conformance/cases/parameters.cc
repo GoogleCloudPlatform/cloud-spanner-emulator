@@ -18,6 +18,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {

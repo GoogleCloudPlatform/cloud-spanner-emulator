@@ -72,6 +72,9 @@ class PgBootstrapCatalog {
   static const PgBootstrapCatalog* Default();
 
   // Collation =================================================================
+  // Given a collation name, return the corresponding pg_collation.
+  absl::StatusOr<const FormData_pg_collation*> GetCollationByName(
+      absl::string_view collation_name) const;
   // Given a collation name, return the corresponding oid.
   absl::StatusOr<Oid> GetCollationOid(absl::string_view collation_name) const;
 
@@ -278,7 +281,8 @@ class PgBootstrapCatalog {
   const FormData_pg_operator* GetFinalOperatorData(
       const FormData_pg_operator& original_operator);
 
-  absl::flat_hash_map<std::string, Oid> collation_name_to_oid_;
+  absl::flat_hash_map<std::string, const FormData_pg_collation*>
+      collation_by_name_;
   absl::flat_hash_map<Oid, const FormData_pg_namespace*> namespace_by_oid_;
   absl::flat_hash_map<std::string, Oid> namespace_name_to_oid_;
   absl::flat_hash_map<Oid, const FormData_pg_type*> type_by_oid_;

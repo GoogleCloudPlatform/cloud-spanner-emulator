@@ -36,9 +36,9 @@
 
 
 extern "C" {
-void get_query_def(Query *query, StringInfo buf, List *parentnamespace,
-                   TupleDesc resultDesc, int prettyFlags, int wrapColumn,
-                   int startIndent);
+void get_query_def(Query* query, StringInfo buf, List* parentnamespace,
+                   TupleDesc resultDesc, bool colNamesVisible, int prettyFlags,
+                   int wrapColumn, int startIndent);
 
 void set_deparse_for_query(deparse_namespace *dpns, Query *query,
                            List *parent_namespaces);
@@ -53,9 +53,9 @@ char* deparse_query(Query* query, bool prettyPrint) {
                   POSTGRES_PRETTYFLAG_SCHEMA;
   }
   initStringInfo(&buf);
-  get_query_def(query, &buf, NIL /* parentnamespace */, NULL /* resultDec */,
-                prettyFlags /* prettyFlags */, 0 /* wrapColumn */,
-                0 /* startIndent */);
+  get_query_def(query, &buf, /*parentnamespace=*/NIL, /*resultDec=*/NULL,
+                /*colNamesVisible=*/true, prettyFlags,
+                /*wrapColumn=*/0, /*startIndent=*/0);
   return buf.data;
 }
 
@@ -63,6 +63,6 @@ char* deparse_expression_in_query(Node* expr, Query* query) {
   deparse_namespace dpns;
   set_deparse_for_query(&dpns, query, NIL);
 
-  return deparse_expression(expr, list_make1(&dpns), false /* forceprefix */,
-                            false /* showimplicit */);
+  return deparse_expression(expr, list_make1(&dpns), /*forceprefix=*/false,
+                            /*showimplicit=*/false);
 }

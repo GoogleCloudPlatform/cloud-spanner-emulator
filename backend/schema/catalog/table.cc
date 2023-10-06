@@ -191,7 +191,6 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&foreign_keys_));
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&referencing_foreign_keys_));
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_));
-  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_tracking_entire_table_));
 
   if (owner_index_) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(owner_index_));

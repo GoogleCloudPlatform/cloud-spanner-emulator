@@ -49,6 +49,7 @@ licenses(["notice"])
 cc_library(
     name = "prep",
     srcs = [
+        "prepagg.c",
         "prepjointree.c",
         "prepqual.c",
         "preptlist.c",

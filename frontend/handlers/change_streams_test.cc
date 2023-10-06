@@ -646,7 +646,7 @@ TEST_F(ChangeStreamQueryAPITest,
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 0);
-  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 1);
   ASSERT_EQ(change_records.data_change_records.size(), 0);
 }
 
@@ -657,12 +657,11 @@ TEST_F(ChangeStreamQueryAPITest,
   std::string sql = absl::Substitute(
       "SELECT * FROM "
       "READ_change_stream_test_table ('$0', '$1', '$2', 10000 )",
-      now_ - absl::Milliseconds(1), now_ - absl::Milliseconds(1),
-      initial_active_token);
+      now_, now_, initial_active_token);
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 0);
-  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 1);
   ASSERT_EQ(change_records.data_change_records.size(), 0);
 }
 
@@ -678,7 +677,7 @@ TEST_F(ChangeStreamQueryAPITest,
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 0);
-  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 1);
   ASSERT_EQ(change_records.data_change_records.size(), 0);
 }
 
@@ -743,9 +742,10 @@ TEST_F(ChangeStreamQueryAPITest,
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 0);
-  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
   // The two inserted rows might commit within or out of the given tvf start
-  // and end, so we skip checking the number of data change records.
+  // and end, so we skip checking the number of heartbeat and data change
+  // records.
+  ASSERT_GE(change_records.heartbeat_records.size(), 0);
   ASSERT_GE(change_records.data_change_records.size(), 0);
 }
 
@@ -766,20 +766,22 @@ TEST_F(ChangeStreamQueryAPITest,
 
 TEST_F(ChangeStreamQueryAPITest,
        ExecuteRealTimePartitionQuerySameStartAndEndTime) {
+  absl::Time query_start_time = now_;
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto initial_active_token,
-                       GetActiveTokenFromInitialQuery(now_));
+                       GetActiveTokenFromInitialQuery(query_start_time));
   std::string sql = absl::Substitute(
       "SELECT * FROM "
       "READ_change_stream_test_table ('$0', '$1', '$2', 10000 )",
-      now_ + absl::Milliseconds(100), now_ + absl::Milliseconds(100),
-      initial_active_token);
+      query_start_time, query_start_time, initial_active_token);
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 0);
-  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
-  // Skip verification for data change records because if commit timestamp of
-  // data change records are exactly at the sa=tart/end time, they will be
-  // returned although with very low possibility.
+  ASSERT_EQ(change_records.heartbeat_records.size(), 1);
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
+  // The only heartbeat record for this empty result query should have timestamp
+  // at exactly tvf end.
+  ASSERT_EQ(change_records.heartbeat_records[0].timestamp.string_value(),
+            test::EncodeTimestampString(query_start_time));
 }
 
 TEST_F(ChangeStreamQueryAPITest,
@@ -794,8 +796,12 @@ TEST_F(ChangeStreamQueryAPITest,
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(sql));
   ASSERT_EQ(change_records.child_partition_records.size(), 0);
-  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 1);
   ASSERT_EQ(change_records.data_change_records.size(), 0);
+  // The only heartbeat record for this empty result query should have timestamp
+  // at exactly tvf end.
+  ASSERT_EQ(change_records.heartbeat_records[0].timestamp.string_value(),
+            test::EncodeTimestampString(now_ + absl::Microseconds(500)));
 }
 
 TEST_F(ChangeStreamQueryAPITest, ExecuteRealTimePartitionQueryThreaded) {

@@ -77,6 +77,11 @@ inline constexpr char kPGRegexpMatchFunctionName[] = "pg.regexp_match";
 inline constexpr char kPGRegexpSplitToArrayFunctionName[] =
     "pg.regexp_split_to_array";
 
+// PG JSONB functions.
+inline constexpr char kPGToJsonBFunctionName[] = "pg.to_jsonb";
+inline constexpr char kPGJsonBSubscriptTextFunctionName[] =
+    "pg.jsonb_subscript_text";
+
 using SpannerPGFunctions = std::vector<std::unique_ptr<zetasql::Function>>;
 
 // Returns Spanner-specific implementations of PG functions.

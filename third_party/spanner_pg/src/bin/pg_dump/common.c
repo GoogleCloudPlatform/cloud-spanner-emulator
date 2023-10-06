@@ -4,7 +4,7 @@
  *	Catalog routines used by pg_dump; long ago these were shared
  *	by another dump tool, but not anymore.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -228,6 +228,9 @@ getSchemaData(Archive *fout, int *numTablesPtr)
 	pg_log_info("flagging inherited columns in subtables");
 	flagInhAttrs(fout->dopt, tblinfo, numTables);
 
+	pg_log_info("reading partitioning data");
+	getPartitioningInfo(fout);
+
 	pg_log_info("reading indexes");
 	getIndexes(fout, tblinfo, numTables);
 
@@ -266,7 +269,9 @@ getSchemaData(Archive *fout, int *numTablesPtr)
 
 /* flagInhTables -
  *	 Fill in parent link fields of tables for which we need that information,
- *	 and mark parents of target tables as interesting
+ *	 mark parents of target tables as interesting, and create
+ *	 TableAttachInfo objects for partitioned tables with appropriate
+ *	 dependency links.
  *
  * Note that only direct ancestors of targets are marked interesting.
  * This is sufficient; we don't much care whether they inherited their
@@ -278,7 +283,6 @@ static void
 flagInhTables(Archive *fout, TableInfo *tblinfo, int numTables,
 			  InhInfo *inhinfo, int numInherits)
 {
-	DumpOptions *dopt = fout->dopt;
 	int			i,
 				j;
 
@@ -294,18 +298,18 @@ flagInhTables(Archive *fout, TableInfo *tblinfo, int numTables,
 			continue;
 
 		/*
-		 * Normally, we don't bother computing anything for non-target tables,
-		 * but if load-via-partition-root is specified, we gather information
-		 * on every partition in the system so that getRootTableInfo can trace
-		 * from any given to leaf partition all the way up to the root.  (We
-		 * don't need to mark them as interesting for getTableAttrs, though.)
+		 * Normally, we don't bother computing anything for non-target tables.
+		 * However, we must find the parents of non-root partitioned tables in
+		 * any case, so that we can trace from leaf partitions up to the root
+		 * (in case a leaf is to be dumped but its parents are not).  We need
+		 * not mark such parents interesting for getTableAttrs, though.
 		 */
 		if (!tblinfo[i].dobj.dump)
 		{
 			mark_parents = false;
 
-			if (!dopt->load_via_partition_root ||
-				!tblinfo[i].ispartition)
+			if (!(tblinfo[i].relkind == RELKIND_PARTITIONED_TABLE &&
+				  tblinfo[i].ispartition))
 				find_parents = false;
 		}
 
@@ -324,6 +328,40 @@ flagInhTables(Archive *fout, TableInfo *tblinfo, int numTables,
 
 			for (j = 0; j < numParents; j++)
 				parents[j]->interesting = true;
+		}
+
+		/* Create TableAttachInfo object if needed */
+		if (tblinfo[i].dobj.dump && tblinfo[i].ispartition)
+		{
+			TableAttachInfo *attachinfo;
+
+			/* With partitions there can only be one parent */
+			if (tblinfo[i].numParents != 1)
+				fatal("invalid number of parents %d for table \"%s\"",
+					  tblinfo[i].numParents,
+					  tblinfo[i].dobj.name);
+
+			attachinfo = (TableAttachInfo *) palloc(sizeof(TableAttachInfo));
+			attachinfo->dobj.objType = DO_TABLE_ATTACH;
+			attachinfo->dobj.catId.tableoid = 0;
+			attachinfo->dobj.catId.oid = 0;
+			AssignDumpId(&attachinfo->dobj);
+			attachinfo->dobj.name = pg_strdup(tblinfo[i].dobj.name);
+			attachinfo->dobj.namespace = tblinfo[i].dobj.namespace;
+			attachinfo->parentTbl = tblinfo[i].parents[0];
+			attachinfo->partitionTbl = &tblinfo[i];
+
+			/*
+			 * We must state the DO_TABLE_ATTACH object's dependencies
+			 * explicitly, since it will not match anything in pg_depend.
+			 *
+			 * Give it dependencies on both the partition table and the parent
+			 * table, so that it will not be executed till both of those
+			 * exist.  (There's no need to care what order those are created
+			 * in.)
+			 */
+			addObjectDependency(&attachinfo->dobj, tblinfo[i].dobj.dumpId);
+			addObjectDependency(&attachinfo->dobj, tblinfo[i].parents[0]->dobj.dumpId);
 		}
 	}
 }
@@ -486,7 +524,7 @@ flagInhAttrs(DumpOptions *dopt, TableInfo *tblinfo, int numTables)
 		{
 			bool		foundNotNull;	/* Attr was NOT NULL in a parent */
 			bool		foundDefault;	/* Found a default in a parent */
-			bool		foundGenerated;	/* Found a generated in a parent */
+			bool		foundGenerated; /* Found a generated in a parent */
 
 			/* no point in examining dropped columns */
 			if (tbinfo->attisdropped[j])
@@ -572,6 +610,7 @@ AssignDumpId(DumpableObject *dobj)
 	dobj->name = NULL;			/* must be set later */
 	dobj->namespace = NULL;		/* may be set later */
 	dobj->dump = DUMP_COMPONENT_ALL;	/* default assumption */
+	dobj->dump_contains = DUMP_COMPONENT_ALL;	/* default assumption */
 	dobj->ext_member = false;	/* default assumption */
 	dobj->depends_on_ext = false;	/* default assumption */
 	dobj->dependencies = NULL;
@@ -742,6 +781,9 @@ buildIndexArray(void *objArray, int numObjs, Size objSize)
 {
 	DumpableObject **ptrs;
 	int			i;
+
+	if (numObjs <= 0)
+		return NULL;
 
 	ptrs = (DumpableObject **) pg_malloc(numObjs * sizeof(DumpableObject *));
 	for (i = 0; i < numObjs; i++)

@@ -40,6 +40,8 @@ class DmlTest
     : public DatabaseTest,
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
+  DmlTest() : feature_flags_({.enable_postgresql_interface = true}) {}
+
   absl::Status SetUpDatabase() override {
     EmulatorFeatureFlags::Flags flags;
     emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
@@ -54,6 +56,9 @@ class DmlTest
                                 "(1, 'Levin', 27), (2, 'Mark', 32), "
                                 "(10, 'Douglas', 31)")}));
   }
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -489,14 +494,16 @@ TEST_P(DmlTest, DISABLED_ReturningGeneratedColumns) {
       result_for_insert));
   absl::StatusOr<std::vector<ValueRow>> result_or = result_for_insert;
   if (!in_prod_env()) {
-    // TODO: This shows that the generated column is not evaluated
-    // in the googlesql reference implementation, which is also a requirement
-    // for GPK support. Once that work is done, this TODO and test should be
-    // updated.
+    // TODO: This shows that the generated column is not
+    // evaluated on the googlesql reference implementation, which is also a
+    // requirement for GPK support. Once that work is done, this TODO and
+    // should be updated.
     Value null_val = cloud::spanner::MakeNullValue<std::int64_t>();
-    EXPECT_THAT(result_or, IsOkAndHoldsRow({null_val, null_val, null_val, 2}));
+    EXPECT_THAT(result_or,
+         IsOkAndHoldsRow({null_val, null_val, null_val, 2}));
     return;
   }
+
   EXPECT_THAT(result_or, IsOkAndHoldsRow({3, 2, 4, 2}));
   EXPECT_THAT(Query("SELECT g1, g2, g3 + 1, v3 FROM tablegen WHERE k = 1;"),
               IsOkAndHoldsRow({3, 2, 4, 2}));

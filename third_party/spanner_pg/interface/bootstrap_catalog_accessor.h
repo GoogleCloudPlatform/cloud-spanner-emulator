@@ -33,7 +33,7 @@
 #define BOOTSTRAP_CATALOG_BOOTSTRAP_CATALOG_ACCESSOR_H_
 
 #include "absl/strings/string_view.h"
-#include "third_party/spanner_pg/interface/bootstrap_catalog_accessor_structs.h"
+#include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 
 namespace postgres_translator {
 
@@ -42,6 +42,12 @@ class PgBootstrapCatalog;
 // Returns a pointer to the Spangres Bootstrap Catalog which contains metadata
 // about PG built-ins.
 const PgBootstrapCatalog* GetPgBootstrapCatalog();
+
+// Returns either a struct containing collation data or an error based on the
+// given collation_name. If collation_name is not an allowed collation (see
+// allowlist) or is not in the catalog, returns NotFoundError.
+absl::StatusOr<PgCollationData> GetPgCollationDataFromBootstrap(
+    const PgBootstrapCatalog* catalog, absl::string_view collation_name);
 
 // Returns either a struct containing type data or an error based on the given
 // type_name. The type name should use the PG format e.g. "jsonb", "_jsonb".

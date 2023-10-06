@@ -826,7 +826,8 @@ EncodeDateTime(struct tm *tm, fsec_t fsec, bool print_tz, int tz, const char *tz
 
 			/*
 			 * Note: the uses of %.*s in this function would be risky if the
-			 * timezone names ever contain non-ASCII characters.  However, all
+			 * timezone names ever contain non-ASCII characters, since we are
+			 * not being careful to do encoding-aware clipping.  However, all
 			 * TZ abbreviations in the IANA database are plain ASCII.
 			 */
 
@@ -1014,7 +1015,7 @@ abstime2tm(AbsoluteTime _time, int *tzp, struct tm *tm, char **tzn)
 			 * Copy no more than MAXTZLEN bytes of timezone to tzn, in case it
 			 * contains an error message, which doesn't fit in the buffer
 			 */
-			StrNCpy(*tzn, tm->tm_zone, MAXTZLEN + 1);
+			strlcpy(*tzn, tm->tm_zone, MAXTZLEN + 1);
 			if (strlen(tm->tm_zone) > MAXTZLEN)
 				tm->tm_isdst = -1;
 		}
@@ -1032,7 +1033,7 @@ abstime2tm(AbsoluteTime _time, int *tzp, struct tm *tm, char **tzn)
 			 * Copy no more than MAXTZLEN bytes of timezone to tzn, in case it
 			 * contains an error message, which doesn't fit in the buffer
 			 */
-			StrNCpy(*tzn, TZNAME_GLOBAL[tm->tm_isdst], MAXTZLEN + 1);
+			strlcpy(*tzn, TZNAME_GLOBAL[tm->tm_isdst], MAXTZLEN + 1);
 			if (strlen(TZNAME_GLOBAL[tm->tm_isdst]) > MAXTZLEN)
 				tm->tm_isdst = -1;
 		}
