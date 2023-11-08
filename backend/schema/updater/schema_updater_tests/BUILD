@@ -76,6 +76,7 @@ cc_library(
         "//common:errors",
         "//common:feature_flags",
         "//tests/common:scoped_feature_flags_setter",
+        "//third_party/spanner_pg/datatypes/extended:spanner_extended_type",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",

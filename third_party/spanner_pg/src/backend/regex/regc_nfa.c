@@ -1262,8 +1262,16 @@ delsub(struct nfa *nfa,
 	deltraverse(nfa, lp, lp);
 	if (NISERR())
 		return;					/* asserts might not hold after failure */
-	assert(lp->nouts == 0 && rp->nins == 0);	/* did the job */
-	assert(lp->no != FREESTATE && rp->no != FREESTATE); /* no more */
+
+	// SPANGRES BEGIN
+	// We remove these asserts as they should only be executed in DEBUG
+	// mode. However, in fuzz testing they get picked up instead of being
+	// ignored. This causes tests to abort instead of returning the proper
+	// error that follows the calling of this method.
+
+	// assert(lp->nouts == 0 && rp->nins == 0);	/* did the job */
+	// assert(lp->no != FREESTATE && rp->no != FREESTATE); /* no more */
+	// SPANGRES END
 
 	rp->tmp = NULL;				/* unmark end */
 	lp->tmp = NULL;				/* and begin, marked by deltraverse */

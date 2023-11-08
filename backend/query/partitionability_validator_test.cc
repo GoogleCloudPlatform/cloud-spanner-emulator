@@ -20,6 +20,10 @@
 #include <utility>
 #include <vector>
 
+#include "zetasql/public/analyzer.h"
+#include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/analyzer_output.h"
+#include "zetasql/public/simple_catalog.h"
 #include "zetasql/public/type.pb.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
@@ -30,7 +34,9 @@
 #include "backend/query/query_engine.h"
 #include "backend/query/queryable_table.h"
 #include "backend/schema/catalog/table.h"
+#include "common/feature_flags.h"
 #include "tests/common/schema_constructor.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {

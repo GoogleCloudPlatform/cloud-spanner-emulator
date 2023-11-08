@@ -33,7 +33,6 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

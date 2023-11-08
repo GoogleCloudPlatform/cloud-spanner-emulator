@@ -24,14 +24,17 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/substitute.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
 #include "google/cloud/spanner/json.h"
 #include "google/cloud/spanner/numeric.h"
-#include "tests/common/file_based_schema_reader.h"
+#include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
+#include "third_party/spanner_pg/datatypes/common/numeric_core.h"
 
 namespace google {
 namespace spanner {
@@ -41,13 +44,21 @@ namespace test {
 namespace {
 
 using cloud::spanner::Bytes;
+using cloud::spanner::JsonB;
+using cloud::spanner::MakePgNumeric;
+using cloud::spanner::PgNumeric;
+using postgres_translator::spangres::datatypes::common::MaxNumericString;
 using zetasql_base::testing::StatusIs;
 
 class QueryTest
     : public DatabaseTest,
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
-  QueryTest() : feature_flags_({.enable_postgresql_interface = true}) {}
+  QueryTest()
+      : feature_flags_({
+            .enable_postgresql_interface = true,
+            .enable_bit_reversed_positive_sequences = true,
+        }) {}
 
   void SetUp() override {
     dialect_ = GetParam();
@@ -62,17 +73,16 @@ class QueryTest
 
  protected:
   void PopulateScalarTypesTable() {
-    // TODO: Remove check once PG.NUMERIC and PG.JSONB are
-    // supported.
     if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-      ZETASQL_EXPECT_OK(
-          MultiInsert("scalar_types_table",
-                      {"int_val", "bool_val", "bytes_val", "date_val",
-                       "float_val", "string_val", "timestamp_val"},
-                      {{0, Null<bool>(), Null<Bytes>(), Null<Date>(),
-                        Null<double>(), Null<std::string>(), Null<Timestamp>()},
-                       {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123,
-                        "stringValue", Timestamp()}}));
+      ZETASQL_EXPECT_OK(MultiInsert(
+          "scalar_types_table",
+          {"int_val", "bool_val", "bytes_val", "date_val", "float_val",
+           "string_val", "numeric_val", "timestamp_val", "json_val"},
+          {{0, Null<bool>(), Null<Bytes>(), Null<Date>(), Null<double>(),
+            Null<std::string>(), Null<PgNumeric>(), Null<Timestamp>(),
+            Null<JsonB>()},
+           {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
+            *MakePgNumeric("1.23"), Timestamp(), JsonB(R"({"key": 123})")}}));
     } else {
       ZETASQL_EXPECT_OK(MultiInsert(
           "scalar_types_table",
@@ -114,8 +124,13 @@ class QueryTest
 
     PopulateScalarTypesTable();
 
-    // TODO: Remove check once PG.NUMERIC is supported.
-    if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+      ZETASQL_EXPECT_OK(MultiInsert("numeric_table", {"key", "val"},
+                            {{-2, Null<PgNumeric>()},
+                             {-1, *MakePgNumeric("-12.3")},
+                             {0, *MakePgNumeric("0")},
+                             {1, *MakePgNumeric("12.3")}}));
+    } else {
       ZETASQL_EXPECT_OK(
           MultiInsert("numeric_table", {"key", "val"},
                       {{Null<Numeric>(), Null<std::int64_t>()},
@@ -140,15 +155,15 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(QueryTest, CanReadScalarTypes) {
   PopulateDatabase();
   auto query = Query("SELECT * FROM scalar_types_table ORDER BY int_val ASC");
-  // TODO: Remove check once PG.NUMERIC and PG.JSONB are
-  // supported.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    EXPECT_THAT(query,
-                IsOkAndHoldsRows(
-                    {{0, Null<bool>(), Null<Bytes>(), Null<Date>(),
-                      Null<double>(), Null<std::string>(), Null<Timestamp>()},
-                     {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123,
-                      "stringValue", Timestamp()}}));
+    EXPECT_THAT(
+        query,
+        IsOkAndHoldsRows({{0, Null<bool>(), Null<Bytes>(), Null<Date>(),
+                           Null<double>(), Null<std::string>(),
+                           Null<PgNumeric>(), Null<Timestamp>(), Null<JsonB>()},
+                          {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123,
+                           "stringValue", *MakePgNumeric("1.23"), Timestamp(),
+                           JsonB(R"({"key": 123})")}}));
   } else {
     EXPECT_THAT(query, IsOkAndHoldsRows(
                            {{0, Null<bool>(), Null<Bytes>(), Null<Date>(),
@@ -163,15 +178,12 @@ TEST_P(QueryTest, CanReadScalarTypes) {
 
 TEST_P(QueryTest, CanCastScalarTypes) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    // TODO: Once PG.NUMERIC is supported, convert double precision
-    // value to 1.1. Currently, if you specify 1.1, it gets interpreted as a
-    // numeric value and we get an UNIMPLEMENTED error.
     EXPECT_THAT(Query(R"(
       SELECT true                     bool_field,
              CAST('abc'  AS varchar)  string_field,
              CAST(-1     AS bigint)   bigint_field,
-             CAST(1      AS float8)   double_field)"),
-                IsOkAndHoldsRows({{true, "abc", -1, 1.0}}));
+             CAST(1.1      AS float8)   double_field)"),
+                IsOkAndHoldsRows({{true, "abc", -1, 1.1}}));
   } else {
     EXPECT_THAT(Query(R"(
       SELECT true                     bool_field,
@@ -274,97 +286,154 @@ TEST_P(QueryTest, HashFunctions) {
 }
 
 TEST_P(QueryTest, JSONFunctions) {
-  // TODO: Remove skip once PG.JSONB is supported.
+  // NOTE that more comprehensive testing for JSON functions is done in
+  // pg_functions_test.cc. The tests here are trying to match the equivalent
+  // JSON functions for GSQL below as much as possible.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
+    EXPECT_THAT(
+        Query(R"(SELECT jsonb_object_field_text('{"a":"str", "b":2}', 'a'))"),
+        IsOkAndHoldsRow({"str"}));
+    EXPECT_THAT(Query(R"(SELECT jsonb_object_field_text('{"a":null}', 'a'))"),
+                IsOkAndHoldsRow({Null<std::string>()}));
+    EXPECT_THAT(Query(R"(SELECT jsonb_object_field_text('{"a":null}', 'b'))"),
+                IsOkAndHoldsRow({Null<std::string>()}));
+
+    EXPECT_THAT(
+        Query(R"(SELECT to_jsonb('{"a":[1,2],"b":"str"}'::jsonb))"),
+        IsOkAndHoldsRow({Value(JsonB(R"({"a": [1, 2], "b": "str"})"))}));
+    EXPECT_THAT(Query(absl::Substitute(R"(SELECT to_jsonb('{"id":$0}'::jsonb))",
+                                       absl::StrCat(MaxNumericString(), "1"))),
+                // TODO: Remove check once the errors are
+                // consistent between the two environments.
+                StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
+                                       : absl::StatusCode::kOutOfRange));
+
+    EXPECT_THAT(Query(R"(SELECT to_jsonb(123))"),
+                IsOkAndHoldsRow({Value(JsonB("123"))}));
+    EXPECT_THAT(Query(R"(SELECT to_jsonb(12345678901234567))"),
+                IsOkAndHoldsRow({Value(JsonB("12345678901234567"))}));
+    EXPECT_THAT(Query(absl::Substitute(R"(SELECT to_jsonb($0))",
+                                       absl::StrCat(MaxNumericString(), "1"))),
+                // TODO: Remove check once the errors are
+                // consistent between the two environments.
+                StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
+                                       : absl::StatusCode::kOutOfRange));
+
+    // TODO: Add tests for casting to TEXT once coercian for
+    // extended types is supported.
+
+    EXPECT_THAT(Query(R"(SELECT '{"a":"str", "b":[1,2,3]}'::jsonb -> 'b')"),
+                IsOkAndHoldsRow({Value(JsonB(R"([1, 2, 3])"))}));
+    EXPECT_THAT(Query(
+                    R"(SELECT jsonb_array_element_text(
+               '{"a":"str", "b":[1,2,3]}'::jsonb -> 'b', 1))"),
+                IsOkAndHoldsRow({"2"}));
+
+    // Returns output as jsonb.
+    EXPECT_THAT(Query(R"(SELECT '{"a":"str", "b":2}'::jsonb -> 'a')"),
+                IsOkAndHoldsRow({Value(JsonB(R"("str")"))}));
+    EXPECT_THAT(Query(R"(SELECT '{"a":null}'::jsonb -> 'a')"),
+                IsOkAndHoldsRow({Value(JsonB("null"))}));
+    EXPECT_THAT(Query(R"(SELECT '{"a":null}'::jsonb -> 'b')"),
+                IsOkAndHoldsRow({Null<JsonB>()}));
+
+    // Returns output as text.
+    EXPECT_THAT(Query(R"(SELECT '{"a":"str", "b":2}'::jsonb ->> 'a')"),
+                IsOkAndHoldsRow({"str"}));
+    EXPECT_THAT(Query(R"(SELECT '{"a":null}'::jsonb ->> 'a')"),
+                IsOkAndHoldsRow({Null<std::string>()}));
+    EXPECT_THAT(Query(R"(SELECT '{"a":null}'::jsonb ->> 'b')"),
+                IsOkAndHoldsRow({Null<std::string>()}));
+
+  } else {
+    EXPECT_THAT(Query(R"(SELECT JSON_QUERY(JSON '{"a":"str", "b":2}', '$.a'))"),
+                IsOkAndHoldsRow({Value(Json(R"("str")"))}));
+    EXPECT_THAT(Query(R"(SELECT JSON_QUERY('{"a":"str", "b":2}', '$.a'))"),
+                IsOkAndHoldsRow({Value(R"("str")")}));
+    EXPECT_THAT(Query(R"(SELECT JSON_QUERY(JSON '{"a":null}', "$.a"))"),
+                IsOkAndHoldsRow({Value(Json("null"))}));
+    EXPECT_THAT(Query(R"(SELECT JSON_QUERY(JSON '{"a":null}', "$.b"))"),
+                IsOkAndHoldsRow({Null<Json>()}));
+
+    EXPECT_THAT(Query(R"(SELECT JSON_VALUE(JSON '{"a":"str", "b":2}', '$.a'))"),
+                IsOkAndHoldsRow({Value("str")}));
+    EXPECT_THAT(Query(R"(SELECT JSON_VALUE(JSON '{"a":null}', "$.a"))"),
+                IsOkAndHoldsRow({Null<std::string>()}));
+    EXPECT_THAT(Query(R"(SELECT JSON_VALUE(JSON '{"a":null}', "$"))"),
+                IsOkAndHoldsRow({Null<std::string>()}));
+
+    EXPECT_THAT(Query(R"(SELECT PARSE_JSON('{"a":[1,2],"b":"str"}'))"),
+                IsOkAndHoldsRow({Value(Json(R"({"a":[1,2],"b":"str"})"))}));
+    EXPECT_THAT(Query(R"(SELECT PARSE_JSON('{"id":123456789012345678901}'))"),
+                StatusIs(absl::StatusCode::kOutOfRange));
+    EXPECT_THAT(Query(R"(
+      SELECT PARSE_JSON('{"id":123456789012345678901}', wide_number_mode=>'exact')
+    )"),
+                StatusIs(absl::StatusCode::kOutOfRange));
+    EXPECT_THAT(
+        Query(R"(
+      SELECT PARSE_JSON('{"id":123456789012345678901}', wide_number_mode=>'round')
+    )"),
+        IsOkAndHoldsRow({Value(Json(R"({"id":1.2345678901234568e+20})"))}));
+
+    EXPECT_THAT(Query(R"(SELECT TO_JSON(123))"),
+                IsOkAndHoldsRow({Value(Json("123"))}));
+    EXPECT_THAT(Query(R"(
+      SELECT TO_JSON(12345678901234567, stringify_wide_numbers=>FALSE)
+    )"),
+                IsOkAndHoldsRow({Value(Json("12345678901234567"))}));
+    EXPECT_THAT(Query(R"(
+      SELECT TO_JSON(12345678901234567, stringify_wide_numbers=>TRUE)
+    )"),
+                IsOkAndHoldsRow({Value(Json("\"12345678901234567\""))}));
+    EXPECT_THAT(Query(R"(
+      SELECT TO_JSON(NUMERIC "123456789.123456789", stringify_wide_numbers=>FALSE)
+    )"),
+                StatusIs(absl::StatusCode::kOutOfRange));
+
+    EXPECT_THAT(Query(R"(SELECT TO_JSON_STRING(JSON '{"a":"str", "b":2}'))"),
+                IsOkAndHoldsRow({R"({"a":"str","b":2})"}));
+    EXPECT_THAT(
+        Query(R"(SELECT TO_JSON_STRING('{"a":"str", "b":2}'))"),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            testing::HasSubstr(
+                "TO_JSON_STRING is not supported on values of type STRING")));
+    EXPECT_THAT(Query(R"(SELECT TO_JSON_STRING(JSON '123'))"),
+                IsOkAndHoldsRow({R"(123)"}));
+    EXPECT_THAT(
+        Query(R"(SELECT TO_JSON_STRING(123))"),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            testing::HasSubstr(
+                "TO_JSON_STRING is not supported on values of type INT64")));
+
+    EXPECT_THAT(Query(R"(SELECT FORMAT("%'p", JSON '{"a":"str", "b":2}'))"),
+                IsOkAndHoldsRow({R"({"a":"str","b":2})"}));
+    EXPECT_THAT(Query(R"(SELECT FORMAT("%'P", JSON '{"a":"str", "b":2}'))"),
+                IsOkAndHoldsRow({"{\n"
+                                 "  \"a\": \"str\",\n"
+                                 "  \"b\": 2\n"
+                                 "}"}));
+    EXPECT_THAT(Query(R"(SELECT FORMAT("%'t", JSON '{"a":"str", "b":2}'))"),
+                IsOkAndHoldsRow({R"({"a":"str","b":2})"}));
+    EXPECT_THAT(Query(R"(SELECT FORMAT("%'T", JSON '{"a":"str", "b":2}'))"),
+                IsOkAndHoldsRow({R"(JSON '{"a":"str","b":2}')"}));
+
+    EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'["a"])"),
+                IsOkAndHoldsRow({Value(Json(R"("str")"))}));
+    EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'["b"])"),
+                IsOkAndHoldsRow({Value(Json(R"([1,2,3])"))}));
+    EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'["b"][1])"),
+                IsOkAndHoldsRow({Value(Json("2"))}));
+
+    EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'.a)"),
+                IsOkAndHoldsRow({Value(Json(R"("str")"))}));
+    EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'.b)"),
+                IsOkAndHoldsRow({Value(Json("[1,2,3]"))}));
+    EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'.c)"),
+                IsOkAndHoldsRow({Value(Null<Json>())}));
   }
-
-  EXPECT_THAT(Query(R"(SELECT JSON_QUERY(JSON '{"a":"str", "b":2}', '$.a'))"),
-              IsOkAndHoldsRow({Value(Json(R"("str")"))}));
-  EXPECT_THAT(Query(R"(SELECT JSON_QUERY('{"a":"str", "b":2}', '$.a'))"),
-              IsOkAndHoldsRow({Value(R"("str")")}));
-  EXPECT_THAT(Query(R"(SELECT JSON_QUERY(JSON '{"a":null}', "$.a"))"),
-              IsOkAndHoldsRow({Value(Json("null"))}));
-  EXPECT_THAT(Query(R"(SELECT JSON_QUERY(JSON '{"a":null}', "$.b"))"),
-              IsOkAndHoldsRow({Null<Json>()}));
-
-  EXPECT_THAT(Query(R"(SELECT JSON_VALUE(JSON '{"a":"str", "b":2}', '$.a'))"),
-              IsOkAndHoldsRow({Value("str")}));
-  EXPECT_THAT(Query(R"(SELECT JSON_VALUE(JSON '{"a":null}', "$.a"))"),
-              IsOkAndHoldsRow({Null<std::string>()}));
-  EXPECT_THAT(Query(R"(SELECT JSON_VALUE(JSON '{"a":null}', "$"))"),
-              IsOkAndHoldsRow({Null<std::string>()}));
-
-  EXPECT_THAT(Query(R"(SELECT PARSE_JSON('{"a":[1,2],"b":"str"}'))"),
-              IsOkAndHoldsRow({Value(Json(R"({"a":[1,2],"b":"str"})"))}));
-  EXPECT_THAT(Query(R"(SELECT PARSE_JSON('{"id":123456789012345678901}'))"),
-              StatusIs(absl::StatusCode::kOutOfRange));
-  EXPECT_THAT(Query(R"(
-    SELECT PARSE_JSON('{"id":123456789012345678901}', wide_number_mode=>'exact')
-  )"),
-              StatusIs(absl::StatusCode::kOutOfRange));
-  EXPECT_THAT(
-      Query(R"(
-    SELECT PARSE_JSON('{"id":123456789012345678901}', wide_number_mode=>'round')
-  )"),
-      IsOkAndHoldsRow({Value(Json(R"({"id":1.2345678901234568e+20})"))}));
-
-  EXPECT_THAT(Query(R"(SELECT TO_JSON(123))"),
-              IsOkAndHoldsRow({Value(Json("123"))}));
-  EXPECT_THAT(Query(R"(
-    SELECT TO_JSON(12345678901234567, stringify_wide_numbers=>FALSE)
-  )"),
-              IsOkAndHoldsRow({Value(Json("12345678901234567"))}));
-  EXPECT_THAT(Query(R"(
-    SELECT TO_JSON(12345678901234567, stringify_wide_numbers=>TRUE)
-  )"),
-              IsOkAndHoldsRow({Value(Json("\"12345678901234567\""))}));
-  EXPECT_THAT(Query(R"(
-    SELECT TO_JSON(NUMERIC "123456789.123456789", stringify_wide_numbers=>FALSE)
-  )"),
-              StatusIs(absl::StatusCode::kOutOfRange));
-
-  EXPECT_THAT(Query(R"(SELECT TO_JSON_STRING(JSON '{"a":"str", "b":2}'))"),
-              IsOkAndHoldsRow({R"({"a":"str","b":2})"}));
-  EXPECT_THAT(
-      Query(R"(SELECT TO_JSON_STRING('{"a":"str", "b":2}'))"),
-      StatusIs(
-          absl::StatusCode::kUnimplemented,
-          testing::HasSubstr(
-              "TO_JSON_STRING is not supported on values of type STRING")));
-  EXPECT_THAT(Query(R"(SELECT TO_JSON_STRING(JSON '123'))"),
-              IsOkAndHoldsRow({R"(123)"}));
-  EXPECT_THAT(
-      Query(R"(SELECT TO_JSON_STRING(123))"),
-      StatusIs(absl::StatusCode::kUnimplemented,
-               testing::HasSubstr(
-                   "TO_JSON_STRING is not supported on values of type INT64")));
-
-  EXPECT_THAT(Query(R"(SELECT FORMAT("%'p", JSON '{"a":"str", "b":2}'))"),
-              IsOkAndHoldsRow({R"({"a":"str","b":2})"}));
-  EXPECT_THAT(Query(R"(SELECT FORMAT("%'P", JSON '{"a":"str", "b":2}'))"),
-              IsOkAndHoldsRow({"{\n"
-                               "  \"a\": \"str\",\n"
-                               "  \"b\": 2\n"
-                               "}"}));
-  EXPECT_THAT(Query(R"(SELECT FORMAT("%'t", JSON '{"a":"str", "b":2}'))"),
-              IsOkAndHoldsRow({R"({"a":"str","b":2})"}));
-  EXPECT_THAT(Query(R"(SELECT FORMAT("%'T", JSON '{"a":"str", "b":2}'))"),
-              IsOkAndHoldsRow({R"(JSON '{"a":"str","b":2}')"}));
-
-  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'["a"])"),
-              IsOkAndHoldsRow({Value(Json(R"("str")"))}));
-  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'["b"])"),
-              IsOkAndHoldsRow({Value(Json(R"([1,2,3])"))}));
-  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'["b"][1])"),
-              IsOkAndHoldsRow({Value(Json("2"))}));
-
-  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'.a)"),
-              IsOkAndHoldsRow({Value(Json(R"("str")"))}));
-  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'.b)"),
-              IsOkAndHoldsRow({Value(Json("[1,2,3]"))}));
-  EXPECT_THAT(Query(R"(SELECT JSON '{"a":"str", "b":[1,2,3]}'.c)"),
-              IsOkAndHoldsRow({Value(Null<Json>())}));
 }
 
 TEST_P(QueryTest, FormatFunction) {
@@ -518,11 +587,6 @@ TEST_P(QueryTest, CharLengthFunctionAliasesAreAvailable) {
 }
 
 TEST_P(QueryTest, PowerFunctionAliasesAreAvailable) {
-  // TODO: Enable once PG.NUMERIC is supported.
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   auto query = Query("SELECT POWER(2,2)");
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     query = Query("SELECT power('2.0'::float8, '2.0'::float8)");
@@ -537,11 +601,6 @@ TEST_P(QueryTest, PowerFunctionAliasesAreAvailable) {
 }
 
 TEST_P(QueryTest, CeilingFunctionAliasesAreAvailable) {
-  // TODO: Enable once PG.NUMERIC is supported.
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(Query("SELECT CEILING(1.6)"), IsOkAndHoldsRow({2.0}));
   }
@@ -585,11 +644,6 @@ TEST_P(QueryTest, CheckQuerySizeLimitsAreEnforced) {
 }
 
 TEST_P(QueryTest, QueryStringSizeLimit) {
-  // TODO: Need to figure out why query length limit is not enforced.
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   auto query = absl::Substitute("SELECT '$0'", std::string(1024 * 1024, 'a'));
   EXPECT_THAT(Query(query),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -597,7 +651,7 @@ TEST_P(QueryTest, QueryStringSizeLimit) {
 }
 
 TEST_P(QueryTest, NumericKey) {
-  // TODO: Remove skip once PG.NUMERIC is supported.
+  // TODO: b/294026608 - Unskip after PG.NUMERIC indexing is supported.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
@@ -623,6 +677,41 @@ TEST_P(QueryTest, NumericKey) {
   EXPECT_THAT(Query("SELECT t.val FROM numeric_table t WHERE t.key < -12.1 OR "
                     "t.key > 12.2 ORDER BY t.key ASC"),
               IsOkAndHoldsRows({{-1}, {1}}));
+}
+
+TEST_P(QueryTest, PgNumericType) {
+  // TODO: b/294026608 - Remove test after PG.NUMERIC indexing is supported and
+  // this test can be combined with the NumericKey test above.
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    GTEST_SKIP();
+  }
+
+  PopulateDatabase();
+
+  EXPECT_THAT(
+      Query("SELECT t.val FROM numeric_table t WHERE t.key < 0"),
+      IsOkAndHoldsRows({{Null<PgNumeric>()}, {*MakePgNumeric("-12.3")}}));
+
+  EXPECT_THAT(Query("SELECT t.val FROM numeric_table t WHERE t.key = 0"),
+              IsOkAndHoldsRows({{*MakePgNumeric("0")}}));
+
+  EXPECT_THAT(Query("SELECT t.val FROM numeric_table t WHERE t.key > 0"),
+              IsOkAndHoldsRows({{*MakePgNumeric("12.3")}}));
+
+  EXPECT_THAT(Query("SELECT t.val FROM numeric_table t WHERE t.val IS NOT NULL "
+                    "ORDER BY t.key ASC"),
+              IsOkAndHoldsRows({{*MakePgNumeric("-12.3")},
+                                {*MakePgNumeric("0")},
+                                {*MakePgNumeric("12.3")}}));
+
+  EXPECT_THAT(Query("SELECT t.key FROM numeric_table t WHERE t.val IS NULL"),
+              IsOkAndHoldsRows({{-2}}));
+
+  // TODO: b/274043756 - Investigate error "INVALID_ARGUMENT: Inputs to Less
+  // must support equality comparison: PG.NUMERIC".
+  // EXPECT_THAT(Query("SELECT t.key FROM numeric_table t WHERE t.val < -12.1 OR
+  // " "t.val > 12.2 ORDER BY t.key ASC"),
+  // IsOkAndHoldsRows({{-1}, {1}}));
 }
 
 TEST_P(QueryTest, SelectStarExcept) {
@@ -680,6 +769,43 @@ TEST_P(QueryTest, NamedArguments) {
       Query(
           R"_(SELECT PARSE_JSON('{"id":123}', wide_number_mode => 'exact'))_"),
       IsOkAndHoldsRows({{Json("{\"id\":123}")}}));
+}
+
+TEST_P(QueryTest, GetInternalSequenceStateFunction) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  EXPECT_THAT(Query("SELECT GET_INTERNAL_SEQUENCE_STATE(SEQUENCE MySeq)"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("Sequence not found: MySeq")));
+}
+
+TEST_P(QueryTest, GetNextSequenceValueFunction) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  EXPECT_THAT(Query("SELECT GET_NEXT_SEQUENCE_VALUE(SEQUENCE MySeq)"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("Sequence not found: MySeq")));
+}
+
+TEST_P(QueryTest, BitReverseFunction) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(Query("SELECT SPANNER.BIT_REVERSE(1, null)"),
+                IsOkAndHoldsRows({{Null<int64_t>()}}));
+
+    EXPECT_THAT(Query("SELECT SPANNER.BIT_REVERSE(null, true)"),
+                IsOkAndHoldsRows({{Null<int64_t>()}}));
+
+    EXPECT_THAT(Query("SELECT SPANNER.BIT_REVERSE(4611686018427387904, true)"),
+                IsOkAndHoldsRows({{1}}));
+  } else {
+    EXPECT_THAT(Query("SELECT BIT_REVERSE(1, cast(null as bool))"),
+                IsOkAndHoldsRows({{Null<int64_t>()}}));
+
+    EXPECT_THAT(Query("SELECT BIT_REVERSE(4611686018427387904, true)"),
+                IsOkAndHoldsRows({{1}}));
+  }
 }
 
 }  // namespace

@@ -289,6 +289,19 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
   EXPECT_EQ(catalog->GetCatalogPathForTable(kv_table),
             std::vector<std::string>({"keyvalue"}));
 }
+
+TEST(FindTableValuedFunction, FindChangeStreamTVFNotUDF) {
+  auto catalog = absl::make_unique<SpangresUserCatalog>(
+      GetSpangresTestSpannerUserCatalog());
+
+  const zetasql::TableValuedFunction* tvf;
+  // Matching the Spanner (SqlCatalog) engine-provided catalog with the prod
+  // SpangresUserCatalog, we should correctly identify our TVF as a UDF.
+  ZETASQL_EXPECT_OK(catalog->FindTableValuedFunction(
+      {"read_json_keyvalue_change_stream"}, &tvf));
+  EXPECT_NE(tvf, nullptr);
+}
+
 }  // namespace
 }  // namespace spangres
 }  // namespace postgres_translator

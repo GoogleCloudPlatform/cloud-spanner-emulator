@@ -33,18 +33,15 @@ class QueryableChangeStreamTvf : public zetasql::TableValuedFunction {
   explicit QueryableChangeStreamTvf(
       std::vector<std::string> function_name_path,
       const zetasql::FunctionSignature& signature,
-      const zetasql::TVFRelation& result_schema,
-      const backend::ChangeStream* change_stream)
+      const zetasql::TVFRelation& result_schema)
       : zetasql::TableValuedFunction(function_name_path, signature),
         result_schema_(result_schema) {}
 
   static absl::StatusOr<std::unique_ptr<QueryableChangeStreamTvf>> Create(
-      const backend::ChangeStream* change_stream,
-      zetasql::AnalyzerOptions options, zetasql::Catalog* catalog,
-      zetasql::TypeFactory* type_factory, bool is_pg);
+      const std::string& tvf_name, zetasql::AnalyzerOptions options,
+      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+      bool is_pg);
 
-  static constexpr char kChangeStreamTvfStructPrefix[] = "READ_";
-  static constexpr char kChangeStreamTvfJsonPrefix[] = "read_json_";
   static constexpr char kChangeStreamTvfStartTimestamp[] = "start_timestamp";
   static constexpr char kChangeStreamTvfEndTimestamp[] = "end_timestamp";
   static constexpr char kChangeStreamTvfPartitionToken[] = "partition_token";

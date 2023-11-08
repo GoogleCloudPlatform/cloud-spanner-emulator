@@ -31,6 +31,8 @@
 
 #include "third_party/spanner_pg/catalog/spangres_user_catalog.h"
 
+#include <vector>
+
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/table_valued_function.h"
 #include "absl/status/status.h"

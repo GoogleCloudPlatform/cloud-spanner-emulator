@@ -21,6 +21,7 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
+#include "frontend/converters/pg_change_streams.h"
 
 namespace google {
 namespace spanner {
@@ -41,27 +42,72 @@ struct DataChangeRecord {
   google::protobuf::Value number_of_partitions_in_transaction;
   google::protobuf::Value transaction_tag;
   google::protobuf::Value is_system_transaction;
-  explicit DataChangeRecord(const google::protobuf::ListValue& list_values) {
-    commit_timestamp = list_values.values(0);
-    record_sequence = list_values.values(1);
-    server_transaction_id = list_values.values(2);
-    is_last_record_in_transaction_in_partition = list_values.values(3);
-    table_name = list_values.values(4);
-    column_types = list_values.values(5).list_value();
-    mods = list_values.values(6).list_value();
-    mod_type = list_values.values(7);
-    value_capture_type = list_values.values(8);
-    number_of_records_in_transaction = list_values.values(9);
-    number_of_partitions_in_transaction = list_values.values(10);
-    transaction_tag = list_values.values(11);
-    is_system_transaction = list_values.values(12);
+  explicit DataChangeRecord(const google::protobuf::ListValue& list_values,
+                            bool is_pg = false) {
+    if (is_pg) {
+      commit_timestamp = list_values.values(0).struct_value().fields().at(
+          frontend::kCommitTimestamp);
+      record_sequence = list_values.values(0).struct_value().fields().at(
+          frontend::kRecordSequence);
+      server_transaction_id = list_values.values(0).struct_value().fields().at(
+          frontend::kServerTransactionId);
+      is_last_record_in_transaction_in_partition =
+          list_values.values(0).struct_value().fields().at(
+              frontend::kIsLastRecordInTransactionInPartition);
+      table_name = list_values.values(0).struct_value().fields().at(
+          frontend::kTableName);
+      column_types = list_values.values(0)
+                         .struct_value()
+                         .fields()
+                         .at(frontend::kColumnTypes)
+                         .list_value();
+      mods = list_values.values(0)
+                 .struct_value()
+                 .fields()
+                 .at(frontend::kMods)
+                 .list_value();
+      mod_type =
+          list_values.values(0).struct_value().fields().at(frontend::kModType);
+      value_capture_type = list_values.values(0).struct_value().fields().at(
+          frontend::kValueCaptureType);
+      number_of_records_in_transaction =
+          list_values.values(0).struct_value().fields().at(
+              frontend::kNumberOfRecordsInTransaction);
+      number_of_partitions_in_transaction =
+          list_values.values(0).struct_value().fields().at(
+              frontend::kNumberOfPartitionsInTransaction);
+      transaction_tag = list_values.values(0).struct_value().fields().at(
+          frontend::kTransactionTag);
+      is_system_transaction = list_values.values(0).struct_value().fields().at(
+          frontend::kIsSystemTransaction);
+    } else {
+      commit_timestamp = list_values.values(0);
+      record_sequence = list_values.values(1);
+      server_transaction_id = list_values.values(2);
+      is_last_record_in_transaction_in_partition = list_values.values(3);
+      table_name = list_values.values(4);
+      column_types = list_values.values(5).list_value();
+      mods = list_values.values(6).list_value();
+      mod_type = list_values.values(7);
+      value_capture_type = list_values.values(8);
+      number_of_records_in_transaction = list_values.values(9);
+      number_of_partitions_in_transaction = list_values.values(10);
+      transaction_tag = list_values.values(11);
+      is_system_transaction = list_values.values(12);
+    }
   }
 };
 
 struct HeartbeatRecord {
   google::protobuf::Value timestamp;
-  explicit HeartbeatRecord(const google::protobuf::ListValue& list_values) {
-    timestamp = list_values.values(0);
+  explicit HeartbeatRecord(const google::protobuf::ListValue& list_values,
+                           bool is_pg = false) {
+    if (is_pg) {
+      timestamp = list_values.values(0).struct_value().fields().at(
+          frontend::kTimestamp);
+    } else {
+      timestamp = list_values.values(0);
+    }
   }
 };
 
@@ -69,11 +115,23 @@ struct ChildPartitionRecord {
   google::protobuf::Value start_time;
   google::protobuf::Value record_sequence;
   google::protobuf::ListValue child_partitions;
-  explicit ChildPartitionRecord(
-      const google::protobuf::ListValue& list_values) {
-    start_time = list_values.values(0);
-    record_sequence = list_values.values(1);
-    child_partitions = list_values.values(2).list_value();
+  explicit ChildPartitionRecord(const google::protobuf::ListValue& list_values,
+                                bool is_pg = false) {
+    if (is_pg) {
+      start_time = list_values.values(0).struct_value().fields().at(
+          frontend::kStartTimestamp);
+      record_sequence = list_values.values(0).struct_value().fields().at(
+          frontend::kRecordSequence);
+      child_partitions = list_values.values(0)
+                             .struct_value()
+                             .fields()
+                             .at(frontend::kChildPartitions)
+                             .list_value();
+    } else {
+      start_time = list_values.values(0);
+      record_sequence = list_values.values(1);
+      child_partitions = list_values.values(2).list_value();
+    }
   }
 };
 

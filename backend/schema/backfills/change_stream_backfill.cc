@@ -57,7 +57,7 @@ absl::StatusOr<Key> ComputeChangeStreamPartitionTableKey(
 
 std::vector<zetasql::Value> CreateInitialBackfillPartitions(
     std::vector<zetasql::Value> row_values, std::string partition_token_str,
-    absl::Time start_time) {
+    absl::Time start_time, std::string churn_type) {
   // specify partition_token
   row_values.push_back(zetasql::Value::String(partition_token_str));
   // Specify start_time
@@ -70,6 +70,8 @@ std::vector<zetasql::Value> CreateInitialBackfillPartitions(
   // Specify children
   row_values.push_back(
       zetasql::Value::EmptyArray(zetasql::types::StringArrayType()));
+  // Specify the churn type.
+  row_values.push_back(zetasql::Value::String(churn_type));
   return row_values;
 }
 
@@ -101,13 +103,15 @@ std::string CreatePartitionTokenString() {
 absl::Status BackfillChangeStreamPartition(
     const SchemaValidationContext* context, const ChangeStream* change_stream,
     absl::Span<const Column* const> change_stream_partition_table_columns,
-    std::vector<ColumnID> change_stream_partition_table_column_ids) {
+    std::vector<ColumnID> change_stream_partition_table_column_ids,
+    std::string churn_type) {
   std::string partition_token_str = CreatePartitionTokenString();
   // Populate values for the row representing the first partition
   std::vector<zetasql::Value> initial_row_values;
   initial_row_values.reserve(change_stream_partition_table_columns.size());
   initial_row_values = CreateInitialBackfillPartitions(
-      initial_row_values, partition_token_str, change_stream->creation_time());
+      initial_row_values, partition_token_str, change_stream->creation_time(),
+      churn_type);
   // Create Key for the change stream partition table
   ZETASQL_ASSIGN_OR_RETURN(
       Key change_stream_partition_table_key,
@@ -134,9 +138,16 @@ absl::Status BackfillChangeStream(const ChangeStream* change_stream,
   // Generate partition token
   const int64_t num_initial_partitions = 2;
   for (int i = 0; i < num_initial_partitions; ++i) {
+    std::string churn_type = "MOVE";
+    if (i == 0) {
+      // The first initial token will be continually merging and splitting.
+      // The second token will continually be moving (i.e. one parent token
+      // generates one child token.)
+      churn_type = "SPLIT";
+    }
     ZETASQL_RETURN_IF_ERROR(BackfillChangeStreamPartition(
         context, change_stream, change_stream_partition_table_columns,
-        change_stream_partition_table_column_ids));
+        change_stream_partition_table_column_ids, churn_type));
   }
   return absl::OkStatus();
 }

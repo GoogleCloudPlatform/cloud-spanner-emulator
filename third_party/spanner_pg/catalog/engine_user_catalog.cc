@@ -35,7 +35,6 @@
 #include <cctype>
 
 #include "zetasql/public/catalog.h"
-#include "zetasql/base/case.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"

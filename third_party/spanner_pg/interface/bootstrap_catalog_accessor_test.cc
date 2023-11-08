@@ -85,13 +85,22 @@ TEST_F(PgCollationDataTest, GetPgCollationDataFromBootstrapFailure) {
               zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
-TEST_P(PgTypeDataTest, GetPgTypeDataFromBootstrapSuccess) {
+TEST_P(PgTypeDataTest, GetPgTypeDataFromBootstrapNameSuccess) {
   PgTypeData expected = ParseTextProtoOrDie(GetParam());
   ZETASQL_ASSERT_OK_AND_ASSIGN(PgTypeData actual,
                        GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(),
                                                   expected.typname()));
   EXPECT_THAT(actual, testing::EqualsProto(expected));
 }
+
+TEST_P(PgTypeDataTest, GetPgTypeDataFromBootstrapOidSuccess) {
+  PgTypeData expected = ParseTextProtoOrDie(GetParam());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(PgTypeData actual,
+                       GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(),
+                                                  expected.oid()));
+  EXPECT_THAT(actual, testing::EqualsProto(expected));
+}
+
 
 INSTANTIATE_TEST_SUITE_P(
   PgTypeDataTestData,
@@ -124,11 +133,20 @@ INSTANTIATE_TEST_SUITE_P(
       typarray: 0
     )pb"));
 
-TEST_F(PgTypeDataTest, GetPgTypeDataFromBootstrapFailure) {
+TEST_F(PgTypeDataTest, GetPgTypeDataFromBootstrapNameFailure) {
   // xid is an unsupported PG type.
   ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), "xid"),
               zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), "invalid"),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(PgTypeDataTest, GetPgTypeDataFromBootstrapOidFailure) {
+  // xml (142) is an unsupported PG type.
+  ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), 142),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+  // default (100) is a collation, not a type.
+  ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), 100),
               zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 

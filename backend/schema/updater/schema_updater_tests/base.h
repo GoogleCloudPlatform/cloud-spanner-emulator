@@ -162,16 +162,14 @@ class SchemaUpdaterTest
       absl::Span<const std::string> statements
       ,
       const database_api::DatabaseDialect& dialect = GetParam(),
-      bool use_gsql_to_pg_translation = true
-  );
+      bool use_gsql_to_pg_translation = true);
 
   absl::StatusOr<std::unique_ptr<const Schema>> UpdateSchema(
       const Schema* base_schema,
       absl::Span<const std::string> statements
       ,
       const database_api::DatabaseDialect& dialect = GetParam(),
-      bool use_gsql_to_pg_translation = true
-  );
+      bool use_gsql_to_pg_translation = true);
 
  protected:
   void SetUp() override {

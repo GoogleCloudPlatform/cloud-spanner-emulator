@@ -49,7 +49,18 @@ namespace spangres {
 class EmulatorBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
  public:
   explicit EmulatorBuiltinFunctionCatalog(zetasql::TypeFactory* type_factory)
-      : EngineBuiltinFunctionCatalog(), function_catalog_(type_factory) {}
+      : EngineBuiltinFunctionCatalog(),
+        function_catalog_(type_factory) {
+  }
+
+  explicit EmulatorBuiltinFunctionCatalog(zetasql::TypeFactory* type_factory,
+                                          const std::string& catalog_name)
+      : EngineBuiltinFunctionCatalog(),
+        function_catalog_(type_factory, catalog_name) {
+  }
+
+  ~EmulatorBuiltinFunctionCatalog() {
+  }
 
   absl::StatusOr<const zetasql::Function*> GetFunction(
       const std::string& name) const override {

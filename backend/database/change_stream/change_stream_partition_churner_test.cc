@@ -43,7 +43,6 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
-namespace {
 
 class ChangeStreamPartitionChurnerTest : public ::testing::Test {
  protected:
@@ -54,6 +53,7 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
     std::string change_stream_name;
     std::vector<std::string> parents;
     std::vector<std::string> children;
+    std::string next_churn;
   };
 
   struct StaleAndActivePartitions {
@@ -132,8 +132,8 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
     std::unique_ptr<backend::RowCursor> cursor;
     backend::ReadArg read_arg;
     read_arg.change_stream_for_partition_table = change_stream_name;
-    read_arg.columns = {"partition_token", "start_time", "end_time", "parents",
-                        "children"};
+    read_arg.columns = {"partition_token", "start_time", "end_time",
+                        "parents",         "children",   "next_churn"};
     read_arg.key_set = KeySet::All();
 
     ZETASQL_EXPECT_OK(txn->Read(read_arg, &cursor));
@@ -168,15 +168,16 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
           children.push_back(child.string_value());
         }
       }
+      const std::string& next_churn = cursor->ColumnValue(5).string_value();
 
       if (!cursor->ColumnValue(2).is_null()) {
-        stale_partitions.push_back({partitionToken, start_time,
-                                    cursor->ColumnValue(2).ToTime(),
-                                    change_stream_name, parents, children});
+        stale_partitions.push_back(
+            {partitionToken, start_time, cursor->ColumnValue(2).ToTime(),
+             change_stream_name, parents, children, next_churn});
       } else {
         active_partitions.push_back({partitionToken, start_time,
                                      absl::InfinitePast(), change_stream_name,
-                                     parents, children});
+                                     parents, children, next_churn});
       }
     }
     return StaleAndActivePartitions{.stale_partitions = stale_partitions,
@@ -190,25 +191,66 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
   void VerifyStaleAndActivePartitions(
       StaleAndActivePartitions stale_and_active_partitions) {
     // Verify the content of stale and active partitions.
+
+    std::vector<TestChurnedPartitions> all_partitions;
     for (const auto& stale_token :
          stale_and_active_partitions.stale_partitions) {
-      // Verify that each stale token has 1 child.
-      std::vector<std::string> children = stale_token.children;
-      ASSERT_EQ(1, children.size());
-
-      // Get the child token for the stale token.
-      ZETASQL_ASSERT_OK_AND_ASSIGN(
-          TestChurnedPartitions child_partition,
-          GetPartition(stale_and_active_partitions, children[0]));
-      // Verify that the child's start time and the stale token's end time
-      // is the same.
-      ASSERT_EQ(child_partition.start_time, stale_token.end_time);
-
-      // Verify that the child token's parents is the same as the stale
-      // token.
-      std::vector<std::string> expected_parents = {stale_token.partition_token};
-      ASSERT_EQ(child_partition.parents, expected_parents);
+      all_partitions.push_back(stale_token);
     }
+    for (const auto& active_token :
+         stale_and_active_partitions.active_partitions) {
+      all_partitions.push_back(active_token);
+    }
+    for (const auto& token : all_partitions) {
+      ASSERT_TRUE(!token.children.empty() || !token.parents.empty());
+      for (const auto& child : token.children) {
+        // Get the child token for the stale token.
+        ZETASQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions child_partition,
+                             GetPartition(stale_and_active_partitions, child));
+        // Verify that the child's start time and the stale token's end time
+        // is the same.
+        ASSERT_EQ(child_partition.start_time, token.end_time);
+        ASSERT_THAT(child_partition.parents,
+                    testing::Contains(token.partition_token));
+        // for each of the child's parents, verify that the parent exists and
+        // contains the child in its childrens list.
+        for (const auto& parent : child_partition.parents) {
+          ZETASQL_ASSERT_OK_AND_ASSIGN(
+              TestChurnedPartitions parent_partition,
+              GetPartition(stale_and_active_partitions, parent));
+          // Verify that each parent contains the correct information.
+          ASSERT_THAT(parent_partition.children, testing::Contains(child));
+          ASSERT_EQ(parent_partition.end_time, child_partition.start_time);
+        }
+      }
+      // Verify that the child token's parents contains the stale token
+      for (const auto& parent : token.parents) {
+        ZETASQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
+                             GetPartition(stale_and_active_partitions, parent));
+        // Verify that each parent contains the correct information.
+        ASSERT_THAT(parent_partition.children,
+                    testing::Contains(token.partition_token));
+        ASSERT_EQ(parent_partition.end_time, token.start_time);
+        // For each parent, go through it's children's list and verify that
+        // the child contains the parent in the parent's list.
+        for (const auto& child : parent_partition.children) {
+          ZETASQL_ASSERT_OK_AND_ASSIGN(
+              TestChurnedPartitions child_partition,
+              GetPartition(stale_and_active_partitions, child));
+          // Verify that each parent contains the correct information.
+          ASSERT_THAT(child_partition.parents, testing::Contains(parent));
+          ASSERT_EQ(child_partition.start_time, parent_partition.end_time);
+        }
+      }
+    }
+  }
+
+  void ChurnPartitionsForChangeStream(std::string change_stream_name) {
+    absl::Status s;
+    do {
+      s = db_->get_change_stream_partition_churner()->ChurnPartitions(
+          change_stream_name);
+    } while (!s.ok());
   }
 
   Clock clock_;
@@ -227,8 +269,8 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   // We expect that there are at least two stale partitions for the existing
   // change stream, since we have slept for 5x the current churn interval.
   EXPECT_GT(stale_and_active_partitions.stale_partitions.size(), 2);
-  // With move churning, there should only ever be 2 active tokens.
-  EXPECT_EQ(stale_and_active_partitions.active_partitions.size(), 2);
+  // With churning, there should always at least be two active tokens.
+  EXPECT_GE(stale_and_active_partitions.active_partitions.size(), 2);
   VerifyStaleAndActivePartitions(stale_and_active_partitions);
 
   std::string change_stream_two = "change_stream_two";
@@ -243,8 +285,8 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   // We expect that there are at least four stale partitions for the existing
   // change stream, since we have slept again for 5x the current churn interval.
   EXPECT_GT(stale_and_active_partitions.stale_partitions.size(), 4);
-  // With move churning, there should only ever be 2 active tokens.
-  EXPECT_EQ(stale_and_active_partitions.active_partitions.size(), 2);
+  // With churning, there should always at least be two active tokens.
+  EXPECT_GE(stale_and_active_partitions.active_partitions.size(), 2);
   VerifyStaleAndActivePartitions(stale_and_active_partitions);
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
@@ -252,8 +294,8 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   // We expect that there are at least two stale partitions for the newly
   // added change stream, since we have slept for 5x the current churn interval.
   EXPECT_GT(stale_and_active_partitions.stale_partitions.size(), 2);
-  // With move churning, there should only ever be 2 active tokens.
-  EXPECT_EQ(stale_and_active_partitions.active_partitions.size(), 2);
+  // With churning, there should always at least be two tokens.
+  EXPECT_GE(stale_and_active_partitions.active_partitions.size(), 2);
   VerifyStaleAndActivePartitions(stale_and_active_partitions);
 
   std::string change_stream_three = "change_stream_three";
@@ -268,8 +310,8 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   // change_stream_one, since we have slept for 5x the current churn
   // interval for the third time.
   EXPECT_GT(stale_and_active_partitions.stale_partitions.size(), 6);
-  // With move churning, there should only ever be 2 active tokens.
-  EXPECT_EQ(stale_and_active_partitions.active_partitions.size(), 2);
+  // With churning, there should always at least be two tokens.
+  EXPECT_GE(stale_and_active_partitions.active_partitions.size(), 2);
   VerifyStaleAndActivePartitions(stale_and_active_partitions);
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
@@ -277,8 +319,8 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   // We expect that there are at least four stale partitions for the existing
   // change stream, since we have slept again for 5x the current churn interval.
   EXPECT_GT(stale_and_active_partitions.stale_partitions.size(), 4);
-  // With move churning, there should only ever be 2 active tokens.
-  EXPECT_EQ(stale_and_active_partitions.active_partitions.size(), 2);
+  // With churning, there should always at least be two tokens.
+  EXPECT_GE(stale_and_active_partitions.active_partitions.size(), 2);
   VerifyStaleAndActivePartitions(stale_and_active_partitions);
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(
@@ -287,8 +329,8 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   // We expect that there are at least two stale partitions for the newly
   // added change stream, since we have slept for 5x the current churn interval.
   EXPECT_GT(stale_and_active_partitions.stale_partitions.size(), 2);
-  // With move churning, there should only ever be 2 active tokens.
-  EXPECT_EQ(stale_and_active_partitions.active_partitions.size(), 2);
+  // With churning, there should always at least be two tokens.
+  EXPECT_GE(stale_and_active_partitions.active_partitions.size(), 2);
   VerifyStaleAndActivePartitions(stale_and_active_partitions);
 
   DropChangeStream(change_stream_three);
@@ -301,7 +343,191 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   ASSERT_EQ(0, db_->get_change_stream_partition_churner()->GetNumThreads());
 }
 
-}  // namespace
+TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamSplitAndMerge) {
+  absl::SetFlag(&FLAGS_enable_change_stream_churning, false);
+  std::string change_stream_disable_churning = "change_stream_disable_churning";
+  AddChangeStream(change_stream_disable_churning);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      StaleAndActivePartitions stale_and_active_partitions,
+      GetChangeStreamPartitions(change_stream_disable_churning, db_.get()));
+  ASSERT_EQ(stale_and_active_partitions.stale_partitions.size(), 0);
+  ASSERT_EQ(stale_and_active_partitions.active_partitions.size(), 2);
+  // Verify that both of the active partitions have null parents and children.
+  ASSERT_TRUE(stale_and_active_partitions.active_partitions[0].parents.empty());
+  ASSERT_TRUE(
+      stale_and_active_partitions.active_partitions[0].children.empty());
+  ASSERT_TRUE(stale_and_active_partitions.active_partitions[1].parents.empty());
+  ASSERT_TRUE(
+      stale_and_active_partitions.active_partitions[1].children.empty());
+  // One of the initial tokens should have churn type SPLIT. The other initial
+  // token should have churn type MOVE.
+  if (stale_and_active_partitions.active_partitions[0].next_churn == "MOVE") {
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[1].next_churn,
+              "SPLIT");
+  } else {
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[0].next_churn,
+              "SPLIT");
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[1].next_churn,
+              "MOVE");
+  }
+
+  absl::SleepFor(
+      absl::GetFlag(FLAGS_change_stream_churn_thread_sleep_interval) * 5);
+  ChurnPartitionsForChangeStream(change_stream_disable_churning);
+
+  // One token has split, the other has moved. Thus, there should be 3 active
+  // tokens and 2 stale ones.
+  bool split_occurred = false;
+  bool merge_occurred = false;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      stale_and_active_partitions,
+      GetChangeStreamPartitions(change_stream_disable_churning, db_.get()));
+  ASSERT_EQ(stale_and_active_partitions.stale_partitions.size(), 2);
+  ASSERT_EQ(stale_and_active_partitions.active_partitions.size(), 3);
+  for (const auto& active_token :
+       stale_and_active_partitions.active_partitions) {
+    ASSERT_TRUE(active_token.children.empty());
+    ASSERT_FALSE(active_token.parents.empty());
+    for (const auto& parent : active_token.parents) {
+      if (active_token.parents.size() > 1) {
+        merge_occurred = true;
+      }
+      ZETASQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
+                           GetPartition(stale_and_active_partitions, parent));
+      // Verify that each parent should contain the token in its children's
+      // list.
+      ASSERT_THAT(parent_partition.children,
+                  testing::Contains(active_token.partition_token));
+      ASSERT_EQ(parent_partition.end_time, active_token.start_time);
+      if (parent_partition.children.size() > 1) {
+        split_occurred = true;
+      }
+    }
+  }
+  ASSERT_TRUE(split_occurred);
+  ASSERT_FALSE(merge_occurred);
+  // One of the tokens has split into two tokens that should be MERGED next
+  // time.
+  if (stale_and_active_partitions.active_partitions[0].next_churn == "MOVE") {
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[1].next_churn,
+              "MERGE");
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[2].next_churn,
+              "MERGE");
+  } else if (stale_and_active_partitions.active_partitions[1].next_churn ==
+             "MOVE") {
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[0].next_churn,
+              "MERGE");
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[2].next_churn,
+              "MERGE");
+  } else {
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[0].next_churn,
+              "MERGE");
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[1].next_churn,
+              "MERGE");
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[2].next_churn,
+              "MOVE");
+  }
+
+  split_occurred = false;
+  merge_occurred = false;
+  // Run the churner a second time, verify that one of the tokens has merged.
+  absl::SleepFor(
+      absl::GetFlag(FLAGS_change_stream_churn_thread_sleep_interval) * 5);
+  ChurnPartitionsForChangeStream(change_stream_disable_churning);
+  // Two tokens have merged, the other token has moved. Thus, there should be
+  // 2+3=5 stale tokens, and two active tokens.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      stale_and_active_partitions,
+      GetChangeStreamPartitions(change_stream_disable_churning, db_.get()));
+  ASSERT_EQ(stale_and_active_partitions.stale_partitions.size(), 5);
+  ASSERT_EQ(stale_and_active_partitions.active_partitions.size(), 2);
+  for (const auto& active_token :
+       stale_and_active_partitions.active_partitions) {
+    ASSERT_TRUE(active_token.children.empty());
+    ASSERT_FALSE(active_token.parents.empty());
+    if (active_token.parents.size() > 1) {
+      merge_occurred = true;
+    }
+    for (const auto& parent : active_token.parents) {
+      ZETASQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
+                           GetPartition(stale_and_active_partitions, parent));
+      ASSERT_THAT(parent_partition.children,
+                  testing::Contains(active_token.partition_token));
+      ASSERT_EQ(parent_partition.end_time, active_token.start_time);
+      if (parent_partition.children.size() > 1) {
+        split_occurred = true;
+      }
+    }
+  }
+  ASSERT_TRUE(merge_occurred);
+  ASSERT_FALSE(split_occurred);
+  // Two tokens have merged into one token that should be SPLIT next time.
+  if (stale_and_active_partitions.active_partitions[0].next_churn == "MOVE") {
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[1].next_churn,
+              "SPLIT");
+  } else {
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[0].next_churn,
+              "SPLIT");
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[1].next_churn,
+              "MOVE");
+  }
+
+  split_occurred = false;
+  merge_occurred = false;
+  // Run the churner a third time, verify that one of the tokens has split
+  // again.
+  absl::SleepFor(
+      absl::GetFlag(FLAGS_change_stream_churn_thread_sleep_interval) * 5);
+  ChurnPartitionsForChangeStream(change_stream_disable_churning);
+  // One token has split, the other has moved. Thus, there should be 5+2=7
+  // stale tokens, and three active tokens.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      stale_and_active_partitions,
+      GetChangeStreamPartitions(change_stream_disable_churning, db_.get()));
+  ASSERT_EQ(stale_and_active_partitions.stale_partitions.size(), 7);
+  ASSERT_EQ(stale_and_active_partitions.active_partitions.size(), 3);
+  for (const auto& active_token :
+       stale_and_active_partitions.active_partitions) {
+    ASSERT_TRUE(active_token.children.empty());
+    ASSERT_FALSE(active_token.parents.empty());
+    if (active_token.parents.size() > 1) {
+      merge_occurred = true;
+    }
+    for (const auto& parent : active_token.parents) {
+      ZETASQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
+                           GetPartition(stale_and_active_partitions, parent));
+      ASSERT_THAT(parent_partition.children,
+                  testing::Contains(active_token.partition_token));
+      ASSERT_EQ(parent_partition.end_time, active_token.start_time);
+      if (parent_partition.children.size() > 1) {
+        split_occurred = true;
+      }
+    }
+  }
+  // One of the tokens has split into two tokens that should be MERGED next
+  // time.
+  if (stale_and_active_partitions.active_partitions[0].next_churn == "MOVE") {
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[1].next_churn,
+              "MERGE");
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[2].next_churn,
+              "MERGE");
+  } else if (stale_and_active_partitions.active_partitions[1].next_churn ==
+             "MOVE") {
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[0].next_churn,
+              "MERGE");
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[2].next_churn,
+              "MERGE");
+  } else {
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[0].next_churn,
+              "MERGE");
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[1].next_churn,
+              "MERGE");
+    ASSERT_EQ(stale_and_active_partitions.active_partitions[2].next_churn,
+              "MOVE");
+  }
+}
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

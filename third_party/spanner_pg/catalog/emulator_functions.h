@@ -51,9 +51,16 @@ inline constexpr char kPGCastToTimestampFunctionName[] = "pg.cast_to_timestamp";
 inline constexpr char kPGMapDoubleToIntFunctionName[] = "pg.map_double_to_int";
 inline constexpr char kPGLeastFunctionName[] = "pg.least";
 inline constexpr char kPGGreatestFunctionName[] = "pg.greatest";
+
+// Aggregate functions.
 inline constexpr char kPGMinFunctionName[] = "pg.min";
+inline constexpr char kPGNumericMaxFunctionName[] = "pg.numeric_max";
+inline constexpr char kPGNumericMinFunctionName[] = "pg.numeric_min";
+inline constexpr char kPGSumFunctionName[] = "pg.sum";
+inline constexpr char kPGAvgFunctionName[] = "pg.avg";
 
 // PG array functions.
+inline constexpr char kPGArrayLengthFunctionName[] = "pg.array_length";
 inline constexpr char kPGArrayUpperFunctionName[] = "pg.array_upper";
 
 // PG comparison functions.
@@ -70,6 +77,14 @@ inline constexpr char kPGToNumberFunctionName[] = "pg.to_number";
 inline constexpr char kPGToTimestampFunctionName[] = "pg.to_timestamp";
 inline constexpr char kPGToCharFunctionName[] = "pg.to_char";
 
+// PG mathematical functions.
+inline constexpr char kPGNumericAbsFunctionName[] = "pg.numeric_abs";
+inline constexpr char kPGNumericCeilFunctionName[] = "pg.numeric_ceil";
+inline constexpr char kPGNumericCeilingFunctionName[] = "pg.numeric_ceiling";
+inline constexpr char kPGNumericFloorFunctionName[] = "pg.numeric_floor";
+inline constexpr char kPGNumericModFunctionName[] = "pg.numeric_mod";
+inline constexpr char kPGNumericTruncFunctionName[] = "pg.numeric_trunc";
+
 // PG string functions.
 inline constexpr char kPGQuoteIdentFunctionName[] = "pg.quote_ident";
 inline constexpr char kPGSubstringFunctionName[] = "pg.substring";
@@ -81,6 +96,26 @@ inline constexpr char kPGRegexpSplitToArrayFunctionName[] =
 inline constexpr char kPGToJsonBFunctionName[] = "pg.to_jsonb";
 inline constexpr char kPGJsonBSubscriptTextFunctionName[] =
     "pg.jsonb_subscript_text";
+inline constexpr char kPGJsonBArrayElementFunctionName[] =
+    "pg.jsonb_array_element";
+inline constexpr char kPGJsonBObjectFieldFunctionName[] =
+    "pg.jsonb_object_field";
+inline constexpr char kPGJsonBTypeofFunctionName[] = "pg.jsonb_typeof";
+
+// PG NUMERIC functions.
+inline constexpr char kPGNumericAddFunctionName[] = "pg.numeric_add";
+inline constexpr char kPGNumericDivideFunctionName[] = "pg.numeric_divide";
+inline constexpr char kPGNumericDivTruncFunctionName[] = "pg.numeric_div_trunc";
+inline constexpr char kPGNumericMultiplyFunctionName[] = "pg.numeric_multiply";
+inline constexpr char kPGNumericSubtractFunctionName[] = "pg.numeric_subtract";
+inline constexpr char kPGNumericUminusFunctionName[] = "pg.numeric_uminus";
+inline constexpr char kPGCastToNumericFunctionName[] =
+    "pg.cast_to_numeric";
+inline constexpr char kPGNumericCastToDoubleFunctionName[] =
+    "pg.cast_to_double";
+inline constexpr char kPGNumericCastToStringFunctionName[] =
+    "pg.cast_to_string";
+inline constexpr char kPGNumericCastToInt64FunctionName[] = "pg.cast_to_int64";
 
 using SpannerPGFunctions = std::vector<std::unique_ptr<zetasql::Function>>;
 

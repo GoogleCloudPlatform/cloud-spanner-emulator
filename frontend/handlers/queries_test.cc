@@ -222,9 +222,15 @@ TEST_F(QueryApiTest, ExecuteSqlWithParameters) {
   spanner_api::ResultSet response;
   ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
   EXPECT_THAT(response, EqualsProto(
-                            R"(
+                            R"pb(
                               metadata {
                                 row_type {
+                                  fields {
+                                    name: "param"
+                                    type { code: STRING }
+                                  }
+                                }
+                                undeclared_parameters {
                                   fields {
                                     name: "param"
                                     type { code: STRING }
@@ -234,7 +240,51 @@ TEST_F(QueryApiTest, ExecuteSqlWithParameters) {
                               rows { values { string_value: "value" } }
                               rows { values { string_value: "value" } }
                               rows { values { string_value: "value" } }
-                            )"));
+                            )pb"));
+}
+
+TEST_F(QueryApiTest, ExecuteSqlWithDmlAndParameters) {
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction transaction_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"""(
+        sql: "INSERT INTO test_table (int64_col, string_col) "
+             "VALUES (@p1, @p2)"
+      )""");
+  request.set_session(test_session_uri_);
+  request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
+  request.mutable_transaction()->set_id(transaction_response.id());
+
+  spanner_api::ResultSet response;
+  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  EXPECT_THAT(
+      response,
+      EqualsProto(
+          R"pb(
+            metadata {
+              row_type {}
+              undeclared_parameters {
+                fields {
+                  name: "p1"
+                  type { code: INT64 }
+                }
+                fields {
+                  name: "p2"
+                  type { code: STRING }
+                }
+              }
+            }
+            stats {
+              query_plan { plan_nodes { display_name: "No query plan" } }
+              row_count_exact: 0
+            }
+          )pb"));
 }
 
 TEST_F(QueryApiTest, ExecuteStreamingSql) {
@@ -292,9 +342,15 @@ TEST_F(QueryApiTest, ExecuteStreamingSqlWithParameters) {
   std::vector<spanner_api::PartialResultSet> response;
   ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
   EXPECT_THAT(response, ElementsAre(EqualsProto(
-                            R"(
+                            R"pb(
                               metadata {
                                 row_type {
+                                  fields {
+                                    name: "param"
+                                    type { code: STRING }
+                                  }
+                                }
+                                undeclared_parameters {
                                   fields {
                                     name: "param"
                                     type { code: STRING }
@@ -304,30 +360,69 @@ TEST_F(QueryApiTest, ExecuteStreamingSqlWithParameters) {
                               values { string_value: "value" }
                               values { string_value: "value" }
                               values { string_value: "value" }
-                            )")));
+                            )pb")));
 }
 
-TEST_F(QueryApiTest, RejectsPlanMode) {
+TEST_F(QueryApiTest, ExecuteStreamingSqlWithDmlAndParameters) {
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction transaction_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
-      R"(
+      R"""(
+        sql: "INSERT INTO test_table (int64_col, string_col) "
+             "VALUES (@p1, @p2)"
+      )""");
+  request.set_session(test_session_uri_);
+  request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
+  request.mutable_transaction()->set_id(transaction_response.id());
+
+  std::vector<spanner_api::PartialResultSet> response;
+  ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  EXPECT_THAT(response, ElementsAre(EqualsProto(
+                            R"pb(
+                              metadata {
+                                row_type {}
+                                undeclared_parameters {
+                                  fields {
+                                    name: "p1"
+                                    type { code: INT64 }
+                                  }
+                                  fields {
+                                    name: "p2"
+                                    type { code: STRING }
+                                  }
+                                }
+                              }
+                              stats { row_count_exact: 0 }
+                            )pb")));
+}
+
+TEST_F(QueryApiTest, AcceptsPlanMode) {
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"pb(
         transaction { single_use { read_only { strong: true } } }
         query_mode: PLAN
         sql: "SELECT * FROM test_table"
-      )");
+      )pb");
   request.set_session(test_session_uri_);
 
-  // PLAN mode rejected in non-streaming case.
+  // PLAN mode accepted in non-streaming case.
   {
     spanner_api::ResultSet response;
     EXPECT_THAT(ExecuteSql(request, &response),
-                StatusIs(absl::StatusCode::kUnimplemented));
+                StatusIs(absl::StatusCode::kOk));
   }
 
-  // PLAN mode rejected in streaming case.
+  // PLAN mode accepted in streaming case.
   {
     std::vector<spanner_api::PartialResultSet> response;
     EXPECT_THAT(ExecuteStreamingSql(request, &response),
-                StatusIs(absl::StatusCode::kUnimplemented));
+                StatusIs(absl::StatusCode::kOk));
   }
 }
 

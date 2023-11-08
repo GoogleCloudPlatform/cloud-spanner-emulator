@@ -50,6 +50,7 @@
 #include "absl/strings/substitute.h"
 #include "absl/synchronization/mutex.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
+#include "third_party/spanner_pg/catalog/type.h"
 #include "zetasql/base/status_macros.h"
 
 namespace postgres_translator {
@@ -401,6 +402,14 @@ absl::Status EngineSystemCatalog::GetPostgreSQLFunctions(
     output->insert(function.get());
   }
 
+  return absl::OkStatus();
+}
+
+absl::Status EngineSystemCatalog::GetPostgreSQLTypes(
+    absl::flat_hash_set<const PostgresTypeMapping*>* output) const {
+  for (const auto& [type_name, type_mapping] : engine_types_) {
+    output->insert(type_mapping);
+  }
   return absl::OkStatus();
 }
 

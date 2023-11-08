@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "zetasql/public/value.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
 #include "absl/log/log.h"
@@ -153,37 +154,61 @@ absl::Status ChangeStreamPartitionChurner::ChurnPartitions(
   // Read the change stream partition table.
   backend::ReadArg read_arg;
   read_arg.change_stream_for_partition_table = change_stream->Name();
-  read_arg.columns = {"partition_token", "start_time", "end_time", "parents",
-                      "children"};
+  read_arg.columns = {"partition_token", "start_time", "end_time",
+                      "parents",         "children",   "next_churn"};
   read_arg.key_set = KeySet::All();
   std::unique_ptr<backend::RowCursor> cursor;
   absl::Status status = txn->Read(read_arg, &cursor);
   ZETASQL_RETURN_IF_ERROR(status);
-  std::vector<std::string> churned_partitions;
+  absl::flat_hash_map<std::string, std::vector<std::string>> churned_partitions;
+  // TODO : Consider optimizing the query to not return stale
+  // tokens, i.e. prefix the token with start timestamp and use key range
+  // prefix.
   while (cursor->Next()) {
     // Only retrieve the active tokens that should be churned.
-    if (cursor->ColumnValue(2).is_null()) {
-      const std::string& partition_token =
-          cursor->ColumnValue(0).string_value();
-      const absl::Time start_time = cursor->ColumnValue(1).ToTime();
-      const absl::Time expected_end_time =
-          start_time + absl::GetFlag(FLAGS_change_stream_churning_interval);
-      if (expected_end_time < clock_->Now()) {
-        // Only churn the tokens whose start time is more than the specified
-        // churn interval in the past.
-        churned_partitions.push_back(partition_token);
+    if (!cursor->ColumnValue(2).is_null()) {
+      continue;
+    }
+    const std::string& partition_token = cursor->ColumnValue(0).string_value();
+    const std::string& churn_type = cursor->ColumnValue(5).string_value();
+    const absl::Time start_time = cursor->ColumnValue(1).ToTime();
+    const absl::Time expected_end_time =
+        start_time + absl::GetFlag(FLAGS_change_stream_churning_interval);
+    if (expected_end_time < clock_->Now()) {
+      // Only churn the tokens whose start time is more than the specified
+      // churn interval in the past.
+      if (!churned_partitions.contains(churn_type)) {
+        churned_partitions.emplace(churn_type, std::vector<std::string>());
       }
+      churned_partitions[churn_type].push_back(partition_token);
     }
   }
-  for (const auto& churned_partition : churned_partitions) {
+  for (const auto& [churn_type, partition_tokens] : churned_partitions) {
     // Churn the tokens retrieved above.
-    ZETASQL_RETURN_IF_ERROR(
-        ChurnPartition(change_stream_name, churned_partition, txn.get()));
+    if (churn_type == "MOVE") {
+      // Make sure to move each partition.
+      for (const auto& partition_token : partition_tokens) {
+        ZETASQL_RETURN_IF_ERROR(
+            MovePartition(change_stream_name, partition_token, txn.get()));
+      }
+    } else if (churn_type == "SPLIT") {
+      for (const auto& partition_token : partition_tokens) {
+        ZETASQL_RETURN_IF_ERROR(
+            SplitPartition(change_stream_name, partition_token, txn.get()));
+      }
+    } else {
+      int number_of_tokens = partition_tokens.size();
+      // Check that the number of tokens to merge is exactly 2.
+      ZETASQL_RET_CHECK(churn_type == "MERGE");
+      ZETASQL_RET_CHECK(number_of_tokens == 2);
+      ZETASQL_RETURN_IF_ERROR(MergePartition(change_stream_name, partition_tokens[0],
+                                     partition_tokens[1], txn.get()));
+    }
   }
   return txn->Commit();
 }
 
-absl::Status ChangeStreamPartitionChurner::ChurnPartition(
+absl::Status ChangeStreamPartitionChurner::MovePartition(
     absl::string_view change_stream_name, absl::string_view partition_token,
     ReadWriteTransaction* txn) {
   // Generate a new partition token string
@@ -193,12 +218,13 @@ absl::Status ChangeStreamPartitionChurner::ChurnPartition(
   // Insert a new partition with the start time set to the transaction
   // commit timestamp, and the parents set to the churned partition's token
   // string.
+  // The partition that is being moved should always be moved.
   m.AddWriteOp(
       MutationOpType::kInsert,
       MakeChangeStreamPartitionTableName(change_stream_name),
-      {"partition_token", "start_time", "parents"},
+      {"partition_token", "start_time", "parents", "next_churn"},
       {{String(new_partition_token), String("spanner.commit_timestamp()"),
-        StringArray({std::string(partition_token)})}});
+        StringArray({std::string(partition_token)}), String("MOVE")}});
   // Modify the existing partition with the end timestamp set to the transaction
   // commit timestamp, and the children set to the new partition token.
   m.AddWriteOp(MutationOpType::kUpdate,
@@ -206,6 +232,78 @@ absl::Status ChangeStreamPartitionChurner::ChurnPartition(
                {"partition_token", "end_time", "children"},
                {{String(partition_token), String("spanner.commit_timestamp()"),
                  StringArray({new_partition_token})}});
+  return txn->Write(m);
+}
+
+absl::Status ChangeStreamPartitionChurner::SplitPartition(
+    absl::string_view change_stream_name, absl::string_view partition_token,
+    ReadWriteTransaction* txn) {
+  // Generate a new partition token string
+  const std::string new_partition_token_one = CreatePartitionTokenString();
+  const std::string new_partition_token_two = CreatePartitionTokenString();
+
+  Mutation m;
+  // Insert a new partition with the start time set to the transaction
+  // commit timestamp, and the parents set to the churned partition's token
+  // string.
+  // If the partition is being split, the next time it should be merged.
+  m.AddWriteOp(
+      MutationOpType::kInsert,
+      MakeChangeStreamPartitionTableName(change_stream_name),
+      {"partition_token", "start_time", "parents", "next_churn"},
+      {{String(new_partition_token_one), String("spanner.commit_timestamp()"),
+        StringArray({std::string(partition_token)}), String("MERGE")}});
+  m.AddWriteOp(
+      MutationOpType::kInsert,
+      MakeChangeStreamPartitionTableName(change_stream_name),
+      {"partition_token", "start_time", "parents", "next_churn"},
+      {{String(new_partition_token_two), String("spanner.commit_timestamp()"),
+        StringArray({std::string(partition_token)}), String("MERGE")}});
+  // Modify the existing partition with the end timestamp set to the transaction
+  // commit timestamp, and the children set to the new partition tokens.
+  m.AddWriteOp(
+      MutationOpType::kUpdate,
+      MakeChangeStreamPartitionTableName(change_stream_name),
+      {"partition_token", "end_time", "children"},
+      {{String(partition_token), String("spanner.commit_timestamp()"),
+        StringArray({new_partition_token_one, new_partition_token_two})}});
+  return txn->Write(m);
+}
+
+absl::Status ChangeStreamPartitionChurner::MergePartition(
+    absl::string_view change_stream_name,
+    absl::string_view first_partition_token,
+    absl::string_view second_partition_token, ReadWriteTransaction* txn) {
+  // Generate a new partition token string
+  const std::string new_partition_token = CreatePartitionTokenString();
+
+  Mutation m;
+  // Insert a new partition with the start time set to the transaction
+  // commit timestamp, and the parents set to the two merged parents.
+  // If the partition is being meged, next time it should be split.
+  m.AddWriteOp(
+      MutationOpType::kInsert,
+      MakeChangeStreamPartitionTableName(change_stream_name),
+      {"partition_token", "start_time", "parents", "next_churn"},
+      {{String(new_partition_token), String("spanner.commit_timestamp()"),
+        StringArray({std::string(first_partition_token),
+                     std::string(second_partition_token)}),
+        String("SPLIT")}});
+  // Modify the existing partitions with the end timestamp set to the
+  // transaction commit timestamp, and the children set to the new partition
+  // token.
+  m.AddWriteOp(
+      MutationOpType::kUpdate,
+      MakeChangeStreamPartitionTableName(change_stream_name),
+      {"partition_token", "end_time", "children"},
+      {{String(first_partition_token), String("spanner.commit_timestamp()"),
+        StringArray({new_partition_token})}});
+  m.AddWriteOp(
+      MutationOpType::kUpdate,
+      MakeChangeStreamPartitionTableName(change_stream_name),
+      {"partition_token", "end_time", "children"},
+      {{String(second_partition_token), String("spanner.commit_timestamp()"),
+        StringArray({new_partition_token})}});
   return txn->Write(m);
 }
 

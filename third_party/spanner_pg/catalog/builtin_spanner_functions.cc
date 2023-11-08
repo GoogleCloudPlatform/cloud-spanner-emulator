@@ -41,6 +41,7 @@
 #include "zetasql/public/types/type_factory.h"
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -107,15 +108,77 @@ static void AddPgNumericSignaturesForExistingFunctions(
   const zetasql::Type* gsql_pg_numeric_array =
       types::PgNumericArrayMapping()->mapped_type();
   std::vector<FunctionNameWithSignature> functions_with_new_signatures = {
-      {"min",
-       {{{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}}},
-      {"max",
-       {{{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}}},
       {"array_cat",
        {{{gsql_pg_numeric_array,
           {gsql_pg_numeric_array, gsql_pg_numeric_array},
-          /*context_ptr=*/nullptr}}}},
-  };
+          /*context_ptr=*/nullptr}}}}};
+
+    functions_with_new_signatures.push_back(
+        {"min",
+         {{
+             {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
+             /*has_postgres_proc_oid=*/true,
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"pg.numeric_min",
+         }}});
+    functions_with_new_signatures.push_back(
+        {"max",
+         {{
+             {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
+             /*has_postgres_proc_oid=*/true,
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"pg.numeric_max",
+         }}});
+    functions_with_new_signatures.push_back(
+        {"abs",
+         {{
+             {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
+             /*has_postgres_proc_oid=*/true,
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"pg.numeric_abs",
+         }}});
+    functions_with_new_signatures.push_back(
+        {"ceil",
+         {{
+             {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
+             /*has_postgres_proc_oid=*/true,
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"pg.numeric_ceil",
+         }}});
+    functions_with_new_signatures.push_back(
+        {"ceiling",
+         {{
+             {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
+             /*has_postgres_proc_oid=*/true,
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"pg.numeric_ceiling",
+         }}});
+    functions_with_new_signatures.push_back(
+        {"floor",
+         {{
+             {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
+             /*has_postgres_proc_oid=*/true,
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"pg.numeric_floor",
+         }}});
+    functions_with_new_signatures.push_back(
+        {"mod",
+         {{
+             {gsql_pg_numeric, {gsql_pg_numeric, gsql_pg_numeric},
+             /*context_ptr=*/nullptr},
+             /*has_postgres_proc_oid=*/true,
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"pg.numeric_mod",
+         }}});
+    functions_with_new_signatures.push_back(
+        {"trunc",
+         {{
+             {gsql_pg_numeric, {gsql_pg_numeric, gsql_int64},
+             /*context_ptr=*/nullptr},
+             /*has_postgres_proc_oid=*/true,
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"pg.numeric_trunc",
+         }}});
 
     functions_with_new_signatures.push_back({"count",
                                              {{{gsql_int64,
@@ -135,6 +198,94 @@ static void AddPgNumericNewFunctions(
     std::vector<PostgresFunctionArguments>& functions) {
   const zetasql::Type* gsql_pg_numeric =
       types::PgNumericMapping()->mapped_type();
+  // Basic arithmetic functions
+  std::string emulator_add_fn_name = "pg.numeric_add";
+  std::string emulator_subtract_fn_name = "pg.numeric_subtract";
+  std::string emulator_divide_fn_name = "pg.numeric_divide";
+  std::string emulator_multiply_fn_name = "pg.numeric_multiply";
+  std::string emulator_abs_fn_name = "pg.numeric_abs";
+  std::string emulator_mod_fn_name = "pg.numeric_mod";
+  std::string emulator_div_trunc_fn_name = "pg.numeric_div_trunc";
+  std::string emulator_uminus_fn_name = "pg.numeric_uminus";
+  functions.push_back(
+      {"numeric_add",
+       "$add",
+       {{{gsql_pg_numeric,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_add_fn_name}}});
+  functions.push_back(
+      {"numeric_sub",
+       "$subtract",
+       {{{gsql_pg_numeric,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_subtract_fn_name}}});
+  functions.push_back(
+      {"numeric_div",
+       "$divide",
+       {{{gsql_pg_numeric,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_divide_fn_name}}});
+  functions.push_back(
+      {"numeric_mul",
+       "$multiply",
+       {{{gsql_pg_numeric,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_multiply_fn_name}}});
+  functions.push_back(
+      {"numeric_abs",
+       "abs",
+       {{{gsql_pg_numeric,
+          {gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_abs_fn_name}}});
+  functions.push_back(
+      {"numeric_mod",
+       "mod",
+       {{{gsql_pg_numeric,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_mod_fn_name}}});
+  functions.push_back({"numeric_div_trunc",
+                       "div",
+                       {{{gsql_pg_numeric,
+                          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_div_trunc_fn_name}}});
+  functions.push_back(
+      {"div",
+       "div",
+       {{{gsql_pg_numeric,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_div_trunc_fn_name}}});
+  functions.push_back(
+      {"numeric_uminus",
+       "$unary_minus",
+       {{{gsql_pg_numeric, {gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_postgres_proc_oid=*/true,
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_uminus_fn_name}}});
 
   // Basic comparison functions
   functions.push_back({"numeric_eq",
@@ -241,11 +392,93 @@ static void AddPgJsonbSignaturesForExistingFunctions(
 static void AddPgJsonbNewFunctions(
     std::vector<PostgresFunctionArguments>& functions) {
   const zetasql::Type* gsql_pg_jsonb = types::PgJsonbMapping()->mapped_type();
+  const zetasql::Type* gsql_date = zetasql::types::DateType();
+  const zetasql::Type* gsql_int64_arr = zetasql::types::Int64ArrayType();
+  const zetasql::Type* gsql_string_arr = zetasql::types::StringArrayType();
+  const zetasql::Type* gsql_bool_arr = zetasql::types::BoolArrayType();
+  const zetasql::Type* gsql_double_arr = zetasql::types::DoubleArrayType();
+  const zetasql::Type* gsql_bytes_arr = zetasql::types::BytesArrayType();
+  const zetasql::Type* gsql_timestamp_arr =
+      zetasql::types::TimestampArrayType();
+  const zetasql::Type* gsql_date_arr = zetasql::types::DateArrayType();
+  const zetasql::Type* gsql_pg_numeric =
+      types::PgNumericMapping()->mapped_type();
+  const zetasql::Type* gsql_pg_numeric_arr = nullptr;
+  ABSL_CHECK_OK(
+      GetTypeFactory()->MakeArrayType(gsql_pg_numeric, &gsql_pg_numeric_arr));
+  const zetasql::Type* gsql_pg_jsonb_arr = nullptr;
+  ABSL_CHECK_OK(GetTypeFactory()->MakeArrayType(gsql_pg_jsonb, &gsql_pg_jsonb_arr));
 
   functions.push_back(
-      {"jsonb_typeof",
-       "json_type",
-       {{{gsql_string, {gsql_pg_jsonb}, /*context_ptr=*/nullptr}}}});
+      {"to_jsonb",
+       "pg.to_jsonb",
+       {{{gsql_pg_jsonb, {gsql_pg_numeric}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_double}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_bool}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_string}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_bytes}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_timestamp}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_date}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_pg_jsonb}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_int64}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_int64_arr}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_string_arr}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_bool_arr}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_double_arr}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_bytes_arr}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_timestamp_arr}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_date_arr}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_pg_numeric_arr}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_pg_jsonb_arr}, /*context_ptr=*/nullptr}}}});
+
+  std::string emulator_jsonb_typeof_fn_name = "pg.jsonb_typeof";
+  std::string emulator_jsonb_array_element_fn_name = "pg.jsonb_array_element";
+  std::string emulator_jsonb_object_field_fn_name = "pg.jsonb_object_field";
+
+  functions.push_back({"jsonb_typeof",
+                       "json_type",
+                       {{{gsql_string,
+                          {gsql_pg_jsonb},
+                          /*context_ptr=*/nullptr},
+                         /*has_postgres_proc_oid=*/true,
+                         /*has_mapped_function=*/true,
+                         /*explicit_mapped_function_name=*/
+                         emulator_jsonb_typeof_fn_name}}});
+
+  // Register new function mapping for '->' operator on JSONB arrays.
+  functions.push_back({"jsonb_array_element",
+                       "$subscript",
+                       {{{gsql_pg_jsonb,
+                          {gsql_pg_jsonb, gsql_int64},
+                          /*context_ptr=*/nullptr},
+                         /*has_postgres_proc_oid=*/true,
+                         /*has_mapped_function=*/true,
+                         /*explicit_mapped_function_name=*/
+                         emulator_jsonb_array_element_fn_name}}});
+
+  // Register new function mapping for '->' operator on JSONB objects.
+  functions.push_back({"jsonb_object_field",
+                       "$subscript",
+                       {{{gsql_pg_jsonb,
+                          {gsql_pg_jsonb, gsql_string},
+                          /*context_ptr=*/nullptr},
+                         /*has_postgres_proc_oid=*/true,
+                         /*has_mapped_function=*/true,
+                         /*explicit_mapped_function_name=*/
+                         emulator_jsonb_object_field_fn_name}}});
+
+  // Register new function mapping for '->>' operator on JSONB arrays.
+  functions.push_back({"jsonb_array_element_text",
+                       "pg.jsonb_subscript_text",
+                       {{{gsql_string,
+                          {gsql_pg_jsonb, gsql_int64},
+                          /*context_ptr=*/nullptr}}}});
+  // Register new function mapping for '->>' operator on JSONB objects.
+  functions.push_back({"jsonb_object_field_text",
+                       "pg.jsonb_subscript_text",
+                       {{{gsql_string,
+                          {gsql_pg_jsonb, gsql_string},
+                          /*context_ptr=*/nullptr}}}});
 }
 
 void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions) {
@@ -426,6 +659,9 @@ void AddPgStringFunctions(std::vector<PostgresFunctionArguments>& functions) {
 }
 
 void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_pg_numeric =
+      types::PgNumericMapping()->mapped_type();
+
   functions.push_back({"pending_commit_timestamp",
                        "pending_commit_timestamp",
                        {{{gsql_timestamp, {}, /*context_ptr=*/nullptr}}},

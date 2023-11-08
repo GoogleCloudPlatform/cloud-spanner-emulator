@@ -77,6 +77,7 @@ cc_test(
     deps = [
         "indexing",
         "//tests/common:proto_matchers",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
@@ -134,6 +135,7 @@ cc_test(
     deps = [
         "rows",
         "//tests/common:proto_matchers",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",

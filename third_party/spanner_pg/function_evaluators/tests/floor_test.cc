@@ -87,7 +87,7 @@ TEST_F(FloorTest, DoesNothingForSpecialValues) {
 
 TEST_F(FloorTest, ReturnsErrorForUnderflow) {
   EXPECT_THAT(Floor(MinNumericString()),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(FloorTest, ReturnsErrorForInvalidInput) {

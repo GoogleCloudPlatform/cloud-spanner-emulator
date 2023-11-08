@@ -22,15 +22,16 @@
 #include <string>
 
 #include "google/protobuf/struct.pb.h"
+#include "google/spanner/v1/spanner.pb.h"
+#include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "backend/access/read.h"
-#include "backend/access/write.h"
 #include "backend/query/change_stream/change_stream_query_validator.h"
 #include "backend/query/function_catalog.h"
+#include "backend/query/query_context.h"
 #include "backend/schema/catalog/schema.h"
 #include "absl/status/status.h"
 
@@ -66,6 +67,9 @@ struct QueryResult {
   // with returning clause.
   std::unique_ptr<RowCursor> rows;
 
+  // Map containing the types of all query parameters.
+  zetasql::QueryParametersMap parameter_types;
+
   // The number of modified rows.
   int64_t modified_row_count = 0;
 
@@ -74,18 +78,6 @@ struct QueryResult {
 
   // Query execution elapsed time.
   absl::Duration elapsed_time;
-};
-
-// QueryContext provides resources required to execute a query.
-struct QueryContext {
-  // The database schema.
-  const Schema* schema;
-
-  // A reader for reading data.
-  RowReader* reader;
-
-  // A writer for writing data for DML requests. Can be null for SELECT queries.
-  RowWriter* writer;
 };
 
 // QueryEngine handles SQL-related requests.
@@ -102,6 +94,11 @@ class QueryEngine {
   // Skip execution if validate_only is true.
   absl::StatusOr<QueryResult> ExecuteSql(const Query& query,
                                          const QueryContext& context) const;
+
+  // Executes a SQL query (SELECT query or DML) using the given query mode.
+  absl::StatusOr<QueryResult> ExecuteSql(
+      const Query& query, const QueryContext& context,
+      v1::ExecuteSqlRequest_QueryMode query_mode) const;
 
   // Returns OK if query is partitionable.
   absl::Status IsPartitionable(const Query& query,

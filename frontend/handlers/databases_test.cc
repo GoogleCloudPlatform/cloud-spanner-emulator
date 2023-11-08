@@ -247,11 +247,9 @@ TEST_F(DatabaseApiTest, CreateDatabaseWithGSQLDialect) {
 }
 
 TEST_F(DatabaseApiTest, CreateDatabaseWithPostgresDialectDisabledByDefault) {
-  EXPECT_THAT(CreateDatabase(test_instance_uri_,
-                             absl::StrCat(test_database_name_, "_pg_1"),
-                             /* extra_statements = */ {},
-                             database_api::DatabaseDialect::POSTGRESQL),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+  ZETASQL_EXPECT_OK(CreateDatabase(
+      test_instance_uri_, absl::StrCat(test_database_name_, "_pg_1"),
+      /* extra_statements = */ {}, database_api::DatabaseDialect::POSTGRESQL));
 }
 
 TEST_F(DatabaseApiTest, CreateDatabaseWithPostgresDialect) {

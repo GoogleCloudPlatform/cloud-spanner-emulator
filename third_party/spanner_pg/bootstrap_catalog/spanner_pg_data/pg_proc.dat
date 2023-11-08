@@ -39,4 +39,8 @@
   prorettype => 'timestamptz', proargtypes => 'timestamptz text',
   prosrc => 'timestamptz_subtract' },
 
+{ proname => 'date_bin', pronamespace => 'spanner',
+  prorettype => 'timestamptz', proargtypes => 'text timestamptz timestamptz',
+  prosrc => 'timestamptz_bin' },
+
 ]

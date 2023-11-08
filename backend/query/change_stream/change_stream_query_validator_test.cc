@@ -211,6 +211,7 @@ TEST_F(ChangeStreamQueryValidatorTest,
             "_change_stream_partition_change_stream_test_table");
   EXPECT_EQ(validator.change_stream_metadata().data_table,
             "_change_stream_data_change_stream_test_table");
+  ASSERT_FALSE(validator.change_stream_metadata().is_pg);
   ASSERT_TRUE(validator.change_stream_metadata().is_change_stream_query);
 }
 

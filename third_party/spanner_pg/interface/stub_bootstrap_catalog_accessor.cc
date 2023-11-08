@@ -51,4 +51,10 @@ absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
   return absl::UnimplementedError("invoked stub GetPgTypeDataFromBootstrap");
 }
 
+absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
+    const PgBootstrapCatalog* catalog, int64_t type_oid) {
+  return absl::UnimplementedError("invoked stub GetPgTypeDataFromBootstrap");
+}
+
+
 }  // namespace postgres_translator

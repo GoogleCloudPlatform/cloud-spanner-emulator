@@ -136,15 +136,13 @@ absl::Status ProcessDataChangeRecordsAndStreamBack(
     ServerStream<spanner_api::PartialResultSet>* stream) {
   std::vector<spanner_api::PartialResultSet> responses;
   if (IsQueryResultEmpty(result) && expect_heartbeat) {
-    ZETASQL_ASSIGN_OR_RETURN(responses,
-                     ConvertHeartbeatTimestampToPartialResultSetProto(
-                         scan_end, *expect_metadata));
+    ZETASQL_ASSIGN_OR_RETURN(responses, ConvertHeartbeatTimestampToStruct(
+                                    scan_end, *expect_metadata));
     *expect_metadata = false;
     *last_record_time = scan_end;
   } else if (!IsQueryResultEmpty(result)) {
-    ZETASQL_ASSIGN_OR_RETURN(responses,
-                     ConvertDataTableRowCursorToPartialResultSetProto(
-                         result.rows.get(), *expect_metadata));
+    ZETASQL_ASSIGN_OR_RETURN(responses, ConvertDataTableRowCursorToStruct(
+                                    result.rows.get(), *expect_metadata));
     *last_record_time = scan_end;
     *expect_metadata = false;
   }
@@ -178,11 +176,10 @@ absl::Status ChangeStreamsHandler::ExecuteInitialQuery(
     // Initial query is guaranteed to return at least 1 child partition record.
     ZETASQL_RET_CHECK(!IsQueryResultEmpty(partition_results));
 
-    ZETASQL_ASSIGN_OR_RETURN(
-        auto responses,
-        ConvertChildPartitionRecordsToPartialResultSetProto(
-            partition_results.rows.get(), metadata().start_timestamp,
-            /*need_metadata=*/true));
+    ZETASQL_ASSIGN_OR_RETURN(auto responses, ConvertPartitionTableRowCursorToStruct(
+                                         partition_results.rows.get(),
+                                         metadata().start_timestamp,
+                                         /*need_metadata=*/true));
 
     for (auto& response : responses) {
       stream->Send(response);
@@ -348,7 +345,7 @@ absl::Status ChangeStreamsHandler::ExecutePartitionQuery(
             ZETASQL_RET_CHECK(!IsQueryResultEmpty(tail_partition_records_results));
             ZETASQL_ASSIGN_OR_RETURN(
                 auto responses,
-                ConvertChildPartitionRecordsToPartialResultSetProto(
+                ConvertPartitionTableRowCursorToStruct(
                     tail_partition_records_results.rows.get(),
                     /*initial_start_time=*/std::nullopt, expect_metadata));
             expect_metadata = false;
@@ -370,9 +367,8 @@ absl::Status ChangeStreamsHandler::ExecutePartitionQuery(
 
   // If expect_metadata is still true, stub a heartbeat record.
   if (expect_metadata == true) {
-    ZETASQL_ASSIGN_OR_RETURN(auto extra_heartbeat,
-                     ConvertHeartbeatTimestampToPartialResultSetProto(
-                         tvf_end, expect_metadata));
+    ZETASQL_ASSIGN_OR_RETURN(auto extra_heartbeat, ConvertHeartbeatTimestampToStruct(
+                                               tvf_end, expect_metadata));
     for (auto& response : extra_heartbeat) {
       stream->Send(response);
     }

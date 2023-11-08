@@ -66,6 +66,25 @@ absl::Status GetGeneratedColumnsInTopologicalOrder(
   return sorter.TopologicalOrder(generated_columns);
 }
 
+// Check if any dependent column is present in the user supplied columns for the
+// generated key column.
+bool IsAnyDependentColumnPresent(
+    const Column* generated_column,
+    std::vector<std::string> user_supplied_columns) {
+  ABSL_DCHECK(generated_column->is_generated());
+  for (const auto& dep_col : generated_column->dependent_columns()) {
+    if (dep_col->is_generated() &&
+        generated_column->table()->FindKeyColumn(dep_col->Name()) != nullptr) {
+      return IsAnyDependentColumnPresent(dep_col, user_supplied_columns);
+    }
+    if (std::find(user_supplied_columns.begin(), user_supplied_columns.end(),
+                  dep_col->Name()) != user_supplied_columns.end()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 absl::StatusOr<std::unique_ptr<zetasql::PreparedExpression>>
 PrepareExpression(const Column* generated_column,
                   zetasql::Catalog* function_catalog) {
@@ -138,8 +157,11 @@ absl::Status GeneratedColumnEffector::Effect(
   // Evaluate generated columns in topological order.
   for (int i = 0; i < generated_columns_.size(); ++i) {
     const Column* generated_column = generated_columns_[i];
-    if (table_->FindKeyColumn(generated_column->Name()) == nullptr) {
-      // skip non-key columns.
+    if (!generated_column->has_default_value() &&
+        table_->FindKeyColumn(generated_column->Name()) == nullptr) {
+      // skip non-key columns except default columns since generated key columns
+      // may depend on default columns values of which would need to be
+      // evaluated.
       continue;
     }
     auto column_supplied_itr = std::find(op.columns.begin(), op.columns.end(),
@@ -157,6 +179,20 @@ absl::Status GeneratedColumnEffector::Effect(
         return error::DefaultPKNeedsExplicitValue(generated_column->FullName(),
                                                   "Update/Delete");
       }
+    } else if (generated_column->is_generated() && is_user_supplied_value) {
+      // If this column is generated column and user is supplying a value for it
+      // and the user is not supplying values for dependent column values to
+      // evaluate generated column value, we don't need to compute its generated
+      // value.
+      if (!IsAnyDependentColumnPresent(generated_column, op.columns)) {
+        continue;
+      }
+      // Users should supply values for generated columns only in update
+      // operations.
+      if (op.type != MutationOpType::kUpdate) {
+        return error::UserSuppliedValueInNonUpdateGpk(
+            generated_column->FullName());
+      }
     }
 
     for (int i = 0; i < op.rows.size(); ++i) {
@@ -167,6 +203,13 @@ absl::Status GeneratedColumnEffector::Effect(
       ZETASQL_ASSIGN_OR_RETURN(
           zetasql::Value value,
           ComputeGeneratedColumnValue(generated_column, row_column_values[i]));
+      if (generated_column->is_generated() && is_user_supplied_value) {
+        size_t index = column_supplied_itr - op.columns.begin();
+        zetasql::Value provided_value = op.rows[i][index];
+        if (provided_value != value) {
+          return error::GeneratedPkModified(generated_column->FullName());
+        }
+      }
       // Update row_column_values so that other dependent columns on this
       // generated column can use the value.
       row_column_values[i][generated_column->Name()] = value;

@@ -90,7 +90,7 @@ TEST_F(ChangeStreamResultConverterTest,
   std::vector<PartialResultSet> results;
   ZETASQL_ASSERT_OK_AND_ASSIGN(results,
 
-                       ConvertChildPartitionRecordsToPartialResultSetProto(
+                       ConvertPartitionTableRowCursorToStruct(
                            &cursor, now_, /*expect_metadata=*/true));
   EXPECT_THAT(
       results,
@@ -290,7 +290,7 @@ TEST_F(ChangeStreamResultConverterTest,
        {Timestamp(now_), String("token2"), parents_array_val2}});
   std::vector<PartialResultSet> results;
   ZETASQL_ASSERT_OK_AND_ASSIGN(results,
-                       ConvertChildPartitionRecordsToPartialResultSetProto(
+                       ConvertPartitionTableRowCursorToStruct(
                            &cursor, /*initial_start_time=*/one_min_from_now_,
                            /*expect_metadata=*/true));
   EXPECT_THAT(results,
@@ -378,7 +378,7 @@ TEST_F(ChangeStreamResultConverterTest,
       {{Timestamp(now_), String("token1"), parents_array_val}});
   std::vector<PartialResultSet> results;
   ZETASQL_ASSERT_OK_AND_ASSIGN(results,
-                       ConvertChildPartitionRecordsToPartialResultSetProto(
+                       ConvertPartitionTableRowCursorToStruct(
                            &cursor, /*initial_start_time=*/std::nullopt,
                            /*expect_metadata=*/false));
   EXPECT_THAT(
@@ -418,8 +418,10 @@ TEST_F(ChangeStreamResultConverterTest,
                   }
                 }
               }
-            })pb",
-          now_str_))));
+            }
+            resume_token: "$1"
+          )pb",
+          now_str_, kChangeStreamDummyResumeToken))));
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
                                             results, /*columns_per_row=*/1));
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
@@ -441,7 +443,7 @@ TEST_F(ChangeStreamResultConverterTest,
       {{Timestamp(now_), String("token1"), parents_array_val}});
   std::vector<PartialResultSet> results;
   ZETASQL_ASSERT_OK_AND_ASSIGN(results,
-                       ConvertChildPartitionRecordsToPartialResultSetProto(
+                       ConvertPartitionTableRowCursorToStruct(
                            &cursor, /*initial_start_time=*/std::nullopt,
                            /*expect_metadata=*/false));
   EXPECT_THAT(
@@ -482,8 +484,10 @@ TEST_F(ChangeStreamResultConverterTest,
                   }
                 }
               }
-            })pb",
-          now_str_))));
+            }
+            resume_token: "$1"
+          )pb",
+          now_str_, kChangeStreamDummyResumeToken))));
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
                                             results, /*columns_per_row=*/1));
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
@@ -505,7 +509,7 @@ TEST_F(ChangeStreamResultConverterTest,
        {Timestamp(now_), String("split_token2"), parents_array_val}});
   std::vector<PartialResultSet> results;
   ZETASQL_ASSERT_OK_AND_ASSIGN(results,
-                       ConvertChildPartitionRecordsToPartialResultSetProto(
+                       ConvertPartitionTableRowCursorToStruct(
                            &cursor, /*initial_start_time=*/std::nullopt,
                            /*need_metadata=*/false));
   EXPECT_THAT(
@@ -555,8 +559,10 @@ TEST_F(ChangeStreamResultConverterTest,
                   }
                 }
               }
-            })pb",
-          now_str_))));
+            }
+            resume_token: "$1"
+          )pb",
+          now_str_, kChangeStreamDummyResumeToken))));
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
                                             results, /*columns_per_row=*/1));
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
@@ -573,8 +579,9 @@ TEST_F(ChangeStreamResultConverterTest,
        HearbeatTimestampToChangeRecordResultSetProto) {
   std::vector<PartialResultSet> results;
   ZETASQL_ASSERT_OK_AND_ASSIGN(
-      results, google::spanner::emulator::frontend::
-                   ConvertHeartbeatTimestampToPartialResultSetProto(now_));
+      results,
+      google::spanner::emulator::frontend::ConvertHeartbeatTimestampToStruct(
+          now_));
   EXPECT_THAT(
       results,
       ElementsAre(EqualsProto(absl::Substitute(
@@ -594,8 +601,10 @@ TEST_F(ChangeStreamResultConverterTest,
                      }
                    }
                  }
-               })pb",
-          now_str_))));
+               }
+               resume_token: "$1"
+          )pb",
+          now_str_, kChangeStreamDummyResumeToken))));
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
                                             results, /*columns_per_row=*/1));
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
@@ -609,8 +618,9 @@ TEST_F(ChangeStreamResultConverterTest, ParseChunkedPartialResultSetProto) {
   const size_t kChunkSize = 40;
   std::vector<PartialResultSet> results;
   ZETASQL_ASSERT_OK_AND_ASSIGN(
-      results, google::spanner::emulator::frontend::
-                   ConvertHeartbeatTimestampToPartialResultSetProto(now_));
+      results,
+      google::spanner::emulator::frontend::ConvertHeartbeatTimestampToStruct(
+          now_));
   auto result_set = ConvertPartialResultSetToResultSet(results[0]);
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> chunked_results,
                        ChunkResultSet(result_set, kChunkSize));
@@ -680,8 +690,7 @@ TEST_F(ChangeStreamResultConverterTest,
         String("NEW_VALUES"), Int64(3), Int64(2), String("test_tag"),
         Bool(false)}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      results, ConvertDataTableRowCursorToPartialResultSetProto(&cursor));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(results, ConvertDataTableRowCursorToStruct(&cursor));
   EXPECT_THAT(
       results,
       ElementsAre(EqualsProto(absl::Substitute(
@@ -763,8 +772,10 @@ TEST_F(ChangeStreamResultConverterTest,
                      }
                    }
                  }
-               })pb",
-          now_str_))));
+               }
+               resume_token: "$1"
+          )pb",
+          now_str_, kChangeStreamDummyResumeToken))));
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
                                             results, /*columns_per_row=*/1));
   ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,

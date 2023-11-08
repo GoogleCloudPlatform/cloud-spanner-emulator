@@ -519,6 +519,16 @@ group {
     name: "TimestamptzUnitsNotRecognized"
     pg_message_id: "timestamp with time zone units \"%s\" not recognized"
   }
+
+  message {
+    name: "NumericScaleOutOfRange"
+    pg_message_id: "NUMERIC scale %d must be between 0 and precision %d"
+  }
+
+  message {
+    name: "NumericPrecisionOutOfRange"
+    pg_message_id: "NUMERIC precision %d must be between 1 and %d"
+  }
 }
 
 group {
@@ -602,6 +612,15 @@ group {
   message {
     name: "StrideOutOfRange"
     pg_message_id: "stride must be greater than zero"
+  }
+}
+
+group {
+  code: "DIVISION_BY_ZERO"
+
+  message {
+    name: "DivisionByZero"
+    pg_message_id: "division by zero"
   }
 }
 

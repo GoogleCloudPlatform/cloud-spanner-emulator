@@ -18,7 +18,6 @@
 
 #include <string>
 
-#include "google/protobuf/descriptor.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.pb.h"
 #include "absl/status/status.h"
@@ -162,6 +161,7 @@ absl::Status ColumnValidator::Validate(const Column* column,
 
   if (column->is_generated()) {
     if (
+        !EmulatorFeatureFlags::instance().flags().enable_generated_pk &&
         column->table()->FindKeyColumn(column->Name())) {
       return error::CannotUseGeneratedColumnInPrimaryKey(
           column->table()->Name(), column->Name());
@@ -185,7 +185,7 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
   bool has_row_deletion_policy =
       column->table()->row_deletion_policy().has_value() &&
       column->table()->row_deletion_policy()->column_name() == column->Name();
-  if (has_row_deletion_policy &&
+  if (has_row_deletion_policy && !column->table_->is_deleted() &&
       (column->is_deleted() || !column->GetType()->IsTimestamp())) {
     return error::RowDeletionPolicyWillBreak(column->Name(),
                                              column->table()->Name());

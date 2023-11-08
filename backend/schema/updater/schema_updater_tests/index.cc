@@ -19,12 +19,13 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
-#include "common/feature_flags.h"
-#include "tests/common/scoped_feature_flags_setter.h"
+#include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 
 namespace google {
 namespace spanner {
@@ -37,27 +38,49 @@ namespace types = zetasql::types;
 namespace {
 
 using database_api::DatabaseDialect::POSTGRESQL;
+using google::spanner::v1::TypeAnnotationCode::PG_JSONB;
+using google::spanner::v1::TypeAnnotationCode::PG_NUMERIC;
+using postgres_translator::spangres::datatypes::SpannerExtendedType;
 
 TEST_P(SchemaUpdaterTest, CreateIndex) {
-  // TODO: Reenable the test for PG when PG.Numeric is supported in
-  // the emulator.
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
-                                        R"sql(
-      CREATE TABLE T (
-        k1 INT64 NOT NULL,
-        c1 STRING(10),
-        c2 STRING(MAX),
-        c3 NUMERIC,
-        c4 JSON
-      ) PRIMARY KEY (k1)
-    )sql",
-                                        R"sql(
-      CREATE INDEX Idx1 ON T(c1)
-    )sql",
-                                        R"sql(
-      CREATE INDEX Idx2 ON T(c1) STORING(c2, c3, c4))sql",
-                                    }));
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(
+                                     {
+                                         R"sql(
+        CREATE TABLE T (
+          k1 bigint primary key,
+          c1 varchar(10),
+          c2 varchar,
+          c3 numeric,
+          c4 jsonb
+        )
+      )sql",
+                                         R"sql(
+        CREATE INDEX Idx1 ON T(c1)
+      )sql",
+                                         R"sql(
+        CREATE INDEX Idx2 ON T(c1) INCLUDE (c2, c3, c4))sql"},
+                                     /*dialect=*/POSTGRESQL,
+                                     /*use_gsql_to_pg_translation=*/false));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+                                     R"sql(
+        CREATE TABLE T (
+          k1 INT64 NOT NULL,
+          c1 STRING(10),
+          c2 STRING(MAX),
+          c3 NUMERIC,
+          c4 JSON
+        ) PRIMARY KEY (k1)
+      )sql",
+                                     R"sql(
+        CREATE INDEX Idx1 ON T(c1)
+      )sql",
+                                     R"sql(
+        CREATE INDEX Idx2 ON T(c1) STORING(c2, c3, c4))sql",
+                                 }));
+  }
 
   auto idx = schema->FindIndex("Idx1");
   EXPECT_NE(idx, nullptr);
@@ -102,11 +125,25 @@ TEST_P(SchemaUpdaterTest, CreateIndex) {
   EXPECT_THAT(idx2_c2, SourceColumnIs(t_c2));
   auto t_c3 = t->FindColumn("c3");
   auto idx2_c3 = idx2->stored_columns()[1];
-  EXPECT_THAT(idx2_c3, ColumnIs("c3", type_factory_.get_numeric()));
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_TRUE(idx2_c3->GetType()->IsExtendedType());
+    EXPECT_EQ(
+        static_cast<const SpannerExtendedType*>(idx2_c3->GetType())->code(),
+        PG_NUMERIC);
+  } else {
+    EXPECT_THAT(idx2_c3, ColumnIs("c3", type_factory_.get_numeric()));
+  }
   EXPECT_THAT(idx2_c3, SourceColumnIs(t_c3));
   auto t_c4 = t->FindColumn("c4");
   auto idx2_c4 = idx2->stored_columns()[2];
-  EXPECT_THAT(idx2_c4, ColumnIs("c4", type_factory_.get_json()));
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_TRUE(idx2_c4->GetType()->IsExtendedType());
+    EXPECT_EQ(
+        static_cast<const SpannerExtendedType*>(idx2_c4->GetType())->code(),
+        PG_JSONB);
+  } else {
+    EXPECT_THAT(idx2_c4, ColumnIs("c4", type_factory_.get_json()));
+  }
   EXPECT_THAT(idx2_c4, SourceColumnIs(t_c4));
 }
 
@@ -623,48 +660,79 @@ TEST_P(SchemaUpdaterTest, CreateIndexOnTableWithNoPK) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_NumericColumn) {
-  // TODO: Reenable the test for PG when PG.Numeric is supported in
-  // the emulator.
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
-                                        R"sql(
-      CREATE TABLE T (
-        col1 INT64 NOT NULL,
-        col2 NUMERIC
-      ) PRIMARY KEY (col1)
-    )sql",
-                                        R"sql(
-      CREATE INDEX Idx ON T(col2)
-    )sql"}));
+  if (GetParam() == POSTGRESQL) {
+    // PG.NUMERIC does not support for indexing yet.
+    EXPECT_THAT(CreateSchema(
+                    {
+                        R"sql(
+        CREATE TABLE T (
+          col1 bigint primary key,
+          col2 numeric
+        )
+      )sql",
+                        R"sql(
+        CREATE INDEX Idx ON T(col2)
+      )sql"},
+                    /*dialect=*/POSTGRESQL,
+                    /*use_gsql_to_pg_translation=*/false),
+                StatusIs(error::CannotCreateIndexOnColumn("idx", "col2",
+                                                          "PG.NUMERIC")));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                          R"sql(
+        CREATE TABLE T (
+          col1 INT64 NOT NULL,
+          col2 NUMERIC
+        ) PRIMARY KEY (col1)
+      )sql",
+                                          R"sql(
+        CREATE INDEX Idx ON T(col2)
+      )sql"}));
 
-  auto t = schema->FindTable("T");
-  auto col2 = t->FindColumn("col2");
-  EXPECT_TRUE(col2->GetType()->IsNumericType());
+    auto t = schema->FindTable("T");
+    auto col2 = t->FindColumn("col2");
+    EXPECT_TRUE(col2->GetType()->IsNumericType());
 
-  auto idx = schema->FindIndex("Idx");
-  EXPECT_NE(idx, nullptr);
-  EXPECT_EQ(idx->key_columns().size(), 1);
+    auto idx = schema->FindIndex("Idx");
+    EXPECT_NE(idx, nullptr);
+    EXPECT_EQ(idx->key_columns().size(), 1);
 
-  auto idx_data = idx->index_data_table();
-  EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col2));
+    auto idx_data = idx->index_data_table();
+    EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col2));
+  }
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_JsonColumn) {
-  // TODO: Reenable the test for PG when PG.Jsonb is supported in
-  // the emulator.
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  EXPECT_THAT(
-      CreateSchema({
-          R"sql(
-      CREATE TABLE T (
-        col1 INT64 NOT NULL,
-        col2 JSON
-      ) PRIMARY KEY (col1)
-    )sql",
-          R"sql(
-      CREATE INDEX Idx ON T(col2)
-    )sql"}),
-      StatusIs(error::CannotCreateIndexOnColumn("Idx", "col2", "JSON")));
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {
+                R"sql(
+        CREATE TABLE T (
+          col1 bigint primary key,
+          col2 jsonb
+        )
+      )sql",
+                R"sql(
+        CREATE INDEX idx ON T(col2)
+      )sql"},
+            /*dialect=*/POSTGRESQL,
+            /*use_gsql_to_pg_translation=*/false),
+        StatusIs(error::CannotCreateIndexOnColumn("idx", "col2", "PG.JSONB")));
+  } else {
+    EXPECT_THAT(
+        CreateSchema({
+            R"sql(
+        CREATE TABLE T (
+          col1 INT64 NOT NULL,
+          col2 JSON
+        ) PRIMARY KEY (col1)
+      )sql",
+            R"sql(
+        CREATE INDEX Idx ON T(col2)
+      )sql"}),
+        StatusIs(error::CannotCreateIndexOnColumn("Idx", "col2", "JSON")));
+  }
 }
 
 std::vector<std::string> SchemaForCaseSensitivityTests() {

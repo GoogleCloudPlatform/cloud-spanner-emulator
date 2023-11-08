@@ -26,15 +26,13 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
-#include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "backend/common/case.h"
-#include "backend/query/analyzer_options.h"
 #include "backend/query/feature_filter/gsql_supported_functions.h"
 #include "backend/query/feature_filter/sql_feature_filter.h"
+#include "backend/schema/catalog/index.h"
 #include "common/errors.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -182,10 +180,13 @@ absl::Status QueryValidator::CheckSpannerHintName(
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
         kHintJoinBatch, kHintJoinForceOrder}},
       {zetasql::RESOLVED_QUERY_STMT,
-       {kHintForceIndex, kHintJoinTypeDeprecated, kHintJoinMethod,
-        kHashJoinBuildSide, kHintJoinForceOrder, kHintConstantFolding,
-        kUseAdditionalParallelism, kHintEnableAdaptivePlans,
-        kHintLockScannedRange, kHintParameterSensitive, kHashJoinExecution}},
+       {
+           kHintForceIndex, kHintJoinTypeDeprecated, kHintJoinMethod,
+           kHashJoinBuildSide, kHintJoinForceOrder, kHintConstantFolding,
+           kUseAdditionalParallelism, kHintEnableAdaptivePlans,
+           kHintLockScannedRange, kHintParameterSensitive,
+           kHashJoinExecution
+       }},
       {zetasql::RESOLVED_SUBQUERY_EXPR,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
         kHintJoinBatch, kHintJoinForceOrder, kHashJoinExecution}},
@@ -258,12 +259,12 @@ absl::Status QueryValidator::CheckHintValue(
       if (node_kind == zetasql::RESOLVED_QUERY_STMT) {
         return error::InvalidStatementHintValue(name, value.DebugString());
       }
-      const Index* index = schema_->FindIndex(index_name);
+      const Index* index = context_.schema->FindIndex(index_name);
       if (index == nullptr) {
         return error::InvalidHintValue(name, value.DebugString());
-      } else {
-        indexes_used_.insert(index);
       }
+
+      indexes_used_.insert(index);
     }
   } else if (absl::EqualsIgnoreCase(name, kHintJoinMethod) ||
              absl::EqualsIgnoreCase(name, kHintJoinTypeDeprecated)) {

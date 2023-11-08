@@ -52,7 +52,9 @@ TEST_F(GsqlSupportedFunctionsTest, SupportedFunctionsAreOnlyGsqlBuiltins) {
   std::map<std::string, std::unique_ptr<zetasql::Function>>
       gsql_builtin_functions;
   zetasql::GetZetaSQLFunctions(
-      &type_factory_, MakeGoogleSqlLanguageOptions(), &gsql_builtin_functions);
+      &type_factory_,
+      zetasql::BuiltinFunctionOptions(MakeGoogleSqlLanguageOptions()),
+      &gsql_builtin_functions);
 
   // Collect the function names and their aliases.
   absl::flat_hash_set<absl::string_view> gsql_functions;

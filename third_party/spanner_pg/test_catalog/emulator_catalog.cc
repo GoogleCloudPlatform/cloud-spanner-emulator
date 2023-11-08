@@ -31,28 +31,30 @@
 
 #include "third_party/spanner_pg/test_catalog/emulator_catalog.h"
 
-#include <string>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/type.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
+#include "backend/schema/builders/column_builder.h"
+#include "backend/schema/builders/change_stream_builder.h"
+#include "backend/schema/builders/table_builder.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
-#include "backend/schema/builders/column_builder.h"
-#include "backend/schema/builders/table_builder.h"
 #include "backend/schema/graph/schema_graph.h"
-
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 
 using google::spanner::emulator::backend::Catalog;
-using google::spanner::emulator::backend::FunctionCatalog;
-using google::spanner::emulator::backend::OwningSchema;
-using google::spanner::emulator::backend::Table;
+using google::spanner::emulator::backend::ChangeStream;
 using google::spanner::emulator::backend::Column;
+using google::spanner::emulator::backend::FunctionCatalog;
 using google::spanner::emulator::backend::KeyColumn;
+using google::spanner::emulator::backend::OwningSchema;
 using google::spanner::emulator::backend::SchemaGraph;
+using google::spanner::emulator::backend::Table;
 
 namespace postgres_translator::spangres::test {
 
@@ -68,6 +70,12 @@ Column::Builder column_builder(const std::string& name, const Table* table,
                                const zetasql::Type* type) {
   Column::Builder c;
   c.set_name(name).set_id(name).set_type(type).set_table(table);
+  return c;
+}
+
+ChangeStream::Builder change_stream_builder(const std::string& name) {
+  ChangeStream::Builder c;
+  c.set_name(name).set_id(name);
   return c;
 }
 
@@ -127,6 +135,8 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
   //       bytes_value BYTES,
   //       timestamp_value TIMESTAMP,
   //       date_value DATE,
+  //       numeric_value PG.NUMERIC,
+  //       jsonb_value PG.JSONB
   //     ) PRIMARY KEY(int64_value)
   //   )",
   Table::Builder tb = table_builder("AllSpangresTypes");
@@ -149,6 +159,21 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
           .build();
   std::unique_ptr<const Column> date_value =
       column_builder("date_value", tb.get(), type_factory.get_date()).build();
+
+  // PG.NUMERIC
+  std::unique_ptr<const Column> numeric_value =
+      column_builder("numeric_value", tb.get(),
+                     postgres_translator::spangres::types::PgNumericMapping()
+                         ->mapped_type())
+          .build();
+
+  // PG.JSONB
+  std::unique_ptr<const Column> jsonb_value =
+      column_builder(
+          "jsonb_value", tb.get(),
+          postgres_translator::spangres::types::PgJsonbMapping()->mapped_type())
+          .build();
+
   std::unique_ptr<const KeyColumn> int64_value_primary =
       KeyColumn::Builder().set_column(int64_value.get()).build();
   std::unique_ptr<const Table> table =
@@ -159,6 +184,8 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
           .add_column(bytes_value.get())
           .add_column(timestamp_value.get())
           .add_column(date_value.get())
+          .add_column(numeric_value.get())
+          .add_column(jsonb_value.get())
           .add_key_column(int64_value_primary.get())
           .build();
   graph->Add(std::move(int64_value));
@@ -168,6 +195,8 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
   graph->Add(std::move(bytes_value));
   graph->Add(std::move(timestamp_value));
   graph->Add(std::move(date_value));
+  graph->Add(std::move(numeric_value));
+  graph->Add(std::move(jsonb_value));
   graph->Add(std::move(int64_value_primary));
   graph->Add(std::move(table));
 }
@@ -184,6 +213,8 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
   //       bytes_array ARRAY<BYTES>,
   //       timestamp_array ARRAY<TIMESTAMP>,
   //       date_array ARRAY<DATE>,
+  //       numeric_array ARRAY<PG.NUMERIC>,
+  //       jsonb_array ARRAY<PG.JSONB>
   //     ) PRIMARY KEY(key)
   //   )",
   Table::Builder tb = table_builder("ArrayTypes");
@@ -220,6 +251,22 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
       get_array_type(type_factory, type_factory.get_bytes()).value();
   std::unique_ptr<const Column> date_array =
       column_builder("date_array", tb.get(), date_array_type).build();
+
+  // PG.NUMERIC ARRAY
+  std::unique_ptr<const Column> numeric_array =
+      column_builder(
+          "numeric_array", tb.get(),
+          postgres_translator::spangres::types::PgNumericArrayMapping()
+              ->mapped_type())
+          .build();
+
+  // PG.JSONB ARRAY
+  std::unique_ptr<const Column> jsonb_array =
+      column_builder("jsonb_array", tb.get(),
+                     postgres_translator::spangres::types::PgJsonbArrayMapping()
+                         ->mapped_type())
+          .build();
+
   std::unique_ptr<const KeyColumn> primary_key_constraint =
       KeyColumn::Builder().set_column(key_column.get()).build();
   std::unique_ptr<const Table> table =
@@ -231,6 +278,8 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
           .add_column(bytes_array.get())
           .add_column(timestamp_array.get())
           .add_column(date_array.get())
+          .add_column(numeric_array.get())
+          .add_column(jsonb_array.get())
           .add_key_column(primary_key_constraint.get())
           .build();
   graph->Add(std::move(key_column));
@@ -241,6 +290,8 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
   graph->Add(std::move(bytes_array));
   graph->Add(std::move(timestamp_array));
   graph->Add(std::move(date_array));
+  graph->Add(std::move(numeric_array));
+  graph->Add(std::move(jsonb_array));
   graph->Add(std::move(primary_key_constraint));
   graph->Add(std::move(table));
 }
@@ -354,6 +405,19 @@ void create_many_columns_table(const std::string table_name,
   graph->Add(std::move(table));
 }
 
+void create_change_stream(zetasql::TypeFactory& type_factory,
+                          SchemaGraph* graph) {
+  // R"(
+  //     CREATE CHANGE STREAM keyvalue_change_stream FOR keyvalue(value)
+  //   )",
+  ChangeStream::Builder cb = change_stream_builder("keyvalue_change_stream");
+  std::unique_ptr<const ChangeStream> change_stream =
+      cb.set_tvf_name("read_json_keyvalue_change_stream")
+          .add_tracked_tables_columns("keyvalue", {"value"})
+          .build();
+  graph->Add(std::move(change_stream));
+}
+
 std::unique_ptr<const OwningSchema> CreateSchema(
     zetasql::TypeFactory& type_factory) {
   auto graph = std::make_unique<SchemaGraph>();
@@ -442,6 +506,9 @@ std::unique_ptr<const OwningSchema> CreateSchema(
   create_many_columns_table("many_columns", type_factory, graph.get());
   create_many_columns_table("many_columns_copy", type_factory, graph.get());
 
+  // Simple change stream over keyvalue for TVF testing.
+  create_change_stream(type_factory, graph.get());
+
   return std::make_unique<const OwningSchema>(
       std::move(graph),
       google::spanner::emulator::backend::database_api::DatabaseDialect::
@@ -454,8 +521,9 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
   options.set_name_resolution_mode(zetasql::NAME_RESOLUTION_DEFAULT);
   options.set_product_mode(zetasql::PRODUCT_EXTERNAL);
   options.SetEnabledLanguageFeatures({
-      zetasql::FEATURE_NAMED_ARGUMENTS, zetasql::FEATURE_NUMERIC_TYPE,
-      zetasql::FEATURE_TABLESAMPLE, zetasql::FEATURE_TIMESTAMP_NANOS,
+      zetasql::FEATURE_EXTENDED_TYPES, zetasql::FEATURE_NAMED_ARGUMENTS,
+      zetasql::FEATURE_NUMERIC_TYPE, zetasql::FEATURE_TABLESAMPLE,
+      zetasql::FEATURE_TIMESTAMP_NANOS,
       zetasql::FEATURE_V_1_1_HAVING_IN_AGGREGATE,
       zetasql::FEATURE_V_1_1_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
       zetasql::FEATURE_V_1_1_ORDER_BY_COLLATE,

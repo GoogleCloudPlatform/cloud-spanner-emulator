@@ -96,7 +96,9 @@ absl::Status ValueProtoTypeMismatch(absl::string_view proto,
 absl::Status CouldNotParseStringAsInteger(absl::string_view str);
 absl::Status CouldNotParseStringAsDouble(absl::string_view str);
 absl::Status CouldNotParseStringAsNumeric(absl::string_view str);
+absl::Status CouldNotParseStringAsPgNumeric(absl::string_view str);
 absl::Status CouldNotParseStringAsJson(absl::string_view str);
+absl::Status CouldNotParseStringAsPgJsonb(absl::string_view str);
 absl::Status CouldNotParseStringAsTimestamp(absl::string_view str,
                                             absl::string_view error);
 absl::Status TimestampMustBeInUTCTimeZone(absl::string_view str);
@@ -264,6 +266,8 @@ absl::Status InvalidChangeStreamTvfArgumentStartTimestampForPartition(
     absl::string_view start_ts_string);
 absl::Status ChangeStreamStalePartition();
 absl::Status IllegalChangeStreamQuerySyntax(absl::string_view tvf_name_string);
+absl::Status IllegalChangeStreamQueryPGSyntax(
+    absl::string_view tvf_name_string);
 absl::Status ChangeStreamQueriesMustBeSingleUseOnly();
 absl::Status ChangeStreamQueriesMustBeStrongReads();
 absl::Status ChangeStreamQueriesMustBeStreaming();
@@ -556,6 +560,10 @@ absl::Status CannotUseCommitTimestampWithColumnDefaultValue(
     absl::string_view column_name);
 absl::Status DefaultPKNeedsExplicitValue(absl::string_view column_name,
                                          absl::string_view op_name);
+absl::Status GeneratedPKNeedsExplicitValue(absl::string_view column_name);
+absl::Status GeneratedPkModified(absl::string_view column_name);
+absl::Status UserSuppliedValueInNonUpdateGpk(absl::string_view column_name);
+absl::Status NeedAllDependentColumnsForGpk(absl::string_view column_name);
 absl::Status CannotSetDefaultValueOnGeneratedColumn(
     absl::string_view column_name);
 

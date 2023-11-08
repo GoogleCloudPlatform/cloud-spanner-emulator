@@ -29,14 +29,24 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#ifndef FUNCTION_EVALUATORS_FUNCTION_EVALUATORS_H_
-#define FUNCTION_EVALUATORS_FUNCTION_EVALUATORS_H_
+#ifndef FUNCTION_EVALUATORS_IN_OUT_EVALUATORS_H_
+#define FUNCTION_EVALUATORS_IN_OUT_EVALUATORS_H_
 
+#include <cstdint>
+#include <string>
 
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"
 namespace postgres_translator::function_evaluators {
 
-// TODO: Remove once on-branch no longer depends on this file.
+// Converts a numeric decimal string into PostgreSQL internal Datum
+// representation.
+absl::StatusOr<Datum> NumericIn(absl::string_view value);
+
+// Converts a numeric PostgreSQL internal Datum into a numeric string.
+absl::StatusOr<std::string> NumericOut(Datum value);
 
 }  // namespace postgres_translator::function_evaluators
 
-#endif  // FUNCTION_EVALUATORS_FUNCTION_EVALUATORS_H_
+#endif  // FUNCTION_EVALUATORS_IN_OUT_EVALUATORS_H_

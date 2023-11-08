@@ -16,6 +16,8 @@
 
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_CHANGE_STREAM_CHANGE_STREAM_QUERY_VALIDATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_CHANGE_STREAM_CHANGE_STREAM_QUERY_VALIDATOR_H_
+#include <stdbool.h>
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -31,6 +33,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/strip.h"
 #include "absl/time/time.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/constants.h"
@@ -47,8 +50,8 @@ class ChangeStreamQueryValidator : public zetasql::ResolvedASTVisitor {
   struct ChangeStreamMetadata {
     ChangeStreamMetadata() { is_change_stream_query = false; }
     ChangeStreamMetadata(absl::string_view tvf_name,
-                         std::vector<zetasql::Value>& args)
-        : tvf_name(tvf_name) {
+                         std::vector<zetasql::Value>& args, bool is_pg)
+        : tvf_name(tvf_name), is_pg(is_pg) {
       start_timestamp = args[0].ToTime();
       end_timestamp = args[1].is_null()
                           ? std::optional<absl::Time>(std::nullopt)
@@ -57,7 +60,9 @@ class ChangeStreamQueryValidator : public zetasql::ResolvedASTVisitor {
                             ? std::optional<std::string>(std::nullopt)
                             : args[2].string_value();
       heartbeat_milliseconds = args[3].int64_value();
-      change_stream_name = tvf_name.substr(5);
+      change_stream_name =
+          absl::StripPrefix(tvf_name, is_pg ? kChangeStreamTvfJsonPrefix
+                                            : kChangeStreamTvfStructPrefix);
       partition_table =
           absl::StrCat(kChangeStreamPartitionTablePrefix, change_stream_name);
       data_table =
@@ -73,6 +78,7 @@ class ChangeStreamQueryValidator : public zetasql::ResolvedASTVisitor {
     std::string data_table;
     std::string tvf_name;
     std::string change_stream_name;
+    bool is_pg;
     // If current query is not a change stream query, all the other fields will
     // be null and this bool is set to false. Vice versa, all the other fields
     // are assigned and this bool will be true.
@@ -87,6 +93,8 @@ class ChangeStreamQueryValidator : public zetasql::ResolvedASTVisitor {
     for (auto& [param_name, param_val] : params) {
       params_[absl::AsciiStrToLower(param_name)] = param_val;
     }
+
+    is_pg_ = schema_->dialect() == database_api::DatabaseDialect::POSTGRESQL;
   }
 
   absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override {
@@ -135,8 +143,13 @@ class ChangeStreamQueryValidator : public zetasql::ResolvedASTVisitor {
   // name of the tvf this validator is validating, used for outputting
   // informational error logs
   std::string tvf_name_;
+  // name of the change stream current tvf in validation, used for fetching
+  // current change stream's retention period from schema.
+  std::string change_stream_name_;
 
   ChangeStreamMetadata change_stream_metadata_;
+
+  bool is_pg_;
 };
 
 }  // namespace backend

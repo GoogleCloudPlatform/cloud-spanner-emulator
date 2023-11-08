@@ -47,31 +47,29 @@ CREATE TABLE users (
 );
 ==
 
-# TODO: Re-enable when PG.numeric is supported.
-# CREATE TABLE Users (
-#   id bigint PRIMARY KEY
-# );
-# ALTER TABLE users ADD COLUMN newcol numeric;
-# --
-# CREATE TABLE users (
-#   id bigint NOT NULL,
-#   newcol numeric,
-#   PRIMARY KEY(id)
-# );
-# ==
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE users ADD COLUMN newcol numeric;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  newcol numeric,
+  PRIMARY KEY(id)
+);
+==
 
-# TODO: Re-enable when PG.jsonb is supported.
-# CREATE TABLE Users (
-#   id bigint PRIMARY KEY
-# );
-# ALTER TABLE users ADD COLUMN newcol jsonb;
-# --
-# CREATE TABLE users (
-#   id bigint NOT NULL,
-#   newcol jsonb,
-#   PRIMARY KEY(id)
-# );
-# ==
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE users ADD COLUMN newcol jsonb;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  newcol jsonb,
+  PRIMARY KEY(id)
+);
+==
 
 CREATE TABLE Users (
   id bigint PRIMARY KEY
@@ -479,11 +477,12 @@ CREATE TABLE users (
   PRIMARY KEY(id)
 );
 ==
-
-ALTER TABLE wrong_action ALTER COLUMN c1 TYPE bigint, ALTER COLUMN c1 SET NOT NULL, ALTER COLUMN c1 DROP DEFAULT;
---
-ERROR: <ALTER TABLE ALTER COLUMN> statement can only modify one column at a time and only support <ALTER COLUMN SET DATA TYPE> and <ALTER COLUMN {SET|DROP} NOT NULL>.
-==
+# TODO: Creating support for SET/DROP NOT NULL in Spanner, will
+# delete and update this once complete
+# ALTER TABLE wrong_action ALTER COLUMN c1 TYPE bigint, ALTER COLUMN c1 SET NOT NULL, ALTER COLUMN c1 DROP DEFAULT;
+# --
+# ERROR: <ALTER TABLE ALTER COLUMN> statement can only modify one column at a time and only support <ALTER COLUMN SET DATA TYPE> and <ALTER COLUMN {SET|DROP} NOT NULL>.
+# ==
 
 ALTER TABLE users ADD CONSTRAINT check_constraint CHECK(name IS NOT NULL) NO INHERIT;
 --

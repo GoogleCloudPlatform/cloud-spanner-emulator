@@ -59,6 +59,24 @@ CreateSchemaWithOneTableAndOneChangeStream(
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
     zetasql::TypeFactory* type_factory);
 
+// Creates a schema with a single table and generated primary key column.
+inline absl::StatusOr<std::unique_ptr<const backend::Schema>>
+CreateGpkSchemaWithOneTable(zetasql::TypeFactory* type_factory) {
+  return CreateSchemaFromDDL(
+      {
+          R"(
+              CREATE TABLE test_table (
+                k1_pk INT64 NOT NULL,
+                k2 INT64 NOT NULL,
+                k3gen_storedpk INT64 NOT NULL AS (k2) STORED,
+                k4 INT64,
+                k5 INT64 AS (k4+1) STORED,
+              ) PRIMARY KEY (k1_pk,k3gen_storedpk)
+            )",
+      },
+      type_factory);
+}
+
 // Creates a schema with two child tables interleaved in a parent table.
 std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
     zetasql::TypeFactory* const type_factory,

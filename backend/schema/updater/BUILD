@@ -28,6 +28,7 @@ cc_library(
     hdrs = ["ddl_type_conversion.h"],
     deps = [
         "//backend/schema/ddl:operations_cc_proto",
+        "//third_party/spanner_pg/catalog:spangres_type",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_zetasql//zetasql/base:ret_check",
@@ -42,6 +43,8 @@ cc_test(
         ":ddl_type_conversion",
         "//backend/schema/ddl:operations_cc_proto",
         "//tests/common:proto_matchers",
+        "//third_party/spanner_pg/catalog:spangres_type",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -83,6 +86,7 @@ cc_test(
         "//common:errors",
         "//common:limits",
         "//tests/common:proto_matchers",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest_main",
@@ -183,6 +187,10 @@ cc_library(
 cc_test(
     name = "schema_updater_test",
     srcs = ["schema_updater_test.cc"],
+    args = [
+        "--spangres_use_emulator_jsonb_type=true",
+        "--spangres_use_emulator_numeric_type=true",
+    ],
     deps = [
         "//backend/schema/updater/schema_updater_tests",
         "//tests/common:proto_matchers",

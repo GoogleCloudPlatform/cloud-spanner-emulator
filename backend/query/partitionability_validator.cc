@@ -19,10 +19,13 @@
 #include <vector>
 
 #include "zetasql/resolved_ast/resolved_ast.h"
+#include "zetasql/resolved_ast/resolved_ast_visitor.h"
 #include "zetasql/resolved_ast/resolved_node.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "common/errors.h"
+#include "common/feature_flags.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {

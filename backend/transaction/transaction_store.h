@@ -124,6 +124,9 @@ class TransactionStore {
   // Buffers a delete mutation. Acquires write locks.
   absl::Status BufferDelete(const Table* table, const Key& key);
 
+  // Returns true if a row already exists in base_storage_.
+  bool RowExistsInStorage(const Table* table, const Key& key);
+
   // Returns true if a mutation has been buffered for 'key' and fills 'row'.
   bool RowExistsInBuffer(const Table* table, const Key& key, RowOp* row) const;
 

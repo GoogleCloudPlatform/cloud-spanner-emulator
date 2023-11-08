@@ -61,6 +61,7 @@
 #include "third_party/spanner_pg/catalog/function_identifier.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
 
@@ -218,7 +219,7 @@ TEST_F(SpangresSystemCatalogTest, GetTypes) {
   EXPECT_THAT(types, UnorderedPointwise(TypeEquals(), expected_types));
 }
 
-  TEST_F(SpangresSystemCatalogTest, DISABLED_GetPgNumericCastFunction) {
+TEST_F(SpangresSystemCatalogTest, GetPgNumericCastFunction) {
   struct CastTestCase {
     const zetasql::Type* source_type;
     const zetasql::Type* target_type;
@@ -518,7 +519,11 @@ TEST_F(SpangresSystemCatalogTest, MinAggregateRemapTest) {
   const PostgresExtendedFunction* min_function = catalog->GetFunction("min");
   ASSERT_NE(min_function, nullptr);
 
+  static const zetasql::Type* gsql_pg_numeric =
+      spangres::datatypes::GetPgNumericType();
+
   bool has_signature_for_double = false;
+  bool has_signature_for_numeric = false;
   for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
        min_function->GetPostgresSignatures()) {
     ASSERT_EQ(signature->arguments().size(), 1);
@@ -527,12 +532,19 @@ TEST_F(SpangresSystemCatalogTest, MinAggregateRemapTest) {
       has_signature_for_double = true;
       EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
                 "pg.min");
+    } else if (
+        argument_type->Equals(gsql_pg_numeric)) {
+      has_signature_for_numeric = true;
+      EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
+                "pg.numeric_min");
     } else {
       EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
                 "min");
     }
   }
   ASSERT_TRUE(has_signature_for_double);
+
+    ASSERT_TRUE(has_signature_for_numeric);
 }
 
 TEST_F(SpangresSystemCatalogTest, NanOrderingFunctionsEnabled) {
@@ -592,6 +604,7 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
   const zetasql::Type* gsql_pg_jsonb_array = GetPgJsonbArrayType();
 
   // Array functions
+
   AssertPGFunctionIsRegistered("array_upper", {ANYARRAYOID, INT8OID},
                                {zetasql::InputArgumentType(gsql_int64_array),
                                 zetasql::InputArgumentType(gsql_int64)});

@@ -28,28 +28,31 @@ namespace emulator {
 namespace frontend {
 namespace spanner_api = ::google::spanner::v1;
 
+static constexpr char kChangeStreamDummyResumeToken[] =
+    "dummy_resume_token_for_change_streams_on_emulator";
+
 // Takes a row cursor for a change stream partition table, and convert the row
-// cursor into a child partition record partial result set. If
+// cursor into a child partition record partial result set as ARRAY<STRUCT>. If
 // initial_start_time is not empty, current row cursor is yielded from initial
 // change stream query. Start time of all change stream partition tokens will be
 // set to the user passed start time in the metadata instead of the actual
 // partition token start time in partition table.
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
-ConvertChildPartitionRecordsToPartialResultSetProto(
+ConvertPartitionTableRowCursorToStruct(
     backend::RowCursor* row_cursor,
     std::optional<absl::Time> initial_start_time, bool expect_metadata = false);
 
-// Takes a timestamp and convert the timestamp
-// into a heartbeat record partial result set.
+// Takes a timestamp and convert the timestamp into a heartbeat record partial
+// result set as ARRAY<STRUCT>.
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
-ConvertHeartbeatTimestampToPartialResultSetProto(absl::Time timestamp,
-                                                 bool expect_metadata = false);
+ConvertHeartbeatTimestampToStruct(absl::Time timestamp,
+                                  bool expect_metadata = false);
 
 // Takes a row cursor from data table and convert all rows into a vector of
-// partial result set.
+// partial result set as ARRAY<STRUCT>.
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
-ConvertDataTableRowCursorToPartialResultSetProto(backend::RowCursor* row_cursor,
-                                                 bool expect_metadata = false);
+ConvertDataTableRowCursorToStruct(backend::RowCursor* row_cursor,
+                                  bool expect_metadata = false);
 
 }  // namespace frontend
 }  // namespace emulator

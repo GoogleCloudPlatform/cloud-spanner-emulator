@@ -341,6 +341,21 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       const AlterChangeStreamStmt& alter_change_stream_stmt,
       const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::AlterChangeStream& out) const;
+
+  // SEQUENCE translation statements.
+  absl::Status ProcessSequenceSkipRangeOption(
+      const DefElem& skip_range,
+      ::google::spanner::emulator::backend::ddl::SetOption& skip_range_min_option,
+      ::google::spanner::emulator::backend::ddl::SetOption& skip_range_max_option) const;
+  absl::Status TranslateCreateSequence(const CreateSeqStmt& create_statement,
+                                       const TranslationOptions& options,
+                                       google::spanner::emulator::backend::ddl::CreateSequence& out) const;
+  absl::Status TranslateDropSequence(const DropStmt& drop_statement,
+                                     const TranslationOptions& options,
+                                     google::spanner::emulator::backend::ddl::DropSequence& out) const;
+  absl::Status TranslateAlterSequence(const AlterSeqStmt& alter_statement,
+                                      const TranslationOptions& options,
+                                      google::spanner::emulator::backend::ddl::AlterSequence& out) const;
 };
 
 // IntervalString extracts the interval from a TTL struct, or returns an
@@ -379,6 +394,9 @@ GetTypeMap() {
       // <timestamptz> in PG AST.
       // Only timestamp with timezone is supported
       {"timestamptz", google::spanner::emulator::backend::ddl::ColumnDefinition::TIMESTAMP},
+      {"numeric", google::spanner::emulator::backend::ddl::ColumnDefinition::PG_NUMERIC},
+      {"decimal", google::spanner::emulator::backend::ddl::ColumnDefinition::PG_NUMERIC},
+      {"jsonb", google::spanner::emulator::backend::ddl::ColumnDefinition::PG_JSONB},
       // Unsupported standard types from pg_catalog schema
       {"aclitem", absl::nullopt},
       {"any", absl::nullopt},
@@ -1213,6 +1231,168 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateRowDeletionPolicy(
   return absl::OkStatus();
 }
 
+absl::Status
+PostgreSQLToSpannerDDLTranslatorImpl::ProcessSequenceSkipRangeOption(
+    const DefElem& skip_range, ::google::spanner::emulator::backend::ddl::SetOption& skip_range_min_option,
+    ::google::spanner::emulator::backend::ddl::SetOption& skip_range_max_option) const {
+  ZETASQL_ASSIGN_OR_RETURN(const List* args,
+                   (DowncastNode<List, T_List>(skip_range.arg)));
+  // Can not use the DowncastNode because the type tag could be either
+  // T_INTEGER or T_FLOAT.
+  Value* skip_range_min = PostgresCastToValue(linitial(args));
+  char min_name[] = "skip_range_min";
+  ZETASQL_ASSIGN_OR_RETURN(
+      DefElem * min_elem,
+      CheckedPgMakeDefElem(min_name, PostgresCastToNode(skip_range_min),
+                           skip_range.location));
+  ZETASQL_ASSIGN_OR_RETURN(int64_t min_int64, CheckedPgDefGetInt64(min_elem));
+  skip_range_min_option.set_option_name(min_name);
+  skip_range_min_option.set_int64_value(min_int64);
+
+  // Can not use the DowncastNode because the type tag could be either
+  // T_INTEGER or T_FLOAT.
+  Value* skip_range_max = PostgresCastToValue(lsecond(args));
+  char max_name[] = "skip_range_max";
+  ZETASQL_ASSIGN_OR_RETURN(
+      DefElem * max_elem,
+      CheckedPgMakeDefElem(max_name, PostgresCastToNode(skip_range_max),
+                           skip_range.location));
+  ZETASQL_ASSIGN_OR_RETURN(int64_t max_int64, CheckedPgDefGetInt64(max_elem));
+  skip_range_max_option.set_option_name(max_name);
+  skip_range_max_option.set_int64_value(max_int64);
+
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSequence(
+    const CreateSeqStmt& create_statement, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::CreateSequence& out) const {
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_statement, options));
+
+  absl::string_view sequence_name;
+  ZETASQL_ASSIGN_OR_RETURN(sequence_name,
+                   GetTableName(*create_statement.sequence, "CREATE SEQUENCE"));
+  out.set_sequence_name(sequence_name);
+
+  // pg_parse_tree_validator guarantees the iff `BIT_REVERSED_POSITIVE` is used
+  // can pass the validation.
+  google::spanner::emulator::backend::ddl::CreateSequence::Type seq_type =
+      google::spanner::emulator::backend::ddl::CreateSequence::BIT_REVERSED_POSITIVE;
+
+  // sequence_type in the options also required to be set.
+  ::google::spanner::emulator::backend::ddl::SetOption* sequence_type = out.add_set_options();
+  sequence_type->set_option_name(PGConstants::kSequenceKindOptionName);
+  sequence_type->set_string_value(
+      PGConstants::kSequenceKindBitReversedPositive);
+
+  // Default `start_with_counter` value is `1`.
+  ::google::spanner::emulator::backend::ddl::SetOption* start_counter = out.add_set_options();
+  start_counter->set_option_name("start_with_counter");
+  start_counter->set_int64_value(1);
+
+  List* opts = create_statement.options;
+  for (int i = 0; i < list_length(opts); ++i) {
+    DefElem* elem = ::postgres_translator::internal::PostgresCastNode(
+        DefElem, opts->elements[i].ptr_value);
+    absl::string_view name = elem->defname;
+    if (name == "bit_reversed") {
+      // Do nothing, just short cut the for loop.
+    } else if (name == "start_counter") {
+      ZETASQL_ASSIGN_OR_RETURN(int64_t value, CheckedPgDefGetInt64(elem));
+      start_counter->set_int64_value(value);
+    } else if (name == "skip_range") {
+      ZETASQL_RETURN_IF_ERROR(ProcessSequenceSkipRangeOption(
+          *elem, *out.add_set_options(), *out.add_set_options()));
+    }
+  }
+
+  out.set_type(seq_type);
+  if (create_statement.if_not_exists) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterSequence(
+    const AlterSeqStmt& alter_statement, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::AlterSequence& out) const {
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_statement, options));
+
+  absl::string_view sequence_name;
+  ZETASQL_ASSIGN_OR_RETURN(sequence_name,
+                   GetTableName(*alter_statement.sequence, "ALTER SEQUENCE"));
+  out.set_sequence_name(sequence_name);
+
+  List* opts = alter_statement.options;
+  for (int i = 0; i < list_length(opts); ++i) {
+    DefElem* elem = ::postgres_translator::internal::PostgresCastNode(
+        DefElem, opts->elements[i].ptr_value);
+    absl::string_view name = elem->defname;
+    if (name == "restart_counter") {
+      ZETASQL_ASSIGN_OR_RETURN(int64_t value, CheckedPgDefGetInt64(elem));
+      auto* opt = out.mutable_set_options()->add_options();
+      opt->set_option_name("start_with_counter");
+      opt->set_int64_value(value);
+      continue;
+    } else if (name == "skip_range") {
+      ZETASQL_RETURN_IF_ERROR(ProcessSequenceSkipRangeOption(
+          *elem, *out.mutable_set_options()->add_options(),
+          *out.mutable_set_options()->add_options()));
+    }
+  }
+
+  if (alter_statement.missing_ok) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSequence(
+    const DropStmt& drop_statement, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::DropSequence& out) const {
+  ZETASQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_SEQUENCE);
+  if (!options.enable_sequence) {
+    return UnsupportedTranslationError("DROP SEQUENCE is not supported");
+  }
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      const List* sequence_to_drop_list,
+      (SingleItemListAsNode<List, T_List>(drop_statement.objects)));
+
+  // Caller should have called ValidateParseTreeNode, which ensures the size of
+  // sequence_to_drop_list is 1 or 2.
+  if (sequence_to_drop_list->length == 2) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        const Value* schema_to_drop_node,
+        (GetListItemAsNode<Value, T_String>)(sequence_to_drop_list, 0));
+    ZETASQL_ASSIGN_OR_RETURN(
+        const Value* sequence_to_drop_node,
+        (GetListItemAsNode<Value, T_String>)(sequence_to_drop_list, 1));
+    if (strcmp(schema_to_drop_node->val.str, "public") != 0) {
+      *out.mutable_sequence_name() =
+          absl::Substitute("$0.$1", schema_to_drop_node->val.str,
+                           sequence_to_drop_node->val.str);
+    } else {
+      *out.mutable_sequence_name() =
+          absl::StrCat(sequence_to_drop_node->val.str);
+    }
+  } else {
+    ZETASQL_RET_CHECK_EQ(sequence_to_drop_list->length, 1)
+        << "Incorrect number of name components in drop target.";
+    ZETASQL_ASSIGN_OR_RETURN(
+        const Value* sequence_to_drop_node,
+        (SingleItemListAsNode<Value, T_String>)(sequence_to_drop_list));
+    *out.mutable_sequence_name() = sequence_to_drop_node->val.str;
+  }
+
+  if (drop_statement.missing_ok) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+  return absl::OkStatus();
+}
+
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
     const CreateStmt& create_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::CreateTable& out) const {
@@ -1567,7 +1747,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropStatement(
     case OBJECT_CHANGE_STREAM:
       return TranslateDropChangeStream(
           drop_statement, options, *out.mutable_drop_change_stream());
-
+    case OBJECT_SEQUENCE:
+      return TranslateDropSequence(drop_statement, options,
+                                   *out.mutable_drop_sequence());
     default:
       ZETASQL_RET_CHECK_FAIL()
           << "removeType should have been validated in ValidateTreeNode.";
@@ -1632,6 +1814,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropView(
     ZETASQL_RET_CHECK_FAIL() << "Incorrect number of name components in drop target: "
                      << view_to_drop_list->length;
   }
+
+  if (drop_statement.missing_ok) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+
   return absl::OkStatus();
 }
 
@@ -2079,6 +2266,24 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
           *statement, options_,
           *result_statement.mutable_alter_change_stream()));
 
+      break;
+    }
+
+    case T_CreateSeqStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const CreateSeqStmt* statement,
+          (DowncastNode<CreateSeqStmt, T_CreateSeqStmt>(raw_statement.stmt)));
+      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateSequence(
+          *statement, options_, *result_statement.mutable_create_sequence()));
+      break;
+    }
+
+    case T_AlterSeqStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const AlterSeqStmt* statement,
+          (DowncastNode<AlterSeqStmt, T_AlterSeqStmt>(raw_statement.stmt)));
+      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterSequence(
+          *statement, options_, *result_statement.mutable_alter_sequence()));
       break;
     }
 

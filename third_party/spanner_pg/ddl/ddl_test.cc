@@ -339,6 +339,42 @@ TEST_F(DdlTest, TTLDayBoundary) {
   EXPECT_TRUE(statements.ok());
 }
 
+void ArrayJsonbBlockOptionTest(const DdlTestHelper& test_helper,
+                               const std::string& input) {
+  // First make sure things parse OK, which they should.
+  interfaces::ParserBatchOutput parsed_statements =
+      test_helper.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ZETASQL_ASSERT_OK(parsed_statements.global_status());
+  EXPECT_EQ(parsed_statements.output().size(), 1);
+
+  // When enable_array_jsonb_type is disabled, the translation should fail.
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      test_helper.Translator()->Translate(
+          parsed_statements,
+          {.enable_jsonb_type = true, .enable_array_jsonb_type = false});
+  EXPECT_THAT(
+      statements.status(),
+      StatusIs(absl::StatusCode::kFailedPrecondition,
+               testing::HasSubstr("Type Array of <jsonb> is not supported")));
+
+  // When enable_array_jsonb_type is enabled, the translation should success.
+  statements = test_helper.Translator()->Translate(
+      parsed_statements,
+      {.enable_jsonb_type = true, .enable_array_jsonb_type = true});
+  ZETASQL_EXPECT_OK(statements);
+}
+
+TEST_F(DdlTest, ArrayJsonbBlock) {
+  // <CREATE> and <INSERT> are two kind of statements which require checking
+  // the flag to block the accessing of the jsonb[] type if it is not enabled.
+  ArrayJsonbBlockOptionTest(
+      base_helper_,
+      "CREATE TABLE jsonb_table (id bigint PRIMARY KEY, jsonb_v jsonb[])");
+  ArrayJsonbBlockOptionTest(
+      base_helper_, "Alter TABLE jsonb_teat Add column jsonb_v jsonb[]");
+}
+
 TEST_F(DdlTest, DisableCreateChangeStream) {
   const std::string input = "CREATE CHANGE STREAM change_stream FOR table1";
 

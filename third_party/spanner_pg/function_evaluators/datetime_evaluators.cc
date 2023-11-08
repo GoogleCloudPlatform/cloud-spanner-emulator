@@ -196,16 +196,6 @@ absl::StatusOr<std::unique_ptr<std::string>> PgTimestampTzToChar(
   return std::make_unique<std::string>(formatted_timestamp);
 }
 
-absl::StatusOr<int32_t> DateIn(absl::string_view input_string,
-                               absl::string_view default_timezone) {
-  return PgDateIn(input_string);
-}
-
-absl::StatusOr<absl::Time> TimestamptzIn(absl::string_view input_string,
-                                         absl::string_view default_timezone) {
-  return PgTimestamptzIn(input_string);
-}
-
 absl::StatusOr<int32_t> PgDateIn(absl::string_view date_string) {
   ZETASQL_ASSIGN_OR_RETURN(Type date_type, CheckedPgTypeidType(DATEOID));
   // StringTypeDatum expects the string to be NUL terminated, so the string_view

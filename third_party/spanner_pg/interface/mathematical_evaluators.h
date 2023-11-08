@@ -42,17 +42,38 @@
 namespace postgres_translator::function_evaluators {
 absl::StatusOr<std::string> Abs(absl::string_view numeric_decimal_string);
 
+absl::StatusOr<std::string> Add(absl::string_view numeric_decimal_string_1,
+                                absl::string_view numeric_decimal_string_2);
+
 absl::StatusOr<std::string> Ceil(absl::string_view numeric_decimal_string);
 
 absl::StatusOr<std::string> Ceiling(absl::string_view numeric_decimal_string);
+
+absl::StatusOr<std::string> Divide(absl::string_view numeric_decimal_string_1,
+                                   absl::string_view numeric_decimal_string_2);
+
+absl::StatusOr<std::string> DivideTruncateTowardsZero(
+    absl::string_view numeric_decimal_string_1,
+    absl::string_view numeric_decimal_string_2);
 
 absl::StatusOr<std::string> Floor(absl::string_view numeric_decimal_string);
 
 absl::StatusOr<std::string> Mod(absl::string_view numeric_decimal_string_1,
                                 absl::string_view numeric_decimal_string_2);
 
+absl::StatusOr<std::string> Multiply(
+    absl::string_view numeric_decimal_string_1,
+    absl::string_view numeric_decimal_string_2);
+
+absl::StatusOr<std::string> Subtract(
+    absl::string_view numeric_decimal_string_1,
+    absl::string_view numeric_decimal_string_2);
+
 absl::StatusOr<std::string> Trunc(absl::string_view numeric_decimal_string,
                                   int64_t scale);
+
+absl::StatusOr<std::string> UnaryMinus(
+    absl::string_view numeric_decimal_string);
 }  // namespace postgres_translator::function_evaluators
 
 #endif  // INTERFACE_MATHEMATICAL_EVALUATORS_H_

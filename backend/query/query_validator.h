@@ -17,16 +17,24 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERY_VALIDATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERY_VALIDATOR_H_
 
-#include "zetasql/public/analyzer.h"
+#include <stdbool.h>
+
+#include <utility>
+
 #include "zetasql/public/language_options.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_ast_visitor.h"
-#include "backend/common/case.h"
+#include "zetasql/resolved_ast/resolved_node.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
+#include "absl/strings/string_view.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/feature_filter/sql_features_view.h"
+#include "backend/query/query_context.h"
 #include "backend/query/query_engine_options.h"
+#include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/schema.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -37,11 +45,11 @@ namespace backend {
 // collect information of interest (such as index names).
 class QueryValidator : public zetasql::ResolvedASTVisitor {
  public:
-  explicit QueryValidator(const Schema* schema,
+  explicit QueryValidator(const QueryContext context,
                           QueryEngineOptions* extracted_options = nullptr,
                           const zetasql::LanguageOptions language_options =
                               MakeGoogleSqlLanguageOptions())
-      : schema_(schema),
+      : context_(std::move(context)),
         language_options_(std::move(language_options)),
         sql_features_(SqlFeaturesView()),
         extracted_options_(extracted_options) {}
@@ -72,7 +80,7 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
   absl::Status VisitResolvedSampleScan(
       const zetasql::ResolvedSampleScan* node) override;
 
-  const Schema* schema() const { return schema_; }
+  const Schema* schema() const { return context_.schema; }
 
  private:
   // Validates the child hint nodes of `node`.
@@ -105,7 +113,7 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
       const absl::flat_hash_map<absl::string_view, zetasql::Value>&
           node_hint_map) const;
 
-  const Schema* schema_;
+  const QueryContext context_;
 
   const zetasql::LanguageOptions language_options_;
 

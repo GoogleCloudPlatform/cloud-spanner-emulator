@@ -22,12 +22,22 @@
 #include <utility>
 #include <vector>
 
+#include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/strings/escaping.h"
+#include "third_party/spanner_pg/datatypes/common/numeric_core.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/interface/pg_arena.h"
+#include "third_party/spanner_pg/interface/pg_arena_factory.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -64,7 +74,49 @@ using zetasql::values::String;
 using zetasql::values::Struct;
 using zetasql::values::Timestamp;
 
+using postgres_translator::spangres::datatypes::CreatePgJsonbValue;
+using postgres_translator::spangres::datatypes::CreatePgNumericValue;
+using postgres_translator::spangres::datatypes::GetPgJsonbArrayType;
+using postgres_translator::spangres::datatypes::GetPgJsonbType;
+using postgres_translator::spangres::datatypes::GetPgNumericArrayType;
+using postgres_translator::spangres::datatypes::GetPgNumericType;
+using ::postgres_translator::spangres::datatypes::common::MaxNumericString;
+
 using zetasql_base::testing::StatusIs;
+
+// Create PG.JSONB value in a valid memory context which is required for calling
+// PG code.
+static absl::StatusOr<zetasql::Value> CreatePgJsonbValueWithMemoryContext(
+    absl::string_view jsonb_string) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
+      postgres_translator::interfaces::CreatePGArena(nullptr));
+  return CreatePgJsonbValue(jsonb_string);
+}
+
+// Create PG.NUMERIC value in a valid memory context which is required for
+// calling PG code.
+static absl::StatusOr<zetasql::Value> CreatePgNumericValueWithMemoryContext(
+    absl::string_view numeric_string) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
+      postgres_translator::interfaces::CreatePGArena(nullptr));
+  return CreatePgNumericValue(numeric_string);
+}
+
+// Performs equality with the memory arena initialized. This is necessary for pg
+// types that call internal functions in order to convert values into a
+// comparable representation (e.g. pg numeric, which uses `numeric_in`).
+MATCHER_P(EqPG, result,
+          absl::StrCat("EqualPostgreSQLValue(", result.DebugString(), ")")) {
+  auto pg_arena = postgres_translator::interfaces::CreatePGArena(nullptr);
+  if (!pg_arena.ok()) {
+    *result_listener << "pg memory arena could not be initialized "
+                     << pg_arena.status();
+    return false;
+  }
+  return arg == result;
+}
 
 class ValueProtos : public ::testing::Test {
  public:
@@ -99,8 +151,12 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
       {Numeric(zetasql::NumericValue::FromStringStrict("-123456789.987654321")
                    .value()),
        "string_value: '-123456789.987654321'"},
+      {CreatePgNumericValueWithMemoryContext("-123456789.987654321").value(),
+       "string_value: '-123456789.987654321'"},
       {Json(zetasql::JSONValue::ParseJSONString("{\"key\":123}").value()),
        "string_value: '{\"key\":123}'"},
+      {CreatePgJsonbValueWithMemoryContext("{\"key\":123}").value(),
+       "string_value: '{\"key\": 123}'"},
       {Int64Array({}), "list_value: { values [] }"},
       {Int64Array({1, 2, 3}),
        "list_value: { values [{string_value: '1'}, {string_value: '2'}, "
@@ -111,6 +167,17 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
             zetasql::NumericValue::FromStringStrict("987.234e-3").value()}),
        "list_value: { values [{string_value: '-23.923'}, {string_value: "
        "'987.234'}, {string_value: '0.987234' }] }"},
+      {zetasql::Value::MakeArray(
+           GetPgNumericArrayType(),
+           {CreatePgNumericValueWithMemoryContext("-23.923").value(),
+            CreatePgNumericValueWithMemoryContext("NaN").value(),
+            CreatePgNumericValueWithMemoryContext("987.234").value(),
+            Null(GetPgNumericType()),
+            CreatePgNumericValueWithMemoryContext("987.234e-3").value()})
+           .value(),
+       "list_value: { values [{string_value: '-23.923'}, {string_value: 'NaN'},"
+       " {string_value: '987.234'}, {null_value: NULL_VALUE}, {string_value: "
+       "'0.987234' }] }"},
       {JsonArray(
            {zetasql::JSONValue::ParseJSONString("{\"intkey\":123}").value(),
             zetasql::JSONValue::ParseJSONString("{\"boolkey\":true}").value(),
@@ -119,10 +186,22 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
        "list_value: { values [{string_value: '{\"intkey\":123}'}, "
        "{string_value: '{\"boolkey\":true}'}, "
        "{string_value: '{\"strkey\":\"strval\"}'}]}"},
+      {zetasql::Value::MakeArray(
+           GetPgJsonbArrayType(),
+           {CreatePgJsonbValueWithMemoryContext("{\"intkey\":123}").value(),
+            CreatePgJsonbValueWithMemoryContext("{\"boolkey\":true}").value(),
+            CreatePgJsonbValueWithMemoryContext("{\"strkey\":\"strval\"}")
+                .value()})
+           .value(),
+       "list_value: { values [{string_value: '{\"intkey\": 123}'}, "
+       "{string_value: '{\"boolkey\": true}'}, "
+       "{string_value: '{\"strkey\": \"strval\"}'}]}"},
       {Struct(EmptyStructType(), {}), "list_value: { values: [] }"},
       {Struct(str_int_pair, {String("One"), Int64(2)}),
        "list_value: { values[{string_value: 'One'}, {string_value: '2'}] }"},
   };
+
+
   for (const auto& entry : test_cases) {
     const zetasql::Value& expected_value = entry.first;
     const std::string& expected_value_pb_txt = entry.second;
@@ -131,7 +210,7 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value actual_value,
                          ValueFromProto(PARSE_TEXT_PROTO(expected_value_pb_txt),
                                         expected_value.type()));
-    EXPECT_EQ(expected_value, actual_value)
+    EXPECT_THAT(expected_value, EqPG(actual_value))
         << "When parsing {" << expected_value_pb_txt << "}";
 
     // Check value -> proto conversions
@@ -156,10 +235,14 @@ TEST_F(ValueProtos, DoesNotParseProtosWithMismatchingTypes) {
       {StringType(), "number_value: 1.0"},
       {BytesType(), "number_value: -1"},
       {NumericType(), "number_value: 1"},
+      {GetPgNumericType(), "number_value: 1"},
       {JsonType(), "number_value: 1"},
+      {GetPgJsonbType(), "number_value: 1"},
       {Int64ArrayType(), "string_value: '1'"},
       {NumericArrayType(), "string_value: '1'"},
+      {GetPgNumericArrayType(), "string_value: '1'"},
       {JsonArrayType(), "string_value: '1'"},
+      {GetPgJsonbArrayType(), "string_value: '1'"},
       {EmptyStructType(), "bool_value: false"},
   };
   for (const auto& entry : test_cases) {
@@ -232,6 +315,26 @@ TEST_F(ValueProtos, DoesNotParseInvalidNumeric) {
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
+TEST_F(ValueProtos, DoesNotParseInvalidPgNumeric) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
+      postgres_translator::interfaces::CreatePGArena(nullptr));
+
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: '9252.a53'"),
+                             GetPgNumericType()),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+  // Scale exceeds PG.NUMERIC max
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO(absl::StrCat(
+                                 "string_value: '", MaxNumericString(), "1'")),
+                             GetPgNumericType()),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+  // Integer portion exceeds PG.NUMERIC
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO(absl::StrCat(
+                                 "string_value: '1", MaxNumericString(), "'")),
+                             GetPgNumericType()),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
 TEST_F(ValueProtos, DoesNotParseInvalidJson) {
   EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: 'invalid string'"),
                              JsonType()),
@@ -240,6 +343,17 @@ TEST_F(ValueProtos, DoesNotParseInvalidJson) {
   EXPECT_THAT(
       ValueFromProto(PARSE_TEXT_PROTO("string_value: '{\"key\":invalid}'"),
                      JsonType()),
+      StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(ValueProtos, DoesNotParseInvalidPgJsonB) {
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: 'invalid string'"),
+                             GetPgJsonbType()),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+  // String value should be quoted
+  EXPECT_THAT(
+      ValueFromProto(PARSE_TEXT_PROTO("string_value: '{\"key\":invalid}'"),
+                     GetPgJsonbType()),
       StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 

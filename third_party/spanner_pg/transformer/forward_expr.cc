@@ -60,6 +60,7 @@
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/catalog/function.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
@@ -84,6 +85,28 @@ using ::postgres_translator::internal::PostgresConstCastToExpr;
 using ::postgres_translator::internal::PostgresConstCastToNode;
 
 namespace {
+
+struct PrecisionAndScale {
+  int32_t precision;
+  int32_t scale;
+};
+
+// Use to extract precision and scale for typmod associated with pg.numeric
+PrecisionAndScale GetPrecisionAndScaleFromTypMod(int32_t typmod) {
+  // PostgreSQL typmods are index-shifted by adding VARHDRSZ. Subtract
+  // VARHDRSZ to get back the original typmod.
+  return {.precision = ((typmod - VARHDRSZ) >> 16) & 0xffff,
+          .scale = (typmod - VARHDRSZ) & 0xffff};
+}
+
+bool IsFixedPrecisionNumericCastSignature(
+    const zetasql::FunctionSignature& signature) {
+  return signature.arguments().size() == 3 &&
+         signature.argument(0).type()->Equals(
+             spangres::types::PgNumericMapping()->mapped_type()) &&
+         signature.argument(1).type()->IsInt64() &&
+         signature.argument(2).type()->IsInt64();
+}
 
 }  // namespace
 
@@ -318,6 +341,46 @@ ForwardTransformer::BuildGsqlCastExpression(
         zetasql::ResolvedFunctionCallBase::DEFAULT_ERROR_MODE);
   }
 
+  // PG.NUMERIC cast overrides are treated separately.
+    if (result_type == NUMERICOID || source_type_oid == NUMERICOID) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        FunctionAndSignature function_and_signature,
+        catalog_adapter_->GetEngineSystemCatalog()->GetPgNumericCastFunction(
+            source_type, target_type,
+            catalog_adapter_->analyzer_options().language()));
+    ABSL_DCHECK_NE(function_and_signature.function(), nullptr);
+
+    std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
+    argument_list.push_back(std::move(resolved_input));
+    if (IsFixedPrecisionNumericCastSignature(
+            function_and_signature.signature())) {
+      if (typmod == -1) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("Fixed precision numeric cast requires valid typmod. "
+                         "Provided typmod: ",
+                         typmod));
+      }
+      PrecisionAndScale precision_and_scale =
+          GetPrecisionAndScaleFromTypMod(typmod);
+      argument_list.push_back(zetasql::MakeResolvedLiteral(
+          zetasql::types::Int64Type(),
+          zetasql::Value::Int64(precision_and_scale.precision)));
+      argument_list.push_back(zetasql::MakeResolvedLiteral(
+          zetasql::types::Int64Type(),
+          zetasql::Value::Int64(precision_and_scale.scale)));
+    } else if (typmod != -1) {
+      return absl::UnimplementedError(
+          "Casts with a typmod are generally not supported. The only "
+          "supported cast with a typmod is varchar(<length>) and "
+          "numeric(<precision>,<scale>).");
+    }
+    return zetasql::MakeResolvedFunctionCall(
+        target_type, function_and_signature.function(),
+        function_and_signature.signature(), std::move(argument_list),
+        zetasql::ResolvedFunctionCallBase::DEFAULT_ERROR_MODE);
+  }
+
+  // If not pg.numeric, rely on ResolvedCast.
   ZETASQL_ASSIGN_OR_RETURN(bool is_cast_supported,
                    catalog_adapter_->GetEngineSystemCatalog()->IsValidCast(
                        source_type, target_type,
@@ -329,7 +392,22 @@ ForwardTransformer::BuildGsqlCastExpression(
       zetasql::MakeResolvedCast(resolved_type, std::move(resolved_input),
                                   /*return_null_on_error=*/false);
 
-  if (result_type == VARCHAROID && typmod != -1) {
+  // Fixed-precision cast; requires additional type parameters
+  if (result_type == NUMERICOID && source_type_oid == NUMERICOID) {
+    if (typmod == -1) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Fixed precision numeric cast requires valid typmod. "
+                       "Provided typmod: ",
+                       typmod));
+    }
+    PrecisionAndScale precision_and_scale =
+        GetPrecisionAndScaleFromTypMod(typmod);
+    resolved_cast->set_type_parameters(
+        zetasql::TypeParameters::MakeExtendedTypeParameters(
+            zetasql::ExtendedTypeParameters(
+                {zetasql::SimpleValue::Int64(precision_and_scale.precision),
+                 zetasql::SimpleValue::Int64(precision_and_scale.scale)})));
+  } else if (result_type == VARCHAROID && typmod != -1) {
     // PostgreSQL typmods are index-shifted by adding VARHDRSZ. Subtract
     // VARHDRSZ to get back the original typmod.
     int32_t substring_length = typmod - VARHDRSZ;
@@ -614,7 +692,6 @@ ForwardTransformer::BuildGsqlResolvedExpr(
     default:
       // This should really be an internal error default case with user-friendly
       // messages for unsupported cases we can identify (like T_CurrentOfExpr).
-      // TODO: Make this error message customer-friendly.
       return absl::InvalidArgumentError(
           absl::StrCat("Unsupported PostgreSQL expression type: ",
                        NodeTagToNodeString(expr.type)));
@@ -768,10 +845,6 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
       const Query* subquery =
           PostgresConstCastNode(Query, pg_sublink.subselect);
 
-      // TODO: if there are multiple columns, wrap the left side
-      // and SELECT list of the subquery in STRUCTs such that
-      // `(x, y) IN (select a, b FROM t)` becomes
-      // `STRUCT(x, y) IN (select STRUCT(a, b) FROM t)`
       if (list_length(subquery->targetList) > 1) {
         return absl::InvalidArgumentError(
             "ALL subqueries must only have one output column");
@@ -812,10 +885,6 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
       const Query* subquery =
           PostgresConstCastNode(Query, pg_sublink.subselect);
 
-      // TODO: if there are multiple columns, wrap the left side
-      // and SELECT list of the subquery in STRUCTs such that
-      // `(x, y) IN (select a, b FROM t)` becomes
-      // `STRUCT(x, y) IN (select STRUCT(a, b) FROM t)`
       if (list_length(subquery->targetList) > 1) {
         return absl::InvalidArgumentError(
             "ANY/SOME/IN subqueries must only have one output column");

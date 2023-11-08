@@ -46,6 +46,11 @@ TEST(StubEvaluatorTest, Abs) {
               StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("Abs")));
 }
 
+TEST(StubEvaluatorTest, Add) {
+  EXPECT_THAT(Add("123.45", "3.45"),
+              StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("Add")));
+}
+
 TEST(StubEvaluatorTest, Ceil) {
   EXPECT_THAT(Ceil("123.45"),
               StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("Ceil")));
@@ -54,6 +59,17 @@ TEST(StubEvaluatorTest, Ceil) {
 TEST(StubEvaluatorTest, Ceiling) {
   EXPECT_THAT(Ceiling("123.45"),
               StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("Ceiling")));
+}
+
+TEST(StubEvaluatorTest, Divide) {
+  EXPECT_THAT(Divide("123.45", "0.5"),
+              StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("Divide")));
+}
+
+TEST(StubEvaluatorTest, DivideTruncateTowardsZero) {
+  EXPECT_THAT(DivideTruncateTowardsZero("123.45", "2"),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("DivideTruncateTowardsZero")));
 }
 
 TEST(StubEvaluatorTest, Floor) {
@@ -66,9 +82,26 @@ TEST(StubEvaluatorTest, Mod) {
               StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("Mod")));
 }
 
+TEST(StubEvaluatorTest, Multiply) {
+  EXPECT_THAT(
+      Multiply("123.45", "2.5"),
+      StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("Multiply")));
+}
+
+TEST(StubEvaluatorTest, Subtract) {
+  EXPECT_THAT(
+      Subtract("123.45", "3.45"),
+      StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("Subtract")));
+}
+
 TEST(StubEvaluatorTest, Trunc) {
   EXPECT_THAT(Trunc("123", 1),
               StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("Trunc")));
+}
+
+TEST(StubEvaluatorTest, UnaryMinus) {
+  EXPECT_THAT(UnaryMinus("-123"), StatusIs(absl::StatusCode::kUnimplemented,
+                                           HasSubstr("UnaryMinus")));
 }
 
 }  // namespace

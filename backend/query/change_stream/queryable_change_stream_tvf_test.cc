@@ -61,10 +61,10 @@ TEST_F(QueryableChangeStreamTvfTest, CreateChangeStreamTvfOk) {
   const auto* schema_change_stream =
       schema_->FindChangeStream("change_stream_test_table");
   ASSERT_NE(schema_change_stream, nullptr);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      auto queryable_tvf,
-      QueryableChangeStreamTvf::Create(schema_change_stream, analyzer_options_,
-                                       catalog_.get(), &type_factory_, false));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto queryable_tvf,
+                       QueryableChangeStreamTvf::Create(
+                           schema_change_stream->tvf_name(), analyzer_options_,
+                           catalog_.get(), &type_factory_, false));
   EXPECT_EQ(queryable_tvf->Name(), "READ_change_stream_test_table");
   EXPECT_EQ(queryable_tvf->result_schema().num_columns(), 1);
   EXPECT_EQ(queryable_tvf->GetSignature(0)->arguments().size(), 5);

@@ -111,11 +111,22 @@ constexpr char kChangeStreamTvfOutputFormat[] = R"(ARRAY<STRUCT<
       parent_partition_tokens ARRAY<STRING>>>>>>>)";
 // Prefix for change stream tvf in googlesql dialect
 constexpr char kChangeStreamTvfStructPrefix[] = "READ_";
+// Prefix for change stream tvf in postgres dialect
+constexpr char kChangeStreamTvfJsonPrefix[] = "read_json_";
 // Prefix for change stream data table
 static constexpr char kChangeStreamDataTablePrefix[] = "_change_stream_data_";
 // Prefix for change stream partition table
 static constexpr char kChangeStreamPartitionTablePrefix[] =
     "_change_stream_partition_";
+
+// Options for bit-reversed sequences.
+static constexpr char kSequenceKindOptionName[] = "sequence_kind";
+static constexpr char kSequenceKindBitReversedPositive[] =
+    "bit_reversed_positive";
+static constexpr char kSequenceSkipRangeMinOptionName[] = "skip_range_min";
+static constexpr char kSequenceSkipRangeMaxOptionName[] = "skip_range_max";
+static constexpr char kSequenceStartWithCounterOptionName[] =
+    "start_with_counter";
 
 // Quotes used by different dialects of Spanner in DDL statements.
 static constexpr char kGSQLQuote[] = "`";

@@ -273,9 +273,6 @@ TEST_P(ForeignKeyTest, CreateTableWithForeignKey) {
 }
 
 TEST_P(ForeignKeyTest, CreateTableWithForeignKeyAction) {
-  if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP() << "Skip PG test!";
-  }
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
@@ -301,9 +298,6 @@ TEST_P(ForeignKeyTest, CreateTableWithForeignKeyAction) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTableWithForeignKeyActionWhenFlagDisabled) {
-  if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP() << "Skip PG test!";
-  }
   EXPECT_THAT(CreateSchema({
                   R"(
       CREATE TABLE T (
@@ -324,9 +318,6 @@ TEST_P(SchemaUpdaterTest, CreateTableWithForeignKeyActionWhenFlagDisabled) {
 
 TEST_P(SchemaUpdaterTest,
        CreateTableWithUnnamedForeignKeyActionWhenFlagDisabled) {
-  if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP() << "Skip PG test!";
-  }
   EXPECT_THAT(CreateSchema({
                   R"(
       CREATE TABLE T (
@@ -435,9 +426,6 @@ TEST_P(ForeignKeyTest, DropForeignKey) {
 }
 
 TEST_P(ForeignKeyTest, AddForeignKeyAction) {
-  if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP() << "Skip PG test!";
-  }
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (

@@ -52,6 +52,7 @@
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
@@ -67,6 +68,7 @@ namespace {
 using ::postgres_translator::internal::PostgresCastNodeTemplate;
 using ::postgres_translator::internal::PostgresCastToExpr;
 using ::postgres_translator::internal::PostgresCastToNode;
+using ::postgres_translator::spangres::types::PgNumericMapping;
 using ::postgres_translator::test::ValidMemoryContext;
 using ::zetasql_base::testing::StatusIs;
 
@@ -74,6 +76,18 @@ using ValuePair = std::pair<Expr*, std::unique_ptr<zetasql::ResolvedExpr>>;
 using ValuePairVector = std::vector<ValuePair>;
 
 using ExpressionTransformerTest = ::postgres_translator::TransformerTest;
+
+// Returns a numeric `Const` from the given string of numeric value
+// (e.g. "3.14").
+absl::StatusOr<Const*> MakeNumericConst(absl::string_view value,
+                                        bool is_null = false) {
+  Datum const_value =
+      DirectFunctionCall3(numeric_in, CStringGetDatum(value.data()),
+                          ObjectIdGetDatum(InvalidOid), Int32GetDatum(-1));
+  ZETASQL_ASSIGN_OR_RETURN(auto numeric_const,
+                   internal::makeScalarConst(NUMERICOID, const_value, is_null));
+  return numeric_const;
+}
 
 absl::StatusOr<ValuePairVector> ConstValuePairs() {
   ValuePairVector value_pairs;
@@ -151,6 +165,24 @@ absl::StatusOr<ValuePairVector> ConstValuePairs() {
       PostgresCastToExpr(string_const),
       zetasql::MakeResolvedLiteral(zetasql::types::BytesType(),
                                      zetasql::Value::NullBytes()));
+
+  // numeric <-> PG.NUMERIC
+  ZETASQL_ASSIGN_OR_RETURN(auto numeric_const,
+                   MakeNumericConst("-13.1357315957913513502000"));
+
+  value_pairs.emplace_back(
+      PostgresCastToExpr(numeric_const),
+      zetasql::MakeResolvedLiteral(
+          PgNumericMapping()->mapped_type(),
+          *PgNumericMapping()->MakeGsqlValue(numeric_const)));
+
+  ZETASQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("0", /*is_null=*/true));
+
+  value_pairs.emplace_back(
+      PostgresCastToExpr(numeric_const),
+      zetasql::MakeResolvedLiteral(
+          PgNumericMapping()->mapped_type(),
+          *PgNumericMapping()->MakeGsqlValue(numeric_const)));
 
   return value_pairs;
 }
@@ -267,9 +299,132 @@ absl::StatusOr<ValuePairVector> CastingValuePairs() {
   std::move(std::begin(new_values), std::end(new_values),
             std::back_inserter(value_pairs));
 
-  // TODO: Add other test cases (aggregation, array,
-  // and CoerceViaIO)
   return value_pairs;
+}
+
+absl::StatusOr<std::vector<std::pair<Expr*, absl::string_view>>>
+NumericCastingValuePairs() {
+  std::vector<std::pair<Expr*, absl::string_view>>
+      pg_expr_to_gsql_expr_debug_string;
+  // numeric -> float8
+  // pg: cast(1.1 as float8) <-> gsql: pg.cast_to_double(1.1)
+  ZETASQL_ASSIGN_OR_RETURN(auto numeric_const, MakeNumericConst("1.1"));
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto float_cast,
+      internal::makeFuncExpr(1746, FLOAT8OID,
+                             list_make1(PostgresCastToExpr(numeric_const)),
+                             COERCE_EXPLICIT_CAST));
+  pg_expr_to_gsql_expr_debug_string.emplace_back(
+      PostgresCastToExpr(float_cast),
+      "FunctionCall(spanner:pg.cast_to_double(PG.NUMERIC) -> "
+      "DOUBLE)\n+-Literal(type=PG.NUMERIC, value=1.1)\n");
+
+  // numeric -> int8_t
+  // pg: cast(2.2 as int8_t) <-> gsql: pg.cast_to_int64(2.2)
+  ZETASQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("2.2"));
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto int_cast,
+      internal::makeFuncExpr(1779, INT8OID,
+                             list_make1(PostgresCastToExpr(numeric_const)),
+                             COERCE_EXPLICIT_CAST));
+  pg_expr_to_gsql_expr_debug_string.emplace_back(
+      PostgresCastToExpr(int_cast),
+      "FunctionCall(spanner:pg.cast_to_int64(PG.NUMERIC) -> "
+      "INT64)\n+-Literal(type=PG.NUMERIC, value=2.2)\n");
+
+  // numeric -> text
+  // pg: cast(3.3 as text) -> gsql: pg.cast_to_string(3.3)
+  ZETASQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("3.3"));
+  ZETASQL_ASSIGN_OR_RETURN(auto coerce, internal::makeCoerceViaIO(
+                                    /*arg=*/PostgresCastToExpr(numeric_const),
+                                    /*resulttype=*/TEXTOID,
+                                    /*resultcollid=*/DEFAULT_COLLATION_OID,
+                                    /*coerceformat=*/COERCE_EXPLICIT_CAST));
+  pg_expr_to_gsql_expr_debug_string.emplace_back(
+      PostgresCastToExpr(coerce),
+      "FunctionCall(spanner:pg.cast_to_string(PG.NUMERIC) -> "
+      "STRING)\n+-Literal(type=PG.NUMERIC, value=3.3)\n");
+
+  // numeric -> text
+  // pg: cast(1000000000000.0000000000001 as text) -> gsql:
+  // pg.cast_to_string(1000000000000.0000000000001)
+  ZETASQL_ASSIGN_OR_RETURN(numeric_const,
+                   MakeNumericConst("1000000000000.0000000000001"));
+  ZETASQL_ASSIGN_OR_RETURN(coerce, internal::makeCoerceViaIO(
+                               /*arg=*/PostgresCastToExpr(numeric_const),
+                               /*resulttype=*/TEXTOID,
+                               /*resultcollid=*/DEFAULT_COLLATION_OID,
+                               /*coerceformat=*/COERCE_EXPLICIT_CAST));
+  pg_expr_to_gsql_expr_debug_string.emplace_back(
+      PostgresCastToExpr(coerce),
+      "FunctionCall(spanner:pg.cast_to_string(PG.NUMERIC) -> "
+      "STRING)\n+-Literal(type=PG.NUMERIC, "
+      "value=1000000000000.0000000000001)\n");
+
+  // float8 -> numeric
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto float8_const,
+      internal::makeScalarConst(FLOAT8OID, Float8GetDatum(3.141592653589793),
+                                /*constisnull=*/false));
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto float_to_numeric_cast,
+      internal::makeFuncExpr(1743, NUMERICOID,
+                             list_make1(PostgresCastToExpr(float8_const)),
+                             COERCE_EXPLICIT_CAST));
+  pg_expr_to_gsql_expr_debug_string.emplace_back(
+      PostgresCastToExpr(float_to_numeric_cast),
+      "FunctionCall(spanner:pg.cast_to_numeric(DOUBLE) -> "
+      "PG.NUMERIC)\n+-Literal(type=DOUBLE, value=3.1415926535897931)\n");
+
+  // int8_t -> numeric
+  ZETASQL_ASSIGN_OR_RETURN(auto int8_const,
+                   internal::makeScalarConst(INT8OID, Int8GetDatum(123456),
+                                             /*constisnull=*/false));
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto int_to_numeric_cast,
+      internal::makeFuncExpr(1781, NUMERICOID,
+                             list_make1(PostgresCastToExpr(int8_const)),
+                             COERCE_EXPLICIT_CAST));
+  pg_expr_to_gsql_expr_debug_string.emplace_back(
+      PostgresCastToExpr(int_to_numeric_cast),
+      "FunctionCall(spanner:pg.cast_to_numeric(INT64) -> "
+      "PG.NUMERIC)\n+-Literal(type=INT64, value=123456)\n");
+
+  // text -> numeric
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto string_const,
+      internal::makeStringConst(TEXTOID, "123.456789", /*constisnull=*/false));
+  ZETASQL_ASSIGN_OR_RETURN(coerce, internal::makeCoerceViaIO(
+                               /*arg=*/PostgresCastToExpr(string_const),
+                               /*resulttype=*/NUMERICOID,
+                               /*resultcollid=*/DEFAULT_COLLATION_OID,
+                               /*coerceformat=*/COERCE_EXPLICIT_CAST));
+  pg_expr_to_gsql_expr_debug_string.emplace_back(
+      PostgresCastToExpr(coerce),
+      "FunctionCall(spanner:pg.cast_to_numeric(STRING) -> "
+      "PG.NUMERIC)\n+-Literal(type=STRING, value=\"123.456789\")\n");
+
+  // numeric -> fixed precision numeric
+  // pg: cast(3.3 as numeric(4,2)) -> gsql: pg.cast_to_numeric(3.3, 4, 5)
+  ZETASQL_ASSIGN_OR_RETURN(auto int4_const,
+                   // 262150 represents precision=4, scale=2
+                   internal::makeScalarConst(INT4OID, Int32GetDatum(262150),
+                                             /*constisnull=*/false));
+  ZETASQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("3.3"));
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto fixed_numeric_cast,
+      internal::makeFuncExpr(
+          1703, NUMERICOID,
+          list_make2(PostgresCastToExpr(numeric_const), int4_const),
+          COERCE_EXPLICIT_CAST));
+  pg_expr_to_gsql_expr_debug_string.emplace_back(
+      PostgresCastToExpr(fixed_numeric_cast),
+      "FunctionCall(spanner:pg.cast_to_numeric(PG.NUMERIC, INT64, optional(1) INT64) -> "
+      "PG.NUMERIC)\n+-Literal(type=PG.NUMERIC, "
+      "value=3.3)\n+-Literal(type=INT64, value=4)\n+-Literal(type=INT64, "
+      "value=2)\n");
+
+  return pg_expr_to_gsql_expr_debug_string;
 }
 
 // Accumulates all value pairs for the general
@@ -410,6 +565,23 @@ TEST_F(ExpressionTransformerTest, PgCastingToGsqlResolvedExpr) {
   }
 }
 
+TEST_F(ExpressionTransformerTest, PgCastingNumericToGsqlResolvedExpr) {
+  VarIndexScope var_index_scope;
+  ExprTransformerInfo expr_transformer_info =
+      ExprTransformerInfo::ForScalarFunctions(&var_index_scope,
+                                              /*clause_name=*/"");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto numeric_cast_pairs, NumericCastingValuePairs());
+  for (const auto& [pg_expr, expected_debug_str] : numeric_cast_pairs) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        std::unique_ptr<const zetasql::ResolvedExpr> new_gsql_expr,
+        forward_transformer_->BuildGsqlResolvedExpr(*pg_expr,
+                                                    &expr_transformer_info));
+    ASSERT_NE(new_gsql_expr, nullptr);
+    EXPECT_EQ(new_gsql_expr->DebugString(), expected_debug_str);
+  }
+}
+
 TEST_F(ExpressionTransformerTest, PgExprToGsqlExpr) {
   VarIndexScope var_index_scope;
   ExprTransformerInfo expr_transformer_info =
@@ -532,9 +704,6 @@ TEST_F(ExpressionTransformerTest, BuildGsqlResolvedLiteralPreservesNullBytes) {
 }  // namespace
 }  // namespace postgres_translator::spangres::test
 
-// TODO: Move spanner-specific code out of engine-agnostic
-// transformer code. In this case, don't call OverrideSpannerFlagsInUnittest
-// since this test should be engine agnostic.
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
 

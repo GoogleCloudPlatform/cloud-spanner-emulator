@@ -62,6 +62,10 @@ cc_test(
 cc_test(
     name = "pg_queryable_change_stream_tvf_test",
     srcs = ["pg_queryable_change_stream_tvf_test.cc"],
+    args = [
+        "--spangres_use_emulator_jsonb_type=true",
+        "--spangres_use_emulator_numeric_type=true",
+    ],
     deps = [
         ":queryable_change_stream_tvf",
         "//backend/query:analyzer_options",
@@ -123,6 +127,41 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "pg_change_stream_query_validator_test",
+    srcs = ["pg_change_stream_query_validator_test.cc"],
+    args = [
+        "--spangres_use_emulator_jsonb_type=true",
+        "--spangres_use_emulator_numeric_type=true",
+    ],
+    deps = [
+        ":change_stream_query_validator",
+        "//backend/query:analyzer_options",
+        "//backend/query:catalog",
+        "//backend/query:function_catalog",
+        "//backend/schema/catalog:schema",
+        "//common:errors",
+        "//common:limits",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_schema_constructor",
+        "//third_party/spanner_pg/interface:emulator_parser",
+        "//third_party/spanner_pg/interface:pg_arena_factory",
+        "//third_party/spanner_pg/shims:memory_context_pg_arena",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:analyzer_options",

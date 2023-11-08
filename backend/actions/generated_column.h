@@ -56,7 +56,7 @@ class GeneratedColumnEffector : public Effector {
       const Column* generated_column,
       const zetasql::ParameterValueMap& row_column_values) const;
 
-  // Computed the default values of primary key columns (if any) based
+  // Computed the default/generated values of primary key columns (if any) based
   // on the given `mutation_op`. Those columns are returned via
   // `columns_with_generated_values`, and their values are returned via
   // `generated_values`.

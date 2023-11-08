@@ -15,6 +15,7 @@
 //
 
 
+// Helper regex definitions to be used in real token definitions.
 TOKEN:
 {
     <#DEC_DIGIT:            ["0"-"9"]>
@@ -23,13 +24,21 @@ TOKEN:
   | <#SCALE_FACTOR:         "e" (["+", "-"])? ( <DEC_DIGIT> )+ >
 }
 
-TOKEN:
+TOKEN: /* Literals */
 {
     <ID: (<LETTER_OR_UNDERSCORE>) (<LETTER_OR_UNDERSCORE> | <DEC_DIGIT>)* >
   | <INTEGER_LITERAL: ("-")? ( <DEC_DIGIT> (<DEC_DIGIT>)* |
                                "0x" (<HEX_DIGIT>)+ ) >
   | <QUOTED_ID: "`" (~["\n","\r","`","0"-"9"]) (~["\n","\r","`"])* "`" >
 }
+
+/* ---------------- General Productions --------------------- */
+
+/**
+ * Basic named reference, used for tables, columns, option names, etc.
+ *
+ * the #void means to not create a node
+ */
 void identifier() #void :
 {}
 {
@@ -61,16 +70,21 @@ void path() :
 {
   identifier()
 }
+
+// Parses an Int64 value
 void int_value() :
 {}
 {
   <INTEGER_LITERAL>
 }
+
+// Parses a String value
 void string_value() :
 {}
 {
   any_string_literal()
 }
+
 void ddl_statement() :
 {}
 {
@@ -87,15 +101,14 @@ void create_statement() #void :
 {
   <CREATE>
   (   create_database_statement()
-
     | create_table_statement()
-    | LOOKAHEAD(2) create_index_statement()
+    | create_index_statement()
 
     | create_or_replace_statement()
     | create_change_stream_statement()
+    | create_sequence_statement()
   )
 }
-
 
 void create_or_replace_statement() :
 {}
@@ -104,6 +117,16 @@ void create_or_replace_statement() :
   (
       create_view_statement()
   )
+}
+
+void alter_index_statement() :
+{}
+{
+  <INDEX>
+  ( qualified_identifier() #name )
+  ( <ADD> #add | <DROP> #drop )
+  <STORED> <COLUMN>
+  ( identifier() #column_name )
 }
 
 void options_clause() :
@@ -184,9 +207,7 @@ void column_type() :
   | <JSON>
   | <ARRAY> "<" column_type() ">"
 
-
 }
-
 
 void column_length() :
 {}
@@ -291,6 +312,12 @@ void create_index_statement() :
 }
 
 
+void index_interleave_clause() :
+{}
+{
+  <INTERLEAVE> <IN> qualified_identifier() #interleave_in
+}
+
 void create_change_stream_statement() :
 {}
 {
@@ -325,12 +352,12 @@ void change_stream_tracked_tables_entry() :
   ]
 }
 
-void index_interleave_clause() :
+void create_sequence_statement() :
 {}
 {
-  <INTERLEAVE> <IN> qualified_identifier() #interleave_in
+  <SEQUENCE> [ if_not_exists() ] qualified_identifier() #name
+  [ options_clause() ]
 }
-
 
 void key() #void :
 {}
@@ -393,10 +420,10 @@ void or_replace() :
   <OR> <REPLACE>
 }
 
-void sql_security_invoker() :
+void sql_security() :
 {}
 {
-  <SQL> <SECURITY> <INVOKER>
+  <INVOKER>
 }
 
 void create_view_statement() :
@@ -404,7 +431,7 @@ void create_view_statement() :
 {
   ( <VIEW> )
   ( qualified_identifier() #name )
-  [ sql_security_invoker() ]
+  [ <SQL> <SECURITY> sql_security() ]
   <AS> statement_tokens() #view_definition
 }
 
@@ -432,17 +459,13 @@ void drop_statement() :
 {}
 {
   <DROP>
+    ( <TABLE> #table [ if_exists() ]
+      | <INDEX> #index [ if_exists() ]
 
-    ( <TABLE> #table
-      [ if_exists() ]
-    | <INDEX> #index
-      [ if_exists() ]
-    | <VIEW> #view
-    | <CHANGE> <STREAM> #change_stream
-  ) qualified_identifier() #name
-
-
-
+      | <VIEW> #view [ if_exists() ]
+      | <CHANGE> <STREAM> #change_stream
+      | <SEQUENCE> #sequence [ if_exists() ]
+    ) qualified_identifier() #name
 }
 
 void alter_statement() #void :
@@ -452,7 +475,8 @@ void alter_statement() #void :
   (
     alter_table_statement()
     | alter_change_stream_statement()
-
+    | alter_index_statement()
+    | alter_sequence_statement()
   )
 }
 
@@ -466,13 +490,14 @@ void alter_table_statement() :
         (identifier() #column_name)
     | LOOKAHEAD(1) <ALTER> #alter_column [LOOKAHEAD(2) <COLUMN>]
         (identifier() #name) column_def_alter()
-    | <SET> #set_on_delete on_delete_clause()
+    | LOOKAHEAD(2) <SET> #set_on_delete on_delete_clause()
     | LOOKAHEAD(4) <ADD> foreign_key()
     | LOOKAHEAD(4) <ADD> check_constraint()
     | LOOKAHEAD(4) <ADD> row_deletion_policy_clause() #add_row_deletion_policy
-    | LOOKAHEAD(1) <ADD> #add_column [LOOKAHEAD(6) <COLUMN>
-      [ if_not_exists() ]
-    ] column_def()
+    // ADD COLUMN could mask the above ADD clauses, so putting it at the end.
+    | LOOKAHEAD(1) <ADD> #add_column [
+        LOOKAHEAD(6) <COLUMN> [ if_not_exists() ]
+      ] column_def()
     | <REPLACE> row_deletion_policy_clause() #replace_row_deletion_policy
   )
 }
@@ -487,16 +512,24 @@ void alter_change_stream_statement() :
   )
 }
 
+void alter_sequence_statement() :
+{}
+{
+  <SEQUENCE> [ if_exists() ] (qualified_identifier() #name) <SET> options_clause()
+
+}
+
 void analyze_statement() :
 {}
 {
   <ANALYZE>
 }
 
-
-TOKEN:
+TOKEN:  /* catch unexpected characters; must be last in file */
 {
   <UNEXPECTED_CHARACTER: ~[]>
+
+  /* These tokens are injected by validation logic to signal error type. */
   | <ILLEGAL_STRING_ESCAPE: "\\" ~[]> : DEFAULT
   | <ILLEGAL_BYTES_ESCAPE: "\\" ~[]> : DEFAULT
 }

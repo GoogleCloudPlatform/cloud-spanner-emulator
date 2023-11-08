@@ -431,3 +431,63 @@ CREATE TABLE Users (
 --
 ERROR: At least one referenced column is required in foreign key.
 ==
+# Foreign key ON DELETE CASCADE action syntax.
+CREATE TABLE T (
+  A bigint,
+  PRIMARY KEY(A));
+CREATE TABLE U (
+  X bigint,
+  CONSTRAINT C FOREIGN KEY(X) REFERENCES T(A) ON DELETE CASCADE,
+  PRIMARY KEY(X)
+);
+--
+CREATE TABLE t (
+  a bigint NOT NULL,
+  PRIMARY KEY(a)
+);
+CREATE TABLE u (
+  x bigint NOT NULL,
+  PRIMARY KEY(x),
+  CONSTRAINT c FOREIGN KEY (x) REFERENCES t(a) ON DELETE CASCADE
+);
+==
+# Foreign key ON DELETE NO ACTION action syntax.
+CREATE TABLE T (
+  A bigint,
+  PRIMARY KEY(A));
+CREATE TABLE U (
+  X bigint,
+  CONSTRAINT C FOREIGN KEY(X) REFERENCES T(A) ON DELETE NO ACTION,
+  PRIMARY KEY(X)
+);
+--
+CREATE TABLE t (
+  a bigint NOT NULL,
+  PRIMARY KEY(a)
+);
+CREATE TABLE u (
+  x bigint NOT NULL,
+  PRIMARY KEY(x),
+  CONSTRAINT c FOREIGN KEY (x) REFERENCES t(a)
+);
+==
+# Add foreign key with DELETE CASCADE action to existing tables.
+CREATE TABLE T (
+  A bigint NOT NULL,
+  PRIMARY KEY(A)
+);
+CREATE TABLE U (
+  X bigint NOT NULL,
+  PRIMARY KEY(X)
+);
+ALTER TABLE U ADD FOREIGN KEY(X) REFERENCES T(A) ON DELETE CASCADE;
+--
+CREATE TABLE t (
+  a bigint NOT NULL,
+  PRIMARY KEY(a)
+);
+CREATE TABLE u (
+  x bigint NOT NULL,
+  PRIMARY KEY(x),
+  FOREIGN KEY (x) REFERENCES t(a) ON DELETE CASCADE
+);

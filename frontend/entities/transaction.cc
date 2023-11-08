@@ -200,19 +200,28 @@ absl::Status Transaction::Read(const backend::ReadArg& read_arg,
 
 absl::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
     const backend::Query& query) {
+  return ExecuteSql(query, v1::ExecuteSqlRequest::NORMAL);
+}
+
+absl::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
+    const backend::Query& query,
+    const v1::ExecuteSqlRequest_QueryMode query_mode) {
   mu_.AssertHeld();
   switch (type_) {
     case kReadOnly: {
       return query_engine_->ExecuteSql(
           query,
           backend::QueryContext{
-              .schema = schema(), .reader = read_only(), .writer = nullptr});
+              .schema = schema(), .reader = read_only(), .writer = nullptr},
+          query_mode);
     }
     case kReadWrite: {
       return query_engine_->ExecuteSql(
-          query, backend::QueryContext{.schema = schema(),
-                                       .reader = read_write(),
-                                       .writer = read_write()});
+          query,
+          backend::QueryContext{.schema = schema(),
+                                .reader = read_write(),
+                                .writer = read_write()},
+          query_mode);
     }
     case kPartitionedDml: {
       auto context = backend::QueryContext{
@@ -220,7 +229,7 @@ absl::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
       ZETASQL_RETURN_IF_ERROR(query_engine_->IsValidPartitionedDML(query, context));
       // PartitionedDml will auto-commit transactions and cannot be reused.
       ZETASQL_ASSIGN_OR_RETURN(backend::QueryResult result,
-                       query_engine_->ExecuteSql(query, context));
+                       query_engine_->ExecuteSql(query, context, query_mode));
       ZETASQL_RETURN_IF_ERROR(read_write()->Commit());
       return result;
     }

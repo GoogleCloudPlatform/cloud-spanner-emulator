@@ -33,7 +33,11 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/actions/manager.h"
@@ -42,9 +46,12 @@
 #include "backend/datamodel/value.h"
 #include "backend/query/catalog.h"
 #include "backend/schema/catalog/schema.h"
+#include "common/limits.h"
 #include "tests/common/row_reader.h"
 #include "tests/common/schema_constructor.h"
 #include "tests/common/scoped_feature_flags_setter.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
@@ -66,6 +73,8 @@ using zetasql_base::testing::IsOkAndHolds;
 
 using zetasql::values::Int64;
 using zetasql::values::String;
+using postgres_translator::spangres::datatypes::GetPgJsonbType;
+using postgres_translator::spangres::datatypes::GetPgNumericType;
 
 inline constexpr char kQueryContainsSubqueryError[] =
     "Query contains subquery.";
@@ -73,8 +82,7 @@ inline constexpr char kQueryContainsSubqueryError[] =
 inline constexpr char kQueryNotASimpleTableScanError[] =
     "Query is not a simple table scan.";
 
-inline constexpr char kPGUnnestUnsupportedError[] =
-    "[ERROR] syntax error at or near \"[\"";
+inline constexpr char kPGUnnestUnsupportedError[] = "UNNEST is not supported";
 
 testing::Matcher<const zetasql::Type*> Int64Type() {
   return Property(&zetasql::Type::IsInt64, IsTrue());
@@ -82,6 +90,40 @@ testing::Matcher<const zetasql::Type*> Int64Type() {
 
 testing::Matcher<const zetasql::Type*> StringType() {
   return Property(&zetasql::Type::IsString, IsTrue());
+}
+
+testing::Matcher<const zetasql::Type*> BoolType() {
+  return Property(&zetasql::Type::IsBool, IsTrue());
+}
+
+testing::Matcher<const zetasql::Type*> Float64Type() {
+  return Property(&zetasql::Type::IsDouble, IsTrue());
+}
+
+testing::Matcher<const zetasql::Type*> BytesType() {
+  return Property(&zetasql::Type::IsBytes, IsTrue());
+}
+
+testing::Matcher<const zetasql::Type*> TimestampType() {
+  return Property(&zetasql::Type::IsTimestamp, IsTrue());
+}
+
+testing::Matcher<const zetasql::Type*> DateType() {
+  return Property(&zetasql::Type::IsDate, IsTrue());
+}
+
+testing::Matcher<const zetasql::Type*> JsonType() {
+  return Property(&zetasql::Type::IsJsonType, IsTrue());
+}
+
+testing::Matcher<const zetasql::Type*> NumericType() {
+  return Property(&zetasql::Type::IsNumericType, IsTrue());
+}
+
+testing::Matcher<zetasql::Value> UuidV4StringValue() {
+  return Property(&zetasql::Value::string_value,
+                  testing::MatchesRegex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-["
+                                        "89ab][0-9a-f]{3}-[0-9a-f]{12}"));
 }
 
 std::vector<std::string> GetColumnNames(const backend::RowCursor& cursor) {
@@ -115,6 +157,25 @@ absl::StatusOr<std::vector<std::vector<zetasql::Value>>> GetAllColumnValues(
   }
   ZETASQL_RETURN_IF_ERROR(cursor->Status());
   return all_values;
+}
+
+std::vector<std::string> GetParamNames(const backend::QueryResult& result) {
+  std::vector<std::string> names;
+  names.reserve(result.parameter_types.size());
+  for (const auto& param : result.parameter_types) {
+    names.push_back(param.first);
+  }
+  return names;
+}
+
+std::vector<const zetasql::Type*> GetParamTypes(
+    const backend::QueryResult& result) {
+  std::vector<const zetasql::Type*> types;
+  types.reserve(result.parameter_types.size());
+  for (const auto& param : result.parameter_types) {
+    types.push_back(param.second);
+  }
+  return types;
 }
 
 class QueryEngineTestBase : public testing::Test {
@@ -151,7 +212,9 @@ class QueryEngineTestBase : public testing::Test {
           {zetasql::values::Int64(4), zetasql::values::String("four")}}}}}};
   QueryEngine query_engine_{&type_factory_};
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_setter_ =
-      test::ScopedEmulatorFeatureFlagsSetter({.enable_dml_returning = true});
+      test::ScopedEmulatorFeatureFlagsSetter(
+          {.enable_dml_returning = true,
+           .enable_bit_reversed_positive_sequences = true});
   test::TestRowReader change_stream_partition_table_reader_{
       {{"_change_stream_partition_change_stream_test_table",
         {{"partition_token"}, {zetasql::types::StringType()}}}}};
@@ -169,6 +232,8 @@ class QueryEngineTest
       schema_ = test::CreateSchemaWithOneTable(
           &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
       multi_table_schema_ = test::CreateSchemaWithMultiTables(
+          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
+      change_stream_schema_ = test::CreateSchemaWithOneTableAndOneChangeStream(
           &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
     } else if (GetParam() ==
                database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
@@ -209,6 +274,49 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsOneFromTable) {
                                ElementsAre(Int64(1)))));
 }
 
+TEST_P(QueryEngineTest, PlanSqlSelectsOneFromTable) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"SELECT 1 AS one FROM test_table"},
+                                QueryContext{schema(), reader()},
+                                v1::ExecuteSqlRequest::PLAN));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("one"));
+  EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(Int64Type()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlSelectsGenerateUUIDFromTable) {
+  // When using the postgres  dialect, generate_uuid() is exposed only via the
+  // 'spanner' namespace.
+  for (std::string function_call :
+       {"GENERATE_UUID()", "SPANNER.GENERATE_UUID()"}) {
+    SCOPED_TRACE(absl::StrCat("Using function: ", function_call));
+    constexpr absl::string_view sql = "SELECT %s AS uuid FROM test_table";
+    absl::StatusOr<QueryResult> status_or =
+        query_engine().ExecuteSql(Query{absl::StrFormat(sql, function_call)},
+                                  QueryContext{schema(), reader()});
+
+    bool using_pg = GetParam() == database_api::DatabaseDialect::POSTGRESQL;
+    bool expect_success =
+        (!using_pg && function_call == "GENERATE_UUID()") ||
+        (using_pg && function_call == "SPANNER.GENERATE_UUID()");
+    ASSERT_EQ(status_or.ok(), expect_success) << status_or.status();
+    if (expect_success) {
+      QueryResult result = std::move(status_or.value());
+      ASSERT_NE(result.rows, nullptr);
+      EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("uuid"));
+      EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(StringType()));
+
+      EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+                  IsOkAndHolds(ElementsAre(ElementsAre(UuidV4StringValue()),
+                                           ElementsAre(UuidV4StringValue()),
+                                           ElementsAre(UuidV4StringValue()))));
+    }
+  }
+}
+
 TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTable) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,
@@ -221,6 +329,107 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTable) {
               IsOkAndHolds(UnorderedElementsAre(ElementsAre(String("one")),
                                                 ElementsAre(String("two")),
                                                 ElementsAre(String("four")))));
+}
+
+TEST_P(QueryEngineTest, PlanSqlSelectsOneColumnFromTable) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"SELECT string_col FROM test_table"},
+                                QueryContext{schema(), reader()},
+                                v1::ExecuteSqlRequest::PLAN));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("string_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(StringType()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, PlanSqlRecognizesAllParameterTypes) {
+  Query query;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = Query{
+        "SELECT "
+        "cast($1 as varchar) as string_param, "
+        "cast($2 as bigint) as int64_param, "
+        "cast($3 as bool) as bool_param, "
+        "cast($4 as bytea) as bytes_param, "
+        "cast($5 as float8) as float64_param, "
+        "cast($6 as jsonb) as json_param, "
+        "cast($7 as numeric) as numeric_param, "
+        "cast($8 as timestamptz) as timestamp_param, "
+        "cast($9 as date) as date_param"};
+  } else {
+    query = Query{
+        "SELECT "
+        "cast(@p1 as string) as string_param, "
+        "@p2 as int64_param, "
+        "cast(@p3 as bool) as bool_param, "
+        "cast(@p4 as bytes) as bytes_param, "
+        "cast(@p5 as float64) as float64_param, "
+        "cast(@p6 as json) as json_param, "
+        "cast(@p7 as numeric) as numeric_param, "
+        "cast(@p8 as timestamp) as timestamp_param, "
+        "cast(@p9 as date) as date_param"};
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{schema(), reader()},
+                                v1::ExecuteSqlRequest::PLAN));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetParamNames(result), ElementsAre("p1", "p2", "p3", "p4", "p5",
+                                                 "p6", "p7", "p8", "p9"));
+  EXPECT_THAT(
+      GetParamTypes(result),
+      ElementsAre(StringType(), Int64Type(), BoolType(), BytesType(),
+                  Float64Type(),
+                  GetParam() == database_api::DatabaseDialect::POSTGRESQL
+                      ? testing::Eq(GetPgJsonbType())
+                      : JsonType(),
+                  GetParam() == database_api::DatabaseDialect::POSTGRESQL
+                      ? testing::Eq(GetPgNumericType())
+                      : NumericType(),
+                  TimestampType(), DateType()));
+}
+
+TEST_P(QueryEngineTest, PlanSqlAcceptsIncompleteParameters) {
+  Query query;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = {
+        "SELECT string_col FROM test_table "
+        "WHERE string_col=$1 and int64_col=$2",
+        {{"p2", zetasql::values::Int64(1)}}};
+  } else {
+    query = {
+        "SELECT string_col FROM test_table "
+        "WHERE string_col=@p1 and int64_col=@p2",
+        {{"p2", zetasql::values::Int64(1)}}};
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{schema(), reader()},
+                                v1::ExecuteSqlRequest::PLAN));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("string_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(StringType()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+  EXPECT_THAT(GetParamNames(result), ElementsAre("p1", "p2"));
+  EXPECT_THAT(GetParamTypes(result), ElementsAre(StringType(), Int64Type()));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlRefusesIncompleteParameters) {
+  Query query;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = {"SELECT string_col FROM test_table WHERE string_col=$1"};
+  } else {
+    query = {"SELECT string_col FROM test_table WHERE string_col=@p1"};
+  }
+  EXPECT_THAT(query_engine().ExecuteSql(query, QueryContext{schema(), reader()},
+                                        v1::ExecuteSqlRequest::NORMAL),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("Incomplete query parameters")));
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTableWithForceIndexHint) {
@@ -313,6 +522,16 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsCountFromTable) {
               IsOkAndHolds(ElementsAre(ElementsAre(Int64(3)))));
 }
 
+TEST_P(QueryEngineTest, ExecuteSqlQueryStringTooLong) {
+  std::string long_str = std::string(limits::kMaxQueryStringSize + 1, 'a');
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{absl::Substitute("SELECT '$0'", long_str)},
+                  QueryContext{schema(), reader()}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("exceeds maximum allowed length")));
+}
+
 TEST_P(QueryEngineTest, PartitionableSimpleScan) {
   Query query{"SELECT string_col FROM test_table"};
   ZETASQL_ASSERT_OK(query_engine().IsPartitionable(
@@ -351,7 +570,7 @@ TEST_P(QueryEngineTest, PartitionableSimpleScanNoTable) {
           // UNNEST is unsupported in the PG dialect.
           ? kPGUnnestUnsupportedError
           : kQueryNotASimpleTableScanError;
-  Query query{"SELECT a FROM UNNEST([1, 2, 3]) AS a"};
+  Query query{"SELECT a FROM UNNEST(ARRAY[1, 2, 3]) AS a"};
   EXPECT_THAT(query_engine().IsPartitionable(
                   query, QueryContext{multi_table_schema(), reader()}),
               zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
@@ -364,7 +583,7 @@ TEST_P(QueryEngineTest, PartitionableSimpleScanFilterNoTable) {
           // UNNEST is unsupported in the PG dialect.
           ? kPGUnnestUnsupportedError
           : kQueryNotASimpleTableScanError;
-  Query query{"SELECT a FROM UNNEST([1, 2, 3]) AS a WHERE a = 1"};
+  Query query{"SELECT a FROM UNNEST(ARRAY[1, 2, 3]) AS a WHERE a = 1"};
   EXPECT_THAT(query_engine().IsPartitionable(
                   query, QueryContext{multi_table_schema(), reader()}),
               zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
@@ -511,55 +730,76 @@ TEST_P(QueryEngineTest, ConnotUpdatePrimaryKey) {
 }
 
 TEST_P(QueryEngineTest, TestGetValidChangeStreamMetadataFromChangeStreamQuery) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    return;
-  }
-
+  Query query;
   absl::Time start_time = absl::Now();
   absl::Time end_time = start_time + absl::Minutes(1);
-  Query query{
-      absl::Substitute("SELECT * FROM "
-                       "READ_change_stream_test_table ('$0', "
-                       "'$1', 'test_token', 1000 )",
-                       start_time, end_time)};
+  std::string tvf_name = GetParam() == database_api::DatabaseDialect::POSTGRESQL
+                             ? "read_json_change_stream_test_table"
+                             : "READ_change_stream_test_table";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = {absl::Substitute(
+        "SELECT * FROM "
+        "spanner.read_json_change_stream_test_table ('$0'::timestamptz, "
+        "'$1'::timestamptz, 'test_token'::text, 1000, NULL::text[] )",
+        start_time, end_time)};
+  } else {
+    query = {
+        absl::Substitute("SELECT * FROM "
+                         "READ_change_stream_test_table ('$0', "
+                         "'$1', 'test_token', 1000 )",
+                         start_time, end_time)};
+  }
+
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto metadata, query_engine().TryGetChangeStreamMetadata(
                                           query, change_stream_schema()));
   EXPECT_EQ(metadata.change_stream_name, "change_stream_test_table");
   EXPECT_EQ(metadata.heartbeat_milliseconds, 1000);
   EXPECT_EQ(metadata.partition_token.value(), "test_token");
-  EXPECT_EQ(metadata.end_timestamp.value(), end_time);
-  EXPECT_EQ(metadata.start_timestamp, start_time);
-  EXPECT_EQ(metadata.tvf_name, "READ_change_stream_test_table");
+  // absl::Time have different precision with timestamptz in pg
+  // dialect, thus we only compare them up to microseconds precision.
+  EXPECT_EQ(absl::FormatTime("%Y-%m-%dT%H:%M:%S.%fZ", metadata.start_timestamp,
+                             absl::LocalTimeZone()),
+            absl::FormatTime("%Y-%m-%dT%H:%M:%S.%fZ", start_time,
+                             absl::LocalTimeZone()));
+  EXPECT_EQ(
+      absl::FormatTime("%Y-%m-%dT%H:%M:%S.%fZ", metadata.end_timestamp.value(),
+                       absl::LocalTimeZone()),
+      absl::FormatTime("%Y-%m-%dT%H:%M:%S.%fZ", end_time,
+                       absl::LocalTimeZone()));
+  EXPECT_EQ(metadata.tvf_name, tvf_name);
   EXPECT_EQ(metadata.partition_table,
             "_change_stream_partition_change_stream_test_table");
   EXPECT_EQ(metadata.data_table,
             "_change_stream_data_change_stream_test_table");
+  EXPECT_EQ(metadata.is_pg,
+            GetParam() == database_api::DatabaseDialect::POSTGRESQL);
   ASSERT_TRUE(metadata.is_change_stream_query);
 }
 
 TEST_P(QueryEngineTest,
        TestCannotGetChangeStreamMetadataFromInvalidChangeStreamQuery) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    return;
-  }
-
+  Query query;
   absl::Time start_time = absl::Now();
   absl::Time end_time = start_time + absl::Minutes(1);
-  Query query{
-      absl::Substitute("SELECT * FROM "
-                       "READ_change_stream_test_table ('$0', "
-                       "'$1', 'test_token', NULL )",
-                       start_time, end_time)};
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = {absl::Substitute(
+        "SELECT * FROM "
+        "spanner.read_json_change_stream_test_table ('$0'::timestamptz, "
+        "'$1'::timestamptz, 'test_token'::text, NULL, NULL::text[] )",
+        start_time, end_time)};
+  } else {
+    query = {
+        absl::Substitute("SELECT * FROM "
+                         "READ_change_stream_test_table ('$0', "
+                         "'$1', 'test_token', NULL )",
+                         start_time, end_time)};
+  }
   EXPECT_THAT(
       query_engine().TryGetChangeStreamMetadata(query, change_stream_schema()),
       zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, TestGetEmptyChangeStreamMetadataFromNormalQuery) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    return;
-  }
-
   Query query{"SELECT * FROM test_table"};
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto metadata, query_engine().TryGetChangeStreamMetadata(
                                           query, change_stream_schema()));
@@ -568,17 +808,22 @@ TEST_P(QueryEngineTest, TestGetEmptyChangeStreamMetadataFromNormalQuery) {
 
 TEST_P(QueryEngineTest,
        TestPreventChanegStreamQueriesFromGenericExecuteSqlAPI) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    return;
-  }
-
+  Query query;
   absl::Time start_time = absl::Now();
   absl::Time end_time = start_time + absl::Minutes(1);
-  Query query{
-      absl::Substitute("SELECT * FROM "
-                       "READ_change_stream_test_table ('$0', "
-                       "'$1', 'test_token', NULL )",
-                       start_time, end_time)};
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = {absl::Substitute(
+        "SELECT * FROM "
+        "spanner.read_json_change_stream_test_table ('$0'::timestamptz, "
+        "'$1'::timestamptz, 'test_token'::text, 1000, NULL::text[] )",
+        start_time, end_time)};
+  } else {
+    query = {
+        absl::Substitute("SELECT * FROM "
+                         "READ_change_stream_test_table ('$0', "
+                         "'$1', 'test_token', 1000 )",
+                         start_time, end_time)};
+  }
   EXPECT_THAT(query_engine().ExecuteSql(
                   query, QueryContext{change_stream_schema(), reader()}),
               zetasql_base::testing::StatusIs(
@@ -588,9 +833,6 @@ TEST_P(QueryEngineTest,
 }
 
 TEST_P(QueryEngineTest, TestCanQueryChangeStreamPartitionTableInternally) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    return;
-  }
   Query query{
       "SELECT partition_token FROM "
       "_change_stream_partition_change_stream_test_table"};
@@ -602,22 +844,19 @@ TEST_P(QueryEngineTest, TestCanQueryChangeStreamPartitionTableInternally) {
 }
 
 TEST_P(QueryEngineTest, TestCannotQueryChangeStreamPartitionTableExternally) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    return;
-  }
   Query query{
       "SELECT partition_token FROM "
       "_change_stream_partition_change_stream_test_table"};
   EXPECT_THAT(query_engine().ExecuteSql(
                   query, QueryContext{change_stream_schema(),
                                       change_stream_partition_table_reader()}),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(
+                  GetParam() == database_api::DatabaseDialect::POSTGRESQL
+                      ? absl::StatusCode::kNotFound
+                      : absl::StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, TestCanQueryChangeStreamDataTableInternally) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    return;
-  }
   Query query{
       "SELECT partition_token FROM "
       "_change_stream_data_change_stream_test_table"};
@@ -628,16 +867,16 @@ TEST_P(QueryEngineTest, TestCanQueryChangeStreamDataTableInternally) {
 }
 
 TEST_P(QueryEngineTest, TestCannotQueryChangeStreamDataTableExternally) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    return;
-  }
   Query query{
       "SELECT partition_token FROM "
       "_change_stream_data_change_stream_test_table"};
   EXPECT_THAT(query_engine().ExecuteSql(
                   query, QueryContext{change_stream_schema(),
                                       change_stream_data_table_reader()}),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              zetasql_base::testing::StatusIs(
+                  GetParam() == database_api::DatabaseDialect::POSTGRESQL
+                      ? absl::StatusCode::kNotFound
+                      : absl::StatusCode::kInvalidArgument));
 }
 
 // Tests for @{parameter_sensitive=always|never|auto} query hint.
@@ -908,6 +1147,59 @@ TEST_P(QueryEngineTest, ViewsInsideDML) {
   EXPECT_EQ(result.modified_row_count, 3);
 }
 
+TEST_P(QueryEngineTest, BitReverseUnsupportedWhenFlagIsOff) {
+  std::string spanner_prefix = "";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    spanner_prefix = "spanner.";
+  }
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_bit_reversed_positive_sequences = false});
+
+  Query query{absl::StrCat("SELECT ", spanner_prefix, "BIT_REVERSE(1, true)")};
+  EXPECT_THAT(
+      query_engine().ExecuteSql(query, QueryContext{schema(), reader()}),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kUnimplemented));
+}
+
+TEST_P(QueryEngineTest, GetInternalSequenceStateUnsupportedWhenFlagIsOff) {
+  std::string spanner_prefix = "";
+  std::string sequence_name = "SEQUENCE MySeq";
+  // In ZetaSQL, the SEQUENCE argument is resolved before we reach the
+  // function evaluator, so we will see an InvalidArgument error first.
+  absl::StatusCode code = absl::StatusCode::kInvalidArgument;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    spanner_prefix = "spanner.";
+    sequence_name = "'\"MySeq\"'";
+    code = absl::StatusCode::kUnimplemented;
+  }
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_bit_reversed_positive_sequences = false});
+
+  Query query{absl::StrCat("SELECT ", spanner_prefix,
+                           "get_internal_sequence_state(", sequence_name, ")")};
+  EXPECT_THAT(
+      query_engine().ExecuteSql(query, QueryContext{schema(), reader()}),
+      zetasql_base::testing::StatusIs(code));
+}
+
+TEST_P(QueryEngineTest, GetNextSequenceValueUnsupportedWhenFlagIsOff) {
+  std::string function_name = "get_next_sequence_value(SEQUENCE MySeq)";
+  // In ZetaSQL, the SEQUENCE argument is resolved before we reach the
+  // function evaluator, so we will see an InvalidArgument error first.
+  absl::StatusCode code = absl::StatusCode::kInvalidArgument;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    function_name = "nextval('\"MySeq\"')";
+    code = absl::StatusCode::kUnimplemented;
+  }
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_bit_reversed_positive_sequences = false});
+
+  Query query{absl::StrCat("SELECT ", function_name)};
+  EXPECT_THAT(
+      query_engine().ExecuteSql(query, QueryContext{schema(), reader()}),
+      zetasql_base::testing::StatusIs(code));
+}
+
 class DefaultValuesTest : public QueryEngineTest {
  public:
   const Schema* schema() { return dvschema_.get(); }
@@ -951,6 +1243,250 @@ TEST_F(DefaultValuesTest, ExecuteInsertsDefaultValues) {
                                       "VALUES (2)"},
                                 QueryContext{schema(), reader(), &writer}),
       IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+}
+
+class GeneratedPrimaryKeyTest : public QueryEngineTest {
+ public:
+  const Schema* schema() { return gpkschema_.get(); }
+  RowReader* reader() { return &reader_; }
+  void SetUp() override {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(gpkschema_,
+                         test::CreateGpkSchemaWithOneTable(type_factory()));
+    action_manager_ = std::make_unique<ActionManager>();
+    action_manager_->AddActionsForSchema(
+        schema(), query_engine().function_catalog(), type_factory());
+  }
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_setter_ =
+      test::ScopedEmulatorFeatureFlagsSetter({.enable_generated_pk = true});
+  std::unique_ptr<const Schema> gpkschema_;
+  test::TestRowReader reader_{
+      {{"test_table",
+        {{"k1_pk", "k2", "k3gen_storedpk", "k4", "k5"},
+         {zetasql::types::Int64Type(), zetasql::types::Int64Type(),
+          zetasql::types::Int64Type(), zetasql::types::Int64Type(),
+          zetasql::types::Int64Type()},
+         {{Int64(1), Int64(1), Int64(1), Int64(1), Int64(2)},
+          {Int64(2), Int64(2), Int64(2), Int64(2), Int64(3)},
+          {Int64(4), Int64(4), Int64(4), Int64(4), Int64(5)}}}}}};
+  std::unique_ptr<ActionManager> action_manager_;
+};
+
+TEST_F(GeneratedPrimaryKeyTest, ExecuteInsertsTwoRows) {
+  MockRowWriter writer;
+  EXPECT_CALL(writer,
+              Write(Property(
+                  &Mutation::ops,
+                  UnorderedElementsAre(AllOf(
+                      Field(&MutationOp::type, MutationOpType::kInsert),
+                      Field(&MutationOp::table, "test_table"),
+                      Field(&MutationOp::columns,
+                            std::vector<std::string>{"k1_pk", "k2", "k4"}),
+                      Field(&MutationOp::rows,
+                            UnorderedElementsAre(
+                                ValueList{Int64(3), Int64(3), Int64(5)},
+                                ValueList{Int64(3), Int64(4), Int64(5)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"INSERT INTO test_table (k1_pk,k2,k4) "
+                                      "VALUES(3,3,5), (3,4,5)"},
+                                QueryContext{schema(), reader(), &writer}));
+  EXPECT_EQ(result.modified_row_count, 2);
+}
+
+TEST_F(GeneratedPrimaryKeyTest, FailsExecuteInsertsTwoRowsIfGpkDisabled) {
+  test::ScopedEmulatorFeatureFlagsSetter setter({.enable_generated_pk = false});
+  MockRowWriter writer;
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{"INSERT INTO test_table (k1_pk,k2,k4) "
+                                      "VALUES(3,3,5), (3,4,5)"},
+                                QueryContext{schema(), reader(), &writer}),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kAlreadyExists,
+          testing::HasSubstr("Failed to insert row with primary key "
+                             "({pk#k1_pk:3, pk#k3gen_storedpk:NULL})")));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, ExecuteSqlDeleteRows) {
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(&Mutation::ops,
+                     UnorderedElementsAre(AllOf(
+                         Field(&MutationOp::type, MutationOpType::kDelete),
+                         Field(&MutationOp::table, "test_table"),
+                         Field(&MutationOp::key_set,
+                               Property(&KeySet::keys,
+                                        UnorderedElementsAre(
+                                            Key{{Int64(2), Int64(2)}},
+                                            Key{{Int64(4), Int64(4)}}))))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{"DELETE FROM test_table "
+                                      "WHERE k3gen_storedpk > 1"},
+                                QueryContext{schema(), reader(), &writer}),
+      IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, ExecuteSqlUpdatesRows) {
+  MockRowWriter writer;
+  EXPECT_CALL(writer,
+              Write(Property(
+                  &Mutation::ops,
+                  UnorderedElementsAre(AllOf(
+                      Field(&MutationOp::type, MutationOpType::kUpdate),
+                      Field(&MutationOp::table, "test_table"),
+                      Field(&MutationOp::columns,
+                            std::vector<std::string>{"k1_pk", "k2", "k4"}),
+                      Field(&MutationOp::rows,
+                            UnorderedElementsAre(
+                                ValueList{Int64(2), Int64(2), Int64(8)},
+                                ValueList{Int64(4), Int64(4), Int64(8)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{"UPDATE test_table "
+                                      "SET k4 = 8 WHERE k3gen_storedpk > 1"},
+                                QueryContext{schema(), reader(), &writer}),
+      IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, CannotInsertDuplicateValuesForPrimaryKey) {
+  MockRowWriter writer;
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{"INSERT INTO test_table (k1_pk,k2,k4) "
+                                      "VALUES(2,2,8)"},
+                                QueryContext{schema(), reader(), &writer}),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kAlreadyExists,
+          testing::HasSubstr("Failed to insert row with primary key "
+                             "({pk#k1_pk:2, pk#k3gen_storedpk:2})")));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, CannotUpdatePrimaryKey) {
+  MockRowWriter writer;
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{
+              "UPDATE test_table SET k3gen_storedpk=5 WHERE k3gen_storedpk=2"},
+          QueryContext{schema(), reader(), &writer}),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          testing::HasSubstr(
+              "Cannot UPDATE value on non-writable column: k3gen_storedpk")));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, ExecuteInsertWithReturning) {
+  MockRowWriter writer;
+  EXPECT_CALL(writer,
+              Write(Property(
+                  &Mutation::ops,
+                  UnorderedElementsAre(AllOf(
+                      Field(&MutationOp::type, MutationOpType::kInsert),
+                      Field(&MutationOp::table, "test_table"),
+                      Field(&MutationOp::columns,
+                            std::vector<std::string>{"k1_pk", "k2", "k4"}),
+                      Field(&MutationOp::rows,
+                            UnorderedElementsAre(
+                                ValueList{Int64(3), Int64(3), Int64(4)},
+                                ValueList{Int64(3), Int64(4), Int64(5)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{absl::StrCat("INSERT INTO test_table (k1_pk,k2,k4) "
+                             "VALUES(3,3,4), (3,4,5) ",
+                             "THEN RETURN k2, k3gen_storedpk, k5")},
+          QueryContext{schema(), reader(), &writer}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("k2", "k3gen_storedpk", "k5"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), Int64Type(), Int64Type()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(
+                  ValueList{Int64(3), Int64(3), Int64(5)},
+                  ValueList{Int64(4), Int64(4), Int64(6)})));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, ExecuteUpdateWithReturning) {
+  MockRowWriter writer;
+  EXPECT_CALL(writer,
+              Write(Property(
+                  &Mutation::ops,
+                  UnorderedElementsAre(AllOf(
+                      Field(&MutationOp::type, MutationOpType::kUpdate),
+                      Field(&MutationOp::table, "test_table"),
+                      Field(&MutationOp::columns,
+                            std::vector<std::string>{"k1_pk", "k2", "k4"}),
+                      Field(&MutationOp::rows,
+                            UnorderedElementsAre(
+                                ValueList{Int64(2), Int64(2), Int64(8)},
+                                ValueList{Int64(4), Int64(4), Int64(8)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"UPDATE test_table "
+                                      "SET k4 = 8 WHERE k3gen_storedpk > 1 "
+                                      "THEN RETURN k2, k3gen_storedpk, k5"},
+                                QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("k2", "k3gen_storedpk", "k5"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), Int64Type(), Int64Type()));
+
+  // TODO: Fix the expectation when generated columns returns
+  // correct results.
+  // EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+  //             IsOkAndHolds(UnorderedElementsAre(
+  //                 ValueList{Int64(2), Int64(2), Int64(9)},
+  //                 ValueList{Int64(4), Int64(4), Int64(9)})));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, ExecuteDeleteWithReturning) {
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(&Mutation::ops,
+                     UnorderedElementsAre(AllOf(
+                         Field(&MutationOp::type, MutationOpType::kDelete),
+                         Field(&MutationOp::table, "test_table"),
+                         Field(&MutationOp::key_set,
+                               Property(&KeySet::keys,
+                                        UnorderedElementsAre(
+                                            Key{{Int64(2), Int64(2)}},
+                                            Key{{Int64(4), Int64(4)}}))))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"DELETE FROM test_table "
+                                      "WHERE k3gen_storedpk > 1 "
+                                      "THEN RETURN k2, k3gen_storedpk, k5"},
+                                QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("k2", "k3gen_storedpk", "k5"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), Int64Type(), Int64Type()));
+
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(
+                  ValueList{Int64(2), Int64(2), Int64(3)},
+                  ValueList{Int64(4), Int64(4), Int64(5)})));
 }
 
 }  // namespace

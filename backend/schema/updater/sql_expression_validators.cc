@@ -43,7 +43,7 @@ class ColumnExpressionValidator : public QueryValidator {
       absl::string_view expression_use,
       absl::flat_hash_set<std::string>* dependent_column_names,
       bool allow_volatile_expression)
-      : QueryValidator(schema, /*options=*/nullptr),
+      : QueryValidator({.schema = schema}, /*options=*/nullptr),
         table_(table),
         expression_use_(expression_use),
         dependent_column_names_(dependent_column_names),
@@ -98,7 +98,7 @@ class ViewDefinitionValidator : public QueryValidator {
   ViewDefinitionValidator(const Schema* schema,
                           const zetasql::LanguageOptions& language_options,
                           absl::flat_hash_set<const SchemaNode*>* dependencies)
-      : QueryValidator(schema, /*extracted_options=*/nullptr,
+      : QueryValidator({.schema = schema}, /*extracted_options=*/nullptr,
                        /*language_options=*/language_options),
         dependencies_(dependencies) {}
 

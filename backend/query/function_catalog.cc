@@ -16,6 +16,7 @@
 
 #include "backend/query/function_catalog.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -37,7 +38,10 @@
 #include "absl/types/span.h"
 #include "backend/query/analyzer_options.h"
 #include "common/constants.h"
+#include "common/errors.h"
+#include "common/feature_flags.h"
 #include "third_party/spanner_pg/catalog/emulator_functions.h"
+#include "zetasql/base/bits.h"
 #include "zetasql/base/ret_check.h"
 
 namespace google {
@@ -71,6 +75,123 @@ std::unique_ptr<zetasql::Function> PendingCommitTimestampFunction(
       zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
           zetasql::types::TimestampType(), {}, nullptr}},
+      function_options);
+}
+
+int64_t BitReverse(int64_t input, bool preserve_sign) {
+  if (input == 0) {
+    return 0;
+  }
+  // Explicitly cast to uint64_t here, as zetasql_base::Bits::ReverseBits64() receives
+  // an uint64_t input, and for easier bit manipulation.
+  uint64_t value = zetasql_base::Bits::ReverseBits64(static_cast<uint64_t>(input));
+  int64_t result;
+  if (preserve_sign) {
+    // The sign bit is now the least significant bit, take it and shift
+    // to the furthest left.
+    uint64_t sign_bit = (value & 1) << 63;
+    //  Shift the rest one bit to the right
+    value = value >> 1;
+
+    // Put the sign bit back in:
+    result = static_cast<int64_t>(sign_bit | value);
+  } else {
+    result = static_cast<int64_t>(value);
+  }
+  return result;
+}
+
+absl::StatusOr<zetasql::Value> EvalBitReverse(
+    absl::Span<const zetasql::Value> args) {
+  if (!EmulatorFeatureFlags::instance()
+           .flags()
+           .enable_bit_reversed_positive_sequences) {
+    return error::UnsupportedFunction(kBitReverseFunctionName);
+  }
+  ZETASQL_RET_CHECK(args.size() == 2);
+  if (args[0].is_null() || args[1].is_null()) {
+    return zetasql::Value::NullInt64();
+  }
+  ZETASQL_RET_CHECK(args[0].type()->IsInt64() && args[1].type()->IsBool());
+  return zetasql::Value::Int64(
+      BitReverse(args[0].int64_value(), args[1].bool_value()));
+}
+
+std::unique_ptr<zetasql::Function> BitReverseFunction(
+    const std::string& catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(zetasql::FunctionEvaluator(EvalBitReverse));
+
+  return std::make_unique<zetasql::Function>(
+      kBitReverseFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+          zetasql::types::Int64Type(),
+          {zetasql::types::Int64Type(), zetasql::types::BoolType()},
+          nullptr}},
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalGetInternalSequenceState(
+    absl::Span<const zetasql::Value> args) {
+  ZETASQL_RET_CHECK(args.size() == 1);
+
+  if (!EmulatorFeatureFlags::instance()
+           .flags()
+           .enable_bit_reversed_positive_sequences) {
+    return error::UnsupportedFunction(kGetInternalSequenceStateFunctionName);
+  }
+  return zetasql::Value::Int64(100);
+}
+
+absl::StatusOr<zetasql::Value> EvalGetNextSequenceValue(
+    absl::Span<const zetasql::Value> args) {
+  ZETASQL_RET_CHECK(args.size() == 1);
+
+  if (!EmulatorFeatureFlags::instance()
+           .flags()
+           .enable_bit_reversed_positive_sequences) {
+    return error::UnsupportedFunction(kGetNextSequenceValueFunctionName);
+  }
+  return zetasql::Value::Int64(200);
+}
+
+std::unique_ptr<zetasql::Function> GetInternalSequenceStateFunction(
+    const std::string& catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(
+      zetasql::FunctionEvaluator(EvalGetInternalSequenceState));
+
+  return std::make_unique<zetasql::Function>(
+      kGetInternalSequenceStateFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{
+              zetasql::types::Int64Type(),
+              {zetasql::FunctionArgumentType::AnySequence()},
+              nullptr},
+          zetasql::FunctionSignature{zetasql::types::Int64Type(),
+                                       {zetasql::types::StringType()},
+                                       nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> GetNextSequenceValueFunction(
+    const std::string& catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(
+      zetasql::FunctionEvaluator(EvalGetNextSequenceValue));
+
+  return std::make_unique<zetasql::Function>(
+      kGetNextSequenceValueFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{
+              zetasql::types::Int64Type(),
+              {zetasql::FunctionArgumentType::AnySequence()},
+              nullptr},
+          zetasql::FunctionSignature{zetasql::types::Int64Type(),
+                                       {zetasql::types::StringType()},
+                                       nullptr}},
       function_options);
 }
 
@@ -116,6 +237,19 @@ void FunctionCatalog::AddSpannerFunctions() {
   auto pending_commit_ts_func = PendingCommitTimestampFunction(catalog_name_);
   functions_[pending_commit_ts_func->Name()] =
       std::move(pending_commit_ts_func);
+
+  auto bit_reverse_func = BitReverseFunction(catalog_name_);
+  functions_[bit_reverse_func->Name()] = std::move(bit_reverse_func);
+
+  auto get_internal_sequence_state_func =
+      GetInternalSequenceStateFunction(catalog_name_);
+  functions_[get_internal_sequence_state_func->Name()] =
+      std::move(get_internal_sequence_state_func);
+
+  auto get_next_sequence_value_func =
+      GetNextSequenceValueFunction(catalog_name_);
+  functions_[get_next_sequence_value_func->Name()] =
+      std::move(get_next_sequence_value_func);
 }
 
 // Adds Spanner PG-specific functions to the list of known functions.

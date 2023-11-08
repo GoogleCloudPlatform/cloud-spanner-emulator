@@ -1099,6 +1099,21 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 CREATE NULL_FILTERED INDEX AlbumsByUser ON Albums(UserId);
 ==
+# You are allowed to drop a table with Row deletion policy enabled.
+CREATE TABLE A (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key);
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 1 DAY));
+CREATE CHANGE STREAM change_stream FOR ALL;
+DROP TABLE T
+--
+CREATE TABLE A ( Key INT64, CreatedAt TIMESTAMP, ) PRIMARY KEY(Key);
+CREATE CHANGE STREAM change_stream FOR ALL;
+==
 # Child table matches parent key commit timestamp settings #1
 # --regex
 CREATE TABLE A (

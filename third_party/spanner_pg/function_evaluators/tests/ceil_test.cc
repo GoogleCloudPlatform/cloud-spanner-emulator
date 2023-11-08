@@ -105,10 +105,10 @@ TEST_F(CeilTest, DoesNothingForSpecialValues) {
 
 TEST_F(CeilTest, ReturnsErrorForOverflow) {
   EXPECT_THAT(Ceil(MaxNumericString()),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(Ceiling(MaxNumericString()),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(CeilTest, ReturnsErrorForInvalidInput) {

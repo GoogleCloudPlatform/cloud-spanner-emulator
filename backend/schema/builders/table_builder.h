@@ -184,8 +184,19 @@ class Table::Editor {
           return absl::EqualsIgnoreCase(change_stream->Name(),
                                         change_stream_element->Name());
         });
-    ABSL_DCHECK(itr != instance_->change_streams_.end());
-    instance_->change_streams_.erase(itr);
+    if (itr != instance_->change_streams_.end()) {
+      instance_->change_streams_.erase(itr);
+    }
+    auto itr_2 = std::find_if(
+        instance_->change_streams_explicitly_tracking_table_.begin(),
+        instance_->change_streams_explicitly_tracking_table_.end(),
+        [change_stream](const auto& change_stream_element) {
+          return absl::EqualsIgnoreCase(change_stream->Name(),
+                                        change_stream_element->Name());
+        });
+    if (itr_2 != instance_->change_streams_explicitly_tracking_table_.end()) {
+      instance_->change_streams_explicitly_tracking_table_.erase(itr_2);
+    }
     return *this;
   }
 

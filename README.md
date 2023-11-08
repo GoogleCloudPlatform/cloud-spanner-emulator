@@ -164,9 +164,15 @@ Notable supported features:
 
 - Generated columns
 
+- Generated primary keys
+
 - Check constraint
 
 - Dataflow templates
+
+- The [Cloud Spanner PostgreSQL interface](
+  https://cloud.google.com/spanner/docs/postgresql-interface).
+
 
 Notable limitations:
 
@@ -196,9 +202,14 @@ Notable limitations:
   violation reported by the emulator may be different from the one reported by
   the Cloud Spanner service.
 
-- The SQL query modes EXPLAIN and PROFILE are disabled. The emulator does not
-  guarantee the same query execution plan as the Cloud Spanner service, and
-  hence query plans and statistics reporting are disabled on the emulator.
+- The SQL query modes PLAN and PROFILE do not return any query plans. The
+  emulator does not guarantee the same query execution plan as the Cloud Spanner
+  service, and hence query plans and statistics reporting are disabled on the
+  emulator. Running a query in PLAN mode will just analyze the SQL string and
+  return the corresponding metadata. Running a query in PROFILE mode executes
+  the query and returns the number of rows that was returned and the execution
+  time. The execution time has no relation with what the execution time on
+  Cloud Spanner will be.
 
 - Some queries that use SQL functionality present in ZetaSQL but not in
   Cloud Spanner service may succeed instead of being rejected as invalid.
@@ -220,10 +231,9 @@ Notable limitations:
   hints. However, index names generated in the emulator cannot be used in the
   emulator or in production.
 
-- Generated primary keys are not supported.
-
-- The [Cloud Spanner PostgreSQL interface](
-  https://cloud.google.com/spanner/docs/postgresql-interface) is not supported.
+- `DELETE CASCADE` referential action is not supported. A DDL statement
+  specifying this action will succeed, however, the action will be set as the
+  default `NO ACTION` action.
 
 ## Frequently Asked Questions (FAQ)
 

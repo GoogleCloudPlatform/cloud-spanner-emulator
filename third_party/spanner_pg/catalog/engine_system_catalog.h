@@ -319,6 +319,19 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
     return builtin_function_catalog_->GetFunctions(output);
   }
 
+  // Like GetTypes(), but return PostgresTypeMapping objects
+  // rather than the GSQL types that they map to.
+  absl::Status GetPostgreSQLTypes(
+      absl::flat_hash_set<const PostgresTypeMapping*>* output) const;
+
+  // If a custom error should be returned for this proc oid, return that error.
+  // The default is to do nothing here and return generic unsupported type
+  // or unsupported function errors later as needed. Derived classes should
+  // override this function if they have errors for specific procs.
+  virtual absl::Status GetCustomErrorForProc(Oid proc_oid) const {
+    return absl::OkStatus();
+  }
+
   virtual absl::StatusOr<FunctionAndSignature> GetPgNumericCastFunction(
       const zetasql::Type* source_type, const zetasql::Type* target_type,
       const zetasql::LanguageOptions& language_options) = 0;

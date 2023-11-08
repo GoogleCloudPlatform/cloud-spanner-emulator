@@ -26,6 +26,8 @@
 
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/random/random.h"
 #include "absl/random/uniform_int_distribution.h"
 #include "absl/status/status.h"
@@ -37,6 +39,7 @@
 #include "absl/types/span.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
+#include "backend/actions/change_stream.h"
 #include "backend/actions/context.h"
 #include "backend/actions/manager.h"
 #include "backend/actions/ops.h"
@@ -64,6 +67,8 @@
 #include "common/config.h"
 #include "common/constants.h"
 #include "common/errors.h"
+#include "third_party/spanner_pg/interface/pg_arena.h"
+#include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -201,7 +206,7 @@ ReadWriteTransaction::ReadWriteTransaction(
       action_context_(std::make_unique<ActionContext>(
           std::make_unique<TransactionReadOnlyStore>(transaction_store_.get()),
           std::make_unique<TransactionEffectsBuffer>(&write_ops_queue_),
-          std::make_unique<ChangeStreamTransactionEffectsBuffer>(id_), clock)),
+          clock)),
       schema_(versioned_catalog_->GetLatestSchema()) {}
 
 absl::StatusOr<absl::Time> ReadWriteTransaction::GetCommitTimestamp() {
@@ -351,12 +356,17 @@ absl::Status ReadWriteTransaction::ProcessWriteOps(
     ZETASQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(write_op));
   }
 
-  action_context_->change_stream_effects()->BuildMutation();
-  for (const WriteOp& writeop :
-       action_context_->change_stream_effects()->GetWriteOps()) {
+  return absl::OkStatus();
+}
+
+absl::Status ReadWriteTransaction::ProcessChangeStreamWriteOps() {
+  mu_.AssertHeld();
+  auto write_ops =
+      BuildChangeStreamWriteOps(schema_, transaction_store_->GetBufferedOps(),
+                                action_context_->store(), id_);
+  for (const WriteOp& writeop : write_ops) {
     ZETASQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(writeop));
   }
-  action_context_->change_stream_effects()->ClearWriteOps();
   return absl::OkStatus();
 }
 
@@ -403,7 +413,7 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
   for (int i = 0; i < mutation_op.rows.size(); i++) {
     const ValueList& row = mutation_op.rows[i];
     ValueList new_row = row;
-    // If we have key columns with default values, append them here:
+    // If we have key columns with generated/default values, append them here:
     new_row.insert(new_row.end(), generated_values[i].begin(),
                    generated_values[i].end());
 
@@ -427,6 +437,14 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
 absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
   return GuardedCall(OpType::kWrite, [&]() -> absl::Status {
     mu_.AssertHeld();
+
+    // When writing, comparison may be required in the process. Comparison of
+    // PG.NUMERIC calls PG to get comparison result (see function
+    // ValueContentLess in datatypes/extended/pg_numeric_type.cc) and therefore
+    // requires a PG arena.
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
+        postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
 
     for (const MutationOp& mutation_op : mutation.ops()) {
       if (mutation_op.type == MutationOpType::kDelete) {
@@ -497,7 +515,7 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
         }
       }
     }
-
+    ZETASQL_RETURN_IF_ERROR(ProcessChangeStreamWriteOps());
     return ApplyStatementVerifiers();
   });
 }
@@ -509,6 +527,14 @@ absl::Status ReadWriteTransaction::Commit() {
     if (retry_state_.abort_retry_count == 0 && ShouldAbortOnFirstCommit()) {
       return error::AbortReadWriteTransactionOnFirstCommit(id_);
     }
+
+    // When committing, comparison may be required in the process. Comparison of
+    // PG.NUMERIC calls PG to get comparison result (see function
+    // ValueContentLess in datatypes/extended/pg_numeric_type.cc) and therefore
+    // requires a PG arena.
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
+        postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
 
     // Pick a commit timestamp.
     ZETASQL_ASSIGN_OR_RETURN(commit_timestamp_, lock_handle_->ReserveCommitTimestamp());

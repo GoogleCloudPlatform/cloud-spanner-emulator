@@ -93,7 +93,7 @@ class ChangeStreamPartitionChurner {
     ~ChurningThread() {
       {
         absl::MutexLock l(&mu);
-        ABSL_LOG(ERROR) << "Stopping ChurningThread ";
+        ABSL_LOG(INFO) << "Stopping ChurningThread ";
         stop_thread = true;
       }
       // Join the thread.
@@ -112,9 +112,20 @@ class ChangeStreamPartitionChurner {
   void PeriodicChurnPartitions(absl::string_view change_stream_name,
                                ChurningThread* churning_thread);
 
-  absl::Status ChurnPartition(absl::string_view change_stream_name,
+  absl::Status MovePartition(absl::string_view change_stream_name,
+                             absl::string_view partition_token,
+                             ReadWriteTransaction* txn);
+
+  absl::Status MergePartition(absl::string_view change_stream_name,
+                              absl::string_view first_partition_token,
+                              absl::string_view second_partition_token,
+                              ReadWriteTransaction* txn);
+
+  absl::Status SplitPartition(absl::string_view change_stream_name,
                               absl::string_view partition_token,
                               ReadWriteTransaction* txn);
+
+  friend class ChangeStreamPartitionChurnerTest;
 
   CreateReadWriteTransactionFn create_read_write_transaction_fn_;
 

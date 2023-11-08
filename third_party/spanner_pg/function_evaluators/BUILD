@@ -34,20 +34,28 @@
 
 licenses(["notice"])
 
-#TODO: Remove once on-branch no longer depends on this library.
 cc_library(
-    name = "function_evaluators",
-    hdrs = [
-        "function_evaluators.h",
+    name = "internal_evaluators",
+    srcs = ["in_out_evaluators.cc"],
+    hdrs = ["in_out_evaluators.h"],
+    deps = [
+        "//third_party/spanner_pg/postgres_includes",
+        "//third_party/spanner_pg/shims:error_shim",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "//third_party/spanner_pg/src/backend/utils:fmgr_sources_header",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
-    visibility = ["//:__subpackages__"],
 )
 
 cc_library(
     name = "pg_evaluators_implementations",
     srcs = [
+        "cast_evaluators.cc",
         "datetime_evaluators.cc",
         "formatting_evaluators.cc",
+        "jsonb_evaluators.cc",
         "mathematical_evaluators.cc",
         "pg_arena_factory.cc",
         "pg_timezone.cc",
@@ -55,7 +63,9 @@ cc_library(
     ],
     visibility = ["//:__subpackages__"],
     deps = [
+        ":internal_evaluators",
         "//third_party/spanner_pg/datatypes/common:pg_numeric_parse",
+        "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
         "//third_party/spanner_pg/interface:memory_reservation_manager",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -75,6 +85,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",
         "@com_google_absl//absl/time",
+        "@com_google_zetasql//zetasql/public:value",
         "@com_google_zetasql//zetasql/public/functions:date_time_util",
     ],
 )

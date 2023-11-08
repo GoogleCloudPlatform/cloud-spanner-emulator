@@ -453,6 +453,45 @@ void StripPgQueryDifferences(Query* pg_query) {
     cte->ctecolcollations = nullptr;
   }
 
+  if (pg_query->onConflict != nullptr &&
+      pg_query->onConflict->action == ONCONFLICT_UPDATE) {
+    for (InferenceElem* elem :
+         StructList<InferenceElem*>(pg_query->onConflict->arbiterElems)) {
+      StripPgExpr(PostgresCastToExpr(elem->expr));
+    }
+
+    // PG query tree has 2 RTEs that represent the row that is being inserted
+    // using same special alias `excluded`. The PG analyzer references
+    // the second RTE when building the query tree's target list for
+    // ON CONFLICT SET clause.
+    // This is handled correctly by the Spangres forward transformer.
+    // However, when the PG deparser runs on such a query tree, it reassigns
+    // aliases such that the first RTE has alias `excluded` and the second RTE
+    // has alias `excluded_1`.
+    // If the reverse transformer references the second RTE (as per PG analyzer
+    // output), then the deparser will use alias `excluded_1` to refer to the
+    // insert row in the deparsed query. This is an invalid PG query as the
+    // ON CONFLICT SET clause will be deparsed into `excluded_1.<colname>`
+    // instead of `excluded.<col>`.
+    // In order to force the deparser to output `excluded` instead of
+    // `excluded_1`, the reverse transformer intentionally generates an
+    // onConflictSet clause whose target list for SET clause references the
+    // first RTE instead of the second RTE, even though this does not match
+    // the PG analyzer output.
+    //
+    // To allow this difference, RTE index in the parse tree from PG analyzer
+    // is adjusted to refer to the first excluded RTE so that it the trees
+    // match.
+    for (TargetEntry* entry :
+         StructList<TargetEntry*>(pg_query->onConflict->onConflictSet)) {
+      StripTargetEntry(entry);
+      Var* var = PostgresCastNode(Var, PostgresCastToExpr(entry->expr));
+      var->varno--;
+      var->varnosyn--;
+    }
+    pg_query->onConflict->exclRelIndex--;
+  }
+
   StripPgHintList(pg_query->statementHints);
 }
 
@@ -804,7 +843,8 @@ INSTANTIATE_TEST_SUITE_P(
                                 {"p2", zetasql::types::BoolType()}}),
         TransformTestCase("CastParameterInSelectList",
                           "select $1::bigint as col1")
-            .SetGsqlQuery("select cast(@p1 as int64) as col1"),  // DO_NOT_TRANSFORM
+            .SetGsqlQuery(
+                "select cast(@p1 as int64) as col1"),  // DO_NOT_TRANSFORM
         // The following queries are NOT equal because PostgreSQL will coerce
         // any expression in the top level SELECT list with type unknown to type
         // text. This is done to prevent CREATE TABLE AS SELECT statements
@@ -883,7 +923,7 @@ INSTANTIATE_TEST_SUITE_P(
         TransformTestCase(
             "ArrayConstructorComplexElements",
             "select array[1+1, key, null] array_col from keyvalue")
-    ),
+        ),
     [](const testing::TestParamInfo<TransformTestCase>& info) {
       return info.param.name();
     });
@@ -1540,15 +1580,6 @@ TEST_F(QueryTransformerTest, UnsupportedQueryFields) {
                   testing::HasSubstr("ON CONFLICT clauses are not supported")));
   query->onConflict = nullptr;
 
-  // ON CONFLICT with UPDATE action.
-  query->onConflict = makeNode(OnConflictExpr);
-  query->onConflict->action = ONCONFLICT_UPDATE;
-  EXPECT_THAT(transformer->BuildGsqlResolvedStatement(*query),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kUnimplemented,
-                  testing::HasSubstr("ON CONFLICT DO UPDATE clauses")));
-  query->onConflict = nullptr;
-
   // GROUPING SET clauses.
   query->groupingSets = list_make1(makeNode(GroupingSet));
   EXPECT_THAT(
@@ -1572,8 +1603,7 @@ TEST_F(QueryTransformerTest, UnsupportedQueryFields) {
   EXPECT_THAT(transformer->BuildGsqlResolvedStatement(*query),
               zetasql_base::testing::StatusIs(
                   absl::StatusCode::kUnimplemented,
-                  testing::HasSubstr("DISTINCT clauses are not supported")));
-                  // clang-format on
+                  testing::HasSubstr("DISTINCT ON clauses are not supported")));
   query->distinctClause = nullptr;
   query->hasDistinctOn = false;
 

@@ -23,6 +23,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
@@ -72,15 +73,80 @@ TEST_F(PgQueryableChangeStreamTvfTest, CreateChangeStreamTvfPgOk) {
   const auto* schema_change_stream =
       schema_->FindChangeStream("change_stream_test_table");
   ASSERT_NE(schema_change_stream, nullptr);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      auto queryable_tvf,
-      QueryableChangeStreamTvf::Create(schema_change_stream, analyzer_options_,
-                                       catalog_.get(), &type_factory_, true));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto queryable_tvf,
+                       QueryableChangeStreamTvf::Create(
+                           schema_change_stream->tvf_name(), analyzer_options_,
+                           catalog_.get(), &type_factory_, true));
   EXPECT_EQ(queryable_tvf->Name(), "read_json_change_stream_test_table");
   EXPECT_EQ(queryable_tvf->result_schema().num_columns(), 1);
   EXPECT_EQ(queryable_tvf->result_schema().column(0).type->DebugString(),
             "PG.JSONB");
   EXPECT_EQ(queryable_tvf->GetSignature(0)->arguments().size(), 5);
+}
+
+TEST_F(PgQueryableChangeStreamTvfTest,
+       AnalyzeChangeStreamTvfQueryPositionalArg) {
+  ZETASQL_EXPECT_OK(AnalyzePGStatement(
+      "SELECT * FROM "
+      "spanner.read_json_change_stream_test_table ("
+      "'2022-09-27T12:30:00.123456Z'::timestamptz,"
+      "NULL::timestamptz, NULL::text, 1000 , NULL::text[] )"));
+}
+
+TEST_F(PgQueryableChangeStreamTvfTest,
+       AnalyzeChangeStreamTvfQueryNamedArgFail) {
+  EXPECT_THAT(
+      AnalyzePGStatement(
+          "SELECT * FROM "
+          "spanner.read_json_change_stream_test_table ("
+          "start_timestamp=>'2022-09-27T12:30:00.123456Z'::timestamptz,"
+          "end_timestamp=>NULL::timestamptz, partition_token=>NULL::text, "
+          "heartbeat_milliseconds=>1000 , "
+          "read_options=>NULL::text[] "
+          ")"),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kUnimplemented,
+          testing::HasSubstr("Named arguments are not supported")));
+}
+
+TEST_F(PgQueryableChangeStreamTvfTest,
+       AnalyzeChangeStreamTvfQueryWrongArgTypeFail) {
+  EXPECT_THAT(
+      AnalyzePGStatement(
+          "SELECT * FROM "
+          "spanner.read_json_change_stream_test_table ("
+          "'2022-09-27T12:30:00.123456Z'::timestamptz,"
+          "NULL::timestamptz, NULL::timestamptz, 1000 , NULL::text[] )"),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kNotFound,
+          testing::HasSubstr(
+              "No function matches the given name and argument types.")));
+}
+
+TEST_F(PgQueryableChangeStreamTvfTest,
+       AnalyzeChangeStreamTvfQueryWrongArgNumFail) {
+  EXPECT_THAT(
+      AnalyzePGStatement("SELECT * FROM "
+                         "spanner.read_json_change_stream_test_table ("
+                         "'2022-09-27T12:30:00.123456Z'::timestamptz,"
+                         "NULL::timestamptz, NULL::text[] )"),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kNotFound,
+          testing::HasSubstr(
+              "No function matches the given name and argument types.")));
+}
+
+TEST_F(PgQueryableChangeStreamTvfTest,
+       AnalyzeChangeStreamTvfQueryWrongTvfNameFail) {
+  EXPECT_THAT(
+      AnalyzePGStatement(
+          "SELECT * FROM spanner.read_json_null ("
+          "'2022-09-27T12:30:00.123456Z'::timestamptz,"
+          "NULL::timestamptz, NULL::text, 1000 , NULL::text[] )"),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kNotFound,
+          testing::HasSubstr(
+              "No function matches the given name and argument types.")));
 }
 
 }  // namespace

@@ -122,6 +122,11 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
                      " is unsupported in this context"));
   }
 
+  // Check if there is a custom error message for this function.
+  ZETASQL_RETURN_IF_ERROR(
+      catalog_adapter_->GetEngineSystemCatalog()->GetCustomErrorForProc(
+          funcid));
+
   // Transform the input arguments.
   ZETASQL_ASSIGN_OR_RETURN(
       std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list,
