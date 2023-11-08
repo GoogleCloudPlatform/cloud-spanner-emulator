@@ -71,16 +71,6 @@ absl::StatusOr<std::string> TimestampTzToChar(absl::Time timestamp,
   return absl::UnimplementedError("invoked stub TimestampTzToChar");
 }
 
-absl::StatusOr<int32_t> DateIn(absl::string_view input_string,
-                               absl::string_view default_timezone) {
-  return absl::UnimplementedError("invoked stub DateIn");
-}
-
-absl::StatusOr<absl::Time> TimestamptzIn(absl::string_view input_string,
-                                         absl::string_view default_timezone) {
-  return absl::UnimplementedError("invoked stub TimestamptzIn");
-}
-
 absl::StatusOr<int32_t> PgDateIn(absl::string_view date_string) {
   return absl::UnimplementedError("invoked stub PgDateIn");
 }

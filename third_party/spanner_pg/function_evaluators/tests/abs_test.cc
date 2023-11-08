@@ -83,9 +83,9 @@ TEST_F(AbsTest, ReturnsErrorWhenInvalidNumericIsGiven) {
 
 TEST_F(AbsTest, ReturnsErrorOnOverflowAndUnderflow) {
   EXPECT_THAT(Abs(absl::StrCat(MinNumericString(), "9")),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kOutOfRange));
   EXPECT_THAT(Abs(absl::StrCat(MaxNumericString(), "9")),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 }  // namespace

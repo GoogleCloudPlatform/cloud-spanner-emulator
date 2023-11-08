@@ -1022,7 +1022,7 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
     // if not enabled, or not a table or index, then an error.
     if (!options.enable_if_not_exists ||
         !(node.removeType == OBJECT_TABLE || node.removeType == OBJECT_INDEX ||
-          node.removeType == OBJECT_SEQUENCE)) {
+          node.removeType == OBJECT_SEQUENCE || node.removeType == OBJECT_VIEW)) {
       return UnsupportedTranslationError(
           "<IF EXISTS> is not supported by <DROP> statement.");
     }

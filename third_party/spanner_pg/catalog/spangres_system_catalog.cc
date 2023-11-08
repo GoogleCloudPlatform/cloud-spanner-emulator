@@ -148,6 +148,10 @@ const PostgresTypeMapping* SpangresSystemCatalog::GetType(
   return type;
 }
 
+absl::Status SpangresSystemCatalog::GetCustomErrorForProc(Oid proc_oid) const {
+  return absl::OkStatus();
+}
+
 static absl::StatusOr<std::string> GetPgNumericCastFunctionName(
     const zetasql::Type* source_type, const zetasql::Type* target_type,
     const zetasql::ProductMode product_mode, bool& is_fixed_precision_cast) {
@@ -479,11 +483,11 @@ absl::Status SpangresSystemCatalog::AddFunctions(
 
     spangres::AddPgJsonbFunctions(functions);
 
-    spangres::AddPgArrayFunctions(functions);
-    spangres::AddPgComparisonFunctions(functions);
-    spangres::AddPgDatetimeFunctions(functions);
-    spangres::AddPgFormattingFunctions(functions);
-    spangres::AddPgStringFunctions(functions);
+  spangres::AddPgArrayFunctions(functions);
+  spangres::AddPgComparisonFunctions(functions);
+  spangres::AddPgDatetimeFunctions(functions);
+  spangres::AddPgFormattingFunctions(functions);
+  spangres::AddPgStringFunctions(functions);
 
   // Map some Postgres functions to custom Spanner functions to match Postgres'
   // order semantics (e.g. PG.MIN).

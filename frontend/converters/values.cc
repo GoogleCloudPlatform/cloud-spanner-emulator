@@ -18,20 +18,30 @@
 
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "google/protobuf/struct.pb.h"
 #include "zetasql/public/functions/date_time_util.h"
 #include "zetasql/public/options.pb.h"
+#include "zetasql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "absl/time/time.h"
 #include "common/constants.h"
 #include "common/errors.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
+#include "third_party/spanner_pg/interface/pg_arena.h"
+#include "third_party/spanner_pg/interface/pg_arena_factory.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -40,9 +50,37 @@ namespace frontend {
 
 namespace {
 
+using google::spanner::v1::TypeAnnotationCode;
+using postgres_translator::spangres::datatypes::CreatePgJsonbValue;
+using postgres_translator::spangres::datatypes::CreatePgNumericValue;
+using postgres_translator::spangres::datatypes::GetPgJsonbNormalizedValue;
+using postgres_translator::spangres::datatypes::GetPgNumericNormalizedValue;
+using postgres_translator::spangres::datatypes::SpannerExtendedType;
+
 // Time format used by Cloud Spanner to encode timestamps.
 constexpr char kRFC3339TimeFormatNoOffset[] = "%E4Y-%m-%dT%H:%M:%E*S";
 
+// Create PG.JSONB value in a valid memory context which is required for calling
+// PG code.
+static absl::StatusOr<zetasql::Value> CreatePgJsonbValueWithMemoryContext(
+    absl::string_view jsonb_string) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
+      postgres_translator::interfaces::CreatePGArena(nullptr));
+  return postgres_translator::spangres::datatypes::CreatePgJsonbValue(
+      jsonb_string);
+}
+
+// Create PG.NUMERIC value in a valid memory context which is required for
+// calling PG code.
+static absl::StatusOr<zetasql::Value> CreatePgNumericValueWithMemoryContext(
+    absl::string_view numeric_string) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
+      postgres_translator::interfaces::CreatePGArena(nullptr));
+  return postgres_translator::spangres::datatypes::CreatePgNumericValue(
+      numeric_string);
+}
 }  // namespace
 
 absl::StatusOr<zetasql::Value> ValueFromProto(
@@ -92,6 +130,43 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
                                              type->DebugString());
       }
       return zetasql::values::Double(val);
+    }
+
+    case zetasql::TypeKind::TYPE_EXTENDED: {
+      auto type_code = static_cast<const SpannerExtendedType*>(type)->code();
+      switch (type_code) {
+        case TypeAnnotationCode::PG_JSONB: {
+          if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
+            return error::ValueProtoTypeMismatch(value_pb.DebugString(),
+                                                 type->DebugString());
+          }
+          auto pg_jsonb =
+              CreatePgJsonbValueWithMemoryContext(value_pb.string_value());
+          if (!pg_jsonb.ok()) {
+            return error::CouldNotParseStringAsPgJsonb(value_pb.string_value());
+          }
+          return *pg_jsonb;
+        }
+        case TypeAnnotationCode::PG_NUMERIC: {
+          if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
+            return error::ValueProtoTypeMismatch(value_pb.DebugString(),
+                                                 type->DebugString());
+          }
+          auto pg_numeric =
+              CreatePgNumericValueWithMemoryContext(value_pb.string_value());
+          if (!pg_numeric.ok()) {
+            return error::CouldNotParseStringAsPgNumeric(
+                value_pb.string_value());
+          }
+          return *pg_numeric;
+        }
+        default:
+          return error::Internal(absl::StrCat(
+              "Cloud Spanner unsupported type ", type->DebugString(),
+              " passed to ValueFromProto when parsing ",
+              value_pb.DebugString()));
+      }
+      break;
     }
 
     case zetasql::TypeKind::TYPE_TIMESTAMP: {
@@ -264,6 +339,28 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
         return error::Internal(absl::StrCat("Unsupported double value ",
                                             value.double_value(),
                                             " passed to ValueToProto"));
+      }
+      break;
+    }
+
+    case zetasql::TypeKind::TYPE_EXTENDED: {
+      auto type_code =
+          static_cast<const SpannerExtendedType*>(value.type())->code();
+      switch (type_code) {
+        case TypeAnnotationCode::PG_JSONB: {
+          value_pb.set_string_value(
+              std::string(*GetPgJsonbNormalizedValue(value)));
+          break;
+        }
+        case TypeAnnotationCode::PG_NUMERIC: {
+          value_pb.set_string_value(
+              std::string(*GetPgNumericNormalizedValue(value)));
+          break;
+        }
+        default:
+          return error::Internal(
+              absl::StrCat("Cloud Spanner unsupported ZetaSQL value ",
+                           value.DebugString(), " passed to ValueToProto"));
       }
       break;
     }

@@ -29,13 +29,19 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
+#include <memory>
 #include <optional>
+#include <string>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "absl/log/check.h"
+#include "absl/status/status.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
 #include "third_party/spanner_pg/interface/regexp_evaluators.h"
+#include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
+#include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
 
 namespace postgres_translator::function_evaluators {
 namespace {
@@ -176,6 +182,12 @@ TEST_F(RegexpMatchTest, RegressionTestLookbehindConstraints) {
               IsOkAndHolds(Pointee(ElementsAre(Optional(StrEq("b"))))));
   EXPECT_THAT(RegexpMatch("foobar", "(?<=oo)b+"),
               IsOkAndHolds(Pointee(ElementsAre(Optional(StrEq("b"))))));
+}
+
+TEST_F(RegexpMatchTest, FuzzTestErrors) {
+  EXPECT_THAT(RegexpMatch("", "(?!([^\\w\\W]){0}"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("parentheses () not balanced")));
 }
 }  // namespace
 }  // namespace postgres_translator::function_evaluators

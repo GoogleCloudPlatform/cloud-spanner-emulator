@@ -109,13 +109,28 @@ QueryableTable::AnalyzeColumnExpression(
     zetasql::Catalog* catalog,
     std::optional<const zetasql::AnalyzerOptions> opt_options) const {
   std::unique_ptr<const zetasql::AnalyzerOutput> output = nullptr;
+  bool enable_generated_pk =
+      EmulatorFeatureFlags::instance().flags().enable_generated_pk;
+  bool is_generated_column = enable_generated_pk && column->is_generated();
   if (opt_options.has_value() && (column->has_default_value()
+                                  || (is_generated_column)
                                   )) {
     zetasql::AnalyzerOptions options = opt_options.value();
+    if (is_generated_column) {
+      for (const Column* dep : column->dependent_columns()) {
+        ZETASQL_RETURN_IF_ERROR(
+            options.AddExpressionColumn(dep->Name(), dep->GetType()))
+            << "Failed to add dependent column " << dep->Name()
+            << " for generated column : " << column->FullName();
+      }
+    }
     absl::Status s = zetasql::AnalyzeExpressionForAssignmentToType(
         column->expression().value(), options, catalog, type_factory,
         column->GetType(), &output);
     std::string expression_type = "default";
+    if (is_generated_column) {
+      expression_type = "generated";
+    }
     ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeExpressionForAssignmentToType(
         column->expression().value(), options, catalog, type_factory,
         column->GetType(), &output))
@@ -130,6 +145,8 @@ QueryableTable::QueryableTable(
     std::optional<const zetasql::AnalyzerOptions> opt_options,
     zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory)
     : wrapped_table_(table), reader_(reader) {
+  bool enable_generated_pk =
+      EmulatorFeatureFlags::instance().flags().enable_generated_pk;
   for (const auto* column : table->columns()) {
     absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
         analyzer_output =
@@ -137,10 +154,16 @@ QueryableTable::QueryableTable(
     ABSL_CHECK_OK(analyzer_output.status());  // Crash OK
     std::unique_ptr<const zetasql::AnalyzerOutput> output =
         std::move(analyzer_output.value());
+    bool is_generated_column = enable_generated_pk && column->is_generated();
     if (column->has_default_value()
+        || (is_generated_column)
     ) {
       zetasql::Column::ExpressionAttributes::ExpressionKind expression_kind =
           zetasql::Column::ExpressionAttributes::ExpressionKind::DEFAULT;
+      if (is_generated_column) {
+        expression_kind =
+            zetasql::Column::ExpressionAttributes::ExpressionKind::GENERATED;
+      }
       zetasql::Column::ExpressionAttributes expression_attributes =
           zetasql::Column::ExpressionAttributes(expression_kind,
                                                   column->expression().value(),

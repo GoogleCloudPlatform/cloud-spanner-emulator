@@ -21,7 +21,6 @@
 #include <vector>
 
 #include "google/spanner/v1/type.pb.h"
-#include "google/protobuf/descriptor.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/type.pb.h"
 #include "zetasql/public/types/array_type.h"
@@ -29,9 +28,11 @@
 #include "zetasql/public/types/proto_type.h"
 #include "zetasql/public/types/struct_type.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "common/errors.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -39,6 +40,9 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace frontend {
+
+using postgres_translator::spangres::datatypes::GetPgJsonbType;
+using postgres_translator::spangres::datatypes::GetPgNumericType;
 
 absl::Status TypeFromProto(
     const google::spanner::v1::Type& type_pb, zetasql::TypeFactory* factory,
@@ -81,12 +85,20 @@ absl::Status TypeFromProto(
     }
 
     case google::spanner::v1::TypeCode::NUMERIC: {
-      *type = factory->get_numeric();
+      if (type_pb.type_annotation() == v1::TypeAnnotationCode::PG_NUMERIC) {
+        *type = GetPgNumericType();
+      } else {
+        *type = factory->get_numeric();
+      }
       return absl::OkStatus();
     }
 
     case google::spanner::v1::TypeCode::JSON: {
-      *type = factory->get_json();
+      if (type_pb.type_annotation() == v1::TypeAnnotationCode::PG_JSONB) {
+        *type = GetPgJsonbType();
+      } else {
+        *type = factory->get_json();
+      }
       return absl::OkStatus();
     }
 
@@ -143,6 +155,26 @@ absl::Status TypeToProto(const zetasql::Type* type,
     case zetasql::TYPE_DOUBLE: {
       type_pb->set_code(google::spanner::v1::TypeCode::FLOAT64);
       return absl::OkStatus();
+    }
+
+    case zetasql::TYPE_EXTENDED: {
+      auto type_code = static_cast<const postgres_translator::spangres::
+                                       datatypes::SpannerExtendedType*>(type)
+                           ->code();
+      switch (type_code) {
+        case v1::TypeAnnotationCode::PG_JSONB:
+          type_pb->set_code(google::spanner::v1::TypeCode::JSON);
+          type_pb->set_type_annotation(v1::TypeAnnotationCode::PG_JSONB);
+          return absl::OkStatus();
+        case v1::TypeAnnotationCode::PG_NUMERIC:
+          type_pb->set_code(google::spanner::v1::TypeCode::NUMERIC);
+          type_pb->set_type_annotation(v1::TypeAnnotationCode::PG_NUMERIC);
+          return absl::OkStatus();
+        default:
+          return error::Internal(
+              absl::StrCat("Unsupported ZetaSQL Extended type ",
+                           type->DebugString(), " passed to TypeToProto"));
+      }
     }
 
     case zetasql::TYPE_TIMESTAMP: {

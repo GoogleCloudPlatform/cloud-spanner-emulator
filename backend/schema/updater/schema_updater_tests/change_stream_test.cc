@@ -37,6 +37,7 @@ namespace test {
 
 namespace {
 
+using database_api::DatabaseDialect::POSTGRESQL;
 using zetasql_base::testing::IsOk;
 TEST_P(SchemaUpdaterTest, CreateChangeStreamBasic) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
@@ -67,10 +68,15 @@ TEST_P(SchemaUpdaterTest, CreateChangeStreamBasic) {
   EXPECT_NE(change_stream_partition_table->FindColumn("end_time"), nullptr);
   EXPECT_NE(change_stream_partition_table->FindColumn("parents"), nullptr);
   EXPECT_NE(change_stream_partition_table->FindColumn("children"), nullptr);
+  EXPECT_NE(change_stream_partition_table->FindColumn("next_churn"), nullptr);
 
   auto t = schema->FindChangeStream("C");
   EXPECT_NE(t, nullptr);
-  EXPECT_EQ(t->tvf_name(), "READ_C");
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(t->tvf_name(), "read_json_C");
+  } else {
+    EXPECT_EQ(t->tvf_name(), "READ_C");
+  }
   ASSERT_TRUE((t->creation_time() < absl::Now()));
   EXPECT_EQ(t->parsed_retention_period(), 60 * 60 * 24);
 
@@ -108,6 +114,58 @@ TEST_P(SchemaUpdaterTest, CreateChangeStreamBasic) {
   EXPECT_NE(change_stream_data_table->FindColumn("transaction_tag"), nullptr);
   EXPECT_NE(change_stream_data_table->FindColumn("is_system_transaction"),
             nullptr);
+}
+
+TEST_P(SchemaUpdaterTest, CanDropExplicitlyTrackedTablesAfterDropChangeStream) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema({R"(
+          CREATE TABLE Users(
+            UserId     INT64 NOT NULL,
+            Name       STRING(MAX),
+            Age        INT64,
+          ) PRIMARY KEY (UserId)
+        )",
+                                     R"(CREATE CHANGE STREAM C FOR Users)"}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {
+                                                                           R"(
+      DROP CHANGE STREAM C)"}));
+  EXPECT_EQ(updated_schema->FindTable("Users")
+                ->change_streams_explicitly_tracking_table()
+                .size(),
+            0);
+  EXPECT_THAT(UpdateSchema(updated_schema.get(),
+                           {
+                               R"(
+      DROP TABLE Users)"})
+                  .status(),
+              IsOk());
+}
+
+TEST_P(SchemaUpdaterTest,
+       CanDropExplicitlyTrackedTablesAfterAlterChangeStream) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema({R"(
+          CREATE TABLE Users(
+            UserId     INT64 NOT NULL,
+            Name       STRING(MAX),
+            Age        INT64,
+          ) PRIMARY KEY (UserId)
+        )",
+                                     R"(CREATE CHANGE STREAM C FOR Users)"}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {
+                                                                           R"(
+      ALTER CHANGE STREAM C SET FOR ALL)"}));
+  EXPECT_EQ(updated_schema->FindTable("Users")->change_streams().size(), 1);
+  EXPECT_EQ(updated_schema->FindTable("Users")
+                ->change_streams_explicitly_tracking_table()
+                .size(),
+            0);
+  EXPECT_THAT(UpdateSchema(updated_schema.get(),
+                           {
+                               R"(
+      DROP TABLE Users)"})
+                  .status(),
+              IsOk());
 }
 
 TEST_P(SchemaUpdaterTest, CanDropImplicitlyTrackedTablesColumns) {
@@ -674,6 +732,8 @@ TEST_P(SchemaUpdaterTest, DropChangeStream) {
   EXPECT_EQ(new_table->change_streams().size(), 0);
   ASSERT_FALSE(new_table->FindColumn("int64_col")->FindChangeStream("C"));
   EXPECT_EQ(new_table->FindColumn("int64_col")->change_streams().size(), 0);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      new_schema, UpdateSchema(schema.get(), {R"(DROP TABLE test_table)"}));
 }
 
 TEST_P(SchemaUpdaterTest, DropAndRecreateChangeStream) {

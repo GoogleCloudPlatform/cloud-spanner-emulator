@@ -65,6 +65,10 @@ absl::StatusCode CanonicalCode(int pg_error_code) {
         return absl::StatusCode::kInternal;
       }
     case ERRCODE_TO_CATEGORY(ERRCODE_DATA_EXCEPTION):
+      if (pg_error_code == ERRCODE_DIVISION_BY_ZERO ||
+          pg_error_code == ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE) {
+        return absl::StatusCode::kOutOfRange;
+      }
       // Failed type conversions (i.e. failing to convert a string to another
       // data type) can report this. It's used elsewhere in the engine, but for
       // us I think it's just bad syntax in the analyzer. InvalidArgument seems

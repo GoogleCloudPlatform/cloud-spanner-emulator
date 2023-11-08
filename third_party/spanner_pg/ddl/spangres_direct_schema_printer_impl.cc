@@ -84,6 +84,7 @@ static auto kTypeMap =
     {google::spanner::emulator::backend::ddl::ColumnDefinition::BOOL, "boolean"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::BYTES, "bytea"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::DOUBLE, "double precision"},
+    {google::spanner::emulator::backend::ddl::ColumnDefinition::PG_NUMERIC, "numeric"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::INT64, "bigint"},
     // Forward translation maps both varchar and text to the STRING type
     // (in non-strict mode). This distinction is lost in non-strict mode,
@@ -93,6 +94,7 @@ static auto kTypeMap =
     {google::spanner::emulator::backend::ddl::ColumnDefinition::STRING, "character varying"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::DATE, "date"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::TIMESTAMP, "timestamp with time zone"},
+    {google::spanner::emulator::backend::ddl::ColumnDefinition::PG_JSONB, "jsonb"},
 });
 
 class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
@@ -134,6 +136,12 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
       const google::spanner::emulator::backend::ddl::DropIndex& statement) const;
   absl::StatusOr<std::string> PrintDropFunction(
       const google::spanner::emulator::backend::ddl::DropFunction& statement) const;
+  absl::StatusOr<std::string> PrintCreateSequence(
+      const google::spanner::emulator::backend::ddl::CreateSequence& statement) const;
+  absl::StatusOr<std::string> PrintAlterSequence(
+      const google::spanner::emulator::backend::ddl::AlterSequence& statement) const;
+  absl::StatusOr<std::string> PrintDropSequence(
+      const google::spanner::emulator::backend::ddl::DropSequence& statement) const;
   absl::StatusOr<std::string> PrintCreateIndex(
       const google::spanner::emulator::backend::ddl::CreateIndex& statement) const;
   absl::StatusOr<std::string> PrintAnalyze(
@@ -144,6 +152,9 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
       const google::spanner::emulator::backend::ddl::CreateFunction& statement) const;
   absl::StatusOr<std::string> PrintColumn(
       const google::spanner::emulator::backend::ddl::ColumnDefinition& column) const;
+  absl::StatusOr<std::string> PrintForeignKeyAction(
+      absl::string_view action_type,
+      const google::spanner::emulator::backend::ddl::ForeignKey::Action action) const;
   absl::StatusOr<std::string> PrintForeignKey(
       const google::spanner::emulator::backend::ddl::ForeignKey& foreign_key) const;
   absl::StatusOr<std::string> PrintPrimaryKey(
@@ -234,6 +245,12 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
           PrintAlterChangeStream(statement.alter_change_stream()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kDropChangeStream:
       return WrapOutput(PrintDropChangeStream(statement.drop_change_stream()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kCreateSequence:
+      return WrapOutput(PrintCreateSequence(statement.create_sequence()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kAlterSequence:
+      return WrapOutput(PrintAlterSequence(statement.alter_sequence()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kDropSequence:
+      return WrapOutput(PrintDropSequence(statement.drop_sequence()));
     default:
       // Ignore unsupported statements
       return StatementTranslationError("Unsupported statement");
@@ -597,9 +614,13 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropIndex(
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropFunction(
     const google::spanner::emulator::backend::ddl::DropFunction& statement) const {
+  std::string if_exists = "";
+  if (statement.existence_modifier() == google::spanner::emulator::backend::ddl::IF_EXISTS) {
+    if_exists = "IF EXISTS ";
+  }
   switch (statement.function_kind()) {
     case google::spanner::emulator::backend::ddl::Function::VIEW:
-      return Substitute("DROP VIEW $0",
+      return Substitute("DROP VIEW $0$1", if_exists,
                         QuoteQualifiedIdentifier(statement.function_name()));
     case google::spanner::emulator::backend::ddl::Function::INVALID_KIND:
       ZETASQL_RET_CHECK_FAIL() << "Only VIEW is supported as a function kind";
@@ -676,6 +697,83 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
                 " ON ", QuoteQualifiedIdentifier(statement.index_base_name()),
                 " (", absl::StrJoin(key_parts, ", "), ")", include,
                 interleave_in, where);
+}
+
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSequence(
+    const google::spanner::emulator::backend::ddl::CreateSequence& statement) const {
+  std::vector<std::string> create_statement_clauses;
+  create_statement_clauses.push_back("CREATE SEQUENCE");
+  const bool if_not_exits = statement.has_existence_modifier() &&
+                            statement.existence_modifier() ==
+                                google::spanner::emulator::backend::ddl::ExistenceModifier::IF_NOT_EXISTS;
+  if (if_not_exits) {
+    create_statement_clauses.push_back("IF NOT EXISTS");
+  }
+  create_statement_clauses.push_back(
+      QuoteQualifiedIdentifier(statement.sequence_name()));
+  create_statement_clauses.push_back("BIT_REVERSED_POSITIVE");
+  std::optional<int64_t> skip_range_min, skip_range_max;
+  for (const ::google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
+    if (option.option_name() == "start_with_counter") {
+      create_statement_clauses.push_back(
+          absl::Substitute("START COUNTER WITH $0", option.int64_value()));
+    } else if (option.option_name() == "skip_range_min") {
+      skip_range_min = option.int64_value();
+    } else if (option.option_name() == "skip_range_max") {
+      skip_range_max = option.int64_value();
+    }
+    // Skip other unsupported options.
+  }
+
+  if (skip_range_min.has_value()) {
+    ZETASQL_RET_CHECK(skip_range_max.has_value());
+    create_statement_clauses.push_back(absl::Substitute(
+        "SKIP RANGE $0 $1", skip_range_min.value(), skip_range_max.value()));
+  }
+  return absl::StrJoin(create_statement_clauses, " ");
+}
+
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterSequence(
+    const google::spanner::emulator::backend::ddl::AlterSequence& statement) const {
+  std::vector<std::string> alter_statement_clauses;
+  alter_statement_clauses.push_back("ALTER SEQUENCE");
+  const bool if_exists = statement.has_existence_modifier() &&
+                        statement.existence_modifier() ==
+                            google::spanner::emulator::backend::ddl::ExistenceModifier::IF_EXISTS;
+  if (if_exists) {
+    alter_statement_clauses.push_back("IF EXISTS");
+  }
+  alter_statement_clauses.push_back(
+      QuoteQualifiedIdentifier(statement.sequence_name()));
+
+  std::optional<int64_t> skip_range_min, skip_range_max;
+  if (statement.has_set_options()) {
+    for (const ::google::spanner::emulator::backend::ddl::SetOption& option :
+         statement.set_options().options()) {
+      if (option.option_name() == "start_with_counter") {
+        alter_statement_clauses.push_back(
+            absl::Substitute("RESTART COUNTER WITH $0", option.int64_value()));
+      } else if (option.option_name() == "skip_range_min") {
+        skip_range_min = option.int64_value();
+      } else if (option.option_name() == "skip_range_max") {
+        skip_range_max = option.int64_value();
+      }
+      // Skip other non-supported options.
+    }
+
+    if (skip_range_min.has_value() && skip_range_max.has_value()) {
+      alter_statement_clauses.push_back(absl::Substitute(
+          "SKIP RANGE $0 $1", skip_range_min.value(), skip_range_max.value()));
+    }
+  }
+
+  return absl::StrJoin(alter_statement_clauses, " ");
+}
+
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropSequence(
+    const google::spanner::emulator::backend::ddl::DropSequence& statement) const {
+  return absl::Substitute("DROP SEQUENCE $0",
+                          QuoteQualifiedIdentifier(statement.sequence_name()));
 }
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAnalyze(
@@ -793,6 +891,14 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintType(
       break;
     }
 
+    case google::spanner::emulator::backend::ddl::ColumnDefinition::PG_NUMERIC: {
+      // For PG.NUMERIC with no scale and precision modifier, breaking out is
+      // fine. This won't work for fixed precision PG.NUMERIC columns, which
+      // are not yet supported.
+      // TODO: Add support for fixed-precision numeric DDL.
+      break;
+    }
+
     default:
       // no type modifiers for the rest
       break;
@@ -858,6 +964,21 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
                 constraint);
 }
 
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintForeignKeyAction(
+    absl::string_view action_type,
+    const google::spanner::emulator::backend::ddl::ForeignKey::Action action) const {
+  switch (action) {
+    case google::spanner::emulator::backend::ddl::ForeignKey::ACTION_UNSPECIFIED:
+    case google::spanner::emulator::backend::ddl::ForeignKey::NO_ACTION:
+      return "";
+    case google::spanner::emulator::backend::ddl::ForeignKey::CASCADE:
+      return StrCat(" ", action_type, " CASCADE");
+    default:
+      ZETASQL_RET_CHECK_FAIL() << "Unknown foreign key action type:"
+                       << static_cast<int64_t>(action);
+  }
+}
+
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintForeignKey(
     const google::spanner::emulator::backend::ddl::ForeignKey& foreign_key) const {
   // Not supported by Cloud Spanner
@@ -879,12 +1000,13 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintForeignKey(
     referenced_columns.push_back(QuoteIdentifier(pk_column));
   }
 
+  ZETASQL_ASSIGN_OR_RETURN(absl::string_view printed_delete_action,
+                   PrintForeignKeyAction("ON DELETE", foreign_key.on_delete()));
   return StrCat(constraint_name, "FOREIGN KEY (",
                 absl::StrJoin(constrained_columns, ", "), ") REFERENCES ",
                 QuoteQualifiedIdentifier(foreign_key.referenced_table_name()),
-                "(", absl::StrJoin(referenced_columns, ", "),
-                ")"
-  );
+                "(", absl::StrJoin(referenced_columns, ", "), ")",
+                printed_delete_action);
 }
 
 absl::StatusOr<std::string>

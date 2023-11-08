@@ -64,7 +64,7 @@ TEST_F(QueryValidatorTest, ValidateUnsupportedHintReturnsError) {
       zetasql::MakeResolvedLiteral(zetasql::Value::Bool(true))));
 
   QueryEngineOptions opts;
-  QueryValidator validator{schema(), &opts};
+  QueryValidator validator{{.schema = schema()}, &opts};
   ASSERT_THAT(resolved_table_scan->Accept(&validator),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
@@ -79,7 +79,7 @@ TEST_F(QueryValidatorTest, ValidateHintWithUnmatchedValueTypeReturnsError) {
       zetasql::MakeResolvedLiteral(zetasql::Value::Bool(true))));
 
   QueryEngineOptions opts;
-  QueryValidator validator{schema(), &opts};
+  QueryValidator validator{{.schema = schema()}, &opts};
   ASSERT_THAT(resolved_table_scan->Accept(&validator),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
@@ -94,7 +94,7 @@ TEST_F(QueryValidatorTest, ValidateForceIndexHintWithBaseTableReturnsOK) {
       zetasql::MakeResolvedLiteral(zetasql::Value::String("_base_table"))));
 
   QueryEngineOptions opts;
-  QueryValidator validator{schema(), &opts};
+  QueryValidator validator{{.schema = schema()}, &opts};
   ZETASQL_ASSERT_OK(resolved_table_scan->Accept(&validator));
 }
 
@@ -108,7 +108,7 @@ TEST_F(QueryValidatorTest, ValidateForceIndexHintWithExistingIndexRetunsOK) {
       zetasql::MakeResolvedLiteral(zetasql::Value::String("test_index"))));
 
   QueryEngineOptions opts;
-  QueryValidator validator{schema(), &opts};
+  QueryValidator validator{{.schema = schema()}, &opts};
   ZETASQL_ASSERT_OK(resolved_table_scan->Accept(&validator));
 }
 
@@ -123,7 +123,7 @@ TEST_F(QueryValidatorTest,
       zetasql::MakeResolvedLiteral(zetasql::Value::String("buggy_index"))));
 
   QueryEngineOptions opts;
-  QueryValidator validator{schema(), &opts};
+  QueryValidator validator{{.schema = schema()}, &opts};
   ASSERT_THAT(resolved_table_scan->Accept(&validator),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
@@ -140,7 +140,7 @@ TEST_F(QueryValidatorTest, CollectEmulatorOnlyOptionsFromHints) {
 
   {
     QueryEngineOptions opts;
-    QueryValidator validator{schema(), &opts};
+    QueryValidator validator{{.schema = schema()}, &opts};
     ZETASQL_ASSERT_OK(resolved_table_scan->Accept(&validator));
     EXPECT_TRUE(opts.disable_query_null_filtered_index_check);
   }
@@ -156,7 +156,7 @@ TEST_F(QueryValidatorTest, CollectEmulatorOnlyOptionsFromHints) {
 
   {
     QueryEngineOptions opts;
-    QueryValidator validator{schema(), &opts};
+    QueryValidator validator{{.schema = schema()}, &opts};
     ZETASQL_ASSERT_OK(resolved_query_stmt->Accept(&validator));
     EXPECT_TRUE(opts.disable_query_partitionability_check);
   }
@@ -186,7 +186,7 @@ TEST_F(QueryValidatorTest, ValidateDisableInlineHintReturnsOK) {
       zetasql::MakeResolvedLiteral(zetasql::Value::Bool(true))));
 
   QueryEngineOptions opts;
-  QueryValidator validator{schema(), &opts};
+  QueryValidator validator{{.schema = schema()}, &opts};
   ZETASQL_ASSERT_OK(resolved_function_call->Accept(&validator));
 }
 
@@ -198,7 +198,7 @@ TEST_F(QueryValidatorTest, HashJoinExecutionHintOnePassReturnsOk) {
       zetasql::MakeResolvedLiteral(zetasql::Value::String("one_pass"))));
 
   QueryEngineOptions opts;
-  QueryValidator validator{schema(), &opts};
+  QueryValidator validator{{.schema = schema()}, &opts};
   ZETASQL_ASSERT_OK(resolved_join_scan->Accept(&validator));
 }
 
@@ -210,7 +210,7 @@ TEST_F(QueryValidatorTest, HashJoinExecutionHintMultiPassReturnsOk) {
       zetasql::MakeResolvedLiteral(zetasql::Value::String("multi_pass"))));
 
   QueryEngineOptions opts;
-  QueryValidator validator{schema(), &opts};
+  QueryValidator validator{{.schema = schema()}, &opts};
   ZETASQL_ASSERT_OK(resolved_join_scan->Accept(&validator));
 }
 
@@ -223,7 +223,7 @@ TEST_F(QueryValidatorTest, HashJoinExecutionHintInvalidReturnsError) {
           zetasql::Value::String("invalid_value"))));
 
   QueryEngineOptions opts;
-  QueryValidator validator{schema(), &opts};
+  QueryValidator validator{{.schema = schema()}, &opts};
   ASSERT_THAT(resolved_join_scan->Accept(&validator),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }

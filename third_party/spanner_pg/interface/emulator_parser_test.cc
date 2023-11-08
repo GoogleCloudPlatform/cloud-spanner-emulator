@@ -37,9 +37,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
-#include "absl/flags/flag.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
-#include "third_party/spanner_pg/interface/spangres_translator.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "third_party/spanner_pg/test_catalog/emulator_catalog.h"
 
@@ -61,28 +59,6 @@ TEST(EmulatorParserTest, ParseAndAnalyzePostgreSQL) {
       std::unique_ptr<const zetasql::AnalyzerOutput> output,
       ParseAndAnalyzePostgreSQL("select 1234567890123", catalog.get(),
                                 analyzer_options, type_factory.get()));
-}
-
-TEST(EmulatorParserTest, ParseAndAnalyzePostgreSQLQueryTooLong) {
-  int sql_length_limit = absl::GetFlag(FLAGS_spangres_sql_length_limit);
-  // Reduce the length limit for testing.
-  absl::SetFlag(&FLAGS_spangres_sql_length_limit, 10);
-
-  std::unique_ptr<zetasql::EnumerableCatalog> catalog =
-      test::GetEmulatorCatalog();
-  auto type_factory = std::make_unique<zetasql::TypeFactory>();
-  zetasql::AnalyzerOptions analyzer_options =
-      test::GetPGEmulatorTestAnalyzerOptions();
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<interfaces::PGArena> extra_arena,
-                       MemoryContextPGArena::Init(nullptr));
-  EXPECT_THAT(ParseAndAnalyzePostgreSQL("SELECT 'aa'", catalog.get(),
-                                        analyzer_options, type_factory.get()),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::HasSubstr("exceeds maximum allowed length")));
-
-  absl::SetFlag(&FLAGS_spangres_sql_length_limit, sql_length_limit);
 }
 
 TEST(EmulatorParserTest, TranslateTableLevelExpression) {

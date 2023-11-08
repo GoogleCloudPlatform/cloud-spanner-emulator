@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "google/spanner/v1/spanner.pb.h"
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
@@ -54,10 +55,12 @@
 #include "backend/query/change_stream/change_stream_query_validator.h"
 #include "backend/query/dml_query_validator.h"
 #include "backend/query/feature_filter/query_size_limits_checker.h"
+#include "backend/query/function_catalog.h"
 #include "backend/query/hint_rewriter.h"
 #include "backend/query/index_hint_validator.h"
 #include "backend/query/partitionability_validator.h"
 #include "backend/query/partitioned_dml_validator.h"
+#include "backend/query/query_context.h"
 #include "backend/query/query_engine_options.h"
 #include "backend/query/query_validator.h"
 #include "backend/query/queryable_column.h"
@@ -164,6 +167,11 @@ absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
 AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
                   zetasql::AnalyzerOptions& options,
                   zetasql::TypeFactory* type_factory) {
+  // Check the overall length of the query string.
+  if (sql.size() > limits::kMaxQueryStringSize) {
+    return error::QueryStringTooLong(sql.size(), limits::kMaxQueryStringSize);
+  }
+
   options.CreateDefaultArenasIfNotSet();
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
@@ -505,7 +513,8 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateUpdate(
 absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
     const zetasql::ResolvedStatement* resolved_statement,
     const zetasql::ParameterValueMap& params,
-    zetasql::TypeFactory* type_factory, int64_t* num_output_rows) {
+    zetasql::TypeFactory* type_factory, int64_t* num_output_rows,
+    const v1::ExecuteSqlRequest_QueryMode query_mode) {
   ZETASQL_RET_CHECK_EQ(resolved_statement->node_kind(), zetasql::RESOLVED_QUERY_STMT)
       << "input is not a query statement";
 
@@ -517,26 +526,38 @@ absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(params));
   ZETASQL_RETURN_IF_ERROR(prepared_query->Prepare(analyzer_options));
-  // Finally execute the query.
-  ZETASQL_ASSIGN_OR_RETURN(auto iterator, prepared_query->Execute(params));
 
-  std::vector<std::vector<zetasql::Value>> values;
-  while (iterator->NextRow()) {
-    values.emplace_back();
-    values.back().reserve(iterator->NumColumns());
-    for (int i = 0; i < iterator->NumColumns(); ++i) {
-      values.back().push_back(iterator->GetValue(i));
-    }
-  }
-  ZETASQL_RETURN_IF_ERROR(iterator->Status());
-  *num_output_rows = values.size();
+  // Get the query metadata from the prepared query.
   std::vector<std::string> names;
   std::vector<const zetasql::Type*> types;
-  for (int i = 0; i < iterator->NumColumns(); ++i) {
-    names.push_back(iterator->GetColumnName(i));
-    types.push_back(iterator->GetColumnType(i));
+  auto columns = prepared_query->GetColumns();
+  for (auto& column : columns) {
+    names.push_back(column.first);
+    types.push_back(column.second);
   }
-  return std::make_unique<VectorsRowCursor>(names, types, values);
+  std::vector<std::vector<zetasql::Value>> values;
+
+  if (query_mode == v1::ExecuteSqlRequest::PLAN) {
+    // Return the query metadata when the query is executed in PLAN mode.
+    // This allows clients to use PLAN to get the metadata of the query without
+    // having to execute the query and/or supply values for all query
+    // parameters. This is used by some drivers (e.g. JDBC) and by PGAdapter.
+    return std::make_unique<VectorsRowCursor>(names, types, values);
+  } else {
+    // Finally execute the query.
+    ZETASQL_ASSIGN_OR_RETURN(auto iterator, prepared_query->Execute(params));
+
+    while (iterator->NextRow()) {
+      values.emplace_back();
+      values.back().reserve(iterator->NumColumns());
+      for (int i = 0; i < iterator->NumColumns(); ++i) {
+        values.back().push_back(iterator->GetValue(i));
+      }
+    }
+    ZETASQL_RETURN_IF_ERROR(iterator->Status());
+    *num_output_rows = values.size();
+    return std::make_unique<VectorsRowCursor>(names, types, values);
+  }
 }
 
 absl::StatusOr<std::map<std::string, zetasql::Value>> ExtractParameters(
@@ -611,7 +632,8 @@ bool IsDMLStmtWitoutSelect(
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedStatement>>
 ExtractValidatedResolvedStatementAndOptions(
-    const zetasql::AnalyzerOutput* analyzer_output, const Schema* schema,
+    const zetasql::AnalyzerOutput* analyzer_output,
+    const QueryContext& context,
     QueryEngineOptions* query_engine_options = nullptr) {
   ZETASQL_RET_CHECK_NE(analyzer_output->resolved_statement(), nullptr);
 
@@ -626,8 +648,9 @@ ExtractValidatedResolvedStatementAndOptions(
   QueryEngineOptions options;
   std::unique_ptr<QueryValidator> query_validator =
       IsDMLStmtWitoutSelect(analyzer_output->resolved_statement())
-          ? std::make_unique<DMLQueryValidator>(schema, &options)
-          : std::make_unique<QueryValidator>(schema, &options);
+          ? std::make_unique<DMLQueryValidator>(context, &options)
+          : std::make_unique<QueryValidator>(context, &options);
+
   ZETASQL_RETURN_IF_ERROR(statement->Accept(query_validator.get()));
   if (query_engine_options != nullptr) {
     *query_engine_options = options;
@@ -635,8 +658,8 @@ ExtractValidatedResolvedStatementAndOptions(
 
   // Validate the index hints.
   IndexHintValidator index_hint_validator{
-      schema, options.disable_query_null_filtered_index_check ||
-                  config::disable_query_null_filtered_index_check()};
+      context.schema, options.disable_query_null_filtered_index_check ||
+                          config::disable_query_null_filtered_index_check()};
   ZETASQL_RETURN_IF_ERROR(statement->Accept(&index_hint_validator));
 
   // Check the query size limits
@@ -685,7 +708,9 @@ class QueryEvaluatorForEngine : public QueryEvaluator {
       const std::string& query) override {
     Query q{/*sql=*/query, /*declared_params=*/{}, /*undeclared_params=*/{}};
 
-    ZETASQL_ASSIGN_OR_RETURN(auto result, query_engine_.ExecuteSql(q, query_context_));
+    ZETASQL_ASSIGN_OR_RETURN(auto result,
+                     query_engine_.ExecuteSql(q, query_context_,
+                                              v1::ExecuteSqlRequest::NORMAL));
     return std::move(result.rows);
   }
 
@@ -707,8 +732,9 @@ absl::StatusOr<std::string> QueryEngine::GetDmlTargetTable(
       Analyze(query.sql, &catalog, analyzer_options, type_factory_));
   ZETASQL_ASSIGN_OR_RETURN(auto params,
                    ExtractParameters(query, analyzer_output.get()));
-  ZETASQL_ASSIGN_OR_RETURN(auto statement, ExtractValidatedResolvedStatementAndOptions(
-                                       analyzer_output.get(), schema));
+  ZETASQL_ASSIGN_OR_RETURN(auto statement,
+                   ExtractValidatedResolvedStatementAndOptions(
+                       analyzer_output.get(), {.schema = schema}));
 
   ExtractDmlTargetTableVisitor visitor;
   ZETASQL_RETURN_IF_ERROR(statement->Accept(&visitor));
@@ -721,6 +747,12 @@ absl::StatusOr<std::string> QueryEngine::GetDmlTargetTable(
 
 absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
     const Query& query, const QueryContext& context) const {
+  return ExecuteSql(query, context, v1::ExecuteSqlRequest::NORMAL);
+}
+
+absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
+    const Query& query, const QueryContext& context,
+    v1::ExecuteSqlRequest_QueryMode query_mode) const {
   absl::Time start_time = absl::Now();
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(query.declared_params));
@@ -752,7 +784,7 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
 
   ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
                    ExtractValidatedResolvedStatementAndOptions(
-                       analyzer_output.get(), context.schema));
+                       analyzer_output.get(), context));
 
   // Change stream queries are not directly executed via this generic ExecuteSql
   // function in query engine. If a change stream query reaches here, it is from
@@ -769,9 +801,10 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
 
   QueryResult result;
   if (!IsDMLStmt(analyzer_output->resolved_statement()->node_kind())) {
-    ZETASQL_ASSIGN_OR_RETURN(auto cursor,
-                     EvaluateQuery(resolved_statement.get(), params,
-                                   type_factory_, &result.num_output_rows));
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto cursor,
+        EvaluateQuery(resolved_statement.get(), params, type_factory_,
+                      &result.num_output_rows, query_mode));
     result.rows = std::move(cursor);
   } else {
     ZETASQL_RET_CHECK_NE(context.writer, nullptr);
@@ -788,16 +821,23 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
     }
     ZETASQL_ASSIGN_OR_RETURN(resolved_statement,
                      ExtractValidatedResolvedStatementAndOptions(
-                         analyzer_output.get(), context.schema));
+                         analyzer_output.get(), context));
 
-    ZETASQL_ASSIGN_OR_RETURN(auto execute_update_result,
-                     EvaluateUpdate(resolved_statement.get(), &catalog, params,
-                                    type_factory_));
-    ZETASQL_RETURN_IF_ERROR(context.writer->Write(execute_update_result.mutation));
-    result.modified_row_count = execute_update_result.modify_row_count;
-    result.rows = std::move(execute_update_result.returning_row_cursor);
+    // Only execute the SQL statement if the user did not request PLAN mode.
+    if (query_mode != v1::ExecuteSqlRequest::PLAN) {
+      ZETASQL_ASSIGN_OR_RETURN(auto execute_update_result,
+                       EvaluateUpdate(resolved_statement.get(), &catalog,
+                                      params, type_factory_));
+      ZETASQL_RETURN_IF_ERROR(context.writer->Write(execute_update_result.mutation));
+      result.modified_row_count = execute_update_result.modify_row_count;
+      result.rows = std::move(execute_update_result.returning_row_cursor);
+    }
   }
-
+  // Add both undeclared and declared parameters to the result.
+  result.parameter_types = analyzer_output->undeclared_parameters();
+  for (auto const& param : query.declared_params) {
+    result.parameter_types.insert({param.first, param.second.type()});
+  }
   result.elapsed_time = absl::Now() - start_time;
   return result;
 }
@@ -823,7 +863,8 @@ absl::Status QueryEngine::IsPartitionable(const Query& query,
   QueryEngineOptions options;
   ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
                    ExtractValidatedResolvedStatementAndOptions(
-                       analyzer_output.get(), context.schema, &options));
+                       analyzer_output.get(), context,
+                       &options));
   if (options.disable_query_partitionability_check) {
     return absl::OkStatus();
   }
@@ -850,7 +891,9 @@ absl::Status QueryEngine::IsValidPartitionedDML(
 
   ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
                    ExtractValidatedResolvedStatementAndOptions(
-                       analyzer_output.get(), context.schema));
+                       analyzer_output.get(),
+                       context
+                       ));
 
   // Check that the DML statement is partitionable.
   PartitionedDMLValidator validator;
@@ -865,10 +908,6 @@ bool IsDMLQuery(const std::string& query) {
 absl::StatusOr<ChangeStreamQueryValidator::ChangeStreamMetadata>
 QueryEngine::TryGetChangeStreamMetadata(const Query& query,
                                         const Schema* schema) {
-  // change streams for postgres is not supported now
-  if (schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
-    return ChangeStreamQueryValidator::ChangeStreamMetadata();
-  }
   const absl::Time start_time = absl::Now();
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(query.declared_params));
@@ -876,22 +915,30 @@ QueryEngine::TryGetChangeStreamMetadata(const Query& query,
   zetasql::TypeFactory type_factory;
   FunctionCatalog function_catalog(&type_factory);
   Catalog catalog{schema, &function_catalog, &type_factory, analyzer_options};
-  ZETASQL_ASSIGN_OR_RETURN(
-      auto analyzer_output,
-      Analyze(query.sql, &catalog, analyzer_options, &type_factory));
-
-  ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
-                   ExtractValidatedResolvedStatementAndOptions(
-                       analyzer_output.get(), schema));
+  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
+  if (schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
+    ZETASQL_ASSIGN_OR_RETURN(analyzer_output,
+                     AnalyzePostgreSQL(query.sql, &catalog, analyzer_options,
+                                       &type_factory));
+  } else {
+    ZETASQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(query.sql, &catalog,
+                                              analyzer_options, &type_factory));
+  }
 
   ZETASQL_ASSIGN_OR_RETURN(auto params,
                    ExtractParameters(query, analyzer_output.get()));
+
+  ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
+                   ExtractValidatedResolvedStatementAndOptions(
+                       analyzer_output.get(), {.schema = schema}));
+
   ChangeStreamQueryValidator validator{
       schema, start_time,
       absl::flat_hash_map<std::string, zetasql::Value>(params.begin(),
                                                          params.end())};
   ZETASQL_ASSIGN_OR_RETURN(auto is_change_stream,
                    validator.IsChangeStreamQuery(resolved_statement.get()));
+
   if (is_change_stream) {
     ZETASQL_RETURN_IF_ERROR(resolved_statement->Accept(&validator));
   }

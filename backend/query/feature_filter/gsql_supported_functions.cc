@@ -97,6 +97,7 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "to_hex",
         "generate_array",
         "generate_date_array",
+        "generate_uuid",
         "$greater",
         "$greater_or_equal",
         "greatest",

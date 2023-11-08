@@ -29,6 +29,7 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -39,6 +40,7 @@
 #include "zetasql/public/value.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_column.h"
+#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
@@ -56,6 +58,8 @@
 #include "third_party/spanner_pg/util/postgres.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
+
+constexpr absl::string_view kExcludedAlias = "excluded";
 
 namespace postgres_translator {
 
@@ -156,8 +160,15 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   // statement is an INSERT...VALUES statement with multiple rows.
   // If there is a second RangeTblEntry with rtekind = RTE_SUBQUERY, the
   // statement is an INSERT...SELECT statement.
+  // If the statement has on conflict clause then there are two more
+  // RangeTblEntry(s) for `excluded` alias that allows access to rows
+  // being inserted in the query.
   int rte_count = list_length(query.rtable);
-  ZETASQL_RET_CHECK(rte_count == 1 || rte_count == 2);
+  if (insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE) {
+    ZETASQL_RET_CHECK(rte_count == 3 || rte_count == 4);
+  } else {
+    ZETASQL_RET_CHECK(rte_count == 1 || rte_count == 2);
+  }
 
   // Get the target table, which is the first rte in the list.
   Index rtindex = 1;
@@ -243,7 +254,7 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     std::unique_ptr<const zetasql::ResolvedInsertRow> insert_row =
         zetasql::MakeResolvedInsertRow(std::move(value_list));
     row_list.push_back(std::move(insert_row));
-  } else if (rte_count == 1) {
+  } else if (rte_count == 1 || rte_count == 3) {
     // A single row INSERT...VALUES statement.
     // Collect the list of Expr objects from the TargetEntry list.
     // Use the list of Expr objects to construct a row.
@@ -259,7 +270,7 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
         zetasql::MakeResolvedInsertRow(std::move(value_list));
     row_list.push_back(std::move(insert_row));
   } else {
-    ZETASQL_RET_CHECK(rte_count == 2);
+    ZETASQL_RET_CHECK(rte_count == 2 || rte_count == 4);
     RangeTblEntry* rte = rt_fetch(2, query.rtable);
     switch (rte->rtekind) {
       case RTE_VALUES: {
@@ -299,6 +310,17 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
             absl::StrCat("rtekind not supported in an INSERT statement: ",
                          internal::RTEKindToString(rte->rtekind)));
     }
+  }
+
+  if (query.returningList != nullptr &&
+      (insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE ||
+       insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE)) {
+    return absl::UnimplementedError(
+        "RETURNING with ON CONFLICT clause is not supported");
+  }
+  if (insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE) {
+    return absl::UnimplementedError(
+    "INSERT...ON CONFLICT DO UPDATE statements are not supported.");
   }
 
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const zetasql::ResolvedReturningClause>
@@ -352,7 +374,8 @@ ForwardTransformer::BuildPartialGsqlResolvedUpdateStmt(const Query& query) {
       GetUnwritableColumns(table);
 
   absl::flat_hash_set<int> updated_resnos;
-  std::vector<std::unique_ptr<zetasql::ResolvedUpdateItem>> update_item_list;
+  std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>
+      update_item_list;
   for (TargetEntry* entry : StructList<TargetEntry*>(query.targetList)) {
     // Check for cases where the same column is set multiple times.
     // Note that this (and vanilla PG) will return an error even if the set

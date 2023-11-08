@@ -43,9 +43,9 @@
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/spangres_system_catalog.h"
 #include "third_party/spanner_pg/catalog/spangres_user_catalog.h"
+#include "third_party/spanner_pg/interface/emulator_builtin_function_catalog.h"
 // clang-format off
 #include "third_party/spanner_pg/catalog/type.h"
-#include "third_party/spanner_pg/interface/emulator_builtin_function_catalog.h"
 // clang-format on
 #include "third_party/spanner_pg/test_catalog/emulator_catalog.h"
 #include "third_party/spanner_pg/test_catalog/spanner_test_catalog.h"
@@ -100,9 +100,13 @@ EngineSystemCatalog* GetSpangresTestSystemCatalog(
     const zetasql::LanguageOptions& language_options) {
   // Initialize the EngineSystemCatalog singleton as needed, but throw away
   // the result since it's ok if it was already initialized.
+  std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog;
+    builtin_function_catalog =
+        absl::make_unique<EmulatorBuiltinFunctionCatalog>(
+            GetTypeFactory(), /* catalog_name =*/ "spanner");
   absl::StatusOr<bool> initialized_catalog_or =
       SpangresSystemCatalog::TryInitializeEngineSystemCatalog(
-          GetSpangresTestBuiltinFunctionCatalog(language_options),
+          std::move(builtin_function_catalog),
           language_options);
 
   // Return an error immediately if there is a problem initializing the

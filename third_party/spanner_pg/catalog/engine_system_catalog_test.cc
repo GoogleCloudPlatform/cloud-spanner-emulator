@@ -299,6 +299,31 @@ TEST_F(EngineSystemCatalogTest, GetTypes) {
           zetasql::types::BytesArrayType(),
           zetasql::types::TimestampArrayType(),
           zetasql::types::DateArrayType()));
+
+  absl::flat_hash_set<const PostgresTypeMapping*> type_mappings;
+  ZETASQL_ASSERT_OK(catalog->GetPostgreSQLTypes(&type_mappings));
+  EXPECT_THAT(
+      type_mappings,
+      UnorderedElementsAre(
+          // Scalar type mappings.
+          types::PgBoolMapping(),
+          types::PgInt8Mapping(),
+          types::PgFloat8Mapping(),
+          types::PgVarcharMapping(),
+          types::PgTextMapping(),
+          types::PgByteaMapping(),
+          types::PgTimestamptzMapping(),
+          types::PgDateMapping(),
+
+          // Array type mappings.
+          types::PgBoolArrayMapping(),
+          types::PgInt8ArrayMapping(),
+          types::PgFloat8ArrayMapping(),
+          types::PgVarcharArrayMapping(),
+          types::PgTextArrayMapping(),
+          types::PgByteaArrayMapping(),
+          types::PgTimestamptzArrayMapping(),
+          types::PgDateArrayMapping()));
 }
 
 TEST_F(EngineSystemCatalogTest, TypeNotFound) {

@@ -51,23 +51,20 @@ CREATE TABLE arrayfields(
   key      bigint PRIMARY KEY,
   arraycol bigint[]
 );
-# TODO: Uncomment after PG extended type support is added.
-# PG.NUMERIC is currently unsupported in the emulator.
-# CREATE TABLE numerictable(
-#   key    numeric PRIMARY KEY,
-#   val    bigint,
-# ) PRIMARY KEY(key);
-# PG.JSONB is currently unsupported in the emulator.
-# CREATE TABLE jsontable(
-#   id     bigint NOT NULL PRIMARY KEY,
-#   val    jsonb,
-# );
+CREATE TABLE numerictable(
+  id    bigint NOT NULL PRIMARY KEY,
+  val   numeric
+);
+CREATE TABLE jsontable(
+  id     bigint NOT NULL PRIMARY KEY,
+  val    jsonb
+);
 CREATE TABLE tablegen(
   k      bigint PRIMARY KEY,
   v1     bigint,
   v2     bigint,
-  g1     bigint GENERATED ALWAYS AS (g2 + 1) STORED,
+  g1     bigint GENERATED ALWAYS AS (v2 + 1) STORED,
   g2     bigint NOT NULL GENERATED ALWAYS AS (v1 + v2) STORED,
-  g3     bigint GENERATED ALWAYS AS (g1) STORED,
+  g3     bigint GENERATED ALWAYS AS (v1) STORED,
   v3     bigint NOT NULL DEFAULT (2)
 );

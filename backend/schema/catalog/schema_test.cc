@@ -708,6 +708,30 @@ TEST_F(SchemaTest, PrintDDLStatementsTestForeignKeyOnDeleteAction) {
 ) PRIMARY KEY(k1))")));
 }
 
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestForeignKeyOnDeleteAction) {
+  std::unique_ptr<const Schema> schema =
+      test::CreateSchemaWithForeignKeyOnDelete(
+          type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL);
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
+                              R"(CREATE TABLE referenced_table (
+  k1 bigint NOT NULL,
+  c1 character varying(20),
+  c2 character varying(20),
+  PRIMARY KEY(k1)
+))",
+                              R"(CREATE TABLE referencing_table (
+  k1 bigint NOT NULL,
+  c1 character varying(20),
+  c2 character varying(20),
+  PRIMARY KEY(k1),
+  CONSTRAINT c1 FOREIGN KEY (k1) REFERENCES referenced_table(k1) ON DELETE CASCADE,
+  CONSTRAINT c2 FOREIGN KEY (k1, c1) REFERENCES referenced_table(k1, c1) ON DELETE CASCADE
+))")));
+}
+
 TEST_F(SchemaTest, TestForeignKeyDebugString) {
   std::unique_ptr<const Schema> schema =
       test::CreateSchemaWithForeignKey(type_factory_.get());

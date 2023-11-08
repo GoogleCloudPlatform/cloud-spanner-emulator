@@ -39,6 +39,7 @@
 #include "backend/database/change_stream/change_stream_partition_churner.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "common/clock.h"
+#include "frontend/converters/change_streams.h"
 #include "frontend/handlers/change_streams.h"
 #include "tests/common/chunking.h"
 #include "tests/common/proto_matchers.h"
@@ -103,6 +104,7 @@ class ChangeStreamQueryAPITest : public test::ServerTest {
     for (int i = 0; i < response.size(); ++i) {
       ZETASQL_RET_CHECK(i == 0 ? response[i].has_metadata()
                        : !response[i].has_metadata());
+      ZETASQL_RET_CHECK(response[i].resume_token() == kChangeStreamDummyResumeToken);
     }
     ZETASQL_ASSIGN_OR_RETURN(auto result_set, backend::test::MergePartialResultSets(
                                           response, /*columns_per_row=*/1));

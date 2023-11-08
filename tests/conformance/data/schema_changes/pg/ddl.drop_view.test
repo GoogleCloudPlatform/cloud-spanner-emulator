@@ -1,7 +1,8 @@
-DROP VIEW IF EXISTS Users;
---
-ERROR: <IF EXISTS> is not supported by <DROP> statement.
-==
+# TODO: When DROP VIEW IE is supported, re-enable this test.
+# DROP VIEW IF EXISTS Users;
+# --
+# ERROR: <IF EXISTS> is not supported by <DROP> statement.
+# ==
 
 DROP VIEW Users CASCADE;
 --

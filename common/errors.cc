@@ -336,6 +336,14 @@ absl::Status CouldNotParseStringAsNumeric(absl::string_view str) {
           "https://cloud.google.com/spanner/docs/data-types for more details"));
 }
 
+absl::Status CouldNotParseStringAsPgNumeric(absl::string_view str) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::StrCat("Could not parse ", str, " as a PG.NUMERIC. See ",
+                   "https://cloud.google.com/spanner/docs/reference/postgresql/"
+                   "data-types for more details"));
+}
+
 absl::Status CouldNotParseStringAsJson(absl::string_view str) {
   return absl::Status(
       absl::StatusCode::kFailedPrecondition,
@@ -343,6 +351,14 @@ absl::Status CouldNotParseStringAsJson(absl::string_view str) {
           "Could not parse ", str,
           " as a JSON. See https://cloud.google.com/spanner/docs/data-types "
           "for more details"));
+}
+
+absl::Status CouldNotParseStringAsPgJsonb(absl::string_view str) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::StrCat("Could not parse ", str, " as a JSONB. See ",
+                                   "https://cloud.google.com/spanner/docs/"
+                                   "reference/postgresql/data-types "
+                                   "for more details"));
 }
 
 absl::Status CouldNotParseStringAsTimestamp(absl::string_view str,
@@ -1064,7 +1080,7 @@ InvalidChangeStreamTvfArgumentStartTimestampGreaterThanEndTimestamp(
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
       absl::Substitute("If end_timestamp is specified, start_timestamp must be "
-                       "<=  end_timestamp. Received start_timestamp: $0, "
+                       "<= end_timestamp. Received start_timestamp: $0, "
                        "end_timestamp: $1.",
                        start_ts_string, end_ts_string));
 }
@@ -1139,6 +1155,17 @@ absl::Status IllegalChangeStreamQuerySyntax(absl::string_view tvf_name_string) {
                        "SQL statements. "
                        "Change stream records should be read using "
                        "`SELECT ChangeRecord FROM $0(<args>)`.",
+                       tvf_name_string));
+}
+
+absl::Status IllegalChangeStreamQueryPGSyntax(
+    absl::string_view tvf_name_string) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("Change stream TVF must not be combined with any other "
+                       "SQL statements. "
+                       "Change stream records should be read using "
+                       "`select * from \"spanner\".\"$0\"(<args>)`.",
                        tvf_name_string));
 }
 
@@ -2192,6 +2219,43 @@ absl::Status DefaultPKNeedsExplicitValue(absl::string_view column_name,
           "Implicit use of primary key default value for column `$0` is not "
           "allowed in $1 mutations. The column must have a specific value.",
           column_name, op_name));
+}
+
+absl::Status GeneratedPKNeedsExplicitValue(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "The value of generated primary key column `$0` must be explicitly "
+          "specified or else its non-key dependent columns must be specified "
+          "in Update mutations.",
+          column_name));
+}
+
+absl::Status GeneratedPkModified(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kOutOfRange,
+      absl::Substitute(
+          "The value of generated primary key column `$0` cannot be modified "
+          "when its non-key dependent columns are updated.",
+          column_name));
+}
+
+absl::Status NeedAllDependentColumnsForGpk(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "The value of generated primary key column `$0` cannot be evaluated "
+          "since value of all its dependent columns is not specified. ",
+          column_name));
+}
+
+absl::Status UserSuppliedValueInNonUpdateGpk(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "The value of generated primary key column `$0` cannot be specified "
+          "in operations except update operations.",
+          column_name));
 }
 
 absl::Status CannotSetDefaultValueOnGeneratedColumn(

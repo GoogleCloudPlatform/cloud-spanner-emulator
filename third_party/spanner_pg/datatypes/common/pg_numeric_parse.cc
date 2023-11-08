@@ -31,10 +31,14 @@
 
 #include "third_party/spanner_pg/datatypes/common/pg_numeric_parse.h"
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
@@ -44,19 +48,22 @@
 
 namespace postgres_translator::spangres::datatypes::common {
 
-absl::StatusOr<std::string> NormalizePgNumeric(absl::string_view pg_numeric) {
+namespace {
+// Returns a normalized numeric according to the precision and scale given in
+// `typmod_datum`.
+absl::StatusOr<std::string> NormalizePgNumeric(absl::string_view readable_value,
+                                               int32_t typmod) {
   // Create a numeric datum from `readable_value` by indirectly calling PG
   // function `numeric_in`
-  // - numeric_in_oid_: the OID value of `numeric_in` function
   // - readable_value: numeric as string
   // - InvalidOid: unused argument
-  // - Int32GetDatum(-1): typmod -1 (unlimited/unknown), i.e. numeric without
-  // typmod
+  // - typmod: precision and scale
   ZETASQL_ASSIGN_OR_RETURN(
       Datum numeric_in_result,
       postgres_translator::CheckedOidFunctionCall3(
-          F_NUMERIC_IN, CStringGetDatum(std::string(pg_numeric.data()).c_str()),
-          ObjectIdGetDatum(InvalidOid), Int32GetDatum(-1)));
+          F_NUMERIC_IN,
+          CStringGetDatum(std::string(readable_value.data()).c_str()),
+          ObjectIdGetDatum(InvalidOid), Int32GetDatum(typmod)));
 
   // Create a string datum from numeric datum by indirectly calling PG
   // function `numeric_out`
@@ -71,9 +78,66 @@ absl::StatusOr<std::string> NormalizePgNumeric(absl::string_view pg_numeric) {
   const char kInfString[] = "Infinity";
   const char kNegInfString[] = "-Infinity";
   ZETASQL_RET_CHECK(pg_normalized != kInfString && pg_normalized != kNegInfString)
-          .SetErrorCode(absl::StatusCode::kInvalidArgument)
+      .SetErrorCode(absl::StatusCode::kInvalidArgument)
       << absl::Substitute("Invalid NUMERIC value: $0.", pg_normalized);
   return pg_normalized;
+}
+
+// Returns the typmod value computed from precision and scale.
+absl::StatusOr<int32_t> GetTypeModifier(int64_t precision, int64_t scale = 0) {
+  // Create an array for precision and scale. Elements must be CSTRING.
+  std::string precision_str = absl::StrCat(precision);
+  std::string scale_str = absl::StrCat(scale);
+  std::vector<Datum> typmod_vector = {CStringGetDatum(precision_str.c_str()),
+                                      CStringGetDatum(scale_str.c_str())};
+
+  // Create bool `nulls` array corresponding to `typmod_vector`.
+  ZETASQL_ASSIGN_OR_RETURN(void* p, CheckedPgPalloc(2 * sizeof(bool)));
+  bool* nulls = reinterpret_cast<bool*>(p);
+  nulls[0] = false;
+  nulls[1] = false;
+
+  // Create PG array of typmod
+  Oid element_typid = CSTRINGOID;
+  int16_t elmlen;
+  bool elmbyval;
+  char elmalign;
+  ZETASQL_RETURN_IF_ERROR(CheckedPgGetTyplenbyvalalign(element_typid, &elmlen,
+                                               &elmbyval, &elmalign));
+  int dims = 2;  // `typmod_vector` dim of 2 elements precision and scale
+  int lower_bounds = 1;
+  ZETASQL_ASSIGN_OR_RETURN(
+      ArrayType * pg_array,
+      CheckedPgConstructMdArray(typmod_vector.data(), nulls, /*ndims=*/1, &dims,
+                                &lower_bounds, element_typid, elmlen, elmbyval,
+                                elmalign));
+
+  // Get int32_t typmod datum
+  ZETASQL_ASSIGN_OR_RETURN(Datum numerictypmodin_result,
+                   postgres_translator::CheckedOidFunctionCall1(
+                       F_NUMERICTYPMODIN, PointerGetDatum(pg_array)));
+
+  return DatumGetInt32(numerictypmodin_result);
+}
+}  // namespace
+
+absl::StatusOr<std::string> NormalizePgNumeric(
+    absl::string_view readable_value) {
+  return NormalizePgNumeric(readable_value, /*typmod=*/-1);
+}
+
+absl::StatusOr<std::string> NormalizePgNumeric(absl::string_view readable_value,
+                                               int64_t precision,
+                                               int64_t scale) {
+  ZETASQL_ASSIGN_OR_RETURN(int32_t numeric_typmod, GetTypeModifier(precision, scale));
+
+  return NormalizePgNumeric(readable_value, numeric_typmod);
+}
+
+absl::StatusOr<bool> ValidatePrecisionAndScale(int64_t precision,
+                                               int64_t scale) {
+  ZETASQL_RETURN_IF_ERROR(GetTypeModifier(precision, scale).status());
+  return true;
 }
 
 }  // namespace postgres_translator::spangres::datatypes::common

@@ -4,9 +4,7 @@ The Cloud Spanner Emulator provides application developers with a
 locally-running, _emulated_ instance of Cloud Spanner to enable local
 development and testing.
 
-This **Preview Release** of the PostgresSQL Interface enables applications using
-the PostgreSQL dialect of Cloud Spanner to use the emulator for local unit
-testing.
+The PostgresSQL Interface enables applications using the PostgreSQL dialect of Cloud Spanner to use the emulator for local unit testing.
 
 ## Quickstart
 
@@ -61,19 +59,14 @@ consistent with the [Cloud Spanner Emulator Features and
 Limitations](https://github.com/GoogleCloudPlatform/cloud-spanner-emulator#features-and-limitations).
 The following additional limitations currently apply:
 
-- NUMERIC type (coming soon)
-
-- JSON type (coming soon)
-
 - The catalog name in information schema tables in production Cloud Spanner
   PostgreSQL databases contain the database name. But in the emulator, the
   database name is not readily available at the point at which the information
   schema tables are populated so any columns with the catalog name will be
   empty.
 
-- While the emulator defines a limited set of `pg_catalog` tables consistent
-  with a production Cloud Spanner PostgreSQL database, the tables themselves
-  contain no data in the preview release.
+- Casting from PG.JSONB to bool, double, bigint and varchar types is
+  currently unsupported.
 
 - Dataflow templates
 

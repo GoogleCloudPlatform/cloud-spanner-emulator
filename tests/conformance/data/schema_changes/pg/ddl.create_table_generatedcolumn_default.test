@@ -1,20 +1,18 @@
-# TODO: when PG.NUMERIC is supported, remove the casting from string
-# to float.
+
 CREATE TABLE Users(
   id bigint PRIMARY KEY,
   height_cm float,
-  height_in float GENERATED ALWAYS AS (height_cm / '2.54'::float) STORED
+  height_in float GENERATED ALWAYS AS (height_cm / 2.54) STORED
 );
 --
 CREATE TABLE users (
   id bigint NOT NULL,
   height_cm double precision,
-  height_in double precision GENERATED ALWAYS AS ((height_cm / '2.54'::double precision)) STORED,
+  height_in double precision GENERATED ALWAYS AS ((height_cm / (2.54)::double precision)) STORED,
   PRIMARY KEY(id)
 )
 ==
-# TODO: when PG.NUMERIC is supported, change PG_CATALOG.FLOAT8 to
-# PG_CATALOG.NUMERIC and '2.5'::float to 2.5.
+
 CREATE TABLE Users(
   id bigint PRIMARY KEY,
   "GROUP" varchar(10), /*reserved keyword*/
@@ -23,11 +21,11 @@ CREATE TABLE Users(
   gc_column_ref varchar(10) GENERATED ALWAYS AS ("GROUP") STORED,
   gc_const_type_cast date GENERATED ALWAYS AS (DATE '2019-08-08') STORED,
   gc_const varchar GENERATED ALWAYS AS ('test') STORED,
-  gc_type_cast varchar GENERATED ALWAYS AS (TEXT(CAST('1.1' AS PG_CATALOG.FLOAT8)::BIGINT)) STORED,
+  gc_type_cast varchar GENERATED ALWAYS AS (TEXT(CAST('1.1' AS PG_CATALOG.NUMERIC)::BIGINT)) STORED,
   gc_case_1 bool GENERATED ALWAYS AS (CASE WHEN id > 10 AND id < 100 THEN true WHEN "UpperCase" THEN true ELSE false END) STORED,
   gc_case_2 bool GENERATED ALWAYS AS (CASE "SELECT" WHEN '2022-03-20' THEN true WHEN '2022-01-01' THEN true ELSE false END) STORED,
   gc_arithmatic_1 bigint GENERATED ALWAYS AS (-(id - 2)) STORED,
-  gc_arithmatic_2 double precision GENERATED ALWAYS AS ((id / '2.5'::float)::double precision) STORED,
+  gc_arithmatic_2 double precision GENERATED ALWAYS AS ((id / 2.5)::double precision) STORED,
   gc_logic bool GENERATED ALWAYS AS (true AND '1'::bool) STORED,
   gc_null_test bool GENERATED ALWAYS AS ( "SELECT" IS NOT NULL) STORED
 );
@@ -40,11 +38,11 @@ CREATE TABLE users (
   gc_column_ref character varying(10) GENERATED ALWAYS AS ("GROUP") STORED,
   gc_const_type_cast date GENERATED ALWAYS AS ('2019-08-08'::date) STORED,
   gc_const character varying GENERATED ALWAYS AS ('test'::text) STORED,
-  gc_type_cast character varying GENERATED ALWAYS AS ((('1.1'::double precision)::bigint)::text) STORED,
+  gc_type_cast character varying GENERATED ALWAYS AS (((1.1)::bigint)::text) STORED,
   gc_case_1 boolean GENERATED ALWAYS AS (CASE WHEN ((id > '10'::bigint) AND (id < '100'::bigint)) THEN true WHEN "UpperCase" THEN true ELSE false END) STORED,
   gc_case_2 boolean GENERATED ALWAYS AS (CASE "SELECT" WHEN '2022-03-20'::date THEN true WHEN '2022-01-01'::date THEN true ELSE false END) STORED,
   gc_arithmatic_1 bigint GENERATED ALWAYS AS ((- (id - '2'::bigint))) STORED,
-  gc_arithmatic_2 double precision GENERATED ALWAYS AS (((id)::double precision / '2.5'::double precision)) STORED,
+  gc_arithmatic_2 double precision GENERATED ALWAYS AS ((((id)::numeric / 2.5))::double precision) STORED,
   gc_logic boolean GENERATED ALWAYS AS ((true AND true)) STORED,
   gc_null_test boolean GENERATED ALWAYS AS (("SELECT" IS NOT NULL)) STORED,
   PRIMARY KEY(id)

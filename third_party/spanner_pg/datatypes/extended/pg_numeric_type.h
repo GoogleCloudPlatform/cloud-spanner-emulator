@@ -32,6 +32,7 @@
 #ifndef SPANGRES_DATATYPES_EXTENDED_PG_NUMERIC_TYPE_H_
 #define SPANGRES_DATATYPES_EXTENDED_PG_NUMERIC_TYPE_H_
 
+#include <cstdint>
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/value.h"
 #include "absl/flags/declare.h"
@@ -59,5 +60,9 @@ absl::StatusOr<zetasql::Value> CreatePgNumericValue(
 absl::StatusOr<absl::Cord> GetPgNumericNormalizedValue(
     const zetasql::Value& value);
 
+// Create a zetasql::Value from the input ASCII decimal format or an ASCII
+// scientific notation format `readable_numeric` and precision and scale.
+absl::StatusOr<zetasql::Value> CreatePgNumericValueWithPrecisionAndScale(
+    absl::string_view readable_numeric, int64_t precision, int64_t scale = 0);
 }  // namespace postgres_translator::spangres::datatypes
 #endif  // SPANGRES_DATATYPES_EXTENDED_PG_NUMERIC_TYPE_H_

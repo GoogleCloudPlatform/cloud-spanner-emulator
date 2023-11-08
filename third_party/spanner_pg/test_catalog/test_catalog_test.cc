@@ -80,7 +80,7 @@ TEST(TestCatalogTest, TableColumns) {
   const zetasql::Table* spangres_table;
   ZETASQL_ASSERT_OK(test_catalog->FindTable({"AllSpangresTypes"}, &spangres_table));
   ASSERT_NE(spangres_table, nullptr);
-  int all_types_num_columns = 7;
+  int all_types_num_columns = 9;
   EXPECT_EQ(spangres_table->NumColumns(), all_types_num_columns);
   const zetasql::Column* int64_column =
       spangres_table->FindColumnByName("int64_value");
@@ -110,6 +110,14 @@ TEST(TestCatalogTest, TableColumns) {
       spangres_table->FindColumnByName("date_value");
   ASSERT_NE(date_column, nullptr);
   EXPECT_TRUE(date_column->GetType()->IsDate());
+  const zetasql::Column* numeric_column =
+      spangres_table->FindColumnByName("numeric_value");
+  ASSERT_NE(numeric_column, nullptr);
+  EXPECT_TRUE(numeric_column->GetType()->IsExtendedType());
+  const zetasql::Column* jsonb_column =
+      spangres_table->FindColumnByName("jsonb_value");
+  ASSERT_NE(jsonb_column, nullptr);
+  EXPECT_TRUE(numeric_column->GetType()->IsExtendedType());
 }
 
 // Basic test of ArrayTypes table--verify it exists and has a couple of the

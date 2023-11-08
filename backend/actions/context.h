@@ -62,33 +62,6 @@ class EffectsBuffer {
   virtual void Delete(const Table* table, const Key& key) = 0;
 };
 
-// TODO: Remove ChangeStreamEffectsBuffer.
-class ChangeStreamEffectsBuffer {
- public:
-  virtual ~ChangeStreamEffectsBuffer() = default;
-
-  // Adds an insert operation to the effects buffer.
-  virtual void Insert(zetasql::Value partition_token_str,
-                      const ChangeStream* change_stream,
-                      const InsertOp& op) = 0;
-
-  // Adds an update operation to the effects buffer.
-  virtual void Update(zetasql::Value partition_token_str,
-                      const ChangeStream* change_stream,
-                      const UpdateOp& op) = 0;
-
-  // Adds a delete operation to the effects buffer.
-  virtual void Delete(zetasql::Value partition_token_str,
-                      const ChangeStream* change_stream,
-                      const DeleteOp& op) = 0;
-
-  virtual void BuildMutation() = 0;
-
-  virtual std::vector<WriteOp> GetWriteOps() = 0;
-
-  virtual void ClearWriteOps() = 0;
-};
-
 // ReadOnlyStore abstracts the storage environment in which an action lives.
 //
 // The contents of the storage presented to the action depends on when the
@@ -127,25 +100,19 @@ class ActionContext {
   ActionContext(
       std::unique_ptr<ReadOnlyStore> store,
       std::unique_ptr<EffectsBuffer> effects,
-      std::unique_ptr<ChangeStreamEffectsBuffer> change_stream_effects,
       Clock* clock)
       : store_(std::move(store)),
         effects_(std::move(effects)),
-        change_stream_effects_(std::move(change_stream_effects)),
         clock_(clock) {}
 
   // Accessors.
   ReadOnlyStore* store() const { return store_.get(); }
   EffectsBuffer* effects() const { return effects_.get(); }
-  ChangeStreamEffectsBuffer* change_stream_effects() const {
-    return change_stream_effects_.get();
-  }
   Clock* clock() const { return clock_; }
 
  private:
   std::unique_ptr<ReadOnlyStore> store_;
   std::unique_ptr<EffectsBuffer> effects_;
-  std::unique_ptr<ChangeStreamEffectsBuffer> change_stream_effects_;
   // System-wide monotonic clock.
   Clock* clock_;
 };

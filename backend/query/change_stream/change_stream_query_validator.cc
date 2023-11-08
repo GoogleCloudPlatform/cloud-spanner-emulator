@@ -17,6 +17,7 @@
 #include "backend/query/change_stream/change_stream_query_validator.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -26,8 +27,6 @@
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/match.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/strip.h"
 #include "absl/time/time.h"
 #include "backend/schema/catalog/change_stream.h"
@@ -40,6 +39,7 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
 absl::Status ChangeStreamQueryValidator::ValidateReadOptions(
     const zetasql::Value read_options_value) const {
   if (!read_options_value.is_null()) {
@@ -70,7 +70,7 @@ absl::Status ChangeStreamQueryValidator::ValidateTimeStamps(
   }
 
   const ChangeStream* change_stream =
-      schema_->FindChangeStream(tvf_name_.substr(5));
+      schema_->FindChangeStream(change_stream_name_);
   absl::Time max_time =
       query_start_time_ +
       absl::Minutes(limits::kChangeStreamsMaxStartTimestampDelay);
@@ -104,7 +104,8 @@ absl::Status ChangeStreamQueryValidator::ValidateTvfScanAndExtractMetadata(
     const zetasql::ResolvedTVFScan* tvf_scan) {
   absl::flat_hash_map<std::string, const zetasql::ResolvedLiteral*> arg_map;
   if (!tvf_scan->alias().empty()) {  // prevent AS clause
-    return error::IllegalChangeStreamQuerySyntax(tvf_name_);
+    return is_pg_ ? error::IllegalChangeStreamQueryPGSyntax(tvf_name_)
+                  : error::IllegalChangeStreamQuerySyntax(tvf_name_);
   }
   std::vector<zetasql::Value> arguments;
   arguments.reserve(tvf_scan->argument_list_size());
@@ -126,11 +127,11 @@ absl::Status ChangeStreamQueryValidator::ValidateTvfScanAndExtractMetadata(
   ZETASQL_RETURN_IF_ERROR(ValidateHeartbeatMilliseconds(arguments[3]));
   ZETASQL_RETURN_IF_ERROR(ValidateReadOptions(arguments[4]));
 
-  change_stream_metadata_ = ChangeStreamMetadata{tvf_name_, arguments};
+  change_stream_metadata_ = ChangeStreamMetadata{tvf_name_, arguments, is_pg_};
   return absl::OkStatus();
 }
 
-// validate the argument values and query syntax, query syntax must be in the
+// Validate the argument values and query syntax, query syntax must be in the
 // form of query_stmt->project_scan->tvf_scan
 absl::Status ChangeStreamQueryValidator::ValidateQuery(
     const zetasql::ResolvedNode* node) {
@@ -139,12 +140,14 @@ absl::Status ChangeStreamQueryValidator::ValidateQuery(
     const zetasql::ResolvedQueryStmt* query_stmt =
         node->GetAs<zetasql::ResolvedQueryStmt>();
     // prevent multiple output columns or single column other than
-    // "ChangeRecord"
+    // "ChangeRecord" in googlesql or the corresponding tvf name "read_json_xxx"
+    // in postgres.
     if (query_stmt->query()->node_kind() != zetasql::RESOLVED_PROJECT_SCAN ||
         query_stmt->output_column_list().size() != 1 ||
         query_stmt->output_column_list().at(0)->name() !=
-            kChangeStreamTvfOutputColumn) {
-      return error::IllegalChangeStreamQuerySyntax(tvf_name_);
+            (is_pg_ ? tvf_name_ : kChangeStreamTvfOutputColumn)) {
+      return is_pg_ ? error::IllegalChangeStreamQueryPGSyntax(tvf_name_)
+                    : error::IllegalChangeStreamQuerySyntax(tvf_name_);
     }
   }
   // prevent other scans except for RESOLVED_TVF_SCAN
@@ -152,7 +155,8 @@ absl::Status ChangeStreamQueryValidator::ValidateQuery(
     if (node->GetAs<zetasql::ResolvedProjectScan>()
             ->input_scan()
             ->node_kind() != zetasql::RESOLVED_TVFSCAN) {
-      return error::IllegalChangeStreamQuerySyntax(tvf_name_);
+      return is_pg_ ? error::IllegalChangeStreamQueryPGSyntax(tvf_name_)
+                    : error::IllegalChangeStreamQuerySyntax(tvf_name_);
     }
   }
   if (node->node_kind() == zetasql::RESOLVED_TVFSCAN) {
@@ -182,8 +186,10 @@ absl::StatusOr<bool> ChangeStreamQueryValidator::IsChangeStreamQuery(
   if (node->node_kind() == zetasql::RESOLVED_TVFSCAN) {
     absl::string_view tvf_name =
         node->GetAs<zetasql::ResolvedTVFScan>()->tvf()->Name();
-    if (absl::ConsumePrefix(&tvf_name, kChangeStreamTvfStructPrefix) &&
+    if (absl::ConsumePrefix(&tvf_name, is_pg_ ? kChangeStreamTvfJsonPrefix
+                                              : kChangeStreamTvfStructPrefix) &&
         schema_->FindChangeStream(std::string(tvf_name)) != nullptr) {
+      change_stream_name_ = std::string(tvf_name);
       tvf_name_ = node->GetAs<zetasql::ResolvedTVFScan>()->tvf()->Name();
       return true;
     } else {

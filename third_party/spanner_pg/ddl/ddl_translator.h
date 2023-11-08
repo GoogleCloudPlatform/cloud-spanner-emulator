@@ -98,7 +98,10 @@ struct TranslationOptions {
   // CREATE/DROP ROLE, GRANT/REVOKE privileges, GRANT/REVOKE role memberships.
   bool enable_role_based_access = true;
   // enable_sequence allows translation of sequence-related DDL.
-  bool enable_sequence = false;
+  bool enable_sequence = true;
+  // enable_set_drop_not_null allows translation of <SET/DROP NOT NULL> without
+  // specifying a column type.
+  bool enable_set_drop_not_null = false;
 };
 
 // Interface for translating PostgreSQL DDL parse tree (AST) to Spanner schema
@@ -120,6 +123,9 @@ class PostgreSQLToSpannerDDLTranslator {
 
   absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList>
   TranslateForEmulator(const interfaces::ParserBatchOutput& parsed_statements,
+                       const TranslationOptions& options = {}) const;
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList>
+  TranslateForEmulator(const interfaces::ParserOutput& parser_output,
                        const TranslationOptions& options = {}) const;
 
   // Constructor.

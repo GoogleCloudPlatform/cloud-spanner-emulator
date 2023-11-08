@@ -42,6 +42,7 @@
 #include "zetasql/public/type.pb.h"
 #include "zetasql/public/types/extended_type.h"
 #include "zetasql/public/types/type.h"
+#include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/types/type_modifiers.h"
 #include "zetasql/public/types/type_parameters.h"
 #include "zetasql/public/types/value_equality_check_options.h"
@@ -350,6 +351,17 @@ absl::StatusOr<zetasql::Value> CreatePgNumericValue(
     absl::string_view readable_numeric) {
   ZETASQL_ASSIGN_OR_RETURN(std::string normalized_numeric,
                    common::NormalizePgNumeric(readable_numeric));
+  absl::Cord normalized(normalized_numeric);
+  return zetasql::Value::Extended(
+      GetPgNumericType(),
+      zetasql::ValueContent::Create(new PgNumericRef(normalized)));
+}
+
+absl::StatusOr<zetasql::Value> CreatePgNumericValueWithPrecisionAndScale(
+    absl::string_view readable_numeric, int64_t precision, int64_t scale) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::string normalized_numeric,
+      common::NormalizePgNumeric(readable_numeric, precision, scale));
   absl::Cord normalized(normalized_numeric);
   return zetasql::Value::Extended(
       GetPgNumericType(),

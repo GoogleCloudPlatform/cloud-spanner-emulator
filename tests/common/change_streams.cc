@@ -16,7 +16,14 @@
 
 #include "tests/common/change_streams.h"
 
+#include <algorithm>
+#include <string>
+#include <vector>
+
 #include "google/protobuf/struct.pb.h"
+#include "absl/status/statusor.h"
+#include "frontend/converters/pg_change_streams.h"
+#include "google/protobuf/json/json.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 namespace google {
@@ -85,6 +92,28 @@ bool IsEmptyChildPartitionsRecord(
              .values_size() == 0;
 }
 
+// Functions to extract ChangeRecord information from the row returned by a
+// JSON change stream TVF.
+bool IsEmptyDataChangeRecord(const google::protobuf::Value& change_record) {
+  return !change_record.struct_value().fields().contains(
+      frontend::kDataChangeRecord);
+}
+bool IsEmptyHeartbeatRecord(const google::protobuf::Value& change_record) {
+  return !change_record.struct_value().fields().contains(
+      frontend::kHeartbeatRecord);
+}
+bool IsEmptyChildPartitionsRecord(
+    const google::protobuf::Value& change_record) {
+  return !change_record.struct_value().fields().contains(
+      frontend::kChildPartitionsRecord);
+}
+
+absl::StatusOr<google::protobuf::Value> ValueFromJSON(const std::string& json) {
+  google::protobuf::Value proto;
+  ZETASQL_RET_CHECK(google::protobuf::json::JsonStringToMessage(json, &proto).ok());
+  return proto;
+}
+
 absl::Status GetChangeStreamRecordsFromArrayHelper(
     const google::spanner::v1::ResultSet& result_set,
     ChangeStreamRecords* change_stream_records) {
@@ -95,36 +124,35 @@ absl::Status GetChangeStreamRecordsFromArrayHelper(
     // STRUCT<data_change_record STRUCT,
     //        heartbeat_record STRUCT,
     //        child_partitions_record STRUCT>
-    bool data_change_record_is_present =
-        !IsEmptyDataChangeRecord(change_record);
-    bool heartbeat_record_is_present = !IsEmptyHeartbeatRecord(change_record);
-    bool child_partitions_record_is_present =
+    bool has_data_change_record = !IsEmptyDataChangeRecord(change_record);
+    bool has_heartbeat_record = !IsEmptyHeartbeatRecord(change_record);
+    bool has_child_partition_record =
         !IsEmptyChildPartitionsRecord(change_record);
 
     // Validate that only one type of record is present in change_stream_record.
-    if ((data_change_record_is_present && heartbeat_record_is_present) ||
-        (data_change_record_is_present && child_partitions_record_is_present) ||
-        (heartbeat_record_is_present && child_partitions_record_is_present)) {
+    if ((has_data_change_record && has_heartbeat_record) ||
+        (has_data_change_record && has_child_partition_record) ||
+        (has_heartbeat_record && has_child_partition_record)) {
       ZETASQL_RET_CHECK_FAIL()
           << "ChangeRecord can have exactly one of the three STRUCTs: "
              "DataChangeRecord, HeartbeatRecord and ChildPartitionsRecord. "
           << change_record.DebugString();
     }
-    if (data_change_record_is_present) {
+    if (has_data_change_record) {
       change_stream_records->data_change_records.push_back(
           DataChangeRecord{change_record.values(kDataChangeRecordIndex)
                                .list_value()
                                .values(0)
                                .list_value()});
     }
-    if (heartbeat_record_is_present) {
+    if (has_heartbeat_record) {
       change_stream_records->heartbeat_records.push_back(
           HeartbeatRecord{change_record.values(kHeartbeatRecordIndex)
                               .list_value()
                               .values(0)
                               .list_value()});
     }
-    if (child_partitions_record_is_present) {
+    if (has_child_partition_record) {
       change_stream_records->child_partition_records.push_back(
           ChildPartitionRecord{change_record.values(kChildPartitionsRecordIndex)
                                    .list_value()
@@ -134,6 +162,59 @@ absl::Status GetChangeStreamRecordsFromArrayHelper(
   }
   return absl::OkStatus();
 }
+
+absl::Status GetChangeStreamRecordsFromJsonHelper(
+    const google::spanner::v1::ResultSet& result_set,
+    ChangeStreamRecords* change_stream_records) {
+  for (const auto& row : result_set.rows()) {
+    // The change_record is of type JSON, which is represented in
+    // google::protobuf::Value as a Struct.
+    ZETASQL_ASSIGN_OR_RETURN(google::protobuf::Value change_record,
+                     ValueFromJSON(row.values(0).string_value()));
+    bool has_data_change_record = !IsEmptyDataChangeRecord(change_record);
+    bool has_heartbeat_record = !IsEmptyHeartbeatRecord(change_record);
+    bool has_child_partition_record =
+        !IsEmptyChildPartitionsRecord(change_record);
+
+    // Validate that only one type of record is present in change_stream_record.
+    std::vector<bool> has_one_record = {has_data_change_record,
+                                        has_child_partition_record,
+                                        has_heartbeat_record};
+    if (std::count_if(has_one_record.begin(), has_one_record.end(),
+                      [](bool v) { return v; }) != 1) {
+      ZETASQL_RET_CHECK_FAIL()
+          << "ChangeRecord can have exactly one of the DataChangeRecord, "
+             "HeartbeatRecord or ChildPartitionsRecord. "
+          << change_record.DebugString();
+    }
+
+    google::protobuf::ListValue change_records;
+    if (has_data_change_record) {
+      google::protobuf::Value data_change_record =
+          change_record.struct_value().fields().at(frontend::kDataChangeRecord);
+      change_records.add_values()->Swap(&data_change_record);
+      change_stream_records->data_change_records.push_back(
+          DataChangeRecord{change_records, /*is_pg=*/true});
+    }
+    if (has_heartbeat_record) {
+      google::protobuf::Value heartbeat_record =
+          change_record.struct_value().fields().at(frontend::kHeartbeatRecord);
+      change_records.add_values()->Swap(&heartbeat_record);
+      change_stream_records->heartbeat_records.push_back(
+          HeartbeatRecord{change_records, /*is_pg=*/true});
+    }
+    if (has_child_partition_record) {
+      google::protobuf::Value child_partitions_record =
+          change_record.struct_value().fields().at(
+              frontend::kChildPartitionsRecord);
+      change_records.add_values()->Swap(&child_partitions_record);
+      change_stream_records->child_partition_records.push_back(
+          ChildPartitionRecord{change_records, /*is_pg=*/true});
+    }
+  }
+  return absl::OkStatus();
+}
+
 }  // namespace
 
 absl::StatusOr<ChangeStreamRecords> GetChangeStreamRecordsFromResultSet(
@@ -143,10 +224,15 @@ absl::StatusOr<ChangeStreamRecords> GetChangeStreamRecordsFromResultSet(
     return change_stream_records;
   }
   const auto& row_value = result_set.rows(0).values(0);
-  ZETASQL_RET_CHECK(row_value.has_list_value());
-  ZETASQL_RET_CHECK(
-      GetChangeStreamRecordsFromArrayHelper(result_set, &change_stream_records)
-          .ok());
+  if (row_value.has_list_value()) {
+    ZETASQL_RET_CHECK(GetChangeStreamRecordsFromArrayHelper(result_set,
+                                                    &change_stream_records)
+                  .ok());
+  } else {
+    ZETASQL_RET_CHECK(
+        GetChangeStreamRecordsFromJsonHelper(result_set, &change_stream_records)
+            .ok());
+  }
   return change_stream_records;
 }
 

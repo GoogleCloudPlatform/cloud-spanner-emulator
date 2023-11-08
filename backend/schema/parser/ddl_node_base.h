@@ -31,6 +31,8 @@ namespace backend {
 class NodeBase {
  public:
   NodeBase() : begin_line_(0), begin_column_(0), end_line_(0), end_column_(0) {}
+  NodeBase(const NodeBase&) = delete;
+  NodeBase& operator=(const NodeBase&) = delete;
 
   int begin_line() const { return begin_line_; }
   int begin_column() const { return begin_column_; }

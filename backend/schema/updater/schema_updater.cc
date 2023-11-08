@@ -188,8 +188,7 @@ class SchemaUpdaterImpl {
   absl::StatusOr<std::unique_ptr<const Schema>> ApplyDDLStatement(
       absl::string_view statement
       ,
-      const database_api::DatabaseDialect& dialect
-  );
+      const database_api::DatabaseDialect& dialect);
 
   // Run any pending schema actions resulting from the schema change statements.
   absl::Status RunPendingActions(
@@ -299,8 +298,9 @@ class SchemaUpdaterImpl {
   absl::Status ValidateChangeStreamOptions(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options);
   int64_t ParseSchemaTimeSpec(absl::string_view spec);
-  static std::string MakeChangeStreamStructTvfName(
-      std::string change_stream_name);
+  static std::string MakeChangeStreamTvfName(
+      std::string change_stream_name,
+      const database_api::DatabaseDialect& dialect);
 
   absl::StatusOr<const Table*> GetInterleaveConstraintTable(
       const std::string& interleave_in_table_name,
@@ -376,7 +376,8 @@ class SchemaUpdaterImpl {
       const ddl::CreateIndex& ddl_index, const Table* indexed_table = nullptr);
 
   absl::StatusOr<const ChangeStream*> CreateChangeStream(
-      const ddl::CreateChangeStream& ddl_change_stream);
+      const ddl::CreateChangeStream& ddl_change_stream,
+      const database_api::DatabaseDialect& dialect);
   absl::StatusOr<const Index*> CreateIndexHelper(
       const std::string& index_name, const std::string& index_base_name,
       bool is_unique, bool is_null_filtered,
@@ -539,8 +540,7 @@ absl::StatusOr<std::unique_ptr<const Schema>>
 SchemaUpdaterImpl::ApplyDDLStatement(
     absl::string_view statement
     ,
-    const database_api::DatabaseDialect& dialect
-) {
+    const database_api::DatabaseDialect& dialect) {
   if (statement.empty()) {
     return error::EmptyDDLStatement();
   }
@@ -558,7 +558,8 @@ SchemaUpdaterImpl::ApplyDDLStatement(
     }
     case ddl::DDLStatement::kCreateChangeStream: {
       ZETASQL_RETURN_IF_ERROR(
-          CreateChangeStream(ddl_statement->create_change_stream()).status());
+          CreateChangeStream(ddl_statement->create_change_stream(), dialect)
+              .status());
       break;
     }
     case ddl::DDLStatement::kCreateIndex: {
@@ -624,11 +625,9 @@ SchemaUpdaterImpl::ApplyDDLStatement(
                        << ddl_statement->statement_case();
   }
   ZETASQL_ASSIGN_OR_RETURN(auto new_schema_graph, editor_->CanonicalizeGraph());
-  return std::make_unique<const OwningSchema>(
-      std::move(new_schema_graph)
-      ,
-      dialect
-  );
+  return std::make_unique<const OwningSchema>(std::move(new_schema_graph)
+                                              ,
+                                              dialect);
 }
 
 absl::StatusOr<std::vector<SchemaValidationContext>>
@@ -655,11 +654,10 @@ SchemaUpdaterImpl::ApplyDDLStatements(
     statement_context_->SetTempNewSchemaSnapshotConstructor(
         [this,
          &new_tmp_schema](const SchemaGraph* unowned_graph) -> const Schema* {
-          new_tmp_schema = std::make_unique<const Schema>(
-              unowned_graph
-              ,
-              latest_schema_->dialect()
-          );
+          new_tmp_schema =
+              std::make_unique<const Schema>(unowned_graph
+                                             ,
+                                             latest_schema_->dialect());
           return new_tmp_schema.get();
         });
 
@@ -672,8 +670,7 @@ SchemaUpdaterImpl::ApplyDDLStatements(
         auto new_schema,
         ApplyDDLStatement(statement
                           ,
-                          schema_change_operation.database_dialect
-                          ));
+                          schema_change_operation.database_dialect));
 
     // We save every schema snapshot as verifiers/backfillers from the
     // current/next statement may need to refer to the previous/current
@@ -812,9 +809,12 @@ int64_t SchemaUpdaterImpl::ParseSchemaTimeSpec(absl::string_view spec) {
 }
 
 // Construct the change stream tvf name for googlesql
-std::string SchemaUpdaterImpl::MakeChangeStreamStructTvfName(
-    std::string change_stream_name) {
-  const char kChangeStreamTvfStructPrefix[] = "READ_";
+std::string SchemaUpdaterImpl::MakeChangeStreamTvfName(
+    std::string change_stream_name,
+    const database_api::DatabaseDialect& dialect) {
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    return absl::StrCat(kChangeStreamTvfJsonPrefix, change_stream_name);
+  }
   return absl::StrCat(kChangeStreamTvfStructPrefix, change_stream_name);
 }
 
@@ -2186,6 +2186,11 @@ SchemaUpdaterImpl::CreateChangeStreamPartitionTable(
                                                  updated_string_array_type));
   builder.add_column(column);
 
+  ZETASQL_ASSIGN_OR_RETURN(column,
+                   CreateChangeStreamTableColumn("next_churn", builder.get(),
+                                                 type_factory_->get_string()));
+  builder.add_column(column);
+
   // Set the partition_token as primary key column
   ZETASQL_RETURN_IF_ERROR(
       CreateChangeStreamTablePKConstraint("partition_token", &builder));
@@ -2468,7 +2473,8 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
 }
 
 absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
-    const ddl::CreateChangeStream& ddl_change_stream) {
+    const ddl::CreateChangeStream& ddl_change_stream,
+    const database_api::DatabaseDialect& dialect) {
   if (latest_schema_->change_streams().size() >=
       limits::kMaxChangeStreamsPerDatabase) {
     return error::TooManyChangeStreamsPerDatabase(
@@ -2484,7 +2490,7 @@ absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
   builder.set_name(ddl_change_stream.change_stream_name());
   const ChangeStream* change_stream = builder.get();
   const std::string tvf_name =
-      MakeChangeStreamStructTvfName(ddl_change_stream.change_stream_name());
+      MakeChangeStreamTvfName(ddl_change_stream.change_stream_name(), dialect);
   builder.set_tvf_name(tvf_name);
   // Validate the change stream tvf name in global_names_
   ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Change Stream", tvf_name));
@@ -3134,8 +3140,7 @@ absl::Status SchemaUpdaterImpl::DropChangeStream(
     return error::ChangeStreamNotFound(drop_change_stream.change_stream_name());
   }
   global_names_.RemoveName(change_stream->tvf_name());
-  ZETASQL_RETURN_IF_ERROR(DropNode(change_stream));
-  return absl::OkStatus();
+  return DropNode(change_stream);
 }
 
 absl::Status SchemaUpdaterImpl::ApplyImplSetColumnOptions(
@@ -3261,12 +3266,11 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
     ZETASQL_ASSIGN_OR_RETURN(
         std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
         postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
-    postgres_translator::interfaces::ParserBatchOutput batch_output(
-        std::move(arena));
-    batch_output.mutable_output()->reserve(1);
-    batch_output.mutable_output()->emplace_back(
+    ZETASQL_ASSIGN_OR_RETURN(
+        postgres_translator::interfaces::ParserOutput parser_output,
         postgres_translator::CheckedPgRawParserFullOutput(
-            std::string(statement).c_str()));
+            std::string(statement).c_str()),
+        _ << "failed to parse the DDL statements.");
     ZETASQL_ASSIGN_OR_RETURN(
         std::unique_ptr<
             postgres_translator::spangres::PostgreSQLToSpannerDDLTranslator>
@@ -3277,6 +3281,8 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_nulls_ordering = true,
         .enable_generated_column = true,
         .enable_column_default = true,
+        .enable_jsonb_type = true,
+        .enable_array_jsonb_type = true,
         .enable_create_view = true,
         // This enables Spangres ddl translator to record the original
         // expression in PG.
@@ -3285,7 +3291,7 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_change_streams = true,
     };
     ZETASQL_ASSIGN_OR_RETURN(ddl::DDLStatementList ddl_statement_list,
-                     translator->TranslateForEmulator(batch_output, options));
+                     translator->TranslateForEmulator(parser_output, options));
     ZETASQL_RET_CHECK_EQ(ddl_statement_list.statement_size(), 1);
     return std::make_unique<ddl::DDLStatement>(ddl_statement_list.statement(0));
   } else {

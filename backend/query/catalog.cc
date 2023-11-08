@@ -150,7 +150,7 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
   for (const auto* change_stream : schema->change_streams()) {
     tvfs_[change_stream->tvf_name()] =
         std::move(*QueryableChangeStreamTvf::Create(
-            change_stream, options, this, type_factory,
+            change_stream->tvf_name(), options, this, type_factory,
             schema->dialect() == database_api::DatabaseDialect::POSTGRESQL));
   }
 }

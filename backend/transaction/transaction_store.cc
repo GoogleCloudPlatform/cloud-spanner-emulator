@@ -111,7 +111,6 @@ absl::Status TransactionStore::BufferInsert(
     row_values[columns[i]] = values[i];
   }
   buffered_ops_[table][key] = std::make_pair(OpType::kInsert, row_values);
-
   TrackColumnsForCommitTimestamp(columns, values);
   TrackTableForCommitTimestamp(table, key);
   return absl::OkStatus();
@@ -144,7 +143,6 @@ absl::Status TransactionStore::BufferUpdate(
     row_values[columns[i]] = values[i];
   }
   buffered_ops_[table][key] = std::make_pair(op_type, row_values);
-
   TrackColumnsForCommitTimestamp(columns, values);
   TrackTableForCommitTimestamp(table, key);
   return absl::OkStatus();
@@ -155,13 +153,24 @@ absl::Status TransactionStore::BufferDelete(const Table* table,
   // Acquire locks to prevent another transaction to modify this entity.
   ZETASQL_RETURN_IF_ERROR(AcquireWriteLock(table, KeyRange::Point(key), {}));
 
-  // Marking all columns null to indicate a delete.
-  Row row_values;
-  for (auto column : table->columns()) {
-    row_values[column] = zetasql::values::Null(column->GetType());
-  }
-  buffered_ops_[table][key] = std::make_pair(OpType::kDelete, row_values);
+  RowOp row_op;
 
+  // This canonicalization is required by change streams. If there's an INSERT
+  // prior to this DELETE to the same row in the same transaction, the two
+  // operation should collapse. However, if the row already exists in storage,
+  // the DELETE shouldn't be collapsed (e.g. DELETE INSERT DELETE to an existing
+  // row).
+  if (RowExistsInBuffer(table, key, &row_op) &&
+      !RowExistsInStorage(table, key)) {
+    buffered_ops_[table].erase(key);
+  } else {
+    // Marking all columns null to indicate a delete.
+    Row row_values;
+    for (auto column : table->columns()) {
+      row_values[column] = zetasql::values::Null(column->GetType());
+    }
+    buffered_ops_[table][key] = std::make_pair(OpType::kDelete, row_values);
+  }
   TrackTableForCommitTimestamp(table, key);
   return absl::OkStatus();
 }
@@ -296,6 +305,12 @@ absl::Status TransactionStore::Read(
   std::inplace_merge(rows.begin(), first_base_row_iter, rows.end(), SortByKey);
   *storage_itr = std::make_unique<FixedRowStorageIterator>(std::move(rows));
   return absl::OkStatus();
+}
+
+bool TransactionStore::RowExistsInStorage(const Table* table, const Key& key) {
+  absl::Status row_in_base_storage =
+      base_storage_->Lookup(absl::InfiniteFuture(), table->id(), key, {}, {});
+  return row_in_base_storage.code() != absl::StatusCode::kNotFound;
 }
 
 bool TransactionStore::RowExistsInBuffer(const Table* table, const Key& key,

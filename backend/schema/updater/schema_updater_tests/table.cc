@@ -22,10 +22,17 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "zetasql/public/types/type_factory.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"
+#include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 
 namespace google {
 namespace spanner {
@@ -1012,33 +1019,62 @@ TEST_P(SchemaUpdaterTest, ChangeKeyColumn) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_NumericColumns) {
-  // Reenable if PG.Numeric is supported in the emulator.
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
-    CREATE TABLE T(
-      col1 INT64,
-      col2 NUMERIC,
-      col3 ARRAY<NUMERIC>
-    ) PRIMARY KEY(col1))"}));
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T(
+        col1 INT64,
+        col2 PG.NUMERIC,
+        col3 ARRAY<PG.NUMERIC>
+      ) PRIMARY KEY(col1))"}));
+    auto t = schema->FindTable("T");
+    EXPECT_NE(t, nullptr);
+    EXPECT_EQ(t->columns().size(), 3);
+    EXPECT_EQ(t->primary_key().size(), 1);
 
-  auto t = schema->FindTable("T");
-  EXPECT_NE(t, nullptr);
-  EXPECT_EQ(t->columns().size(), 3);
-  EXPECT_EQ(t->primary_key().size(), 1);
+    auto col1 = t->columns()[0];
+    EXPECT_THAT(col1, ColumnIs("col1", types::Int64Type()));
+    EXPECT_THAT(col1, IsKeyColumnOf(t, "ASC"));
 
-  auto col1 = t->columns()[0];
-  EXPECT_THAT(col1, ColumnIs("col1", types::Int64Type()));
-  EXPECT_THAT(col1, IsKeyColumnOf(t, "ASC"));
+    auto col2 = t->columns()[1];
+    EXPECT_TRUE(col2->GetType()->IsExtendedType());
+    EXPECT_EQ(static_cast<const postgres_translator::spangres::datatypes::
+                              SpannerExtendedType*>(col2->GetType())
+                  ->code(),
+              google::spanner::v1::TypeAnnotationCode::PG_NUMERIC);
 
-  auto col2 = t->columns()[1];
-  EXPECT_THAT(col2, ColumnIs("col2", types::NumericType()));
+    auto col3 = t->columns()[2];
+    EXPECT_TRUE(col3->GetType()->IsArray());
+    EXPECT_TRUE(col3->GetType()->AsArray()->element_type()->IsExtendedType());
+    EXPECT_EQ(static_cast<const postgres_translator::spangres::datatypes::
+                              SpannerExtendedType*>(
+                  col3->GetType()->AsArray()->element_type())
+                  ->code(),
+              google::spanner::v1::TypeAnnotationCode::PG_NUMERIC);
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T(
+        col1 INT64,
+        col2 NUMERIC,
+        col3 ARRAY<NUMERIC>
+      ) PRIMARY KEY(col1))"}));
+    auto t = schema->FindTable("T");
+    EXPECT_NE(t, nullptr);
+    EXPECT_EQ(t->columns().size(), 3);
+    EXPECT_EQ(t->primary_key().size(), 1);
 
-  auto col3 = t->columns()[2];
-  EXPECT_THAT(col3, ColumnIs("col3", types::NumericArrayType()));
+    auto col1 = t->columns()[0];
+    EXPECT_THAT(col1, ColumnIs("col1", types::Int64Type()));
+    EXPECT_THAT(col1, IsKeyColumnOf(t, "ASC"));
+
+    auto col2 = t->columns()[1];
+    EXPECT_THAT(col2, ColumnIs("col2", types::NumericType()));
+
+    auto col3 = t->columns()[2];
+    EXPECT_THAT(col3, ColumnIs("col3", types::NumericArrayType()));
+  }
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_NumericAsPK) {
-  // Reenable if PG.Numeric is supported in the emulator.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EmulatorFeatureFlags::Flags flags;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
@@ -1057,35 +1093,67 @@ TEST_P(SchemaUpdaterTest, CreateTable_NumericAsPK) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_JsonColumns) {
-  // Reenable if PG.JSONB is supported in the emulator.
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  EmulatorFeatureFlags::Flags flags;
-  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    CREATE TABLE T(
+      col1 INT64,
+      col2 PG.JSONB,
+      col3 ARRAY<PG.JSONB>
+    ) PRIMARY KEY(col1))"}));
+
+    auto t = schema->FindTable("T");
+    EXPECT_NE(t, nullptr);
+    EXPECT_EQ(t->columns().size(), 3);
+    EXPECT_EQ(t->primary_key().size(), 1);
+
+    auto col1 = t->columns()[0];
+    EXPECT_THAT(col1, ColumnIs("col1", types::Int64Type()));
+    EXPECT_THAT(col1, IsKeyColumnOf(t, "ASC"));
+
+    auto col2 = t->columns()[1];
+    EXPECT_TRUE(col2->GetType()->IsExtendedType());
+    EXPECT_EQ(static_cast<const postgres_translator::spangres::datatypes::
+                              SpannerExtendedType*>(col2->GetType())
+                  ->code(),
+              google::spanner::v1::TypeAnnotationCode::PG_JSONB);
+
+    auto col3 = t->columns()[2];
+    EXPECT_TRUE(col3->GetType()->IsArray());
+    EXPECT_TRUE(col3->GetType()->AsArray()->element_type()->IsExtendedType());
+    EXPECT_EQ(static_cast<const postgres_translator::spangres::datatypes::
+                              SpannerExtendedType*>(
+                  col3->GetType()->AsArray()->element_type())
+                  ->code(),
+              google::spanner::v1::TypeAnnotationCode::PG_JSONB);
+  } else {
+    EmulatorFeatureFlags::Flags flags;
+    emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
       col2 JSON,
       col3 ARRAY<JSON>
     ) PRIMARY KEY(col1))"}));
 
-  auto t = schema->FindTable("T");
-  EXPECT_NE(t, nullptr);
-  EXPECT_EQ(t->columns().size(), 3);
-  EXPECT_EQ(t->primary_key().size(), 1);
+    auto t = schema->FindTable("T");
+    EXPECT_NE(t, nullptr);
+    EXPECT_EQ(t->columns().size(), 3);
+    EXPECT_EQ(t->primary_key().size(), 1);
 
-  auto col1 = t->columns()[0];
-  EXPECT_THAT(col1, ColumnIs("col1", types::Int64Type()));
-  EXPECT_THAT(col1, IsKeyColumnOf(t, "ASC"));
+    auto col1 = t->columns()[0];
+    EXPECT_THAT(col1, ColumnIs("col1", types::Int64Type()));
+    EXPECT_THAT(col1, IsKeyColumnOf(t, "ASC"));
 
-  auto col2 = t->columns()[1];
-  EXPECT_THAT(col2, ColumnIs("col2", types::JsonType()));
+    auto col2 = t->columns()[1];
+    EXPECT_THAT(col2, ColumnIs("col2", types::JsonType()));
 
-  auto col3 = t->columns()[2];
-  EXPECT_THAT(col3, ColumnIs("col3", types::JsonArrayType()));
+    auto col3 = t->columns()[2];
+    EXPECT_THAT(col3, ColumnIs("col3", types::JsonArrayType()));
+  }
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_JsonAsPK) {
-  // Reenable if PG.JSONB is supported in the emulator.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EmulatorFeatureFlags::Flags flags;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
@@ -1229,7 +1297,6 @@ TEST_P(SchemaUpdaterTest, CreateTableIfNotExists) {
   // null.
   ASSERT_NE(t->FindColumn("col2"), nullptr);
 }
-
 }  // namespace
 
 }  // namespace test

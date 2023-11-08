@@ -20,6 +20,7 @@
 
 #include "absl/status/statusor.h"
 #include "backend/schema/ddl/operations.pb.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -53,8 +54,14 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       return type_factory->get_date();
     case ddl::ColumnDefinition::NUMERIC:
       return type_factory->get_numeric();
+    case ddl::ColumnDefinition::PG_NUMERIC:
+      return postgres_translator::spangres::types::PgNumericMapping()
+          ->mapped_type();
     case ddl::ColumnDefinition::JSON:
       return type_factory->get_json();
+    case ddl::ColumnDefinition::PG_JSONB:
+      return postgres_translator::spangres::types::PgJsonbMapping()
+          ->mapped_type();
     case ddl::ColumnDefinition::ARRAY: {
       ZETASQL_RET_CHECK(ddl_column_def.has_array_subtype())
           << "Missing array_subtype field for ddl::ColumnDefinition input: "
@@ -105,6 +112,16 @@ ddl::ColumnDefinition GoogleSqlTypeToDDLColumnType(
   if (type->IsNumericType())
     ddl_column_def.set_type(ddl::ColumnDefinition::NUMERIC);
   if (type->IsJson()) ddl_column_def.set_type(ddl::ColumnDefinition::JSON);
+  if (type->IsExtendedType()) {
+    if (type->Equals(postgres_translator::spangres::types::PgNumericMapping()
+                         ->mapped_type())) {
+      ddl_column_def.set_type(ddl::ColumnDefinition::PG_NUMERIC);
+    } else if (type->Equals(
+                   postgres_translator::spangres::types::PgJsonbMapping()
+                       ->mapped_type())) {
+      ddl_column_def.set_type(ddl::ColumnDefinition::PG_JSONB);
+    }
+  }
   return ddl_column_def;
 }
 

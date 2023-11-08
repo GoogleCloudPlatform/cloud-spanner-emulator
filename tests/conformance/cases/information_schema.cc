@@ -66,8 +66,10 @@ class InformationSchemaTest
            GetNameForDialect("MODELS"), GetNameForDialect("MODEL_OPTIONS"),
            GetNameForDialect("MODEL_COLUMNS"),
            GetNameForDialect("MODEL_COLUMN_OPTIONS"),
-           GetNameForDialect("VIEWS"), GetNameForDialect("ROLES"),
-           GetNameForDialect("ROLE_GRANTEES"),
+           GetNameForDialect("MODEL_PRIVILEGES"),
+           GetNameForDialect("SEQUENCES"), GetNameForDialect("SEQUENCES"),
+           GetNameForDialect("SEQUENCE_OPTIONS"), GetNameForDialect("VIEWS"),
+           GetNameForDialect("ROLES"), GetNameForDialect("ROLE_GRANTEES"),
            GetNameForDialect("TABLE_PRIVILEGES"),
            GetNameForDialect("COLUMN_PRIVILEGES"),
            GetNameForDialect("PARAMETERS"), GetNameForDialect("ROUTINES"),
@@ -76,6 +78,7 @@ class InformationSchemaTest
            GetNameForDialect("ROLE_TABLE_GRANTS"),
            GetNameForDialect("ROLE_COLUMN_GRANTS"),
            GetNameForDialect("ROLE_CHANGE_STREAM_GRANTS"),
+           GetNameForDialect("ROLE_MODEL_GRANTS"),
            GetNameForDialect("ROLE_ROUTINE_GRANTS"),
            GetNameForDialect("TABLE_SYNONYMS"),
            // Unsupported PG-specific tables.
@@ -958,15 +961,18 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_TABLE_GRANTS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_COLUMN_GRANTS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_CHANGE_STREAM_GRANTS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_MODEL_GRANTS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_ROUTINE_GRANTS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODELS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_OPTIONS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMNS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMN_OPTIONS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_PRIVILEGES%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PARAMETERS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINES%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_OPTIONS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_PRIVILEGES%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_SEQUENCE%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_TABLE_SYNONYMS%')";
   }
 

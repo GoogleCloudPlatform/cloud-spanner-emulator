@@ -42,8 +42,7 @@ absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::CreateSchema(
   return UpdateSchema(/*base_schema=*/nullptr,
                       statements
                       ,
-                      dialect, use_gsql_to_pg_translation
-  );
+                      dialect, use_gsql_to_pg_translation);
 }
 
 absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::UpdateSchema(

@@ -209,10 +209,10 @@ absl::StatusOr<zetasql::Value> CreateChildPartitionRecord(
   std::vector<zetasql::Value> child_partitions_struct_values;
 
   // If a split event happens during partition query, one child partition record
-  // can contain up to two partiton tokens after split. If initial_start_time
-  // has value and there are more than one row contain in the partition table
-  // row cursor, we know a split event happened and keep inserting the remaining
-  // splitted partition tokens in current row cursor.
+  // can contain up to two partition tokens after split. If initial_start_time
+  // doesn't have value and there are more than one row contain in the partition
+  // table row cursor, we know a split event happened and keep inserting the
+  // remaining splitted partition tokens in current row cursor.
   do {
     zetasql::Value partition_token_val = cursor->ColumnValue(1);
     // Prevent populating parent tokens for initial partition queries.
@@ -358,6 +358,7 @@ absl::StatusOr<zetasql::Value> CreateDataChangeRecord(
                                   {data_change_record_struct_val}));
   return final_data_change_record;
 }
+
 absl::Status PopulateMetadata(
     std::vector<spanner_api::PartialResultSet>* responses) {
   auto* result_metadata_pb = responses->at(0).mutable_metadata();
@@ -367,11 +368,18 @@ absl::Status PopulateMetadata(
                               field_pb->mutable_type()));
   return absl::OkStatus();
 }
+
+void PopulateFakeResumeTokens(
+    std::vector<spanner_api::PartialResultSet>* responses) {
+  for (auto& response : *responses) {
+    *response.mutable_resume_token() = kChangeStreamDummyResumeToken;
+  }
+}
+
 }  // namespace
 
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
-ConvertHeartbeatTimestampToPartialResultSetProto(absl::Time timestamp,
-                                                 bool expect_metadata) {
+ConvertHeartbeatTimestampToStruct(absl::Time timestamp, bool expect_metadata) {
   spanner_api::ResultSet result_pb;
   auto* row_pb = result_pb.add_rows();
   ZETASQL_ASSIGN_OR_RETURN(auto heartbeat_record, CreateHeartbeatRecord(timestamp));
@@ -391,11 +399,12 @@ ConvertHeartbeatTimestampToPartialResultSetProto(absl::Time timestamp,
   } else {
     responses.at(0).clear_metadata();
   }
+  PopulateFakeResumeTokens(&responses);
   return responses;
 }
 
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
-ConvertChildPartitionRecordsToPartialResultSetProto(
+ConvertPartitionTableRowCursorToStruct(
     backend::RowCursor* row_cursor,
     std::optional<absl::Time> initial_start_timestamp, bool expect_metadata) {
   spanner_api::ResultSet result_pb;
@@ -422,12 +431,13 @@ ConvertChildPartitionRecordsToPartialResultSetProto(
   } else {
     responses.at(0).clear_metadata();
   }
+  PopulateFakeResumeTokens(&responses);
   return responses;
 }
 
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
-ConvertDataTableRowCursorToPartialResultSetProto(backend::RowCursor* row_cursor,
-                                                 bool expect_metadata) {
+ConvertDataTableRowCursorToStruct(backend::RowCursor* row_cursor,
+                                  bool expect_metadata) {
   spanner_api::ResultSet result_pb;
   while (row_cursor->Next()) {
     auto* row_pb = result_pb.add_rows();
@@ -450,6 +460,7 @@ ConvertDataTableRowCursorToPartialResultSetProto(backend::RowCursor* row_cursor,
   } else {
     responses.at(0).clear_metadata();
   }
+  PopulateFakeResumeTokens(&responses);
   return responses;
 }
 

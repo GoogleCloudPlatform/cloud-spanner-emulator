@@ -136,14 +136,12 @@ absl::Status CreateDatabase(RequestContext* ctx,
   for (const std::string& statement : request->extra_statements()) {
     create_statements.push_back(statement);
   }
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::shared_ptr<Database> database,
-      ctx->env()->database_manager()->CreateDatabase(
-          database_uri,
-          backend::SchemaChangeOperation{
-              .statements = create_statements,
-              .database_dialect = dialect,
-          }));
+  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Database> database,
+                   ctx->env()->database_manager()->CreateDatabase(
+                       database_uri, backend::SchemaChangeOperation{
+                                         .statements = create_statements,
+                                         .database_dialect = dialect,
+                                     }));
 
   // Create an operation tracking the database creation.
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Operation> operation,
@@ -211,8 +209,7 @@ absl::Status UpdateDatabaseDdl(
   ZETASQL_RETURN_IF_ERROR(backend_database->UpdateSchema(
       backend::SchemaChangeOperation{
           .statements = statements,
-          .database_dialect = backend_database->dialect()
-      },
+          .database_dialect = backend_database->dialect()},
       &num_succesful_statements, &commit_timestamp, &backfill_status));
 
   // Populate ResultSet metadata.

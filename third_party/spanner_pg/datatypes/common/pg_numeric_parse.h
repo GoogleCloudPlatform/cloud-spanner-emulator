@@ -32,6 +32,7 @@
 #ifndef DATATYPES_COMMON_NUMBER_PARSER_H_
 #define DATATYPES_COMMON_NUMBER_PARSER_H_
 
+#include <cstdint>
 #include <string>
 
 #include "absl/status/statusor.h"
@@ -39,11 +40,25 @@
 
 namespace postgres_translator::spangres::datatypes::common {
 
-// Checks that `pg_numeric` is a valid PG Numeric value and converts it into
+// Checks that `readable_value` is a valid PG Numeric value and converts it into
 // normalized representation. The normalized representation contains 0 or 1 sign
 // character (+/-), digits (0-9), 0 or 1 floating point (.).
-absl::StatusOr<std::string> NormalizePgNumeric(absl::string_view pg_numeric);
+absl::StatusOr<std::string> NormalizePgNumeric(
+    absl::string_view readable_value);
 
+// Checks that `readable_value` is a valid PG Numeric value and converts it into
+// normalized representation according to the `precision` and `scale`. The
+// normalized representation contains 0 or 1 sign character (+/-), digits (0-9),
+// 0 or 1 floating point (.).
+absl::StatusOr<std::string> NormalizePgNumeric(absl::string_view readable_value,
+                                               int64_t precision,
+                                               int64_t scale = 0);
+
+// Checks that precision and scale form a valid pair of type modifier for
+// numeric. It checks if precision in is allowed range [1, 1000] and whether
+// scale is in allowed range [0, precision].
+absl::StatusOr<bool> ValidatePrecisionAndScale(int64_t precision,
+                                               int64_t scale = 0);
 }  // namespace postgres_translator::spangres::datatypes::common
 
 #endif  // DATATYPES_COMMON_NUMBER_PARSER_H_

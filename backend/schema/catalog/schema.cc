@@ -346,12 +346,10 @@ ddl::DDLStatementList Schema::Dump() const {
 
 Schema::Schema(const SchemaGraph* graph
                ,
-               const database_api::DatabaseDialect& dialect
-               )
+               const database_api::DatabaseDialect& dialect)
     : graph_(graph)
       ,
-      dialect_(dialect)
-{
+      dialect_(dialect) {
   views_.clear();
   views_map_.clear();
   tables_.clear();

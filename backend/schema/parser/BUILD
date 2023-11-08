@@ -37,9 +37,12 @@ cc_library(
     deps = [
         ":javacc_ddl_parser",
         "//backend/schema/ddl:operations_cc_proto",
+        "//common:constants",
         "//common:errors",
         "//common:feature_flags",
+        "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",

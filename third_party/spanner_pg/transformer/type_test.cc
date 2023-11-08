@@ -37,6 +37,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/memory/memory.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 #include "third_party/spanner_pg/transformer/forward_transformer.h"
 #include "third_party/spanner_pg/transformer/transformer.h"
@@ -154,6 +155,8 @@ TEST_F(TypeTransformerTest, ValidParameters) {
   std::map<std::string, const zetasql::Type*> parameter_types = {
       {"p2", zetasql::types::BoolType()},
       {"p3", zetasql::types::Int64Type()},
+      {"p4",
+       postgres_translator::spangres::types::PgNumericMapping()->mapped_type()},
       {"p1", zetasql::types::DoubleType()}};
 
   std::unique_ptr<CatalogAdapter> adapter =
@@ -166,7 +169,8 @@ TEST_F(TypeTransformerTest, ValidParameters) {
   EXPECT_EQ(parameter_oids[0], FLOAT8OID);
   EXPECT_EQ(parameter_oids[1], BOOLOID);
   EXPECT_EQ(parameter_oids[2], INT8OID);
-  EXPECT_EQ(num_params, 3);
+  EXPECT_EQ(parameter_oids[3], NUMERICOID);
+  EXPECT_EQ(num_params, 4);
 }
 
 }  // namespace

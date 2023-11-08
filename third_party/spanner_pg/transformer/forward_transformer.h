@@ -872,6 +872,14 @@ class ForwardTransformer {
   BuildGsqlResolvedComputedColumnForOrderByClause(
       const zetasql::ResolvedColumn& order_by_column, int column_index);
 
+  // Check if the insert or update query is supported by Spangres.
+  // This is done by inspecting alias tables and onConflict expressions in the
+  // parsed tree `query`.
+  absl::Status CheckForUnsupportedOnConflictClause(
+      const Query& query, Index rte_index, const zetasql::Table& table,
+      const std::vector<zetasql::ResolvedColumn>& insert_column_list,
+      VarIndexScope* scope);
+
  private:
   absl::StatusOr<int> GetEndLocationForStartLocation(int start_location);
 

@@ -17,7 +17,12 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_DML_QUERY_VALIDATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_DML_QUERY_VALIDATOR_H_
 
+#include <utility>
+
+#include "zetasql/resolved_ast/resolved_ast.h"
 #include "absl/status/status.h"
+#include "backend/query/query_context.h"
+#include "backend/query/query_engine_options.h"
 #include "backend/query/query_validator.h"
 
 namespace google {
@@ -28,8 +33,8 @@ namespace backend {
 // Extends QueryValidator to validate DML specific nodes in an AST.
 class DMLQueryValidator : public QueryValidator {
  public:
-  DMLQueryValidator(const Schema* schema, QueryEngineOptions* options)
-      : QueryValidator(schema, options) {}
+  DMLQueryValidator(const QueryContext context, QueryEngineOptions* options)
+      : QueryValidator(std::move(context), options) {}
 
  protected:
   absl::Status VisitResolvedFunctionCall(

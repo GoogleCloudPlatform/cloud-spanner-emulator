@@ -171,6 +171,10 @@ cc_test(
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
+        "//third_party/spanner_pg/shims:memory_context_pg_arena",
+        "//third_party/spanner_pg/shims:stub_memory_reservation_manager",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
@@ -316,11 +320,59 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "add_test",
+    srcs = [
+        "add_test.cc",
+    ],
+    deps = [
+        ":test_base",
+        "//third_party/spanner_pg/datatypes/common:numeric_core",
+        "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
 # ceiling is an alias to ceil, so we don't have a specific test for it
 cc_test(
     name = "ceil_test",
     srcs = [
         "ceil_test.cc",
+    ],
+    deps = [
+        ":test_base",
+        "//third_party/spanner_pg/datatypes/common:numeric_core",
+        "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "divide_test",
+    srcs = [
+        "divide_test.cc",
+    ],
+    deps = [
+        ":test_base",
+        "//third_party/spanner_pg/datatypes/common:numeric_core",
+        "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "divide_truncate_towards_zero_test",
+    srcs = [
+        "divide_truncate_towards_zero_test.cc",
     ],
     deps = [
         ":test_base",
@@ -350,9 +402,89 @@ cc_test(
 )
 
 cc_test(
+    name = "jsonb_array_element_test",
+    srcs = [
+        "jsonb_array_element_test.cc",
+    ],
+    deps = [
+        ":test_base",
+        "//third_party/spanner_pg/catalog:spangres_type",
+        "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
+        "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "jsonb_object_field_test",
+    srcs = [
+        "jsonb_object_field_test.cc",
+    ],
+    deps = [
+        ":test_base",
+        "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
+        "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "jsonb_typeof_test",
+    srcs = [
+        "jsonb_typeof_test.cc",
+    ],
+    deps = [
+        ":test_base",
+        "//third_party/spanner_pg/datatypes/common:numeric_core",
+        "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
     name = "mod_test",
     srcs = [
         "mod_test.cc",
+    ],
+    deps = [
+        ":test_base",
+        "//third_party/spanner_pg/datatypes/common:numeric_core",
+        "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "multiply_test",
+    srcs = [
+        "multiply_test.cc",
+    ],
+    deps = [
+        ":test_base",
+        "//third_party/spanner_pg/datatypes/common:numeric_core",
+        "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "subtract_test",
+    srcs = [
+        "subtract_test.cc",
     ],
     deps = [
         ":test_base",
@@ -375,6 +507,22 @@ cc_test(
         "//third_party/spanner_pg/datatypes/common:numeric_core",
         "//third_party/spanner_pg/interface:pg_evaluators",
         "//third_party/spanner_pg/postgres_includes",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "unary_minus_test",
+    srcs = [
+        "unary_minus_test.cc",
+    ],
+    deps = [
+        ":test_base",
+        "//third_party/spanner_pg/datatypes/common:numeric_core",
+        "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",

@@ -210,6 +210,7 @@ cc_library(
     name = "queries",
     srcs = ["queries.cc"],
     deps = [
+        ":change_streams",
         "//backend/access:read",
         "//backend/query:query_engine",
         "//backend/query/change_stream:change_stream_query_validator",
@@ -223,7 +224,6 @@ cc_library(
         "//frontend/converters:values",
         "//frontend/entities:session",
         "//frontend/entities:transaction",
-        "//frontend/handlers:change_streams",
         "//frontend/proto:partition_token_cc_proto",
         "//frontend/server:handler",
         "//frontend/server:request_context",
@@ -235,6 +235,7 @@ cc_library(
         "@com_google_farmhash//:farmhash_fingerprint",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
     ],
     alwayslink = 1,
 )
@@ -426,6 +427,7 @@ cc_test(
         "//backend/database/change_stream:change_stream_partition_churner",
         "//backend/schema/updater:schema_updater",
         "//common:clock",
+        "//frontend/converters:change_streams",
         "//tests/common:change_streams",
         "//tests/common:chunking",
         "//tests/common:proto_matchers",

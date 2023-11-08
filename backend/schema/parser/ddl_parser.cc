@@ -25,6 +25,8 @@
 #include <vector>
 
 #include "google/protobuf/descriptor.h"
+#include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -35,11 +37,14 @@
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "backend/schema/ddl/operations.pb.h"
+#include "backend/schema/parser/DDLParserTokenManager.h"
 #include "backend/schema/parser/DDLParserTree.h"
 #include "backend/schema/parser/DDLParserTreeConstants.h"
 #include "backend/schema/parser/JavaCC.h"
+#include "backend/schema/parser/ddl_char_stream.h"
 #include "backend/schema/parser/ddl_includes.h"
 #include "backend/schema/parser/ddl_token_validation_utils.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
 #include "zetasql/base/status_macros.h"
@@ -463,11 +468,28 @@ void VisitColumnTypeNode(const SimpleNode* column_type,
   std::string type_name = absl::AsciiStrToUpper(column_type->image());
   ColumnDefinition::Type type;
 
+  if (type_name == "PG") {
+    std::string pg_type = absl::AsciiStrToUpper(
+        GetQualifiedIdentifier(GetChildNode(column_type, 0, JJTPGTYPE)));
+    if (pg_type == "NUMERIC") {
+      type = ColumnDefinition::PG_NUMERIC;
+    } else if (pg_type == "JSONB") {
+      type = ColumnDefinition::PG_JSONB;
+    } else {
+      errors->push_back(absl::Substitute(
+          "Syntax error on line $0 column $1: Encountered '$2' while parsing: "
+          "column_type",
+          column_type->begin_line(), column_type->begin_column(),
+          absl::StrCat(type_name, ".", pg_type)));
+      return;
+    }
+  } else {
     if (type_name == "FLOAT64") {
       type = ColumnDefinition::DOUBLE;
     } else if (!ColumnDefinition::Type_Parse(type_name, &type)) {
       ABSL_LOG(FATAL) << "Unrecognized type: " << type_name;
     }
+  }
 
   column->set_type(type);
   if (type == ColumnDefinition::ARRAY) {
@@ -793,7 +815,7 @@ void VisitCreateViewNode(const SimpleNode* node, CreateFunction* function,
     function->set_is_or_replace(true);
   }
 
-  if (GetFirstChildNode(node, JJTSQL_SECURITY_INVOKER)) {
+  if (GetFirstChildNode(node, JJTSQL_SECURITY)) {
     function->set_sql_security(Function::INVOKER);
   }
 
@@ -977,6 +999,22 @@ void VisitStringOrNullOptionValNode(const SimpleNode* value_node,
   option->set_string_value(string_value);
 }
 
+void VisitInt64OrNullOptionValNode(const SimpleNode* value_node,
+                                   SetOption* option,
+                                   std::vector<std::string>* errors) {
+  if (value_node->getId() == JJTINTEGER_VAL) {
+    const int64_t value = value_node->image_as_int64();
+    option->set_int64_value(value);
+  } else if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+  } else {
+    errors->push_back(
+        absl::StrCat("Unexpected value for option: ", option->option_name(),
+                     ". Supported option values are integers and NULL."));
+    return;
+  }
+}
+
 void VisitChangeStreamOptionKeyValNode(const SimpleNode* node,
                                        OptionList* options,
                                        std::vector<std::string>* errors) {
@@ -1034,6 +1072,115 @@ void VisitCreateChangeStreamNode(const SimpleNode* node,
         ABSL_LOG(FATAL) << "Unexpected create change stream clause: "
                    << child->toString();
     }
+  }
+}
+
+bool IsSupportedSequenceOption(const std::string& option_name) {
+  if (option_name == kSequenceKindOptionName ||
+      option_name == kSequenceSkipRangeMinOptionName ||
+      option_name == kSequenceSkipRangeMaxOptionName ||
+      option_name == kSequenceStartWithCounterOptionName) {
+    return true;
+  }
+  return false;
+}
+
+void VisitSequenceOptionKeyValNode(const SimpleNode* node, OptionList* options,
+                                   std::vector<std::string>* errors,
+                                   bool* sequence_kind_visited) {
+  std::string name = CheckOptionKeyValNodeAndGetName(node);
+  if (absl::c_find_if(*options, [&name](const SetOption& option) {
+        return option.option_name() == name;
+      }) != options->end()) {
+    errors->push_back(absl::StrCat("Duplicate option: ", name));
+    return;
+  }
+
+  const SimpleNode* value_node = GetChildNode(node, 1);
+
+  if (!IsSupportedSequenceOption(name)) {
+    errors->push_back(absl::StrCat("Option: ", name, " is unknown."));
+    return;
+  }
+
+  *sequence_kind_visited = false;
+  SetOption* option = options->Add();
+  option->set_option_name(name);
+  if (name == kSequenceKindOptionName) {
+    VisitStringOrNullOptionValNode(value_node, option, errors);
+    *sequence_kind_visited = true;
+    if (option->has_null_value()) {
+      errors->push_back(
+          "The only supported sequence kind is `bit_reversed_positive`");
+      return;
+    }
+    if (option->has_string_value() &&
+        option->string_value() != kSequenceKindBitReversedPositive) {
+      errors->push_back(
+          absl::StrCat("Unsupported sequence kind: ", option->string_value()));
+    }
+  } else {
+    VisitInt64OrNullOptionValNode(value_node, option, errors);
+  }
+}
+
+void VisitCreateSequenceNode(const SimpleNode* node, CreateSequence* sequence,
+                             std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_SEQUENCE_STATEMENT);
+  int offset = 0;
+  if (GetFirstChildNode(node, JJTIF_NOT_EXISTS) != nullptr) {
+    sequence->set_existence_modifier(IF_NOT_EXISTS);
+    ++offset;
+  }
+
+  sequence->set_sequence_name(
+      GetQualifiedIdentifier(GetChildNode(node, offset++, JJTNAME)));
+
+  bool has_valid_sequence_kind = false;
+
+  if (node->jjtGetNumChildren() == offset + 1) {
+    const SimpleNode* options_clause =
+        GetChildNode(node, offset, JJTOPTIONS_CLAUSE);
+
+    OptionList* options = sequence->mutable_set_options();
+    bool sequence_kind_visited = false;
+
+    for (int i = 0; i < options_clause->jjtGetNumChildren(); ++i) {
+      VisitSequenceOptionKeyValNode(
+          GetChildNode(options_clause, i, JJTOPTION_KEY_VAL), options, errors,
+          &sequence_kind_visited);
+      if (sequence_kind_visited) {
+        has_valid_sequence_kind = sequence_kind_visited;
+      }
+    }
+  }
+  if (!has_valid_sequence_kind) {
+    errors->push_back(
+        "CREATE SEQUENCE statements require option `sequence_kind` to be set");
+  }
+  sequence->set_type(CreateSequence::BIT_REVERSED_POSITIVE);
+}
+
+void VisitAlterSequenceNode(const SimpleNode* node, AlterSequence* sequence,
+                            std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_SEQUENCE_STATEMENT);
+  int offset = 0;
+  if (GetFirstChildNode(node, JJTIF_EXISTS) != nullptr) {
+    sequence->set_existence_modifier(IF_EXISTS);
+    ++offset;
+  }
+
+  sequence->set_sequence_name(
+      GetQualifiedIdentifier(GetChildNode(node, offset++, JJTNAME)));
+  const SimpleNode* options_clause =
+      GetChildNode(node, offset, JJTOPTIONS_CLAUSE);
+
+  OptionList* options = sequence->mutable_set_options()->mutable_options();
+  for (int i = 0; i < options_clause->jjtGetNumChildren(); ++i) {
+    bool sequence_kind_visited;  // Unused
+    VisitSequenceOptionKeyValNode(
+        GetChildNode(options_clause, i, JJTOPTION_KEY_VAL), options, errors,
+        &sequence_kind_visited);
   }
 }
 
@@ -1149,6 +1296,33 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
   }
 }
 
+void VisitAlterIndexNode(const SimpleNode* node, AlterIndex* alter_index,
+                         std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_INDEX_STATEMENT);
+  const SimpleNode* alter_type = GetChildNode(node, 1);
+  alter_index->set_index_name(
+      GetQualifiedIdentifier(GetFirstChildNode(node, JJTNAME)));
+  switch (alter_type->getId()) {
+    case JJTADD: {
+      const SimpleNode* column_name = GetFirstChildNode(node, JJTCOLUMN_NAME);
+      alter_index->mutable_add_stored_column()->set_column_name(
+          column_name->image());
+      break;
+    }
+    case JJTDROP: {
+      const SimpleNode* column_name = GetFirstChildNode(node, JJTCOLUMN_NAME);
+      alter_index->set_drop_stored_column(column_name->image());
+      break;
+    }
+    default: {
+      errors->push_back(LogicalError(
+          alter_type, absl::StrCat("Unexpected value for alter index type: ",
+                                   alter_type->image())));
+      break;
+    }
+  }
+}
+
 // End Visit functions
 //////////////////////////////////////////////////////////////////////////
 
@@ -1171,9 +1345,17 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
     case JJTCREATE_INDEX_STATEMENT:
       VisitCreateIndexNode(stmt, statement->mutable_create_index(), errors);
       break;
+    case JJTALTER_INDEX_STATEMENT: {
+      VisitAlterIndexNode(stmt, statement->mutable_alter_index(), errors);
+      break;
+    }
     case JJTCREATE_CHANGE_STREAM_STATEMENT:
       VisitCreateChangeStreamNode(
           stmt, statement->mutable_create_change_stream(), errors);
+      break;
+    case JJTCREATE_SEQUENCE_STATEMENT:
+      VisitCreateSequenceNode(stmt, statement->mutable_create_sequence(),
+                              errors);
       break;
     case JJTDROP_STATEMENT: {
       const SimpleNode* drop_stmt = GetChildNode(stmt, 0);
@@ -1199,6 +1381,13 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
           statement->mutable_drop_function()->set_function_kind(Function::VIEW);
           statement->mutable_drop_function()->set_function_name(name);
           break;
+        case JJTSEQUENCE:
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_sequence()->set_existence_modifier(
+                IF_EXISTS);
+          }
+          statement->mutable_drop_sequence()->set_sequence_name(name);
+          break;
         default:
           ABSL_LOG(FATAL) << "Unexpected object type: "
                      << GetChildNode(stmt, 0)->toString();
@@ -1210,6 +1399,9 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
     case JJTALTER_CHANGE_STREAM_STATEMENT:
       VisitAlterChangeStreamNode(stmt, statement->mutable_alter_change_stream(),
                                  errors);
+      break;
+    case JJTALTER_SEQUENCE_STATEMENT:
+      VisitAlterSequenceNode(stmt, statement->mutable_alter_sequence(), errors);
       break;
     case JJTANALYZE_STATEMENT:
       CheckNode(stmt, JJTANALYZE_STATEMENT);

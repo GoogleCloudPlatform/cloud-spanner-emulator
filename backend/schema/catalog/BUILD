@@ -98,6 +98,10 @@ cc_test(
     srcs = [
         "schema_test.cc",
     ],
+    args = [
+        "--spangres_use_emulator_jsonb_type=true",
+        "--spangres_use_emulator_numeric_type=true",
+    ],
     deps = [
         ":schema",
         "//backend/schema/builders:schema_builders",
@@ -124,6 +128,7 @@ cc_test(
     deps = [
         ":versioned_catalog",
         "//tests/common:proto_matchers",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/time",
@@ -140,6 +145,7 @@ cc_test(
     deps = [
         ":schema",
         "//tests/common:proto_matchers",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",

@@ -59,14 +59,11 @@ CREATE TABLE scalar_types_table (
   date_val date,
   float_val float8,
   string_val varchar,
-  -- PG.NUMERIC is currently unsupported in the emulator.
-  -- numeric_val numeric,
-  timestamp_val timestamptz
-  -- PG.JSONB is currently unsupported in the emulator.
-  -- json_val jsonb
+  numeric_val numeric,
+  timestamp_val timestamptz,
+  json_val jsonb
 );
-# PG.NUMERIC is currently unsupported in the emulator.
-# CREATE TABLE numeric_table (
-#   key     numeric,
-#   val     bigint NOT NULL PRIMARY KEY,
-# );
+CREATE TABLE numeric_table (
+  key     bigint NOT NULL PRIMARY KEY,
+  val     numeric
+);

@@ -1315,6 +1315,39 @@ TEST(ParseAlterTable, CannotParseAlterColumnMiscErrors) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+TEST(ParseAlterIndex, CanParseAddStoredColumn) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+                    ALTER INDEX index ADD STORED COLUMN extra_column
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_index {
+                      index_name: "index"
+                      add_stored_column { column_name: "extra_column" }
+                    }
+                  )pb")));
+}
+
+TEST(ParseAlterIndex, CanParseDropStoredColumn) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+                    ALTER INDEX index DROP STORED COLUMN extra_column
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_index {
+                      index_name: "index"
+                      drop_stored_column: "extra_column"
+                    }
+                  )pb")));
+}
+
+TEST(ParseAlterIndex, CanNotParseUnknownAlterType) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+                    ALTER INDEX index UNKNOWN STORED COLUMN extra_column
+                  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 // ALTER TABLE SET ONDELETE
 
 TEST(ParseAlterTable, CanParseSetOnDeleteNoAction) {
@@ -2888,6 +2921,401 @@ TEST(DropChangeStream, ErrorParseDropChangeStreams) {
   EXPECT_THAT(ParseDDLStatement(R"sql(DROP `CHANGE` `STREAM`)sql"),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateSequence, SequenceKindInSingleQuotes) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq OPTIONS (
+        sequence_kind = 'bit_reversed_positive' )
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_sequence {
+                  sequence_name: "seq"
+                  type: BIT_REVERSED_POSITIVE
+                  set_options {
+                    option_name: "sequence_kind"
+                    string_value: "bit_reversed_positive"
+                  }
+                }
+              )pb")));
+}
+
+TEST(CreateSequence, WithIfNotExists) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE SEQUENCE IF NOT EXISTS seq OPTIONS (
+        sequence_kind = "bit_reversed_positive" )
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_sequence {
+                  sequence_name: "seq"
+                  type: BIT_REVERSED_POSITIVE
+                  set_options {
+                    option_name: "sequence_kind"
+                    string_value: "bit_reversed_positive"
+                  }
+                  existence_modifier: IF_NOT_EXISTS
+                }
+              )pb")));
+}
+
+TEST(CreateSequence, SequenceKindInDoubleQuotes) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq OPTIONS (
+        sequence_kind = "bit_reversed_positive" )
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_sequence {
+                  sequence_name: "seq"
+                  type: BIT_REVERSED_POSITIVE
+                  set_options {
+                    option_name: "sequence_kind"
+                    string_value: "bit_reversed_positive"
+                  }
+                }
+              )pb")));
+}
+
+TEST(CreateSequence, WithNullOptions) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq OPTIONS (
+        sequence_kind = "bit_reversed_positive",
+        skip_range_min = NULL,
+        skip_range_max = NULL,
+        start_with_counter = NULL )
+      )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_sequence {
+          sequence_name: "seq"
+          type: BIT_REVERSED_POSITIVE
+          set_options {
+            option_name: "sequence_kind"
+            string_value: "bit_reversed_positive"
+          }
+          set_options { option_name: "skip_range_min" null_value: true }
+          set_options { option_name: "skip_range_max" null_value: true }
+          set_options { option_name: "start_with_counter" null_value: true }
+        }
+      )pb")));
+}
+
+TEST(CreateSequence, CanParseCreateSequenceAllOptions) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq OPTIONS (
+          sequence_kind = "bit_reversed_positive",
+          skip_range_min = 1,
+          skip_range_max = 1000,
+          start_with_counter = 1
+      )
+      )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_sequence {
+          sequence_name: "seq"
+          type: BIT_REVERSED_POSITIVE
+          set_options {
+            option_name: "sequence_kind"
+            string_value: "bit_reversed_positive"
+          }
+          set_options { option_name: "skip_range_min" int64_value: 1 }
+          set_options { option_name: "skip_range_max" int64_value: 1000 }
+          set_options { option_name: "start_with_counter" int64_value: 1 }
+        }
+      )pb")));
+}
+
+TEST(CreateSequence, Invalid_NoSequenceKind) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq OPTIONS (
+          skip_range_min = 1,
+          skip_range_max = 1000,
+          start_with_counter = 1
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("CREATE SEQUENCE statements require option "
+                                 "`sequence_kind` to be set")));
+}
+
+TEST(CreateSequence, Invalid_EmptyOptionList) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq OPTIONS ()
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Encountered ')' while parsing: identifier")));
+}
+
+TEST(CreateSequence, Invalid_NullSequenceKind) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq OPTIONS (
+        sequence_kind = NULL
+      )
+      )sql"),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr(
+              "The only supported sequence kind is `bit_reversed_positive`")));
+}
+
+TEST(CreateSequence, Invalid_UnknownSequenceKind) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq OPTIONS (
+        sequence_kind = "some_kind"
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Unsupported sequence kind: some_kind")));
+}
+
+TEST(CreateSequence, Invalid_UnknownOption) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq OPTIONS (
+        sequence_kind = "bit_reversed_positive",
+        start_with = 1
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Option: start_with is unknown")));
+}
+
+TEST(CreateSequence, Invalid_WrongOptionValue) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq OPTIONS (
+        sequence_kind = "bit_reversed_positive",
+        start_with_counter = "hello"
+      )
+      )sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Unexpected value for option: start_with_counter. "
+                         "Supported option values are integers and NULL.")));
+}
+
+TEST(CreateSequence, Invalid_DuplicateOption) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq OPTIONS (
+        sequence_kind = "bit_reversed_positive",
+        sequence_kind = "bit_reversed_positive"
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Duplicate option: sequence_kind")));
+}
+
+TEST(CreateSequence, Invalid_SetOptionClause) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE SEQUENCE seq SET OPTIONS (
+        sequence_kind = "bit_reversed_positive"
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Expecting 'EOF' but found 'SET'")));
+}
+
+TEST(AlterSequence, SetSequenceKind) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq SET OPTIONS (
+        sequence_kind = "bit_reversed_positive"
+      )
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_sequence {
+                  sequence_name: "seq"
+                  set_options {
+                    options {
+                      option_name: "sequence_kind"
+                      string_value: "bit_reversed_positive"
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST(AlterSequence, WithIfExists) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER SEQUENCE IF EXISTS seq SET OPTIONS (
+        start_with_counter = 1
+      )
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_sequence {
+                  sequence_name: "seq"
+                  set_options {
+                    options { option_name: "start_with_counter" int64_value: 1 }
+                  }
+                  existence_modifier: IF_EXISTS
+                }
+              )pb")));
+}
+
+TEST(AlterSequence, SetStartWithCounter) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq SET OPTIONS (
+        start_with_counter = 1
+      )
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_sequence {
+                  sequence_name: "seq"
+                  set_options {
+                    options { option_name: "start_with_counter" int64_value: 1 }
+                  }
+                }
+              )pb")));
+}
+
+TEST(AlterSequence, SetSkipRange) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq SET OPTIONS (
+        skip_range_min = 1,
+        skip_range_max = 1000
+      )
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_sequence {
+                  sequence_name: "seq"
+                  set_options {
+                    options { option_name: "skip_range_min" int64_value: 1 }
+                    options { option_name: "skip_range_max" int64_value: 1000 }
+                  }
+                }
+              )pb")));
+}
+
+TEST(AlterSequence, SetMultipleOptions) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq SET OPTIONS (
+        skip_range_min = 1,
+        skip_range_max = 1000,
+        start_with_counter = 100
+      )
+      )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_sequence {
+          sequence_name: "seq"
+          set_options {
+            options { option_name: "skip_range_min" int64_value: 1 }
+            options { option_name: "skip_range_max" int64_value: 1000 }
+            options { option_name: "start_with_counter" int64_value: 100 }
+          }
+        }
+      )pb")));
+}
+
+TEST(AlterSequence, Invalid_EmptySetOptionClause) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq SET OPTIONS (
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Encountered ')' while parsing: identifier")));
+}
+
+TEST(AlterSequence, Invalid_OptionClauseWithoutSetKeyword) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq OPTIONS (
+        skip_range_min = 1
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Expecting 'SET' but found 'OPTIONS'")));
+}
+
+TEST(AlterSequence, Invalid_SetSequenceKindToNull) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq SET OPTIONS (
+        sequence_kind = NULL
+      )
+      )sql"),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr(
+              "The only supported sequence kind is `bit_reversed_positive`")));
+}
+
+TEST(AlterSequence, Invalid_SetSequenceKindToOtherKind) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq SET OPTIONS (
+        sequence_kind = "other_kind"
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Unsupported sequence kind: other_kind")));
+}
+
+TEST(AlterSequence, Invalid_UnknownOption) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq SET OPTIONS (
+        start_with = 1
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Option: start_with is unknown")));
+}
+
+TEST(AlterSequence, Invalid_WrongOptionValue) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq SET OPTIONS (
+        start_with_counter = "hello"
+      )
+      )sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Unexpected value for option: start_with_counter. "
+                         "Supported option values are integers and NULL.")));
+}
+
+TEST(AlterSequence, Invalid_DuplicateOption) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq SET OPTIONS (
+        start_with_counter = 1,
+        start_with_counter = 1
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Duplicate option: start_with_counter")));
+}
+
+TEST(DropSequence, Invalid_WithOptionClause) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      DROP SEQUENCE seq OPTIONS (
+        start_with_counter = 1
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Expecting 'EOF' but found 'OPTIONS'")));
+}
+
+TEST(DropSequence, Invalid_WithSetOptionClause) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      DROP SEQUENCE seq SET OPTIONS (
+        start_with_counter = 1
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Expecting 'EOF' but found 'SET'")));
+}
+
+TEST(DropSequence, Basic) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      DROP SEQUENCE seq
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_sequence { sequence_name: "seq" }
+              )pb")));
+}
+
+TEST(DropSequence, WithIfExists) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      DROP SEQUENCE IF EXISTS seq
+      )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        drop_sequence { sequence_name: "seq" existence_modifier: IF_EXISTS }
+      )pb")));
 }
 
 TEST(ParseViews, CreateViewNoSqlSecurity) {

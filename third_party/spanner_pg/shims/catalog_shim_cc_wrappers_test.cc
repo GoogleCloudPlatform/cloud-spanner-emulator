@@ -1067,6 +1067,78 @@ TEST_F(CatalogShimCcWrappersTest, ExpandJoinTableToTable) {
   ASSERT_FALSE(error);
 }
 
+// Verify we can look up (by name) a UDF and get a reasonable-looking proc.
+TEST_F(CatalogShimCcWrappersTest, LooksUpUdfProcByName) {
+  zetasql::AnalyzerOptions analyzer_options =
+      GetSpangresTestAnalyzerOptions();
+  std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
+      GetSpangresTestCatalogAdapterHolder(analyzer_options);
+
+  const std::string kTvfName = "read_json_keyvalue_change_stream";
+  const FormData_pg_proc** proc_list;
+  size_t proc_count;
+  GetProcsByName(kTvfName.c_str(), &proc_list, &proc_count);
+
+  ASSERT_EQ(proc_count, 1);
+  const FormData_pg_proc* proc = proc_list[0];
+  // TODO: enable this check after making lookup case sensitive.
+  // EXPECT_STREQ(NameStr(proc->proname), kTvfName.c_str());
+  EXPECT_NE(proc->oid, InvalidOid);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      const Oid namespace_id,
+      PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
+  EXPECT_EQ(proc->pronamespace, namespace_id);
+  EXPECT_EQ(proc->pronargs, 5);
+  EXPECT_EQ(proc->prorettype, JSONBOID);
+}
+
+// Verify we can look up (by oid) a UDF and get a reasonable-looking proc.
+TEST_F(CatalogShimCcWrappersTest, LooksUpUdfProcByOid) {
+  zetasql::AnalyzerOptions analyzer_options =
+      GetSpangresTestAnalyzerOptions();
+  std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
+      GetSpangresTestCatalogAdapterHolder(analyzer_options);
+  const std::string kTvfName = "read_json_keyvalue_change_stream";
+  const FormData_pg_proc** proc_list;
+  size_t proc_count;
+  GetProcsByName(kTvfName.c_str(), &proc_list, &proc_count);
+  ASSERT_EQ(proc_count, 1);
+
+  const FormData_pg_proc* proc = GetProcByOid(proc_list[0]->oid);
+
+  ASSERT_NE(proc, nullptr);
+  EXPECT_NE(proc->oid, InvalidOid);
+  EXPECT_TRUE(proc->proretset);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      const Oid namespace_id,
+      PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
+  EXPECT_EQ(proc->pronamespace, namespace_id);
+  EXPECT_EQ(proc->pronargs, 5);
+  EXPECT_EQ(proc->prorettype, JSONBOID);
+}
+
+// Verify UDF lookup is case-sensitive.
+TEST_F(CatalogShimCcWrappersTest, UdfLookUpCaseSensitive) {
+  zetasql::AnalyzerOptions analyzer_options =
+      GetSpangresTestAnalyzerOptions();
+  std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
+      GetSpangresTestCatalogAdapterHolder(analyzer_options);
+
+  const std::string kTvfNameCorrectCase = "read_json_keyvalue_change_stream";
+  const std::string kTvfNameIncorrectCase = "read_json_keyvalue_CHANGE_STREAM";
+  ASSERT_TRUE(
+      absl::EqualsIgnoreCase(kTvfNameCorrectCase, kTvfNameIncorrectCase));
+  const FormData_pg_proc** proc_list;
+  size_t proc_count;
+  // With the correct case, expect to find our UDF (no error throw).
+  GetProcsByName(kTvfNameCorrectCase.c_str(), &proc_list, &proc_count);
+  ASSERT_EQ(proc_count, 1);
+
+  // With the incorrect case, we don't find it.
+  GetProcsByName(kTvfNameIncorrectCase.c_str(), &proc_list, &proc_count);
+  EXPECT_EQ(proc_count, 0);
+}
+
 }  // namespace
 }  // namespace postgres_translator::test
 

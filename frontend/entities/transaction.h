@@ -134,8 +134,14 @@ class Transaction {
   absl::Status Read(const backend::ReadArg& read_arg,
                     std::unique_ptr<backend::RowCursor>* cursor);
 
-  // Calls ExecuteSql using the backend transaction and query engine.
+  // Calls ExecuteSql using the backend transaction and query engine in normal
+  // query mode.
   absl::StatusOr<backend::QueryResult> ExecuteSql(const backend::Query& query);
+
+  // Calls ExecuteSql using the backend transaction and query engine with the
+  // given query mode.
+  absl::StatusOr<backend::QueryResult> ExecuteSql(
+      const backend::Query& query, v1::ExecuteSqlRequest_QueryMode query_mode);
 
   // Calls Write using the backend transaction.
   absl::Status Write(const backend::Mutation& mutation);

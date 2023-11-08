@@ -45,6 +45,7 @@
 #include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
 #include "common/limits.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 #include "zetasql/base/no_destructor.h"
@@ -179,6 +180,7 @@ static constexpr char kChangeStreamValueCaptureTypeOptionName[] =
 static int kDoubleNumericPrecision = 53;
 static int kBigintNumericPrecision = 64;
 static int kDoubleNumericPrecisionRadix = 2;
+static int kPGNumericNumericPrecisionRadix = 10;
 
 static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
     // For now, this is a set of tables that are created from metadata. Once the
@@ -686,6 +688,9 @@ zetasql::Value GetPGNumericPrecisionRadix(const zetasql::Type* type) {
   // Setting the numeric precision radix.
   if (type->IsDouble() || type->IsInt64()) {
     return Int64(kDoubleNumericPrecisionRadix);
+  } else if (type == postgres_translator::spangres::types::PgNumericMapping()
+                         ->mapped_type()) {
+    return Int64(kPGNumericNumericPrecisionRadix);
   }
   return NullInt64();
 }

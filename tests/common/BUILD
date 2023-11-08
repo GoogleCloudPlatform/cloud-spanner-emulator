@@ -265,9 +265,12 @@ cc_library(
     srcs = ["change_streams.cc"],
     hdrs = ["change_streams.h"],
     deps = [
+        "//frontend/converters:pg_change_streams",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_protobuf//:protobuf",
         "@com_google_zetasql//zetasql/base:ret_check",
     ],
 )

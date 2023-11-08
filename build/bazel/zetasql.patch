@@ -215,3 +215,46 @@ index 50deb34..2070935 100644
      // Sanitize any '$' characters before creating substitution template. "$$"
      // is replaced by "$" in the output from absl::Substitute.
      std::string templ =
+diff --git a/zetasql/analyzer/name_scope.cc b/zetasql/analyzer/name_scope.cc
+index 9507aea..de75f25 100644
+--- a/zetasql/analyzer/name_scope.cc
++++ b/zetasql/analyzer/name_scope.cc
+@@ -1458,7 +1458,8 @@ NameList::AddRangeVariableInWrappingNameList(
+   // variables, including for value tables, so we use `flatten_to_table`
+   // which drops range variables.
+   ZETASQL_RETURN_IF_ERROR(range_variable_name_list->MergeFrom(
+-      *original_name_list, ast_location, {.flatten_to_table = true}));
++      *original_name_list, ast_location,
++      MergeOptions{.flatten_to_table = true}));
+
+   auto wrapper_name_list = std::make_shared<NameList>();
+   ZETASQL_RETURN_IF_ERROR(
+diff --git a/zetasql/analyzer/resolver_query.cc b/zetasql/analyzer/resolver_query.cc
+index 0eb93be..a15598f 100644
+--- a/zetasql/analyzer/resolver_query.cc
++++ b/zetasql/analyzer/resolver_query.cc
+@@ -7478,9 +7478,9 @@ absl::Status Resolver::ResolveTableSubquery(
+       // If the value table has an existing range variable, then it has to be
+       // renamed to the new name.
+       auto new_name_list = std::make_shared<NameList>();
+-      ZETASQL_RETURN_IF_ERROR(
+-          new_name_list->MergeFrom(*subquery_name_list, table_ref,
+-                                   {.rename_value_table_to_name = &alias}));
++      ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(
++          *subquery_name_list, table_ref,
++          NameList::MergeOptions{.rename_value_table_to_name = &alias}));
+       *output_name_list = new_name_list;
+     } else {
+       // If the value table was anonymous and didn't have an existing range
+@@ -7493,8 +7493,9 @@ absl::Status Resolver::ResolveTableSubquery(
+     // to drop existing range variables and convert value tables to columns,
+     // and then make the new range variables pointing at the remaining columns.
+     auto new_name_list = std::make_shared<NameList>();
+-    ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(*subquery_name_list, table_ref,
+-                                             {.flatten_to_table = true}));
++    ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(
++        *subquery_name_list, table_ref,
++        NameList::MergeOptions{.flatten_to_table = true}));
+
+     ZETASQL_ASSIGN_OR_RETURN(*output_name_list,
+                      NameList::AddRangeVariableInWrappingNameList(

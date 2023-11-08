@@ -203,25 +203,6 @@ TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlOrderBy) {
       StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlNoTable) {
-  PopulateDatabase();
-
-  Transaction txn{Transaction::ReadOnlyOptions{}};
-
-  EXPECT_THAT(PartitionQuery(txn, "SELECT a FROM UNNEST([1, 2, 3]) AS a"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
-}
-
-TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlFilterNoTable) {
-  PopulateDatabase();
-
-  Transaction txn{Transaction::ReadOnlyOptions{}};
-
-  EXPECT_THAT(
-      PartitionQuery(txn, "SELECT a FROM UNNEST([1, 2, 3]) AS a WHERE a = 1"),
-      StatusIs(absl::StatusCode::kInvalidArgument));
-}
-
 TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlSubquery) {
   PopulateDatabase();
 

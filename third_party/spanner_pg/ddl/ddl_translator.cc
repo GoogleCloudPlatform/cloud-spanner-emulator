@@ -76,4 +76,22 @@ PostgreSQLToSpannerDDLTranslator::TranslateForEmulator(
   return ddl_statement_list;
 }
 
+absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList>
+PostgreSQLToSpannerDDLTranslator::TranslateForEmulator(
+    const interfaces::ParserOutput& parser_output,
+    const TranslationOptions& options) const {
+  google::spanner::emulator::backend::ddl::DDLStatementList result;
+  if (parser_output.parse_tree() == nullptr) {
+    return absl::InvalidArgumentError("No statement found.");
+  }
+  ZETASQL_RETURN_IF_ERROR(Translate(parser_output, options, result));
+  std::string sdl = result.SerializeAsString();
+  google::spanner::emulator::backend::ddl::DDLStatementList ddl_statement_list;
+  if (!ddl_statement_list.ParseFromString(sdl)) {
+    return absl::InvalidArgumentError(
+        "Failed to convert to the emulator DDL protocol.");
+  }
+  return ddl_statement_list;
+}
+
 }  // namespace postgres_translator::spangres

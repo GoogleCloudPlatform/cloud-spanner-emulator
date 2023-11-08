@@ -52,8 +52,7 @@ class Schema {
 
   explicit Schema(const SchemaGraph* graph
                   ,
-                  const database_api::DatabaseDialect& dialect
-  );
+                  const database_api::DatabaseDialect& dialect);
 
   virtual ~Schema() = default;
 
@@ -159,12 +158,10 @@ class OwningSchema : public Schema {
  public:
   explicit OwningSchema(std::unique_ptr<const SchemaGraph> graph
                         ,
-                        const database_api::DatabaseDialect& dialect
-                        )
+                        const database_api::DatabaseDialect& dialect)
       : Schema(graph.get()
                ,
-               dialect
-               ),
+               dialect),
         graph_(std::move(graph)) {}
 
   ~OwningSchema() override = default;

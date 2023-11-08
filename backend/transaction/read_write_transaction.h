@@ -132,7 +132,7 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
   absl::Status GuardedCall(OpType op, const std::function<absl::Status()>& fn)
       ABSL_LOCKS_EXCLUDED(mu_);
   absl::Status ProcessWriteOps(const std::vector<WriteOp>& write_ops);
-
+  absl::Status ProcessChangeStreamWriteOps();
   // Resets the transaction and marks it Active.
   void Reset();
 

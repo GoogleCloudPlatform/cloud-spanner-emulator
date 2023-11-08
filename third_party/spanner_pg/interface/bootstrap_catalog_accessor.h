@@ -56,6 +56,13 @@ absl::StatusOr<PgCollationData> GetPgCollationDataFromBootstrap(
 absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
     const PgBootstrapCatalog* catalog, absl::string_view type_name);
 
+// Returns either a struct containing type data or an error based on the given
+// type oid. If the type associated with the oid is not an allowed type
+// (see allowlist) or is not in the catalog or is not a type oid, returns
+// NotFoundError.
+absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
+    const PgBootstrapCatalog* catalog, int64_t type_oid);
+
 }  // namespace postgres_translator
 
 #endif  // BOOTSTRAP_CATALOG_BOOTSTRAP_CATALOG_ACCESSOR_H_

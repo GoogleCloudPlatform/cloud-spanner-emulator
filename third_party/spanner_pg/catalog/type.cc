@@ -433,6 +433,9 @@ absl::StatusOr<zetasql::Value> PostgresExtendedArrayMapping::MakeGsqlValue(
   if (array->ndim > 1) {
     return absl::InvalidArgumentError(
         "Multi-dimensional arrays are not supported");
+  } else if (array->ndim == 1 && ARR_LBOUND(array)[0] != 1) {
+    return absl::InvalidArgumentError(
+        "Arrays with lower bounds other than 1 are not supported");
   }
 
   Oid element_oid = ARR_ELEMTYPE(array);

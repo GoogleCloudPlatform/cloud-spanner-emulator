@@ -123,6 +123,8 @@ absl::flat_hash_map<PgProcId, PgProcSignature> procs_to_update = {
     {{"trunc", {{NUMERICOID, INT4OID}, NUMERICOID}},
      {{NUMERICOID, INT8OID}, NUMERICOID}},
     {{"nextval", {{REGCLASSOID}, INT8OID}}, {{TEXTOID}, INT8OID}},
+    {{"array_length", {{ANYARRAYOID, INT4OID}, INT4OID}},
+     {{ANYARRAYOID, INT8OID}, INT8OID}},
     {{"array_upper", {{ANYARRAYOID, INT4OID}, INT4OID}},
      {{ANYARRAYOID, INT8OID}, INT8OID}},
     {{"date_mi", {{DATEOID, DATEOID}, INT4OID}}, {{DATEOID, DATEOID}, INT8OID}},

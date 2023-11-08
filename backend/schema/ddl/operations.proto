@@ -29,7 +29,6 @@ message DDLStatement {
     // Database statements.
     CreateDatabase create_database = 1;
 
-
     // Table statements.
     CreateTable create_table = 8;
     SetColumnOptions set_column_options = 10;
@@ -38,6 +37,7 @@ message DDLStatement {
 
     // Index statements.
     CreateIndex create_index = 13;
+    AlterIndex alter_index = 15;
     DropIndex drop_index = 16;
 
     // Change Stream statements.
@@ -48,6 +48,11 @@ message DDLStatement {
     // Function statements.
     CreateFunction create_function = 34;
     DropFunction drop_function = 36;
+
+    // Sequence statements.
+    CreateSequence create_sequence = 30;
+    AlterSequence alter_sequence = 31;
+    DropSequence drop_sequence = 32;
 
     // Statistics statements.
     Analyze analyze = 75;
@@ -64,7 +69,6 @@ message SetOption {
   optional double double_value = 8;
   optional string string_value = 5;
 }
-
 
 // If database dialect, e.g., PostgreSQL compatible dialect, is different from
 // GoogleSQL, this message contains information about original SQL expression
@@ -94,9 +98,9 @@ message ColumnDefinition {
     ARRAY = 16;
     NUMERIC = 19;
     JSON = 20;
+    PG_NUMERIC = 21;
 
-
-
+    PG_JSONB = 24;
   }
 
   optional Type type = 2;
@@ -218,6 +222,7 @@ message CreateFunction {
 message DropFunction {
   optional string function_name = 1;
   optional Function.Kind function_kind = 2;
+  optional ExistenceModifier existence_modifier = 3;
 }
 
 message CheckConstraint {
@@ -266,7 +271,6 @@ message InterleaveClause {
 message CreateDatabase {
   optional string db_name = 4;
 }
-
 
 message RowDeletionPolicy {
   // The timestamp column based on which we set the policy.
@@ -355,6 +359,18 @@ message CreateChangeStream {
   repeated SetOption set_options = 3;
 }
 
+message CreateSequence {
+  optional string sequence_name = 1;
+  enum Type {
+    reserved 0, 1;
+    BIT_REVERSED_POSITIVE = 2;
+  }
+  optional Type type = 2;  // Must be set.
+  repeated SetOption set_options = 9;
+
+  optional ExistenceModifier existence_modifier = 10;
+}
+
 message SetColumnOptions {
   message ColumnPath {
     optional string table_name = 1;
@@ -436,6 +452,24 @@ message AlterChangeStream {
   }
 }
 
+message AlterSequence {
+  optional string sequence_name = 1;
+  message SetOptions {
+    repeated SetOption options = 1;
+  }
+
+  oneof alter_type {
+    SetOptions set_options = 3;
+  }
+
+  optional ExistenceModifier existence_modifier = 8;
+}
+
+message DropSequence {
+  optional string sequence_name = 1;
+  optional ExistenceModifier existence_modifier = 2;
+}
+
 // ANALYZE is a special DDL operation that doesn't trigger a schema change in
 // emulator. The emulator will accept it but perform no-op. This allows the same
 // script to run in both emulator and production.
@@ -466,36 +500,20 @@ message CreateIndex {
   optional ExistenceModifier existence_modifier = 17;
 }
 
+message AlterIndex {
+  optional string index_name = 1;
+  message AddStoredColumn {
+    optional string column_name = 1;
+  }
+  oneof alter_type {
+    AddStoredColumn add_stored_column = 3;
+    string drop_stored_column = 4;
+  }
+}
+
 message DropIndex {
   optional string index_name = 1;
   optional ExistenceModifier existence_modifier = 2;
-}
-
-
-message TokenColumnDefinition {
-  // Required.
-  optional KeyPartClause token_column = 1;
-  repeated SetOption set_options = 2;
-}
-
-message CreateSearchIndex {
-  // Required.
-  optional string index_name = 1;
-  // Required.
-  optional string index_base_name = 2;
-  // Each column here corresponds to one token index per secondary index.
-  // They should exist in the base table already.
-  repeated TokenColumnDefinition token_column_definition = 3;
-
-  repeated KeyPartClause partition_by = 4;
-  // Normally there will be at most a single order_by column listed here, but
-  // if the user provides their own UID column, there could be up to two.
-  repeated KeyPartClause order_by = 5;
-  repeated string null_filtered_column = 6;
-  optional string interleave_in_table = 7;
-  repeated StoredColumnDefinition stored_column_definition = 8;
-  repeated SetOption set_options = 9;
-  optional bool null_filtered = 10;
 }
 
 

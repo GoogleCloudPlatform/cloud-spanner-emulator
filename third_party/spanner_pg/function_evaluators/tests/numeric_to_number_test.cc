@@ -190,7 +190,7 @@ TEST_F(NumericToNumberTest, ReturnsErrorWhenFormatIsInvalid) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("invalid input syntax for type numeric")));
   EXPECT_THAT(NumericToNumber("123.45", "9.99"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("numeric field overflow")));
 }
 

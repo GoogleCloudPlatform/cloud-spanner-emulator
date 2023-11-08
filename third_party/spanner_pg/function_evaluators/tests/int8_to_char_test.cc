@@ -196,10 +196,10 @@ TEST_F(Int8ToCharTest, ReturnsErrorWhenFormatIsInvalid) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("cannot use \"S\" twice")));
   EXPECT_THAT(Int8ToChar(std::numeric_limits<int64_t>::max(), "RN"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("integer out of range")));
   EXPECT_THAT(Int8ToChar(std::numeric_limits<int64_t>::max(), "9V9"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("bigint out of range")));
   EXPECT_THAT(Int8ToChar(-1, "S9MI"),
               StatusIs(absl::StatusCode::kInvalidArgument,

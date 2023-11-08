@@ -26,6 +26,7 @@
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/types/array_type.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/substitute.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "common/constants.h"
@@ -37,7 +38,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 absl::StatusOr<std::unique_ptr<QueryableChangeStreamTvf>>
-QueryableChangeStreamTvf::Create(const backend::ChangeStream* change_stream,
+QueryableChangeStreamTvf::Create(const std::string& tvf_name,
                                  const zetasql::AnalyzerOptions options,
                                  zetasql::Catalog* catalog,
                                  zetasql::TypeFactory* type_factory,
@@ -46,14 +47,10 @@ QueryableChangeStreamTvf::Create(const backend::ChangeStream* change_stream,
   std::vector<zetasql::TVFSchemaColumn> output_columns;
   std::vector<std::pair<std::string, const zetasql::Type*>> columns;
   const zetasql::Type* output_type = nullptr;
-  std::string tvf_name;
   if (is_pg) {
-    tvf_name = absl::StrCat(kChangeStreamTvfJsonPrefix, change_stream->Name());
     output_type =
         postgres_translator::spangres::types::PgJsonbMapping()->mapped_type();
   } else {
-    tvf_name =
-        absl::StrCat(kChangeStreamTvfStructPrefix, change_stream->Name());
     ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeType(
         absl::Substitute(kChangeStreamTvfOutputFormat, "JSON"), options,
         catalog, type_factory, &output_type));
@@ -93,7 +90,7 @@ QueryableChangeStreamTvf::Create(const backend::ChangeStream* change_stream,
   const auto signature = zetasql::FunctionSignature(result_type, args,
                                                       /*context_ptr=*/nullptr);
   return std::make_unique<QueryableChangeStreamTvf>(
-      absl::StrSplit(tvf_name, '.'), signature, result_schema, change_stream);
+      absl::StrSplit(tvf_name, '.'), signature, result_schema);
 }
 }  // namespace backend
 }  // namespace emulator

@@ -57,13 +57,6 @@ ParseAndAnalyzePostgreSQL(const std::string& sql,
   using postgres_translator::interfaces::SpangresTranslatorFactory;
   using postgres_translator::interfaces::TranslateParsedQueryParamsBuilder;
 
-  if (sql.size() > absl::GetFlag(FLAGS_spangres_sql_length_limit)) {
-    return absl::InvalidArgumentError(absl::Substitute(
-        "Query failed: Query string length of $0 exceeds maximum allowed "
-        "length of $1.",
-        sql.size(), absl::GetFlag(FLAGS_spangres_sql_length_limit)));
-  }
-
   ZETASQL_ASSIGN_OR_RETURN(ParserOutput parser_output,
                    CheckedPgRawParserFullOutput(sql.c_str()));
 

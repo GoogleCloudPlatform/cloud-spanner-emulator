@@ -33,21 +33,30 @@ TEST(EmulatorFeatureFlags, Basic) {
 
   EXPECT_TRUE(features.flags().enable_check_constraint);
   EXPECT_TRUE(features.flags().enable_column_default_values);
+  EXPECT_TRUE(features.flags().enable_generated_pk);
   EXPECT_FALSE(features.flags().enable_fk_delete_cascade_action);
+  EXPECT_FALSE(features.flags().enable_bit_reversed_positive_sequences);
 
   {
     EmulatorFeatureFlags::Flags flags;
     flags.enable_check_constraint = false;
     flags.enable_column_default_values = false;
+    flags.enable_generated_pk = false;
     flags.enable_fk_delete_cascade_action = true;
+    flags.enable_bit_reversed_positive_sequences = true;
+
     test::ScopedEmulatorFeatureFlagsSetter setter(flags);
     EXPECT_FALSE(features.flags().enable_check_constraint);
     EXPECT_FALSE(features.flags().enable_column_default_values);
+    EXPECT_FALSE(features.flags().enable_generated_pk);
     EXPECT_TRUE(features.flags().enable_fk_delete_cascade_action);
+    EXPECT_TRUE(features.flags().enable_bit_reversed_positive_sequences);
   }
   EXPECT_TRUE(features.flags().enable_check_constraint);
   EXPECT_TRUE(features.flags().enable_column_default_values);
+  EXPECT_TRUE(features.flags().enable_generated_pk);
   EXPECT_FALSE(features.flags().enable_fk_delete_cascade_action);
+  EXPECT_FALSE(features.flags().enable_bit_reversed_positive_sequences);
 }
 
 TEST(EmulatorFeatureFlags, DmlReturningFlag) {
@@ -68,16 +77,16 @@ TEST(EmulatorFeatureFlags, DmlReturningFlag) {
 TEST(EmulatorFeatureFlags, PostgresqlInterfaceFlag) {
   const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
 
-  EXPECT_FALSE(features.flags().enable_postgresql_interface);
+  EXPECT_TRUE(features.flags().enable_postgresql_interface);
 
   {
     EmulatorFeatureFlags::Flags flags;
-    flags.enable_postgresql_interface = true;
+    flags.enable_postgresql_interface = false;
     test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-    EXPECT_TRUE(features.flags().enable_postgresql_interface);
+    EXPECT_FALSE(features.flags().enable_postgresql_interface);
   }
 
-  EXPECT_FALSE(features.flags().enable_postgresql_interface);
+  EXPECT_TRUE(features.flags().enable_postgresql_interface);
 }
 
 }  // namespace

@@ -290,8 +290,10 @@ cc_library(
 cc_library(
     name = "pg_evaluators",
     hdrs = [
+        "cast_evaluators.h",
         "datetime_evaluators.h",
         "formatting_evaluators.h",
+        "jsonb_evaluators.h",
         "mathematical_evaluators.h",
         "pg_arena.h",
         "pg_arena_factory.h",
@@ -306,14 +308,17 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",
         "@com_google_absl//absl/time",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 
 cc_library(
     name = "pg_evaluators_stubs",
     srcs = [
+        "stub_cast_evaluators.cc",
         "stub_datetime_evaluators.cc",
         "stub_formatting_evaluators.cc",
+        "stub_jsonb_evaluators.cc",
         "stub_mathematical_evaluators.cc",
         "stub_pg_arena_factory.cc",
         "stub_pg_timezone.cc",
@@ -325,6 +330,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 
@@ -349,6 +355,20 @@ cc_test(
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "stub_jsonb_evaluators_test",
+    srcs = [
+        "stub_jsonb_evaluators_test.cc",
+    ],
+    deps = [
+        ":pg_evaluators",
+        ":pg_evaluators_stubs",  # buildcleaner: keep
+        "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
@@ -435,11 +455,9 @@ cc_test(
     srcs = ["emulator_parser_test.cc"],
     deps = [
         ":emulator_parser",
-        ":implementations_without_parser",
         ":pg_arena_factory",
         "//third_party/spanner_pg/shims:memory_context_pg_arena",
         "//third_party/spanner_pg/test_catalog:emulator_catalog",
-        "@com_google_absl//absl/flags:flag",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:simple_catalog",

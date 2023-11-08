@@ -17,7 +17,7 @@
 options {
   OUTPUT_LANGUAGE = "c++";
   STATIC = false;
-  IGNORE_CASE = true;
+  IGNORE_CASE = true;  // Case is preserved, but ignored during token matching
   NODE_SCOPE_HOOK = true;
   VISITOR = true;
   TOKEN_MANAGER_INCLUDES =
@@ -29,6 +29,11 @@ options {
   TOKEN_EXTENDS = "TokenBase";
   COMMON_TOKEN_ACTION = true;
 }
+
+// The C++ code fragment found between PARSER_BEGIN($name) and PARSER_END
+// get generated into the middle of a class called $name in a file called
+// $(name).cc.  Options above such as "NAMESPACE", "NODE_INCLUDES" etc
+// affect how the code is generated.
 PARSER_BEGIN(DDLParser)
  private:
   void jjtreeOpenNodeScope(Node* node) {

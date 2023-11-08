@@ -66,16 +66,6 @@ TEST(StubEvaluatorTest, PgTimestampTzToChar) {
                        HasSubstr("TimestampTzToChar")));
 }
 
-TEST(StubEvaluatorTest, DateIn) {
-  EXPECT_THAT(DateIn("a", "b"), StatusIs(absl::StatusCode::kUnimplemented,
-                                              HasSubstr("DateIn")));
-}
-
-TEST(StubEvaluatorTest, TimestamptzIn) {
-  EXPECT_THAT(TimestamptzIn("a", "b"), StatusIs(absl::StatusCode::kUnimplemented,
-                                              HasSubstr("TimestamptzIn")));
-}
-
 TEST(StubEvaluatorTest, PgDateIn) {
   EXPECT_THAT(PgDateIn("a"), StatusIs(absl::StatusCode::kUnimplemented,
                                               HasSubstr("DateIn")));

@@ -99,6 +99,7 @@ class SchemaChangeTest
  public:
   SchemaChangeTest()
       : flag_setter_({
+            .enable_generated_pk = true,
             .enable_postgresql_interface = true,
             .enable_fk_delete_cascade_action = true,
         }) {}

@@ -30,6 +30,7 @@
 #include "absl/status/statusor.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "tests/common/proto_matchers.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -134,6 +135,27 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Json) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
                        DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
   EXPECT_TRUE(converted_type->Equals(type_factory_.get_json()));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(ddl_type));
+}
+
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, PgNumeric) {
+  auto ddl_type =
+      MakeColumnDefinitionForType(ddl::ColumnDefinition::PG_NUMERIC);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
+                       DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
+  EXPECT_TRUE(converted_type->Equals(
+      postgres_translator::spangres::types::PgNumericMapping()->mapped_type()));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(ddl_type));
+}
+
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, JsonB) {
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::PG_JSONB);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
+                       DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
+  EXPECT_TRUE(converted_type->Equals(
+      postgres_translator::spangres::types::PgJsonbMapping()->mapped_type()));
   EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
               test::EqualsProto(ddl_type));
 }

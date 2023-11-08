@@ -2982,8 +2982,8 @@ absl::Status ForwardTransformer::SetColumnAccessList(
   std::vector<zetasql::ResolvedStatement::ObjectAccess> column_access_list;
   for (int i = 0; i < scan->column_list().size(); ++i) {
     const zetasql::ResolvedColumn& column = scan->column_list(i);
-    if (referenced_column_access_.find(column) !=
-          referenced_column_access_.end()) {
+      if (referenced_column_access_.find(column) !=
+            referenced_column_access_.end()) {
       column_access_list.push_back(referenced_column_access_.at(column));
     } else if (!catalog_adapter_->analyzer_options().prune_unused_columns()) {
       column_access_list.push_back(zetasql::ResolvedStatement::NONE);
@@ -3014,12 +3014,6 @@ absl::Status ForwardTransformer::CheckForUnsupportedFeatures(
       CheckForUnsupportedFields(query.constraintDeps, "constraint clauses"));
   ZETASQL_RETURN_IF_ERROR(
       CheckForUnsupportedFields(query.withCheckOptions, "WITH CHECK options"));
-
-  if (query.distinctClause != nullptr
-     ) {
-    return absl::UnimplementedError(
-        "Statements with DISTINCT clauses are not supported");
-  }
 
   if (query.groupDistinct) {
     return absl::UnimplementedError(
@@ -3143,6 +3137,8 @@ ForwardTransformer::BuildGsqlResolvedStatement(const Query& query) {
       switch (query.utilityStmt->type) {
         case T_CreatedbStmt:
         case T_CreateStmt:
+        case T_CreateSeqStmt:
+        case T_AlterSeqStmt:
         case T_AlterTableStmt:
         case T_DropStmt:
         case T_AlterDatabaseSetStmt:

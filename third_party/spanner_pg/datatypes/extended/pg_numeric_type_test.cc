@@ -218,6 +218,218 @@ TEST_F(PgNumericTypeTest, ValueComparison) {
   EXPECT_FALSE(smallest_numeric.Equals(numeric));
 }
 
+TEST_F(PgNumericTypeTest, FixedPrecisionNumericErrorCases) {
+  EXPECT_THAT(postgres_translator::spangres::datatypes::
+                  CreatePgNumericValueWithPrecisionAndScale("0.3", 2, 3),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("NUMERIC scale")));
+  EXPECT_THAT(postgres_translator::spangres::datatypes::
+                  CreatePgNumericValueWithPrecisionAndScale("0.3", 2, -1),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("NUMERIC scale")));
+  EXPECT_THAT(postgres_translator::spangres::datatypes::
+                  CreatePgNumericValueWithPrecisionAndScale("0.3", 1001, 0),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("NUMERIC precision")));
+  EXPECT_THAT(postgres_translator::spangres::datatypes::
+                  CreatePgNumericValueWithPrecisionAndScale("0.3", -1, -2),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("NUMERIC precision")));
+  EXPECT_THAT(postgres_translator::spangres::datatypes::
+                  CreatePgNumericValueWithPrecisionAndScale("0.3", -1, 0),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("NUMERIC precision")));
+  EXPECT_THAT(postgres_translator::spangres::datatypes::
+                  CreatePgNumericValueWithPrecisionAndScale("10", 1),
+              StatusIs(absl::StatusCode::kOutOfRange,
+                       testing::HasSubstr(
+                           "must round to an absolute value less than")));
+  EXPECT_THAT(postgres_translator::spangres::datatypes::
+                  CreatePgNumericValueWithPrecisionAndScale("999", 2, 1),
+              StatusIs(absl::StatusCode::kOutOfRange,
+                       testing::HasSubstr(
+                           "must round to an absolute value less than")));
+  EXPECT_THAT(postgres_translator::spangres::datatypes::
+                  CreatePgNumericValueWithPrecisionAndScale("-10", 1),
+              StatusIs(absl::StatusCode::kOutOfRange,
+                       testing::HasSubstr(
+                           "must round to an absolute value less than")));
+  EXPECT_THAT(postgres_translator::spangres::datatypes::
+                  CreatePgNumericValueWithPrecisionAndScale("-999", 2, 1),
+              StatusIs(absl::StatusCode::kOutOfRange,
+                       testing::HasSubstr(
+                           "must round to an absolute value less than")));
+}
+
+struct TestCase {
+  std::string arbitrary_numeric;
+  int64_t precision;
+  int64_t scale;
+  std::string expected_fixed_precision;
+};
+
+using FixedPgNumericTypeTest =
+    postgres_translator::test::ValidMemoryContextParameterized<TestCase>;
+
+INSTANTIATE_TEST_SUITE_P(
+    FixedPgNumericTypeTestValues, FixedPgNumericTypeTest,
+    testing::Values(
+        TestCase{
+            .arbitrary_numeric = "12.345",
+            .precision = 4,
+            .scale = 2,
+            .expected_fixed_precision = "12.35",
+        },
+        TestCase{
+            .arbitrary_numeric = "12.345",
+            .precision = 4,
+            .scale = 1,
+            .expected_fixed_precision = "12.3",
+        },
+        TestCase{
+            .arbitrary_numeric = "12.345",
+            .precision = 4,
+            .scale = 0,
+            .expected_fixed_precision = "12",
+        },
+        TestCase{
+            .arbitrary_numeric = "123.45",
+            .precision = 10,
+            .scale = 0,
+            .expected_fixed_precision = "123",
+        },
+        TestCase{
+            .arbitrary_numeric = "123.0000000001",
+            .precision = 13,
+            .scale = 10,
+            .expected_fixed_precision = "123.0000000001",
+        },
+        TestCase{
+            .arbitrary_numeric = "123.0000000001",
+            .precision = 13,
+            .scale = 9,
+            .expected_fixed_precision = "123.000000000",
+        },
+        TestCase{
+            .arbitrary_numeric = "123.0000000001",
+            .precision = 15,
+            .scale = 12,
+            .expected_fixed_precision = "123.000000000100",
+        },
+        TestCase{
+            .arbitrary_numeric = "123.0000000009",
+            .precision = 13,
+            .scale = 9,
+            .expected_fixed_precision = "123.000000001",
+        },
+        TestCase{
+            .arbitrary_numeric = "1",
+            .precision = 1000,
+            .scale = 999,
+            .expected_fixed_precision = absl::StrCat("1.",
+                                                     std::string(999, '0')),
+        },
+        TestCase{
+            .arbitrary_numeric = absl::StrCat("1", std::string(999, '0')),
+            .precision = 1000,
+            .scale = 0,
+            .expected_fixed_precision = absl::StrCat("1",
+                                                     std::string(999, '0')),
+        },
+        TestCase{
+            .arbitrary_numeric = "1.5",
+            .precision = 10,
+            .scale = 0,
+            .expected_fixed_precision = "2",
+        },
+        TestCase{
+            .arbitrary_numeric = "1.499999999",
+            .precision = 10,
+            .scale = 0,
+            .expected_fixed_precision = "1",
+        },
+        TestCase{
+            .arbitrary_numeric = "-1.5",
+            .precision = 1,
+            .scale = 0,
+            .expected_fixed_precision = "-2",
+        },
+        TestCase{
+            .arbitrary_numeric = "-1.499999999",
+            .precision = 1,
+            .scale = 0,
+            .expected_fixed_precision = "-1",
+        },
+        TestCase{
+            .arbitrary_numeric = "1.5",
+            .precision = 10,
+            .scale = 0,
+            .expected_fixed_precision = "2",
+        },
+        TestCase{
+            .arbitrary_numeric = "-0.0000000009",
+            .precision = 10,
+            .scale = 10,
+            .expected_fixed_precision = "-0.0000000009",
+        },
+        TestCase{
+            .arbitrary_numeric = "-0.0000000009",
+            .precision = 10,
+            .scale = 9,
+            .expected_fixed_precision = "-0.000000001",
+        },
+        TestCase{
+            .arbitrary_numeric = "0.000",
+            .precision = 10,
+            .scale = 0,
+            .expected_fixed_precision = "0",
+        },
+        TestCase{
+            .arbitrary_numeric = "0",
+            .precision = 10,
+            .scale = 10,
+            .expected_fixed_precision = "0.0000000000",
+        },
+        TestCase{
+            .arbitrary_numeric = "9.99",
+            .precision = 3,
+            .scale = 1,
+            .expected_fixed_precision = "10.0",
+        },
+        TestCase{
+            .arbitrary_numeric = "0.99",
+            .precision = 1,
+            .scale = 0,
+            .expected_fixed_precision = "1",
+        },
+        TestCase{
+            .arbitrary_numeric = "0.3",
+            .precision = 3,
+            .scale = 3,
+            .expected_fixed_precision = "0.300",
+        },
+        TestCase{
+            .arbitrary_numeric = "NaN",
+            .precision = 5,
+            .scale = 3,
+            .expected_fixed_precision = "NaN",
+        }
+        ));
+
+TEST_P(FixedPgNumericTypeTest, ReturnsOk) {
+  TestCase test_case = GetParam();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value fixed_precision_numeric,
+                       postgres_translator::spangres::datatypes::
+                           CreatePgNumericValueWithPrecisionAndScale(
+                               test_case.arbitrary_numeric, test_case.precision,
+                               test_case.scale));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      absl::Cord normalized,
+      postgres_translator::spangres::datatypes::GetPgNumericNormalizedValue(
+          fixed_precision_numeric));
+  EXPECT_EQ(std::string(normalized), test_case.expected_fixed_precision);
+}
+
 TEST(PgNumericArrayTypeTest, ValidateTypeProperties) {
   const zetasql::ArrayType* type = GetPgNumericArrayType();
   ASSERT_NE(type, nullptr);

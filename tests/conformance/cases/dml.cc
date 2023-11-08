@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include <cstdint>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -23,7 +24,9 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/statusor.h"
-#include "google/cloud/spanner/value.h"
+#include "absl/strings/substitute.h"
+#include "google/cloud/spanner/json.h"
+#include "google/cloud/spanner/numeric.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -34,6 +37,9 @@ namespace test {
 
 namespace {
 
+using cloud::spanner::JsonB;
+using cloud::spanner::MakePgNumeric;
+using cloud::spanner::PgNumeric;
 using zetasql_base::testing::StatusIs;
 
 class DmlTest
@@ -41,6 +47,11 @@ class DmlTest
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
   DmlTest() : feature_flags_({.enable_postgresql_interface = true}) {}
+
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
 
   absl::Status SetUpDatabase() override {
     EmulatorFeatureFlags::Flags flags;
@@ -279,12 +290,11 @@ TEST_P(DmlTest, CanInsertToArrayColumns) {
   values = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
                ? "VALUES($1, $2)"
                : "VALUES(@p1, @p2)";
-  ZETASQL_EXPECT_OK(CommitDml(
-      {SqlStatement("INSERT INTO arrayfields(key, arraycol) "
-                    "VALUES(@p1, @p2)",
-                    SqlStatement::ParamType{
-                        {"p1", Value(2)},
-                        {"p2", Value(std::vector<int64_t>{10, 20, 30})}})}));
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+      absl::StrCat("INSERT INTO arrayfields(key, arraycol) ", values),
+      SqlStatement::ParamType{
+          {"p1", Value(2)},
+          {"p2", Value(std::vector<int64_t>{10, 20, 30})}})}));
 
   EXPECT_THAT(Query("SELECT key, arraycol FROM arrayfields ORDER BY key"),
               IsOkAndHoldsRows({
@@ -311,11 +321,16 @@ TEST_P(DmlTest, CanInsertMultipleRowsUsingStructParam) {
 }
 
 TEST_P(DmlTest, CannotCommitWithBadMutation) {
+  std::string value = GetParam() == database_api::DatabaseDialect::POSTGRESQL
+                          ? "'abc'"
+                          : "\"abc\"";
+
   Transaction txn{Transaction::ReadWriteOptions{}};
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       auto result,
       ExecuteDmlTransaction(
-          txn, SqlStatement("INSERT INTO users(id, name) VALUES(1, \"abc\")")));
+          txn, SqlStatement(absl::Substitute(
+                   "INSERT INTO users(id, name) VALUES(1, $0)", value))));
 
   // Check read-your-writes
   EXPECT_THAT(QueryTransaction(txn, "SELECT id, name FROM users"),
@@ -376,9 +391,7 @@ TEST_P(DmlTest, CanUseIndexHintInUpdateStatement) {
 }
 
 TEST_P(DmlTest, NumericKey) {
-  // Spanner PG dialect for the emulator doesn't yet support the PG.NUMERIC
-  // type.
-  // TODO: Uncomment after PG extended type support is added.
+  // TODO: Unskip after PG.NUMERIC indexing is supported.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
@@ -403,40 +416,79 @@ TEST_P(DmlTest, NumericKey) {
               IsOkAndHoldsRows({{0}, {2}}));
 }
 
-TEST_P(DmlTest, JsonType) {
-  // Spanner PG dialect for the emulator doesn't yet support the PG.JSONB
-  // type.
-  // TODO: Uncomment after PG extended type support is added.
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+TEST_P(DmlTest, NumericType) {
+  // TODO: Remove test after PG.NUMERIC indexing is supported and
+  // this test can be combined with the NumericKey test above.
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
     GTEST_SKIP();
   }
 
   // Insert DML
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(R"(
-        INSERT INTO jsontable(id, val) VALUES (3, JSON '{"a":"str"}')
-  )")}));
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("INSERT INTO numerictable(id, val) VALUES (-1, -12.3), "
+                    "(0, 0.1), (1, 12.3)")}));
+
+  // Update DML
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("UPDATE numerictable SET val = 2.2 WHERE id = 1")}));
+
+  EXPECT_THAT(Query("SELECT t.val FROM numerictable t ORDER BY t.id"),
+              IsOkAndHoldsRows({{*MakePgNumeric("-12.3")},
+                                {*MakePgNumeric("0.1")},
+                                {*MakePgNumeric("2.2")}}));
+
+  // Delete DML
+  ZETASQL_EXPECT_OK(
+      CommitDml({SqlStatement("DELETE FROM numerictable t WHERE t.id < 0")}));
+
+  EXPECT_THAT(
+      Query("SELECT t.val FROM numerictable t ORDER BY t.id"),
+      IsOkAndHoldsRows({{*MakePgNumeric("0.1")}, {*MakePgNumeric("2.2")}}));
+}
+
+TEST_P(DmlTest, JsonType) {
+  std::string value = GetParam() == database_api::DatabaseDialect::POSTGRESQL
+                          ? R"('{"a":"str"}')"
+                          : R"(JSON '{"a":"str"}')";
+
+  // Insert DML
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(absl::Substitute(R"(
+        INSERT INTO jsontable(id, val) VALUES (3, $0)
+  )",
+                                                     value))}));
+
   ZETASQL_EXPECT_OK(CommitDml({SqlStatement(R"(
         INSERT INTO jsontable(id, val) VALUES (4, NULL)
   )")}));
 
-  EXPECT_THAT(
-      Query("SELECT TO_JSON_STRING(t.Val) FROM jsontable t WHERE id = 3"),
-      IsOkAndHoldsRow({R"({"a":"str"})"}));
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(Query("SELECT t.val FROM jsontable t WHERE id = 3"),
+                IsOkAndHoldsRow({JsonB(R"({"a": "str"})")}));
+  } else {
+    EXPECT_THAT(
+        Query("SELECT TO_JSON_STRING(t.Val) FROM jsontable t WHERE id = 3"),
+        IsOkAndHoldsRow({R"({"a":"str"})"}));
+  }
   EXPECT_THAT(Query("SELECT id FROM jsontable t WHERE val IS NULL"),
               IsOkAndHoldsRow({Value(4)}));
   EXPECT_THAT(Query("SELECT id FROM jsontable t WHERE val IS NOT NULL"),
               IsOkAndHoldsRow({Value(3)}));
 
   // Update DML
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(R"(
-      UPDATE jsontable
-        SET val = JSON '{"a":"newstr", "b":123}'
-        WHERE id = 3
-  )")}));
+  value = GetParam() == database_api::DatabaseDialect::POSTGRESQL
+              ? R"('{"a":"newstr", "b":123}')"
+              : R"(JSON '{"a":"newstr", "b":123}')";
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(absl::Substitute(
+      R"(UPDATE jsontable SET val = $0 WHERE id = 3)", value))}));
 
-  EXPECT_THAT(
-      Query("SELECT TO_JSON_STRING(t.Val) FROM jsontable t WHERE id = 3"),
-      IsOkAndHoldsRow({R"({"a":"newstr","b":123})"}));
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(Query("SELECT t.Val FROM jsontable t WHERE id = 3"),
+                IsOkAndHoldsRow({JsonB(R"({"a": "newstr", "b": 123})")}));
+  } else {
+    EXPECT_THAT(
+        Query("SELECT TO_JSON_STRING(t.Val) FROM jsontable t WHERE id = 3"),
+        IsOkAndHoldsRow({R"({"a":"newstr","b":123})"}));
+  }
 }
 
 TEST_P(DmlTest, Returning) {
@@ -444,11 +496,17 @@ TEST_P(DmlTest, Returning) {
   flags.enable_dml_returning = true;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
+  std::string returning =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
+                                                                : "THEN RETURN";
+
   // Insert THEN RETURN
   std::vector<ValueRow> result_for_insert;
   ZETASQL_EXPECT_OK(CommitDmlReturning(
-      {SqlStatement("INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27) "
-                    "THEN RETURN age;")},
+      {SqlStatement(absl::Substitute(
+          "INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27) "
+          "$0 age;",
+          returning))},
       result_for_insert));
 
   absl::StatusOr<std::vector<ValueRow>> result_or = result_for_insert;
@@ -459,10 +517,12 @@ TEST_P(DmlTest, Returning) {
 
   // Update THEN RETURN
   std::vector<ValueRow> result_for_update;
-  ZETASQL_EXPECT_OK(CommitDmlReturning(
-      {SqlStatement("UPDATE users SET age = age + 1 WHERE id = 1 "
-                    "THEN RETURN age, name;")},
-      result_for_update));
+  ZETASQL_EXPECT_OK(
+      CommitDmlReturning({SqlStatement(absl::Substitute(
+                             "UPDATE users SET age = age + 1 WHERE id = 1 "
+                             "$0 age, name;",
+                             returning))},
+                         result_for_update));
   result_or = result_for_update;
   EXPECT_THAT(result_or, IsOkAndHoldsRow({28, "Levin"}));
 
@@ -471,9 +531,11 @@ TEST_P(DmlTest, Returning) {
 
   // Delete THEN RETURN
   std::vector<ValueRow> result_for_delete;
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement("DELETE FROM users WHERE id = 1 "
-                                             "THEN RETURN name, age;")},
-                               result_for_delete));
+  ZETASQL_EXPECT_OK(CommitDmlReturning(
+      {SqlStatement(absl::Substitute("DELETE FROM users WHERE id = 1 "
+                                     "$0 name, age;",
+                                     returning))},
+      result_for_delete));
   result_or = result_for_delete;
   EXPECT_THAT(result_or, IsOkAndHoldsRow({"Levin", 28}));
   EXPECT_THAT(Query("SELECT age, name FROM users WHERE id = 1;"),
@@ -486,27 +548,27 @@ TEST_P(DmlTest, DISABLED_ReturningGeneratedColumns) {
   flags.enable_dml_returning = true;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
+  std::string returning =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
+                                                                : "THEN RETURN";
+
   // Insert THEN RETURN
   std::vector<ValueRow> result_for_insert;
-  ZETASQL_EXPECT_OK(CommitDmlReturning(
-      {SqlStatement("INSERT INTO tablegen(k, v1, v2) VALUES (1, 1, 1) "
-                    "THEN RETURN g1, g2, g3 + 1, v3;")},
-      result_for_insert));
+  ZETASQL_EXPECT_OK(
+      CommitDmlReturning({SqlStatement(absl::Substitute(
+                             "INSERT INTO tablegen(k, v1, v2) VALUES (1, 1, 1) "
+                             "$0 g1, g2, g3 + 1, v3;",
+                             returning))},
+                         result_for_insert));
   absl::StatusOr<std::vector<ValueRow>> result_or = result_for_insert;
-  if (!in_prod_env()) {
-    // TODO: This shows that the generated column is not
-    // evaluated on the googlesql reference implementation, which is also a
-    // requirement for GPK support. Once that work is done, this TODO and
-    // should be updated.
-    Value null_val = cloud::spanner::MakeNullValue<std::int64_t>();
-    EXPECT_THAT(result_or,
-         IsOkAndHoldsRow({null_val, null_val, null_val, 2}));
-    return;
-  }
 
   EXPECT_THAT(result_or, IsOkAndHoldsRow({3, 2, 4, 2}));
   EXPECT_THAT(Query("SELECT g1, g2, g3 + 1, v3 FROM tablegen WHERE k = 1;"),
               IsOkAndHoldsRow({3, 2, 4, 2}));
+
+  // TODO: Add required support for `THEN RETURN` after generated
+  // column implementation.
+  if (!in_prod_env()) return;
 
   // Update THEN RETURN
   std::vector<ValueRow> result_for_update;
@@ -521,10 +583,11 @@ TEST_P(DmlTest, DISABLED_ReturningGeneratedColumns) {
 
   // Delete THEN RETURN
   std::vector<ValueRow> result_for_delete;
-  ZETASQL_EXPECT_OK(
-      CommitDmlReturning({SqlStatement("DELETE FROM tablegen WHERE k = 1 "
-                                       "THEN RETURN g1, g2, g3 + 1, v3;")},
-                         result_for_delete));
+  ZETASQL_EXPECT_OK(CommitDmlReturning(
+      {SqlStatement(absl::Substitute("DELETE FROM tablegen WHERE k = 1 "
+                                     "$0 g1, g2, g3 + 1, v3;",
+                                     returning))},
+      result_for_delete));
   result_or = result_for_delete;
   EXPECT_THAT(result_or, IsOkAndHoldsRow({5, 4, 6, 2}));
   EXPECT_THAT(Query("SELECT g1, g2, g3 + 1 FROM tablegen WHERE k = 1;"),
@@ -535,6 +598,11 @@ TEST_P(DmlTest, ReturningStructValues) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_dml_returning = true;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  // Spanner PG dialect doesn't support STRUCT and array subquery expressions.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
 
   // Insert THEN RETURN
   std::vector<ValueRow> result_for_insert;

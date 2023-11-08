@@ -23,7 +23,6 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "absl/status/statusor.h"
 #include "backend/query/query_engine.h"
-#include "common/errors.h"
 
 namespace google {
 namespace spanner {
