@@ -50,6 +50,7 @@
 #include "backend/datamodel/value.h"
 #include "backend/locking/manager.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/versioned_catalog.h"
@@ -185,6 +186,23 @@ bool SplitKeyRangeAndAppend(const KeyRange& key_range, const Key& key,
   return true;
 }
 
+absl::StatusOr<bool> IsMutationInvolvingForeignKeyAction(
+    const MutationOp& mutation_op, const Schema* schema) {
+  const Table* table = schema->FindTable(mutation_op.table);
+  if (IsChangeStreamPartitionTable(mutation_op.table)) {
+    ZETASQL_ASSIGN_OR_RETURN(table,
+                     FindChangeStreamPartitionTable(schema, mutation_op.table));
+  }
+  if (table == nullptr) {
+    return error::TableNotFound(mutation_op.table);
+  }
+  for (const ForeignKey* foreign_key : table->referencing_foreign_keys()) {
+    if (foreign_key->on_delete_action() == ForeignKey::Action::kCascade) {
+      return true;
+    }
+  }
+  return false;
+}
 }  // namespace
 
 ReadWriteTransaction::ReadWriteTransaction(
@@ -361,9 +379,10 @@ absl::Status ReadWriteTransaction::ProcessWriteOps(
 
 absl::Status ReadWriteTransaction::ProcessChangeStreamWriteOps() {
   mu_.AssertHeld();
-  auto write_ops =
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto write_ops,
       BuildChangeStreamWriteOps(schema_, transaction_store_->GetBufferedOps(),
-                                action_context_->store(), id_);
+                                action_context_->store(), id_));
   for (const WriteOp& writeop : write_ops) {
     ZETASQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(writeop));
   }
@@ -447,12 +466,20 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
         postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
 
     for (const MutationOp& mutation_op : mutation.ops()) {
+      ZETASQL_ASSIGN_OR_RETURN(
+          bool has_delete_cascade_foreign_key,
+          IsMutationInvolvingForeignKeyAction(mutation_op, schema_));
       if (mutation_op.type == MutationOpType::kDelete) {
         // Process Delete.
         ZETASQL_ASSIGN_OR_RETURN(
             ResolvedMutationOp resolved_mutation_op,
             ResolveDeleteMutationOp(mutation_op, schema_, clock_->Now()));
         const std::string& table_name = resolved_mutation_op.table->Name();
+
+        if (has_delete_cascade_foreign_key) {
+          ZETASQL_RETURN_IF_ERROR(fk_restrictions_.ValidateReferencedDeleteMods(
+              table_name, resolved_mutation_op.key_ranges));
+        }
 
         std::vector<KeyRange>& key_ranges =
             deleted_key_ranges_by_table_[table_name];
@@ -463,7 +490,6 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
                          FlattenDeleteOp(resolved_mutation_op.table,
                                          resolved_mutation_op.key_ranges,
                                          transaction_store_.get()));
-
         ZETASQL_RETURN_IF_ERROR(ProcessWriteOps(write_ops));
       } else {
         // Process non-delete Mutation ops.
@@ -511,11 +537,15 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
                   resolved_mutation_op.columns, resolved_mutation_op.keys[i],
                   resolved_mutation_op.rows[i], transaction_store_.get()));
 
+          if (has_delete_cascade_foreign_key) {
+            ZETASQL_RETURN_IF_ERROR(fk_restrictions_.ValidateReferencedMods(
+                write_ops, table_name, schema_));
+          }
+
           ZETASQL_RETURN_IF_ERROR(ProcessWriteOps(write_ops));
         }
       }
     }
-    ZETASQL_RETURN_IF_ERROR(ProcessChangeStreamWriteOps());
     return ApplyStatementVerifiers();
   });
 }
@@ -527,6 +557,7 @@ absl::Status ReadWriteTransaction::Commit() {
     if (retry_state_.abort_retry_count == 0 && ShouldAbortOnFirstCommit()) {
       return error::AbortReadWriteTransactionOnFirstCommit(id_);
     }
+    ZETASQL_RETURN_IF_ERROR(ProcessChangeStreamWriteOps());
 
     // When committing, comparison may be required in the process. Comparison of
     // PG.NUMERIC calls PG to get comparison result (see function

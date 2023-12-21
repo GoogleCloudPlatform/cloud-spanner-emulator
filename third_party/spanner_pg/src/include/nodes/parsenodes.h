@@ -1982,8 +1982,10 @@ typedef enum AlterTableType
 	AT_SetOnDeleteNoAction,	/* SET INTERLEAVE IN PARENT ON DELETE to NO ACTION */
 	AT_AddIndexIncludeColumn,	/* ALTER INDEX ADD INCLUDE COLUMN -- add an non-key 
 															column into the index */
-	AT_DropIndexIncludeColumn	/* ALTER INDEX DROP INCLUDE COLUMN -- drop an 
+	AT_DropIndexIncludeColumn,	/* ALTER INDEX DROP INCLUDE COLUMN -- drop an 
 															non-key column from the index*/
+	AT_AddSynonym,				/* add synonym */
+  AT_DropSynonym 				/* drop synonym */
 } AlterTableType;
 
 typedef struct ReplicaIdentityStmt
@@ -2348,6 +2350,16 @@ typedef struct Constraint_UNUSED_SPANGRES
 	bool		skip_validation;	/* skip validation of existing rows? */
 	bool		initially_valid;	/* mark the new constraint as valid? */
 } Constraint_UNUSED_SPANGRES;
+
+/* ----------------------
+ *		Synonym
+ * ----------------------
+ */
+
+typedef struct SynonymClause {
+        NodeTag type;
+        char *name; /* name */
+} SynonymClause;
 
 /* ----------------------
  *		Create/Drop Table Space Statements
@@ -3113,6 +3125,7 @@ typedef struct RenameStmt
 	char	   *newname;		/* the new name */
 	DropBehavior behavior;		/* RESTRICT or CASCADE behavior */
 	bool		missing_ok;		/* skip error if missing? */
+	bool		addSynonym;	/* add old name as synonym */
 } RenameStmt;
 
 /* ----------------------

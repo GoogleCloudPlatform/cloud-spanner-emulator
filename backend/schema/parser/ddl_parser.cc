@@ -47,6 +47,7 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
+#include "common/limits.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -64,6 +65,14 @@ const char kChangeStreamRetentionPeriodOptionName[] = "retention_period";
 const char kSearchIndexOptionSortOrderShardingName[] = "sort_order_sharding";
 const char kSearchIndexOptionsDisableAutomaticUidName[] =
     "disable_automatic_uid_column";
+const char kModelColumnRequiredOptionName[] = "required";
+const char kModelDefaultBatchSizeOptionName[] = "default_batch_size";
+const char kModelEndpointOptionName[] = "endpoint";
+const char kModelEndpointsOptionName[] = "endpoints";
+
+typedef google::protobuf::RepeatedPtrField<SetOption> OptionList;
+typedef google::protobuf::RepeatedPtrField<Grantee> Grantees;
+typedef google::protobuf::RepeatedPtrField<Privilege> Privileges;
 
 namespace {
 
@@ -270,13 +279,14 @@ void VisitColumnOptionKeyValNode(const SimpleNode* node, OptionList* options,
   // If this is an invalid option, return error. Later during schema
   // change, we will verify the valid option against the
   // column type.
-  if (option_name != kCommitTimestampOptionName) {
+  if (option_name != kCommitTimestampOptionName &&
+      option_name != kModelColumnRequiredOptionName) {
     errors->push_back(absl::StrCat("Option: ", option_name, " is unknown."));
     return;
   }
 
   SetOption* option = options->Add();
-  option->set_option_name(kCommitTimestampOptionName);
+  option->set_option_name(option_name);
 
   const SimpleNode* child = GetChildNode(node, 1);
   switch (child->getId()) {
@@ -457,11 +467,96 @@ void SetColumnLength(const SimpleNode* length_node, ColumnDefinition* column) {
   }
 }
 
+void SetTypeDefinitionLength(const SimpleNode* length_node,
+                             TypeDefinition* type_definition) {
+  if (length_node != nullptr &&
+      !absl::EqualsIgnoreCase(length_node->image(), "MAX")) {
+    type_definition->set_length(length_node->image_as_int64());
+  }
+}
+
+void VisitTypeDefinitionNode(const SimpleNode* type_node,
+                             TypeDefinition* type_definition,
+                             int recursion_depth,
+                             std::vector<std::string>* errors) {
+  if (recursion_depth > limits::kMaxComplexTypeNestingDepth) {
+    errors->push_back(
+        absl::StrCat("DDL parser exceeded complex type nesting limit of ",
+                     limits::kMaxComplexTypeNestingDepth));
+    return;
+  }
+
+  const std::string type_name = absl::AsciiStrToUpper(type_node->image());
+  TypeDefinition::Type type;
+
+  if (type_name == "PG") {
+    std::string pg_type = absl::AsciiStrToUpper(
+        GetQualifiedIdentifier(GetChildNode(type_node, 0, JJTPGTYPE)));
+    if (pg_type == "NUMERIC") {
+      type = TypeDefinition::PG_NUMERIC;
+    } else if (pg_type == "JSONB") {
+      type = TypeDefinition::PG_JSONB;
+    } else {
+      errors->push_back(absl::Substitute(
+          "Syntax error on line $0 column $1: Encountered '$2' while parsing: "
+          "column_type",
+          type_node->begin_line(), type_node->begin_column(),
+          absl::StrCat(type_name, ".", pg_type)));
+      return;
+    }
+  } else if (type_name == "FLOAT64") {
+    // FLOAT64 => DOUBLE.
+    type = TypeDefinition::DOUBLE;
+  } else if (type_name == "TOKENLIST") {
+    type = TypeDefinition::TOKENLIST;
+  } else if (!TypeDefinition::Type_Parse(type_name, &type)) {
+    errors->push_back(absl::StrCat("Unrecognized type: ", type_name));
+    return;
+  }
+
+  type_definition->set_type(type);
+  if (type == TypeDefinition::ARRAY) {
+    SimpleNode* column_subtype = GetChildNode(type_node, 0, JJTCOLUMN_TYPE);
+    VisitTypeDefinitionNode(column_subtype,
+                            type_definition->mutable_array_subtype(),
+                            recursion_depth + 1, errors);
+  } else if (type == TypeDefinition::STRUCT) {
+    SimpleNode* struct_fields_node =
+        GetFirstChildNode(type_node, JJTSTRUCT_FIELDS);
+    // Initialization in case the struct is empty.
+    type_definition->mutable_struct_descriptor();
+    if (struct_fields_node != nullptr) {
+      for (int i = 0; i < struct_fields_node->jjtGetNumChildren(); ++i) {
+        SimpleNode* field_node = GetChildNode(struct_fields_node, i);
+        TypeDefinition::StructDescriptor::Field field;
+        SimpleNode* name_node = GetFirstChildNode(field_node, JJTNAME);
+        if (name_node != nullptr) {
+          field.set_name(name_node->image());
+        }
+        VisitTypeDefinitionNode(GetFirstChildNode(field_node, JJTCOLUMN_TYPE),
+                                field.mutable_type(), recursion_depth + 1,
+                                errors);
+        type_definition->mutable_struct_descriptor()->mutable_field()->Add(
+            std::move(field));
+      }
+    }
+  }
+
+  const SimpleNode* length_node = GetFirstChildNode(type_node, JJTLENGTH);
+  SetTypeDefinitionLength(length_node, type_definition);
+  if (type_definition->length() < 0) {
+    errors->push_back(absl::StrCat("Invalid length for type: ", type_name,
+                                   ", found: ", length_node->image()));
+  }
+}
+
 void VisitColumnTypeNode(const SimpleNode* column_type,
                          ColumnDefinition* column, int recursion_depth,
                          std::vector<std::string>* errors) {
-  if (recursion_depth > 4) {
-    errors->push_back("DDL parser exceeded max recursion stack depth");
+  if (recursion_depth > limits::kMaxComplexTypeNestingDepth) {
+    errors->push_back(
+        absl::StrCat("DDL parser exceeded complex type nesting limit of ",
+                     limits::kMaxComplexTypeNestingDepth));
     return;
   }
 
@@ -497,6 +592,9 @@ void VisitColumnTypeNode(const SimpleNode* column_type,
     SimpleNode* column_subtype = GetChildNode(column_type, 0, JJTCOLUMN_TYPE);
     VisitColumnTypeNode(column_subtype, column->mutable_array_subtype(),
                         recursion_depth + 1, errors);
+  } else if (type == ColumnDefinition::STRUCT) {
+    VisitTypeDefinitionNode(column_type, column->mutable_type_definition(),
+                            recursion_depth, errors);
   }
   const SimpleNode* length_node = GetFirstChildNode(column_type, JJTLENGTH);
   SetColumnLength(length_node, column);
@@ -663,6 +761,14 @@ void VisitColumnNodeAlter(const std::string& table_name,
       VisitColumnNodeAlterAttrs(child, column_name, column, ddl_text, errors);
       break;
     }
+    case JJTSET_NOT_NULL:
+      errors->push_back(
+          "ALTER COLUMN SET NOT NULL not supported without a column type");
+      break;
+    case JJTDROP_NOT_NULL:
+      errors->push_back(
+          "ALTER COLUMN DROP NOT NULL not supported without a column type");
+      break;
     default:
       ABSL_LOG(FATAL) << "Unexpected alter column type: "
                  << GetChildNode(node, 1)->toString();
@@ -999,6 +1105,34 @@ void VisitStringOrNullOptionValNode(const SimpleNode* value_node,
   option->set_string_value(string_value);
 }
 
+void VisitStringArrayOrNullOptionValNode(const SimpleNode* value_node,
+                                         SetOption* option,
+                                         std::vector<std::string>* errors) {
+  if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+    return;
+  }
+
+  if (value_node->getId() != JJTSTR_VAL_LIST) {
+    errors->push_back(
+        absl::StrCat("Unexpected value for option: ", option->option_name(),
+                     ". Supported option values are string array and NULL."));
+    return;
+  }
+
+  auto* values = option->mutable_string_list_value();
+  for (int i = 0; i < value_node->jjtGetNumChildren(); ++i) {
+    const SimpleNode* value = GetChildNode(value_node, i);
+    CheckNode(value, JJTSTR_VAL);
+    if (!UnescapeStringLiteral(value->image(), values->Add())) {
+      errors->push_back(LogicalError(
+          value_node,
+          absl::StrCat("Cannot parse string literal: ", value->image())));
+      return;
+    }
+  }
+}
+
 void VisitInt64OrNullOptionValNode(const SimpleNode* value_node,
                                    SetOption* option,
                                    std::vector<std::string>* errors) {
@@ -1161,6 +1295,21 @@ void VisitCreateSequenceNode(const SimpleNode* node, CreateSequence* sequence,
   sequence->set_type(CreateSequence::BIT_REVERSED_POSITIVE);
 }
 
+void VisitCreateSchemaNode(const SimpleNode* node, CreateSchema* schema,
+                           std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_SCHEMA_STATEMENT);
+  int offset = 0;
+  if (GetFirstChildNode(node, JJTIF_NOT_EXISTS) != nullptr) {
+    schema->set_existence_modifier(IF_NOT_EXISTS);
+    ++offset;
+  }
+
+  schema->set_schema_name(
+      GetQualifiedIdentifier(GetChildNode(node, offset++, JJTNAME)));
+
+  // No options for CreateSchema yet.
+}
+
 void VisitAlterSequenceNode(const SimpleNode* node, AlterSequence* sequence,
                             std::vector<std::string>* errors) {
   CheckNode(node, JJTALTER_SEQUENCE_STATEMENT);
@@ -1182,6 +1331,21 @@ void VisitAlterSequenceNode(const SimpleNode* node, AlterSequence* sequence,
         GetChildNode(options_clause, i, JJTOPTION_KEY_VAL), options, errors,
         &sequence_kind_visited);
   }
+}
+
+void VisitAlterSchemaNode(const SimpleNode* node, AlterSchema* schema,
+                          std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_SCHEMA_STATEMENT);
+  int offset = 0;
+  if (GetFirstChildNode(node, JJTIF_EXISTS) != nullptr) {
+    schema->set_if_exists(true);
+    ++offset;
+  }
+
+  schema->set_schema_name(
+      GetQualifiedIdentifier(GetChildNode(node, offset++, JJTNAME)));
+
+  // No options for AlterSchema yet.
 }
 
 void VisitAlterChangeStreamNode(const SimpleNode* node,
@@ -1323,6 +1487,251 @@ void VisitAlterIndexNode(const SimpleNode* node, AlterIndex* alter_index,
   }
 }
 
+void VisitPrivilegeNode(const SimpleNode* node, Privilege* privilege,
+                        std::vector<std::string>* errors) {
+  CheckNode(node, JJTPRIVILEGE);
+  std::string privilege_name = node->image();
+  if (absl::EqualsIgnoreCase("SELECT", privilege_name)) {
+    privilege->set_type(Privilege::SELECT);
+  } else if (absl::EqualsIgnoreCase("INSERT", privilege_name)) {
+    privilege->set_type(Privilege::INSERT);
+  } else if (absl::EqualsIgnoreCase("UPDATE", privilege_name)) {
+    privilege->set_type(Privilege::UPDATE);
+  } else if (absl::EqualsIgnoreCase("DELETE", privilege_name)) {
+    privilege->set_type(Privilege::DELETE);
+  } else if (absl::EqualsIgnoreCase("EXECUTE", privilege_name)) {
+    privilege->set_type(Privilege::EXECUTE);
+  } else if (absl::EqualsIgnoreCase("USAGE", privilege_name)) {
+    privilege->set_type(Privilege::USAGE);
+  } else {
+    errors->push_back(
+        absl::StrCat("Unexpected privilege type: ", node->image(), "."));
+    return;
+  }
+
+  // TODO: Add support for column-level FGAC
+  if (node->jjtGetNumChildren() != 0) {
+    errors->push_back(
+        "Emulator does not yet support column level access controls");
+  }
+}
+
+void VisitPrivilegesNode(const SimpleNode* node, Privileges* privileges,
+                         std::vector<std::string>* errors) {
+  CheckNode(node, JJTPRIVILEGES);
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* privilege = GetChildNode(node, i);
+    VisitPrivilegeNode(privilege, privileges->Add(), errors);
+  }
+}
+
+void VisitPrivilegeTargetsNode(const SimpleNode* node, PrivilegeTarget* target,
+                               std::vector<std::string>* errors) {
+  CheckNode(node, JJTPRIVILEGE_TARGET);
+  SimpleNode* child = GetChildNode(node, 0);
+  CheckNode(child, JJTTARGET_TYPE);
+  child = GetChildNode(child, 0);
+  switch (child->getId()) {
+    case JJTTABLE: {
+      target->set_type(PrivilegeTarget::TABLE);
+      break;
+    }
+    case JJTCHANGE_STREAM: {
+      target->set_type(PrivilegeTarget::CHANGE_STREAM);
+      break;
+    }
+    case JJTVIEW: {
+      target->set_type(PrivilegeTarget::VIEW);
+      break;
+    }
+    case JJTFUNCTION: {
+      target->set_type(PrivilegeTarget::FUNCTION);
+      break;
+    }
+    case JJTTABLE_FUNCTION: {
+      target->set_type(PrivilegeTarget::TABLE_FUNCTION);
+      break;
+    }
+    case JJTSEQUENCE: {
+      target->set_type(PrivilegeTarget::SEQUENCE);
+      break;
+    }
+    default: {
+      errors->push_back(
+          absl::StrCat("Unexpected privilege target: ", child->image()));
+    }
+  }
+
+  SimpleNode* names = GetChildNode(node, 1);
+  for (int i = 0; i < names->jjtGetNumChildren(); ++i) {
+    SimpleNode* name = GetChildNode(names, i);
+    target->add_name(GetQualifiedIdentifier(name));
+  }
+}
+
+void VisitGranteesNode(const SimpleNode* node, Grantees* grantees,
+                       std::vector<std::string>* errors) {
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* grantee_node = GetChildNode(node, i);
+    Grantee* grantee = grantees->Add();
+    grantee->set_name(grantee_node->image());
+    grantee->set_type(Grantee::ROLE);
+  }
+}
+
+void VisitGrantPrivilegeNode(const SimpleNode* node, GrantPrivilege* statement,
+                             std::vector<std::string>* errors) {
+  CheckNode(node, JJTGRANT_STATEMENT);
+  VisitPrivilegesNode(GetChildNode(node, 0), statement->mutable_privilege(),
+                      errors);
+  VisitPrivilegeTargetsNode(GetChildNode(node, 1), statement->mutable_target(),
+                            errors);
+  SimpleNode* grantees_node = GetChildNode(node, 2);
+  VisitGranteesNode(GetChildNode(grantees_node, 0),
+                    statement->mutable_grantee(), errors);
+}
+
+void VisitGrantMembershipNode(const SimpleNode* node, GrantMembership* grant,
+                              std::vector<std::string>* errors) {
+  CheckNode(node, JJTGRANT_STATEMENT);
+  SimpleNode* roles_node = GetChildNode(node, 0);
+  VisitGranteesNode(GetChildNode(roles_node, 0), grant->mutable_role(), errors);
+  SimpleNode* grantees_node = GetChildNode(node, 1);
+  VisitGranteesNode(GetChildNode(grantees_node, 0), grant->mutable_grantee(),
+                    errors);
+}
+
+void VisitRevokePrivilegeNode(const SimpleNode* node, RevokePrivilege* revoke,
+                              std::vector<std::string>* errors) {
+  CheckNode(node, JJTREVOKE_STATEMENT);
+  VisitPrivilegesNode(GetChildNode(node, 0), revoke->mutable_privilege(),
+                      errors);
+  VisitPrivilegeTargetsNode(GetChildNode(node, 1), revoke->mutable_target(),
+                            errors);
+  SimpleNode* grantees_node = GetChildNode(node, 2);
+  VisitGranteesNode(GetChildNode(grantees_node, 0), revoke->mutable_grantee(),
+                    errors);
+}
+
+void VisitRevokeMembershipNode(const SimpleNode* node, RevokeMembership* revoke,
+                               std::vector<std::string>* errors) {
+  CheckNode(node, JJTREVOKE_STATEMENT);
+  SimpleNode* roles_node = GetChildNode(node, 0);
+  VisitGranteesNode(GetChildNode(roles_node, 0), revoke->mutable_role(),
+                    errors);
+  SimpleNode* grantees_node = GetChildNode(node, 1);
+  VisitGranteesNode(GetChildNode(grantees_node, 0), revoke->mutable_grantee(),
+                    errors);
+}
+
+void VisitModelOptionKeyValNode(const SimpleNode* node, OptionList* options,
+                                std::vector<std::string>* errors) {
+  std::string name = CheckOptionKeyValNodeAndGetName(node);
+
+  // Options is an accumulator that contains already visited options. If the
+  // current node contains option name that was already seen, it's a duplicate.
+  if (absl::c_find_if(*options, [&name](const SetOption& option) {
+        return option.option_name() == name;
+      }) != options->end()) {
+    errors->push_back(absl::StrCat("Duplicate option: ", name));
+    return;
+  }
+
+  SetOption* option = options->Add();
+  option->set_option_name(name);
+
+  const SimpleNode* value_node = GetChildNode(node, 1);
+  if (name == kModelDefaultBatchSizeOptionName) {
+    VisitInt64OrNullOptionValNode(value_node, option, errors);
+  } else if (name == kModelEndpointOptionName) {
+    VisitStringOrNullOptionValNode(value_node, option, errors);
+  } else if (name == kModelEndpointsOptionName) {
+    VisitStringArrayOrNullOptionValNode(value_node, option, errors);
+  } else {
+    errors->push_back(absl::StrCat("Option: ", name, " is unknown."));
+  }
+}
+
+void VisitModelOptionListNode(const SimpleNode* node, OptionList* options,
+                              std::vector<std::string>* errors) {
+  CheckNode(node, JJTOPTIONS_CLAUSE);
+  // The option_list node is suppressed (defined #void in .jjt) so it is not
+  // created. The children of this node are OPTION_KEY_VALs.
+  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
+    VisitModelOptionKeyValNode(GetChildNode(node, i, JJTOPTION_KEY_VAL),
+                               options, errors);
+  }
+}
+
+void VisitModelColumnList(const SimpleNode* node,
+                          google::protobuf::RepeatedPtrField<ColumnDefinition>* columns,
+                          absl::string_view ddl_text,
+                          std::vector<std::string>* errors) {
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    CheckNode(child, JJTCOLUMN_DEF);
+    VisitColumnNode(child, columns->Add(), ddl_text, errors);
+  }
+}
+
+void VisitCreateModelNode(const SimpleNode* node, CreateModel* create_model,
+                          bool is_or_replace, absl::string_view ddl_text,
+                          std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_MODEL_STATEMENT);
+  create_model->set_model_name(
+      GetQualifiedIdentifier(GetFirstChildNode(node, JJTNAME)));
+  if (GetFirstChildNode(node, JJTIF_NOT_EXISTS) != nullptr) {
+    create_model->set_existence_modifier(IF_NOT_EXISTS);
+    if (is_or_replace) {
+      errors->push_back(
+          absl::StrCat("CREATE MODEL statement cannot have both OR REPLACE and "
+                       "IF NOT EXISTS set: ",
+                       create_model->model_name()));
+      return;
+    }
+  }
+  if (is_or_replace) {
+    create_model->set_existence_modifier(OR_REPLACE);
+  }
+  SimpleNode* input = GetFirstChildNode(node, JJTINPUT);
+  if (input != nullptr) {
+    VisitModelColumnList(input, create_model->mutable_input(), ddl_text,
+                         errors);
+  }
+
+  SimpleNode* output = GetFirstChildNode(node, JJTOUTPUT);
+  if (output != nullptr) {
+    VisitModelColumnList(output, create_model->mutable_output(), ddl_text,
+                         errors);
+  }
+
+  const SimpleNode* remote = GetFirstChildNode(node, JJTREMOTE);
+  if (remote != nullptr) {
+    create_model->set_remote(true);
+  }
+
+  const SimpleNode* options = GetFirstChildNode(node, JJTOPTIONS_CLAUSE);
+  if (options != nullptr) {
+    VisitModelOptionListNode(options, create_model->mutable_set_options(),
+                             errors);
+  }
+}
+
+void VisitAlterModelNode(const SimpleNode* node, AlterModel* alter_model,
+                         std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_MODEL_STATEMENT);
+  alter_model->set_model_name(
+      GetQualifiedIdentifier(GetFirstChildNode(node, JJTNAME)));
+  if (GetFirstChildNode(node, JJTIF_EXISTS) != nullptr) {
+    alter_model->set_if_exists(true);
+  }
+  const SimpleNode* options = GetFirstChildNode(node, JJTOPTIONS_CLAUSE);
+  if (options != nullptr) {
+    VisitModelOptionListNode(
+        options, alter_model->mutable_set_options()->mutable_options(), errors);
+  }
+}
+
 // End Visit functions
 //////////////////////////////////////////////////////////////////////////
 
@@ -1347,6 +1756,35 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       break;
     case JJTALTER_INDEX_STATEMENT: {
       VisitAlterIndexNode(stmt, statement->mutable_alter_index(), errors);
+      break;
+    }
+    case JJTGRANT_STATEMENT: {
+      // For grant privilege statement, first child node represents privileges.
+      if (GetChildNode(stmt, 0)->getId() == JJTPRIVILEGES) {
+        VisitGrantPrivilegeNode(stmt, statement->mutable_grant_privilege(),
+                                errors);
+      } else if (GetChildNode(stmt, 0)->getId() == JJTGRANTEES) {
+        // For grant membership statement, first child node represents grantees.
+        VisitGrantMembershipNode(stmt, statement->mutable_grant_membership(),
+                                 errors);
+      } else {
+        ABSL_LOG(FATAL) << "Unexpected statement: " << stmt->toString();
+      }
+      break;
+    }
+    case JJTREVOKE_STATEMENT: {
+      // For revoke privilege statement, first child node represents privileges.
+      if (GetChildNode(stmt, 0)->getId() == JJTPRIVILEGES) {
+        VisitRevokePrivilegeNode(stmt, statement->mutable_revoke_privilege(),
+                                 errors);
+      } else if (GetChildNode(stmt, 0)->getId() == JJTGRANTEES) {
+        // For revoke membership statement, first child node represents
+        // grantees.
+        VisitRevokeMembershipNode(stmt, statement->mutable_revoke_membership(),
+                                  errors);
+      } else {
+        ABSL_LOG(FATAL) << "Unexpected statement: " << stmt->toString();
+      }
       break;
     }
     case JJTCREATE_CHANGE_STREAM_STATEMENT:
@@ -1377,16 +1815,36 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
         case JJTCHANGE_STREAM:
           statement->mutable_drop_change_stream()->set_change_stream_name(name);
           break;
+        case JJTROLE:
+          statement->mutable_drop_role()->set_role_name(name);
+          break;
         case JJTVIEW:
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_function()->set_existence_modifier(
+                IF_EXISTS);
+          }
           statement->mutable_drop_function()->set_function_kind(Function::VIEW);
           statement->mutable_drop_function()->set_function_name(name);
           break;
+        case JJTMODEL: {
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_model()->set_if_exists(true);
+          }
+          statement->mutable_drop_model()->set_model_name(name);
+          break;
+        }
         case JJTSEQUENCE:
           if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
             statement->mutable_drop_sequence()->set_existence_modifier(
                 IF_EXISTS);
           }
           statement->mutable_drop_sequence()->set_sequence_name(name);
+          break;
+        case JJTSCHEMA:
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_schema()->set_if_exists(true);
+          }
+          statement->mutable_drop_schema()->set_schema_name(name);
           break;
         default:
           ABSL_LOG(FATAL) << "Unexpected object type: "
@@ -1396,12 +1854,18 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
     case JJTALTER_TABLE_STATEMENT:
       VisitAlterTableNode(stmt, ddl_text, statement, errors);
       break;
+    case JJTALTER_MODEL_STATEMENT:
+      VisitAlterModelNode(stmt, statement->mutable_alter_model(), errors);
+      break;
     case JJTALTER_CHANGE_STREAM_STATEMENT:
       VisitAlterChangeStreamNode(stmt, statement->mutable_alter_change_stream(),
                                  errors);
       break;
     case JJTALTER_SEQUENCE_STATEMENT:
       VisitAlterSequenceNode(stmt, statement->mutable_alter_sequence(), errors);
+      break;
+    case JJTALTER_SCHEMA_STATEMENT:
+      VisitAlterSchemaNode(stmt, statement->mutable_alter_schema(), errors);
       break;
     case JJTANALYZE_STATEMENT:
       CheckNode(stmt, JJTANALYZE_STATEMENT);
@@ -1416,9 +1880,26 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
           VisitCreateViewNode(actual_stmt, statement->mutable_create_function(),
                               has_or_replace, ddl_text, errors);
           break;
+        case JJTCREATE_MODEL_STATEMENT:
+          VisitCreateModelNode(actual_stmt, statement->mutable_create_model(),
+                               has_or_replace, ddl_text, errors);
+          break;
+        case JJTCREATE_SCHEMA_STATEMENT:
+          VisitCreateSchemaNode(actual_stmt, statement->mutable_create_schema(),
+                                errors);
+          break;
         default:
           ABSL_LOG(FATAL) << "Unexpected statement: " << stmt->toString();
       }
+      break;
+    }
+    case JJTCREATE_ROLE_STATEMENT: {
+      ABSL_CHECK_EQ(stmt->jjtGetNumChildren(), 1);
+
+      auto* create_role = statement->mutable_create_role();
+      SimpleNode* name = GetChildNode(stmt, 0);
+      ABSL_CHECK_EQ(name->getId(), JJTNAME);
+      create_role->set_role_name(name->image());
       break;
     }
     default:

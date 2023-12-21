@@ -512,6 +512,7 @@ cc_library(
         "catalog_shim_rewriteHandler.c",
         "catalog_shim_ruleutils.c",
         "catalog_shim_timestamp.c",
+        "catalog_shim_tokenlist.c",
         "catalog_shim_tupdesc.c",
         "catalog_shim_typcache.c",
     ],

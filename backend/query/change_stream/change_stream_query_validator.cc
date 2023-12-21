@@ -25,8 +25,11 @@
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_node.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "absl/time/time.h"
 #include "backend/schema/catalog/change_stream.h"
@@ -192,9 +195,6 @@ absl::StatusOr<bool> ChangeStreamQueryValidator::IsChangeStreamQuery(
       change_stream_name_ = std::string(tvf_name);
       tvf_name_ = node->GetAs<zetasql::ResolvedTVFScan>()->tvf()->Name();
       return true;
-    } else {
-      return error::UnsupportedUserDefinedTableValuedFunction(
-          node->GetAs<zetasql::ResolvedTVFScan>()->tvf()->Name());
     }
   }
   change_stream_metadata_ = ChangeStreamMetadata{};

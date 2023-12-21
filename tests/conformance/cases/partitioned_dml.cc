@@ -17,6 +17,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "tests/common/proto_matchers.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -30,6 +31,9 @@ using zetasql_base::testing::StatusIs;
 
 class PartitionedDmlTest : public DatabaseTest {
  public:
+  PartitionedDmlTest()
+      : feature_flags_({.enable_bit_reversed_positive_sequences = true}) {}
+
   absl::Status SetUpDatabase() override {
     ZETASQL_RETURN_IF_ERROR(SetSchema({
         R"(
@@ -39,6 +43,11 @@ class PartitionedDmlTest : public DatabaseTest {
             Age      INT64,
             Updated  TIMESTAMP,
           ) PRIMARY KEY (ID)
+        )",
+        R"(
+          CREATE SEQUENCE mysequence OPTIONS (
+            sequence_kind = "bit_reversed_positive"
+          )
         )"}));
 
     // Create a raw session for tests which cannot use the C++ client library
@@ -46,6 +55,8 @@ class PartitionedDmlTest : public DatabaseTest {
     ZETASQL_RETURN_IF_ERROR(CreateSession(database()->FullName()));
     return absl::OkStatus();
   }
+
+  void SetUp() override { DatabaseTest::SetUp(); }
 
  protected:
   void PopulateDatabase() {
@@ -91,6 +102,9 @@ class PartitionedDmlTest : public DatabaseTest {
   }
 
   std::string session_name_;
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
 
 TEST_F(PartitionedDmlTest, CannotReusePartitionedDmlTransactionAfterError) {
@@ -137,6 +151,28 @@ TEST_F(PartitionedDmlTest, UpdateRowsSucceed) {
   EXPECT_EQ(result.row_count_lower_bound, 2);
   EXPECT_THAT(Query("SELECT ID, Name, Age FROM Users WHERE Name IS NOT NULL"),
               IsOkAndHoldsRows({{1, "Levin", 27}}));
+}
+
+TEST_F(PartitionedDmlTest, UpdateRowsUsingSequenceSucceed) {
+  PopulateDatabase();
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      PartitionedDmlResult result,
+      ExecutePartitionedDml(SqlStatement(
+          "UPDATE Users SET Age = GET_INTERNAL_SEQUENCE_STATE(SEQUENCE "
+          "mysequence) WHERE ID = 1")));
+  EXPECT_EQ(result.row_count_lower_bound, 1);
+  EXPECT_THAT(Query("SELECT count(*) FROM Users WHERE Age IS NULL"),
+              IsOkAndHoldsRows({{1}}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result, ExecutePartitionedDml(SqlStatement(
+                  "UPDATE Users SET Age = GET_NEXT_SEQUENCE_VALUE(SEQUENCE "
+                  "mysequence) WHERE ID = 1")));
+  EXPECT_EQ(result.row_count_lower_bound, 1);
+  EXPECT_THAT(
+      Query("SELECT count(*) FROM Users WHERE Age > 32 and AGE IS NOT NULL"),
+      IsOkAndHoldsRows({{1}}));
 }
 
 TEST_F(PartitionedDmlTest, DeleteAllRowsSucceed) {

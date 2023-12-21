@@ -393,6 +393,11 @@ absl::Status EngineSystemCatalog::GetFunctions(
     output->insert(function);
   }
 
+  // Add builtin functions for casting.
+  for (const auto& [cast_pair, function] : pg_cast_to_builtin_function_) {
+    output->insert(function.function());
+  }
+
   return absl::OkStatus();
 }
 
@@ -686,19 +691,17 @@ absl::Status EngineSystemCatalog::AddFunction(
     }
 
     // Get and verify the mapped PostgreSQL proc oid.
-    if (signature_arguments.has_postgres_proc_oid()) {
-      ZETASQL_ASSIGN_OR_RETURN(
-          oid,
-          FindMatchingPgProcOid(
-              procs, input_arguments,
-              engine_system_catalog_signature.result_type().type(),
-              language_options),
-          _ << absl::StrCat(
-              "Function ", function_arguments.postgres_function_name(),
-              " with signature: ",
-              engine_system_catalog_signature.DebugString(/*function_name=*/"",
-                                                          /*verbose=*/true)));
-    }
+    ZETASQL_ASSIGN_OR_RETURN(
+        oid,
+        FindMatchingPgProcOid(
+            procs, input_arguments,
+            engine_system_catalog_signature.result_type().type(),
+            language_options),
+        _ << absl::StrCat(
+            "Function ", function_arguments.postgres_function_name(),
+            " with signature: ",
+            engine_system_catalog_signature.DebugString(/*function_name=*/"",
+                                                        /*verbose=*/true)));
 
     // Construct the PostgresExtendedFunctionSignature.
     function_signatures.push_back(
@@ -707,8 +710,7 @@ absl::Status EngineSystemCatalog::AddFunction(
 
     // If there is a mapped function and a PostgreSQL oid, add the pair to the
     // reverse map.
-    if (signature_arguments.has_mapped_function() &&
-        signature_arguments.has_postgres_proc_oid()) {
+    if (signature_arguments.has_mapped_function()) {
       ABSL_DCHECK_NE(oid, InvalidOid);
 
       // Check if the function is also an operator.

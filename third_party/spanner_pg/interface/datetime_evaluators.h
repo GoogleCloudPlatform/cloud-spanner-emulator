@@ -80,6 +80,37 @@ absl::StatusOr<int32_t> PgDateIn(absl::string_view date_string);
 // Casts a string to a timestamptz.
 absl::StatusOr<absl::Time> PgTimestamptzIn(absl::string_view timestamp_string);
 
+// Adds an interval to a timestamptz.
+// Returns an error if the interval_string is not a valid interval or if the
+// resulting timestamptz is out of range.
+absl::StatusOr<absl::Time> PgTimestamptzAdd(absl::Time input_time,
+                                            absl::string_view interval_string);
+
+// Subtracts an interval from a timestamptz.
+// Returns an error if the interval_string is not a valid interval or if the
+// resulting timestamptz is out of range.
+absl::StatusOr<absl::Time> PgTimestamptzSubtract(
+    absl::Time input_time, absl::string_view interval_string);
+
+// “Bins” the input timestamp into the specified interval (the stride) aligned
+// with a specified origin.
+absl::StatusOr<absl::Time> PgTimestamptzBin(absl::string_view stride,
+                                            absl::Time source,
+                                            absl::Time origin);
+
+absl::StatusOr<absl::Time> PgTimestamptzTrunc(absl::string_view field,
+                                              absl::Time source);
+
+absl::StatusOr<absl::Time> PgTimestamptzTrunc(absl::string_view field,
+                                              absl::Time source,
+                                              absl::string_view timezone);
+
+absl::StatusOr<absl::Cord> PgTimestamptzExtract(absl::string_view field,
+                                                absl::Time source);
+
+absl::StatusOr<absl::Cord> PgDateExtract(absl::string_view field,
+                                         int32_t source);
+
 }  // namespace postgres_translator::function_evaluators
 
 #endif  // FUNCTION_EVALUATORS_DATETIME_EVALUATORS_H_

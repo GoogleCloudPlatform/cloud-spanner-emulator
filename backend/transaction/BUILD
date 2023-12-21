@@ -33,6 +33,7 @@ cc_library(
         ":actions",
         ":commit_timestamp",
         ":flush",
+        ":foreign_key_restrictions",
         ":resolve",
         ":row_cursor",
         ":transaction_store",
@@ -107,6 +108,53 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
+    name = "foreign_key_restrictions",
+    srcs = [
+        "foreign_key_restrictions.cc",
+    ],
+    hdrs = [
+        "foreign_key_restrictions.h",
+        "options.h",
+    ],
+    deps = [
+        "//backend/actions:ops",
+        "//backend/common:case",
+        "//backend/common:ids",
+        "//backend/datamodel:key",
+        "//backend/datamodel:key_range",
+        "//backend/schema/catalog:schema",
+        "//common:errors",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/time",
+    ],
+)
+
+cc_test(
+    name = "foreign_key_restrictions_test",
+    srcs = [
+        "foreign_key_restrictions_test.cc",
+    ],
+    deps = [
+        ":foreign_key_restrictions",
+        "//backend/actions:ops",
+        "//backend/datamodel:key",
+        "//backend/datamodel:key_range",
+        "//backend/schema/catalog:schema",
+        "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
+        "//tests/common:test_schema_constructor",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 

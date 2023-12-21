@@ -101,6 +101,39 @@ class GCloudDatabaseDdlTest(emulator.TestCase):
         '--instance=test-instance',
         '--ddl=DROP CHANGE STREAM myChangeStream',
     )
+    # Create a model.
+    self.RunGCloud(
+        'spanner',
+        'databases',
+        'ddl',
+        'update',
+        'test-database',
+        '--instance=test-instance',
+        '--ddl=CREATE MODEL m INPUT (f INT64) OUTPUT (o BOOL) REMOTE OPTIONS ('
+        ' endpoint ='
+        ' "//aiplatform.googleapis.com/projects/aaa/locations/bbb/endpoints/ccc" )',
+    )
+    # Alter a model.
+    self.RunGCloud(
+        'spanner',
+        'databases',
+        'ddl',
+        'update',
+        'test-database',
+        '--instance=test-instance',
+        '--ddl=ALTER MODEL m SET OPTIONS ( endpoint ='
+        ' "//aiplatform.googleapis.com/projects/aaa/locations/bbb/endpoints/ddd") ',
+    )
+    # Drop a model.
+    self.RunGCloud(
+        'spanner',
+        'databases',
+        'ddl',
+        'update',
+        'test-database',
+        '--instance=test-instance',
+        '--ddl=DROP MODEL m',
+    )
 
 
 if __name__ == '__main__':

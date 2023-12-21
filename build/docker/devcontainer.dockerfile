@@ -6,7 +6,7 @@ FROM ubuntu:18.04 as build
 
 # Install prerequisites for bazel
 RUN apt-get update && apt-get -qq install curl tar build-essential wget        \
-    python python3 zip unzip
+    python python3.8 zip unzip
 
 # Setup java
 RUN apt-get update && apt-get -qq install -y default-jre default-jdk

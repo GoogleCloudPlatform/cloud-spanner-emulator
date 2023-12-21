@@ -96,6 +96,10 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
   database->change_stream_partition_churner_->Update(
       database->versioned_catalog_->GetLatestSchema());
 
+  // Some functions need to access the schema (e.g. sequence functions), so
+  // set the latest schema to the function catalog here.
+  database->query_engine_->SetLatestSchemaForFunctionCatalog(
+      database->versioned_catalog_->GetLatestSchema());
   return database;
 }
 absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
@@ -164,6 +168,11 @@ absl::Status Database::UpdateSchema(
                                          query_engine_->type_factory());
   }
   change_stream_partition_churner_->Update(
+      versioned_catalog_->GetLatestSchema());
+
+  // Some functions need to access the schema (e.g. sequence functions), so
+  // set the latest schema to the function catalog here.
+  query_engine_->SetLatestSchemaForFunctionCatalog(
       versioned_catalog_->GetLatestSchema());
 
   return absl::OkStatus();

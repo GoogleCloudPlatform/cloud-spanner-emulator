@@ -419,6 +419,11 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
         case AT_SetOnDeleteCascade:
         case AT_SetOnDeleteNoAction:
           break;
+        case AT_AddSynonym:
+        case AT_DropSynonym: {
+          ZETASQL_RET_CHECK_NE(node.name, nullptr);
+          break;
+        }
         default: {
           return UnsupportedTranslationError(
               "Operation is not supported in <ALTER TABLE> statement.");
@@ -1238,6 +1243,53 @@ absl::Status ValidateParseTreeNode(const AlterSeqStmt& node,
   ZETASQL_RET_CHECK_EQ(node.for_identity, false);
 
   // `missing_ok` do nothing when the sequence exists if value is true.
+
+  return absl::OkStatus();
+}
+
+absl::Status ValidateParseTreeNode(const RenameStmt& node,
+                                   const TranslationOptions& options) {
+  // Make sure that if RenameStmt structure changes we update the translator.
+  AssertPGNodeConsistsOf(node, FieldTypeChecker<ObjectType>(node.renameType),
+                         FieldTypeChecker<ObjectType>(node.relationType),
+                         FieldTypeChecker<RangeVar*>(node.relation),
+                         FieldTypeChecker<Node*>(node.object),
+                         FieldTypeChecker<char*>(node.subname),
+                         FieldTypeChecker<char*>(node.newname),
+                         FieldTypeChecker<DropBehavior>(node.behavior),
+                         FieldTypeChecker<bool>(node.missing_ok),
+                         FieldTypeChecker<bool>(node.addSynonym));
+
+  ZETASQL_RET_CHECK_EQ(node.type, T_RenameStmt);
+
+  // `renameType` defines the type of the object to rename.
+  if (node.renameType != OBJECT_TABLE) {
+    return UnsupportedTranslationError(
+        "Object type is not supported in <RENAME TO> statement.");
+  }
+
+  // `relationType` is not used for table rename.
+
+  // `relation` defines the table to alter.
+  ZETASQL_RET_CHECK_NE(node.relation, nullptr);
+
+  // `object` is not used for table rename.
+  // `subname` is not used for table rename.
+
+  // `newname` defines the new table name to change to.
+  ZETASQL_RET_CHECK_NE(node.newname, nullptr);
+
+  // `behavior` is not used for table rename.
+
+   // `missing_ok` is set if IF EXISTS/IF NOT EXISTS clause is present.
+  // TODO: Add support for IF EXISTS
+  if (node.missing_ok) {
+    return UnsupportedTranslationError(
+        "<IF EXISTS> clause is not supported in <RENAME TO> statement.");
+  }
+
+  // `addSynonym` defines whether to additionally create a synonym.
+  // Both cases are supported.
 
   return absl::OkStatus();
 }

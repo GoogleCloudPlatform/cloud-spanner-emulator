@@ -30,6 +30,11 @@ namespace backend {
 absl::Status BackfillIndex(const Index* index,
                            const SchemaValidationContext* context);
 
+// Handles backfilling of a newly added column into the index.
+absl::Status BackfillIndexAddedColumn(const Index* index,
+                                      const Column* added_column,
+                                      const SchemaValidationContext* context);
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

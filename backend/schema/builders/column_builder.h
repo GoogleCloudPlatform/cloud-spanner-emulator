@@ -23,10 +23,12 @@
 #include <string>
 
 #include "zetasql/public/type.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/graph/schema_node.h"
 #include "backend/schema/validators/column_validator.h"
 
 namespace google {
@@ -123,6 +125,16 @@ class Column::Builder {
     return *this;
   }
 
+  Builder& set_sequences_used(
+      const absl::flat_hash_set<const SchemaNode*>& sequences_used) {
+    instance_->sequences_used_.clear();
+    instance_->sequences_used_.reserve(sequences_used.size());
+    for (const SchemaNode* node : sequences_used) {
+      instance_->sequences_used_.push_back(node);
+    }
+    return *this;
+  }
+
  private:
   std::unique_ptr<Column> instance_;
 };
@@ -204,6 +216,16 @@ class Column::Editor {
 
   Editor& set_allow_commit_timestamp(std::optional<bool> allow) {
     instance_->allows_commit_timestamp_ = allow;
+    return *this;
+  }
+
+  Editor& set_sequences_used(
+      const absl::flat_hash_set<const SchemaNode*>& sequences_used) {
+    instance_->sequences_used_.clear();
+    instance_->sequences_used_.reserve(sequences_used.size());
+    for (const SchemaNode* node : sequences_used) {
+      instance_->sequences_used_.push_back(node);
+    }
     return *this;
   }
 

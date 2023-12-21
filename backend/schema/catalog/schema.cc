@@ -23,16 +23,22 @@
 
 #include "zetasql/public/types/type.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/view.h"
 #include "backend/schema/ddl/operations.pb.h"
+#include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
+#include "common/constants.h"
 #include "re2/re2.h"
 
 namespace google {
@@ -97,6 +103,22 @@ const ChangeStream* Schema::FindChangeStream(
     const std::string& change_stream_name) const {
   auto itr = change_streams_map_.find(change_stream_name);
   if (itr == change_streams_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
+const Sequence* Schema::FindSequence(const std::string& sequence_name) const {
+  auto itr = sequences_map_.find(sequence_name);
+  if (itr == sequences_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
+const Model* Schema::FindModel(const std::string& model_name) const {
+  auto itr = models_map_.find(model_name);
+  if (itr == models_map_.end()) {
     return nullptr;
   }
   return itr->second;
@@ -270,8 +292,86 @@ void DumpChangeStream(const ChangeStream* change_stream,
   }
 }
 
+void DumpSequence(const Sequence* sequence,
+                  ddl::CreateSequence& create_sequence) {
+  create_sequence.set_sequence_name(sequence->Name());
+  if (sequence->sequence_kind() != Sequence::BIT_REVERSED_POSITIVE) {
+    return;
+  }
+  ddl::SetOption* set_option = create_sequence.add_set_options();
+  set_option->set_option_name(kSequenceKindOptionName);
+  set_option->set_string_value(kSequenceKindBitReversedPositive);
+
+  if (sequence->start_with_counter().has_value()) {
+    set_option = create_sequence.add_set_options();
+    set_option->set_option_name(kSequenceStartWithCounterOptionName);
+    set_option->set_int64_value(sequence->start_with_counter().value());
+  }
+  if (sequence->skip_range_min().has_value()) {
+    set_option = create_sequence.add_set_options();
+    set_option->set_option_name(kSequenceSkipRangeMinOptionName);
+    set_option->set_int64_value(sequence->skip_range_min().value());
+  }
+  if (sequence->skip_range_max().has_value()) {
+    set_option = create_sequence.add_set_options();
+    set_option->set_option_name(kSequenceSkipRangeMaxOptionName);
+    set_option->set_int64_value(sequence->skip_range_max().value());
+  }
+}
+
+void DumpModelColumn(const Model::ModelColumn& model_column,
+                     ddl::ColumnDefinition& column_definition) {
+  column_definition = GoogleSqlTypeToDDLColumnType(model_column.type);
+  column_definition.set_column_name(model_column.name);
+
+  if (model_column.is_required.has_value()) {
+    ddl::SetOption* required = column_definition.add_set_options();
+    required->set_option_name(ddl::kModelColumnRequiredOptionName);
+    required->set_bool_value(*model_column.is_required);
+  }
+}
+
+void DumpModel(const Model* model, ddl::CreateModel& create_model) {
+  create_model.set_model_name(model->Name());
+  create_model.set_remote(model->is_remote());
+
+  for (const Model::ModelColumn& input : model->input()) {
+    DumpModelColumn(input, *create_model.add_input());
+  }
+  for (const Model::ModelColumn& output : model->output()) {
+    DumpModelColumn(output, *create_model.add_output());
+  }
+
+  if (model->endpoint().has_value()) {
+    ddl::SetOption* endpoint = create_model.add_set_options();
+    endpoint->set_option_name(ddl::kModelEndpointOptionName);
+    endpoint->set_string_value(*model->endpoint());
+  }
+
+  if (!model->endpoints().empty()) {
+    ddl::SetOption* endpoints = create_model.add_set_options();
+    endpoints->set_option_name(ddl::kModelEndpointsOptionName);
+
+    for (const std::string& endpoint : model->endpoints()) {
+      endpoints->add_string_list_value(endpoint);
+    }
+  }
+
+  if (model->default_batch_size().has_value()) {
+    ddl::SetOption* default_batch = create_model.add_set_options();
+    default_batch->set_option_name(ddl::kModelDefaultBatchSizeOptionName);
+    default_batch->set_int64_value(*model->default_batch_size());
+  }
+}
+
 ddl::DDLStatementList Schema::Dump() const {
   ddl::DDLStatementList ddl_statements;
+  // Print sequences first, since other schema objects may use them.
+  for (const Sequence* sequence : sequences_) {
+    DumpSequence(sequence,
+                 *ddl_statements.add_statement()->mutable_create_sequence());
+  }
+
   for (const Table* table : tables_) {
     ddl::CreateTable* create_table =
         ddl_statements.add_statement()->mutable_create_table();
@@ -320,6 +420,10 @@ ddl::DDLStatementList Schema::Dump() const {
     }
   }
 
+  for (const Model* model : models_) {
+    DumpModel(model, *ddl_statements.add_statement()->mutable_create_model());
+  }
+
   for (const View* view : views_) {
     ddl::CreateFunction* create_function =
         ddl_statements.add_statement()->mutable_create_function();
@@ -357,6 +461,10 @@ Schema::Schema(const SchemaGraph* graph
   index_map_.clear();
   change_streams_.clear();
   change_streams_map_.clear();
+  models_.clear();
+  models_map_.clear();
+  sequences_.clear();
+  sequences_map_.clear();
   for (const SchemaNode* node : graph_->GetSchemaNodes()) {
     const View* view = node->As<const View>();
     if (view != nullptr) {
@@ -382,6 +490,20 @@ Schema::Schema(const SchemaGraph* graph
     if (change_stream != nullptr) {
       change_streams_.push_back(change_stream);
       change_streams_map_[change_stream->Name()] = change_stream;
+      continue;
+    }
+
+    const Sequence* sequence = node->As<Sequence>();
+    if (sequence != nullptr) {
+      sequences_.push_back(sequence);
+      sequences_map_[sequence->Name()] = sequence;
+      continue;
+    }
+
+    const Model* model = node->As<Model>();
+    if (model != nullptr) {
+      models_.push_back(model);
+      models_map_[model->Name()] = model;
       continue;
     }
 

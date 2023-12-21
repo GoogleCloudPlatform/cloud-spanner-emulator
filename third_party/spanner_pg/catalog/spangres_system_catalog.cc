@@ -34,6 +34,7 @@
 #include <optional>
 
 #include "zetasql/public/builtin_function.h"
+#include "zetasql/public/builtin_function_options.h"
 #include "zetasql/analyzer/function_signature_matcher.h"
 #include "zetasql/public/input_argument_type.h"
 #include "zetasql/public/type.pb.h"
@@ -50,6 +51,9 @@
 #include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
+#include "third_party/spanner_pg/datatypes/extended/conversion_finder.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include <map>
 #include <set>
@@ -75,17 +79,18 @@ const auto kNanOrderingFunctions =
     std::set<absl::string_view>(
         {"pg.min", "pg.least", "pg.greatest", "pg.map_double_to_int"});
 
-
 static bool FunctionNameSupportedInSpanner(
     const std::string& function_name,
     const zetasql::LanguageOptions& language_options,
     zetasql::TypeFactory* type_factory) {
-  std::map<std::string, std::unique_ptr<zetasql::Function>>
-      spanner_function_kind_map;
-  zetasql::GetZetaSQLFunctions(type_factory, language_options,
-                               &spanner_function_kind_map);
-  if (spanner_function_kind_map.find(function_name) !=
-      spanner_function_kind_map.end()) {
+  zetasql::BuiltinFunctionOptions function_options(language_options);
+  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
+      spanner_function_map;
+  absl::flat_hash_map<std::string, const zetasql::Type*> types;
+  zetasql::GetBuiltinFunctionsAndTypes(function_options, *type_factory,
+                               spanner_function_map, types);
+  if (spanner_function_map.find(function_name) !=
+      spanner_function_map.end()) {
     return true;
   }
 
@@ -226,17 +231,16 @@ SpangresSystemCatalog::GetPgNumericCastFunction(
   for (const zetasql::FunctionSignature& signature :
        builtin_function->signatures()) {
     zetasql::SignatureMatchResult signature_match_result;
-
-    absl::StatusOr<bool> function_signature_matches_or =
+    ZETASQL_ASSIGN_OR_RETURN(
+        bool function_signature_matches,
         zetasql::FunctionSignatureMatchesWithStatus(
             language_options, coercer, arg_ast_nodes, input_argument_types,
             signature, /*allow_argument_coercion=*/false, type_factory(),
             /*resolve_lambda_callback=*/nullptr, &result_signature,
             &signature_match_result,
-            /*arg_index_mapping=*/nullptr, /*arg_overrides=*/nullptr);
-    ABSL_DCHECK_OK(function_signature_matches_or.status());
+            /*arg_index_mapping=*/nullptr, /*arg_overrides=*/nullptr));
 
-    found_signature = function_signature_matches_or.value_or(false) &&
+    found_signature = function_signature_matches &&
                       signature_match_result.non_matched_arguments() == 0 &&
                       signature_match_result.non_literals_coerced() == 0 &&
                       signature_match_result.literals_coerced() == 0;
@@ -389,6 +393,16 @@ absl::StatusOr<zetasql::TypeListView>
 SpangresSystemCatalog::GetExtendedTypeSuperTypes(const zetasql::Type* type) {
   // None of existing Spanner extended types currently support supertyping.
   return zetasql::TypeListView{};
+}
+
+absl::Status SpangresSystemCatalog::FindConversion(
+    const zetasql::Type* from_type, const zetasql::Type* to_type,
+    const FindConversionOptions& options, zetasql::Conversion* conversion) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        *conversion,
+        ::postgres_translator::spangres::datatypes::FindExtendedTypeConversion(
+            from_type, to_type, options));
+  return absl::OkStatus();
 }
 
 // Support for new datatypes should also be added in the PG Worker Proxy

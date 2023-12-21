@@ -27,28 +27,37 @@
 #include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/types/span.h"
 #include "backend/access/read.h"
-#include "backend/query/analyzer_options.h"
 #include "backend/query/change_stream/queryable_change_stream_tvf.h"
 #include "backend/query/function_catalog.h"
 #include "backend/query/information_schema_catalog.h"
+#include "backend/query/queryable_model.h"
+#include "backend/query/queryable_sequence.h"
 #include "backend/query/queryable_table.h"
 #include "backend/query/queryable_view.h"
 #include "backend/query/spanner_sys_catalog.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/schema/catalog/sequence.h"
 #include "common/errors.h"
 #include "third_party/spanner_pg/catalog/pg_catalog.h"
-#include "absl/status/status.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+using postgres_translator::spangres::datatypes::GetPgJsonbType;
+using postgres_translator::spangres::datatypes::GetPgNumericType;
 
 // A sub-catalog used for resolving NET function lookups.
 class NetCatalog : public zetasql::Catalog {
@@ -91,6 +100,8 @@ class PGFunctionCatalog : public zetasql::Catalog {
       : root_catalog_(root_catalog) {}
 
   static constexpr char kName[] = "PG";
+  static constexpr char kPgNumericTypeName[] = "PG.NUMERIC";
+  static constexpr char kPgJsonbTypeName[] = "PG.JSONB";
 
   std::string FullName() const final {
     std::string name = root_catalog_->FullName();
@@ -112,6 +123,26 @@ class PGFunctionCatalog : public zetasql::Catalog {
                                       function, options);
   }
 
+  // Similar to GetFunction. Types are maintained in the root catalog in the
+  // form of their fully-qualified names, such as PG.NUMERIC and PG.JSONB.
+  // Redirect the request to the parent.
+  absl::Status GetType(const std::string& name, const zetasql::Type** type,
+                       const FindOptions& options) final {
+    std::string full_name = absl::StrJoin({FullName(), name}, ".");
+    if (root_catalog_->schema_ != nullptr &&
+        root_catalog_->schema_->dialect() ==
+            database_api::DatabaseDialect::POSTGRESQL) {
+      if (absl::EqualsIgnoreCase(full_name, kPgNumericTypeName)) {
+        *type = GetPgNumericType();
+        return absl::OkStatus();
+      } else if (absl::EqualsIgnoreCase(full_name, kPgJsonbTypeName)) {
+        *type = GetPgJsonbType();
+        return absl::OkStatus();
+      }
+    }
+    return root_catalog_->GetType(full_name, type, options);
+  }
+
  private:
   backend::Catalog* root_catalog_;
 };
@@ -124,10 +155,21 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
     : schema_(schema),
       function_catalog_(function_catalog),
       type_factory_(type_factory) {
+  // Pass the sequences to the catalog. This step has to be the first one,
+  // because sequences may be used by table columns and views.
+  for (const backend::Sequence* sequence : schema->sequences()) {
+    sequences_[sequence->Name()] =
+        std::make_unique<QueryableSequence>(sequence);
+  }
+
   // Pass the reader to tables.
   for (const auto* table : schema->tables()) {
     tables_[table->Name()] = std::make_unique<QueryableTable>(
         table, reader, options, this, type_factory);
+  }
+
+  for (const auto* model : schema->models()) {
+    models_[model->Name()] = std::make_unique<QueryableModel>(model);
   }
 
   // Pass the query_evaluator to views.
@@ -152,6 +194,16 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
         std::move(*QueryableChangeStreamTvf::Create(
             change_stream->tvf_name(), options, this, type_factory,
             schema->dialect() == database_api::DatabaseDialect::POSTGRESQL));
+  }
+
+  // Read types.
+  for (const auto& tablepair : tables_) {
+    const QueryableTable* table = tablepair.second.get();
+    for (int i = 0; i < table->NumColumns(); ++i) {
+      std::string type_name =
+          table->GetColumn(i)->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL);
+      types_[type_name] = table->GetColumn(i)->GetType();
+    }
   }
 }
 
@@ -192,15 +244,35 @@ absl::Status Catalog::GetTable(const std::string& name,
   return error::TableNotFound(name);
 }
 
-absl::Status Catalog::GetTableValuedFunction(
-    const std::string& name, const zetasql::TableValuedFunction** tvf,
-    const FindOptions& options) {
-  *tvf = nullptr;
-  if (auto it = tvfs_.find(name); it != tvfs_.end()) {
-    *tvf = it->second.get();
+absl::Status Catalog::GetModel(const std::string& name,
+                               const zetasql::Model** model,
+                               const FindOptions& options) {
+  *model = nullptr;
+  if (auto it = models_.find(name); it != models_.end()) {
+    *model = it->second.get();
     return absl::OkStatus();
   }
-  return error::TableValuedFunctionNotFound(name);
+  return absl::OkStatus();
+}
+
+absl::Status Catalog::FindTableValuedFunction(
+
+    const absl::Span<const std::string>& path,
+    const zetasql::TableValuedFunction** function,
+    const FindOptions& options) {
+  *function = nullptr;
+  std::string name = absl::StrJoin(path, ".");
+  if (auto it = tvfs_.find(name); it != tvfs_.end()) {
+    *function = it->second.get();
+    return absl::OkStatus();
+  }
+
+  function_catalog_->GetTableValuedFunction(name, function);
+  if (*function == nullptr) {
+    return TableValuedFunctionNotFoundError(path);
+  }
+
+  return absl::OkStatus();
 }
 
 absl::Status Catalog::GetFunction(const std::string& name,
@@ -208,6 +280,17 @@ absl::Status Catalog::GetFunction(const std::string& name,
                                   const FindOptions& options) {
   function_catalog_->GetFunction(name, function);
   return absl::OkStatus();
+}
+
+absl::Status Catalog::GetSequence(const std::string& name,
+                                  const zetasql::Sequence** sequence,
+                                  const FindOptions& options) {
+  *sequence = nullptr;
+  if (auto it = sequences_.find(name); it != sequences_.end()) {
+    *sequence = it->second.get();
+    return absl::OkStatus();
+  }
+  return error::SequenceNotFound(name);
 }
 
 absl::Status Catalog::GetCatalogs(
@@ -231,8 +314,21 @@ absl::Status Catalog::GetTables(
 
 absl::Status Catalog::GetTypes(
     absl::flat_hash_set<const zetasql::Type*>* output) const {
-  // Currently, Cloud Spanner doesn't support proto or enum types.
+  for (const auto& [unused_name, type] : types_) {
+    output->insert(type);
+  }
   return absl::OkStatus();
+}
+
+absl::Status Catalog::GetType(const std::string& name,
+                              const zetasql::Type** type,
+                              const FindOptions& options) {
+  *type = nullptr;
+  if (auto it = types_.find(name); it != types_.end()) {
+    *type = it->second;
+    return absl::OkStatus();
+  }
+  return error::TypeNotFound(name);
 }
 
 absl::Status Catalog::GetFunctions(

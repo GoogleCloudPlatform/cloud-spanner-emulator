@@ -17,26 +17,37 @@
 #include "backend/schema/printer/print_ddl.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
-#include <utility>
 #include <vector>
 
+#include "zetasql/public/strings.h"
+#include "zetasql/public/types/struct_type.h"
+#include "zetasql/public/types/type.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/substitute.h"
-#include "backend/common/case.h"
-#include "backend/datamodel/types.h"
+#include "absl/types/span.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
+#include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/schema/catalog/sequence.h"
+#include "backend/schema/catalog/view.h"
 #include "backend/schema/ddl/operations.pb.h"
+#include "backend/schema/graph/schema_node.h"
 #include "backend/schema/parser/ddl_reserved_words.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
+#include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 #include "google/protobuf/repeated_ptr_field.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -100,9 +111,17 @@ std::string RowDeletionPolicyToString(const ddl::RowDeletionPolicy& policy) {
 
 std::string ColumnTypeToString(const zetasql::Type* type,
                                std::optional<int64_t> max_length) {
-  if (type->IsArray()) {
+  if (type->IsStruct()) {
+    std::vector<std::string> fields;
+    for (const zetasql::StructField& field : type->AsStruct()->fields()) {
+      fields.push_back(absl::StrCat(
+          field.name, " ", ColumnTypeToString(field.type, std::nullopt)));
+    }
+    return absl::StrCat("STRUCT<", absl::StrJoin(fields, ", "), ">");
+  } else if (type->IsArray()) {
     return "ARRAY<" +
-           TypeToString(type->AsArray()->element_type(), max_length) + ">";
+           ColumnTypeToString(type->AsArray()->element_type(), max_length) +
+           ">";
   } else {
     return TypeToString(type, max_length);
   }
@@ -180,11 +199,34 @@ std::string PrintView(const View* view) {
 }
 
 std::string PrintOptions(::google::protobuf::RepeatedPtrField<ddl::SetOption> options) {
-  return absl::StrJoin(options, ", ",
-                       [](std::string* out, const ddl::SetOption& option) {
-                         absl::StrAppend(out, option.option_name(), " = '",
-                                         option.string_value(), "'");
-                       });
+  return absl::StrJoin(
+      options, ", ", [](std::string* out, const ddl::SetOption& option) {
+        absl::StrAppend(out, option.option_name(), " = ");
+        if (option.has_null_value()) {
+          absl::StrAppend(out, "NULL");
+        } else if (option.has_bool_value()) {
+          absl::StrAppend(out, option.bool_value() ? "true" : "false");
+        } else if (option.has_int64_value()) {
+          absl::StrAppend(out, option.int64_value());
+        } else if (option.has_double_value()) {
+          absl::StrAppend(out, option.double_value());
+        } else if (option.has_string_value()) {
+          absl::StrAppend(out, zetasql::ToSingleQuotedStringLiteral(
+                                   option.string_value()));
+        } else if (!option.string_list_value().empty()) {
+          absl::StrAppend(
+              out, "[",
+              absl::StrJoin(
+                  option.string_list_value(), ", ",
+                  [](std::string* out, const std::string& option) {
+                    absl::StrAppend(
+                        out, zetasql::ToSingleQuotedStringLiteral(option));
+                  }),
+              "]");
+
+        } else {
+        }
+      });
 }
 
 std::string PrintChangeStream(const ChangeStream* change_stream) {
@@ -224,6 +266,80 @@ std::string PrintChangeStream(const ChangeStream* change_stream) {
   }
 
   return change_stream_string;
+}
+
+std::string PrintModelColumnOptions(const Model::ModelColumn& model_column) {
+  std::vector<std::string> options;
+  if (model_column.is_required.has_value()) {
+    options.push_back(absl::StrCat(
+        "required = ", *model_column.is_required ? "true" : "false"));
+  }
+  std::string options_string;
+  if (!options.empty()) {
+    options_string =
+        absl::StrCat(" OPTIONS ( ", absl::StrJoin(options, ", "), " )");
+  }
+  return options_string;
+}
+
+std::string PrintModelColumn(const Model::ModelColumn& model_column) {
+  return absl::StrCat(model_column.name, " ",
+                      ColumnTypeToString(model_column.type, std::nullopt),
+                      PrintModelColumnOptions(model_column));
+}
+
+std::string PrintModelOptions(const Model* model) {
+  std::vector<std::string> options;
+  if (model->endpoint().has_value()) {
+    options.push_back(absl::StrCat(
+        "endpoint = ",
+        zetasql::ToSingleQuotedStringLiteral(*model->endpoint())));
+  }
+
+  if (!model->endpoints().empty()) {
+    options.push_back(absl::StrCat(
+        "endpoints = [ ",
+        absl::StrJoin(model->endpoints(), ", ",
+                      [](std::string* out, const std::string& endpoint) {
+                        absl::StrAppend(
+                            out,
+                            zetasql::ToSingleQuotedStringLiteral(endpoint));
+                      }),
+        " ]"));
+  }
+
+  if (model->default_batch_size().has_value()) {
+    options.push_back(
+        absl::StrCat("default_batch_size = ", *model->default_batch_size()));
+  }
+
+  std::string options_string;
+  if (!options.empty()) {
+    options_string =
+        absl::StrCat(" OPTIONS ( ", absl::StrJoin(options, ", "), " )");
+  }
+  return options_string;
+}
+
+std::string PrintModel(const Model* model) {
+  std::string statement = absl::Substitute("CREATE MODEL $0\n", model->Name());
+  absl::StrAppend(&statement, "INPUT(\n");
+  for (const Model::ModelColumn& model_column : model->input()) {
+    absl::StrAppend(&statement, "  ", PrintModelColumn(model_column), ",\n");
+  }
+  absl::StrAppend(&statement, ")\n");
+  absl::StrAppend(&statement, "OUTPUT(\n");
+  for (const Model::ModelColumn& model_column : model->output()) {
+    absl::StrAppend(&statement, "  ", PrintModelColumn(model_column), ",\n");
+  }
+  absl::StrAppend(&statement, ")\n");
+
+  if (model->is_remote()) {
+    absl::StrAppend(&statement, "REMOTE\n");
+  }
+
+  absl::StrAppend(&statement, PrintModelOptions(model));
+  return statement;
 }
 
 std::string PrintTable(const Table* table) {
@@ -312,6 +428,35 @@ std::string PrintForeignKey(const ForeignKey* foreign_key) {
   return out;
 }
 
+std::string PrintSequence(const Sequence* sequence) {
+  std::string sequence_string = absl::Substitute(
+      "CREATE SEQUENCE $0 OPTIONS (\n", PrintName(sequence->Name()));
+
+  absl::StrAppend(&sequence_string,
+                  "  sequence_kind = 'bit_reversed_positive'");
+  if (sequence->skip_range_min().has_value() &&
+      sequence->skip_range_max().has_value()) {
+    absl::StrAppend(&sequence_string,
+                    ",\n"
+                    "  skip_range_min = ",
+                    sequence->skip_range_min().value());
+    absl::StrAppend(&sequence_string,
+                    ",\n"
+                    "  skip_range_max = ",
+                    sequence->skip_range_max().value());
+  }
+
+  if (sequence->start_with_counter().has_value()) {
+    absl::StrAppend(&sequence_string,
+                    ",\n"
+                    "  start_with_counter = ",
+                    sequence->start_with_counter().value());
+  }
+  absl::StrAppend(&sequence_string, " )");
+
+  return sequence_string;
+}
+
 absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
     const Schema* schema) {
   std::vector<std::string> statements;
@@ -328,6 +473,11 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
                         (*printed_statements).end());
     }
     return statements;
+  }
+
+  // Print sequences
+  for (auto sequence : schema->sequences()) {
+    statements.push_back(PrintSequence(sequence));
   }
 
   // Print tables
@@ -349,6 +499,12 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
   for (auto change_stream : schema->change_streams()) {
     statements.push_back(PrintChangeStream(change_stream));
   }
+
+  // Print models
+  for (auto model : schema->models()) {
+    statements.push_back(PrintModel(model));
+  }
+
   // Print views that depend on the tables/indexes.
   absl::flat_hash_set<const SchemaNode*> visited;
   std::vector<const View*> views;

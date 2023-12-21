@@ -120,6 +120,8 @@ absl::Status ValidateParseTreeNode(const CreateSeqStmt& node,
                                    const TranslationOptions& options);
 absl::Status ValidateParseTreeNode(const AlterSeqStmt& node,
                                    const TranslationOptions& options);
+absl::Status ValidateParseTreeNode(const RenameStmt& node,
+                                   const TranslationOptions& options);
 
 }  // namespace spangres
 }  // namespace postgres_translator

@@ -3271,7 +3271,7 @@ transformOnConflictArbiter_UNUSED_SPANGRES(ParseState *pstate,
 		 */
 		if (infer->conname)
 		{
-			Oid			relid = RelationGetRelid(pstate->p_target_relation_oid);
+			Oid			relid = RelationGetRelid(pstate->p_target_relation);
 			RangeTblEntry *rte = pstate->p_target_nsitem->p_rte;
 			Bitmapset  *conattnos;
 

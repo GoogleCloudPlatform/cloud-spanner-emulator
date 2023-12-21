@@ -496,6 +496,7 @@ typedef enum NodeTag
 	T_VacuumRelation,
 	T_InterleaveSpec,
   T_ChangeStreamTrackedTable,
+	T_SynonymClause,
 
 	/*
 	 * TAGS FOR REPLICATION GRAMMAR PARSE NODES (replnodes.h)

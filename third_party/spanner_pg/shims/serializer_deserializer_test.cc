@@ -1011,5 +1011,21 @@ TEST_F(SerializationDeserializationTest, AlterSeqStmt) {
   EXPECT_THAT(alter_seq_stmt, CanSerializeAndDeserialize());
 }
 
+TEST_F(SerializationDeserializationTest, RenameStmt) {
+  RenameStmt* rename_stmt = makeNode(RenameStmt);
+  rename_stmt->renameType = OBJECT_TABLE;
+  rename_stmt->relation = makeNode(RangeVar);
+  rename_stmt->newname = pstrdup("new_name");
+  rename_stmt->missing_ok = false;
+  rename_stmt->addSynonym = true;
+  EXPECT_THAT(rename_stmt, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, SynonymClause) {
+  SynonymClause* synonym_clause = makeNode(SynonymClause);
+  synonym_clause->name = pstrdup("test_synonym");
+  EXPECT_THAT(synonym_clause, CanSerializeAndDeserialize());
+}
+
 }  // namespace
 }  // namespace postgres_translator::test

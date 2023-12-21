@@ -19,18 +19,21 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "absl/algorithm/container.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/str_replace.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
+#include "google/cloud/optional.h"
 #include "google/cloud/spanner/bytes.h"
 #include "google/cloud/spanner/mutations.h"
 #include "google/cloud/spanner/transaction.h"
@@ -38,7 +41,9 @@
 #include "tests/common/file_based_test_runner.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
-#include "absl/status/status.h"
+#include "re2/re2.h"
+#include "zetasql/base/ret_check.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -64,10 +69,15 @@ const char kPgDdlTestDataDir[] = "tests/conformance/data/schema_changes/pg";
 
 // List of schema change test files within the directory above.
 const absl::string_view kSchemaChangeTestFiles[] = {
-    "change_streams.test",        "check_constraint.test",
-    "column_default_values.test", "combined.test",
-    "foreign_key.test",           "generated_column.test",
-    "key_column_alteration.test", "views.test",
+    "change_streams.test",
+    "check_constraint.test",
+    "column_default_values.test",
+    "combined.test",
+    "foreign_key.test",
+    "generated_column.test",
+    "key_column_alteration.test",
+    "models.test",
+    "views.test",
 };
 
 const absl::string_view kPgDdlTestFiles[] = {

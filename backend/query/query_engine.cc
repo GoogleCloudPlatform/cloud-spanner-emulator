@@ -166,7 +166,8 @@ absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> Analyze(
 absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
 AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
                   zetasql::AnalyzerOptions& options,
-                  zetasql::TypeFactory* type_factory) {
+                  zetasql::TypeFactory* type_factory,
+                  const FunctionCatalog* function_catalog) {
   // Check the overall length of the query string.
   if (sql.size() > limits::kMaxQueryStringSize) {
     return error::QueryStringTooLong(sql.size(), limits::kMaxQueryStringSize);
@@ -177,7 +178,11 @@ AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
       std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
       postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
   return postgres_translator::spangres::ParseAndAnalyzePostgreSQL(
-      sql, catalog, options, type_factory);
+      sql, catalog, options, type_factory,
+      std::make_unique<FunctionCatalog>(
+          type_factory,
+          /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+          /*schema=*/function_catalog->GetLatestSchema()));
 }
 
 // TODO : Replace with a better error transforming mechanism,
@@ -770,10 +775,12 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
   };
 
   std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
-  if (context.schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (context.schema->dialect() == database_api::DatabaseDialect::POSTGRESQL &&
+      !query.change_stream_internal_lookup.has_value()) {
     ZETASQL_ASSIGN_OR_RETURN(analyzer_output,
                      AnalyzePostgreSQL(query.sql, &catalog, analyzer_options,
-                                       type_factory_));
+                                       type_factory_, &function_catalog_));
+
   } else {
     ZETASQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(query.sql, &catalog,
                                               analyzer_options, type_factory_));
@@ -813,7 +820,7 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
         database_api::DatabaseDialect::POSTGRESQL) {
       ZETASQL_ASSIGN_OR_RETURN(analyzer_output,
                        AnalyzePostgreSQL(query.sql, &catalog, analyzer_options,
-                                         type_factory_));
+                                         type_factory_, &function_catalog_));
     } else {
       ZETASQL_ASSIGN_OR_RETURN(
           analyzer_output,
@@ -854,7 +861,7 @@ absl::Status QueryEngine::IsPartitionable(const Query& query,
   if (context.schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
     ZETASQL_ASSIGN_OR_RETURN(analyzer_output,
                      AnalyzePostgreSQL(query.sql, &catalog, analyzer_options,
-                                       type_factory_));
+                                       type_factory_, &function_catalog_));
   } else {
     ZETASQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(query.sql, &catalog,
                                               analyzer_options, type_factory_));
@@ -907,7 +914,8 @@ bool IsDMLQuery(const std::string& query) {
 
 absl::StatusOr<ChangeStreamQueryValidator::ChangeStreamMetadata>
 QueryEngine::TryGetChangeStreamMetadata(const Query& query,
-                                        const Schema* schema) {
+                                        const Schema* schema,
+                                        bool in_read_write_txn) {
   const absl::Time start_time = absl::Now();
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(query.declared_params));
@@ -919,7 +927,7 @@ QueryEngine::TryGetChangeStreamMetadata(const Query& query,
   if (schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
     ZETASQL_ASSIGN_OR_RETURN(analyzer_output,
                      AnalyzePostgreSQL(query.sql, &catalog, analyzer_options,
-                                       &type_factory));
+                                       &type_factory, &function_catalog));
   } else {
     ZETASQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(query.sql, &catalog,
                                               analyzer_options, &type_factory));
@@ -928,9 +936,12 @@ QueryEngine::TryGetChangeStreamMetadata(const Query& query,
   ZETASQL_ASSIGN_OR_RETURN(auto params,
                    ExtractParameters(query, analyzer_output.get()));
 
-  ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
-                   ExtractValidatedResolvedStatementAndOptions(
-                       analyzer_output.get(), {.schema = schema}));
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto resolved_statement,
+      ExtractValidatedResolvedStatementAndOptions(
+          analyzer_output.get(),
+          QueryContext{.schema = schema,
+                       .allow_read_write_only_functions = in_read_write_txn}));
 
   ChangeStreamQueryValidator validator{
       schema, start_time,

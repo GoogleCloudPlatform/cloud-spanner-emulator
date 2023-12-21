@@ -35,10 +35,13 @@
 #include <utility>
 #include <vector>
 
+#include "zetasql/public/cast.h"
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/id_string.h"
+#include "zetasql/public/input_argument_type.h"
 #include "zetasql/public/parse_location.h"
+#include "zetasql/public/signature_match_result.h"
 #include "zetasql/public/types/array_type.h"
 #include "zetasql/public/types/simple_value.h"
 #include "zetasql/public/types/type.h"
@@ -62,6 +65,7 @@
 #include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/transformer/expr_transformer_helper.h"
@@ -391,6 +395,32 @@ ForwardTransformer::BuildGsqlCastExpression(
   std::unique_ptr<zetasql::ResolvedCast> resolved_cast =
       zetasql::MakeResolvedCast(resolved_type, std::move(resolved_input),
                                   /*return_null_on_error=*/false);
+
+  if (source_type_oid == JSONBOID
+  ) {
+    zetasql::ExtendedCompositeCastEvaluator extended_conversion_evaluator =
+        zetasql::ExtendedCompositeCastEvaluator::Invalid();
+    zetasql::SignatureMatchResult result;
+    ABSL_CHECK(coercer_ != nullptr);
+    ZETASQL_ASSIGN_OR_RETURN(
+        bool cast_is_valid,
+        coercer_->CoercesTo(zetasql::InputArgumentType(source_type),
+                            target_type, /*is_explicit=*/true, &result,
+                            &extended_conversion_evaluator));
+    ZETASQL_RET_CHECK(cast_is_valid);
+
+    if (extended_conversion_evaluator.is_valid()) {
+      std::vector<std::unique_ptr<const zetasql::ResolvedExtendedCastElement>>
+          conversion_list;
+      for (const zetasql::ConversionEvaluator& evaluator :
+           extended_conversion_evaluator.evaluators()) {
+        conversion_list.push_back(MakeResolvedExtendedCastElement(
+            evaluator.from_type(), evaluator.to_type(), evaluator.function()));
+      }
+      resolved_cast->set_extended_cast(
+          MakeResolvedExtendedCast(std::move(conversion_list)));
+    }
+  }
 
   // Fixed-precision cast; requires additional type parameters
   if (result_type == NUMERICOID && source_type_oid == NUMERICOID) {
@@ -835,9 +865,41 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
           expr_transformer_info);
     }
     case ARRAY_SUBLINK: {
-      return absl::UnimplementedError(
-          "Array Subquery expressions are not supported");
-      }
+      // ARRAY(SELECT with single output column ...)
+        const Query* subquery =
+            PostgresConstCastNode(Query, pg_sublink.subselect);
+        ZETASQL_RET_CHECK_GT(list_length(subquery->targetList), 0)
+            << "Array subquery should have exactly 1 output column.";
+        // It can be assumed that resjunk columns come after non-junk columns.
+        for (int i = 1; i < list_length(subquery->targetList); ++i) {
+          const TargetEntry* target_entry = list_nth_node(
+            TargetEntry, subquery->targetList, i);
+          if (!target_entry->resjunk) {
+            return absl::InvalidArgumentError(
+                "Array subquery should have exactly 1 output column.");
+          }
+        }
+        const TargetEntry* target_entry = list_nth_node(
+            TargetEntry, subquery->targetList, 0);
+        ZETASQL_ASSIGN_OR_RETURN(Oid output_type_oid, CheckedPgExprType(
+            PostgresCastToNode(target_entry->expr)));
+        ZETASQL_ASSIGN_OR_RETURN(const zetasql::Type* output_type,
+                        BuildGsqlType(output_type_oid));
+        if (output_type->IsArray()) {
+          return absl::InvalidArgumentError(
+              "Cannot use array subquery with column of type " +
+              OidToTypeString(output_type_oid) +
+              " because nested arrays are not supported.");
+        }
+        const zetasql::ArrayType* array_type = nullptr;
+        ZETASQL_RETURN_IF_ERROR(GetTypeFactory()->MakeArrayType(output_type,
+                                                          &array_type));
+        std::unique_ptr<zetasql::ResolvedSubqueryExpr> subquery_expr;
+        return BuildGsqlResolvedSubqueryExpr(
+            *subquery, /*in_testexpr=*/nullptr, /*hint_list=*/nullptr,
+            array_type, zetasql::ResolvedSubqueryExpr::ARRAY,
+            expr_transformer_info);
+    }
     // Error cases to cover the remaining enum types. We handle each
     // individually to provide helpful error messages.
     case ALL_SUBLINK: {

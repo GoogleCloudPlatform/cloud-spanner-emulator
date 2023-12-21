@@ -55,10 +55,10 @@ class QueryTest
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
   QueryTest()
-      : feature_flags_({
-            .enable_postgresql_interface = true,
-            .enable_bit_reversed_positive_sequences = true,
-        }) {}
+      : feature_flags_(
+            {.enable_postgresql_interface = true,
+             .enable_bit_reversed_positive_sequences = true,
+             .enable_bit_reversed_positive_sequences_postgresql = true}) {}
 
   void SetUp() override {
     dialect_ = GetParam();
@@ -319,8 +319,10 @@ TEST_P(QueryTest, JSONFunctions) {
                 StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
                                        : absl::StatusCode::kOutOfRange));
 
-    // TODO: Add tests for casting to TEXT once coercian for
-    // extended types is supported.
+    EXPECT_THAT(Query(R"(SELECT CAST('{"a":"str", "b":2}'::jsonb AS text))"),
+                IsOkAndHoldsRow({R"({"a": "str", "b": 2})"}));
+    EXPECT_THAT(Query(R"(SELECT CAST('123'::jsonb AS text))"),
+                IsOkAndHoldsRow({"123"}));
 
     EXPECT_THAT(Query(R"(SELECT '{"a":"str", "b":[1,2,3]}'::jsonb -> 'b')"),
                 IsOkAndHoldsRow({Value(JsonB(R"([1, 2, 3])"))}));
@@ -707,11 +709,9 @@ TEST_P(QueryTest, PgNumericType) {
   EXPECT_THAT(Query("SELECT t.key FROM numeric_table t WHERE t.val IS NULL"),
               IsOkAndHoldsRows({{-2}}));
 
-  // TODO: b/274043756 - Investigate error "INVALID_ARGUMENT: Inputs to Less
-  // must support equality comparison: PG.NUMERIC".
-  // EXPECT_THAT(Query("SELECT t.key FROM numeric_table t WHERE t.val < -12.1 OR
-  // " "t.val > 12.2 ORDER BY t.key ASC"),
-  // IsOkAndHoldsRows({{-1}, {1}}));
+  EXPECT_THAT(Query("SELECT t.key FROM numeric_table t WHERE t.val < -12.1 OR "
+                    "t.val > 12.2 ORDER BY t.key ASC"),
+              IsOkAndHoldsRows({{-1}, {1}}));
 }
 
 TEST_P(QueryTest, SelectStarExcept) {

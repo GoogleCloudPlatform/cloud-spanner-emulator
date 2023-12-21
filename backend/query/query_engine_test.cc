@@ -19,6 +19,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
@@ -28,10 +29,9 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
-#include "absl/memory/memory.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
@@ -44,7 +44,7 @@
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
-#include "backend/query/catalog.h"
+#include "backend/query/query_context.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/limits.h"
 #include "tests/common/row_reader.h"
@@ -52,7 +52,6 @@
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
-#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -65,11 +64,13 @@ namespace {
 using testing::AllOf;
 using testing::ElementsAre;
 using testing::Field;
+using testing::HasSubstr;
 using testing::IsTrue;
 using testing::Property;
 using testing::Return;
 using testing::UnorderedElementsAre;
 using zetasql_base::testing::IsOkAndHolds;
+using zetasql_base::testing::StatusIs;
 
 using zetasql::values::Int64;
 using zetasql::values::String;
@@ -81,8 +82,6 @@ inline constexpr char kQueryContainsSubqueryError[] =
 
 inline constexpr char kQueryNotASimpleTableScanError[] =
     "Query is not a simple table scan.";
-
-inline constexpr char kPGUnnestUnsupportedError[] = "UNNEST is not supported";
 
 testing::Matcher<const zetasql::Type*> Int64Type() {
   return Property(&zetasql::Type::IsInt64, IsTrue());
@@ -184,6 +183,8 @@ class QueryEngineTestBase : public testing::Test {
   const Schema* multi_table_schema() { return multi_table_schema_.get(); }
   const Schema* views_schema() { return views_schema_.get(); }
   const Schema* change_stream_schema() { return change_stream_schema_.get(); }
+  const Schema* model_schema() { return model_schema_.get(); }
+  const Schema* sequence_schema() { return sequence_schema_.get(); }
   RowReader* change_stream_partition_table_reader() {
     return &change_stream_partition_table_reader_;
   }
@@ -199,6 +200,8 @@ class QueryEngineTestBase : public testing::Test {
   std::unique_ptr<const Schema> schema_;
   std::unique_ptr<const Schema> multi_table_schema_;
   std::unique_ptr<const Schema> change_stream_schema_;
+  std::unique_ptr<const Schema> model_schema_;
+  std::unique_ptr<const Schema> sequence_schema_;
 
  private:
   std::unique_ptr<const Schema> views_schema_ =
@@ -214,7 +217,8 @@ class QueryEngineTestBase : public testing::Test {
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_setter_ =
       test::ScopedEmulatorFeatureFlagsSetter(
           {.enable_dml_returning = true,
-           .enable_bit_reversed_positive_sequences = true});
+           .enable_bit_reversed_positive_sequences = true,
+           .enable_bit_reversed_positive_sequences_postgresql = true});
   test::TestRowReader change_stream_partition_table_reader_{
       {{"_change_stream_partition_change_stream_test_table",
         {{"partition_token"}, {zetasql::types::StringType()}}}}};
@@ -235,12 +239,21 @@ class QueryEngineTest
           &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
       change_stream_schema_ = test::CreateSchemaWithOneTableAndOneChangeStream(
           &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
+      ZETASQL_ASSERT_OK_AND_ASSIGN(
+          sequence_schema_,
+          test::CreateSchemaWithOneSequence(
+              &type_factory_, database_api::DatabaseDialect::POSTGRESQL));
+      query_engine().SetLatestSchemaForFunctionCatalog(sequence_schema_.get());
     } else if (GetParam() ==
                database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
       schema_ = test::CreateSchemaWithOneTable(&type_factory_);
       multi_table_schema_ = test::CreateSchemaWithMultiTables(&type_factory_);
       change_stream_schema_ =
           test::CreateSchemaWithOneTableAndOneChangeStream(&type_factory_);
+      model_schema_ = test::CreateSchemaWithOneModel(&type_factory_);
+      ZETASQL_ASSERT_OK_AND_ASSIGN(sequence_schema_,
+                           test::CreateSchemaWithOneSequence(&type_factory_));
+      query_engine().SetLatestSchemaForFunctionCatalog(sequence_schema_.get());
     }
   }
 };
@@ -315,6 +328,176 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsGenerateUUIDFromTable) {
                                            ElementsAre(UuidV4StringValue()))));
     }
   }
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlSelectBitReverse) {
+  // When using the postgres dialect, bit_reverse() is exposed only via the
+  // 'spanner' namespace.
+  for (std::string function_call :
+       {"BIT_REVERSE(1, true)", "SPANNER.BIT_REVERSE(1, true)"}) {
+    SCOPED_TRACE(absl::StrCat("Using function: ", function_call));
+    constexpr absl::string_view sql =
+        "SELECT %s AS bit_reverse FROM test_table";
+    absl::StatusOr<QueryResult> status_or =
+        query_engine().ExecuteSql(Query{absl::StrFormat(sql, function_call)},
+                                  QueryContext{schema(), reader()});
+
+    bool using_pg = GetParam() == database_api::DatabaseDialect::POSTGRESQL;
+    bool expect_success =
+        (!using_pg && function_call == "BIT_REVERSE(1, true)") ||
+        (using_pg && function_call == "SPANNER.BIT_REVERSE(1, true)");
+    ASSERT_EQ(status_or.ok(), expect_success) << status_or.status();
+    if (expect_success) {
+      QueryResult result = std::move(status_or.value());
+      ASSERT_NE(result.rows, nullptr);
+      EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("bit_reverse"));
+      EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(Int64Type()));
+
+      EXPECT_THAT(
+          GetAllColumnValues(std::move(result.rows)),
+          IsOkAndHolds(ElementsAre(ElementsAre(Int64(4611686018427387904)),
+                                   ElementsAre(Int64(4611686018427387904)),
+                                   ElementsAre(Int64(4611686018427387904)))));
+    }
+  }
+}
+
+TEST_P(QueryEngineTest, SelectBitReverseWithDifferentArguments) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  constexpr absl::string_view sql = "SELECT BIT_REVERSE(%s)";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{absl::StrFormat(sql, "2, false")},
+                                QueryContext{sequence_schema(), reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(
+      GetAllColumnValues(std::move(result.rows)),
+      IsOkAndHolds(ElementsAre(ElementsAre(Int64(4611686018427387904)))));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(result, query_engine().ExecuteSql(
+                                   Query{absl::StrFormat(sql, "0, false")},
+                                   QueryContext{sequence_schema(), reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre(ElementsAre(Int64(0)))));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(result, query_engine().ExecuteSql(
+                                   Query{absl::StrFormat(sql, "0, true")},
+                                   QueryContext{sequence_schema(), reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre(ElementsAre(Int64(0)))));
+}
+
+TEST_P(QueryEngineTest, PG_SelectBitReverseWithDifferentArguments) {
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    GTEST_SKIP();
+  }
+
+  constexpr absl::string_view sql = "SELECT SPANNER.BIT_REVERSE(%s)";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{absl::StrFormat(sql, "2, false")},
+                                QueryContext{sequence_schema(), reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(
+      GetAllColumnValues(std::move(result.rows)),
+      IsOkAndHolds(ElementsAre(ElementsAre(Int64(4611686018427387904)))));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(result, query_engine().ExecuteSql(
+                                   Query{absl::StrFormat(sql, "0, false")},
+                                   QueryContext{sequence_schema(), reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre(ElementsAre(Int64(0)))));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(result, query_engine().ExecuteSql(
+                                   Query{absl::StrFormat(sql, "0, true")},
+                                   QueryContext{sequence_schema(), reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre(ElementsAre(Int64(0)))));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlSelectGetInternalSequenceState) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  // When using the postgres dialect, GET_INTERNAL_SEQUENCE_STATE() is exposed
+  // only via the 'spanner' namespace.
+  for (std::string function_call :
+       {"GET_INTERNAL_SEQUENCE_STATE(SEQUENCE myseq)",
+        "SPANNER.GET_INTERNAL_SEQUENCE_STATE('myseq')"}) {
+    SCOPED_TRACE(absl::StrCat("Using function: ", function_call));
+    constexpr absl::string_view sql = "SELECT %s AS state FROM test_table";
+    absl::StatusOr<QueryResult> status_or =
+        query_engine().ExecuteSql(Query{absl::StrFormat(sql, function_call)},
+                                  QueryContext{sequence_schema(), reader()});
+
+    bool using_pg = GetParam() == database_api::DatabaseDialect::POSTGRESQL;
+    bool expect_success =
+        (!using_pg &&
+         function_call == "GET_INTERNAL_SEQUENCE_STATE(SEQUENCE myseq)") ||
+        (using_pg &&
+         function_call == "SPANNER.GET_INTERNAL_SEQUENCE_STATE('myseq')");
+    ASSERT_EQ(status_or.ok(), expect_success) << status_or.status();
+    if (expect_success) {
+      QueryResult result = std::move(status_or.value());
+      ASSERT_NE(result.rows, nullptr);
+      EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("state"));
+      EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(Int64Type()));
+
+      EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+                  IsOkAndHolds(ElementsAre(
+                      ElementsAre(zetasql::values::NullInt64()),
+                      ElementsAre(zetasql::values::NullInt64()),
+                      ElementsAre(zetasql::values::NullInt64()))));
+    }
+  }
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlSelectGetInternalSequenceStateInvalidArg) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  constexpr absl::string_view sql = "SELECT GET_INTERNAL_SEQUENCE_STATE(%s)";
+
+  // Invalid input: SEQUENCE keyword without the identifier
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{absl::StrFormat(sql, "SEQUENCE")},
+                                QueryContext{sequence_schema(), reader()}),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          testing::HasSubstr("Unrecognized name: SEQUENCE")));
+
+  // Invalid input: empty argument
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{absl::StrFormat(sql, "")},
+                                QueryContext{sequence_schema(), reader()}),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          testing::HasSubstr("No matching signature for function")));
+
+  // Invalid input: invalid type
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{absl::StrFormat(sql, "1234")},
+                                QueryContext{sequence_schema(), reader()}),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          testing::HasSubstr("No matching signature for function")));
+
+  // Invalid input: extra argument
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{absl::StrFormat(sql, "SEQUENCE myseq, SEQUENCE myseq2")},
+          QueryContext{sequence_schema(), reader()}),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          testing::HasSubstr("No matching signature for function")));
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTable) {
@@ -427,9 +610,8 @@ TEST_P(QueryEngineTest, ExecuteSqlRefusesIncompleteParameters) {
   }
   EXPECT_THAT(query_engine().ExecuteSql(query, QueryContext{schema(), reader()},
                                         v1::ExecuteSqlRequest::NORMAL),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::HasSubstr("Incomplete query parameters")));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Incomplete query parameters")));
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTableWithForceIndexHint) {
@@ -527,9 +709,8 @@ TEST_P(QueryEngineTest, ExecuteSqlQueryStringTooLong) {
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{absl::Substitute("SELECT '$0'", long_str)},
                   QueryContext{schema(), reader()}),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::HasSubstr("exceeds maximum allowed length")));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("exceeds maximum allowed length")));
 }
 
 TEST_P(QueryEngineTest, PartitionableSimpleScan) {
@@ -545,49 +726,32 @@ TEST_P(QueryEngineTest, PartitionableSimpleScanFilter) {
 }
 
 TEST_P(QueryEngineTest, PartitionableSimpleScanSubqueryColumn) {
-  absl::StatusCode error_code;
-  std::string error_msg;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    // UNNEST is unsupported in the PG dialect.
-    error_code = absl::StatusCode::kUnimplemented;
-    error_msg = "Array Subquery expressions are not supported";
-  } else {
-    error_code = absl::StatusCode::kInvalidArgument;
-    error_msg = kQueryContainsSubqueryError;
-  }
+  absl::StatusCode error_code = absl::StatusCode::kInvalidArgument;
+  std::string error_msg = kQueryContainsSubqueryError;
   Query query{
       "SELECT string_col, ARRAY(SELECT child_key from child_table) FROM "
       "test_table"};
-  EXPECT_THAT(
-      query_engine().IsPartitionable(
-          query, QueryContext{multi_table_schema(), reader()}),
-      zetasql_base::testing::StatusIs(error_code, testing::HasSubstr(error_msg)));
+  EXPECT_THAT(query_engine().IsPartitionable(
+                  query, QueryContext{multi_table_schema(), reader()}),
+              StatusIs(error_code, HasSubstr(error_msg)));
 }
 
 TEST_P(QueryEngineTest, PartitionableSimpleScanNoTable) {
-  std::string error_msg =
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
-          // UNNEST is unsupported in the PG dialect.
-          ? kPGUnnestUnsupportedError
-          : kQueryNotASimpleTableScanError;
+  std::string error_msg = kQueryNotASimpleTableScanError;
   Query query{"SELECT a FROM UNNEST(ARRAY[1, 2, 3]) AS a"};
-  EXPECT_THAT(query_engine().IsPartitionable(
-                  query, QueryContext{multi_table_schema(), reader()}),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
-                                        testing::HasSubstr(error_msg)));
+  EXPECT_THAT(
+      query_engine().IsPartitionable(
+          query, QueryContext{multi_table_schema(), reader()}),
+      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr(error_msg)));
 }
 
 TEST_P(QueryEngineTest, PartitionableSimpleScanFilterNoTable) {
-  std::string error_msg =
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
-          // UNNEST is unsupported in the PG dialect.
-          ? kPGUnnestUnsupportedError
-          : kQueryNotASimpleTableScanError;
+  std::string error_msg = kQueryNotASimpleTableScanError;
   Query query{"SELECT a FROM UNNEST(ARRAY[1, 2, 3]) AS a WHERE a = 1"};
-  EXPECT_THAT(query_engine().IsPartitionable(
-                  query, QueryContext{multi_table_schema(), reader()}),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
-                                        testing::HasSubstr(error_msg)));
+  EXPECT_THAT(
+      query_engine().IsPartitionable(
+          query, QueryContext{multi_table_schema(), reader()}),
+      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr(error_msg)));
 }
 
 TEST_P(QueryEngineTest, PartitionableExecuteSqlSimpleScanFilterSubquery) {
@@ -596,9 +760,8 @@ TEST_P(QueryEngineTest, PartitionableExecuteSqlSimpleScanFilterSubquery) {
       "(SELECT child_key FROM child_table)"};
   EXPECT_THAT(query_engine().IsPartitionable(
                   query, QueryContext{multi_table_schema(), reader()}),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::HasSubstr(kQueryContainsSubqueryError)));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr(kQueryContainsSubqueryError)));
 }
 
 TEST_P(QueryEngineTest, PartitionableSimpleScanFilterSubqueryInExpr) {
@@ -607,18 +770,16 @@ TEST_P(QueryEngineTest, PartitionableSimpleScanFilterSubqueryInExpr) {
       "(SELECT child_key FROM child_table)"};
   EXPECT_THAT(query_engine().IsPartitionable(
                   query, QueryContext{multi_table_schema(), reader()}),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::HasSubstr(kQueryContainsSubqueryError)));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr(kQueryContainsSubqueryError)));
 }
 
 TEST_P(QueryEngineTest, NonPartitionableSelectsFromTwoTable) {
   Query query{"SELECT t1.string_col FROM test_table AS t1, test_table2 AS t2"};
   EXPECT_THAT(query_engine().IsPartitionable(
                   query, QueryContext{multi_table_schema(), reader()}),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::HasSubstr(kQueryNotASimpleTableScanError)));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr(kQueryNotASimpleTableScanError)));
 }
 
 // TODO: turn on test once parent child join implemented.
@@ -660,6 +821,23 @@ TEST_P(QueryEngineTest, ExecuteInsertsTwoRows) {
           QueryContext{schema(), reader(), &writer}));
   EXPECT_EQ(result.rows, nullptr);
   EXPECT_EQ(result.modified_row_count, 2);
+}
+
+TEST_P(QueryEngineTest, ExecuteInsertsTwoRowsIntoSequenceTable) {
+  std::string returning =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
+                                                                : "THEN RETURN";
+  MockRowWriter writer;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{absl::StrCat("INSERT INTO test_table (string_col) VALUES "
+                             "('one'), ('two') ",
+                             returning, " int64_col as col")},
+          QueryContext{sequence_schema(), reader(), &writer}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+  EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(Int64Type()));
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlDeleteRows) {
@@ -718,7 +896,7 @@ TEST_P(QueryEngineTest, CannotInsertDuplicateValuesForPrimaryKey) {
                   Query{"INSERT INTO test_table (int64_col, string_col) "
                         "VALUES(2, 'another two')"},
                   QueryContext{schema(), reader(), &writer}),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
+              StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_P(QueryEngineTest, ConnotUpdatePrimaryKey) {
@@ -726,7 +904,7 @@ TEST_P(QueryEngineTest, ConnotUpdatePrimaryKey) {
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{"UPDATE test_table SET int64_col=2 WHERE int64_col=2"},
                   QueryContext{schema(), reader(), &writer}),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, TestGetValidChangeStreamMetadataFromChangeStreamQuery) {
@@ -796,7 +974,7 @@ TEST_P(QueryEngineTest,
   }
   EXPECT_THAT(
       query_engine().TryGetChangeStreamMetadata(query, change_stream_schema()),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+      StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, TestGetEmptyChangeStreamMetadataFromNormalQuery) {
@@ -826,10 +1004,9 @@ TEST_P(QueryEngineTest,
   }
   EXPECT_THAT(query_engine().ExecuteSql(
                   query, QueryContext{change_stream_schema(), reader()}),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::HasSubstr("Change stream queries are not "
-                                     "supported for the ExecuteSql API.")));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Change stream queries are not "
+                                 "supported for the ExecuteSql API.")));
 }
 
 TEST_P(QueryEngineTest, TestCanQueryChangeStreamPartitionTableInternally) {
@@ -850,10 +1027,9 @@ TEST_P(QueryEngineTest, TestCannotQueryChangeStreamPartitionTableExternally) {
   EXPECT_THAT(query_engine().ExecuteSql(
                   query, QueryContext{change_stream_schema(),
                                       change_stream_partition_table_reader()}),
-              zetasql_base::testing::StatusIs(
-                  GetParam() == database_api::DatabaseDialect::POSTGRESQL
-                      ? absl::StatusCode::kNotFound
-                      : absl::StatusCode::kInvalidArgument));
+              StatusIs(GetParam() == database_api::DatabaseDialect::POSTGRESQL
+                           ? absl::StatusCode::kNotFound
+                           : absl::StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, TestCanQueryChangeStreamDataTableInternally) {
@@ -873,10 +1049,23 @@ TEST_P(QueryEngineTest, TestCannotQueryChangeStreamDataTableExternally) {
   EXPECT_THAT(query_engine().ExecuteSql(
                   query, QueryContext{change_stream_schema(),
                                       change_stream_data_table_reader()}),
-              zetasql_base::testing::StatusIs(
-                  GetParam() == database_api::DatabaseDialect::POSTGRESQL
-                      ? absl::StatusCode::kNotFound
-                      : absl::StatusCode::kInvalidArgument));
+              StatusIs(GetParam() == database_api::DatabaseDialect::POSTGRESQL
+                           ? absl::StatusCode::kNotFound
+                           : absl::StatusCode::kInvalidArgument));
+}
+
+TEST_P(QueryEngineTest, TestMlQuery) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{"SELECT int64_col, Outcome "
+                "FROM ML.PREDICT(MODEL test_model, TABLE test_table)"},
+          QueryContext{model_schema(), reader()}),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("Unhandled node type algebrizing a scan: TVFScan")));
 }
 
 // Tests for @{parameter_sensitive=always|never|auto} query hint.
@@ -949,12 +1138,12 @@ TEST_P(ParameterSensitiveHintTests, TestParameterSensitiveHint) {
                     ElementsAre(String("one")), ElementsAre(String("two")),
                     ElementsAre(String("four")))));
   } else {
-    EXPECT_THAT(query_engine().ExecuteSql(Query{query},
-                                          QueryContext{schema(), reader()}),
-                zetasql_base::testing::StatusIs(
-                    absl::StatusCode::kInvalidArgument,
-                    testing::HasSubstr(
-                        "Invalid hint value for: parameter_sensitive hint")));
+    EXPECT_THAT(
+        query_engine().ExecuteSql(Query{query},
+                                  QueryContext{schema(), reader()}),
+        StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Invalid hint value for: parameter_sensitive hint")));
   }
 }
 
@@ -1158,46 +1347,36 @@ TEST_P(QueryEngineTest, BitReverseUnsupportedWhenFlagIsOff) {
   Query query{absl::StrCat("SELECT ", spanner_prefix, "BIT_REVERSE(1, true)")};
   EXPECT_THAT(
       query_engine().ExecuteSql(query, QueryContext{schema(), reader()}),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kUnimplemented));
+      StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 TEST_P(QueryEngineTest, GetInternalSequenceStateUnsupportedWhenFlagIsOff) {
   std::string spanner_prefix = "";
-  std::string sequence_name = "SEQUENCE MySeq";
-  // In ZetaSQL, the SEQUENCE argument is resolved before we reach the
-  // function evaluator, so we will see an InvalidArgument error first.
-  absl::StatusCode code = absl::StatusCode::kInvalidArgument;
+  std::string sequence_name = "SEQUENCE myseq";
+  absl::StatusCode code = absl::StatusCode::kUnimplemented;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     spanner_prefix = "spanner.";
-    sequence_name = "'\"MySeq\"'";
-    code = absl::StatusCode::kUnimplemented;
+    sequence_name = "'myseq'";
   }
   test::ScopedEmulatorFeatureFlagsSetter setter(
       {.enable_bit_reversed_positive_sequences = false});
 
   Query query{absl::StrCat("SELECT ", spanner_prefix,
                            "get_internal_sequence_state(", sequence_name, ")")};
-  EXPECT_THAT(
-      query_engine().ExecuteSql(query, QueryContext{schema(), reader()}),
-      zetasql_base::testing::StatusIs(code));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  query, QueryContext{sequence_schema(), reader()}),
+              StatusIs(code));
 }
 
 TEST_P(QueryEngineTest, GetNextSequenceValueUnsupportedWhenFlagIsOff) {
-  std::string function_name = "get_next_sequence_value(SEQUENCE MySeq)";
-  // In ZetaSQL, the SEQUENCE argument is resolved before we reach the
-  // function evaluator, so we will see an InvalidArgument error first.
-  absl::StatusCode code = absl::StatusCode::kInvalidArgument;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    function_name = "nextval('\"MySeq\"')";
-    code = absl::StatusCode::kUnimplemented;
-  }
+  MockRowWriter writer;
   test::ScopedEmulatorFeatureFlagsSetter setter(
       {.enable_bit_reversed_positive_sequences = false});
 
-  Query query{absl::StrCat("SELECT ", function_name)};
-  EXPECT_THAT(
-      query_engine().ExecuteSql(query, QueryContext{schema(), reader()}),
-      zetasql_base::testing::StatusIs(code));
+  Query query{"INSERT INTO test_table (string_col) VALUES ('abc')"};
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  query, QueryContext{sequence_schema(), reader(), &writer}),
+              StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 class DefaultValuesTest : public QueryEngineTest {
@@ -1304,10 +1483,9 @@ TEST_F(GeneratedPrimaryKeyTest, FailsExecuteInsertsTwoRowsIfGpkDisabled) {
       query_engine().ExecuteSql(Query{"INSERT INTO test_table (k1_pk,k2,k4) "
                                       "VALUES(3,3,5), (3,4,5)"},
                                 QueryContext{schema(), reader(), &writer}),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kAlreadyExists,
-          testing::HasSubstr("Failed to insert row with primary key "
-                             "({pk#k1_pk:3, pk#k3gen_storedpk:NULL})")));
+      StatusIs(absl::StatusCode::kAlreadyExists,
+               HasSubstr("Failed to insert row with primary key "
+                         "({pk#k1_pk:3, pk#k3gen_storedpk:NULL})")));
 }
 
 TEST_F(GeneratedPrimaryKeyTest, ExecuteSqlDeleteRows) {
@@ -1361,10 +1539,9 @@ TEST_F(GeneratedPrimaryKeyTest, CannotInsertDuplicateValuesForPrimaryKey) {
       query_engine().ExecuteSql(Query{"INSERT INTO test_table (k1_pk,k2,k4) "
                                       "VALUES(2,2,8)"},
                                 QueryContext{schema(), reader(), &writer}),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kAlreadyExists,
-          testing::HasSubstr("Failed to insert row with primary key "
-                             "({pk#k1_pk:2, pk#k3gen_storedpk:2})")));
+      StatusIs(absl::StatusCode::kAlreadyExists,
+               HasSubstr("Failed to insert row with primary key "
+                         "({pk#k1_pk:2, pk#k3gen_storedpk:2})")));
 }
 
 TEST_F(GeneratedPrimaryKeyTest, CannotUpdatePrimaryKey) {
@@ -1374,9 +1551,9 @@ TEST_F(GeneratedPrimaryKeyTest, CannotUpdatePrimaryKey) {
           Query{
               "UPDATE test_table SET k3gen_storedpk=5 WHERE k3gen_storedpk=2"},
           QueryContext{schema(), reader(), &writer}),
-      zetasql_base::testing::StatusIs(
+      StatusIs(
           absl::StatusCode::kInvalidArgument,
-          testing::HasSubstr(
+          HasSubstr(
               "Cannot UPDATE value on non-writable column: k3gen_storedpk")));
 }
 
@@ -1446,12 +1623,10 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteUpdateWithReturning) {
   EXPECT_THAT(GetColumnTypes(*result.rows),
               ElementsAre(Int64Type(), Int64Type(), Int64Type()));
 
-  // TODO: Fix the expectation when generated columns returns
-  // correct results.
-  // EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
-  //             IsOkAndHolds(UnorderedElementsAre(
-  //                 ValueList{Int64(2), Int64(2), Int64(9)},
-  //                 ValueList{Int64(4), Int64(4), Int64(9)})));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(
+                  ValueList{Int64(2), Int64(2), Int64(9)},
+                  ValueList{Int64(4), Int64(4), Int64(9)})));
 }
 
 TEST_F(GeneratedPrimaryKeyTest, ExecuteDeleteWithReturning) {

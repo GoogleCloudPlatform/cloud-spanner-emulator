@@ -55,6 +55,25 @@ CREATE CHANGE STREAM test_stream FOR base(bool_value,int_value),no_action_child 
 CREATE CHANGE STREAM test_stream2 FOR base,no_action_child(),cascade_child(value1,value2,created_at) OPTIONS ( retention_period = '2d' , value_capture_type = 'OLD_AND_NEW_VALUES' );
 CREATE CHANGE STREAM test_stream3 FOR ALL;
 CREATE CHANGE STREAM test_stream4;
+CREATE MODEL test_model1
+INPUT( feature INT64 )
+OUTPUT( label STRING(MAX) )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+CREATE MODEL test_model2
+INPUT (
+  feature INT64,
+  optional_feature BOOL OPTIONS (required = false),
+)
+OUTPUT(
+  label STRING(MAX) OPTIONS (required = false),
+)
+REMOTE OPTIONS (
+  endpoints = ['//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'],
+  default_batch_size = 1
+);
+
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE base (
@@ -130,4 +149,3 @@ CREATE CHANGE STREAM test_stream FOR base(bool_value,int_value),no_action_child 
 CREATE CHANGE STREAM test_stream2 FOR base,no_action_child(),cascade_child(value1,value2,created_at) WITH ( retention_period = '2d' , value_capture_type = 'OLD_AND_NEW_VALUES' );
 CREATE CHANGE STREAM test_stream3 FOR ALL;
 CREATE CHANGE STREAM test_stream4;
-

@@ -60,6 +60,10 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
     return indexes_used_;
   }
 
+  const absl::flat_hash_set<const SchemaNode*>& dependent_sequences() {
+    return dependent_sequences_;
+  }
+
  protected:
   absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override;
 
@@ -81,6 +85,11 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
       const zetasql::ResolvedSampleScan* node) override;
 
   const Schema* schema() const { return context_.schema; }
+
+  bool IsSequenceFunction(const zetasql::ResolvedFunctionCall* node) const;
+
+  absl::Status ValidateSequenceFunction(
+      const zetasql::ResolvedFunctionCall* node);
 
  private:
   // Validates the child hint nodes of `node`.
@@ -113,6 +122,10 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
       const absl::flat_hash_map<absl::string_view, zetasql::Value>&
           node_hint_map) const;
 
+  // Returns true if the function is allowed in read-write transactions
+  // only. E.g. GET_NEXT_SEQUENCE_VALUE().
+  bool IsReadWriteOnlyFunction(absl::string_view name) const;
+
   const QueryContext context_;
 
   const zetasql::LanguageOptions language_options_;
@@ -121,6 +134,9 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
 
   // List of indexes used by the query being validated.
   absl::flat_hash_set<const Index*> indexes_used_;
+
+  // List of sequences used by the query being validated.
+  absl::flat_hash_set<const SchemaNode*> dependent_sequences_;
 
   // Options for the query engine that are extracted through user-specified
   // hints.

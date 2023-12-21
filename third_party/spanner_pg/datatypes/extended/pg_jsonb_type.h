@@ -54,6 +54,12 @@ const zetasql::ArrayType* GetPgJsonbArrayType();
 absl::StatusOr<zetasql::Value> CreatePgJsonbValue(
     absl::string_view denormalized_jsonb);
 
+// Create PG.JSONB value in a valid memory context which is required for calling
+// PG code. This function is intended to be used in tests where a memory context
+// is sometimes not initialized.
+absl::StatusOr<zetasql::Value> CreatePgJsonbValueWithMemoryContext(
+    absl::string_view jsonb_string);
+
 // Create a zetasql::Value from the normalized input ASCII string format
 // `normalized_jsonb`
 zetasql::Value CreatePgJsonbValueFromNormalized(

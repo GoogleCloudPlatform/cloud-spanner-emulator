@@ -253,7 +253,7 @@ absl::Status SchemaGraphEditor::CanonicalizeDeletion() {
   // To propagate the deletion information across the graph so that every node
   // can take action on deletion of its neighbor, we run Fixup as many times as
   // the number of nodes (the length of the longest non-cyclical path in the
-  // graph or until the number of deletions has  converged).
+  // graph or until the number of deletions has converged).
   delete_fixup_ = true;
   int deletions = 1;
   for (int i = 0; i < num_original_nodes(); ++i) {

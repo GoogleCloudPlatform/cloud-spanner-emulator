@@ -220,12 +220,16 @@ absl::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
           query,
           backend::QueryContext{.schema = schema(),
                                 .reader = read_write(),
-                                .writer = read_write()},
+                                .writer = read_write(),
+                                .allow_read_write_only_functions = true},
           query_mode);
     }
     case kPartitionedDml: {
-      auto context = backend::QueryContext{
-          .schema = schema(), .reader = read_write(), .writer = read_write()};
+      auto context =
+          backend::QueryContext{.schema = schema(),
+                                .reader = read_write(),
+                                .writer = read_write(),
+                                .allow_read_write_only_functions = true};
       ZETASQL_RETURN_IF_ERROR(query_engine_->IsValidPartitionedDML(query, context));
       // PartitionedDml will auto-commit transactions and cannot be reused.
       ZETASQL_ASSIGN_OR_RETURN(backend::QueryResult result,

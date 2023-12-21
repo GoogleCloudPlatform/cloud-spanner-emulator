@@ -121,7 +121,8 @@ absl::Status BadDeleteRange(absl::string_view start_key,
 absl::Status MutationTableRequired();
 
 // Transaction errors.
-absl::Status AbortConcurrentTransaction(int64_t requestor_id, int64_t holder_id);
+absl::Status AbortConcurrentTransaction(int64_t requestor_id,
+                                        int64_t holder_id);
 absl::Status TransactionNotFound(backend::TransactionID id);
 absl::Status TransactionClosed(backend::TransactionID id);
 absl::Status InvalidTransactionID(backend::TransactionID id);
@@ -154,6 +155,8 @@ absl::Status AbortDueToConcurrentSchemaChange(backend::TransactionID id);
 absl::Status AbortReadWriteTransactionOnFirstCommit(backend::TransactionID id);
 absl::Status UpdateDeletedRowInTransaction(absl::string_view table,
                                            absl::string_view key);
+absl::Status ForeignKeyReferencedRestrictionInTransaction(
+    absl::string_view table, absl::string_view key);
 
 // DDL errors.
 absl::Status EmptyDDLStatement();
@@ -281,7 +284,8 @@ absl::Status TooManyKeys(absl::string_view object_type,
 absl::Status NoColumnsTable(absl::string_view object_type,
                             absl::string_view object_name);
 absl::Status TooManyIndicesPerTable(absl::string_view index_name,
-                                    absl::string_view table_name, int64_t limit);
+                                    absl::string_view table_name,
+                                    int64_t limit);
 absl::Status DeepNesting(absl::string_view object_type,
                          absl::string_view object_name, int limit);
 absl::Status DropTableWithInterleavedTables(absl::string_view table_name,
@@ -346,6 +350,47 @@ absl::Status ChangingNullConstraintOnIndexedColumn(
     absl::string_view column_name, absl::string_view index_name);
 absl::Status ConcurrentSchemaChangeOrReadWriteTxnInProgress();
 
+// Model errors.
+absl::Status TooManyModelsPerDatabase(absl::string_view model_name,
+                                      int64_t limit);
+absl::Status ModelAlreadyExists(absl::string_view model_name);
+absl::Status TooManyModelColumns(absl::string_view model_name,
+                                 absl::string_view column_kind, int64_t limit);
+absl::Status NoColumnsModel(absl::string_view model_name,
+                            absl::string_view column_kind);
+absl::Status LocalModelUnsupported(absl::string_view model_name);
+absl::Status NoModelEndpoint(absl::string_view model_name);
+absl::Status AmbiguousModelEndpoint(absl::string_view model_name);
+absl::Status InvalidModelDefaultBatchSize(absl::string_view model_name,
+                                          int64_t value, int64_t limit);
+absl::Status ModelDuplicateColumn(absl::string_view column_name);
+absl::Status ModelCaseInsensitiveDuplicateColumn(
+    absl::string_view column_name, absl::string_view original_column_name);
+absl::Status EmptyStruct();
+absl::Status StructFieldNumberExceedsLimit(int64_t limit);
+absl::Status MissingStructFieldName(absl::string_view struct_type);
+absl::Status DuplicateStructName(absl::string_view struct_type,
+                                 absl::string_view field_name);
+absl::Status CaseInsensitiveDuplicateStructName(
+    absl::string_view struct_type, absl::string_view field_name,
+    absl::string_view existing_field_name);
+absl::Status CaseInsensitiveDuplicateStructName(
+    absl::string_view struct_type, absl::string_view field_name,
+    absl::string_view existing_field_name);
+absl::Status ModelColumnTypeUnsupported(absl::string_view model_name,
+                                        absl::string_view column_name,
+                                        absl::string_view column_type);
+absl::Status ModelColumnNotNull(absl::string_view model_name,
+                                absl::string_view column_name);
+absl::Status ModelColumnHidden(absl::string_view model_name,
+                               absl::string_view column_name);
+absl::Status ModelColumnLength(absl::string_view model_name,
+                               absl::string_view column_name);
+absl::Status ModelColumnGenerated(absl::string_view model_name,
+                                  absl::string_view column_name);
+absl::Status ModelColumnDefault(absl::string_view model_name,
+                                absl::string_view column_name);
+
 // Schema access errors.
 absl::Status TableNotFound(absl::string_view table_name);
 absl::Status TableNotFoundAtTimestamp(absl::string_view table_name,
@@ -353,7 +398,10 @@ absl::Status TableNotFoundAtTimestamp(absl::string_view table_name,
 absl::Status IndexNotFound(absl::string_view index_name);
 
 absl::Status ChangeStreamNotFound(absl::string_view change_stream_name);
+absl::Status ModelNotFound(absl::string_view model_name);
 absl::Status TableValuedFunctionNotFound(absl::string_view tvf_name);
+absl::Status SequenceNotFound(absl::string_view sequence_name);
+absl::Status TypeNotFound(absl::string_view type_name);
 absl::Status DropTableWithChangeStream(
     absl::string_view table_name, int64_t change_stream_count,
     absl::string_view change_stream_name_list_string);
@@ -449,6 +497,10 @@ absl::Status IndexNotFound(absl::string_view index, absl::string_view table);
 absl::Status ColumnNotFoundInIndex(absl::string_view index,
                                    absl::string_view indexed_table,
                                    absl::string_view column);
+absl::Status ColumnNotFoundInIndex(absl::string_view index_name,
+                                   absl::string_view column_name);
+absl::Status ColumnInIndexAlreadyExists(absl::string_view index_name,
+                                        absl::string_view column_name);
 
 // Foreign key errors.
 absl::Status ForeignKeyColumnsRequired(absl::string_view table,
@@ -593,14 +645,14 @@ absl::Status ExecuteBatchDmlOnlySupportsDmlStatements(int index,
                                                       absl::string_view query);
 absl::Status ReadOnlyTransactionDoesNotSupportDml(
     absl::string_view transaction_type);
+absl::Status ReadOnlyTransactionDoesNotSupportReadWriteOnlyFunctions(
+    absl::string_view functions);
 // Unsupported query shape errors.
 absl::Status UnsupportedReturnStructAsColumn();
 absl::Status UnsupportedArrayConstructorSyntaxForEmptyStructArray();
 absl::Status UnsupportedFeatureSafe(absl::string_view feature_type,
                                     absl::string_view info_message);
 absl::Status UnsupportedFunction(absl::string_view function_name);
-absl::Status UnsupportedUserDefinedTableValuedFunction(
-    absl::string_view tvf_name);
 
 absl::Status UnsupportedHavingModifierWithDistinct();
 absl::Status UnsupportedIgnoreNullsInAggregateFunctions();
@@ -614,6 +666,8 @@ absl::Status NoFeatureSupportDifferentTypeArrayCasts(
 absl::Status UnsupportedTablesampleRepeatable();
 absl::Status UnsupportedTablesampleSystem();
 absl::Status ToJsonStringNonJsonTypeNotSupported(absl::string_view type_name);
+absl::Status NoMatchingFunctionSignature(absl::string_view function_name,
+                                         absl::string_view supported_signature);
 
 // Query size limits errors.
 absl::Status TooManyFunctions(int max_function_nodes);
@@ -687,6 +741,23 @@ absl::Status InvalidDropDependentViews(absl::string_view type_kind,
                                        absl::string_view name,
                                        absl::string_view dependent_views);
 absl::Status WithViewsAreNotSupported();
+
+// Sequence-related errors
+absl::Status SequenceNotSupportedInPostgreSQL();
+
+absl::Status UnsupportedSequenceOption(absl::string_view option_name);
+
+absl::Status InvalidSequenceOptionValue(absl::string_view option_name,
+                                        absl::string_view type);
+absl::Status InvalidSequenceStartWithCounterValue();
+absl::Status SequenceSkipRangeMinMaxNotSetTogether();
+absl::Status SequenceSkippedRangeHasAtleastOnePositiveNumber();
+absl::Status SequenceSkipRangeMinLargerThanMax();
+absl::Status UnsupportedSequenceKind(absl::string_view kind);
+absl::Status SequenceNeedsAccessToSchema();
+absl::Status SequenceExhausted(absl::string_view name);
+absl::Status InvalidDropSequenceWithColumnDependents(
+    absl::string_view sequence_name, absl::string_view dependent_name);
 
 }  // namespace error
 }  // namespace emulator

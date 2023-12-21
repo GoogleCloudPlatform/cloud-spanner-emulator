@@ -40,6 +40,9 @@
 #include <vector>
 
 #include "zetasql/public/function.h"
+#include "zetasql/public/value.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
 
 namespace postgres_translator {
 
@@ -70,6 +73,12 @@ inline constexpr char kPGTextregexneFunctionName[] = "pg.textregexne";
 inline constexpr char kPGDateMiFunctionName[] = "pg.date_mi";
 inline constexpr char kPGDateMiiFunctionName[] = "pg.date_mii";
 inline constexpr char kPGDatePliFunctionName[] = "pg.date_pli";
+inline constexpr char kPGTimestamptzAddFunctionName[] = "pg.timestamptz_add";
+inline constexpr char kPGTimestamptzSubtractFunctionName[] =
+    "pg.timestamptz_subtract";
+inline constexpr char kPGTimestamptzBinFunctionName[] = "pg.date_bin";
+inline constexpr char kPGTimestamptzTruncFunctionName[] = "pg.date_trunc";
+inline constexpr char kPGExtractFunctionName[] = "pg.extract";
 
 // PG formatting functions.
 inline constexpr char kPGToDateFunctionName[] = "pg.to_date";
@@ -94,6 +103,7 @@ inline constexpr char kPGRegexpSplitToArrayFunctionName[] =
 
 // PG JSONB functions.
 inline constexpr char kPGToJsonBFunctionName[] = "pg.to_jsonb";
+inline constexpr char kPGCastFromJsonBFunctionName[] = "pg.cast_from_jsonb";
 inline constexpr char kPGJsonBSubscriptTextFunctionName[] =
     "pg.jsonb_subscript_text";
 inline constexpr char kPGJsonBArrayElementFunctionName[] =
@@ -117,10 +127,35 @@ inline constexpr char kPGNumericCastToStringFunctionName[] =
     "pg.cast_to_string";
 inline constexpr char kPGNumericCastToInt64FunctionName[] = "pg.cast_to_int64";
 
+// PG NUMERIC operators.
+inline constexpr char kPGNumericEqualsFunctionName[] = "pg.numeric_eq";
+inline constexpr char kPGNumericNotEqualsFunctionName[] = "pg.numeric_ne";
+inline constexpr char kPGNumericLessThanFunctionName[] = "pg.numeric_lt";
+inline constexpr char kPGNumericLessThanEqualsFunctionName[] = "pg.numeric_le";
+inline constexpr char kPGNumericGreaterThanFunctionName[] = "pg.numeric_gt";
+inline constexpr char kPGNumericGreaterThanEqualsFunctionName[] =
+    "pg.numeric_ge";
+
 using SpannerPGFunctions = std::vector<std::unique_ptr<zetasql::Function>>;
 
 // Returns Spanner-specific implementations of PG functions.
 SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name);
+
+// Evaluators exported for supporting type coercion.
+absl::StatusOr<zetasql::Value> EvalNumericCastToInt64(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalNumericCastToDouble(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalNumericCastToString(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalCastToNumeric(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalToJsonB(
+    absl::Span<const zetasql::Value> args);
 
 }  // namespace postgres_translator
 

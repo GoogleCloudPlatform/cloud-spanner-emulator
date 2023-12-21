@@ -17,7 +17,12 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_CONSTANTS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_CONSTANTS_H_
 
+#include <cstdint>
+#include <limits>
+
 #include "zetasql/public/type.h"
+
+constexpr int64_t kInt64Max = std::numeric_limits<int64_t>::max();
 
 // Name of the function to write the commit timestamp in a DML statement. Cloud
 // Spanner selects the commit timestamp when the transaction commits.
@@ -127,6 +132,10 @@ static constexpr char kSequenceSkipRangeMinOptionName[] = "skip_range_min";
 static constexpr char kSequenceSkipRangeMaxOptionName[] = "skip_range_max";
 static constexpr char kSequenceStartWithCounterOptionName[] =
     "start_with_counter";
+
+// Default start_with value for a sequence, when the sequence does not
+// have a user-set start_with.
+constexpr int64_t kSequenceDefaultStartWith = 1;
 
 // Quotes used by different dialects of Spanner in DDL statements.
 static constexpr char kGSQLQuote[] = "`";

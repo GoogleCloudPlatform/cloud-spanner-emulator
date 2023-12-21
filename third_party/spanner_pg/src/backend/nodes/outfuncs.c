@@ -4168,6 +4168,26 @@ static void _outAlterSeqStmt(StringInfo str, const AlterSeqStmt *node)
 	WRITE_BOOL_FIELD(missing_ok);
 }
 
+static void _outRenameStmt(StringInfo str, const RenameStmt *node)
+{
+	WRITE_NODE_TYPE("RENAMESTMT");
+	WRITE_ENUM_FIELD(renameType, ObjectType);
+	WRITE_ENUM_FIELD(relationType, ObjectType);
+	WRITE_NODE_FIELD(relation);
+	WRITE_NODE_FIELD(object);
+	WRITE_STRING_FIELD(subname);
+	WRITE_STRING_FIELD(newname);
+	WRITE_ENUM_FIELD(behavior, DropBehavior);
+	WRITE_BOOL_FIELD(missing_ok);
+	WRITE_BOOL_FIELD(addSynonym);
+}
+
+static void _outSynonymClause(StringInfo str, const SynonymClause *node)
+{
+	WRITE_NODE_TYPE("SYNONYMCLAUSE");
+	WRITE_STRING_FIELD(name);
+}
+
 /* SPANGRES END */
 
 /*
@@ -4972,12 +4992,18 @@ outNode(StringInfo str, const void *obj)
 			case T_GrantRoleStmt:
 				_outGrantRoleStmt(str, obj);
 				break;
-		case T_CreateSeqStmt:
-			_outCreateSeqStmt(str, obj);
-			break;
-		case T_AlterSeqStmt:
-			_outAlterSeqStmt(str, obj);
-			break;
+			case T_CreateSeqStmt:
+				_outCreateSeqStmt(str, obj);
+				break;
+			case T_AlterSeqStmt:
+				_outAlterSeqStmt(str, obj);
+				break;
+			case T_RenameStmt:
+				_outRenameStmt(str, obj);
+				break;
+			case T_SynonymClause:
+				_outSynonymClause(str, obj);
+				break;
 			/* SPANGRES END */
 			default:
 

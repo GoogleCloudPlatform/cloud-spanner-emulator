@@ -32,15 +32,29 @@
 #ifndef UTIL_INTERVAL_HELPERS_H_
 #define UTIL_INTERVAL_HELPERS_H_
 
+#include <cstdint>
+
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+
+struct PGInterval {
+  int64_t months;
+  int64_t days;
+  int64_t micros;
+};
+
+// ParseInterval turns a postgres-format interval specifier string, like "2
+// days" or "7 weeks, 4 days, 15 minutes - 1 month", into canonical
+// representation `PGInterval(months, days and micros)`. This has been modified
+// to run in a MemoryContext-less path (DDL translation) and should not be used
+// if interval_in can be called directly through spangres/src.
+absl::StatusOr<PGInterval> ParseInterval(absl::string_view input_string);
 
 // IntervalToSecs turns a postgres-format interval specifier string, like "2
 // days" or "7 weeks, 4 days, 15 minutes - 1 month", into the number of
 // seconds it represents.
-// This has been modified to run in a MemoryContext-less path (DDL translation)
-// and should not be used if interval_in can be called directly through
-// spangres/src.
+// Internally uses ParseInterval for canonicalizing into `(months, days and
+// micros)`.
 absl::StatusOr<int64_t> IntervalToSecs(absl::string_view input_string);
 
 #endif  // UTIL_INTERVAL_HELPERS_H_

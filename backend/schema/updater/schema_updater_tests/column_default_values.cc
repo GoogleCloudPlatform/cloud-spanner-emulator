@@ -17,10 +17,12 @@
 #include <memory>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "zetasql/public/options.pb.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 
 namespace google {
 namespace spanner {
@@ -300,6 +302,52 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
   EXPECT_FALSE(col->has_default_value());
   EXPECT_FALSE(col->expression().has_value());
   EXPECT_FALSE(col->original_expression().has_value());
+}
+
+TEST_P(SchemaUpdaterTest, NumericColumnDefault) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(
+                                     {
+                                         R"(
+        CREATE TABLE t (
+          key bigint primary key,
+          value numeric DEFAULT 0.0 NOT NULL
+        )
+      )"},
+                                     database_api::DatabaseDialect::POSTGRESQL,
+                                     /*use_gsql_to_pg_translation=*/false));
+    EXPECT_EQ(schema->dialect(), database_api::DatabaseDialect::POSTGRESQL);
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+        CREATE TABLE t (
+          key INT64,
+          value NUMERIC NOT NULL DEFAULT (0.0)
+        ) PRIMARY KEY (key)
+      )"}));
+    EXPECT_EQ(schema->dialect(),
+              database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+  }
+  const Table* table = schema->FindTable("t");
+  ASSERT_NE(table, nullptr);
+  const Column* col = table->FindColumn("value");
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(
+        col->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL),
+        postgres_translator::spangres::datatypes::GetPgNumericType()->TypeName(
+            zetasql::PRODUCT_EXTERNAL));
+  } else {
+    EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_NUMERIC);
+  }
+  EXPECT_TRUE(col->has_default_value());
+  EXPECT_TRUE(col->expression().has_value());
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(col->expression().value(), "pg.cast_to_numeric('0.0')");
+    EXPECT_EQ(col->original_expression(), "0.0");
+  } else {
+    EXPECT_EQ(col->expression().value(), "0.0");
+    EXPECT_FALSE(col->original_expression().has_value());
+  }
 }
 
 }  // namespace test

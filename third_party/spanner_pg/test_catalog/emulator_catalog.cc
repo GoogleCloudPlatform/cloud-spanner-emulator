@@ -39,13 +39,14 @@
 #include "zetasql/public/type.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
-#include "backend/schema/builders/column_builder.h"
 #include "backend/schema/builders/change_stream_builder.h"
+#include "backend/schema/builders/column_builder.h"
 #include "backend/schema/builders/table_builder.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
+#include "third_party/spanner_pg/catalog/type.h"
 
 using google::spanner::emulator::backend::Catalog;
 using google::spanner::emulator::backend::ChangeStream;
@@ -547,17 +548,16 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
 }  // namespace
 
 std::unique_ptr<zetasql::EnumerableCatalog> GetEmulatorCatalog() {
-  zetasql::TypeFactory type_factory{};
   // Need to statically allocate the unique_ptrs since the callers of this
   // function keep a static unique_ptr of the emulator catalog returned by this
   // function.
   static std::unique_ptr<const OwningSchema> schema =
-      CreateSchema(type_factory);
+      CreateSchema(*GetTypeFactory());
   static auto function_catalog =
-      std::make_unique<FunctionCatalog>(&type_factory,
+      std::make_unique<FunctionCatalog>(GetTypeFactory(),
                                         /*catalog_name = */ "spanner");
   return std::make_unique<Catalog>(schema.get(), function_catalog.get(),
-                                   &type_factory);
+                                   GetTypeFactory());
 }
 
 zetasql::AnalyzerOptions GetPGEmulatorTestAnalyzerOptions() {

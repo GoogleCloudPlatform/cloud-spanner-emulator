@@ -91,6 +91,11 @@ class SpangresSystemCatalog : public EngineSystemCatalog {
   absl::StatusOr<zetasql::TypeListView> GetExtendedTypeSuperTypes(
       const zetasql::Type* type) override;
 
+  absl::Status FindConversion(const zetasql::Type* from_type,
+                              const zetasql::Type* to_type,
+                              const FindConversionOptions& options,
+                              zetasql::Conversion* conversion) override;
+
   // Get the matching function and signature for this oid and set of input
   // argument types. Returns an error if the function call is not supported.
   absl::StatusOr<FunctionAndSignature> GetFunctionAndSignature(

@@ -76,7 +76,6 @@ cc_library(
         ":constants",
         ":limits",
         "//backend/common:ids",
-        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",
@@ -89,9 +88,6 @@ cc_library(
     name = "limits",
     hdrs = [
         "limits.h",
-    ],
-    deps = [
-        "@com_google_absl//absl/base:core_headers",
     ],
 )
 
@@ -120,5 +116,18 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
+    name = "bit_reverse",
+    srcs = [
+        "bit_reverse.cc",
+    ],
+    hdrs = [
+        "bit_reverse.h",
+    ],
+    deps = [
+        "@com_google_zetasql//zetasql/base:bits",
     ],
 )

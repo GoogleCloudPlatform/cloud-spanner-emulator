@@ -550,7 +550,6 @@ TEST_F(EngineSystemCatalogTest, NoMappedFunction) {
   PostgresFunctionArguments arguments(
       "float8", /*mapped_function_name=*/"",
       {{{gsql_double, {gsql_int64}, /*context_ptr=*/nullptr},
-        /*has_postgres_proc_oid=*/true,
         /*has_mapped_function=*/false}});
   ZETASQL_ASSERT_OK(catalog->AddTestFunction(arguments));
 
@@ -717,7 +716,6 @@ TEST_F(EngineSystemCatalogTest, ExplicitMappedFunction) {
        {{gsql_int64, {gsql_string}, /*context_ptr=*/nullptr}},
        {{gsql_int64, {gsql_date}, /*context_ptr=*/nullptr}},
        {{gsql_int64, {}, /*context_ptr=*/nullptr},
-        /*has_postgres_proc_oid=*/true,
         /*has_mapped_function=*/true,
         /*explicit_mapped_function_name=*/"$count_star"}},
       zetasql::Function::AGGREGATE};

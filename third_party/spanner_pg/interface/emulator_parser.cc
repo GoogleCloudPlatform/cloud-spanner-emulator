@@ -30,6 +30,7 @@
 //------------------------------------------------------------------------------
 
 #include "third_party/spanner_pg/interface/emulator_parser.h"
+#include <memory>
 
 #include "zetasql/public/function_signature.h"
 #include "absl/strings/substitute.h"
@@ -44,15 +45,17 @@
 namespace postgres_translator {
 namespace spangres {
 
+using google::spanner::emulator::backend::FunctionCatalog;
 using ::postgres_translator::interfaces::ParserOutput;
 using ::postgres_translator::interfaces::SpangresTranslatorFactory;
 using ::postgres_translator::interfaces::TranslateParsedQueryParamsBuilder;
 
 absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
-ParseAndAnalyzePostgreSQL(const std::string& sql,
-                          zetasql::EnumerableCatalog* catalog,
-                          const zetasql::AnalyzerOptions& analyzer_options,
-                          zetasql::TypeFactory* type_factory) {
+ParseAndAnalyzePostgreSQL(
+    const std::string& sql, zetasql::EnumerableCatalog* catalog,
+    const zetasql::AnalyzerOptions& analyzer_options,
+    zetasql::TypeFactory* type_factory,
+    std::unique_ptr<FunctionCatalog> emulator_function_catalog) {
   using postgres_translator::interfaces::ParserOutput;
   using postgres_translator::interfaces::SpangresTranslatorFactory;
   using postgres_translator::interfaces::TranslateParsedQueryParamsBuilder;
@@ -63,7 +66,8 @@ ParseAndAnalyzePostgreSQL(const std::string& sql,
   return SpangresTranslatorFactory::Create()->TranslateParsedQuery(
       TranslateParsedQueryParamsBuilder(
           std::move(parser_output), sql, catalog,
-          absl::make_unique<EmulatorBuiltinFunctionCatalog>(type_factory))
+          absl::make_unique<EmulatorBuiltinFunctionCatalog>(
+              std::move(emulator_function_catalog)))
           .SetAnalyzerOptions(analyzer_options)
           .SetTypeFactory(type_factory)
           .Build());
@@ -74,7 +78,8 @@ TranslateTableLevelExpression(
     absl::string_view expression, absl::string_view table_name,
     zetasql::EnumerableCatalog& catalog,
     const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::TypeFactory* type_factory) {
+    zetasql::TypeFactory* type_factory,
+    std::unique_ptr<FunctionCatalog> emulator_function_catalog) {
   // Wrap the expression in SELECT <expression> FROM <table_name>.
   ZETASQL_ASSIGN_OR_RETURN(
       std::string wrapped_expression,
@@ -87,7 +92,8 @@ TranslateTableLevelExpression(
       ->TranslateParsedTableLevelExpression(
           TranslateParsedQueryParamsBuilder(
               std::move(parser_output), {}, &catalog,
-              absl::make_unique<EmulatorBuiltinFunctionCatalog>(type_factory))
+              absl::make_unique<EmulatorBuiltinFunctionCatalog>(
+                  std::move(emulator_function_catalog)))
               .SetAnalyzerOptions(analyzer_options)
               .SetTypeFactory(type_factory)
               .Build(),
@@ -97,7 +103,8 @@ TranslateTableLevelExpression(
 absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateQueryInView(
     absl::string_view query, zetasql::EnumerableCatalog& catalog,
     const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::TypeFactory* type_factory) {
+    zetasql::TypeFactory* type_factory,
+    std::unique_ptr<FunctionCatalog> emulator_function_catalog) {
   ZETASQL_ASSIGN_OR_RETURN(
       ParserOutput parser_output,
       CheckedPgRawParserFullOutput(std::string(query).c_str()));
@@ -105,7 +112,8 @@ absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateQueryInView(
   return SpangresTranslatorFactory::Create()->TranslateParsedQueryInView(
       TranslateParsedQueryParamsBuilder(
           std::move(parser_output), query, &catalog,
-          std::make_unique<EmulatorBuiltinFunctionCatalog>(type_factory))
+          std::make_unique<EmulatorBuiltinFunctionCatalog>(
+              std::move(emulator_function_catalog)))
           .SetAnalyzerOptions(analyzer_options)
           .SetTypeFactory(type_factory)
           .Build());

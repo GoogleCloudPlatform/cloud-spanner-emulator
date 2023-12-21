@@ -115,11 +115,16 @@ class QueryEngine {
   // query is an invalid regular query, a non-change stream tvf query or an
   // invalid change stream tvf query.
   static absl::StatusOr<ChangeStreamQueryValidator::ChangeStreamMetadata>
-  TryGetChangeStreamMetadata(const Query& query, const Schema* schema);
+  TryGetChangeStreamMetadata(const Query& query, const Schema* schema,
+                             bool in_read_write_txn = false);
 
   zetasql::TypeFactory* type_factory() const { return type_factory_; }
 
   const FunctionCatalog* function_catalog() const { return &function_catalog_; }
+
+  void SetLatestSchemaForFunctionCatalog(const Schema* schema) {
+    function_catalog_.SetLatestSchema(schema);
+  }
 
  private:
   zetasql::TypeFactory* type_factory_;

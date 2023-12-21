@@ -87,7 +87,6 @@ using ::zetasql::ResolvedTableScan;
 using ::postgres_translator::internal::PostgresCastNodeTemplate;
 using ::postgres_translator::internal::PostgresCastToExpr;
 using ::postgres_translator::internal::PostgresCastToNode;
-using ::postgres_translator::test::ValidMemoryContext;
 using ::testing::HasSubstr;
 using ::zetasql_base::testing::IsOkAndHolds;
 using ::zetasql_base::testing::StatusIs;
@@ -114,22 +113,6 @@ const ResolvedProjectScan* CastToGsqlProjectScan(
   }
   const ResolvedQueryStmt* query_stmt = CastToGsqlQueryStmt(stmt);
   return query_stmt->query()->GetAs<ResolvedProjectScan>();
-}
-
-// Returns a RangeTblEntry object based on its rtindex in the query tree's
-// rtable list. rtindex starts at 1.
-// This function name matches PostgreSQL convention as RangeTblEntry is a
-// PostgreSQL data structure.
-RangeTblEntry* BuildPgRangeTblEntry(Query* query, int rtindex) {
-  if (query == nullptr) {
-    return nullptr;
-  }
-  List* fromlist = query->jointree->fromlist;
-  Node* listnode = PostgresCastToNode(linitial(fromlist));
-  if (!IsA(listnode, RangeTblRef)) {
-    return nullptr;
-  }
-  return rt_fetch(rtindex, query->rtable);
 }
 
 // Builds a mutable copy of the input ZetaSQL table scan.
@@ -454,42 +437,16 @@ void StripPgQueryDifferences(Query* pg_query) {
   }
 
   if (pg_query->onConflict != nullptr &&
-      pg_query->onConflict->action == ONCONFLICT_UPDATE) {
+      (pg_query->onConflict->action == ONCONFLICT_UPDATE ||
+       pg_query->onConflict->action == ONCONFLICT_NOTHING)) {
     for (InferenceElem* elem :
          StructList<InferenceElem*>(pg_query->onConflict->arbiterElems)) {
       StripPgExpr(PostgresCastToExpr(elem->expr));
     }
-
-    // PG query tree has 2 RTEs that represent the row that is being inserted
-    // using same special alias `excluded`. The PG analyzer references
-    // the second RTE when building the query tree's target list for
-    // ON CONFLICT SET clause.
-    // This is handled correctly by the Spangres forward transformer.
-    // However, when the PG deparser runs on such a query tree, it reassigns
-    // aliases such that the first RTE has alias `excluded` and the second RTE
-    // has alias `excluded_1`.
-    // If the reverse transformer references the second RTE (as per PG analyzer
-    // output), then the deparser will use alias `excluded_1` to refer to the
-    // insert row in the deparsed query. This is an invalid PG query as the
-    // ON CONFLICT SET clause will be deparsed into `excluded_1.<colname>`
-    // instead of `excluded.<col>`.
-    // In order to force the deparser to output `excluded` instead of
-    // `excluded_1`, the reverse transformer intentionally generates an
-    // onConflictSet clause whose target list for SET clause references the
-    // first RTE instead of the second RTE, even though this does not match
-    // the PG analyzer output.
-    //
-    // To allow this difference, RTE index in the parse tree from PG analyzer
-    // is adjusted to refer to the first excluded RTE so that it the trees
-    // match.
     for (TargetEntry* entry :
          StructList<TargetEntry*>(pg_query->onConflict->onConflictSet)) {
       StripTargetEntry(entry);
-      Var* var = PostgresCastNode(Var, PostgresCastToExpr(entry->expr));
-      var->varno--;
-      var->varnosyn--;
     }
-    pg_query->onConflict->exclRelIndex--;
   }
 
   StripPgHintList(pg_query->statementHints);
@@ -1515,9 +1472,8 @@ TEST_F(QueryTransformerTest, ExpressionRecursionLimitTest) {
 
   const std::string sql = "select 1+1+2+3+4";
   EXPECT_THAT(ForwardTransformQuery(sql, analyzer_options_),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::HasSubstr("SQL expression limit exceeded")));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("SQL expression limit exceeded")));
   absl::SetFlag(&FLAGS_spangres_expression_recursion_limit, recursion_limit);
 }
 
@@ -1553,11 +1509,10 @@ TEST_F(QueryTransformerTest, SetRecursionDepth) {
   const std::string sql =
       "select 1 intersect select 2 union select 3 except select 4";
 
-  EXPECT_THAT(
-      ForwardTransformQuery(sql, analyzer_options_),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kInvalidArgument,
-          testing::HasSubstr("SQL set operation recursion limit exceeded")));
+  EXPECT_THAT(ForwardTransformQuery(sql, analyzer_options_),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr(
+                           "SQL set operation recursion limit exceeded")));
 }
 
 TEST_F(QueryTransformerTest, UnsupportedQueryFields) {
@@ -1574,61 +1529,59 @@ TEST_F(QueryTransformerTest, UnsupportedQueryFields) {
   // ON CONFLICT without an action.
   query->onConflict = makeNode(OnConflictExpr);
   EXPECT_EQ(query->onConflict->action, ONCONFLICT_NONE);
-  EXPECT_THAT(transformer->BuildGsqlResolvedStatement(*query),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kUnimplemented,
-                  testing::HasSubstr("ON CONFLICT clauses are not supported")));
+  EXPECT_THAT(
+      transformer->BuildGsqlResolvedStatement(*query),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("ON CONFLICT clauses are not supported")));
   query->onConflict = nullptr;
 
   // GROUPING SET clauses.
   query->groupingSets = list_make1(makeNode(GroupingSet));
   EXPECT_THAT(
       transformer->BuildGsqlResolvedStatement(*query),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kUnimplemented,
-          testing::HasSubstr("GROUPING SET clauses are not supported")));
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("GROUPING SET clauses are not supported")));
   query->groupingSets = nullptr;
 
   // WINDOW clauses.
   query->windowClause = list_make1(makeNode(WindowClause));
   EXPECT_THAT(transformer->BuildGsqlResolvedStatement(*query),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kUnimplemented,
-                  testing::HasSubstr("WINDOW clauses are not supported")));
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("WINDOW clauses are not supported")));
   query->windowClause = nullptr;
 
   // DISTINCT ON clauses.
   query->distinctClause = list_make1(makeNode(SortGroupClause));
   query->hasDistinctOn = true;
-  EXPECT_THAT(transformer->BuildGsqlResolvedStatement(*query),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kUnimplemented,
-                  testing::HasSubstr("DISTINCT ON clauses are not supported")));
+  EXPECT_THAT(
+      transformer->BuildGsqlResolvedStatement(*query),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("DISTINCT ON clauses are not supported")));
   query->distinctClause = nullptr;
   query->hasDistinctOn = false;
 
   // ROW MARK clauses.
   query->rowMarks = list_make1(makeNode(RowMarkClause));
-  EXPECT_THAT(transformer->BuildGsqlResolvedStatement(*query),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kUnimplemented,
-                  testing::HasSubstr("ROW MARK clauses are not supported")));
+  EXPECT_THAT(
+      transformer->BuildGsqlResolvedStatement(*query),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("ROW MARK clauses are not supported")));
   query->rowMarks = nullptr;
 
   // Constraint clauses.
   query->constraintDeps = list_make1_oid(InvalidOid);
-  EXPECT_THAT(transformer->BuildGsqlResolvedStatement(*query),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kUnimplemented,
-                  testing::HasSubstr("constraint clauses are not supported")));
+  EXPECT_THAT(
+      transformer->BuildGsqlResolvedStatement(*query),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("constraint clauses are not supported")));
   query->constraintDeps = nullptr;
 
   // WITH ABSL_CHECK options.
   query->withCheckOptions = list_make1(makeNode(WithCheckOption));
-  EXPECT_THAT(transformer->BuildGsqlResolvedStatement(*query),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kUnimplemented,
-                  testing::HasSubstr("WITH CHECK options are not supported")));
+  EXPECT_THAT(
+      transformer->BuildGsqlResolvedStatement(*query),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("WITH CHECK options are not supported")));
   query->withCheckOptions = nullptr;
 }
 
@@ -1637,21 +1590,20 @@ TEST_F(QueryTransformerTest, UnsupportedOnConflictClause) {
     const std::string sql =
         "INSERT INTO keyvalue VALUES (1, 'abc') "
         "ON CONFLICT (key) DO UPDATE SET value = 1";
-    EXPECT_THAT(ForwardTransformQuery(sql, analyzer_options_),
-                zetasql_base::testing::StatusIs(
-                    absl::StatusCode::kUnimplemented,
-                    testing::HasSubstr("ON CONFLICT DO UPDATE clauses are not "
-                                       "supported")));
+    EXPECT_THAT(
+        ForwardTransformQuery(sql, analyzer_options_),
+        StatusIs(absl::StatusCode::kUnimplemented,
+                 HasSubstr("ON CONFLICT DO UPDATE clauses are not supported")));
   }
 
   {
     const std::string sql =
         "INSERT INTO keyvalue VALUES (1, 'abc') ON CONFLICT DO NOTHING";
-    EXPECT_THAT(ForwardTransformQuery(sql, analyzer_options_),
-                zetasql_base::testing::StatusIs(
-                    absl::StatusCode::kUnimplemented,
-                    testing::HasSubstr("ON CONFLICT DO NOTHING clauses are not "
-                                       "supported")));
+    EXPECT_THAT(
+        ForwardTransformQuery(sql, analyzer_options_),
+        StatusIs(absl::StatusCode::kUnimplemented,
+                 HasSubstr("ON CONFLICT DO NOTHING clauses are not "
+                                    "supported")));
   }
 }
 }  // namespace

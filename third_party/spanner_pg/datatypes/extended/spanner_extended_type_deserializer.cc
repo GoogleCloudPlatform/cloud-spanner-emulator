@@ -37,6 +37,7 @@
 #include "zetasql/public/types/type_deserializer.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/errors/error_catalog.h"
 #include "zetasql/base/ret_check.h"
 
@@ -52,8 +53,12 @@ SpannerExtendedTypeDeserializer::Deserialize(
       GetPgJsonbType()->TypeName(zetasql::PRODUCT_EXTERNAL)) {
     return GetPgJsonbType();
   }
-  return ::spangres::syntax_error_or_access_rule_violation
-            ::FailedToDeserializeExtendedType(type_proto.extended_type_name());
+  if (type_proto.extended_type_name() ==
+      GetPgNumericType()->TypeName(zetasql::PRODUCT_EXTERNAL)) {
+    return GetPgNumericType();
+  }
+  return ::spangres::syntax_error_or_access_rule_violation ::
+      FailedToDeserializeExtendedType(type_proto.extended_type_name());
 }
 
 }  // namespace datatypes

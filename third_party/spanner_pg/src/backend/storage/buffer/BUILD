@@ -61,6 +61,7 @@ cc_library(
     ],
     deps = [
         "//third_party/spanner_pg/src/include",
+        "//third_party/spanner_pg/src/include:pg_config_include",
     ],
     alwayslink = 1,
 )

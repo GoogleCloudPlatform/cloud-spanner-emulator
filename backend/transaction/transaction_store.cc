@@ -45,7 +45,6 @@
 #include "backend/transaction/commit_timestamp.h"
 #include "common/errors.h"
 #include "zetasql/base/status_macros.h"
-
 namespace google {
 namespace spanner {
 namespace emulator {
@@ -187,6 +186,27 @@ absl::Status TransactionStore::BufferWriteOp(const WriteOp& op) {
           [&](const DeleteOp& op) { return BufferDelete(op.table, op.key); },
       },
       op);
+}
+
+absl::StatusOr<ValueList> TransactionStore::ReadCommitted(
+    const Table* table, const Key& key,
+    std::vector<const Column*> columns) const {
+  ZETASQL_RETURN_IF_ERROR(AcquireReadLock(table, KeyRange::Point(key), columns));
+  std::unique_ptr<StorageIterator> base_itr;
+  ZETASQL_RETURN_IF_ERROR(base_storage_->Read(absl::InfiniteFuture(), table->id(),
+                                      KeyRange::Point(key),
+                                      GetColumnIDs(columns), &base_itr));
+  ValueList values;
+  while (base_itr->Next()) {
+    for (int i = 0; i < base_itr->NumColumns(); i++) {
+      if (base_itr->ColumnValue(i).is_valid()) {
+        values.push_back(base_itr->ColumnValue(i));
+      } else {
+        values.push_back(zetasql::values::Null(columns[i]->GetType()));
+      }
+    }
+  }
+  return values;
 }
 
 // Reads keys within the given range and add to StorageIterator. This is done by

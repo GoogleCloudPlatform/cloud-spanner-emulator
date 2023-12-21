@@ -28,6 +28,7 @@
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "backend/schema/verifiers/column_value_verifiers.h"
 #include "common/errors.h"
@@ -283,6 +284,14 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
     }
   }
 
+  for (const SchemaNode* dependency : column->sequences_used()) {
+    // Cannot drop a sequence if a column depends on it.
+    if (dependency->is_deleted()) {
+      const auto& dep_info = dependency->GetSchemaNameInfo();
+      return error::InvalidDropSequenceWithColumnDependents(dep_info->name,
+                                                            column->FullName());
+    }
+  }
   return absl::OkStatus();
 }
 

@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_LIMITS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_LIMITS_H_
 
+#include <cstdint>
 
 namespace google {
 namespace spanner {
@@ -44,6 +45,13 @@ constexpr int kMaxTablesPerDatabase = 2560;
 // Maximum number of change streams per database.
 //   https://cloud.google.com/spanner/quotas#change-streams
 constexpr int kMaxChangeStreamsPerDatabase = 10;
+
+// Maximum number of models per database.
+//   https://cloud.google.com/spanner/quotas#models
+constexpr int kMaxModelsPerDatabase = 100;
+constexpr int kMaxModelDefaultBatchSize = 10;
+constexpr int kMaxStructFieldCount = 10;
+constexpr int kMaxComplexTypeNestingDepth = 5;
 
 // Minimum retention duration supported for Change Streams in seconds.
 constexpr int kChangeStreamsMinRetention = 60 * 60 * 24;
@@ -127,6 +135,12 @@ constexpr int kMaxQueryStringSize = 1024 * 1024;  // 1 K
 
 // Maximum depth of column expressions.
 constexpr int kColumnExpressionMaxDepth = 20;
+
+// Maximum number of attempts that the sequence API will try to retrieve a
+// valid sequence value. This is used to fail fast in the case users set
+// a very big skipped range, potentially skipping the whole positive int64_t
+// value range.
+constexpr int kMaxGetSequenceValueAttempt = 2000;
 
 }  // namespace limits
 }  // namespace emulator

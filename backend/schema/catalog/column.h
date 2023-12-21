@@ -29,6 +29,7 @@
 #include "backend/common/case.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/change_stream.h"
+#include "backend/schema/catalog/sequence.h"
 #include "backend/schema/graph/schema_node.h"
 #include "common/limits.h"
 #include "absl/status/status.h"
@@ -117,6 +118,10 @@ class Column : public SchemaNode {
     return dependent_columns_;
   }
 
+  const std::vector<const SchemaNode*>& sequences_used() const {
+    return sequences_used_;
+  }
+
   // Returns the source column.
   const Column* source_column() const { return source_column_; }
 
@@ -157,7 +162,8 @@ class Column : public SchemaNode {
                               SchemaValidationContext* context) const override;
 
   std::string DebugString() const override {
-    return absl::Substitute("C:$0[$1]($2)", Name(), id_, type_->DebugString());
+    return absl::Substitute("C:$0[$1]($2)$3", Name(), id_, type_->DebugString(),
+                            is_deleted() ? "[DELETED]" : "");
   }
 
   // Populates dependent_columns_.
@@ -230,6 +236,9 @@ class Column : public SchemaNode {
   // references in its expression.
   std::vector<std::string> dependent_column_names_;
   std::vector<const Column*> dependent_columns_;
+
+  // List of sequences used by this column in its expression.
+  std::vector<const SchemaNode*> sequences_used_;
 
   // The table containing the column.
   const Table* table_ = nullptr;

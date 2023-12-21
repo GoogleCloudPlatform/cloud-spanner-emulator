@@ -1,2 +1,2 @@
 table_name,column_name,is_nullable,column_ordering,spanner_type,ordinal_position
-,,,,,
+users,id,NO,ASC,bigint,1

@@ -29,37 +29,35 @@
 
 #include "zetasql/base/logging.h"
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "google/protobuf/repeated_field.h"
-#include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
 #include "zetasql/public/function.pb.h"
 #include "zetasql/public/simple_catalog.h"
 #include "zetasql/public/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_node.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/flags/flag.h"
+#include "absl/functional/function_ref.h"
 #include "absl/log/log.h"
 #include "absl/meta/type_traits.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "backend/common/case.h"
+#include "backend/common/ids.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
-#include "backend/query/query_engine_options.h"
-#include "backend/query/query_validator.h"
+#include "backend/query/function_catalog.h"
 #include "backend/schema/backfills/change_stream_backfill.h"
 #include "backend/schema/backfills/column_value_backfill.h"
 #include "backend/schema/backfills/index_backfill.h"
@@ -68,6 +66,8 @@
 #include "backend/schema/builders/column_builder.h"
 #include "backend/schema/builders/foreign_key_builder.h"
 #include "backend/schema/builders/index_builder.h"
+#include "backend/schema/builders/model_builder.h"
+#include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
 #include "backend/schema/builders/view_builder.h"
 #include "backend/schema/catalog/change_stream.h"
@@ -76,7 +76,9 @@
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/view.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_graph_editor.h"
@@ -89,6 +91,7 @@
 #include "backend/schema/validators/view_validator.h"
 #include "backend/schema/verifiers/check_constraint_verifiers.h"
 #include "backend/schema/verifiers/foreign_key_verifiers.h"
+#include "backend/storage/storage.h"
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
@@ -97,9 +100,11 @@
 #include "third_party/spanner_pg/ddl/pg_to_spanner_ddl_translator.h"
 #include "third_party/spanner_pg/interface/emulator_parser.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
+#include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/interface/spangres_translator_interface.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
+#include "google/protobuf/repeated_ptr_field.h"
 #include "re2/re2.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
@@ -208,7 +213,8 @@ class SchemaUpdaterImpl {
   absl::Status AnalyzeColumnDefaultValue(
       absl::string_view expression, const std::string& column_name,
       const zetasql::Type* column_type, const Table* table,
-      const ddl::CreateTable* ddl_create_table);
+      const ddl::CreateTable* ddl_create_table,
+      absl::flat_hash_set<const SchemaNode*>* dependent_sequences);
 
   absl::Status AnalyzeCheckConstraint(
       absl::string_view expression, const Table* table,
@@ -219,8 +225,7 @@ class SchemaUpdaterImpl {
   template <typename ColumnModifier>
   absl::Status SetColumnOptions(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
-      const database_api::DatabaseDialect& dialect,
-      ColumnModifier* modifier);
+      const database_api::DatabaseDialect& dialect, ColumnModifier* modifier);
 
   template <typename ColumnDef, typename ColumnDefModifer>
   absl::StatusOr<std::string> TranslatePGExpression(
@@ -236,13 +241,11 @@ class SchemaUpdaterImpl {
 
   absl::Status AlterColumnDefinition(
       const ddl::ColumnDefinition& ddl_column, const Table* table,
-      const database_api::DatabaseDialect& dialect,
-      Column::Editor* editor);
+      const database_api::DatabaseDialect& dialect, Column::Editor* editor);
 
   absl::Status AlterColumnSetDropDefault(
       const ddl::AlterTable::AlterColumn& alter_column, const Table* table,
-      const Column* column,
-      const database_api::DatabaseDialect& dialect,
+      const Column* column, const database_api::DatabaseDialect& dialect,
       Column::Editor* editor);
 
   absl::StatusOr<const Column*> CreateColumn(
@@ -389,6 +392,17 @@ class SchemaUpdaterImpl {
 
   absl::Status CreateFunction(const ddl::CreateFunction& ddl_function);
 
+  template <typename SequenceModifier>
+  absl::Status SetSequenceOptions(
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+      SequenceModifier* modifier);
+  absl::Status ValidateSequenceOptions(
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+      const Sequence* current_sequence);
+
+  absl::StatusOr<const Sequence*> CreateSequence(
+      const ddl::CreateSequence& create_sequence);
+
   absl::Status AlterRowDeletionPolicy(
       std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
       const Table* table);
@@ -399,9 +413,12 @@ class SchemaUpdaterImpl {
   absl::Status AlterChangeStreamForClause(
       const ddl::ChangeStreamForClause& ddl_change_stream_for_clause,
       const ChangeStream* change_stream);
+  absl::Status AlterIndex(const ddl::AlterIndex& alter_index);
   absl::Status AlterInterleaveAction(
       const ddl::InterleaveClause::Action& ddl_interleave_action,
       const Table* table);
+  absl::Status AlterSequence(const ddl::AlterSequence& alter_sequence,
+                             const Sequence* current_sequence);
   absl::Status AddCheckConstraint(
       const ddl::CheckConstraint& ddl_check_constraint, const Table* table);
   absl::Status AddForeignKey(const ddl::ForeignKey& ddl_foreign_key,
@@ -416,11 +433,27 @@ class SchemaUpdaterImpl {
   absl::Status DropChangeStream(
       const ddl::DropChangeStream& drop_change_stream);
 
+  absl::Status DropSequence(const ddl::DropSequence& drop_sequence,
+                            const Sequence* current_sequence);
+
   absl::Status ApplyImplSetColumnOptions(
       const ddl::SetColumnOptions& set_column_options,
       const database_api::DatabaseDialect& dialect);
 
   absl::Status DropFunction(const ddl::DropFunction& drop_function);
+
+  absl::StatusOr<Model::ModelColumn> CreateModelColumn(
+      const ddl::ColumnDefinition& ddl_column, const Model* model,
+      const ddl::CreateModel* ddl_model,
+      const database_api::DatabaseDialect& dialect);
+  absl::Status CreateModel(const ddl::CreateModel& ddl_model,
+                           const database_api::DatabaseDialect& dialect);
+  absl::Status AlterModel(const ddl::AlterModel& alter_model);
+  absl::Status DropModel(const ddl::DropModel& drop_model);
+  template <typename ModelModifier>
+  absl::Status SetModelOptions(
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+      ModelModifier* modifier);
 
   // Adds a new schema object `node` to the schema copy being edited by
   // `editor_`.
@@ -502,7 +535,8 @@ absl::Status SchemaUpdaterImpl::DropNode(const SchemaNode* node) {
   return absl::OkStatus();
 }
 
-absl::Status ValidateDdlStatement(const ddl::DDLStatement& ddl) {
+absl::Status ValidateDdlStatement(const ddl::DDLStatement& ddl,
+                                  database_api::DatabaseDialect dialect) {
   auto check_generated_column = [&](const ddl::ColumnDefinition& col) {
     if (col.has_generated_column()) {
       if (!col.generated_column().stored()) {
@@ -533,6 +567,15 @@ absl::Status ValidateDdlStatement(const ddl::DDLStatement& ddl) {
                                                               : "DROP");
   }
 
+  if ((ddl.has_create_sequence() || ddl.has_alter_sequence() ||
+       ddl.has_drop_sequence()) &&
+      dialect == database_api::DatabaseDialect::POSTGRESQL &&
+      !EmulatorFeatureFlags::instance()
+           .flags()
+           .enable_bit_reversed_positive_sequences_postgresql) {
+    return error::SequenceNotSupportedInPostgreSQL();
+  }
+
   return absl::OkStatus();
 }
 
@@ -548,8 +591,7 @@ SchemaUpdaterImpl::ApplyDDLStatement(
   ZETASQL_RET_CHECK(!editor_->HasModifications());
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<ddl::DDLStatement> ddl_statement,
                    ParseDDLByDialect(statement, dialect));
-  ZETASQL_RETURN_IF_ERROR(ValidateDdlStatement(*ddl_statement));
-
+  ZETASQL_RETURN_IF_ERROR(ValidateDdlStatement(*ddl_statement, dialect));
   // Apply the statement to the schema graph.
   switch (ddl_statement->statement_case()) {
     case ddl::DDLStatement::kCreateTable: {
@@ -590,12 +632,46 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       ZETASQL_RETURN_IF_ERROR(CreateFunction(ddl_statement->create_function()));
       break;
     }
+    case ddl::DDLStatement::kCreateSequence: {
+      const ddl::CreateSequence& create_sequence =
+          ddl_statement->create_sequence();
+      if (latest_schema_->FindSequence(create_sequence.sequence_name()) !=
+              nullptr &&
+          create_sequence.existence_modifier() == ddl::IF_NOT_EXISTS) {
+        // A sequence with the same name already exists, and we have the
+        // IF NOT EXISTS clause in the statement, so return without error.
+        break;
+      }
+      ZETASQL_RETURN_IF_ERROR(
+          CreateSequence(ddl_statement->create_sequence()).status());
+      break;
+    }
     case ddl::DDLStatement::kAlterTable: {
       ZETASQL_RETURN_IF_ERROR(AlterTable(ddl_statement->alter_table(), dialect));
       break;
     }
     case ddl::DDLStatement::kAlterChangeStream: {
       ZETASQL_RETURN_IF_ERROR(AlterChangeStream(ddl_statement->alter_change_stream()));
+      break;
+    }
+    case ddl::DDLStatement::kAlterSequence: {
+      const ddl::AlterSequence& alter_sequence =
+          ddl_statement->alter_sequence();
+      const Sequence* current_sequence =
+          latest_schema_->FindSequence(alter_sequence.sequence_name());
+      if (current_sequence == nullptr) {
+        if (alter_sequence.existence_modifier() == ddl::IF_EXISTS) {
+          // The sequence doesn't exist, but we have the IF EXISTS clause
+          // in the statement, so return without error.
+          break;
+        }
+        return error::SequenceNotFound(alter_sequence.sequence_name());
+      }
+      ZETASQL_RETURN_IF_ERROR(AlterSequence(alter_sequence, current_sequence));
+      break;
+    }
+    case ddl::DDLStatement::kAlterIndex: {
+      ZETASQL_RETURN_IF_ERROR(AlterIndex(ddl_statement->alter_index()));
       break;
     }
     case ddl::DDLStatement::kDropTable: {
@@ -610,6 +686,25 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       ZETASQL_RETURN_IF_ERROR(DropChangeStream(ddl_statement->drop_change_stream()));
       break;
     }
+    case ddl::DDLStatement::kDropFunction: {
+      ZETASQL_RETURN_IF_ERROR(DropFunction(ddl_statement->drop_function()));
+      break;
+    }
+    case ddl::DDLStatement::kDropSequence: {
+      const ddl::DropSequence& drop_sequence = ddl_statement->drop_sequence();
+      const Sequence* current_sequence =
+          latest_schema_->FindSequence(drop_sequence.sequence_name());
+      if (current_sequence == nullptr) {
+        if (drop_sequence.existence_modifier() == ddl::IF_EXISTS) {
+          // The sequence doesn't exist, but we have the IF EXISTS clause
+          // in the statement, so return without error.
+          break;
+        }
+        return error::SequenceNotFound(drop_sequence.sequence_name());
+      }
+      ZETASQL_RETURN_IF_ERROR(DropSequence(drop_sequence, current_sequence));
+      break;
+    }
     case ddl::DDLStatement::kAnalyze:
       // Intentionally no=op.
       break;
@@ -617,8 +712,14 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       ZETASQL_RETURN_IF_ERROR(ApplyImplSetColumnOptions(
           ddl_statement->set_column_options(), dialect));
       break;
-    case ddl::DDLStatement::kDropFunction:
-      ZETASQL_RETURN_IF_ERROR(DropFunction(ddl_statement->drop_function()));
+    case ddl::DDLStatement::kCreateModel:
+      ZETASQL_RETURN_IF_ERROR(CreateModel(ddl_statement->create_model(), dialect));
+      break;
+    case ddl::DDLStatement::kAlterModel:
+      ZETASQL_RETURN_IF_ERROR(AlterModel(ddl_statement->alter_model()));
+      break;
+    case ddl::DDLStatement::kDropModel:
+      ZETASQL_RETURN_IF_ERROR(DropModel(ddl_statement->drop_model()));
       break;
     default:
       ZETASQL_RET_CHECK(false) << "Unsupported ddl statement: "
@@ -820,10 +921,11 @@ std::string SchemaUpdaterImpl::MakeChangeStreamTvfName(
 
 absl::Status SchemaUpdaterImpl::AlterColumnDefinition(
     const ddl::ColumnDefinition& ddl_column, const Table* table,
-    const database_api::DatabaseDialect& dialect,
-    Column::Editor* editor) {
-  return SetColumnDefinition(ddl_column, table, /*ddl_create_table=*/nullptr,
-                             dialect, editor);
+    const database_api::DatabaseDialect& dialect, Column::Editor* editor) {
+  ZETASQL_RETURN_IF_ERROR(SetColumnDefinition(ddl_column, table,
+                                      /*ddl_create_table=*/nullptr, dialect,
+                                      editor));
+  return absl::OkStatus();
 }
 
 absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
@@ -836,6 +938,7 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
             type == ddl::AlterTable::AlterColumn::DROP_DEFAULT);
 
   const ddl::ColumnDefinition& new_column_def = alter_column.column();
+  absl::flat_hash_set<const SchemaNode*> dependent_sequences;
   if (type == ddl::AlterTable::AlterColumn::SET_DEFAULT) {
     if (column->is_generated()) {
       return error::CannotSetDefaultValueOnGeneratedColumn(column->FullName());
@@ -848,9 +951,9 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
                                        /*ddl_create_table=*/nullptr, *editor));
     }
     ZETASQL_RET_CHECK(new_column_def.has_column_default() && !expression.empty());
-    absl::Status s = AnalyzeColumnDefaultValue(expression, column->Name(),
-                                               column->GetType(), table,
-                                               /*ddl_create_table=*/nullptr);
+    absl::Status s = AnalyzeColumnDefaultValue(
+        expression, column->Name(), column->GetType(), table,
+        /*ddl_create_table=*/nullptr, &dependent_sequences);
     if (!s.ok()) {
       return error::ColumnDefaultValueParseError(table->Name(), column->Name(),
                                                  s.message());
@@ -865,7 +968,8 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
     editor->clear_original_expression();
     editor->set_has_default_value(false);
   }
-
+  // Clear all the old sequence dependencies and set the new ones
+  editor->set_sequences_used(dependent_sequences);
   return absl::OkStatus();
 }
 
@@ -909,13 +1013,15 @@ absl::Status SchemaUpdaterImpl::AnalyzeGeneratedColumn(
   return AnalyzeColumnExpression(
       expression, column_type, table, latest_schema_, type_factory_,
       name_and_types, "stored generated columns", dependent_column_names,
+      /*dependent_sequences=*/nullptr,
       /*allow_volatile_expression=*/false);
 }
 
 absl::Status SchemaUpdaterImpl::AnalyzeColumnDefaultValue(
     absl::string_view expression, const std::string& column_name,
     const zetasql::Type* column_type, const Table* table,
-    const ddl::CreateTable* ddl_create_table) {
+    const ddl::CreateTable* ddl_create_table,
+    absl::flat_hash_set<const SchemaNode*>* dependent_sequences) {
   std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
   ZETASQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
                                                   &name_and_types));
@@ -929,7 +1035,7 @@ absl::Status SchemaUpdaterImpl::AnalyzeColumnDefaultValue(
   ZETASQL_RETURN_IF_ERROR(AnalyzeColumnExpression(
       expression, column_type, table, latest_schema_, type_factory_,
       name_and_types, "column default", &dependent_column_names,
-      /*allow_volatile_expression=*/true));
+      dependent_sequences, /*allow_volatile_expression=*/true));
   if (!dependent_column_names.empty()) {
     return error::DefaultExpressionWithColumnDependency(column_name);
   }
@@ -949,6 +1055,7 @@ absl::Status SchemaUpdaterImpl::AnalyzeCheckConstraint(
       AnalyzeColumnExpression(expression, zetasql::types::BoolType(), table,
                               latest_schema_, type_factory_, name_and_types,
                               "check constraints", dependent_column_names,
+                              /*dependent_sequences=*/nullptr,
                               /*allow_volatile_expression=*/false));
 
   for (const std::string& column_name : *dependent_column_names) {
@@ -984,8 +1091,7 @@ template <typename ColumnDefModifer>
 absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     const ddl::ColumnDefinition& ddl_column, const Table* table,
     const ddl::CreateTable* ddl_create_table,
-    const database_api::DatabaseDialect& dialect,
-    ColumnDefModifer* modifier) {
+    const database_api::DatabaseDialect& dialect, ColumnDefModifer* modifier) {
   bool is_generated = false;
   bool has_default_value = false;
   // Process any changes in column definition.
@@ -996,6 +1102,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
                                    ));
   modifier->set_type(column_type);
 
+  absl::flat_hash_set<const SchemaNode*> dependent_sequences;
   if (ddl_column.has_column_default()) {
     std::string expression = ddl_column.column_default().expression();
     if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
@@ -1005,9 +1112,11 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     }
     has_default_value = true;
     modifier->set_expression(expression);
-    absl::Status s =
-        AnalyzeColumnDefaultValue(expression, ddl_column.column_name(),
-                                  column_type, table, ddl_create_table);
+
+    absl::Status s = AnalyzeColumnDefaultValue(
+        expression, ddl_column.column_name(), column_type, table,
+        ddl_create_table, &dependent_sequences);
+
     if (!s.ok()) {
       return error::ColumnDefaultValueParseError(
           table->Name(), ddl_column.column_name(), s.message());
@@ -1087,6 +1196,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
              ddl_column.array_subtype().has_length()) {
     modifier->set_declared_max_length(ddl_column.array_subtype().length());
   }
+  modifier->set_sequences_used(dependent_sequences);
   if (!ddl_column.set_options().empty()) {
     ZETASQL_RETURN_IF_ERROR(
         SetColumnOptions(ddl_column.set_options(), dialect, modifier));
@@ -1116,6 +1226,7 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
           return BackfillGeneratedColumnValue(column, context);
         });
   }
+
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return column;
 }
@@ -1687,6 +1798,7 @@ absl::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
                               }));
   if (ddl_foreign_key.has_on_delete()) {
     if (ddl_foreign_key.on_delete() != ddl::ForeignKey::ACTION_UNSPECIFIED &&
+        ddl_foreign_key.on_delete() != ddl::ForeignKey::NO_ACTION &&
         !EmulatorFeatureFlags::instance()
              .flags()
              .enable_fk_delete_cascade_action) {
@@ -1816,9 +1928,7 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateForeignKeyIndex(
       key_part->set_key_name(column_name);
       const auto* key_column = table->FindKeyColumn(column_name);
       if (key_column != nullptr) {
-        if (key_column->is_descending()
-            && key_column->is_nulls_last()
-        ) {
+        if (key_column->is_descending() && key_column->is_nulls_last()) {
           key_part->set_order(ddl::KeyPartClause::DESC);
         } else if (key_column->is_descending() &&
                    !key_column->is_nulls_last()) {
@@ -1908,30 +2018,41 @@ SchemaUpdaterImpl::TranslatePostgreSqlExpression(
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
       postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
-  ZETASQL_ASSIGN_OR_RETURN(ExpressionTranslateResult result,
-                   postgres_translator::spangres::TranslateTableLevelExpression(
-                       expression, simple_table.Name(), catalog,
-                       analyzer_options, type_factory_),
-                   _.With(MapSpangresDDLErrorToSpannerError));
+  ZETASQL_ASSIGN_OR_RETURN(
+      ExpressionTranslateResult result,
+      postgres_translator::spangres::TranslateTableLevelExpression(
+          expression, simple_table.Name(), catalog, analyzer_options,
+          type_factory_,
+          std::make_unique<FunctionCatalog>(
+              type_factory_,
+              /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+              /*schema=*/latest_schema_)),
+      _.With(MapSpangresDDLErrorToSpannerError));
   return result;
 }
 
 absl::StatusOr<ExpressionTranslateResult>
 SchemaUpdaterImpl::TranslatePostgreSqlQueryInView(absl::string_view query) {
   zetasql::AnalyzerOptions analyzer_options =
-      MakeGoogleSqlAnalyzerOptionsForViews();
+      MakeGoogleSqlAnalyzerOptionsForViews(admin::database::v1::POSTGRESQL);
   analyzer_options.CreateDefaultArenasIfNotSet();
   FunctionCatalog function_catalog(type_factory_);
+  function_catalog.SetLatestSchema(latest_schema_);
   Catalog catalog(latest_schema_, &function_catalog, type_factory_,
                   analyzer_options);
 
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
       postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
-  ZETASQL_ASSIGN_OR_RETURN(ExpressionTranslateResult result,
-                   postgres_translator::spangres::TranslateQueryInView(
-                       query, catalog, analyzer_options, type_factory_),
-                   _.With(MapSpangresDDLErrorToSpannerError));
+  ZETASQL_ASSIGN_OR_RETURN(
+      ExpressionTranslateResult result,
+      postgres_translator::spangres::TranslateQueryInView(
+          query, catalog, analyzer_options, type_factory_,
+          std::make_unique<FunctionCatalog>(
+              type_factory_,
+              /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+              /*schema=*/latest_schema_)),
+      _.With(MapSpangresDDLErrorToSpannerError));
   return result;
 }
 
@@ -2796,6 +2917,144 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
   }
 }
 
+template <typename SequenceModifier>
+absl::Status SchemaUpdaterImpl::SetSequenceOptions(
+    const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+    SequenceModifier* modifier) {
+  // We are only setting the sequence options as we see them here. We validate
+  // the options in the function `ValidateSequenceOptions`.
+  for (const ddl::SetOption& option : set_options) {
+    if (option.option_name() == kSequenceKindOptionName) {
+      modifier->set_sequence_kind(Sequence::BIT_REVERSED_POSITIVE);
+    } else if (option.option_name() == kSequenceStartWithCounterOptionName) {
+      if (option.has_int64_value()) {
+        modifier->set_start_with_counter(option.int64_value());
+      } else {
+        modifier->clear_start_with_counter();
+      }
+    } else if (option.option_name() == kSequenceSkipRangeMinOptionName) {
+      if (option.has_int64_value()) {
+        modifier->set_skip_range_min(option.int64_value());
+      } else {
+        modifier->clear_skip_range_min();
+      }
+    } else if (option.option_name() == kSequenceSkipRangeMaxOptionName) {
+      if (option.has_int64_value()) {
+        modifier->set_skip_range_max(option.int64_value());
+      } else {
+        modifier->clear_skip_range_max();
+      }
+    } else {
+      return error::UnsupportedSequenceOption(option.option_name());
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::ValidateSequenceOptions(
+    const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+    const Sequence* current_sequence) {
+  absl::flat_hash_map<std::string, std::optional<int64_t>> int64_options;
+  int64_options.reserve(3);
+  for (const ddl::SetOption& option : set_options) {
+    if (option.option_name() == kSequenceKindOptionName) {
+      if (!option.has_string_value()) {
+        return error::InvalidSequenceOptionValue(kSequenceKindOptionName,
+                                                 "string");
+      }
+      if (option.string_value() != kSequenceKindBitReversedPositive) {
+        return error::UnsupportedSequenceKind(option.string_value());
+      }
+    } else if (option.option_name() == kSequenceStartWithCounterOptionName ||
+               option.option_name() == kSequenceSkipRangeMinOptionName ||
+               option.option_name() == kSequenceSkipRangeMaxOptionName) {
+      // In this block, we're only assigning values to the temporary
+      // `int64_options` map as we see them. We check for their validity
+      // after this for loop.
+
+      // Checking for null value here is necessary, since a sequence can be
+      // altered to clear the option.
+      if (option.has_null_value()) {
+        int64_options[option.option_name()] = std::nullopt;
+      } else {
+        if (!option.has_int64_value()) {
+          return error::InvalidSequenceOptionValue(option.option_name(),
+                                                   "integer");
+        }
+        int64_options[option.option_name()] = option.int64_value();
+      }
+    } else {
+      return error::UnsupportedSequenceOption(option.option_name());
+    }
+  }
+
+  if (int64_options.contains(kSequenceStartWithCounterOptionName)) {
+    if (int64_options[kSequenceStartWithCounterOptionName].has_value() &&
+        int64_options[kSequenceStartWithCounterOptionName].value() < 1) {
+      return error::InvalidSequenceStartWithCounterValue();
+    }
+  }
+
+  std::optional<int64_t> skip_range_min, skip_range_max;
+  if (current_sequence != nullptr) {
+    // We are altering the sequence to set options. So we're loading the current
+    // values of these options to compare against the new values we're seeing.
+    skip_range_min = current_sequence->skip_range_min();
+    skip_range_max = current_sequence->skip_range_max();
+  }
+  // In this condition and below, if skip_range_min (or skip_range_max) is
+  // explicitly set to null, we are overwriting its current value here.
+  if (int64_options.contains(kSequenceSkipRangeMinOptionName)) {
+    skip_range_min = int64_options[kSequenceSkipRangeMinOptionName];
+  }
+  if (int64_options.contains(kSequenceSkipRangeMaxOptionName)) {
+    skip_range_max = int64_options[kSequenceSkipRangeMaxOptionName];
+  }
+
+  if (skip_range_min.has_value() != skip_range_max.has_value()) {
+    return error::SequenceSkipRangeMinMaxNotSetTogether();
+  }
+  if (!skip_range_min.has_value()) {
+    // Skipped range is not set, safely return.
+    return absl::OkStatus();
+  }
+  if (skip_range_min.value() > skip_range_max.value()) {
+    return error::SequenceSkipRangeMinLargerThanMax();
+  }
+  if (skip_range_max.value() < 1) {
+    return error::SequenceSkippedRangeHasAtleastOnePositiveNumber();
+  }
+
+  return absl::OkStatus();
+}
+
+absl::StatusOr<const Sequence*> SchemaUpdaterImpl::CreateSequence(
+    const ddl::CreateSequence& create_sequence) {
+  // Validate the sequence name in global_names_
+  ZETASQL_RETURN_IF_ERROR(
+      global_names_.AddName("Sequence", create_sequence.sequence_name()));
+
+  Sequence::Builder builder;
+  builder.set_name(create_sequence.sequence_name());
+  const Sequence* sequence = builder.get();
+
+  // Validate and set sequence options.
+  const auto& set_options = create_sequence.set_options();
+  if (!set_options.empty()) {
+    ZETASQL_RETURN_IF_ERROR(ValidateSequenceOptions(set_options,
+                                            /*current_sequence=*/nullptr));
+    ZETASQL_RETURN_IF_ERROR(AlterNode<Sequence>(
+        sequence,
+        [this, set_options](Sequence::Editor* editor) -> absl::Status {
+          // Set sequence options
+          return SetSequenceOptions(set_options, editor);
+        }));
+  }
+
+  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  return sequence;
+}
+
 absl::Status SchemaUpdaterImpl::AlterRowDeletionPolicy(
     std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
     const Table* table) {
@@ -2876,6 +3135,30 @@ absl::Status SchemaUpdaterImpl::AlterChangeStreamForClause(
       RegisterTrackedObjects(ddl_change_stream_for_clause, change_stream));
   ZETASQL_RETURN_IF_ERROR(EditChangeStreamTrackedObjects(ddl_change_stream_for_clause,
                                                  change_stream));
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AlterSequence(
+    const ddl::AlterSequence& alter_sequence,
+    const Sequence* current_sequence) {
+  std::string sequence_name = current_sequence->Name();
+  if (alter_sequence.alter_type_case() != ddl::AlterSequence::kSetOptions) {
+    return error::Internal(
+        absl::StrCat("Unsupported alter sequence statement: ",
+                     alter_sequence.DebugString()));
+  }
+
+  const auto& set_options = alter_sequence.set_options();
+  const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& repeated_set_options =
+      set_options.options();
+  ZETASQL_RETURN_IF_ERROR(
+      ValidateSequenceOptions(repeated_set_options, current_sequence));
+  ZETASQL_RETURN_IF_ERROR(AlterNode<Sequence>(
+      current_sequence,
+      [this, repeated_set_options](Sequence::Editor* editor) -> absl::Status {
+        // Set sequence options
+        return SetSequenceOptions(repeated_set_options, editor);
+      }));
   return absl::OkStatus();
 }
 
@@ -2976,6 +3259,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
         return error::ColumnNotFound(table->Name(), column_name);
       }
       const auto& alter_column = alter_table.alter_column();
+      // absl::flat_hash_set<const SchemaNode*> new_sequences_used;
       if (alter_column.has_operation()) {
         ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
             column,
@@ -3042,6 +3326,80 @@ absl::Status SchemaUpdaterImpl::AlterTable(
     default:
       return error::Internal(absl::StrCat("Unsupported alter table type: ",
                                           alter_table.DebugString()));
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AlterIndex(const ddl::AlterIndex& alter_index) {
+  const Index* index = latest_schema_->FindIndex(alter_index.index_name());
+
+  if (index == nullptr) {
+    return error::IndexNotFound(alter_index.index_name());
+  }
+
+  const Table* indexed_table = index->indexed_table();
+  const Table* indexed_data_table = index->index_data_table();
+  ZETASQL_RET_CHECK(indexed_table != nullptr)
+      << "No indexed table found for the index ";
+  ZETASQL_RET_CHECK(indexed_data_table != nullptr)
+      << "No index data table found for the index ";
+
+  switch (alter_index.alter_type_case()) {
+    case ddl::AlterIndex::kAddStoredColumn: {
+      const std::string& column_name =
+          alter_index.add_stored_column().column_name();
+
+      if (indexed_table->FindColumn(column_name) == nullptr) {
+        return error::ColumnNotFound(indexed_table->Name(), column_name);
+      }
+
+      if (indexed_data_table->FindColumn(column_name) != nullptr) {
+        return error::ColumnInIndexAlreadyExists(index->Name(), column_name);
+      }
+
+      ZETASQL_ASSIGN_OR_RETURN(const Column* new_index_data_table_column,
+                       CreateIndexDataTableColumn(indexed_table, column_name,
+                                                  indexed_data_table,
+                                                  index->is_null_filtered()));
+
+      ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+          indexed_data_table,
+          [new_index_data_table_column](Table::Editor* editor) -> absl::Status {
+            editor->add_column(new_index_data_table_column);
+            return absl::OkStatus();
+          }));
+      ZETASQL_RETURN_IF_ERROR(AlterNode<Index>(
+          index,
+          [new_index_data_table_column](Index::Editor* editor) -> absl::Status {
+            editor->add_stored_column(new_index_data_table_column);
+            return absl::OkStatus();
+          }));
+
+      statement_context_->AddAction(
+          [index, new_index_data_table_column](
+              const SchemaValidationContext* context) {
+            return BackfillIndexAddedColumn(index, new_index_data_table_column,
+                                            context);
+          });
+      break;
+    }
+    case ddl::AlterIndex::kDropStoredColumn: {
+      const std::string& column_name = alter_index.drop_stored_column();
+      auto stored_columns = index->stored_columns();
+      if (!absl::c_any_of(stored_columns, [column_name](const Column* c) {
+            return c->Name() == column_name;
+          })) {
+        return error::ColumnNotFoundInIndex(alter_index.index_name(),
+                                            column_name);
+      }
+
+      const Column* drop_column = indexed_data_table->FindColumn(column_name);
+      return DropNode(drop_column);
+      break;
+    }
+    default:
+      ZETASQL_RET_CHECK_FAIL() << "Invalid alter index type: "
+                       << absl::StrCat(alter_index);
   }
   return absl::OkStatus();
 }
@@ -3143,6 +3501,13 @@ absl::Status SchemaUpdaterImpl::DropChangeStream(
   return DropNode(change_stream);
 }
 
+absl::Status SchemaUpdaterImpl::DropSequence(
+    const ddl::DropSequence& drop_sequence, const Sequence* current_sequence) {
+  global_names_.RemoveName(drop_sequence.sequence_name());
+  ZETASQL_RETURN_IF_ERROR(DropNode(current_sequence));
+  return absl::OkStatus();
+}
+
 absl::Status SchemaUpdaterImpl::ApplyImplSetColumnOptions(
     const ddl::SetColumnOptions& set_column_options,
     const database_api::DatabaseDialect& dialect) {
@@ -3173,14 +3538,196 @@ absl::Status SchemaUpdaterImpl::DropFunction(
   const View* view =
       latest_schema_->FindViewCaseSensitive(drop_function.function_name());
   if (view == nullptr) {
+    if (drop_function.has_existence_modifier() &&
+        drop_function.existence_modifier() == ddl::IF_EXISTS) {
+      return absl::OkStatus();
+    }
     return error::ViewNotFound(drop_function.function_name());
   }
   return DropNode(view);
 }
 
-const Schema* EmptySchema() {
-  static const Schema* empty_schema = new Schema;
-  return empty_schema;
+absl::StatusOr<Model::ModelColumn> SchemaUpdaterImpl::CreateModelColumn(
+    const ddl::ColumnDefinition& ddl_column, const Model* model,
+    const ddl::CreateModel* ddl_model,
+    const database_api::DatabaseDialect& dialect) {
+  const std::string& column_name = ddl_column.column_name();
+  ZETASQL_ASSIGN_OR_RETURN(
+      const zetasql::Type* column_type,
+      DDLColumnTypeToGoogleSqlType(ddl_column,
+                                   type_factory_
+                                   ));
+  if (ddl_column.not_null()) {
+    return error::ModelColumnNotNull(model->Name(), column_name);
+  }
+  if (ddl_column.hidden()) {
+    return error::ModelColumnHidden(model->Name(), column_name);
+  }
+  if (ddl_column.has_length()) {
+    return error::ModelColumnLength(model->Name(), column_name);
+  }
+  if (ddl_column.has_generated_column()) {
+    return error::ModelColumnGenerated(model->Name(), column_name);
+  }
+  if (ddl_column.has_column_default()) {
+    return error::ModelColumnDefault(model->Name(), column_name);
+  }
+
+  std::optional<bool> is_required;
+  for (const auto& option : ddl_column.set_options()) {
+    if (option.option_name() == ddl::kModelColumnRequiredOptionName) {
+      if (option.has_null_value()) {
+        is_required = std::nullopt;
+      } else {
+        ZETASQL_RET_CHECK(option.has_bool_value())
+            << "Option " << ddl::kModelColumnRequiredOptionName
+            << " can only take bool value";
+        is_required = option.bool_value();
+      }
+    } else {
+      ZETASQL_RET_CHECK_FAIL() << "Invalid column option: " << option.option_name();
+    }
+  }
+
+  return Model::ModelColumn{
+      .name = column_name,
+      .type = column_type,
+      // Auto discovery doesn't work in Emulator.
+      .is_explicit = true,
+      .is_required = is_required,
+  };
+}
+
+absl::Status SchemaUpdaterImpl::CreateModel(
+    const ddl::CreateModel& ddl_model,
+    const database_api::DatabaseDialect& dialect) {
+  const Model* existing_model =
+      latest_schema_->FindModel(ddl_model.model_name());
+
+  bool replace = false;
+  if (existing_model && ddl_model.existence_modifier() == ddl::IF_NOT_EXISTS) {
+    return absl::OkStatus();
+  } else if (existing_model &&
+             ddl_model.existence_modifier() == ddl::OR_REPLACE) {
+    replace = true;
+  } else {
+    if (latest_schema_->models().size() >= limits::kMaxModelsPerDatabase) {
+      return error::TooManyModelsPerDatabase(ddl_model.model_name(),
+                                             limits::kMaxModelsPerDatabase);
+    }
+
+    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Model", ddl_model.model_name()));
+  }
+
+  Model::Builder builder;
+  builder.set_name(ddl_model.model_name());
+  for (const ddl::ColumnDefinition& input_column : ddl_model.input()) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        Model::ModelColumn column,
+        CreateModelColumn(input_column, builder.get(), &ddl_model, dialect));
+    builder.add_input_column(column);
+  }
+
+  for (const ddl::ColumnDefinition& output_column : ddl_model.output()) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        Model::ModelColumn column,
+        CreateModelColumn(output_column, builder.get(), &ddl_model, dialect));
+    builder.add_output_column(column);
+  }
+  builder.set_remote(ddl_model.remote());
+  ZETASQL_RETURN_IF_ERROR(SetModelOptions(ddl_model.set_options(), &builder));
+  const Model* model = builder.get();
+
+  if (replace) {
+    return AlterNode<Model>(existing_model,
+                            [&](Model::Editor* editor) -> absl::Status {
+                              editor->copy_from(model);
+                              return absl::OkStatus();
+                            });
+  } else {
+    return AddNode(builder.build());
+  }
+}
+
+absl::Status SchemaUpdaterImpl::AlterModel(const ddl::AlterModel& alter_model) {
+  const Model* model = latest_schema_->FindModel(alter_model.model_name());
+  if (model == nullptr) {
+    if (alter_model.if_exists()) {
+      return absl::OkStatus();
+    }
+    return error::ModelNotFound(alter_model.model_name());
+  }
+
+  const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& options =
+      alter_model.set_options().options();
+  ZETASQL_RETURN_IF_ERROR(AlterNode<Model>(
+      model, [this, options](Model::Editor* editor) -> absl::Status {
+        return SetModelOptions(options, editor);
+      }));
+  return absl::OkStatus();
+}
+
+template <typename ModelModifier>
+absl::Status SchemaUpdaterImpl::SetModelOptions(
+    const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+    ModelModifier* modifier) {
+  for (const ddl::SetOption& option : set_options) {
+    if (option.option_name() == ddl::kModelDefaultBatchSizeOptionName) {
+      if (option.has_null_value()) {
+        modifier->set_default_batch_size(std::nullopt);
+      } else {
+        ZETASQL_RET_CHECK(option.has_int64_value())
+            << "Option " << ddl::kModelDefaultBatchSizeOptionName
+            << " can only take int64_t value";
+        modifier->set_default_batch_size(option.int64_value());
+      }
+    } else if (option.option_name() == ddl::kModelEndpointOptionName) {
+      if (option.has_null_value()) {
+        modifier->set_endpoint(std::nullopt);
+      } else {
+        ZETASQL_RET_CHECK(option.has_string_value())
+            << "Option " << ddl::kModelEndpointOptionName
+            << " can only take string value";
+        modifier->set_endpoint(option.string_value());
+      }
+    } else if (option.option_name() == ddl::kModelEndpointsOptionName) {
+      if (option.has_null_value()) {
+        modifier->set_endpoints({});
+      } else {
+        ZETASQL_RET_CHECK(!option.string_list_value().empty())
+            << "Option " << ddl::kModelEndpointsOptionName
+            << " can only take string list value";
+        modifier->set_endpoints({option.string_list_value().begin(),
+                                 option.string_list_value().end()});
+      }
+    } else {
+      ZETASQL_RET_CHECK_FAIL() << "Invalid column option: " << option.option_name();
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::DropModel(const ddl::DropModel& drop_model) {
+  const Model* model = latest_schema_->FindModel(drop_model.model_name());
+  if (model == nullptr) {
+    if (drop_model.if_exists()) {
+      return absl::OkStatus();
+    }
+    return error::ModelNotFound(drop_model.model_name());
+  }
+  return DropNode(model);
+}
+
+const Schema* EmptySchema(database_api::DatabaseDialect dialect) {
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    static const Schema* empty_pg_schema =
+        new Schema(SchemaGraph::CreateEmpty()
+                   ,
+                   dialect);
+    return empty_pg_schema;
+  }
+  static const Schema* empty_gsql_schema = new Schema;
+  return empty_gsql_schema;
 }
 
 }  // namespace
@@ -3190,7 +3737,7 @@ SchemaUpdater::ValidateSchemaFromDDL(
     const SchemaChangeOperation& schema_change_operation,
     const SchemaChangeContext& context, const Schema* existing_schema) {
   if (existing_schema == nullptr) {
-    existing_schema = EmptySchema();
+    existing_schema = EmptySchema(schema_change_operation.database_dialect);
   }
   ZETASQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
                    SchemaUpdaterImpl::Build(
@@ -3255,7 +3802,8 @@ SchemaUpdater::CreateSchemaFromDDL(
     const SchemaChangeContext& context) {
   ZETASQL_ASSIGN_OR_RETURN(
       SchemaChangeResult result,
-      UpdateSchemaFromDDL(EmptySchema(), schema_change_operation, context));
+      UpdateSchemaFromDDL(EmptySchema(schema_change_operation.database_dialect),
+                          schema_change_operation, context));
   ZETASQL_RETURN_IF_ERROR(result.backfill_status);
   return std::move(result.updated_schema);
 }
@@ -3289,6 +3837,7 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_expression_string = true,
         .enable_if_not_exists = true,
         .enable_change_streams = true,
+        .enable_sequence = true,
     };
     ZETASQL_ASSIGN_OR_RETURN(ddl::DDLStatementList ddl_statement_list,
                      translator->TranslateForEmulator(parser_output, options));

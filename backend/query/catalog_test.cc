@@ -17,12 +17,13 @@
 #include "zetasql/public/catalog.h"
 
 #include <memory>
-#include <optional>
 #include <string>
-#include <vector>
 
+#include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "zetasql/public/analyzer.h"
+#include "zetasql/public/analyzer_output.h"
 #include "zetasql/public/function.h"
+#include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -30,14 +31,15 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
-#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/schema.h"
-#include "backend/schema/catalog/table.h"
 #include "tests/common/schema_constructor.h"
 #include "tests/common/scoped_feature_flags_setter.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 
 namespace google {
 namespace spanner {
@@ -45,6 +47,8 @@ namespace emulator {
 namespace backend {
 namespace {
 
+using postgres_translator::spangres::datatypes::GetPgJsonbType;
+using postgres_translator::spangres::datatypes::GetPgNumericType;
 using ::testing::Contains;
 using ::testing::Property;
 using ::zetasql_base::testing::StatusIs;
@@ -57,6 +61,7 @@ class AnalyzeStatementTest : public testing::Test {
     std::unique_ptr<const Schema> schema =
         test::CreateSchemaWithOneTable(&type_factory);
     FunctionCatalog function_catalog{&type_factory};
+    function_catalog.SetLatestSchema(schema.get());
     auto analyzer_options = MakeGoogleSqlAnalyzerOptions();
     Catalog catalog{schema.get(), &function_catalog, &type_factory,
                     analyzer_options};
@@ -112,13 +117,19 @@ class CatalogTest : public testing::Test {
 
   void SetUp() override {
     schema_ = test::CreateSchemaWithOneTable(&type_factory_);
+    function_catalog_.SetLatestSchema(schema_.get());
     catalog_ = std::make_unique<Catalog>(schema_.get(), &function_catalog_,
                                          &type_factory_);
   }
 
-  void MakeCatalog(absl::Span<const std::string> statements) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema_,
-                         test::CreateSchemaFromDDL(statements, &type_factory_));
+  void MakeCatalog(absl::Span<const std::string> statements,
+                   database_api::DatabaseDialect dialect =
+                       database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema_, test::CreateSchemaFromDDL(statements,
+                                           &type_factory_
+                                           ,
+                                           dialect));
     catalog_ = std::make_unique<Catalog>(schema_.get(), &function_catalog_,
                                          &type_factory_);
   }
@@ -213,6 +224,14 @@ TEST_F(CatalogTest, FindViewTable) {
   EXPECT_EQ(view->FindColumnByName("view_col"), view_col);
 }
 
+TEST_F(CatalogTest, FindBuiltInTableValuedFunction) {
+  const zetasql::TableValuedFunction* tvf;
+  ZETASQL_EXPECT_OK(catalog().FindTableValuedFunction({"ML.PREDICT"}, &tvf, {}));
+  EXPECT_EQ(tvf->FullName(), "ML.PREDICT");
+  ZETASQL_EXPECT_OK(catalog().FindTableValuedFunction({"SAFE.ML.PREDICT"}, &tvf, {}));
+  EXPECT_EQ(tvf->FullName(), "SAFE.ML.PREDICT");
+}
+
 TEST_F(CatalogTest, FindTableValuedFunction) {
   MakeCatalog({
       R"(
@@ -230,6 +249,7 @@ TEST_F(CatalogTest, FindTableValuedFunction) {
   ZETASQL_EXPECT_OK(catalog().FindTableValuedFunction({"READ_test_stream"}, &tvf, {}));
   EXPECT_EQ(tvf->FullName(), "READ_test_stream");
 }
+
 TEST_F(CatalogTest, FindTableValuedFunctionIsNotFound) {
   MakeCatalog({
       R"(
@@ -327,6 +347,74 @@ TEST_F(CatalogTest, FindChangeStreamInternalDataTableNotValidFromExternalUser) {
       catalog().FindTable({"_change_stream_dat_test_stream"}, &data_table, {}),
       StatusIs(absl::StatusCode::kNotFound));
   EXPECT_EQ(data_table, nullptr);
+}
+
+TEST_F(CatalogTest, FindSequence) {
+  test::ScopedEmulatorFeatureFlagsSetter flag_setter({
+      .enable_bit_reversed_positive_sequences = true,
+  });
+  MakeCatalog({
+      R"(
+        CREATE SEQUENCE myseq OPTIONS (
+          sequence_kind = "bit_reversed_positive",
+          start_with_counter = 500
+        )
+      )",
+      R"(
+        CREATE SEQUENCE myseq2 OPTIONS (
+          sequence_kind = "bit_reversed_positive",
+          skip_range_min = 1,
+          skip_range_max = 1000
+        )
+      )",
+      R"(
+        CREATE TABLE test_table (
+          int64_col INT64 DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE myseq)),
+          string_col STRING(MAX)
+        ) PRIMARY KEY (int64_col)
+      )",
+  });
+
+  const zetasql::Sequence* myseq;
+  ZETASQL_EXPECT_OK(catalog().FindSequence({"myseq"}, &myseq, {}));
+  EXPECT_NE(myseq, nullptr);
+  EXPECT_EQ(myseq->Name(), "myseq");
+  const zetasql::Sequence* myseq2;
+  ZETASQL_EXPECT_OK(catalog().FindSequence({"myseq2"}, &myseq2, {}));
+  EXPECT_NE(myseq2, nullptr);
+  EXPECT_EQ(myseq2->Name(), "myseq2");
+  const zetasql::Sequence* myseq3;
+  EXPECT_THAT(catalog().FindSequence({"myseq3"}, &myseq3, {}),
+              StatusIs(absl::StatusCode::kNotFound));
+  EXPECT_EQ(myseq3, nullptr);
+}
+
+TEST_F(CatalogTest, GetPGNumericAndPGJsonbType) {
+  MakeCatalog(
+      {
+          R"(
+        CREATE TABLE test_table (
+          key bigint primary key,
+          value varchar
+        ))",
+      },
+      database_api::DatabaseDialect::POSTGRESQL);
+
+  const zetasql::Type* int64_t;
+  ZETASQL_ASSERT_OK(catalog().FindType({"INT64"}, &int64_t));
+  EXPECT_EQ(int64_t, zetasql::types::Int64Type());
+
+  const zetasql::Type* pg_numeric_type;
+  ZETASQL_ASSERT_OK(catalog().FindType({"Pg", "Numeric"}, &pg_numeric_type));
+  EXPECT_EQ(pg_numeric_type, GetPgNumericType());
+
+  const zetasql::Type* pg_jsonb_type;
+  ZETASQL_ASSERT_OK(catalog().FindType({"PG", "JSONB"}, &pg_jsonb_type));
+  EXPECT_EQ(pg_jsonb_type, GetPgJsonbType());
+
+  const zetasql::Type* empty_type;
+  EXPECT_THAT(catalog().FindType({"UNKNOWN"}, &empty_type),
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 }  // namespace

@@ -26,6 +26,7 @@
 #include "backend/actions/ops.h"
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
+#include "backend/datamodel/value.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/iterator.h"
@@ -92,6 +93,12 @@ class ReadOnlyStore {
   virtual absl::StatusOr<std::unique_ptr<StorageIterator>> Read(
       const Table* table, const KeyRange& key_range,
       absl::Span<const Column* const> columns) const = 0;
+
+  // Only reads committed values for the given key, ignoring any mutations
+  // buffered within the transaction.
+  virtual absl::StatusOr<ValueList> ReadCommitted(
+      const Table* table, const Key& key,
+      std::vector<const Column*> columns) const = 0;
 };
 
 // ActionContext contains the context in which an action operates.

@@ -43,4 +43,178 @@
   prorettype => 'timestamptz', proargtypes => 'text timestamptz timestamptz',
   prosrc => 'timestamptz_bin' },
 
+#############################
+# FTS SPANNER.TOKENLIST I/O FUNCTIONS
+#############################
+ { oid => '9050', proname => 'spanner_tokenlist_in',
+  prorettype => 'tokenlist', proargtypes => 'cstring',
+  prosrc => 'spangres_fts_func' },
+
+{ oid => '9051', proname => 'spanner_tokenlist_out',
+  prorettype => 'cstring', proargtypes => 'tokenlist',
+  prosrc => 'spangres_fts_func' },
+
+#############################
+# FTS TOKENIZATION FUNCTIONS
+#############################
+# TOKENIZE_FULLTEXT
+{ proname => 'tokenize_fulltext', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text',
+  proargnames => '{value}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_fulltext', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_text',
+  proargnames => '{value}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_fulltext', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text text',
+  proargnames => '{value,language_tag}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_fulltext', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_text text',
+  proargnames => '{value,language_tag}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_fulltext', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text text text',
+  proargnames => '{value,language_tag,content_type}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_fulltext', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_text text text',
+  proargnames => '{value,language_tag,content_type}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_fulltext', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text text text text',
+  proargnames => '{value,language_tag,content_type,hit_category}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_fulltext', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_text text text text',
+  proargnames => '{value,language_tag,content_type,hit_category}',
+  prosrc => 'spangres_fts_func' },
+
+# TOKENIZE_SUBSTRING
+{ proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text',
+  proargnames => '{value}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_text',
+  proargnames => '{value}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text int8',
+  proargnames => '{value, ngram_size_max}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_text int8',
+  proargnames => '{value, ngram_size_max}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text int8 int8',
+  proargnames => '{value, ngram_size_max, ngram_size_min}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_text int8 int8',
+  proargnames => '{value, ngram_size_max, ngram_size_min}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text int8 int8 bool',
+  proargnames => '{value, ngram_size_max, ngram_size_min,
+  support_relative_search}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_text int8 int8 bool',
+  proargnames => '{value, ngram_size_max, ngram_size_min,
+  support_relative_search}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text int8 int8 bool text',
+  proargnames => '{value, ngram_size_max, ngram_size_min,
+  support_relative_search, content_type}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_text int8 int8 bool text',
+  proargnames => '{value, ngram_size_max, ngram_size_min,
+  support_relative_search, content_type}',
+  prosrc => 'spangres_fts_func' },
+
+# TOKEN
+{ proname => 'token', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text',
+  proargnames => '{value}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'token', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_text',
+  proargnames => '{value}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'token', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'bytea',
+  proargnames => '{value}',
+  prosrc => 'spangres_fts_func' },
+
+{ proname => 'token', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_bytea',
+  proargnames => '{value}',
+  prosrc => 'spangres_fts_func' },
+
+
+# TOKENIZE_NUMBER
+
+# TOKENIZE_BOOL
+
+# TOKENLIST_CONCAT
+
+#############################
+# FTS SEARCH FUNCTIONS
+#############################
+
+# SEARCH
+
+# SEARCH_SUBSTRING
+
+# SCORE
+
+#############################
+# FTS DEBUG FUNCTIONS
+#############################
+
+# TOKENLIST_DEBUG
+
+# SEARCH_DEBUG
+
+#############################
+# FTS MISC FUNCTIONS
+#############################
+
+# SNIPPET
+
+#############################
+# VECTOR FUNCTIONS
+#############################
+
+{ proname => 'cosine_distance', pronamespace => 'spanner',
+  prorettype => 'float8', proargtypes => '_float8 _float8',
+  prosrc => 'cosine_distance' },
+
+{ proname => 'euclidean_distance', pronamespace => 'spanner',
+  prorettype => 'float8', proargtypes => '_float8 _float8',
+  prosrc => 'euclidean_distance' },
+
 ]

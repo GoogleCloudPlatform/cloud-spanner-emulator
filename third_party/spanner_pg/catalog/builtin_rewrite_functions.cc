@@ -85,7 +85,7 @@ void AddTruncFunctionSignatures(
              zetasql::FunctionArgumentTypeOptions().set_argument_name(
                  "arg1", zetasql::kPositionalOnly)}},
            /*context_ptr=*/nullptr, "trunc(arg1, 0)"),
-       /*has_postgres_proc_oid=*/true, /*has_mapped_function=*/false});
+       /*has_mapped_function=*/false});
 }
 
 void AddPgCatalogFunctions(std::vector<PostgresFunctionArguments>& functions) {
@@ -103,7 +103,7 @@ void AddPgCatalogFunctions(std::vector<PostgresFunctionArguments>& functions) {
              // so all names must be fully qualified.
              "(select pg_views.definition from pg_catalog.pg_views where "
              "pg_views.viewname = arg1)"),
-         /*has_postgres_proc_oid=*/true, /*has_mapped_function=*/false}}});
+         /*has_mapped_function=*/false}}});
 }
 
 void AddRewriteFunctions(std::vector<PostgresFunctionArguments>& functions) {

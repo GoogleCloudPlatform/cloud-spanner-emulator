@@ -94,7 +94,7 @@ static absl::Status DateTimeParseError(int dterr, absl::string_view str,
  * tm2timestamp return an error code rather than calling ereport, so they
  * should be safe to call directly instead of through the error shim.
  */
-absl::StatusOr<int64_t> IntervalToSecs(absl::string_view input_string) {
+absl::StatusOr<PGInterval> ParseInterval(absl::string_view input_string) {
   fsec_t fsec;
   struct pg_tm tt, *tm = &tt;
   int dtype;
@@ -134,7 +134,13 @@ absl::StatusOr<int64_t> IntervalToSecs(absl::string_view input_string) {
         absl::StrFormat("invalid interval: \"%s\"", input_string));
   }
 
+  return PGInterval{.months = res.month, .days = res.day, .micros = res.time};
+}
+
+absl::StatusOr<int64_t> IntervalToSecs(absl::string_view input_string) {
+  ZETASQL_ASSIGN_OR_RETURN(PGInterval interval, ParseInterval(input_string));
   int64_t total;
-  total = (((res.month * 30) + res.day) * 86400) + res.time / USECS_PER_SEC;
+  total = (((interval.months * 30) + interval.days) * 86400) +
+          interval.micros / USECS_PER_SEC;
   return total;
 }

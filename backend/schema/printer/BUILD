@@ -29,16 +29,21 @@ cc_library(
         "print_ddl.h",
     ],
     deps = [
-        "//backend/common:case",
-        "//backend/datamodel:types",
         "//backend/schema/catalog:schema",
         "//backend/schema/ddl:operations_cc_proto",
+        "//backend/schema/graph:schema_node",
         "//backend/schema/parser:ddl_reserved_words",  # buildcleaner: keep
         "//third_party/spanner_pg/ddl:spangres_direct_schema_printer_impl",
+        "//third_party/spanner_pg/ddl:spangres_schema_printer",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
+        "@com_google_zetasql//zetasql/public:strings",
+        "@com_google_zetasql//zetasql/public:type",
     ],
 )

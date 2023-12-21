@@ -105,7 +105,7 @@ cc_test(
         "--spangres_use_emulator_numeric_type=true",
     ],
     deps = [
-        ":catalog",
+        ":query_context",
         ":query_engine",
         "//backend/access:read",
         "//backend/access:write",
@@ -122,7 +122,7 @@ cc_test(
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
         "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -144,6 +144,7 @@ cc_library(
         "//common:constants",
         "//common:feature_flags",
         "@com_google_absl//absl/time",
+        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_zetasql//zetasql/public:analyzer",
         "@com_google_zetasql//zetasql/public:analyzer_options",
         "@com_google_zetasql//zetasql/public:language_options",
@@ -163,6 +164,7 @@ cc_library(
         "//backend/query/feature_filter:sql_feature_filter",
         "//backend/query/feature_filter:sql_features_view",
         "//backend/schema/catalog:schema",
+        "//common:constants",
         "//common:errors",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -395,6 +397,8 @@ cc_library(
         ":analyzer_options",
         ":function_catalog",
         ":information_schema_catalog",
+        ":queryable_model",
+        ":queryable_sequence",
         ":queryable_table",
         ":queryable_view",
         ":spanner_sys_catalog",
@@ -404,17 +408,19 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//common:errors",
         "//third_party/spanner_pg/catalog:pg_catalog",
+        "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
+        "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/types:span",
         "@com_google_zetasql//zetasql/public:analyzer_options",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:simple_catalog",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )
@@ -432,13 +438,18 @@ cc_test(
         "//tests/common:proto_matchers",
         "//tests/common:scoped_feature_flags_setter",
         "//tests/common:test_schema_constructor",
+        "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
+        "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:analyzer",
+        "@com_google_zetasql//zetasql/public:analyzer_output",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:type",
@@ -478,6 +489,22 @@ cc_library(
         "@com_google_zetasql//zetasql/public:analyzer_output",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:type",
+    ],
+)
+
+cc_library(
+    name = "queryable_sequence",
+    srcs = [
+        "queryable_sequence.cc",
+    ],
+    hdrs = [
+        "queryable_sequence.h",
+    ],
+    deps = [
+        "//backend/schema/catalog:schema",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_zetasql//zetasql/public:catalog",
     ],
 )
 
@@ -570,6 +597,9 @@ cc_library(
     deps = [
         ":analyzer_options",
         "//backend/common:case",
+        "//backend/query/ml:ml_predict_table_valued_function",
+        "//backend/schema/catalog:schema",
+        "//common:bit_reverse",
         "//common:constants",
         "//common:errors",
         "//common:feature_flags",
@@ -582,7 +612,6 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
-        "@com_google_zetasql//zetasql/base:bits",
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:builtin_function",
         "@com_google_zetasql//zetasql/public:builtin_function_options",
@@ -682,6 +711,18 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/resolved_ast",
         "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "queryable_model",
+    srcs = ["queryable_model.cc"],
+    hdrs = ["queryable_model.h"],
+    deps = [
+        "//backend/schema/catalog:schema",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:type",
     ],
 )
 

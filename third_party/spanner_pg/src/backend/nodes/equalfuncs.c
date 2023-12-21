@@ -1489,6 +1489,7 @@ _equalRenameStmt(const RenameStmt *a, const RenameStmt *b)
 	COMPARE_STRING_FIELD(newname);
 	COMPARE_SCALAR_FIELD(behavior);
 	COMPARE_SCALAR_FIELD(missing_ok);
+	COMPARE_SCALAR_FIELD(addSynonym);
 
 	return true;
 }
@@ -3102,6 +3103,14 @@ _equalTtlSpangres(const Ttl *a, const Ttl *b)
 	return true;
 }
 
+static bool
+_equalSynonymClause(const SynonymClause *a, const SynonymClause *b)
+{
+	COMPARE_STRING_FIELD(name);
+
+	return true;
+}
+
 /*
  * Stuff from pg_list.h
  */
@@ -3956,6 +3965,9 @@ equal(const void *a, const void *b)
 			break;
 		case T_Ttl:
 			retval = _equalTtlSpangres(a, b);
+			break;
+		case T_SynonymClause:
+			retval = _equalSynonymClause(a, b);
 			break;
 
 		default:

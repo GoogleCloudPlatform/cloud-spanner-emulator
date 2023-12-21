@@ -88,6 +88,15 @@ group {
 }
 
 group {
+  code: "INTERVAL_FIELD_OVERFLOW"
+
+  message {
+    name: "InvalidFieldValueOutOfRange"
+    pg_message_id: "interval field value out of range: \"%s\""
+  }
+}
+
+group {
   code: "SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION"
 
   message {
@@ -173,6 +182,11 @@ group {
   message {
     name: "OperatorNotExist"
     pg_message_id: "operator does not exist: %s"
+  }
+
+  message {
+    name: "UnknownFunction"
+    pg_message_id: "Unknown function or function is not a built-in: %u"
   }
 }
 
@@ -529,6 +543,11 @@ group {
     name: "NumericPrecisionOutOfRange"
     pg_message_id: "NUMERIC precision %d must be between 1 and %d"
   }
+
+  message {
+    name: "DateUnitsNotRecognized"
+    pg_message_id: "date units \"%s\" not recognized"
+  }
 }
 
 group {
@@ -542,6 +561,11 @@ group {
   message {
     name: "InvalidArgumentType"
     pg_message_id: "argument of %s must be type %s, not type %s"
+  }
+
+  message {
+    name: "InvalidExpressionType"
+    pg_message_id: "column \"%s\" is of type %s but expression is of type %s"
   }
 }
 
@@ -613,6 +637,30 @@ group {
     name: "StrideOutOfRange"
     pg_message_id: "stride must be greater than zero"
   }
+
+  message {
+    name: "ValueOutOfRange"
+    pg_message_id: "value for \"%s\" in source string is out of range"
+  }
+
+  message {
+    name: "TimestampOutOfRangeWithValue"
+    pg_message_id: "timestamp out of range: \"%s\""
+  }
+
+  message {
+    name: "DateOutOfRangeWithValue"
+    pg_message_id: "date out of range: \"%s\""
+  }
+}
+
+group {
+  code: "INVALID_TIME_ZONE_DISPLACEMENT_VALUE"
+
+  message {
+    name: "TimeZoneDisplacementOutOfRange"
+    pg_message_id: "time zone displacement out of range: \"%s\""
+  }
 }
 
 group {
@@ -669,6 +717,31 @@ group {
   message {
     name: "InvalidValue"
     pg_message_id: "invalid value \"%s\" for \"%s\""
+  }
+
+  message {
+    name: "InvalidCombinationOfDateConventions"
+    pg_message_id: "invalid combination of date conventions"
+  }
+
+  message {
+    name: "ConflictingValuesInFormattingString"
+    pg_message_id: "conflicting values for \"%s\" field in formatting string"
+  }
+
+  message {
+    name: "SourceStringTooShort"
+    pg_message_id: "source string too short for \"%s\" formatting field"
+  }
+
+  message {
+    name: "InvalidHour"
+    pg_message_id: "hour \"%d\" is invalid for the 12-hour clock"
+  }
+
+  message {
+    name: "MissingYear"
+    pg_message_id: "cannot calculate day of year without year information"
   }
 }
 

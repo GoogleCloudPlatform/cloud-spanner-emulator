@@ -21,6 +21,7 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
+#include "absl/time/time.h"
 #include "frontend/converters/pg_change_streams.h"
 
 namespace google {
@@ -144,7 +145,12 @@ struct ChangeStreamRecords {
 absl::StatusOr<ChangeStreamRecords> GetChangeStreamRecordsFromResultSet(
     const google::spanner::v1::ResultSet& result_set);
 
-inline std::string EncodeTimestampString(absl::Time timestamp) {
+inline std::string EncodeTimestampString(absl::Time timestamp,
+                                         bool is_pg = false) {
+  if (is_pg) {
+    return absl::StrCat(
+        absl::FormatTime(absl::RFC3339_full, timestamp, absl::LocalTimeZone()));
+  }
   constexpr char kRFC3339TimeFormatNoOffset[] = "%E4Y-%m-%dT%H:%M:%E*S";
   return absl::StrCat(absl::FormatTime(kRFC3339TimeFormatNoOffset, timestamp,
                                        absl::UTCTimeZone()),

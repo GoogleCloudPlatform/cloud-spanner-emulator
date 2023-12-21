@@ -36,6 +36,11 @@ struct QueryContext {
 
   // A writer for writing data for DML requests. Can be null for SELECT queries.
   RowWriter* writer = nullptr;
+
+  // True if the context of this query allows functions that need read-write
+  // transactions. E.g. when analyzing a column expression, in partitioned DML,
+  // or read-write transactions.
+  bool allow_read_write_only_functions = false;
 };
 
 }  // namespace backend

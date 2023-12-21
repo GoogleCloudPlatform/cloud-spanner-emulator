@@ -73,38 +73,20 @@
 
 namespace postgres_translator {
 namespace {
-using spangres::datatypes::common::MaxNumericString;
-using spangres::datatypes::common::MinNumericString;
+using spangres::datatypes::CreatePgJsonbValueWithMemoryContext;
+using spangres::datatypes::CreatePgNumericValueWithMemoryContext;
 using spangres::datatypes::common::kMaxPGNumericFractionalDigits;
 using spangres::datatypes::common::kMaxPGNumericWholeDigits;
+using spangres::datatypes::common::MaxNumericString;
+using spangres::datatypes::common::MinNumericString;
 using testing::HasSubstr;
 using zetasql_base::testing::IsOkAndHolds;
 using zetasql_base::testing::StatusIs;
-
-// Create PG.JSONB value in a valid memory context which is required for calling
-// PG code.
-static absl::StatusOr<zetasql::Value> CreatePgJsonbValueWithMemoryContext(
-    absl::string_view jsonb_string) {
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
-      postgres_translator::interfaces::CreatePGArena(nullptr));
-  return spangres::datatypes::CreatePgJsonbValue(jsonb_string);
-}
 
 static zetasql::Value CreatePgJsonBNullValue() {
   static const zetasql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
   return zetasql::values::Null(gsql_pg_jsonb);
-}
-
-// Create PG.NUMERIC value in a valid memory context which is required for
-// calling PG code.
-static absl::StatusOr<zetasql::Value> CreatePgNumericValueWithMemoryContext(
-    absl::string_view numeric_string) {
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
-      postgres_translator::interfaces::CreatePGArena(nullptr));
-  return spangres::datatypes::CreatePgNumericValue(numeric_string);
 }
 
 static zetasql::Value CreatePgNumericNullValue() {
@@ -214,10 +196,71 @@ const zetasql::Value kPGNumericMinDoubleValueRetainingLast15Digits =
         absl::StrCat("0.", std::string(307, '0'), "22250738585072"));
 
 const zetasql::Value kNullStringValue = zetasql::values::NullString();
+absl::TimeZone default_timezone() {
+  absl::TimeZone timezone;
+  ABSL_CHECK(absl::LoadTimeZone("America/Los_Angeles", &timezone));
+  return timezone;
+}
+absl::TimeZone timezone = default_timezone();
 
 INSTANTIATE_TEST_SUITE_P(
     PGScalarFunctionTests, PGScalarFunctionsTest,
     ::testing::Values(
+        PGScalarFunctionTestCase{
+            kPGTimestamptzAddFunctionName,
+            {zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
+             zetasql::values::String("3 months 8 days 20 seconds")},
+            zetasql::values::Timestamp(absl::FromCivil(
+                absl::CivilSecond(2005, 4, 10, 3, 4, 25), timezone)),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractFunctionName,
+            {zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
+             zetasql::values::String("2 years 1 hour")},
+            zetasql::values::Timestamp(absl::FromCivil(
+                absl::CivilSecond(2003, 1, 2, 2, 4, 5), timezone)),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzBinFunctionName,
+            {zetasql::values::String("10 seconds"),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2001, 1, 1, 0, 0, 0), timezone))},
+            zetasql::values::Timestamp(absl::FromCivil(
+                absl::CivilSecond(2020, 2, 11, 15, 44, 10), timezone)),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzTruncFunctionName,
+            {zetasql::values::String("day"),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone))},
+            zetasql::values::Timestamp(absl::FromCivil(
+                absl::CivilSecond(2020, 2, 11, 0, 0, 0), timezone)),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzTruncFunctionName,
+            {zetasql::values::String("day"),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
+             zetasql::values::String("Australia/Sydney")},
+            zetasql::values::Timestamp(absl::FromCivil(
+                absl::CivilSecond(2020, 2, 11, 5, 0, 0), timezone)),
+        },
+        PGScalarFunctionTestCase{
+            kPGExtractFunctionName,
+            {zetasql::values::String("second"),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone))},
+            *CreatePgNumericValueWithMemoryContext("17"),
+        },
+        PGScalarFunctionTestCase{
+            kPGExtractFunctionName,
+            {zetasql::values::String("month"), zetasql::values::Date(45)},
+            *CreatePgNumericValueWithMemoryContext("2"),
+        },
         // pg.jsonb_array_element
         PGScalarFunctionTestCase{
             kPGJsonBArrayElementFunctionName,
@@ -897,6 +940,198 @@ INSTANTIATE_TEST_SUITE_P(
             {kNullPGNumericValue, zetasql::Value::Int64(5),
              zetasql::Value::Int64(3)},
             kNullPGNumericValue},
+
+        // PG.NUMERIC equals
+        PGScalarFunctionTestCase{kPGNumericEqualsFunctionName,
+                                 {kNullPGNumericValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericEqualsFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericNaNValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericEqualsFunctionName,
+                                 {kPGNumericValue, kPGNumericValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericEqualsFunctionName,
+                                 {kNullPGNumericValue, kPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericEqualsFunctionName,
+                                 {kNullPGNumericValue, kPGNumericNaNValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericEqualsFunctionName,
+                                 {kPGNumericValue, kPGNumericNaNValue},
+                                 zetasql::values::False()},
+
+        // PG.NUMERIC not equals
+        PGScalarFunctionTestCase{kPGNumericNotEqualsFunctionName,
+                                 {kNullPGNumericValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericNotEqualsFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericNaNValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericNotEqualsFunctionName,
+                                 {kPGNumericValue, kPGNumericValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericNotEqualsFunctionName,
+                                 {kNullPGNumericValue, kPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericNotEqualsFunctionName,
+                                 {kNullPGNumericValue, kPGNumericNaNValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericNotEqualsFunctionName,
+                                 {kPGNumericValue, kPGNumericNaNValue},
+                                 zetasql::values::True()},
+
+        // PG.NUMERIC less than
+        PGScalarFunctionTestCase{kPGNumericLessThanFunctionName,
+                                 {kNullPGNumericValue, kPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericLessThanFunctionName,
+                                 {kNullPGNumericValue, kPGNumericMinValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericLessThanFunctionName,
+                                 {kNullPGNumericValue, kPGNumericNaNValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericLessThanFunctionName,
+                                 {kPGNumericValue, kPGNumericNaNValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericLessThanFunctionName,
+                                 {kPGNumericMaxValue, kPGNumericNaNValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericLessThanFunctionName,
+                                 {kNullPGNumericValue, kPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericLessThanFunctionName,
+                                 {kPGNumericValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericLessThanFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericLessThanFunctionName,
+                                 {kPGNumericValue, kPGNumericValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericLessThanFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericMaxValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericLessThanFunctionName,
+                                 {kPGNumericMinValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+
+        // PG.NUMERIC less than equals
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kNullPGNumericValue, kPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kNullPGNumericValue, kPGNumericMinValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kNullPGNumericValue, kPGNumericNaNValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kPGNumericValue, kPGNumericNaNValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kPGNumericMaxValue, kPGNumericNaNValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kNullPGNumericValue, kPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kPGNumericValue, kPGNumericValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kNullPGNumericValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericNaNValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kPGNumericValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericMaxValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericLessThanEqualsFunctionName,
+                                 {kPGNumericMinValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+
+        // PG.NUMERIC greater than
+        PGScalarFunctionTestCase{kPGNumericGreaterThanFunctionName,
+                                 {kPGNumericValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanFunctionName,
+                                 {kPGNumericMinValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanFunctionName,
+                                 {kPGNumericNaNValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericMaxValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanFunctionName,
+                                 {kPGNumericValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanFunctionName,
+                                 {kNullPGNumericValue, kPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanFunctionName,
+                                 {kPGNumericValue, kPGNumericNaNValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanFunctionName,
+                                 {kPGNumericValue, kPGNumericValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanFunctionName,
+                                 {kPGNumericMaxValue, kPGNumericNaNValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanFunctionName,
+                                 {kNullPGNumericValue, kPGNumericMinValue},
+                                 zetasql::values::NullBool()},
+
+        // PG.NUMERIC greater than equals
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kPGNumericValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kPGNumericMinValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kPGNumericNaNValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericMaxValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kPGNumericValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kPGNumericValue, kPGNumericValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kNullPGNumericValue, kNullPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kNullPGNumericValue, kPGNumericValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kPGNumericValue, kPGNumericNaNValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kPGNumericNaNValue, kPGNumericNaNValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kPGNumericMaxValue, kPGNumericNaNValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGNumericGreaterThanEqualsFunctionName,
+                                 {kNullPGNumericValue, kPGNumericMinValue},
+                                 zetasql::values::NullBool()},
 
         PGScalarFunctionTestCase{
             kPGArrayUpperFunctionName,
@@ -2763,6 +2998,131 @@ TEST_F(EvalJsonBTypeof, ErrorCases) {
               StatusIs(absl::StatusCode::kInternal));
 }
 
+struct EvalCastFromJsonbTestCase {
+  std::string test_name;
+  zetasql::Value arg;
+  zetasql::Value expected_value;
+  absl::StatusCode expected_status_code;
+};
+
+using EvalCastFromJsonbTest =
+    ::testing::TestWithParam<EvalCastFromJsonbTestCase>;
+
+TEST_P(EvalCastFromJsonbTest, TestEvalCastFromJsonb) {
+  SpannerPGFunctions spanner_pg_functions =
+      GetSpannerPGFunctions("TestCatalog");
+  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
+      functions;
+  for (auto& function : spanner_pg_functions) {
+    functions[function->Name()] = std::move(function);
+  }
+
+  static const zetasql::Type* gsql_pg_jsonb =
+      spangres::datatypes::GetPgJsonbType();
+  static const zetasql::Type* gsql_pg_numeric =
+      spangres::datatypes::GetPgNumericType();
+
+  absl::flat_hash_map<zetasql::TypeKind, zetasql::FunctionSignature>
+      signature_map = {
+          {zetasql::TYPE_BOOL,
+           {zetasql::types::BoolType(), {gsql_pg_jsonb}, nullptr}},
+          {zetasql::TYPE_INT64,
+           {zetasql::types::Int64Type(), {gsql_pg_jsonb}, nullptr}},
+          {zetasql::TYPE_DOUBLE,
+           {zetasql::types::DoubleType(), {gsql_pg_jsonb}, nullptr}},
+          {zetasql::TYPE_EXTENDED,
+           {gsql_pg_numeric, {gsql_pg_jsonb}, nullptr}},
+          {zetasql::TYPE_STRING,
+           {zetasql::types::StringType(), {gsql_pg_jsonb}, nullptr}},
+          // To trigger an invalid cast.
+          {zetasql::TYPE_TIMESTAMP,
+           {zetasql::types::TimestampType(), {gsql_pg_jsonb}, nullptr}},
+      };
+
+  const EvalCastFromJsonbTestCase& test_case = GetParam();
+
+  const zetasql::Function* function =
+      functions[kPGCastFromJsonBFunctionName].get();
+  auto callback = function->GetFunctionEvaluatorFactory();
+
+  auto iter = signature_map.find(test_case.expected_value.type_kind());
+  ASSERT_NE(iter, signature_map.end());
+  if (test_case.expected_value.type_kind() == zetasql::TYPE_TIMESTAMP) {
+    // This test is attempting to trigger an invalid cast.
+    EXPECT_THAT(callback(iter->second),
+                StatusIs(test_case.expected_status_code));
+    return;
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto evaluator, callback(iter->second));
+
+  if (test_case.expected_status_code == absl::StatusCode::kOk) {
+    EXPECT_THAT(evaluator({test_case.arg}),
+                IsOkAndHolds(EqPG(test_case.expected_value)));
+  } else {
+    EXPECT_THAT(evaluator({test_case.arg}),
+                StatusIs(test_case.expected_status_code));
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    EvalCastFromJsonbTests, EvalCastFromJsonbTest,
+    ::testing::ValuesIn<EvalCastFromJsonbTestCase>({
+        // PG.JSONB -> BOOL
+        {"CastNullJsonbToNullBool",
+         zetasql::values::Null(spangres::datatypes::GetPgJsonbType()),
+         zetasql::Value::NullBool(), absl::StatusCode::kOk},
+        {"CastTrueJsonbToBool", *CreatePgJsonbValueWithMemoryContext("true"),
+         zetasql::values::True(), absl::StatusCode::kOk},
+        {"CastFalseJsonbToBool", *CreatePgJsonbValueWithMemoryContext("false"),
+         zetasql::values::False(), absl::StatusCode::kOk},
+        {"CastInvalidValueToBoolFails",
+         *CreatePgJsonbValueWithMemoryContext("1.0"),
+         zetasql::Value::NullBool(),  // unused
+         absl::StatusCode::kInvalidArgument},
+
+        // PG.JSONB -> DOUBLE
+        {"CastNullJsonbToNullDouble",
+         zetasql::values::Null(spangres::datatypes::GetPgJsonbType()),
+         zetasql::Value::NullDouble(), absl::StatusCode::kOk},
+        {"CastNumberJsonbToDouble", *CreatePgJsonbValueWithMemoryContext("1.5"),
+         zetasql::Value::Double(1.5), absl::StatusCode::kOk},
+        {"CastInvalidValueToDoubleFails",
+         *CreatePgJsonbValueWithMemoryContext("true"),
+         zetasql::Value::NullDouble(),  // unused
+         absl::StatusCode::kInvalidArgument},
+
+        // PG.JSONB -> INT64
+        {"CastNullJsonbToNullInt64",
+         zetasql::values::Null(spangres::datatypes::GetPgJsonbType()),
+         zetasql::Value::NullInt64(), absl::StatusCode::kOk},
+        {"CastNumberJsonbToInt64", *CreatePgJsonbValueWithMemoryContext("500"),
+         zetasql::Value::Int64(500), absl::StatusCode::kOk},
+        {"CastNumberWithDecimalPointJsonbToInt64",
+         *CreatePgJsonbValueWithMemoryContext("1.5"),
+         zetasql::Value::Int64(2), absl::StatusCode::kOk},
+        {"CastInvalidValueToInt64Fails",
+         *CreatePgJsonbValueWithMemoryContext("true"),
+         zetasql::Value::NullInt64(),  // unused
+         absl::StatusCode::kInvalidArgument},
+
+        // PG.JSONB -> STRING
+        {"CastNullJsonbToNullString",
+         zetasql::values::Null(spangres::datatypes::GetPgJsonbType()),
+         zetasql::Value::NullString(), absl::StatusCode::kOk},
+        {"CastNumberJsonbToString", *CreatePgJsonbValueWithMemoryContext("500"),
+         zetasql::Value::String("500"), absl::StatusCode::kOk},
+        {"CastStringJsonbToString",
+         *CreatePgJsonbValueWithMemoryContext("\"hello\""),
+         zetasql::Value::String("\"hello\""), absl::StatusCode::kOk},
+
+        // PG.JSONB -> <INVALID TYPE>
+        {"CastTimestampJsonbToTimestampIsInvalid",
+         *CreatePgJsonbValueWithMemoryContext("\"01 Jan 1970 00:00:00+00\""),
+         zetasql::values::Timestamp(absl::UnixEpoch()),
+         absl::StatusCode::kInvalidArgument},
+    }));
+
 class EvalCastToDateTest : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
@@ -3392,8 +3752,8 @@ TEST_P(EvalNumericMinMaxTest, TestNumericMinMax) {
       ++i;
     }
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value result, evaluator->GetFinalResult());
-    EXPECT_THAT(result, test_case.expected_value);
+    EXPECT_THAT(evaluator->GetFinalResult(),
+                IsOkAndHolds(EqPG(test_case.expected_value)));
   } else {
     absl::Status status = absl::OkStatus();
     int i = 0;
@@ -3549,8 +3909,8 @@ TEST_P(EvalSumAvgTest, TestSumAvgAggregator) {
           evaluator->Accumulate(absl::MakeSpan(args).subspan(i), &stop_acc));
       ++i;
     }
-    ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value result, evaluator->GetFinalResult());
-    EXPECT_THAT(result, test_case.expected_value);
+    EXPECT_THAT(evaluator->GetFinalResult(),
+                IsOkAndHolds(EqPG(test_case.expected_value)));
   } else {
     absl::Status status = absl::OkStatus();
     int i = 0;

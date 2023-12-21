@@ -337,6 +337,22 @@ schemata,default_character_set_schema,YES,character varying
 schemata,default_character_set_name,YES,character varying
 schemata,sql_path,YES,character varying
 schemata,effective_timestamp,YES,bigint
+sequences,sequence_catalog,YES,character varying
+sequences,sequence_schema,YES,character varying
+sequences,sequence_name,YES,character varying
+sequences,data_type,YES,character varying
+sequences,numeric_precision,YES,bigint
+sequences,numeric_precision_radix,YES,bigint
+sequences,numeric_scale,YES,bigint
+sequences,start_value,YES,bigint
+sequences,minimum_value,YES,bigint
+sequences,maximum_value,YES,bigint
+sequences,increment,YES,bigint
+sequences,cycle_option,YES,character varying
+sequences,sequence_kind,YES,character varying
+sequences,counter_start_value,YES,bigint
+sequences,skip_range_min,YES,bigint
+sequences,skip_range_max,YES,bigint
 spanner_statistics,catalog_name,YES,character varying
 spanner_statistics,schema_name,YES,character varying
 spanner_statistics,package_name,YES,character varying

@@ -26,6 +26,7 @@
 #include "zetasql/public/builtin_function_options.h"
 #include "zetasql/public/function.h"
 #include "zetasql/public/function_signature.h"
+#include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_map.h"
@@ -35,13 +36,17 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/strip.h"
 #include "absl/types/span.h"
 #include "backend/query/analyzer_options.h"
+#include "backend/query/ml/ml_predict_table_valued_function.h"
+#include "backend/schema/catalog/schema.h"
+#include "backend/schema/catalog/sequence.h"
+#include "common/bit_reverse.h"
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
 #include "third_party/spanner_pg/catalog/emulator_functions.h"
-#include "zetasql/base/bits.h"
 #include "zetasql/base/ret_check.h"
 
 namespace google {
@@ -78,29 +83,6 @@ std::unique_ptr<zetasql::Function> PendingCommitTimestampFunction(
       function_options);
 }
 
-int64_t BitReverse(int64_t input, bool preserve_sign) {
-  if (input == 0) {
-    return 0;
-  }
-  // Explicitly cast to uint64_t here, as zetasql_base::Bits::ReverseBits64() receives
-  // an uint64_t input, and for easier bit manipulation.
-  uint64_t value = zetasql_base::Bits::ReverseBits64(static_cast<uint64_t>(input));
-  int64_t result;
-  if (preserve_sign) {
-    // The sign bit is now the least significant bit, take it and shift
-    // to the furthest left.
-    uint64_t sign_bit = (value & 1) << 63;
-    //  Shift the rest one bit to the right
-    value = value >> 1;
-
-    // Put the sign bit back in:
-    result = static_cast<int64_t>(sign_bit | value);
-  } else {
-    result = static_cast<int64_t>(value);
-  }
-  return result;
-}
-
 absl::StatusOr<zetasql::Value> EvalBitReverse(
     absl::Span<const zetasql::Value> args) {
   if (!EmulatorFeatureFlags::instance()
@@ -130,82 +112,19 @@ std::unique_ptr<zetasql::Function> BitReverseFunction(
           nullptr}},
       function_options);
 }
-
-absl::StatusOr<zetasql::Value> EvalGetInternalSequenceState(
-    absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK(args.size() == 1);
-
-  if (!EmulatorFeatureFlags::instance()
-           .flags()
-           .enable_bit_reversed_positive_sequences) {
-    return error::UnsupportedFunction(kGetInternalSequenceStateFunctionName);
-  }
-  return zetasql::Value::Int64(100);
-}
-
-absl::StatusOr<zetasql::Value> EvalGetNextSequenceValue(
-    absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK(args.size() == 1);
-
-  if (!EmulatorFeatureFlags::instance()
-           .flags()
-           .enable_bit_reversed_positive_sequences) {
-    return error::UnsupportedFunction(kGetNextSequenceValueFunctionName);
-  }
-  return zetasql::Value::Int64(200);
-}
-
-std::unique_ptr<zetasql::Function> GetInternalSequenceStateFunction(
-    const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(
-      zetasql::FunctionEvaluator(EvalGetInternalSequenceState));
-
-  return std::make_unique<zetasql::Function>(
-      kGetInternalSequenceStateFunctionName, catalog_name,
-      zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{
-              zetasql::types::Int64Type(),
-              {zetasql::FunctionArgumentType::AnySequence()},
-              nullptr},
-          zetasql::FunctionSignature{zetasql::types::Int64Type(),
-                                       {zetasql::types::StringType()},
-                                       nullptr}},
-      function_options);
-}
-
-std::unique_ptr<zetasql::Function> GetNextSequenceValueFunction(
-    const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(
-      zetasql::FunctionEvaluator(EvalGetNextSequenceValue));
-
-  return std::make_unique<zetasql::Function>(
-      kGetNextSequenceValueFunctionName, catalog_name,
-      zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{
-              zetasql::types::Int64Type(),
-              {zetasql::FunctionArgumentType::AnySequence()},
-              nullptr},
-          zetasql::FunctionSignature{zetasql::types::Int64Type(),
-                                       {zetasql::types::StringType()},
-                                       nullptr}},
-      function_options);
-}
-
 }  // namespace
 
 FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory,
-                                 const std::string& catalog_name)
-    : catalog_name_(catalog_name) {
+                                 const std::string& catalog_name,
+                                 const backend::Schema* schema)
+    : catalog_name_(catalog_name), latest_schema_(schema) {
   // Add the subset of ZetaSQL built-in functions supported by Cloud Spanner.
   AddZetaSQLBuiltInFunctions(type_factory);
   // Add Cloud Spanner specific functions.
   AddSpannerFunctions();
   // Add aliases for the functions.
   AddFunctionAliases();
+  AddMlFunctions();
   AddSpannerPGFunctions(type_factory);
 }
 
@@ -252,6 +171,23 @@ void FunctionCatalog::AddSpannerFunctions() {
       std::move(get_next_sequence_value_func);
 }
 
+void FunctionCatalog::AddMlFunctions() {
+  {
+    auto ml_predict =
+        std::make_unique<MlPredictTableValuedFunction>(/*safe=*/false);
+
+    table_valued_functions_.insert(
+        {ml_predict->FullName(), std::move(ml_predict)});
+  }
+
+  {
+    auto safe_ml_predict =
+        std::make_unique<MlPredictTableValuedFunction>(/*safe=*/true);
+    table_valued_functions_.insert(
+        {safe_ml_predict->FullName(), std::move(safe_ml_predict)});
+  }
+}
+
 // Adds Spanner PG-specific functions to the list of known functions.
 void FunctionCatalog::AddSpannerPGFunctions(
     zetasql::TypeFactory* type_factory) {
@@ -277,6 +213,13 @@ void FunctionCatalog::GetFunctions(
   }
 }
 
+void FunctionCatalog::GetTableValuedFunction(
+    const std::string& name,
+    const zetasql::TableValuedFunction** output) const {
+  auto i = table_valued_functions_.find(name);
+  *output = i == table_valued_functions_.end() ? nullptr : i->second.get();
+}
+
 void FunctionCatalog::AddFunctionAliases() {
   std::vector<std::pair<std::string, std::unique_ptr<zetasql::Function>>>
       aliases;
@@ -299,6 +242,95 @@ void FunctionCatalog::AddFunctionAliases() {
   for (auto& alias : aliases) {
     functions_.insert(std::move(alias));
   }
+}
+
+std::unique_ptr<zetasql::Function>
+FunctionCatalog::GetInternalSequenceStateFunction(
+    const std::string& catalog_name) {
+  // Defines the function evaluator as a lambda, so it has access to the schema.
+  auto evaluator = [&](absl::Span<const zetasql::Value> args)
+      -> absl::StatusOr<zetasql::Value> {
+    ZETASQL_RET_CHECK(args.size() == 1 && args[0].type()->IsString());
+
+    if (!EmulatorFeatureFlags::instance()
+             .flags()
+             .enable_bit_reversed_positive_sequences) {
+      return error::UnsupportedFunction(kGetInternalSequenceStateFunctionName);
+    }
+
+    if (latest_schema_ == nullptr) {
+      return error::SequenceNeedsAccessToSchema();
+    }
+    // ZetaSQL algebrizer prepends a prefix to the sequence name.
+    std::string sequence_name =
+        std::string(absl::StripPrefix(args[0].string_value(), "_sequence_"));
+    const backend::Sequence* sequence =
+        latest_schema_->FindSequence(sequence_name);
+    if (sequence == nullptr) {
+      return error::SequenceNotFound(sequence_name);
+    }
+    return sequence->GetInternalSequenceState();
+  };
+
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(zetasql::FunctionEvaluator(evaluator));
+
+  return std::make_unique<zetasql::Function>(
+      kGetInternalSequenceStateFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{
+              zetasql::types::Int64Type(),
+              {zetasql::FunctionArgumentType::AnySequence()},
+              nullptr},
+          zetasql::FunctionSignature{zetasql::types::Int64Type(),
+                                       {zetasql::types::StringType()},
+                                       nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function>
+FunctionCatalog::GetNextSequenceValueFunction(const std::string& catalog_name) {
+  // Defines the function evaluator as a lambda, so it has access to the schema.
+  auto evaluator = [&](absl::Span<const zetasql::Value> args)
+      -> absl::StatusOr<zetasql::Value> {
+    ZETASQL_RET_CHECK(args.size() == 1 && args[0].type()->IsString());
+
+    if (!EmulatorFeatureFlags::instance()
+             .flags()
+             .enable_bit_reversed_positive_sequences) {
+      return error::UnsupportedFunction(kGetNextSequenceValueFunctionName);
+    }
+
+    if (latest_schema_ == nullptr) {
+      return error::SequenceNeedsAccessToSchema();
+    }
+    // ZetaSQL algebrizer prepends a prefix to the sequence name.
+    std::string sequence_name =
+        std::string(absl::StripPrefix(args[0].string_value(), "_sequence_"));
+    const backend::Sequence* sequence =
+        latest_schema_->FindSequence(sequence_name);
+    if (sequence == nullptr) {
+      return error::SequenceNotFound(sequence_name);
+    }
+    return sequence->GetNextSequenceValue();
+  };
+
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(zetasql::FunctionEvaluator(evaluator));
+
+  return std::make_unique<zetasql::Function>(
+      kGetNextSequenceValueFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{
+              zetasql::types::Int64Type(),
+              {zetasql::FunctionArgumentType::AnySequence()},
+              nullptr},
+          zetasql::FunctionSignature{zetasql::types::Int64Type(),
+                                       {zetasql::types::StringType()},
+                                       nullptr}},
+      function_options);
 }
 
 }  // namespace backend

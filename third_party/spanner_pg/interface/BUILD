@@ -439,6 +439,7 @@ cc_library(
         ":implementations_without_parser",
         ":interfaces_with_stub_implementations",
         ":parser_interface",
+        "//backend/query:function_catalog",
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_google_absl//absl/status",

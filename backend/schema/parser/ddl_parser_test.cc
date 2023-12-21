@@ -102,9 +102,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithNoColumns) {
                     )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
-                    create_table {
-                      table_name: "Users"
-                    }
+                    create_table { table_name: "Users" }
                   )pb")));
 }
 
@@ -1428,9 +1426,7 @@ TEST(Miscellaneous, CanParseExtraWhitespaceCharacters) {
                   )sql"),
               IsOkAndHolds(test::EqualsProto(
                   R"pb(
-                    create_table {
-                      table_name: "Users"
-                    }
+                    create_table { table_name: "Users" }
                   )pb")));
 }
 
@@ -3379,9 +3375,660 @@ TEST(ParseViews, DropView) {
         drop_function { function_name: "MyView" function_kind: VIEW })pb")));
 }
 
+TEST(ParseCreateModel, ParseCreateModel) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE MODEL MyModel
+    )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_model { model_name: "MyModel" })pb")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE OR REPLACE MODEL MyModel
+    )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_model { model_name: "MyModel" existence_modifier: OR_REPLACE }
+      )pb")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE MODEL IF NOT EXISTS MyModel
+    )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_model { model_name: "MyModel" existence_modifier: IF_NOT_EXISTS }
+      )pb")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE MODEL MyModel
+    INPUT (
+      f1 INT64,
+      f2 STRING(MAX)
+    )
+    OUTPUT (
+      l1 BOOL,
+      l2 ARRAY<FLOAT64>
+    )
+    OPTIONS (
+      endpoint = '//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e'
+    )
+    )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_model {
+          model_name: "MyModel"
+          set_options {
+            option_name: "endpoint"
+            string_value: "//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e"
+          }
+          input { column_name: "f1" type: INT64 }
+          input { column_name: "f2" type: STRING }
+          output { column_name: "l1" type: BOOL }
+          output {
+            column_name: "l2"
+            type: ARRAY
+            array_subtype { type: DOUBLE }
+          }
+        })pb")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE MODEL MyModel
+    INPUT (
+      f1 INT64,
+      f2 STRING(MAX)
+    )
+    OUTPUT (
+      l1 STRUCT<field1 BOOL>,
+      l2 STRUCT<arr ARRAY<STRING(MAX)>, str STRUCT<bar DATE, foo BYTES(1024)>>
+    )
+    OPTIONS (
+      endpoint = '//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e'
+    )
+    )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_model {
+          model_name: "MyModel"
+          set_options {
+            option_name: "endpoint"
+            string_value: "//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e"
+          }
+          input { column_name: "f1" type: INT64 }
+          input { column_name: "f2" type: STRING }
+          output {
+            column_name: "l1"
+            type: STRUCT
+            type_definition {
+              type: STRUCT
+              struct_descriptor {
+                field {
+                  name: "field1"
+                  type { type: BOOL }
+                }
+              }
+            }
+          }
+          output {
+            column_name: "l2"
+            type: STRUCT
+            type_definition {
+              type: STRUCT
+              struct_descriptor {
+                field {
+                  name: "arr"
+                  type {
+                    type: ARRAY
+                    array_subtype { type: STRING }
+                  }
+                }
+                field {
+                  name: "str"
+                  type {
+                    type: STRUCT
+                    struct_descriptor {
+                      field {
+                        name: "bar"
+                        type { type: DATE }
+                      }
+                      field {
+                        name: "foo"
+                        type { type: BYTES length: 1024 }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })pb")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE MODEL MyModel
+    INPUT (
+      f1 INT64,
+      f2 STRING(MAX)
+    )
+    OUTPUT (
+      l1 STRUCT<field1 BOOL>,
+      l2 STRUCT<ARRAY<STRING(MAX)>, str STRUCT<>>
+    )
+    OPTIONS (
+      endpoint = '//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e'
+    )
+    )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_model {
+          model_name: "MyModel"
+          set_options {
+            option_name: "endpoint"
+            string_value: "//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e"
+          }
+          input { column_name: "f1" type: INT64 }
+          input { column_name: "f2" type: STRING }
+          output {
+            column_name: "l1"
+            type: STRUCT
+            type_definition {
+              type: STRUCT
+              struct_descriptor {
+                field {
+                  name: "field1"
+                  type { type: BOOL }
+                }
+              }
+            }
+          }
+          output {
+            column_name: "l2"
+            type: STRUCT
+            type_definition {
+              type: STRUCT
+              struct_descriptor {
+                field {
+                  type {
+                    type: ARRAY
+                    array_subtype { type: STRING }
+                  }
+                }
+                field {
+                  name: "str"
+                  type {
+                    type: STRUCT
+                    struct_descriptor {}
+                  }
+                }
+              }
+            }
+          }
+        })pb")));
+
+  // CREATE MODEL with column options
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE MODEL MyModel
+    INPUT (
+      f1 INT64 OPTIONS (required = false),
+      f2 STRING(MAX)
+    )
+    OUTPUT (
+      l1 BOOL OPTIONS (required = true),
+      l2 ARRAY<FLOAT64>
+    )
+    OPTIONS (
+      endpoint = '//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e'
+    )
+    )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_model {
+          model_name: "MyModel"
+          set_options {
+            option_name: "endpoint"
+            string_value: "//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e"
+          }
+          input {
+            column_name: "f1"
+            type: INT64
+            set_options { option_name: "required" bool_value: false }
+          }
+          input { column_name: "f2" type: STRING }
+          output {
+            column_name: "l1"
+            type: BOOL
+            set_options { option_name: "required" bool_value: true }
+          }
+          output {
+            column_name: "l2"
+            type: ARRAY
+            array_subtype { type: DOUBLE }
+          }
+        })pb")));
+
+  // CREATE MODEL with multiple endpoints
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE MODEL MyModel
+    INPUT (
+      f1 INT64,
+      f2 STRING(MAX)
+    )
+    OUTPUT (
+      l1 BOOL,
+      l2 ARRAY<FLOAT64>
+    )
+    OPTIONS (
+      endpoints = ['//aiplatform.googleapis.com/projects/p/locations/l/endpoints/1',
+      '//aiplatform.googleapis.com/projects/p/locations/l/endpoints/2']
+    )
+    )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_model {
+          model_name: "MyModel"
+          set_options {
+            option_name: "endpoints"
+            string_list_value: "//aiplatform.googleapis.com/projects/p/locations/l/endpoints/1"
+            string_list_value: "//aiplatform.googleapis.com/projects/p/locations/l/endpoints/2"
+          }
+          input { column_name: "f1" type: INT64 }
+          input { column_name: "f2" type: STRING }
+          output { column_name: "l1" type: BOOL }
+          output {
+            column_name: "l2"
+            type: ARRAY
+            array_subtype { type: DOUBLE }
+          }
+        })pb")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      CREATE MODEL
+      )sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Encountered 'EOF' while parsing: identifier")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE MODEL MyModel OPTIONS ()
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Encountered ')' while parsing: identifier")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE MODEL MyModel OPTIONS (unknown_option = true)
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Option: unknown_option is unknown")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE MODEL MyModel OPTIONS (
+        endpoint = 'test',
+        endpoint = 'test'
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Duplicate option: endpoint")));
+
+  // Model has a STRUCT column with missing types
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      CREATE MODEL m INPUT (f1 INT64) OUTPUT (l1 STRUCT<foo, bar>)
+      )sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Encountered ',' while parsing: column_type")));
+}
+
+TEST(ParseAlterModel, ParseAlterModel) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER MODEL MyModel
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_model { model_name: "MyModel" })pb")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER MODEL IF EXISTS MyModel
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_model { model_name: "MyModel" if_exists: true })pb")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      ALTER MODEL MyModel SET OPTIONS (
+        endpoint='//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e'
+      )
+      )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_model {
+          model_name: "MyModel"
+          set_options {
+            options {
+              option_name: "endpoint"
+              string_value: "//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e"
+            }
+          }
+        })pb")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      ALTER MODEL MyModel SET OPTIONS (
+        endpoint=NULL
+      )
+      )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_model {
+          model_name: "MyModel"
+          set_options { options { option_name: "endpoint" null_value: true } }
+        })pb")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      ALTER MODEL
+      )sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Encountered 'EOF' while parsing: identifier")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER MODEL MyModel SET OPTIONS ()
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Encountered ')' while parsing: identifier")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER MODEL MyModel SET OPTIONS (unknown_option = true)
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Option: unknown_option is unknown")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      ALTER MODEL MyModel SET OPTIONS (
+        endpoint='//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e',
+        endpoint='//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e'
+      )
+      )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Duplicate option: endpoint")));
+}
+
+TEST(ParseDropModel, ParseDropModel) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      DROP MODEL MyModel
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_model { model_name: "MyModel" })pb")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      DROP MODEL IF EXISTS MyModel
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_model { model_name: "MyModel" if_exists: true })pb")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      DROP MODEL
+      )sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Encountered 'EOF' while parsing: identifier")));
+}
+
+TEST(ParseViews, DropViewIfExists) {
+  EXPECT_THAT(ParseDDLStatement("DROP VIEW IF EXISTS MyView"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_function {
+                  function_name: "MyView"
+                  function_kind: VIEW
+                  existence_modifier: IF_EXISTS
+                })pb")));
+}
+TEST(CreateSchema, Basic) {
+  EXPECT_THAT(ParseDDLStatement("CREATE SCHEMA MySchema "),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_schema { schema_name: "MySchema" })pb")));
+}
+
+TEST(CreateSchema, IfExists) {
+  EXPECT_THAT(ParseDDLStatement("CREATE SCHEMA IF NOT EXISTS MySchema"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_schema {
+                  schema_name: "MySchema"
+                  existence_modifier: IF_NOT_EXISTS
+                })pb")));
+}
+TEST(AlterSchema, Basic) {
+  EXPECT_THAT(ParseDDLStatement("ALTER SCHEMA MySchema SET OPTIONS (blah = 1)"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_schema { schema_name: "MySchema" })pb")));
+}
+
+TEST(AlterSchema, IfExists) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "ALTER SCHEMA IF EXISTS MySchema SET OPTIONS (blah = 1)"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_schema { schema_name: "MySchema" if_exists: true })pb")));
+}
+
+TEST(DropSchema, Basic) {
+  EXPECT_THAT(ParseDDLStatement("DROP SCHEMA MySchema"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_schema { schema_name: "MySchema" })pb")));
+}
+
+TEST(DropSchema, IfExists) {
+  EXPECT_THAT(ParseDDLStatement("DROP SCHEMA IF EXISTS MySchema"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_schema { schema_name: "MySchema" if_exists: true })pb")));
+}
+
 TEST(ParseAnalyze, CanParseAnalyze) {
   EXPECT_THAT(ParseDDLStatement("ANALYZE"), IsOk());
 }
+
+TEST(ParseFGAC, ParseCreateRole) {
+  EXPECT_THAT(ParseDDLStatement("CREATE ROLE myrole"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_role { role_name: "myrole" })pb")));
+}
+
+TEST(ParseFGAC, ParseDropRole) {
+  EXPECT_THAT(ParseDDLStatement("DROP ROLE myrole"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_role { role_name: "myrole" })pb")));
+}
+
+TEST(ParseFGAC, GrantPrivilege) {
+  // Simple single privilege.
+  EXPECT_THAT(ParseDDLStatement("GRANT INSERT ON TABLE MyTable TO ROLE MyRole"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                grant_privilege {
+                  privilege { type: INSERT }
+                  target { type: TABLE name: "MyTable" }
+                  grantee { type: ROLE name: "MyRole" }
+                })pb")));
+
+  // Multiple privileges.
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "GRANT INSERT, SELECT, UPDATE ON TABLE MyTable TO ROLE MyRole"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        grant_privilege {
+          privilege { type: INSERT }
+          privilege { type: SELECT }
+          privilege { type: UPDATE }
+          target { type: TABLE name: "MyTable" }
+          grantee { type: ROLE name: "MyRole" }
+        })pb")));
+
+  // Multiple grantees.
+  EXPECT_THAT(ParseDDLStatement(
+                  "GRANT INSERT ON TABLE MyTable TO ROLE MyRole1, MyRole2"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                grant_privilege {
+                  privilege { type: INSERT }
+                  target { type: TABLE name: "MyTable" }
+                  grantee { type: ROLE name: "MyRole1" }
+                  grantee { type: ROLE name: "MyRole2" }
+                })pb")));
+
+  // Single Invalid Privilege.
+  EXPECT_THAT(
+      ParseDDLStatement("GRANT DESTROY ON TABLE MyTable TO ROLE MyRole"),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Encountered 'DESTROY' while parsing: grant_statement")));
+
+  // Multiple Invalid Privileges.
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "GRANT DESTROY CRASH BURN ON TABLE MyTable TO ROLE MyRole"),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Encountered 'DESTROY' while parsing: grant_statement")));
+
+  // Valid and Invalid Privileges.
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "GRANT INSERT, UPDATE, DESTROY ON TABLE MyTable TO ROLE MyRole"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Encountered 'DESTROY' while parsing: privilege")));
+}
+
+TEST(ParseFGAC, GrantMembership) {
+  // Single role, single grantee.
+  EXPECT_THAT(ParseDDLStatement("GRANT ROLE MyRole1 TO ROLE MyRole2"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                grant_membership {
+                  role { type: ROLE name: "MyRole1" }
+                  grantee { type: ROLE name: "MyRole2" }
+                })pb")));
+
+  // Multiple roles, single grantee.
+  EXPECT_THAT(ParseDDLStatement("GRANT ROLE MyRole1, MyRole2 TO ROLE MyRole3"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                grant_membership {
+                  role { type: ROLE name: "MyRole1" }
+                  role { type: ROLE name: "MyRole2" }
+                  grantee { type: ROLE name: "MyRole3" }
+                })pb")));
+
+  // Single role, mutiple grantees.
+  EXPECT_THAT(ParseDDLStatement("GRANT ROLE MyRole1 TO ROLE MyRole2, MyRole3"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                grant_membership {
+                  role { type: ROLE name: "MyRole1" }
+                  grantee { type: ROLE name: "MyRole2" }
+                  grantee { type: ROLE name: "MyRole3" }
+                })pb")));
+
+  // Multiple roles, mutiple grantees.
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    GRANT ROLE MyRole1, MyRole2 TO ROLE MyRole3, MyRole4
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                grant_membership {
+                  role { type: ROLE name: "MyRole1" }
+                  role { type: ROLE name: "MyRole2" }
+                  grantee { type: ROLE name: "MyRole3" }
+                  grantee { type: ROLE name: "MyRole4" }
+                })pb")));
+}
+
+TEST(ParseFGAC, RevokePrivilege) {
+  // Simple single privilege.
+  EXPECT_THAT(
+      ParseDDLStatement("REVOKE INSERT ON TABLE MyTable FROM ROLE MyRole"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        revoke_privilege {
+          privilege { type: INSERT }
+          target { type: TABLE name: "MyTable" }
+          grantee { type: ROLE name: "MyRole" }
+        })pb")));
+
+  // Multiple privileges.
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "REVOKE INSERT, SELECT, UPDATE ON TABLE MyTable FROM ROLE MyRole"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        revoke_privilege {
+          privilege { type: INSERT }
+          privilege { type: SELECT }
+          privilege { type: UPDATE }
+          target { type: TABLE name: "MyTable" }
+          grantee { type: ROLE name: "MyRole" }
+        })pb")));
+
+  // Multiple grantees.
+  EXPECT_THAT(ParseDDLStatement(
+                  "REVOKE INSERT ON TABLE MyTable FROM ROLE MyRole1, MyRole2"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                revoke_privilege {
+                  privilege { type: INSERT }
+                  target { type: TABLE name: "MyTable" }
+                  grantee { type: ROLE name: "MyRole1" }
+                  grantee { type: ROLE name: "MyRole2" }
+                })pb")));
+
+  // Single Invalid Privilege.
+  EXPECT_THAT(
+      ParseDDLStatement("REVOKE DESTROY ON TABLE MyTable FROM ROLE MyRole"),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Encountered 'DESTROY' while parsing: revoke_statement")));
+
+  // Multiple Invalid Privileges.
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "REVOKE DESTROY CRASH BURN FROM TABLE MyTable TO ROLE MyRole"),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Encountered 'DESTROY' while parsing: revoke_statement")));
+
+  // Valid and Invalid Privileges.
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "REVOKE INSERT, UPDATE, DESTROY FROM TABLE MyTable TO ROLE MyRole"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Encountered 'DESTROY' while parsing: privilege")));
+}
+
+TEST(ParseFGAC, RevokeMembership) {
+  // Single role, single grantee.
+  EXPECT_THAT(ParseDDLStatement("REVOKE ROLE MyRole1 FROM ROLE MyRole2"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                revoke_membership {
+                  role { type: ROLE name: "MyRole1" }
+                  grantee { type: ROLE name: "MyRole2" }
+                })pb")));
+
+  // Multiple roles, single grantee.
+  EXPECT_THAT(
+      ParseDDLStatement("REVOKE ROLE MyRole1, MyRole2 FROM ROLE MyRole3"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        revoke_membership {
+          role { type: ROLE name: "MyRole1" }
+          role { type: ROLE name: "MyRole2" }
+          grantee { type: ROLE name: "MyRole3" }
+        })pb")));
+
+  // Single role, mutiple grantees.
+  EXPECT_THAT(
+      ParseDDLStatement("REVOKE ROLE MyRole1 FROM ROLE MyRole2, MyRole3"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        revoke_membership {
+          role { type: ROLE name: "MyRole1" }
+          grantee { type: ROLE name: "MyRole2" }
+          grantee { type: ROLE name: "MyRole3" }
+        })pb")));
+
+  // Multiple roles, mutiple grantees.
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    REVOKE ROLE MyRole1, MyRole2 FROM ROLE MyRole3, MyRole4
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                revoke_membership {
+                  role { type: ROLE name: "MyRole1" }
+                  role { type: ROLE name: "MyRole2" }
+                  grantee { type: ROLE name: "MyRole3" }
+                  grantee { type: ROLE name: "MyRole4" }
+                })pb")));
+}
+
 }  // namespace
 
 }  // namespace ddl

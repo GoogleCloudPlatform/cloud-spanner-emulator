@@ -54,6 +54,12 @@ const zetasql::ArrayType* GetPgNumericArrayType();
 absl::StatusOr<zetasql::Value> CreatePgNumericValue(
     absl::string_view readable_numeric);
 
+// Create PG.NUMERIC value in a valid memory context which is required for
+// calling PG code. This function is intended to be used in tests where a memory
+// context is sometimes not initialized.
+absl::StatusOr<zetasql::Value> CreatePgNumericValueWithMemoryContext(
+    absl::string_view numeric_string);
+
 // Retrieves an `absl::Cord` normalized representation of PG.NUMERIC value from
 // the ZetaSQL `value`. Returns error if `value` doesn't contain non-NULL
 // value of PG.NUMERIC.

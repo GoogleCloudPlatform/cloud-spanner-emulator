@@ -194,6 +194,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "TOKENLIST",
     "UNIQUE",
     "UPDATE",
+    "USAGE",
     "VIEW",
 };
 

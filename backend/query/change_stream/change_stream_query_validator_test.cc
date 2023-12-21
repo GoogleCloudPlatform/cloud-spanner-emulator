@@ -44,6 +44,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 namespace {
+using zetasql_base::testing::IsOkAndHolds;
 using zetasql_base::testing::StatusIs;
 class OtherTvf : public zetasql::TableValuedFunction {
  public:
@@ -121,8 +122,8 @@ TEST_F(ChangeStreamQueryValidatorTest,
       absl::Now(),
       params_,
   };
-  EXPECT_EQ(validator.IsChangeStreamQuery(stmt->resolved_statement()).status(),
-            error::UnsupportedUserDefinedTableValuedFunction("READ_foo"));
+  EXPECT_THAT(validator.IsChangeStreamQuery(stmt->resolved_statement()),
+              IsOkAndHolds(false));
 }
 
 TEST_F(ChangeStreamQueryValidatorTest,
@@ -144,8 +145,8 @@ TEST_F(ChangeStreamQueryValidatorTest,
       absl::Now(),
       params_,
   };
-  EXPECT_EQ(validator.IsChangeStreamQuery(stmt->resolved_statement()).status(),
-            error::UnsupportedUserDefinedTableValuedFunction("some_tvf"));
+  EXPECT_THAT(validator.IsChangeStreamQuery(stmt->resolved_statement()),
+              IsOkAndHolds(false));
 }
 
 TEST_F(ChangeStreamQueryValidatorTest, ValidateArgumentLiteralsValid) {

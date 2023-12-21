@@ -41,6 +41,7 @@ absl::Status AnalyzeColumnExpression(
     const std::vector<zetasql::SimpleTable::NameAndType>& name_and_types,
     absl::string_view expression_use,
     absl::flat_hash_set<std::string>* dependent_column_names,
+    absl::flat_hash_set<const SchemaNode*>* dependent_sequences,
     bool allow_volatile_expression);
 
 // Analyzes the view definition in `view_definition`. Returns the

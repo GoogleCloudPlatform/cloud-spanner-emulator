@@ -51,12 +51,26 @@ class PostgresExprIdentifier {
     ABSL_CHECK_NE(node_tag, T_BooleanTest);
     ABSL_CHECK_NE(node_tag, T_CaseExpr);
     ABSL_CHECK_NE(node_tag, T_SQLValueFunction);
+    ABSL_CHECK_NE(node_tag, T_ScalarArrayOpExpr);
     return PostgresExprIdentifier(node_tag);
   }
 
   // Special constructor for BoolExpr.
   static PostgresExprIdentifier BoolExpr(BoolExprType bool_type) {
     return PostgresExprIdentifier(T_BoolExpr).SetBoolExprType(bool_type);
+  }
+
+  // Special constructor for ScalarArrayOpExpr.
+  // ScalarArrayOpExpr represents ANY/SOME/ALL(<array>) and also IN(values).
+  // PG query tree does not distinguish between both types of queries.
+  //
+  // However, GSQL distinguishes between both cases. In GSQL, `$in_array`
+  // gets invoked for `<value> IN <array>`, which is the GSQL equivalent of
+  // PG's ANY/SOME(<array>) while `$in` gets invoked for
+  // `<value> IN (<comma separated list>)`.
+  static PostgresExprIdentifier ScalarArrayOpExpr(bool array_op_arg_is_array) {
+    return PostgresExprIdentifier(T_ScalarArrayOpExpr)
+        .SetArrayOpArgIsArray(array_op_arg_is_array);
   }
 
   // Special constructor for NullTest.
@@ -93,16 +107,17 @@ class PostgresExprIdentifier {
            min_max_op_ == other.min_max_op() &&
            boolean_test_type_ == other.bool_test_type() &&
            case_has_testexpr_ == other.case_has_testexpr() &&
-           sql_value_function_op_ == other.sql_value_function_op();
+           sql_value_function_op_ == other.sql_value_function_op() &&
+           array_op_arg_is_array_ == other.array_op_arg_is_array();
   }
 
   template <typename H>
   friend H AbslHashValue(H state, const PostgresExprIdentifier& expr_id) {
-    return H::combine(std::move(state), expr_id.node_tag(),
-                      expr_id.bool_expr_type(), expr_id.null_test_type(),
-                      expr_id.min_max_op(), expr_id.bool_test_type(),
-                      expr_id.case_has_testexpr(),
-                      expr_id.sql_value_function_op());
+    return H::combine(
+        std::move(state), expr_id.node_tag(), expr_id.bool_expr_type(),
+        expr_id.null_test_type(), expr_id.min_max_op(),
+        expr_id.bool_test_type(), expr_id.case_has_testexpr(),
+        expr_id.sql_value_function_op(), expr_id.array_op_arg_is_array());
   }
 
   NodeTag node_tag() const { return node_tag_; }
@@ -117,6 +132,8 @@ class PostgresExprIdentifier {
 
   bool case_has_testexpr() const { return case_has_testexpr_; }
 
+  bool array_op_arg_is_array() const { return array_op_arg_is_array_; }
+
   SQLValueFunctionOp sql_value_function_op() const {
     return sql_value_function_op_;
   }
@@ -129,7 +146,8 @@ class PostgresExprIdentifier {
         min_max_op_(IS_GREATEST),
         boolean_test_type_(IS_FALSE),
         case_has_testexpr_(false),
-        sql_value_function_op_(SVFOP_CURRENT_DATE) {}
+        sql_value_function_op_(SVFOP_CURRENT_DATE),
+        array_op_arg_is_array_(false) {}
 
   PostgresExprIdentifier& SetBoolExprType(BoolExprType bool_expr_type) {
     bool_expr_type_ = bool_expr_type;
@@ -143,6 +161,11 @@ class PostgresExprIdentifier {
 
   PostgresExprIdentifier& SetMinMaxOp(MinMaxOp min_max_op) {
     min_max_op_ = min_max_op;
+    return *this;
+  }
+
+  PostgresExprIdentifier& SetArrayOpArgIsArray(bool array_op_arg_is_array) {
+    array_op_arg_is_array_ = array_op_arg_is_array;
     return *this;
   }
 
@@ -172,6 +195,7 @@ class PostgresExprIdentifier {
   BoolTestType boolean_test_type_;
   bool case_has_testexpr_;
   SQLValueFunctionOp sql_value_function_op_;
+  bool array_op_arg_is_array_;
 };
 
 }  // namespace postgres_translator

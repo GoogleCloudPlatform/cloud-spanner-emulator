@@ -27,6 +27,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
@@ -222,7 +223,7 @@ TEST_F(ChangeStreamTest, SingleInsertYieldsOneRecord) {
   EXPECT_EQ(record.mods.values_size(), 1);
 }
 
-TEST_F(ChangeStreamTest, SingleInsertVerifyDataChangeRecordContent) {
+TEST_F(ChangeStreamTest, SingleInsertVerifyDataChangeRecordContentNewValues) {
   auto mutation_builder_insert =
       InsertMutationBuilder("Users", {"UserId", "Name"});
   std::vector<ValueRow> rows = {{1, "name1"}};
@@ -288,7 +289,145 @@ TEST_F(ChangeStreamTest, SingleInsertVerifyDataChangeRecordContent) {
                })pb"));
 }
 
-TEST_F(ChangeStreamTest, SingleUpdateVerifyDataChangeRecordContent) {
+TEST_F(ChangeStreamTest,
+       SingleInsertVerifyDataChangeRecordContentOldAndNewValues) {
+  auto mutation_builder_insert =
+      InsertMutationBuilder("Users", {"UserId", "Name"});
+  std::vector<ValueRow> rows = {{1, "name1"}};
+  for (const auto& row : rows) {
+    mutation_builder_insert.AddRow(row);
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+                       Commit({mutation_builder_insert.Build()}));
+  Timestamp commit_timestamp = commit_result.commit_timestamp;
+  absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
+  ASSERT_EQ(data_change_records.size(), 1);
+  DataChangeRecord record = data_change_records[0];
+  EXPECT_EQ(record.commit_timestamp.string_value(),
+            cloud::spanner_internal::TimestampToRFC3339(commit_timestamp));
+  EXPECT_EQ(record.record_sequence.string_value(), "00000000");
+  EXPECT_EQ(record.is_last_record_in_transaction_in_partition.bool_value(),
+            true);
+  EXPECT_EQ(record.table_name.string_value(), "Users");
+  EXPECT_EQ(record.mod_type.string_value(), "INSERT");
+  EXPECT_EQ(record.value_capture_type.string_value(), "OLD_AND_NEW_VALUES");
+  EXPECT_EQ(record.number_of_records_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.number_of_partitions_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.transaction_tag.string_value(), "");
+  EXPECT_EQ(record.is_system_transaction.bool_value(), false);
+  EXPECT_THAT(record.column_types,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "UserId" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: true }
+                           values { string_value: "1" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Name" }
+                           values { string_value: "{\"code\":\"STRING\"}" }
+                           values { bool_value: false }
+                           values { string_value: "2" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Age" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: false }
+                           values { string_value: "3" }
+                         }
+                       })pb"));
+  EXPECT_THAT(
+      record.mods,
+      test::EqualsProto(
+          R"pb(values {
+                 list_value {
+                   values { string_value: "{\"UserId\":\"1\"}" }
+                   values { string_value: "{\"Age\":null,\"Name\":\"name1\"}" }
+                   values { string_value: "{}" }
+                 }
+               })pb"));
+}
+
+TEST_F(ChangeStreamTest, SingleInsertVerifyDataChangeRecordContentNewRow) {
+  ZETASQL_EXPECT_OK(UpdateSchema({
+      R"(
+          ALTER CHANGE STREAM StreamUsers SET OPTIONS ( value_capture_type = 'NEW_ROW' )
+        )",
+  }));
+  auto mutation_builder_insert =
+      InsertMutationBuilder("Users", {"UserId", "Name"});
+  std::vector<ValueRow> rows = {{1, "name1"}};
+  for (const auto& row : rows) {
+    mutation_builder_insert.AddRow(row);
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+                       Commit({mutation_builder_insert.Build()}));
+  Timestamp commit_timestamp = commit_result.commit_timestamp;
+  absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
+  ASSERT_EQ(data_change_records.size(), 1);
+  DataChangeRecord record = data_change_records[0];
+  EXPECT_EQ(record.commit_timestamp.string_value(),
+            cloud::spanner_internal::TimestampToRFC3339(commit_timestamp));
+  EXPECT_EQ(record.record_sequence.string_value(), "00000000");
+  EXPECT_EQ(record.is_last_record_in_transaction_in_partition.bool_value(),
+            true);
+  EXPECT_EQ(record.table_name.string_value(), "Users");
+  EXPECT_EQ(record.mod_type.string_value(), "INSERT");
+  EXPECT_EQ(record.value_capture_type.string_value(), "NEW_ROW");
+  EXPECT_EQ(record.number_of_records_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.number_of_partitions_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.transaction_tag.string_value(), "");
+  EXPECT_EQ(record.is_system_transaction.bool_value(), false);
+  EXPECT_THAT(record.column_types,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "UserId" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: true }
+                           values { string_value: "1" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Name" }
+                           values { string_value: "{\"code\":\"STRING\"}" }
+                           values { bool_value: false }
+                           values { string_value: "2" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Age" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: false }
+                           values { string_value: "3" }
+                         }
+                       })pb"));
+  EXPECT_THAT(
+      record.mods,
+      test::EqualsProto(
+          R"pb(values {
+                 list_value {
+                   values { string_value: "{\"UserId\":\"1\"}" }
+                   values { string_value: "{\"Age\":null,\"Name\":\"name1\"}" }
+                   values { string_value: "{}" }
+                 }
+               })pb"));
+}
+
+TEST_F(ChangeStreamTest, SingleUpdateVerifyDataChangeRecordContentNewValues) {
   auto mutation_builder_insert =
       InsertMutationBuilder("Users", {"UserId", "Name"});
   std::vector<ValueRow> rows = {{1, "name1"}};
@@ -352,7 +491,233 @@ TEST_F(ChangeStreamTest, SingleUpdateVerifyDataChangeRecordContent) {
                        })pb"));
 }
 
-TEST_F(ChangeStreamTest, SingleDeleteVerifyDataChangeRecordContent) {
+TEST_F(ChangeStreamTest,
+       SingleUpdateVerifyDataChangeRecordContentOldAndNewValues) {
+  auto mutation_builder_insert =
+      InsertMutationBuilder("Users", {"UserId", "Name"});
+  std::vector<ValueRow> rows = {{1, "name1"}};
+  for (const auto& row : rows) {
+    mutation_builder_insert.AddRow(row);
+  }
+  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  auto mutation_builder_update =
+      UpdateMutationBuilder("Users", {"UserId", "Name"});
+  rows = {{1, "name1Update"}};
+  for (const auto& row : rows) {
+    mutation_builder_update.AddRow(row);
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+                       Commit({mutation_builder_update.Build()}));
+  Timestamp commit_timestamp = commit_result.commit_timestamp;
+  absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
+  ASSERT_EQ(data_change_records.size(), 1);
+  DataChangeRecord record = data_change_records[0];
+  EXPECT_EQ(record.commit_timestamp.string_value(),
+            cloud::spanner_internal::TimestampToRFC3339(commit_timestamp));
+  EXPECT_EQ(record.record_sequence.string_value(), "00000000");
+  EXPECT_EQ(record.is_last_record_in_transaction_in_partition.bool_value(),
+            true);
+  EXPECT_EQ(record.table_name.string_value(), "Users");
+  EXPECT_EQ(record.mod_type.string_value(), "UPDATE");
+  EXPECT_EQ(record.value_capture_type.string_value(), "OLD_AND_NEW_VALUES");
+  EXPECT_EQ(record.number_of_records_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.number_of_partitions_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.transaction_tag.string_value(), "");
+  EXPECT_EQ(record.is_system_transaction.bool_value(), false);
+  EXPECT_THAT(record.column_types,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "UserId" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: true }
+                           values { string_value: "1" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Name" }
+                           values { string_value: "{\"code\":\"STRING\"}" }
+                           values { bool_value: false }
+                           values { string_value: "2" }
+                         }
+                       })pb"));
+  EXPECT_THAT(record.mods,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "{\"UserId\":\"1\"}" }
+                           values { string_value: "{\"Name\":\"name1Update\"}" }
+                           values { string_value: "{\"Name\":\"name1\"}" }
+                         }
+                       })pb"));
+}
+
+TEST_F(ChangeStreamTest, SingleUpdateVerifyDataChangeRecordContentNewRow) {
+  ZETASQL_EXPECT_OK(UpdateSchema({
+      R"(
+          ALTER CHANGE STREAM StreamAll SET OPTIONS ( value_capture_type = 'NEW_ROW' )
+        )",
+  }));
+  auto mutation_builder_insert =
+      InsertMutationBuilder("Users", {"UserId", "Name"});
+  std::vector<ValueRow> rows = {{1, "name1"}};
+  for (const auto& row : rows) {
+    mutation_builder_insert.AddRow(row);
+  }
+  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  auto mutation_builder_update =
+      UpdateMutationBuilder("Users", {"UserId", "Name"});
+  rows = {{1, "name1Update"}};
+  for (const auto& row : rows) {
+    mutation_builder_update.AddRow(row);
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+                       Commit({mutation_builder_update.Build()}));
+  Timestamp commit_timestamp = commit_result.commit_timestamp;
+  absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
+  ASSERT_EQ(data_change_records.size(), 1);
+  DataChangeRecord record = data_change_records[0];
+  EXPECT_EQ(record.commit_timestamp.string_value(),
+            cloud::spanner_internal::TimestampToRFC3339(commit_timestamp));
+  EXPECT_EQ(record.record_sequence.string_value(), "00000000");
+  EXPECT_EQ(record.is_last_record_in_transaction_in_partition.bool_value(),
+            true);
+  EXPECT_EQ(record.table_name.string_value(), "Users");
+  EXPECT_EQ(record.mod_type.string_value(), "UPDATE");
+  EXPECT_EQ(record.value_capture_type.string_value(), "NEW_ROW");
+  EXPECT_EQ(record.number_of_records_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.number_of_partitions_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.transaction_tag.string_value(), "");
+  EXPECT_EQ(record.is_system_transaction.bool_value(), false);
+  EXPECT_THAT(record.column_types,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "UserId" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: true }
+                           values { string_value: "1" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Name" }
+                           values { string_value: "{\"code\":\"STRING\"}" }
+                           values { bool_value: false }
+                           values { string_value: "2" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Age" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: false }
+                           values { string_value: "3" }
+                         }
+                       })pb"));
+  EXPECT_THAT(
+      record.mods,
+      test::EqualsProto(
+          R"pb(values {
+                 list_value {
+                   values { string_value: "{\"UserId\":\"1\"}" }
+                   values {
+                     string_value: "{\"Age\":null,\"Name\":\"name1Update\"}"
+                   }
+                   values { string_value: "{}" }
+                 }
+               })pb"));
+}
+
+TEST_F(ChangeStreamTest,
+       SingleUpdateVerifyDataChangeRecordContentNewRowAllColsPopulatedEarlier) {
+  ZETASQL_EXPECT_OK(UpdateSchema({
+      R"(
+          ALTER CHANGE STREAM StreamAll SET OPTIONS ( value_capture_type = 'NEW_ROW' )
+        )",
+  }));
+  auto mutation_builder_insert =
+      InsertMutationBuilder("Users", {"UserId", "Name", "Age"});
+  std::vector<ValueRow> rows = {{1, "name1", "20"}};
+  for (const auto& row : rows) {
+    mutation_builder_insert.AddRow(row);
+  }
+  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  auto mutation_builder_update =
+      UpdateMutationBuilder("Users", {"UserId", "Name"});
+  rows = {{1, "name1Update"}};
+  for (const auto& row : rows) {
+    mutation_builder_update.AddRow(row);
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+                       Commit({mutation_builder_update.Build()}));
+  Timestamp commit_timestamp = commit_result.commit_timestamp;
+  absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
+  ASSERT_EQ(data_change_records.size(), 1);
+  DataChangeRecord record = data_change_records[0];
+  EXPECT_EQ(record.commit_timestamp.string_value(),
+            cloud::spanner_internal::TimestampToRFC3339(commit_timestamp));
+  EXPECT_EQ(record.record_sequence.string_value(), "00000000");
+  EXPECT_EQ(record.is_last_record_in_transaction_in_partition.bool_value(),
+            true);
+  EXPECT_EQ(record.table_name.string_value(), "Users");
+  EXPECT_EQ(record.mod_type.string_value(), "UPDATE");
+  EXPECT_EQ(record.value_capture_type.string_value(), "NEW_ROW");
+  EXPECT_EQ(record.number_of_records_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.number_of_partitions_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.transaction_tag.string_value(), "");
+  EXPECT_EQ(record.is_system_transaction.bool_value(), false);
+  EXPECT_THAT(record.column_types,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "UserId" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: true }
+                           values { string_value: "1" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Name" }
+                           values { string_value: "{\"code\":\"STRING\"}" }
+                           values { bool_value: false }
+                           values { string_value: "2" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Age" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: false }
+                           values { string_value: "3" }
+                         }
+                       })pb"));
+  EXPECT_THAT(
+      record.mods,
+      test::EqualsProto(
+          R"pb(values {
+                 list_value {
+                   values { string_value: "{\"UserId\":\"1\"}" }
+                   values {
+                     string_value: "{\"Age\":\"20\",\"Name\":\"name1Update\"}"
+                   }
+                   values { string_value: "{}" }
+                 }
+               })pb"));
+}
+
+TEST_F(ChangeStreamTest, SingleDeleteVerifyDataChangeRecordContentNewValues) {
   auto mutation_builder_insert =
       InsertMutationBuilder("Users", {"UserId", "Name"});
   std::vector<ValueRow> rows = {{1, "name1"}};
@@ -380,6 +745,151 @@ TEST_F(ChangeStreamTest, SingleDeleteVerifyDataChangeRecordContent) {
   EXPECT_EQ(record.table_name.string_value(), "Users");
   EXPECT_EQ(record.mod_type.string_value(), "DELETE");
   EXPECT_EQ(record.value_capture_type.string_value(), "NEW_VALUES");
+  EXPECT_EQ(record.number_of_records_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.number_of_partitions_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.transaction_tag.string_value(), "");
+  EXPECT_EQ(record.is_system_transaction.bool_value(), false);
+  EXPECT_THAT(record.column_types,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "UserId" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: true }
+                           values { string_value: "1" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Name" }
+                           values { string_value: "{\"code\":\"STRING\"}" }
+                           values { bool_value: false }
+                           values { string_value: "2" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Age" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: false }
+                           values { string_value: "3" }
+                         }
+                       })pb"));
+  EXPECT_THAT(record.mods,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "{\"UserId\":\"1\"}" }
+                           values { string_value: "{}" }
+                           values { string_value: "{}" }
+                         }
+                       })pb"));
+}
+
+TEST_F(ChangeStreamTest,
+       SingleDeleteVerifyDataChangeRecordContentOldAndNewValues) {
+  auto mutation_builder_insert =
+      InsertMutationBuilder("Users", {"UserId", "Name"});
+  std::vector<ValueRow> rows = {{1, "name1"}};
+  for (const auto& row : rows) {
+    mutation_builder_insert.AddRow(row);
+  }
+  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  // Delete an existing row generates a DELETE record
+  auto mutation_builder_delete = DeleteMutationBuilder(
+      "Users", KeySet().AddKey(cloud::spanner::MakeKey(1)));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+                       Commit({mutation_builder_delete.Build()}));
+  Timestamp commit_timestamp = commit_result.commit_timestamp;
+  absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
+  ASSERT_EQ(data_change_records.size(), 1);
+  DataChangeRecord record = data_change_records[0];
+  EXPECT_EQ(record.commit_timestamp.string_value(),
+            cloud::spanner_internal::TimestampToRFC3339(commit_timestamp));
+  EXPECT_EQ(record.record_sequence.string_value(), "00000000");
+  EXPECT_EQ(record.is_last_record_in_transaction_in_partition.bool_value(),
+            true);
+  EXPECT_EQ(record.table_name.string_value(), "Users");
+  EXPECT_EQ(record.mod_type.string_value(), "DELETE");
+  EXPECT_EQ(record.value_capture_type.string_value(), "OLD_AND_NEW_VALUES");
+  EXPECT_EQ(record.number_of_records_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.number_of_partitions_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.transaction_tag.string_value(), "");
+  EXPECT_EQ(record.is_system_transaction.bool_value(), false);
+  EXPECT_THAT(record.column_types,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "UserId" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: true }
+                           values { string_value: "1" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Name" }
+                           values { string_value: "{\"code\":\"STRING\"}" }
+                           values { bool_value: false }
+                           values { string_value: "2" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Age" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: false }
+                           values { string_value: "3" }
+                         }
+                       })pb"));
+  EXPECT_THAT(
+      record.mods,
+      test::EqualsProto(
+          R"pb(values {
+                 list_value {
+                   values { string_value: "{\"UserId\":\"1\"}" }
+                   values { string_value: "{}" }
+                   values { string_value: "{\"Age\":null,\"Name\":\"name1\"}" }
+                 }
+               })pb"));
+}
+
+TEST_F(ChangeStreamTest, SingleDeleteVerifyDataChangeRecordContentNewRow) {
+  ZETASQL_EXPECT_OK(UpdateSchema({
+      R"(
+          ALTER CHANGE STREAM StreamUsers SET OPTIONS ( value_capture_type = 'NEW_ROW' )
+        )",
+  }));
+  auto mutation_builder_insert =
+      InsertMutationBuilder("Users", {"UserId", "Name"});
+  std::vector<ValueRow> rows = {{1, "name1"}};
+  for (const auto& row : rows) {
+    mutation_builder_insert.AddRow(row);
+  }
+  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  // Delete an existing row generates a DELETE record
+  auto mutation_builder_delete = DeleteMutationBuilder(
+      "Users", KeySet().AddKey(cloud::spanner::MakeKey(1)));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+                       Commit({mutation_builder_delete.Build()}));
+  Timestamp commit_timestamp = commit_result.commit_timestamp;
+  absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
+  ASSERT_EQ(data_change_records.size(), 1);
+  DataChangeRecord record = data_change_records[0];
+  EXPECT_EQ(record.commit_timestamp.string_value(),
+            cloud::spanner_internal::TimestampToRFC3339(commit_timestamp));
+  EXPECT_EQ(record.record_sequence.string_value(), "00000000");
+  EXPECT_EQ(record.is_last_record_in_transaction_in_partition.bool_value(),
+            true);
+  EXPECT_EQ(record.table_name.string_value(), "Users");
+  EXPECT_EQ(record.mod_type.string_value(), "DELETE");
+  EXPECT_EQ(record.value_capture_type.string_value(), "NEW_ROW");
   EXPECT_EQ(record.number_of_records_in_transaction.string_value(), "1");
   EXPECT_EQ(record.number_of_partitions_in_transaction.string_value(), "1");
   EXPECT_EQ(record.transaction_tag.string_value(), "");
@@ -449,6 +959,7 @@ TEST_F(ChangeStreamTest, DeleteRowNotExisting) {
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 0);
 }
+
 // DML inserts all columns including those not explicitly mentioned in the
 // statement. Null values for those columns will be populated into the
 // DataChangeRecord.
@@ -603,8 +1114,64 @@ TEST_F(ChangeStreamTest, SingleInsertDMLVerifyDataChangeRecordContent) {
                })pb"));
 }
 
+// Columns not populated in DML are inserted with null values on emulator while
+// not in production, so this test is disabled.
+TEST_F(ChangeStreamTest, DISABLED_MultipleDMLVerifyDataChangeRecordContent) {
+  // Insert a row with UserId only and then update the row with a age value.
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("INSERT INTO Users (UserId) VALUES (1)")}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto commit_result,
+      CommitDml({SqlStatement("UPDATE Users SET Age = 20 WHERE UserId = 1")}));
+  Timestamp commit_timestamp = commit_result.commit_timestamp;
+  absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
+  ASSERT_EQ(data_change_records.size(), 1);
+  DataChangeRecord record = data_change_records[0];
+  EXPECT_EQ(record.commit_timestamp.string_value(),
+            cloud::spanner_internal::TimestampToRFC3339(commit_timestamp));
+  EXPECT_EQ(record.record_sequence.string_value(), "00000000");
+  EXPECT_EQ(record.is_last_record_in_transaction_in_partition.bool_value(),
+            true);
+  EXPECT_EQ(record.table_name.string_value(), "Users");
+  EXPECT_EQ(record.mod_type.string_value(), "UPDATE");
+  EXPECT_EQ(record.value_capture_type.string_value(), "NEW_VALUES");
+  EXPECT_EQ(record.number_of_records_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.number_of_partitions_in_transaction.string_value(), "1");
+  EXPECT_EQ(record.transaction_tag.string_value(), "");
+  EXPECT_EQ(record.is_system_transaction.bool_value(), false);
+  EXPECT_THAT(record.column_types,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "UserId" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: true }
+                           values { string_value: "1" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Age" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: false }
+                           values { string_value: "3" }
+                         }
+                       })pb"));
+  EXPECT_THAT(record.mods,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "{\"UserId\":\"1\"}" }
+                           values { string_value: "{\"Age\":\"20\"}" }
+                           values { string_value: "{}" }
+                         }
+                       })pb"));
+}
+
 // Generates 1 DataChangeRecord
-TEST_F(ChangeStreamTest, MultiUpdateSameExistingRowSameTransaction) {
+TEST_F(ChangeStreamTest, MultiUpdateSameExistingRowSameTransactionNewValues) {
   // 1st transaction
   auto mutation_builder_insert =
       InsertMutationBuilder("Users", {"UserId", "Name"});
@@ -683,6 +1250,192 @@ TEST_F(ChangeStreamTest, MultiUpdateSameExistingRowSameTransaction) {
                  list_value {
                    values { string_value: "{\"UserId\":\"1\"}" }
                    values { string_value: "{\"Name\":\"Foo Bar Update2\"}" }
+                   values { string_value: "{}" }
+                 }
+               })pb"));
+}
+
+// Generates 1 DataChangeRecord
+TEST_F(ChangeStreamTest,
+       MultiUpdateSameExistingRowSameTransactionOldAndNewValues) {
+  // 1st transaction
+  auto mutation_builder_insert =
+      InsertMutationBuilder("Users", {"UserId", "Name"});
+  std::vector<ValueRow> rows = {{1, "Foo Bar"}};
+  for (const auto& row : rows) {
+    mutation_builder_insert.AddRow(row);
+  }
+  absl::StatusOr<CommitResult> commit_result =
+      Commit({mutation_builder_insert.Build()});
+  ZETASQL_EXPECT_OK(commit_result.status());
+  // 2nd transaction
+  auto mutation_builder_update =
+      UpdateMutationBuilder("Users", {"UserId", "Name"});
+  std::vector<ValueRow> update_rows = {{1, "Foo Bar Update1"},
+                                       {1, "Foo Bar Update2"}};
+  for (const auto& row : update_rows) {
+    mutation_builder_update.AddRow(row);
+  }
+  absl::StatusOr<CommitResult> commit_result2 =
+      Commit({mutation_builder_update.Build()});
+  ZETASQL_EXPECT_OK(commit_result2.status());
+  Timestamp commit_timestamp = commit_result2->commit_timestamp;
+  absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
+  ASSERT_EQ(data_change_records.size(), 1);
+  DataChangeRecord record = data_change_records[0];
+  EXPECT_EQ(record.mod_type.string_value(), "UPDATE");
+  // commit_timestamp
+  EXPECT_EQ(record.commit_timestamp.string_value(),
+            cloud::spanner_internal::TimestampToRFC3339(commit_timestamp));
+  // record_sequence
+  EXPECT_EQ(record.record_sequence.string_value(), "00000000");
+  // is_last_record_in_transaction_in_partition
+  EXPECT_EQ(record.is_last_record_in_transaction_in_partition.bool_value(),
+            true);
+  // table_name
+  EXPECT_EQ(record.table_name.string_value(), "Users");
+  // mod_type
+  EXPECT_EQ(record.mod_type.string_value(), "UPDATE");
+  // value_capture_type
+  EXPECT_EQ(record.value_capture_type.string_value(), "OLD_AND_NEW_VALUES");
+  // number_of_records_in_transaction
+  EXPECT_EQ(record.number_of_records_in_transaction.string_value(), "1");
+  // number_of_partitions_in_transaction
+  EXPECT_EQ(record.number_of_partitions_in_transaction.string_value(), "1");
+  // transaction_tag
+  EXPECT_EQ(record.transaction_tag.string_value(), "");
+  // is_system_transaction
+  EXPECT_EQ(record.is_system_transaction.bool_value(), false);
+  // column_types
+  EXPECT_THAT(record.column_types,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "UserId" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: true }
+                           values { string_value: "1" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Name" }
+                           values { string_value: "{\"code\":\"STRING\"}" }
+                           values { bool_value: false }
+                           values { string_value: "2" }
+                         }
+                       })pb"));
+  // mods
+  EXPECT_THAT(
+      record.mods,
+      test::EqualsProto(
+          R"pb(values {
+                 list_value {
+                   values { string_value: "{\"UserId\":\"1\"}" }
+                   values { string_value: "{\"Name\":\"Foo Bar Update2\"}" }
+                   values { string_value: "{\"Name\":\"Foo Bar\"}" }
+                 }
+               })pb"));
+}
+
+// Generates 1 DataChangeRecord
+TEST_F(ChangeStreamTest, MultiUpdateSameExistingRowSameTransactionNewRow) {
+  ZETASQL_EXPECT_OK(UpdateSchema({
+      R"(
+          ALTER CHANGE STREAM StreamUsers SET OPTIONS ( value_capture_type = 'NEW_ROW' )
+        )",
+  }));
+  // 1st transaction
+  auto mutation_builder_insert =
+      InsertMutationBuilder("Users", {"UserId", "Name"});
+  std::vector<ValueRow> rows = {{1, "Foo Bar"}};
+  for (const auto& row : rows) {
+    mutation_builder_insert.AddRow(row);
+  }
+  absl::StatusOr<CommitResult> commit_result =
+      Commit({mutation_builder_insert.Build()});
+  ZETASQL_EXPECT_OK(commit_result.status());
+  // 2nd transaction
+  auto mutation_builder_update =
+      UpdateMutationBuilder("Users", {"UserId", "Name"});
+  std::vector<ValueRow> update_rows = {{1, "Foo Bar Update1"},
+                                       {1, "Foo Bar Update2"}};
+  for (const auto& row : update_rows) {
+    mutation_builder_update.AddRow(row);
+  }
+  absl::StatusOr<CommitResult> commit_result2 =
+      Commit({mutation_builder_update.Build()});
+  ZETASQL_EXPECT_OK(commit_result2.status());
+  Timestamp commit_timestamp = commit_result2->commit_timestamp;
+  absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
+  ASSERT_EQ(data_change_records.size(), 1);
+  DataChangeRecord record = data_change_records[0];
+  EXPECT_EQ(record.mod_type.string_value(), "UPDATE");
+  // commit_timestamp
+  EXPECT_EQ(record.commit_timestamp.string_value(),
+            cloud::spanner_internal::TimestampToRFC3339(commit_timestamp));
+  // record_sequence
+  EXPECT_EQ(record.record_sequence.string_value(), "00000000");
+  // is_last_record_in_transaction_in_partition
+  EXPECT_EQ(record.is_last_record_in_transaction_in_partition.bool_value(),
+            true);
+  // table_name
+  EXPECT_EQ(record.table_name.string_value(), "Users");
+  // mod_type
+  EXPECT_EQ(record.mod_type.string_value(), "UPDATE");
+  // value_capture_type
+  EXPECT_EQ(record.value_capture_type.string_value(), "NEW_ROW");
+  // number_of_records_in_transaction
+  EXPECT_EQ(record.number_of_records_in_transaction.string_value(), "1");
+  // number_of_partitions_in_transaction
+  EXPECT_EQ(record.number_of_partitions_in_transaction.string_value(), "1");
+  // transaction_tag
+  EXPECT_EQ(record.transaction_tag.string_value(), "");
+  // is_system_transaction
+  EXPECT_EQ(record.is_system_transaction.bool_value(), false);
+  // column_types
+  EXPECT_THAT(record.column_types,
+              test::EqualsProto(
+                  R"pb(values {
+                         list_value {
+                           values { string_value: "UserId" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: true }
+                           values { string_value: "1" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Name" }
+                           values { string_value: "{\"code\":\"STRING\"}" }
+                           values { bool_value: false }
+                           values { string_value: "2" }
+                         }
+                       }
+                       values {
+                         list_value {
+                           values { string_value: "Age" }
+                           values { string_value: "{\"code\":\"INT64\"}" }
+                           values { bool_value: false }
+                           values { string_value: "3" }
+                         }
+                       })pb"));
+  // mods
+  EXPECT_THAT(
+      record.mods,
+      test::EqualsProto(
+          R"pb(values {
+                 list_value {
+                   values { string_value: "{\"UserId\":\"1\"}" }
+                   values {
+                     string_value: "{\"Age\":null,\"Name\":\"Foo Bar Update2\"}"
+                   }
                    values { string_value: "{}" }
                  }
                })pb"));

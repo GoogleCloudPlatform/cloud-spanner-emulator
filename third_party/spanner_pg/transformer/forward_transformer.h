@@ -43,6 +43,7 @@
 #include "zetasql/base/logging.h"
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
+#include "zetasql/public/coercer.h"
 #include "zetasql/public/id_string.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
@@ -59,6 +60,7 @@
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/transformer/expr_transformer_helper.h"
 #include "third_party/spanner_pg/transformer/transformer_helper.h"
 
@@ -111,6 +113,13 @@ class ForwardTransformer {
       : catalog_adapter_(std::move(catalog_adapter)) {
     ABSL_CHECK(catalog_adapter_ != nullptr);
     ABSL_CHECK(catalog_adapter_->analyzer_options().id_string_pool() != nullptr);
+      ABSL_CHECK(catalog_adapter_->GetEngineSystemCatalog() != nullptr);
+      ABSL_CHECK(catalog_adapter_->GetEngineSystemCatalog()->type_factory() !=
+            nullptr);
+      coercer_ = std::make_unique<zetasql::Coercer>(
+          catalog_adapter_->GetEngineSystemCatalog()->type_factory(),
+          &catalog_adapter_->analyzer_options().language(),
+          catalog_adapter_->GetEngineSystemCatalog());
   }
   ForwardTransformer(ForwardTransformer&&) = default;
   virtual ~ForwardTransformer() = default;
@@ -240,10 +249,11 @@ class ForwardTransformer {
   absl::Status CheckForUnsupportedFeatures(const Query& query,
                                            bool is_top_level_query) const;
 
-  // Returns an unimplemented error with the feature name if a field that is
-  // not supported is populated (not nullptr).
+  // Returns an unimplemented error with the feature and field names if a field
+  // that is not supported is populated (not nullptr).
   absl::Status CheckForUnsupportedFields(const void* field,
-                                         absl::string_view feature_name) const;
+                                         absl::string_view feature_name,
+                                         absl::string_view field_name) const;
 
   // Builds a list of ResolvedColumn objects from the argument list of
   // `function_call`.
@@ -320,7 +330,8 @@ class ForwardTransformer {
   BuildGsqlResolvedJoinScan(const JoinExpr& join_expr, const List& rtable,
                             const VarIndexScope* external_scope,
                             const VarIndexScope* local_scope,
-                            VarIndexScope* output_scope);
+                            VarIndexScope* output_scope,
+                            bool has_using = false);
 
   // Builds a ZetaSQL ResolvedJoinScan object based on the ZetaSQL inputs.
   // The resulted ResolvedJoinScan has type INNER and does not have any join
@@ -829,6 +840,14 @@ class ForwardTransformer {
   BuildGsqlInFunctionCall(const ScalarArrayOpExpr& scalar_array,
                           ExprTransformerInfo* expr_transformer_info);
 
+  // Append the array expressions for the googlesql function call to the
+  // argument list. Returns true if the caller should invoke ZetaSQL's
+  // $in_array function instead of $in i.e., if this function appends an array
+  // argument instead of appending the array values individually.
+  absl::StatusOr<bool> AppendGsqlInFunctionCallArrayArg(
+      void* array_argument, ExprTransformerInfo* expr_transformer_info,
+      std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& argument_list);
+
   // Type ======================================================================
   // If the result PostgresTypeMapping has mapped_type, returns the
   // mapped_type. Otherwise returns a PostgresTypeMapping.
@@ -878,7 +897,7 @@ class ForwardTransformer {
   absl::Status CheckForUnsupportedOnConflictClause(
       const Query& query, Index rte_index, const zetasql::Table& table,
       const std::vector<zetasql::ResolvedColumn>& insert_column_list,
-      VarIndexScope* scope);
+      VarIndexScope* scope, bool is_ignore_mode);
 
  private:
   absl::StatusOr<int> GetEndLocationForStartLocation(int start_location);
@@ -988,6 +1007,10 @@ class ForwardTransformer {
   // Space for streamz flags
   // Flags if a from clause contains both implicit and explicit joins
   bool is_mixed_joins_query_ = false;
+
+  // The coercer defines common supertypes for individual types (including
+  // n-ary supertypes) and whether one type can be coerced to another type.
+  std::unique_ptr<zetasql::Coercer> coercer_;
 };
 
 }  // namespace postgres_translator

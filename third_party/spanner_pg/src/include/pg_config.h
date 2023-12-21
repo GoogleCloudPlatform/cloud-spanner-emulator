@@ -1,6 +1,7 @@
 /* src/include/pg_config.h.  Generated from pg_config.h.in by configure.  */
 /* src/include/pg_config.h.in.  Generated from configure.in by autoheader.  */
-/* SPECKLE_POSTGRES Added absl's integral types for defined-width ints. */
+/* SPECKLE_POSTGRES Use fixed-width integer types from //base. */
+#include <stdint.h>
 #ifdef __cplusplus
 extern "C++" {
 #endif

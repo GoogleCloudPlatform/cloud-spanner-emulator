@@ -1,0 +1,36 @@
+# Note that PG databases by default have lower case table and column names. To
+# use uppercase names, you have to quote them. But the GSQL and PG quoting
+# syntax is incompatible so we use lower-case names in both schemas to avoid
+# having to maintain two copies of each query.
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE SEQUENCE mysequence OPTIONS (
+  sequence_kind = "bit_reversed_positive"
+);
+
+CREATE TABLE users(
+  id       INT64 NOT NULL DEFAULT
+    (GET_NEXT_SEQUENCE_VALUE(SEQUENCE mysequence)),
+  name       STRING(MAX),
+  age        INT64,
+  counter    INT64 DEFAULT
+                (GET_INTERNAL_SEQUENCE_STATE(SEQUENCE mysequence)),
+  br_id      INT64 AS (BIT_REVERSE(id, true)) STORED,
+  CONSTRAINT id_gt_0 CHECK (id > 0),
+  CONSTRAINT counter_gt_br_id CHECK (counter >= br_id),
+  CONSTRAINT br_id_true CHECK (id = BIT_REVERSE(br_id, true)),
+) PRIMARY KEY (id, br_id);
+===
+@Dialect=POSTGRESQL
+CREATE SEQUENCE mysequence BIT_REVERSED_POSITIVE;
+CREATE TABLE users(
+  id         bigint NOT NULL DEFAULT nextval('mysequence'),
+  name       varchar,
+  age        bigint,
+  counter    bigint DEFAULT
+                (spanner.get_internal_sequence_state('mysequence')),
+  br_id      bigint GENERATED ALWAYS AS (spanner.bit_reverse(id, true)) STORED,
+  CONSTRAINT id_gt_0 CHECK (id > 0),
+  CONSTRAINT counter_gt_br_id CHECK (counter >= br_id),
+  CONSTRAINT br_id_true CHECK (id = spanner.bit_reverse(br_id, true)),
+  PRIMARY KEY (id, br_id)
+);

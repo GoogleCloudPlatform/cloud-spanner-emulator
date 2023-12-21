@@ -25,17 +25,23 @@
 #include "zetasql/public/type.pb.h"
 #include "zetasql/public/value.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "absl/types/optional.h"
 #include "backend/common/ids.h"
 #include "backend/common/indexing.h"
 #include "backend/common/rows.h"
+#include "backend/datamodel/key.h"
+#include "backend/datamodel/key_range.h"
 #include "backend/datamodel/value.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/index.h"
+#include "backend/schema/updater/schema_validation_context.h"
 #include "backend/storage/in_memory_storage.h"
 #include "backend/storage/iterator.h"
 #include "common/errors.h"
 #include "common/limits.h"
+#include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
@@ -43,6 +49,53 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+absl::Status BackfillIndexAddedColumn(const Index* index,
+                                      const Column* added_column,
+                                      const SchemaValidationContext* context) {
+  ZETASQL_RET_CHECK_NE(added_column, nullptr);
+  ZETASQL_RET_CHECK_NE(context, nullptr);
+
+  const Table* index_data_table = index->index_data_table();
+  const Table* indexed_table = index->indexed_table();
+
+  const Column* indexed_table_column = added_column->source_column();
+
+  std::vector<ColumnID> key_column_ids;
+  for (const auto& key_column : indexed_table->primary_key()) {
+    key_column_ids.push_back(
+        index_data_table->FindColumn(key_column->column()->Name())->id());
+  }
+  std::unique_ptr<StorageIterator> itr;
+  ZETASQL_RETURN_IF_ERROR(context->storage()->Read(
+      context->pending_commit_timestamp(), index_data_table->id(),
+      KeyRange::All(), key_column_ids, &itr));
+
+  while (itr->Next()) {
+    // Construct the key of the indexed table.
+    Key indexed_table_key;
+    for (int i = 0; i < indexed_table->primary_key().size(); ++i) {
+      indexed_table_key.AddColumn(
+          itr->ColumnValue(i).is_valid()
+              ? itr->ColumnValue(i)
+              : zetasql::Value::Null(
+                    index_data_table->columns()[i]->GetType()),
+          indexed_table->primary_key()[i]->is_descending(),
+          indexed_table->primary_key()[i]->is_nulls_last());
+    }
+    // Read added column from the indexed table using the key constructed above.
+    std::vector<zetasql::Value> values;
+    ZETASQL_RETURN_IF_ERROR(context->storage()->Lookup(
+        context->pending_commit_timestamp(), indexed_table->id(),
+        indexed_table_key, {indexed_table_column->id()}, &values));
+    // Write the value of the added column to index's data table.
+    ZETASQL_RETURN_IF_ERROR(context->storage()->Write(
+        context->pending_commit_timestamp(), index_data_table->id(), itr->Key(),
+        {added_column->id()}, values));
+  }
+
+  return absl::OkStatus();
+}
 
 absl::Status BackfillIndex(const Index* index,
                            const SchemaValidationContext* context) {
