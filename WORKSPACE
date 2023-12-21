@@ -78,7 +78,7 @@ http_archive(
 
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 
-go_register_toolchains(version = "1.20.10")
+go_register_toolchains(version = "1.20.12")
 
 _bazel_gazelle_version = "0.31.1"
 
@@ -278,9 +278,9 @@ http_archive(
     patches = ["//build/bazel:zetasql.patch"],
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
-    sha256 = "38988710f09546e2e819b9bcba446a060385b21b61ede2f8bbdaf5ab6bfdf3c9",
-    strip_prefix = "zetasql-a745bef47b315bb11fecab4eeefa2bcc41be5951",
-    url = "https://github.com/google/zetasql/archive/a745bef47b315bb11fecab4eeefa2bcc41be5951.tar.gz",
+    sha256 = "56bc9f8c76ce75e8953af43bd09b9ae836de8e07ed38457c295e8a9f99377884",
+    strip_prefix = "zetasql-589026c410c42de9aa8ee92ad16f745977140041",
+    url = "https://github.com/google/zetasql/archive/589026c410c42de9aa8ee92ad16f745977140041.tar.gz",
 )
 
 http_archive(

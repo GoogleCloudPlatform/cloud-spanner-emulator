@@ -23,8 +23,11 @@
 
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/simple_catalog.h"
+#include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/string_view.h"
 #include "backend/query/spanner_sys_catalog.h"
+#include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/schema.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 
@@ -102,6 +105,24 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   void FillChangeStreamTablesTable();
   void FillChangeStreamOptionsTable();
   void FillChangeStreamColumnsTable();
+
+  void FillSequencesTable();
+  void FillSequenceOptionsTable();
+
+  void FillModelsTable();
+  void FillModelOptionsTable();
+  void FillModelColumnsTable();
+  void FillModelColumnOptionsTable();
+
+  void FillModelColumnsTable(const Model& model,
+                             const Model::ModelColumn& column,
+                             absl::string_view column_kind,
+                             int64_t ordinal_position,
+                             std::vector<std::vector<zetasql::Value>>* rows);
+  void FillModelColumnOptionsTable(
+      const Model& model, const Model::ModelColumn& column,
+      absl::string_view column_kind,
+      std::vector<std::vector<zetasql::Value>>* rows);
 };
 
 }  // namespace backend

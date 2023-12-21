@@ -362,11 +362,17 @@ ForwardTransformer::BuildGsqlResolvedScanForTableExpression(
     }
   } else if (IsA(&node, JoinExpr)) {
     JoinExpr* join_expr = PostgresCastNode(JoinExpr, (void*)&node);
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<zetasql::ResolvedScan> join_scan,
-        BuildGsqlResolvedJoinScan(*join_expr, rtable, external_scope,
-                                  local_scope, output_scope));
-
+    std::unique_ptr<zetasql::ResolvedScan> join_scan;
+    if (list_length(join_expr->usingClause) > 0) {
+      ZETASQL_ASSIGN_OR_RETURN(join_scan, BuildGsqlResolvedJoinScan(
+                                      *join_expr, rtable, external_scope,
+                                      local_scope, output_scope,
+                                      /*has_using=*/true));
+    } else {
+      ZETASQL_ASSIGN_OR_RETURN(join_scan, BuildGsqlResolvedJoinScan(
+                                      *join_expr, rtable, external_scope,
+                                      local_scope, output_scope));
+    }
     return join_scan;
   } else {
     return absl::UnimplementedError(absl::StrCat(
@@ -401,7 +407,8 @@ ForwardTransformer::BuildGsqlResolvedScanForFunctionCall(
   // the other variants (for record or range). UNNEST becomes an ArrayScan in
   // ZetaSQL.
   if (func_expr->funcid == array_unnest_proc_oid) {
-      return absl::InvalidArgumentError("UNNEST is not supported");
+      return BuildGsqlResolvedArrayScan(*rte, rtindex, external_scope,
+                                        output_scope);
   } else {
     // Anything else had better be a TVF. For now that's Change Streams only.
     auto tvf_catalog_entry = catalog_adapter().GetTVFFromOid(func_expr->funcid);
@@ -576,7 +583,7 @@ absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
 ForwardTransformer::BuildGsqlResolvedJoinScan(
     const JoinExpr& join_expr, const List& rtable,
     const VarIndexScope* external_scope, const VarIndexScope* local_scope,
-    VarIndexScope* output_scope) {
+    VarIndexScope* output_scope, bool has_using) {
   if (join_expr.jointype == JOIN_FULL &&
       list_length(join_expr.usingClause) != 0
      ) {
@@ -715,9 +722,7 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
     if (gsql_join_type != zetasql::ResolvedJoinScan::INNER) {
       ZETASQL_RET_CHECK(gsql_join_expr != nullptr);
     }
-
-    result =
-        MakeResolvedJoinScan(columns, gsql_join_type, std::move(left_scan),
+    result = MakeResolvedJoinScan(columns, gsql_join_type, std::move(left_scan),
                              std::move(right_scan), std::move(gsql_join_expr));
   }
 
@@ -2994,26 +2999,28 @@ absl::Status ForwardTransformer::SetColumnAccessList(
 }
 
 absl::Status ForwardTransformer::CheckForUnsupportedFields(
-    const void* field, absl::string_view feature_name) const {
+    const void* field, absl::string_view feature_name,
+    absl::string_view field_name) const {
   if (field != nullptr) {
-    return absl::UnimplementedError(
-        absl::StrFormat("Statements with %s are not supported", feature_name));
+    return absl::UnimplementedError(absl::StrFormat(
+        "%s with %s are not supported", feature_name, field_name));
   }
   return absl::OkStatus();
 }
 
 absl::Status ForwardTransformer::CheckForUnsupportedFeatures(
     const Query& query, bool is_top_level_query) const {
-  ZETASQL_RETURN_IF_ERROR(
-      CheckForUnsupportedFields(query.groupingSets, "GROUPING SET clauses"));
-  ZETASQL_RETURN_IF_ERROR(
-      CheckForUnsupportedFields(query.windowClause, "WINDOW clauses"));
-  ZETASQL_RETURN_IF_ERROR(
-      CheckForUnsupportedFields(query.rowMarks, "ROW MARK clauses"));
-  ZETASQL_RETURN_IF_ERROR(
-      CheckForUnsupportedFields(query.constraintDeps, "constraint clauses"));
-  ZETASQL_RETURN_IF_ERROR(
-      CheckForUnsupportedFields(query.withCheckOptions, "WITH CHECK options"));
+  std::string feature_name = "Statements";
+  ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(query.groupingSets, feature_name,
+                                            "GROUPING SET clauses"));
+  ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(query.windowClause, feature_name,
+                                            "WINDOW clauses"));
+  ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(query.rowMarks, feature_name,
+                                            "ROW MARK clauses"));
+  ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(query.constraintDeps, feature_name,
+                                            "constraint clauses"));
+  ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(
+      query.withCheckOptions, feature_name, "WITH CHECK options"));
 
   if (query.groupDistinct) {
     return absl::UnimplementedError(
@@ -3077,17 +3084,18 @@ absl::Status ForwardTransformer::CheckForUnsupportedFeatures(
 
   if (query.onConflict != nullptr) {
       if (query.onConflict->action == ONCONFLICT_NOTHING) {
-      return CheckForUnsupportedFields(query.onConflict,
+      return CheckForUnsupportedFields(query.onConflict, feature_name,
                                        "ON CONFLICT DO NOTHING clauses");
     }
 
       if (query.onConflict->action == ONCONFLICT_UPDATE) {
-      return CheckForUnsupportedFields(query.onConflict,
+      return CheckForUnsupportedFields(query.onConflict, feature_name,
                                        "ON CONFLICT DO UPDATE clauses");
     }
 
     if (query.onConflict->action == ONCONFLICT_NONE) {
-      return CheckForUnsupportedFields(query.onConflict, "ON CONFLICT clauses");
+      return CheckForUnsupportedFields(query.onConflict, feature_name,
+                                       "ON CONFLICT clauses");
     }
   }
 

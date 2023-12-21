@@ -144,6 +144,8 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
       const google::spanner::emulator::backend::ddl::DropSequence& statement) const;
   absl::StatusOr<std::string> PrintCreateIndex(
       const google::spanner::emulator::backend::ddl::CreateIndex& statement) const;
+  absl::StatusOr<std::string> PrintAlterIndex(
+      const google::spanner::emulator::backend::ddl::AlterIndex& statement) const;
   absl::StatusOr<std::string> PrintAnalyze(
       const google::spanner::emulator::backend::ddl::Analyze& statement) const;
   absl::StatusOr<std::string> PrintSQLSecurityType(
@@ -230,6 +232,8 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
       return WrapOutput(PrintDropIndex(statement.drop_index()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kCreateIndex:
       return WrapOutput(PrintCreateIndex(statement.create_index()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kAlterIndex:
+      return WrapOutput(PrintAlterIndex(statement.alter_index()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kAnalyze:
       return WrapOutput(PrintAnalyze(statement.analyze()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kCreateFunction:
@@ -321,9 +325,10 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
 
       if (alter_column_sdl.has_operation()) {
         switch (alter_column_sdl.operation()) {
-          case google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::DROP_DEFAULT:
+          case google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::DROP_DEFAULT: {
             return StrCat(alter_table, " ", alter_column, " DROP DEFAULT");
-          case google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::SET_DEFAULT:
+          }
+          case google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::SET_DEFAULT: {
             ZETASQL_RET_CHECK(column.has_column_default());
             ZETASQL_RET_CHECK(column.column_default().has_expression_origin());
             google::spanner::emulator::backend::ddl::SQLExpressionOrigin expression_origin =
@@ -334,6 +339,14 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
                     : "";
             return StrCat(alter_table, " ", alter_column, " SET DEFAULT",
                           expression_output);
+          }
+          default: {
+            // We need this here to allow us to add the SET_NOT_NULL and
+            // DROP_NOT_NULL operations in ZetaSQL first/
+            ZETASQL_RET_CHECK_FAIL()
+                << "Unknown alter column operation type:"
+                << static_cast<int64_t>(alter_column_sdl.operation());
+          }
         }
         // Should never get here.
         ZETASQL_RET_CHECK_FAIL() << "Unknown alter column operation type:"
@@ -640,6 +653,34 @@ absl::string_view GetSchemaLocalName(absl::string_view name) {
   }
 }
 }  // namespace
+
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterIndex(
+    const google::spanner::emulator::backend::ddl::AlterIndex& statement) const {
+  std::string alter_type;
+  std::string column_name;
+  switch (statement.alter_type_case()) {
+    case google::spanner::emulator::backend::ddl::AlterIndex::kAddStoredColumn: {
+      alter_type = " ADD INCLUDE COLUMN ";
+      column_name =
+          QuoteIdentifier(statement.add_stored_column().column_name());
+      break;
+    }
+    case google::spanner::emulator::backend::ddl::AlterIndex::kDropStoredColumn: {
+      alter_type = " DROP INCLUDE COLUMN ";
+      column_name = QuoteIdentifier(statement.drop_stored_column());
+      break;
+    }
+    default: {
+      return absl::UnimplementedError(
+          StrCat("ALTER INDEX does not support alter type:",
+                 statement.alter_type_case()));
+    }
+  }
+
+  return StrCat("ALTER INDEX ",
+                QuoteQualifiedIdentifier(statement.index_name()), alter_type,
+                column_name);
+}
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
     const google::spanner::emulator::backend::ddl::CreateIndex& statement) const {

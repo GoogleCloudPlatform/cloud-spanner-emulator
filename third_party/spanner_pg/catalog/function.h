@@ -55,8 +55,8 @@ struct FunctionAndSignature {
                        const zetasql::FunctionSignature signature)
       : function_(function), signature_(signature) {}
 
-  const zetasql::Function* function() { return function_; }
-  const zetasql::FunctionSignature& signature() { return signature_; }
+  const zetasql::Function* function() const { return function_; }
+  const zetasql::FunctionSignature& signature() const { return signature_; }
 
  private:
   const zetasql::Function* function_;

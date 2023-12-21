@@ -230,31 +230,31 @@ index 9507aea..de75f25 100644
    auto wrapper_name_list = std::make_shared<NameList>();
    ZETASQL_RETURN_IF_ERROR(
 diff --git a/zetasql/analyzer/resolver_query.cc b/zetasql/analyzer/resolver_query.cc
-index 0eb93be..a15598f 100644
+index f124ed8..ac859d0 100644
 --- a/zetasql/analyzer/resolver_query.cc
 +++ b/zetasql/analyzer/resolver_query.cc
-@@ -7478,9 +7478,9 @@ absl::Status Resolver::ResolveTableSubquery(
+@@ -652,9 +652,9 @@ static absl::Status UpdateNameListForTableAlias(
+     if (input_name_list->HasRangeVariables()) {
        // If the value table has an existing range variable, then it has to be
        // renamed to the new name.
-       auto new_name_list = std::make_shared<NameList>();
 -      ZETASQL_RETURN_IF_ERROR(
--          new_name_list->MergeFrom(*subquery_name_list, table_ref,
+-          new_name_list->MergeFrom(*input_name_list, ast_location,
 -                                   {.rename_value_table_to_name = &alias}));
 +      ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(
-+          *subquery_name_list, table_ref,
++          *input_name_list, ast_location,
 +          NameList::MergeOptions{.rename_value_table_to_name = &alias}));
-       *output_name_list = new_name_list;
      } else {
        // If the value table was anonymous and didn't have an existing range
-@@ -7493,8 +7493,9 @@ absl::Status Resolver::ResolveTableSubquery(
-     // to drop existing range variables and convert value tables to columns,
-     // and then make the new range variables pointing at the remaining columns.
-     auto new_name_list = std::make_shared<NameList>();
--    ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(*subquery_name_list, table_ref,
--                                             {.flatten_to_table = true}));
-+    ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(
-+        *subquery_name_list, table_ref,
-+        NameList::MergeOptions{.flatten_to_table = true}));
+       // variable, this function will create one, using `alias` as the name.
+@@ -670,8 +670,9 @@ static absl::Status UpdateNameListForTableAlias(
+   // to drop existing range variables and convert value tables to columns,
+   // and then make the new range variables pointing at the remaining columns.
+   auto new_name_list = std::make_shared<NameList>();
+-  ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(*input_name_list, ast_location,
+-                                           {.flatten_to_table = true}));
++  ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(
++      *input_name_list, ast_location,
++      NameList::MergeOptions{.flatten_to_table = true}));
 
-     ZETASQL_ASSIGN_OR_RETURN(*output_name_list,
-                      NameList::AddRangeVariableInWrappingNameList(
+   ZETASQL_ASSIGN_OR_RETURN(*output_name_list,
+                    NameList::AddRangeVariableInWrappingNameList(

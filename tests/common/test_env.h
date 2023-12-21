@@ -22,6 +22,7 @@
 #include <thread>  // NOLINT(build/c++11)
 
 #include "google/longrunning/operations.grpc.pb.h"
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.grpc.pb.h"
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.grpc.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
@@ -35,6 +36,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/notification.h"
 #include "absl/time/clock.h"
+#include "common/constants.h"
 #include "frontend/common/uris.h"
 #include "frontend/server/server.h"
 #include "tests/common/proto_matchers.h"
@@ -137,28 +139,56 @@ class ServerTest : public testing::Test {
     return WaitForOperation(operation.name(), &operation);
   }
 
-  absl::Status CreateTestDatabaseWithChangeStream() {
+  absl::Status CreateTestDatabaseWithChangeStream(
+      database_api::DatabaseDialect dialect) {
     // Create a database that belongs to the instance created above and create
     // a test schema with change stream inside the newly created database.
     database_api::CreateDatabaseRequest request;
-    request.add_extra_statements(
-        R"(
+    if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+      request.add_extra_statements(
+          R"(
+              CREATE TABLE test_table(
+                int64_col bigint NOT NULL,
+                string_col varchar,
+                PRIMARY KEY(int64_col)
+              )
+        )");
+      request.add_extra_statements(
+          R"(
+              CREATE TABLE test_table2(
+                int64_col bigint NOT NULL,
+                string_col varchar,
+                PRIMARY KEY(int64_col)
+              )
+        )");
+      request.add_extra_statements(R"(
+              CREATE TABLE partition_table (
+                partition_token varchar,
+                start_time timestamptz,
+                end_time timestamptz,
+                gc_time timestamptz,
+                record_sequence varchar,
+                parents text[],
+                children text[],
+                PRIMARY KEY (partition_token)
+              )
+        )");
+    } else {
+      request.add_extra_statements(
+          R"(
               CREATE TABLE test_table(
                 int64_col INT64 NOT NULL,
                 string_col STRING(MAX)
               ) PRIMARY KEY(int64_col)
         )");
-    request.add_extra_statements(
-        R"(
+      request.add_extra_statements(
+          R"(
               CREATE TABLE test_table2(
                 int64_col INT64 NOT NULL,
                 string_col STRING(MAX)
               ) PRIMARY KEY(int64_col)
         )");
-    request.add_extra_statements(R"(
-              CREATE CHANGE STREAM change_stream_test_table FOR test_table
-            )");
-    request.add_extra_statements(R"(
+      request.add_extra_statements(R"(
               CREATE TABLE partition_table (
                 partition_token STRING(MAX),
                 start_time TIMESTAMP,
@@ -169,9 +199,18 @@ class ServerTest : public testing::Test {
                 children ARRAY<STRING(MAX)>,
               ) PRIMARY KEY (partition_token)
             )");
+    }
+    request.add_extra_statements(R"(
+              CREATE CHANGE STREAM change_stream_test_table FOR test_table
+            )");
     request.set_parent(test_instance_uri_);
-    request.set_create_statement(
-        absl::StrCat("CREATE DATABASE `", test_database_name_, "`"));
+    request.set_database_dialect(dialect);
+    std::string quote = kGSQLQuote;
+    if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+      quote = kPGQuote;
+    }
+    request.set_create_statement("CREATE DATABASE " + quote +
+                                 test_database_name_ + quote);
     grpc::ClientContext context;
     longrunning::Operation operation;
     ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->CreateDatabase(

@@ -142,6 +142,10 @@ class PostgreSQLToSpannerDDLTranslatorImpl
                            google::spanner::emulator::backend::ddl::CreateIndex& out,
                            const TranslationOptions& options);
 
+    absl::Status Translate(const AlterTableStmt& alter_index_statement,
+                           google::spanner::emulator::backend::ddl::AlterIndex& out);
+
+
    private:
     absl::StatusOr<absl::string_view> GetColumnName(
         const NullTest& null_test) const;
@@ -217,9 +221,17 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::Status TranslateDropIndex(const DropStmt& drop_statement,
                                   google::spanner::emulator::backend::ddl::DropIndex& out,
                                   const TranslationOptions& options) const;
+  absl::Status TranslateDropSchema(const DropStmt& drop_statement,
+                                   google::spanner::emulator::backend::ddl::DropSchema& out) const;
   absl::Status TranslateCreateIndex(const IndexStmt& create_index_statement,
                                     const TranslationOptions& options,
                                     google::spanner::emulator::backend::ddl::CreateIndex& out) const;
+
+  absl::Status TranslateAlterIndex(const AlterTableStmt& alter_index_statement,
+                                   const TranslationOptions& options,
+                                   google::spanner::emulator::backend::ddl::AlterIndex& out) const;
+  absl::Status TranslateCreateSchema(const CreateSchemaStmt& create_statement,
+                                     google::spanner::emulator::backend::ddl::CreateSchema& out) const;
   absl::Status TranslateVacuum(const VacuumStmt& vacuum_statement,
                                const TranslationOptions& options,
                                google::spanner::emulator::backend::ddl::Analyze& out) const;
@@ -1741,6 +1753,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropStatement(
       return TranslateDropIndex(drop_statement, *out.mutable_drop_index(),
                                 options);
 
+    case OBJECT_SCHEMA:
+      return TranslateDropSchema(drop_statement, *out.mutable_drop_schema());
+
     case OBJECT_VIEW:
       return TranslateDropView(drop_statement, *out.mutable_drop_function());
 
@@ -1871,6 +1886,21 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateIndex(
   return absl::OkStatus();
 }
 
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterIndex(
+    const AlterTableStmt& alter_index_statement, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::AlterIndex& out) const {
+  if (!options.enable_alter_index) {
+    return UnsupportedTranslationError("<ALTER INDEX> is not supported.");
+  }
+
+  ZETASQL_RET_CHECK_EQ(alter_index_statement.objtype, OBJECT_INDEX);
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_index_statement, options));
+
+  CreateIndexStatementTranslator translator(*this, options);
+  ZETASQL_RETURN_IF_ERROR(translator.Translate(alter_index_statement, out));
+  return absl::OkStatus();
+}
+
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropIndex(
     const DropStmt& drop_statement, google::spanner::emulator::backend::ddl::DropIndex& out,
     const TranslationOptions& options) const {
@@ -1907,6 +1937,44 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropIndex(
 
   if (drop_statement.missing_ok && options.enable_if_not_exists) {
     out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSchema(
+    const CreateSchemaStmt& create_statement,
+    google::spanner::emulator::backend::ddl::CreateSchema& out) const {
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_statement));
+
+  if (internal::IsReservedName(create_statement.schemaname)) {
+    return absl::InvalidArgumentError(
+        "'pg_' is not supported as a prefix for a schema name.");
+  }
+  if (absl::StartsWith(create_statement.schemaname, "spanner_")) {
+    // "spanner_*" namespaces are mainly reserved for functions; it's a place to
+    // put old versions of functions whose behavior we need to modify. It would
+    // be spanner_{version}.{function_name}.
+    return absl::InvalidArgumentError(
+        "'spanner_' is not supported as a prefix for a schema name.");
+  }
+
+  out.set_schema_name(create_statement.schemaname);
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSchema(
+    const DropStmt& drop_statement, google::spanner::emulator::backend::ddl::DropSchema& out) const {
+  ZETASQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_SCHEMA);
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      const Value* schema_to_drop_node,
+      (SingleItemListAsNode<Value, T_String>)(drop_statement.objects));
+
+  *out.mutable_schema_name() = schema_to_drop_node->val.str;
+
+  if (drop_statement.missing_ok) {
+    out.set_if_exists(true);
   }
 
   return absl::OkStatus();
@@ -2198,6 +2266,12 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
           break;
         }
 
+        case OBJECT_INDEX: {
+          ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterIndex(
+              *statement, options_, *result_statement.mutable_alter_index()));
+          break;
+        }
+
         default:
           return absl::InvalidArgumentError(
               "Object type is not supported in <ALTER> statement.");
@@ -2221,6 +2295,17 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
           (DowncastNode<IndexStmt, T_IndexStmt>(raw_statement.stmt)));
       ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateIndex(
           *statement, options_, *result_statement.mutable_create_index()));
+
+      break;
+    }
+
+    case T_CreateSchemaStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const CreateSchemaStmt* statement,
+          (DowncastNode<CreateSchemaStmt, T_CreateSchemaStmt>(
+              raw_statement.stmt)));
+      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateSchema(
+          *statement, *result_statement.mutable_create_schema()));
 
       break;
     }
@@ -2436,6 +2521,38 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
 
   if (create_index_statement.if_not_exists && options.enable_if_not_exists) {
     create_index_out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status
+PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
+    const AlterTableStmt& alter_index_statement,
+    google::spanner::emulator::backend::ddl::AlterIndex& out) {
+  // alter_index_statement has been verified
+  ZETASQL_RET_CHECK_EQ(list_length(alter_index_statement.cmds), 1);
+  ZETASQL_ASSIGN_OR_RETURN(const AlterTableCmd* first_cmd,
+                   (GetListItemAsNode<AlterTableCmd, T_AlterTableCmd>(
+                       alter_index_statement.cmds, 0)));
+  ZETASQL_ASSIGN_OR_RETURN(std::string relname,
+                   ddl_translator_.GetTableName(*alter_index_statement.relation,
+                                                "ALTER INDEX"));
+
+  out.set_index_name(relname);
+  switch (first_cmd->subtype) {
+    case AT_AddIndexIncludeColumn: {
+      *out.mutable_add_stored_column()->mutable_column_name() = first_cmd->name;
+      break;
+    }
+    case AT_DropIndexIncludeColumn: {
+      *out.mutable_drop_stored_column() = first_cmd->name;
+      break;
+    }
+    default:
+      return UnsupportedTranslationError(
+          "<ALTER INDEX> only supports actions to add or drop an include "
+          "column");
   }
 
   return absl::OkStatus();

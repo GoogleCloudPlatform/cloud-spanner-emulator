@@ -121,6 +121,7 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//backend/schema/graph:schema_graph",
         "//third_party/spanner_pg/catalog:spangres_type",
+        "//third_party/spanner_pg/catalog:type",
         "@com_google_zetasql//zetasql/public:analyzer_options",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:type",

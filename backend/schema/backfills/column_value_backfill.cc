@@ -113,6 +113,7 @@ absl::Status BackfillGeneratedColumnValue(
              generated_column->has_default_value()));
   ZETASQL_RET_CHECK_NE(context, nullptr);
   FunctionCatalog function_catalog(context->type_factory());
+  function_catalog.SetLatestSchema(context->validated_new_schema());
   Catalog catalog(context->validated_new_schema(), &function_catalog,
                   context->type_factory());
   const Table* table = generated_column->table();

@@ -65,9 +65,6 @@ The following additional limitations currently apply:
   schema tables are populated so any columns with the catalog name will be
   empty.
 
-- Casting from PG.JSONB to bool, double, bigint and varchar types is
-  currently unsupported.
-
 - Dataflow templates
 
 - Any limitations listed in [The PostgreSQL language in

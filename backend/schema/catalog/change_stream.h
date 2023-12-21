@@ -41,6 +41,8 @@ namespace backend {
 inline constexpr absl::string_view kChangeStreamRetentionPeriodDefault = "1d";
 inline constexpr absl::string_view kChangeStreamValueCaptureTypeDefault =
     "OLD_AND_NEW_VALUES";
+inline constexpr absl::string_view kChangeStreamValueCaptureTypeNewRow =
+    "NEW_ROW";
 
 class Table;
 class Column;

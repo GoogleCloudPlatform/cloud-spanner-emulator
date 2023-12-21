@@ -69,7 +69,7 @@ class QueryHintsTest : public DatabaseTest {
   }
 };
 
-TEST_F(QueryHintsTest, QueryWithHints_ForceIndex) {
+TEST_F(QueryHintsTest, QueryWithHintsForceIndex) {
   ZETASQL_EXPECT_OK(Query("SELECT ID, Name, Age FROM Users@{force_index=UsersByName}"));
   EXPECT_THAT(
       Query("@{force_index=UsersByName} SELECT ID, Name, Age FROM Users"),
@@ -78,7 +78,7 @@ TEST_F(QueryHintsTest, QueryWithHints_ForceIndex) {
       Query("@{force_index=_BASE_TABLE} SELECT ID, Name, Age FROM Users"));
 }
 
-TEST_F(QueryHintsTest, QueryWithHints_ForceIndex_ManagedIndex) {
+TEST_F(QueryHintsTest, QueryWithHintsForceIndexManagedIndex) {
   // Managed indexes should work for force_index query hint.
   // The last part of the index name is not used for matching the index in the
   // emulator, but this test uses the production generated fingerprint to pass
@@ -93,20 +93,35 @@ TEST_F(QueryHintsTest, QueryWithHints_ForceIndex_ManagedIndex) {
       StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(QueryHintsTest, QueryWithHints_JoinMethod) {
+TEST_F(QueryHintsTest, QueryWithHintsIndexStrategy) {
+  ZETASQL_EXPECT_OK(Query(
+      "SELECT ID, Name, Age FROM Users@{index_strategy=force_index_union}"));
+  ZETASQL_EXPECT_OK(Query(
+      "@{INDEX_STRATEGY=FORCE_INDEX_UNION} SELECT ID, Name, Age FROM Users"));
+  EXPECT_THAT(Query("@{index_strategy=invalid_value} SELECT ID, Name, Age "
+                    "FROM Users"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(QueryHintsTest, QueryWithHintsJoinMethod) {
   ZETASQL_EXPECT_OK(Query("@{join_method=merge_join} SELECT ID, Name, Age FROM Users"));
   ZETASQL_EXPECT_OK(Query("@{join_method=hash_join} SELECT ID, Name, Age FROM Users"));
   ZETASQL_EXPECT_OK(Query("@{join_method=apply_join} SELECT ID, Name, Age FROM Users"));
   ZETASQL_EXPECT_OK(Query("@{join_method=loop_join} SELECT ID, Name, Age FROM Users"));
+  ZETASQL_EXPECT_OK(
+      Query("@{join_method=push_broadcast_hash_join} SELECT ID, Name, Age FROM "
+            "Users"));
 }
 
-TEST_F(QueryHintsTest, QueryWithHints_JoinType) {
+TEST_F(QueryHintsTest, QueryWithHintsJoinType) {
   ZETASQL_EXPECT_OK(Query("@{join_type=hash_join} SELECT ID, Name, Age FROM Users"));
   ZETASQL_EXPECT_OK(Query("@{join_type=apply_join} SELECT ID, Name, Age FROM Users"));
   ZETASQL_EXPECT_OK(Query("@{join_type=loop_join} SELECT ID, Name, Age FROM Users"));
+  ZETASQL_EXPECT_OK(Query(
+      "@{join_type=push_broadcast_hash_join} SELECT ID, Name, Age FROM Users"));
 }
 
-TEST_F(QueryHintsTest, QueryWithHints_HashJoinBuildSide) {
+TEST_F(QueryHintsTest, QueryWithHintsHashJoinBuildSide) {
   EXPECT_THAT(
       Query(
           "@{hash_join_build_side=build_left} SELECT ID, Name, Age FROM Users"),

@@ -892,11 +892,6 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	}
 	/* SPANGRES END */
 
-	/* Process ON CONFLICT, if any. */
-	if (stmt->onConflictClause)
-		qry->onConflict = transformOnConflictClause(pstate,
-													stmt->onConflictClause);
-
 	/*
 	 * If we have any clauses yet to process, set the query namespace to
 	 * contain only the target relation, removing any entries added in a

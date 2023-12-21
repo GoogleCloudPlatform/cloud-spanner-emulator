@@ -59,7 +59,7 @@ absl::Status CheckKeyPartCompatibility(const Table* interleaved_table,
   const Column* parent_key_col = parent_key->column();
   const Column* child_key_col = child_key->column();
 
-  if (!absl::EqualsIgnoreCase(child_key_col->Name(), parent_key_col->Name())) {
+  if (child_key_col->Name() != parent_key_col->Name()) {
     // The parent key column does not match the child key column. But perhaps
     // the child declared the key column in a different position. Provide a
     // more helpful error message in this case (as they do refer to the parent
@@ -68,8 +68,7 @@ absl::Status CheckKeyPartCompatibility(const Table* interleaved_table,
                         ? interleaved_table->owner_index()->key_columns()
                         : interleaved_table->primary_key();
     for (int i = 0; i < child_pk.size(); ++i) {
-      if (absl::EqualsIgnoreCase(child_pk[i]->column()->Name(),
-                                 parent_key_col->Name())) {
+      if (child_pk[i]->column()->Name() == parent_key_col->Name()) {
         return error::IncorrectParentKeyPosition(object_type, object_name,
                                                  parent_key_col->Name(), i);
       }

@@ -32,6 +32,7 @@
 #ifndef INTERFACE_EMULATOR_BUILTIN_FUNCTION_CATALOG_
 #define INTERFACE_EMULATOR_BUILTIN_FUNCTION_CATALOG_
 
+#include <memory>
 #include <string>
 
 #include "zetasql/public/function.h"
@@ -48,15 +49,11 @@ namespace spangres {
 // functions that are built into Cloud Spanner.
 class EmulatorBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
  public:
-  explicit EmulatorBuiltinFunctionCatalog(zetasql::TypeFactory* type_factory)
+  explicit EmulatorBuiltinFunctionCatalog(
+      std::unique_ptr<google::spanner::emulator::backend::FunctionCatalog>
+          function_catalog)
       : EngineBuiltinFunctionCatalog(),
-        function_catalog_(type_factory) {
-  }
-
-  explicit EmulatorBuiltinFunctionCatalog(zetasql::TypeFactory* type_factory,
-                                          const std::string& catalog_name)
-      : EngineBuiltinFunctionCatalog(),
-        function_catalog_(type_factory, catalog_name) {
+        function_catalog_(std::move(function_catalog)) {
   }
 
   ~EmulatorBuiltinFunctionCatalog() {
@@ -65,7 +62,7 @@ class EmulatorBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
   absl::StatusOr<const zetasql::Function*> GetFunction(
       const std::string& name) const override {
     const zetasql::Function* function;
-    function_catalog_.GetFunction(name, &function);
+    function_catalog_->GetFunction(name, &function);
     if (function == nullptr) {
       return absl::NotFoundError(absl::StrCat(name, " function not found"));
     }
@@ -76,12 +73,16 @@ class EmulatorBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
       absl::flat_hash_set<const zetasql::Function*>* output) const override {
     ZETASQL_RET_CHECK_NE(output, nullptr);
     ZETASQL_RET_CHECK(output->empty());
-    function_catalog_.GetFunctions(output);
+    function_catalog_->GetFunctions(output);
     return absl::OkStatus();
   }
 
  private:
-  google::spanner::emulator::backend::FunctionCatalog function_catalog_;
+  // The EmulatorBuiltinFunctionCatalog object must own this pointer; otherwise,
+  // the returned function pointer from GetFunction() will become invalid and
+  // point to an incorrect function.
+  std::unique_ptr<google::spanner::emulator::backend::FunctionCatalog>
+      function_catalog_;
 };
 
 }  // namespace spangres

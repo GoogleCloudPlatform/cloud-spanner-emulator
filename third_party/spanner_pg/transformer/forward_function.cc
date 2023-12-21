@@ -229,10 +229,10 @@ ForwardTransformer::BuildGsqlResolvedAggregateFunctionCall(
                      expr_transformer_info->clause_name));
   }
 
-  if (agg_function.aggorder != NIL) {
-    return absl::UnimplementedError(
-        "ORDER BY in aggregate functions is not supported");
-  }
+  ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(agg_function.aggorder,
+                                            "Aggregate functions", "ORDER BY"));
+  ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(
+      agg_function.aggfilter, "Aggregate functions", "FILTER clauses"));
 
   // Construct a local ExprTransformerInfo whose var_index_scope is the
   // aggregate var_index_scope so that the aggregate function arguments will
@@ -645,7 +645,9 @@ ForwardTransformer::BuildGsqlResolvedScalarArrayFunctionCall(
   bool useOr = scalar_array.useOr;
 
   if (useOr && comparator_type != "=") {
-    return absl::UnimplementedError("ANY/SOME expression is not supported.");
+    return absl::UnimplementedError(
+        absl::StrCat("ANY/SOME expression is not supported with ",
+                     comparator_type, " operator."));
   }
   if (useOr == false && comparator_type != "<>") {
     return absl::UnimplementedError("ALL expression is not supported.");
@@ -694,19 +696,16 @@ absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
 ForwardTransformer::BuildGsqlInFunctionCall(
     const ScalarArrayOpExpr& scalar_array,
     ExprTransformerInfo* expr_transformer_info) {
-  // In some cases, PostgreSQL may supply an ArrayCoerceExpr as the array
-  // argument to request runtime casting of the array elements to match the
-  // first argument. This is not supported, but we special case it for a good
-  // error message.
   void* array_argument = lsecond(scalar_array.args);
+
   if (IsA(array_argument, ArrayCoerceExpr)) {
+    // In some cases, PostgreSQL may supply an ArrayCoerceExpr as the array
+    // argument to request runtime casting of the array elements to match the
+    // first argument. This is not supported, but we special case it for a good
+    // error message.
     return absl::InvalidArgumentError(
         "ANY, SOME, and IN expressions requiring array casting are not "
         "supported. Consider rewriting as an explicit JOIN");
-  } else if (IsA(array_argument, Var)) {
-    return absl::InvalidArgumentError(
-        "ANY, SOME, and IN expressions with column arguments are not "
-        "supported");
   } else if (IsA(array_argument, Const)) {
     return absl::InvalidArgumentError(
         "ANY, SOME, and IN expressions with array literal arguments are not "
@@ -717,19 +716,21 @@ ForwardTransformer::BuildGsqlInFunctionCall(
     return absl::UnimplementedError(
         "ANY, SOME, and IN expressions with a subquery on the right hand "
         "side are not supported");
-  } else if (IsA(array_argument, FuncExpr)) {
+  } else if (IsA(array_argument, FuncExpr) || IsA(array_argument, OpExpr)) {
+    // OpExpr and FuncExpr are semantically equivalent, so we'll handle both of
+    // them together.
     return absl::InvalidArgumentError(
-        "ANY, SOME, and IN expressions with function arguments are not "
-        "supported");
+        "ANY, SOME, and IN expressions with function or operator arguments are "
+        "not supported");
   } else if (IsA(array_argument, Param)) {
     return absl::InvalidArgumentError(
         "ANY, SOME, and IN expressions with parameter arguments are not "
         "supported");
   }
 
-  // Build the argument list for the googlesql function. The argument list is a
-  // vector that consists of the scalar expression and each expression from the
-  // array.
+  // Build the argument list for the googlesql function. The argument list is
+  // a vector that consists of the scalar expression and each expression from
+  // the array.
   std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
 
   // Get the scalar expression and add it to the argument list.
@@ -743,35 +744,56 @@ ForwardTransformer::BuildGsqlInFunctionCall(
           catalog_adapter_->analyzer_options().language()));
   argument_list.push_back(std::move(mapped_scalar_arg));
 
-  // Get each expression from the array and add them to the argument list.
-  ZETASQL_RET_CHECK(IsA(array_argument, ArrayExpr))
-      << "Expected array expression in ScalarArrayOpExpr. Got "
-      << internal::PostgresCastToNode(array_argument)->type;
-  ArrayExpr* array_node = internal::PostgresCastNode(ArrayExpr, array_argument);
-  for (Expr* array_element : StructList<Expr*>(array_node->elements)) {
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<zetasql::ResolvedExpr> expr_arg,
-        BuildGsqlResolvedExpr(*array_element, expr_transformer_info));
-    ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedExpr> mapped_expr_arg,
-                     catalog_adapter_->GetEngineSystemCatalog()
-                         ->GetResolvedExprForComparison(
-                             std::move(expr_arg),
-                             catalog_adapter_->analyzer_options().language()));
-    argument_list.push_back(std::move(mapped_expr_arg));
-  }
-
+  ZETASQL_ASSIGN_OR_RETURN(bool array_op_arg_is_array,
+                   AppendGsqlInFunctionCallArrayArg(
+                       array_argument, expr_transformer_info, argument_list));
   std::vector<zetasql::InputArgumentType> input_argument_types =
       GetInputArgumentTypes(argument_list);
 
   ZETASQL_ASSIGN_OR_RETURN(
       FunctionAndSignature function_and_signature,
       catalog_adapter_->GetEngineSystemCatalog()->GetFunctionAndSignature(
-          PostgresExprIdentifier::Expr(T_ScalarArrayOpExpr),
+          PostgresExprIdentifier::ScalarArrayOpExpr(array_op_arg_is_array),
           input_argument_types,
           catalog_adapter_->analyzer_options().language()));
 
   return MakeResolvedFunctionCall(function_and_signature,
                                   std::move(argument_list));
+}
+
+absl::StatusOr<bool> ForwardTransformer::AppendGsqlInFunctionCallArrayArg(
+    void* array_argument, ExprTransformerInfo* expr_transformer_info,
+    std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& argument_list) {
+  ZETASQL_RET_CHECK_EQ(argument_list.size(), 1)
+      << "The scalar argument should be added to argument_list before the "
+         "array arguments";
+  bool appended_arg_is_array = IsA(array_argument, Var);
+  if (appended_arg_is_array) {
+      return absl::InvalidArgumentError(
+          "ANY/SOME expressions with column arguments are not supported");
+  } else {
+    ZETASQL_RET_CHECK(IsA(array_argument, ArrayExpr));
+    // Get each expression from the array and add them to the argument list.
+    ArrayExpr* array_node =
+        internal::PostgresCastNode(ArrayExpr, array_argument);
+    if (array_node->multidims) {
+      return absl::InvalidArgumentError(
+        "Multi-dimensional arrays are not supported.");
+    }
+    for (Expr* array_element : StructList<Expr*>(array_node->elements)) {
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::unique_ptr<zetasql::ResolvedExpr> expr_arg,
+          BuildGsqlResolvedExpr(*array_element, expr_transformer_info));
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::unique_ptr<zetasql::ResolvedExpr> mapped_expr_arg,
+          catalog_adapter_->GetEngineSystemCatalog()
+              ->GetResolvedExprForComparison(
+                  std::move(expr_arg),
+                  catalog_adapter_->analyzer_options().language()));
+      argument_list.push_back(std::move(mapped_expr_arg));
+    }
+  }
+  return appended_arg_is_array;
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>

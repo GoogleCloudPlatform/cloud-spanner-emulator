@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ANALYZER_OPTIONS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ANALYZER_OPTIONS_H_
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/language_options.h"
@@ -26,13 +27,16 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+using admin::database::v1::DatabaseDialect;
+
 zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions();
 
 zetasql::LanguageOptions MakeGoogleSqlLanguageOptions();
 
 zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance();
 
-zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViews();
+zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViews(
+    DatabaseDialect dialect = DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 }  // namespace backend
 }  // namespace emulator

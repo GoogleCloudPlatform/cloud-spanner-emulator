@@ -434,9 +434,10 @@ absl::Status ExecuteStreamingSql(
                          QueryFromProto(request->sql(), request->params(),
                                         request->param_types(),
                                         txn->query_engine()->type_factory()));
+        bool in_read_write_txn = txn->IsReadWrite() || txn->IsPartitionedDml();
         ZETASQL_ASSIGN_OR_RETURN(change_stream_metadata,
                          backend::QueryEngine::TryGetChangeStreamMetadata(
-                             query, txn->schema()));
+                             query, txn->schema(), in_read_write_txn));
         // if current query is a change stream query, return and exit current
         // transaction lambda to avoid nested transaction call.
         if (change_stream_metadata.is_change_stream_query) {

@@ -16,13 +16,13 @@
 
 #include "common/errors.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
 #include "google/rpc/error_details.pb.h"
 #include "absl/status/status.h"
 #include "absl/strings/cord.h"
-#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
@@ -652,6 +652,14 @@ absl::Status UpdateDeletedRowInTransaction(absl::string_view table,
                                    "transaction."));
 }
 
+absl::Status ForeignKeyReferencedRestrictionInTransaction(
+    absl::string_view table, absl::string_view key) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::StrCat("Cannot write and delete the row with key ",
+                                   key, " in the foreign key referenced table ",
+                                   table, " within the same transaction."));
+}
+
 absl::Status ReadTimestampPastVersionGCLimit(absl::Time timestamp) {
   return absl::Status(
       absl::StatusCode::kFailedPrecondition,
@@ -972,6 +980,16 @@ absl::Status TooManyChangeStreamsTrackingSameObject(
                        "$1 Change Streams tracking the same table or "
                        "non-key column or ALL: $2.",
                        change_stream_name, limit, object_name_string));
+}
+
+absl::Status TooManyModelsPerDatabase(absl::string_view model_name,
+                                      int64_t limit) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Cannot add Model $0 : "
+                                       "because the maximum number "
+                                       "of <Models> per Database "
+                                       "(limit $1) has been reached.",
+                                       model_name, limit));
 }
 
 absl::Status UnsupportedChangeStreamOption(absl::string_view option_name) {
@@ -1380,6 +1398,159 @@ absl::Status ConcurrentSchemaChangeOrReadWriteTxnInProgress() {
                       "already in progress.");
 }
 
+absl::Status TooManyModelColumns(absl::string_view model_name,
+                                 absl::string_view column_kind, int64_t limit) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Model $0 has too many $1; the limit is $2.", model_name,
+                       column_kind, limit));
+}
+
+absl::Status NoColumnsModel(absl::string_view model_name,
+                            absl::string_view column_kind) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Schema discovery is not available in emulator. "
+                       "Please use explicit $1 clause for model $0.",
+                       model_name, column_kind));
+}
+
+absl::Status LocalModelUnsupported(absl::string_view model_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Model $0 must specify REMOTE attribute.", model_name));
+}
+
+absl::Status NoModelEndpoint(absl::string_view model_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Model $0 has invalid endpoints option. Option is required.",
+          model_name));
+}
+
+absl::Status AmbiguousModelEndpoint(absl::string_view model_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Model $0 has invalid endpoint option. Option cannot be "
+                       "specified together with endpoints.",
+                       model_name));
+}
+
+absl::Status InvalidModelDefaultBatchSize(absl::string_view model_name,
+                                          int64_t value, int64_t limit) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Model $0 has invalid default_batch_size option: $1. "
+                       "Must be between 1 and $2.",
+                       model_name, value, limit));
+}
+
+absl::Status ModelDuplicateColumn(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Duplicate name in schema: $0.", column_name));
+}
+
+absl::Status ModelCaseInsensitiveDuplicateColumn(
+    absl::string_view column_name, absl::string_view original_column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Schema object names differ only in case: $0, $1.",
+                       column_name, original_column_name));
+}
+
+absl::Status EmptyStruct() {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      "Empty STRUCT is not allowed.");
+}
+
+absl::Status StructFieldNumberExceedsLimit(int64_t limit) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("The number of struct field exceeds the limit: $0.",
+                       limit));
+}
+absl::Status MissingStructFieldName(absl::string_view struct_type) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Missing struct field name in Struct: $0.",
+                       struct_type));
+}
+
+absl::Status DuplicateStructName(absl::string_view struct_type,
+                                 absl::string_view field_name) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Duplicate name in Struct: $0, $1.",
+                                       struct_type, field_name));
+}
+
+absl::Status CaseInsensitiveDuplicateStructName(
+    absl::string_view struct_type, absl::string_view field_name,
+    absl::string_view existing_field_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Case Insensitive duplicate name in Struct: $0. "
+                       "Struct field names differ only in case: $1, $2.",
+                       struct_type, field_name, existing_field_name));
+}
+
+absl::Status ModelColumnTypeUnsupported(absl::string_view model_name,
+                                        absl::string_view column_name,
+                                        absl::string_view column_type) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Type $2 is not supported in model columns. "
+                       "Used in Model $0 column $1.",
+                       model_name, column_name, column_type));
+}
+
+absl::Status ModelColumnNotNull(absl::string_view model_name,
+                                absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("NOT NULL constraint is not supported in models."
+                       " Used in Model $0 column $1.",
+                       model_name, column_name));
+}
+
+absl::Status ModelColumnHidden(absl::string_view model_name,
+                               absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("HIDDEN attribute is not supported in models. "
+                       "Used in Model $0 column $1.",
+                       model_name, column_name));
+}
+
+absl::Status ModelColumnLength(absl::string_view model_name,
+                               absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Length is not supported in model columns. Please use MAX."
+          " Used in Model $0 column $1.",
+          model_name, column_name));
+}
+
+absl::Status ModelColumnGenerated(absl::string_view model_name,
+                                  absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Generated columns are not supported in models. "
+                       " Used in Model $0 column $1.",
+                       model_name, column_name));
+}
+
+absl::Status ModelColumnDefault(absl::string_view model_name,
+                                absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Default values are not supported in models. "
+                       " Used in Model $0 column $1.",
+                       model_name, column_name));
+}
+
 absl::Status IndexInterleaveTableNotFound(absl::string_view index_name,
                                           absl::string_view table_name) {
   return absl::Status(
@@ -1451,10 +1622,25 @@ absl::Status ChangeStreamNotFound(absl::string_view change_stream_name) {
       absl::StrCat("Change Stream not found: ", change_stream_name));
 }
 
+absl::Status ModelNotFound(absl::string_view model_name) {
+  return absl::Status(absl::StatusCode::kNotFound,
+                      absl::StrCat("Model `", model_name, "` not found."));
+}
+
 absl::Status TableValuedFunctionNotFound(absl::string_view tvf_name) {
   return absl::Status(
       absl::StatusCode::kNotFound,
       absl::StrCat("Table valued function not found: ", tvf_name));
+}
+
+absl::Status SequenceNotFound(absl::string_view sequence_name) {
+  return absl::Status(absl::StatusCode::kNotFound,
+                      absl::StrCat("Sequence not found: ", sequence_name));
+}
+
+absl::Status TypeNotFound(absl::string_view type_name) {
+  return absl::Status(absl::StatusCode::kNotFound,
+                      absl::StrCat("Type not found: ", type_name));
 }
 
 absl::Status DropTableWithChangeStream(
@@ -1805,6 +1991,22 @@ absl::Status ColumnNotFoundInIndex(absl::string_view index,
                    "the index (see "
                    "https://cloud.google.com/spanner/docs/"
                    "secondary-indexes#read-with-index)."));
+}
+
+absl::Status ColumnNotFoundInIndex(absl::string_view index_name,
+                                   absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::Substitute("Index $0 does not have stored column $1.", index_name,
+                       column_name));
+}
+
+absl::Status ColumnInIndexAlreadyExists(absl::string_view index_name,
+                                        absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Column $0 is already existed in index $1.", column_name,
+                       index_name));
 }
 
 // Foreign key errors.
@@ -2385,6 +2587,17 @@ absl::Status ReadOnlyTransactionDoesNotSupportDml(
           transaction_type));
 }
 
+absl::Status ReadOnlyTransactionDoesNotSupportReadWriteOnlyFunctions(
+    absl::string_view functions) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "The following functions can only be used in a read-write or "
+          "partitioned-dml transaction. Current transaction type is ReadOnly: "
+          "$0",
+          functions));
+}
+
 // Unsupported query shape errors.
 absl::Status UnsupportedReturnStructAsColumn() {
   return absl::Status(
@@ -2411,16 +2624,6 @@ absl::Status UnsupportedFunction(absl::string_view function_name) {
   return absl::Status(
       absl::StatusCode::kUnimplemented,
       absl::Substitute("Unsupported built-in function: $0", function_name));
-}
-
-absl::Status UnsupportedUserDefinedTableValuedFunction(
-    absl::string_view tvf_name) {
-  return absl::Status(
-      absl::StatusCode::kUnimplemented,
-      absl::Substitute(
-          "Unsupported table valued function: $0, user defined table valued "
-          "function is not supported in Cloud Spanner.",
-          tvf_name));
 }
 
 absl::Status UnsupportedHavingModifierWithDistinct() {
@@ -2490,6 +2693,14 @@ absl::Status ToJsonStringNonJsonTypeNotSupported(absl::string_view type_name) {
       absl::StatusCode::kUnimplemented,
       absl::Substitute("TO_JSON_STRING is not supported on values of type $0",
                        type_name));
+}
+
+absl::Status NoMatchingFunctionSignature(
+    absl::string_view function_name, absl::string_view supported_signature) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("No matching signature for function $0. "
+                                       "Supported signature is $0($1)",
+                                       function_name, supported_signature));
 }
 absl::Status TooManyFunctions(int max_function_nodes) {
   return absl::Status(
@@ -2849,6 +3060,73 @@ absl::Status ViewNotFound(absl::string_view view_name) {
 absl::Status WithViewsAreNotSupported() {
   return absl::Status(absl::StatusCode::kInvalidArgument,
                       "WITH clauses are unsupported in view definitions.");
+}
+
+absl::Status SequenceNotSupportedInPostgreSQL() {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      "Sequence is not supported in PostgreSQL dialect of "
+                      "the Emulator.");
+}
+
+absl::Status UnsupportedSequenceOption(absl::string_view option_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Unsupported sequence option: $0.", option_name));
+}
+
+absl::Status InvalidSequenceOptionValue(absl::string_view option_name,
+                                        absl::string_view type) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Option $0 can only take a $1 value.",
+                                       option_name, type));
+}
+
+absl::Status InvalidSequenceStartWithCounterValue() {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      "`start_with_counter` has to be a positive INT64 number");
+}
+
+absl::Status SequenceSkipRangeMinMaxNotSetTogether() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      "`skip_range_min` and `skip_range_max` have to be set together");
+}
+
+absl::Status SequenceSkippedRangeHasAtleastOnePositiveNumber() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      "The sequence skipped range has to contain at least one positive value");
+}
+
+absl::Status SequenceSkipRangeMinLargerThanMax() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      "`skip_range_min` has to be lesser than or equal to `skip_range_max`");
+}
+
+absl::Status UnsupportedSequenceKind(absl::string_view kind) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Invalid Sequence Kind: $0.", kind));
+}
+
+absl::Status SequenceNeedsAccessToSchema() {
+  return absl::Status(
+      absl::StatusCode::kInternal,
+      "Sequence function needs access to the schema in the Emulator");
+}
+
+absl::Status SequenceExhausted(absl::string_view name) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Sequence $0 is exhausted", name));
+}
+
+absl::Status InvalidDropSequenceWithColumnDependents(
+    absl::string_view sequence_name, absl::string_view dependent_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot drop SEQUENCE `$0` on which there are dependent columns: $1.",
+          sequence_name, dependent_name));
 }
 
 absl::Status DdlInvalidArgumentError(absl::string_view message) {

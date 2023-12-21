@@ -21,17 +21,19 @@
 #include <string>
 
 #include "zetasql/public/function.h"
+#include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
 #include "backend/common/case.h"
+#include "backend/schema/catalog/schema.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
 
-constexpr char kCloudSpannerEmulatorFunctionCatalog[] =
+constexpr char kCloudSpannerEmulatorFunctionCatalogName[] =
     "CloudSpannerEmulatorCatalog";
 
 // A catalog of all SQL functions.
@@ -42,25 +44,45 @@ class FunctionCatalog {
  public:
   // catalog_name allows tests to override the catalog name.
   // Overriding the catalog name is required for some PG dialect testing.
-  explicit FunctionCatalog(
-      zetasql::TypeFactory* type_factory,
-      const std::string& catalog_name = kCloudSpannerEmulatorFunctionCatalog);
+  explicit FunctionCatalog(zetasql::TypeFactory* type_factory,
+                           const std::string& catalog_name =
+                               kCloudSpannerEmulatorFunctionCatalogName,
+                           const backend::Schema* schema = nullptr);
   void GetFunction(const std::string& name,
                    const zetasql::Function** output) const;
   void GetFunctions(
       absl::flat_hash_set<const zetasql::Function*>* output) const;
+  void GetTableValuedFunction(
+      const std::string& name,
+      const zetasql::TableValuedFunction** output) const;
+
+  void SetLatestSchema(const backend::Schema* schema) {
+    latest_schema_ = schema;
+  }
+
+  const backend::Schema* GetLatestSchema() const { return latest_schema_; }
 
  private:
   void AddZetaSQLBuiltInFunctions(zetasql::TypeFactory* type_factory);
-
   void AddSpannerFunctions();
+  void AddMlFunctions();
 
   void AddSpannerPGFunctions(zetasql::TypeFactory* type_factory);
-
   void AddFunctionAliases();
 
+  std::unique_ptr<zetasql::Function> GetInternalSequenceStateFunction(
+      const std::string& catalog_name);
+
+  std::unique_ptr<zetasql::Function> GetNextSequenceValueFunction(
+      const std::string& catalog_name);
+
   CaseInsensitiveStringMap<std::unique_ptr<zetasql::Function>> functions_;
+  CaseInsensitiveStringMap<std::unique_ptr<zetasql::TableValuedFunction>>
+      table_valued_functions_;
   const std::string catalog_name_;
+  // A pointer to the latest schema, since some functions need to access it
+  // (e.g. sequence functions).
+  const backend::Schema* latest_schema_;
 };
 
 }  // namespace backend

@@ -44,6 +44,8 @@
 namespace postgres_translator {
 namespace spangres {
 
+using ::google::spanner::emulator::backend::FunctionCatalog;
+
 namespace {
 
 TEST(EmulatorParserTest, ParseAndAnalyzePostgreSQL) {
@@ -57,8 +59,10 @@ TEST(EmulatorParserTest, ParseAndAnalyzePostgreSQL) {
                        MemoryContextPGArena::Init(nullptr));
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const zetasql::AnalyzerOutput> output,
-      ParseAndAnalyzePostgreSQL("select 1234567890123", catalog.get(),
-                                analyzer_options, type_factory.get()));
+      ParseAndAnalyzePostgreSQL(
+          "select 1234567890123", catalog.get(), analyzer_options,
+          type_factory.get(),
+          std::make_unique<FunctionCatalog>(type_factory.get())));
 }
 
 TEST(EmulatorParserTest, TranslateTableLevelExpression) {
@@ -77,8 +81,9 @@ TEST(EmulatorParserTest, TranslateTableLevelExpression) {
                        MemoryContextPGArena::Init(nullptr));
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       postgres_translator::interfaces::ExpressionTranslateResult result,
-      TranslateTableLevelExpression("\"K\" > 0", "T", catalog,
-                                    analyzer_options, type_factory.get()));
+      TranslateTableLevelExpression(
+          "\"K\" > 0", "T", catalog, analyzer_options, type_factory.get(),
+          std::make_unique<FunctionCatalog>(type_factory.get())));
 }
 
 TEST(EmulatorParserTest, TranslateQueryInView) {
@@ -99,8 +104,10 @@ TEST(EmulatorParserTest, TranslateQueryInView) {
       MemoryContextPGArena::Init(/*memory_reservation_manager=*/nullptr));
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       postgres_translator::interfaces::ExpressionTranslateResult result,
-      TranslateQueryInView(R"(SELECT "K" FROM "T")", catalog, analyzer_options,
-                           type_factory.get()));
+      TranslateQueryInView(
+          R"(SELECT "K" FROM "T")", catalog, analyzer_options,
+          type_factory.get(),
+          std::make_unique<FunctionCatalog>(type_factory.get())));
 }
 
 }  // namespace

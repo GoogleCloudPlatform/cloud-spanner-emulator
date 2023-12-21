@@ -15,7 +15,13 @@
 //
 
 #include <string>
+#include <tuple>
+#include <utility>
 
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "tests/common/proto_matchers.h"
@@ -28,10 +34,11 @@ namespace test {
 
 namespace {
 
-using test::proto::Partially;
-using zetasql_base::testing::IsOk;
-using zetasql_base::testing::IsOkAndHolds;
-using zetasql_base::testing::StatusIs;
+using ::google::spanner::emulator::test::proto::Partially;
+using ::testing::HasSubstr;
+using ::zetasql_base::testing::IsOk;
+using ::zetasql_base::testing::IsOkAndHolds;
+using ::zetasql_base::testing::StatusIs;
 
 class ParamsApiTest : public test::DatabaseTest {
  protected:
@@ -146,6 +153,37 @@ TEST_F(ParamsApiTest, Params) {
       StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+TEST_F(ParamsApiTest, StructParams) {
+  auto make_name = [](std::string first_name, std::string last_name) {
+    return std::tuple(std::pair("FirstName", first_name),
+                      std::pair("LastName", last_name));
+  };
+
+  // A struct value cannot be returned as a column value.
+  EXPECT_THAT(QueryWithParams("SELECT @param",
+                              {{"param", Value(make_name("Test", "Name"))},
+                               {"unused_param", Value(6)}}),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("Unsupported query shape")));
+
+  EXPECT_THAT(QueryWithParams("SELECT @param.FirstName",
+                              {{"param", Value(make_name("Test", "Name"))},
+                               {"unused_param", Value(6)}}),
+              IsOkAndHoldsRow({"Test"}));
+
+  // Nested struct param.
+  EXPECT_THAT(
+      QueryWithParams(
+          "SELECT @param.Name.First",
+          {{"param",
+            Value(std::tuple(
+                false,
+                std::pair("Name",
+                          std::tuple(true, std::pair("First", "Test")))))},
+           {"unused_param", Value(6)}}),
+      IsOkAndHoldsRow({"Test"}));
+}
+
 TEST_F(ParamsApiTest, NamedParameterInSqlNotSuppliedParametersInRequest) {
   // The SQL query uses a named parameter, but none are supplied in the actual
   // request.
@@ -158,117 +196,122 @@ TEST_F(ParamsApiTest, NamedParameterInSqlNotSuppliedParametersInRequest) {
 
 TEST_F(ParamsApiTest, UndeclaredParameters) {
   // Parameter unused in query.
-  google::protobuf::Struct params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "p"
-           value { string_value: "unused" }
-         }
-         fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         })");
+  google::protobuf::Struct params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "p"
+      value { string_value: "unused" }
+    }
+    fields {
+      key: "ptimestamp"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
+    }
+  )pb");
   google::protobuf::Map<std::string, google::spanner::v1::Type> param_types = {};
-  spanner_api::ResultSet result = PARSE_TEXT_PROTO(
-      R"(metadata { row_type { fields { type { code: INT64 } } } }
-         rows { values { string_value: "1" } })");
+  spanner_api::ResultSet result = PARSE_TEXT_PROTO(R"pb(
+    metadata { row_type { fields { type { code: INT64 } } } }
+    rows { values { string_value: "1" } }
+  )pb");
   EXPECT_THAT(Execute("SELECT 1", params, param_types),
               IsOkAndHolds(Partially(test::EqualsProto(result))));
 
   // Parameter used but value not provided.
-  params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         })");
+  params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "ptimestamp"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
+    }
+  )pb");
   param_types = {};
   EXPECT_THAT(Execute("SELECT @WhereAmI > 1", params, param_types),
               testing::Not(IsOk()));
 
   // Declared and undeclared string parameters in same query.
-  params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "p"
-           value { string_value: "str" }
-         }
-         fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         }
-         fields {
-           key: "q"
-           value { string_value: "str" }
-         })");
+  params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "p"
+      value { string_value: "str" }
+    }
+    fields {
+      key: "ptimestamp"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
+    }
+    fields {
+      key: "q"
+      value { string_value: "str" }
+    }
+  )pb");
   param_types = {};
   param_types["q"] = PARSE_TEXT_PROTO("code: STRING");
   result = PARSE_TEXT_PROTO(
-      R"(metadata { row_type { fields { type { code: BOOL } } } }
-         rows { values { bool_value: true } })");
+      R"pb(metadata { row_type { fields { type { code: BOOL } } } }
+           rows { values { bool_value: true } })pb");
   EXPECT_THAT(Execute("SELECT @p = @q", params, param_types),
               IsOkAndHolds(Partially(test::EqualsProto(result))));
 
   // Roundtrip values of all supported scalar types.
-  params = PARSE_TEXT_PROTO(
-      R"pb(fields {
-             key: "PDOUBLE"
-             value { number_value: 1.5 }
-           }
-           fields {
-             key: "pStRiNg"
-             value { string_value: "str" }
-           }
-           fields {
-             key: "pbool"
-             value { bool_value: true }
-           }
-           fields {
-             key: "pbytes"
-             value { string_value: "Ynl0ZXM=" }
-           }
-           fields {
-             key: "pint64"
-             value { string_value: "-1" }
-           }
-           fields {
-             key: "pnumeric"
-             value { string_value: "-99999900001412413135315315.3140124" }
-           }
-           fields {
-             key: "pjson"
-             value { string_value: "{\"key\":123}" }
-           }
-           fields {
-             key: "ptimestamp"
-             value { string_value: "1970-01-01T00:00:00.000001Z" }
-           }
-           fields {
-             key: "pdate"
-             value { string_value: "2000-01-01" }
-           }
-      )pb");
+  params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "PDOUBLE"
+      value { number_value: 1.5 }
+    }
+    fields {
+      key: "pStRiNg"
+      value { string_value: "str" }
+    }
+    fields {
+      key: "pbool"
+      value { bool_value: true }
+    }
+    fields {
+      key: "pbytes"
+      value { string_value: "Ynl0ZXM=" }
+    }
+    fields {
+      key: "pint64"
+      value { string_value: "-1" }
+    }
+    fields {
+      key: "pnumeric"
+      value { string_value: "-99999900001412413135315315.3140124" }
+    }
+    fields {
+      key: "pjson"
+      value { string_value: "{\"key\":123}" }
+    }
+    fields {
+      key: "ptimestamp"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
+    }
+    fields {
+      key: "pdate"
+      value { string_value: "2000-01-01" }
+    }
+  )pb");
   param_types = {};
-  result = PARSE_TEXT_PROTO(
-      R"pb(metadata {
-             row_type {
-               fields { type { code: BOOL } }
-               fields { type { code: INT64 } }
-               fields { type { code: FLOAT64 } }
-               fields { type { code: STRING } }
-               fields { type { code: BYTES } }
-               fields { type { code: BOOL } }
-               fields { type { code: NUMERIC } }
-               fields { type { code: JSON } }
-             }
-           }
-           rows {
-             values { bool_value: true }
-             values { string_value: "-1" }
-             values { number_value: 1.5 }
-             values { string_value: "str" }
-             values { string_value: "Ynl0ZXM=" }
-             values { bool_value: true }
-             values { string_value: "-99999900001412413135315315.3140124" }
-             values { string_value: "{\"key\":123}" }
-           })pb");
+  result = PARSE_TEXT_PROTO(R"pb(
+    metadata {
+      row_type {
+        fields { type { code: BOOL } }
+        fields { type { code: INT64 } }
+        fields { type { code: FLOAT64 } }
+        fields { type { code: STRING } }
+        fields { type { code: BYTES } }
+        fields { type { code: BOOL } }
+        fields { type { code: NUMERIC } }
+        fields { type { code: JSON } }
+      }
+    }
+    rows {
+      values { bool_value: true }
+      values { string_value: "-1" }
+      values { number_value: 1.5 }
+      values { string_value: "str" }
+      values { string_value: "Ynl0ZXM=" }
+      values { bool_value: true }
+      values { string_value: "-99999900001412413135315315.3140124" }
+      values { string_value: "{\"key\":123}" }
+    }
+  )pb");
   EXPECT_THAT(Execute(R"(SELECT
                     CAST(@pBool AS BOOL),
                     CAST(@pInt64 AS INT64),
@@ -282,71 +325,73 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
               IsOkAndHolds(Partially(test::EqualsProto(result))));
 
   // Roundtrip NULL values of all supported scalar types.
-  params = PARSE_TEXT_PROTO(
-      R"pb(fields {
-             key: "PDOUBLE"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pStRiNg"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pbool"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pbytes"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pint64"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pnumeric"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pjson"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "ptimestamp"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pdate"
-             value { null_value: NULL_VALUE }
-           }
-      )pb");
+  params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "PDOUBLE"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pStRiNg"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pbool"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pbytes"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pint64"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pnumeric"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pjson"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "ptimestamp"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pdate"
+      value { null_value: NULL_VALUE }
+    }
+  )pb");
   param_types = {};
-  result = PARSE_TEXT_PROTO(R"pb(metadata {
-                                   row_type {
-                                     fields { type { code: BOOL } }
-                                     fields { type { code: INT64 } }
-                                     fields { type { code: FLOAT64 } }
-                                     fields { type { code: STRING } }
-                                     fields { type { code: BYTES } }
-                                     fields { type { code: BOOL } }
-                                     fields { type { code: NUMERIC } }
-                                     fields { type { code: JSON } }
-                                     fields { type { code: TIMESTAMP } }
-                                     fields { type { code: DATE } }
-                                   }
-                                 }
-                                 rows {
-                                   values { null_value: NULL_VALUE }
-                                   values { null_value: NULL_VALUE }
-                                   values { null_value: NULL_VALUE }
-                                   values { null_value: NULL_VALUE }
-                                   values { null_value: NULL_VALUE }
-                                   values { null_value: NULL_VALUE }
-                                   values { null_value: NULL_VALUE }
-                                   values { null_value: NULL_VALUE }
-                                   values { null_value: NULL_VALUE }
-                                   values { null_value: NULL_VALUE }
-                                 })pb");
+  result = PARSE_TEXT_PROTO(R"pb(
+    metadata {
+      row_type {
+        fields { type { code: BOOL } }
+        fields { type { code: INT64 } }
+        fields { type { code: FLOAT64 } }
+        fields { type { code: STRING } }
+        fields { type { code: BYTES } }
+        fields { type { code: BOOL } }
+        fields { type { code: NUMERIC } }
+        fields { type { code: JSON } }
+        fields { type { code: TIMESTAMP } }
+        fields { type { code: DATE } }
+      }
+    }
+    rows {
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+    }
+  )pb");
   EXPECT_THAT(Execute(R"(SELECT
                     CAST(@pBool AS BOOL),
                     CAST(@pInt64 AS INT64),
@@ -362,163 +407,164 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
               IsOkAndHolds(Partially(test::EqualsProto(result))));
 
   // Roundtrip values of all supported array types.
-  params = PARSE_TEXT_PROTO(
-      R"pb(fields {
-             key: "pboolarray"
-             value {
-               list_value {
-                 values { bool_value: true }
-                 values { null_value: NULL_VALUE }
-               }
-             }
-           }
-           fields {
-             key: "pbytesarray"
-             value {
-               list_value {
-                 values { null_value: NULL_VALUE }
-                 values { string_value: "Ynl0ZXM=" }
-               }
-             }
-           }
-           fields {
-             key: "pdoublearray"
-             value {
-               list_value {
-                 values { null_value: NULL_VALUE }
-                 values { number_value: 1.5 }
-               }
-             }
-           }
-           fields {
-             key: "pint64array"
-             value {
-               list_value {
-                 values { string_value: "-1" }
-                 values { null_value: NULL_VALUE }
-               }
-             }
-           }
-           fields {
-             key: "pstringarray"
-             value {
-               list_value {
-                 values { null_value: NULL_VALUE }
-                 values { string_value: "str" }
-               }
-             }
-           }
-           fields {
-             key: "pnumericarray"
-             value {
-               list_value {
-                 values { null_value: NULL_VALUE }
-                 values { string_value: "123.456" }
-               }
-             }
-           }
-           fields {
-             key: "pjsonarray"
-             value {
-               list_value {
-                 values { null_value: NULL_VALUE }
-                 values { string_value: "{\"key\":123}" }
-               }
-             }
-           }
-      )pb");
+  params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "pboolarray"
+      value {
+        list_value {
+          values { bool_value: true }
+          values { null_value: NULL_VALUE }
+        }
+      }
+    }
+    fields {
+      key: "pbytesarray"
+      value {
+        list_value {
+          values { null_value: NULL_VALUE }
+          values { string_value: "Ynl0ZXM=" }
+        }
+      }
+    }
+    fields {
+      key: "pdoublearray"
+      value {
+        list_value {
+          values { null_value: NULL_VALUE }
+          values { number_value: 1.5 }
+        }
+      }
+    }
+    fields {
+      key: "pint64array"
+      value {
+        list_value {
+          values { string_value: "-1" }
+          values { null_value: NULL_VALUE }
+        }
+      }
+    }
+    fields {
+      key: "pstringarray"
+      value {
+        list_value {
+          values { null_value: NULL_VALUE }
+          values { string_value: "str" }
+        }
+      }
+    }
+    fields {
+      key: "pnumericarray"
+      value {
+        list_value {
+          values { null_value: NULL_VALUE }
+          values { string_value: "123.456" }
+        }
+      }
+    }
+    fields {
+      key: "pjsonarray"
+      value {
+        list_value {
+          values { null_value: NULL_VALUE }
+          values { string_value: "{\"key\":123}" }
+        }
+      }
+    }
+  )pb");
   param_types = {};
-  result = PARSE_TEXT_PROTO(
-      R"pb(metadata {
-             row_type {
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: BOOL }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: INT64 }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: FLOAT64 }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: STRING }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: BYTES }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: NUMERIC }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: JSON }
-                 }
-               }
-             }
-           }
-           rows {
-             values {
-               list_value {
-                 values { bool_value: true }
-                 values { null_value: NULL_VALUE }
-               }
-             }
-             values {
-               list_value {
-                 values { string_value: "-1" }
-                 values { null_value: NULL_VALUE }
-               }
-             }
-             values {
-               list_value {
-                 values { null_value: NULL_VALUE }
-                 values { number_value: 1.5 }
-               }
-             }
-             values {
-               list_value {
-                 values { null_value: NULL_VALUE }
-                 values { string_value: "str" }
-               }
-             }
-             values {
-               list_value {
-                 values { null_value: NULL_VALUE }
-                 values { string_value: "Ynl0ZXM=" }
-               }
-             }
-             values {
-               list_value {
-                 values { null_value: NULL_VALUE }
-                 values { string_value: "123.456" }
-               }
-             }
-             values {
-               list_value {
-                 values { null_value: NULL_VALUE }
-                 values { string_value: "{\"key\":123}" }
-               }
-             }
-           })pb");
+  result = PARSE_TEXT_PROTO(R"pb(
+    metadata {
+      row_type {
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: BOOL }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: INT64 }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: FLOAT64 }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: STRING }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: BYTES }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: NUMERIC }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: JSON }
+          }
+        }
+      }
+    }
+    rows {
+      values {
+        list_value {
+          values { bool_value: true }
+          values { null_value: NULL_VALUE }
+        }
+      }
+      values {
+        list_value {
+          values { string_value: "-1" }
+          values { null_value: NULL_VALUE }
+        }
+      }
+      values {
+        list_value {
+          values { null_value: NULL_VALUE }
+          values { number_value: 1.5 }
+        }
+      }
+      values {
+        list_value {
+          values { null_value: NULL_VALUE }
+          values { string_value: "str" }
+        }
+      }
+      values {
+        list_value {
+          values { null_value: NULL_VALUE }
+          values { string_value: "Ynl0ZXM=" }
+        }
+      }
+      values {
+        list_value {
+          values { null_value: NULL_VALUE }
+          values { string_value: "123.456" }
+        }
+      }
+      values {
+        list_value {
+          values { null_value: NULL_VALUE }
+          values { string_value: "{\"key\":123}" }
+        }
+      }
+    }
+  )pb");
   EXPECT_THAT(Execute(
                   R"(SELECT
                 CAST(@pBoolArray AS ARRAY<BOOL>),
@@ -532,115 +578,116 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
               IsOkAndHolds(Partially(test::EqualsProto(result))));
 
   // Roundtrip NULL values of all supported array types.
-  params = PARSE_TEXT_PROTO(
-      R"pb(fields {
-             key: "pboolarray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pbytesarray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pdoublearray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pint64array"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pstringarray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pnumericarray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pjsonarray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "ptimestamparray"
-             value { null_value: NULL_VALUE }
-           }
-           fields {
-             key: "pdatearray"
-             value { null_value: NULL_VALUE }
-           }
-      )pb");
+  params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "pboolarray"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pbytesarray"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pdoublearray"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pint64array"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pstringarray"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pnumericarray"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pjsonarray"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "ptimestamparray"
+      value { null_value: NULL_VALUE }
+    }
+    fields {
+      key: "pdatearray"
+      value { null_value: NULL_VALUE }
+    }
+  )pb");
   param_types = {};
-  result = PARSE_TEXT_PROTO(
-      R"pb(metadata {
-             row_type {
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: BOOL }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: INT64 }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: FLOAT64 }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: STRING }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: BYTES }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: NUMERIC }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: JSON }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: TIMESTAMP }
-                 }
-               }
-               fields {
-                 type {
-                   code: ARRAY
-                   array_element_type { code: DATE }
-                 }
-               }
-             }
-           }
-           rows {
-             values { null_value: NULL_VALUE }
-             values { null_value: NULL_VALUE }
-             values { null_value: NULL_VALUE }
-             values { null_value: NULL_VALUE }
-             values { null_value: NULL_VALUE }
-             values { null_value: NULL_VALUE }
-             values { null_value: NULL_VALUE }
-             values { null_value: NULL_VALUE }
-             values { null_value: NULL_VALUE }
-           })pb");
+  result = PARSE_TEXT_PROTO(R"pb(
+    metadata {
+      row_type {
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: BOOL }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: INT64 }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: FLOAT64 }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: STRING }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: BYTES }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: NUMERIC }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: JSON }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: TIMESTAMP }
+          }
+        }
+        fields {
+          type {
+            code: ARRAY
+            array_element_type { code: DATE }
+          }
+        }
+      }
+    }
+    rows {
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+      values { null_value: NULL_VALUE }
+    }
+  )pb");
   EXPECT_THAT(Execute(
                   R"(SELECT
                 CAST(@pBoolArray AS ARRAY<BOOL>),
@@ -656,22 +703,52 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
               IsOkAndHolds(Partially(test::EqualsProto(result))));
 }
 
+TEST_F(ParamsApiTest, UndeclaredStructParams) {
+  google::protobuf::Struct params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "pstruct1"
+      value {
+        list_value {
+          values { bool_value: true }
+          values { string_value: "xyz" }
+        }
+      }
+    }
+    fields {
+      key: "pstruct2"
+      value {
+        list_value {
+          values { string_value: "yzx" }
+          values { number_value: 1.0 }
+          values { string_value: "-1" }
+        }
+      }
+    }
+  )pb");
+  google::protobuf::Map<std::string, google::spanner::v1::Type> param_types = {};
+  EXPECT_THAT(Execute(R"(SELECT @pstruct1.pbool, @pstruct2.pint64)", params,
+                      param_types),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Cannot access field pbool on parameter "
+                                 "pstruct1 whose type is unknown")));
+}
+
 TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
   // The provided parameter is a STRING, but the query expects a DOUBLE.
-  google::protobuf::Struct params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "p"
-           value { string_value: "10" }
-         }
-         fields {
-           key: "pbar"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         }
-         fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         }
-      )");
+  google::protobuf::Struct params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "p"
+      value { string_value: "10" }
+    }
+    fields {
+      key: "pbar"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
+    }
+    fields {
+      key: "ptimestamp"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
+    }
+  )pb");
   google::protobuf::Map<std::string, google::spanner::v1::Type> param_types = {};
   EXPECT_THAT(Execute("SELECT DoubleValue from test_table WHERE DoubleValue=@p",
                       params, param_types),
@@ -679,20 +756,20 @@ TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
                        testing::HasSubstr("FLOAT64")));
 
   // The provided parameter is a DOUBLE, but the query expects a STRING.
-  params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "p"
-           value { number_value: 10 }
-         }
-         fields {
-           key: "pbar"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         }
-         fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         }
-      )");
+  params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "p"
+      value { number_value: 10 }
+    }
+    fields {
+      key: "pbar"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
+    }
+    fields {
+      key: "ptimestamp"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
+    }
+  )pb");
   param_types = {};
   EXPECT_THAT(Execute("SELECT StrValue FROM test_table WHERE StrValue=@p",
                       params, param_types),
@@ -700,20 +777,21 @@ TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
                        testing::HasSubstr("STRING")));
 
   // The provided parameter is a DOUBLE, but the query expects an INT64.
-  params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "p"
-           value { number_value: 10 }
-         }
-         fields {
-           key: "pbar"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         }
-         fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
+  params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "p"
+      value { number_value: 10 }
+    }
+    fields {
+      key: "pbar"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
+    }
+    fields {
+      key: "ptimestamp"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
 
-         })");
+    }
+  )pb");
   param_types = {};
   EXPECT_THAT(Execute("SELECT IntValue FROM test_table WHERE IntValue=@p",
                       params, param_types),
@@ -721,19 +799,20 @@ TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
                        testing::HasSubstr("INT64")));
 
   // The provided parameter is a DOUBLE, but the query expects an INT64.
-  params = PARSE_TEXT_PROTO(
-      R"(fields {
-           key: "p"
-           value { number_value: 10 }
-         }
-         fields {
-           key: "pbar"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         }
-         fields {
-           key: "ptimestamp"
-           value { string_value: "1970-01-01T00:00:00.000001Z" }
-         })");
+  params = PARSE_TEXT_PROTO(R"pb(
+    fields {
+      key: "p"
+      value { number_value: 10 }
+    }
+    fields {
+      key: "pbar"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
+    }
+    fields {
+      key: "ptimestamp"
+      value { string_value: "1970-01-01T00:00:00.000001Z" }
+    }
+  )pb");
   param_types = {};
   EXPECT_THAT(Execute("SELECT @p", params, param_types),
               StatusIs(absl::StatusCode::kInvalidArgument,

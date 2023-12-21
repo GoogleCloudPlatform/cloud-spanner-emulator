@@ -121,6 +121,53 @@ TEST_P(ViewsTest, Basic) {
   EXPECT_THAT(v->security(), testing::Eq(View::SqlSecurity::INVOKER));
 }
 
+TEST_P(ViewsTest, OrderBy) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+    CREATE TABLE t(
+      col1 bigint primary key,
+      col2 varchar
+    )
+  )",
+                                       R"(
+    CREATE OR REPLACE VIEW "MyView" SQL SECURITY INVOKER AS SELECT T.col1, T.col2 FROM T ORDER BY T.col2
+  )"},
+                                      database_api::DatabaseDialect::POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      CREATE TABLE T(
+        col1 INT64,
+        col2 STRING(MAX)
+      ) PRIMARY KEY(col1)
+    )",
+                                               R"(
+      CREATE OR REPLACE VIEW `MyView` SQL SECURITY INVOKER AS
+      SELECT T.col1, T.col2 FROM T ORDER BY T.col2
+    )"}));
+  }
+
+  auto t = schema->FindTable("T");
+  ASSERT_NE(t, nullptr);
+
+  auto v = schema->FindView("Myview");
+  EXPECT_NE(v, nullptr);
+  if (GetParam() == POSTGRESQL) {
+    ASSERT_TRUE(v->body_origin().has_value());
+    EXPECT_THAT(absl::StripAsciiWhitespace(*v->body_origin()),
+                StrEq("SELECT col1, col2 FROM t ORDER BY col2"));
+    EXPECT_THAT(absl::StripAsciiWhitespace(v->body()),
+                StrEq("SELECT t_3.a_1 AS col1, t_3.a_2 AS col2 FROM (SELECT "
+                      "t.col1 AS a_1, t.col2 AS a_2 FROM t) AS t_3 ORDER BY "
+                      "t_3.a_2 NULLS LAST"));
+  } else {
+    EXPECT_THAT(absl::StripAsciiWhitespace(v->body()),
+                StrEq("SELECT T.col1, T.col2 FROM T ORDER BY T.col2"));
+  }
+}
+
 TEST_P(ViewsTest, IndexDependency) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
@@ -477,6 +524,32 @@ TEST_P(ViewsTest, ViewNotFound) {
       UpdateSchema(schema.get(), {"DROP VIEW V"}),
       ::zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound,
                                   testing::HasSubstr("View not found: V")));
+}
+
+TEST_P(ViewsTest, ViewIfExistsNotFound) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto schema, CreateSchema({
+                       "CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 as c",
+                       "DROP VIEW V",
+                   }));
+
+  ZETASQL_ASSERT_OK(UpdateSchema(schema.get(), {"DROP VIEW IF EXISTS V"}));
+}
+
+TEST_P(ViewsTest, ViewIfExistsNotFoundPG) {
+  if (GetParam() != POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto schema,
+      CreateSchema(
+          {R"(CREATE VIEW users_view SQL SECURITY INVOKER AS SELECT 1)",
+           R"(DROP VIEW users_view)"},
+          database_api::DatabaseDialect::POSTGRESQL,
+          /*use_gsql_to_pg_translation=*/false));
+
+  ZETASQL_ASSERT_OK(UpdateSchema(schema.get(), {"DROP VIEW IF EXISTS users_view"},
+                         database_api::DatabaseDialect::POSTGRESQL,
+                         /*use_gsql_to_pg_translation=*/false));
 }
 
 TEST_P(ViewsTest, PrintViewBasic) {

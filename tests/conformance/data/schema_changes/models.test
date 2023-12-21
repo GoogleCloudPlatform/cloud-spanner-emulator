@@ -1,0 +1,1020 @@
+# # # # --- Success Test Cases --- # # # #
+
+# Create model: basic
+CREATE MODEL m1
+INPUT( feature INT64 )
+OUTPUT( label STRING(MAX) )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+CREATE MODEL m1 INPUT( feature INT64, ) OUTPUT( label STRING(MAX), ) REMOTE OPTIONS ( endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless' );
+==
+
+# Create model: all options
+CREATE MODEL m1
+INPUT (
+  feature INT64,
+  optional_feature BOOL OPTIONS (required = false),
+)
+OUTPUT(
+  label STRING(MAX) OPTIONS (required = false),
+)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless',
+  default_batch_size = 1
+);
+--
+CREATE MODEL m1 INPUT( feature INT64, optional_feature BOOL OPTIONS ( required = false ), ) OUTPUT( label STRING(MAX) OPTIONS ( required = false ), ) REMOTE OPTIONS ( endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless', default_batch_size = 1 );
+==
+
+# Create model: array types
+CREATE MODEL m1
+INPUT( feature ARRAY<INT64> )
+OUTPUT( label ARRAY<STRING(MAX)> )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+CREATE MODEL m1 INPUT( feature ARRAY<INT64>, ) OUTPUT( label ARRAY<STRING(MAX)>, ) REMOTE OPTIONS ( endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless' );
+==
+
+# Create model: struct types
+CREATE MODEL m1
+INPUT( feature STRUCT<bar INT64> )
+OUTPUT( label STRUCT<foo ARRAY<STRUCT<bar STRING(MAX), str STRUCT<field1 ARRAY<FLOAT64>, field2 BOOL>>>> )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+CREATE MODEL m1 INPUT( feature STRUCT<bar INT64>, ) OUTPUT( label STRUCT<foo ARRAY<STRUCT<bar STRING(MAX), str STRUCT<field1 ARRAY<FLOAT64>, field2 BOOL>>>>, ) REMOTE OPTIONS ( endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless' );
+==
+
+# Create model: struct max nesting
+CREATE MODEL m1
+INPUT ( feature STRUCT<l1 STRUCT<l2 STRUCT<l3 STRUCT<l4 STRUCT<l5 INT64>>>>> )
+OUTPUT ( label STRUCT<l1 STRUCT<l2 STRUCT<l3 STRUCT<l4 STRUCT<l5 INT64>>>>> )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+CREATE MODEL m1 INPUT( feature STRUCT<l1 STRUCT<l2 STRUCT<l3 STRUCT<l4 STRUCT<l5 INT64>>>>>, ) OUTPUT( label STRUCT<l1 STRUCT<l2 STRUCT<l3 STRUCT<l4 STRUCT<l5 INT64>>>>>, ) REMOTE OPTIONS ( endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless' );
+==
+
+# Create model: struct max nesting with arrays
+CREATE MODEL m1
+INPUT ( feature ARRAY<STRUCT<l2 STRUCT<l3 STRUCT<l4 STRUCT<l5 INT64>>>>> )
+OUTPUT ( label STRUCT<l1 STRUCT<l2 STRUCT<l3 STRUCT<l4 ARRAY<INT64>>>>> )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+CREATE MODEL m1 INPUT( feature ARRAY<STRUCT<l2 STRUCT<l3 STRUCT<l4 STRUCT<l5 INT64>>>>>, ) OUTPUT( label STRUCT<l1 STRUCT<l2 STRUCT<l3 STRUCT<l4 ARRAY<INT64>>>>>, ) REMOTE OPTIONS ( endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless' );
+==
+
+# Create or replace model.
+CREATE OR REPLACE MODEL m1
+INPUT( feature INT64 )
+OUTPUT( label STRING(MAX) )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+CREATE MODEL m1 INPUT( feature INT64, ) OUTPUT( label STRING(MAX), ) REMOTE OPTIONS ( endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless' );
+==
+
+# Create or replace model. Model already exists.
+CREATE MODEL m1
+  INPUT( feature INT64 )
+  OUTPUT( label STRING(MAX) )
+  REMOTE OPTIONS (
+    endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+  );
+CREATE OR REPLACE MODEL m1
+  INPUT( f FLOAT64 )
+  OUTPUT( l STRING(MAX) )
+  REMOTE OPTIONS (
+    endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless',
+    default_batch_size = 5
+  );
+--
+CREATE MODEL m1 INPUT( f FLOAT64, ) OUTPUT( l STRING(MAX), ) REMOTE OPTIONS ( endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless', default_batch_size = 5 );
+==
+
+# Create model if not exists.
+CREATE MODEL IF NOT EXISTS m1
+  INPUT( feature INT64 )
+  OUTPUT( label STRING(MAX) )
+  REMOTE OPTIONS (
+    endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+  );
+--
+CREATE MODEL m1 INPUT( feature INT64, ) OUTPUT( label STRING(MAX), ) REMOTE OPTIONS ( endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless' );
+==
+
+# Create model if not exists. Model already exists.
+CREATE MODEL m1
+INPUT( feature INT64 )
+OUTPUT( label STRING(MAX) )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+CREATE MODEL IF NOT EXISTS m1
+INPUT( feature INT64 )
+OUTPUT( label STRING(MAX) )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+CREATE MODEL m1 INPUT( feature INT64, ) OUTPUT( label STRING(MAX), ) REMOTE OPTIONS ( endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless' );
+==
+
+# Basic alter model
+CREATE MODEL m1
+INPUT( feature INT64 )
+OUTPUT( label STRING(MAX) )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+ALTER MODEL m1 SET OPTIONS (
+  default_batch_size = 5
+);
+--
+CREATE MODEL m1 INPUT( feature INT64, ) OUTPUT( label STRING(MAX), ) REMOTE OPTIONS ( endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless', default_batch_size = 5 );
+==
+
+# Alter model to unset endpoint and set endpoints
+CREATE MODEL m1
+INPUT( feature INT64 )
+OUTPUT( label STRING(MAX) )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+ALTER MODEL m1 SET OPTIONS (
+  endpoint = NULL,
+  endpoints = ['//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless']
+);
+--
+CREATE MODEL m1 INPUT( feature INT64, ) OUTPUT( label STRING(MAX), ) REMOTE OPTIONS ( endpoints = [ '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless' ] );
+==
+
+# Basic drop model
+CREATE MODEL m1
+INPUT( feature INT64 )
+OUTPUT( label STRING(MAX) )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+DROP MODEL m1;
+--
+;
+==
+
+# Drop if exists
+DROP MODEL IF EXISTS m1;
+--
+;
+==
+
+# # # # --- Failure Test Cases --- # # # #
+
+# Incomplete: No schema / remote / options.
+CREATE MODEL m1;
+--
+ERROR: Model m1 must specify REMOTE attribute.
+==
+
+# Incomplete: No schema.
+CREATE MODEL m1
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: use explicit Input clause
+==
+
+# Incomplete: No options
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE;
+--
+ERROR: Model m1 has invalid endpoints option. Option is required
+==
+
+# Unknown option
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS(unknown = true);
+--
+ERROR: Option: unknown is unknown.
+==
+
+# Both endpoint and endpoints exist.
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless',
+  endpoints = [
+    '//aiplatform.googleapis.com/projects/aaa/locations/tl/endpoints/aaa',
+    '//aiplatform.googleapis.com/projects/aaa/locations/tl/endpoints/bbb'
+  ]
+);
+--
+ERROR: Model m1 has invalid endpoint option. Option cannot be specified together with endpoints
+==
+
+# Invalid rpc batch size: less than 1
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless',
+  default_batch_size = 0
+);
+--
+ERROR: Model m1 has invalid default_batch_size option: 0. Must be between 1 and 10
+==
+
+# Invalid rpc batch size: more than max
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless',
+  default_batch_size = 11
+);
+--
+ERROR: Model m1 has invalid default_batch_size option: 11. Must be between 1 and 10
+==
+
+# Create model: empty inputs
+CREATE MODEL m1
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Expecting 'EOF' but found 'OUTPUT'
+==
+
+# Create model: max inputs
+CREATE MODEL m1
+INPUT (
+  c0 BOOL, c1 BOOL, c2 BOOL, c3 BOOL, c4 BOOL, c5 BOOL,
+  c6 BOOL, c7 BOOL, c8 BOOL, c9 BOOL, c10 BOOL, c11 BOOL,
+  c12 BOOL, c13 BOOL, c14 BOOL, c15 BOOL, c16 BOOL, c17 BOOL,
+  c18 BOOL, c19 BOOL, c20 BOOL, c21 BOOL, c22 BOOL, c23 BOOL,
+  c24 BOOL, c25 BOOL, c26 BOOL, c27 BOOL, c28 BOOL, c29 BOOL,
+  c30 BOOL, c31 BOOL, c32 BOOL, c33 BOOL, c34 BOOL, c35 BOOL,
+  c36 BOOL, c37 BOOL, c38 BOOL, c39 BOOL, c40 BOOL, c41 BOOL,
+  c42 BOOL, c43 BOOL, c44 BOOL, c45 BOOL, c46 BOOL, c47 BOOL,
+  c48 BOOL, c49 BOOL, c50 BOOL, c51 BOOL, c52 BOOL, c53 BOOL,
+  c54 BOOL, c55 BOOL, c56 BOOL, c57 BOOL, c58 BOOL, c59 BOOL,
+  c60 BOOL, c61 BOOL, c62 BOOL, c63 BOOL, c64 BOOL, c65 BOOL,
+  c66 BOOL, c67 BOOL, c68 BOOL, c69 BOOL, c70 BOOL, c71 BOOL,
+  c72 BOOL, c73 BOOL, c74 BOOL, c75 BOOL, c76 BOOL, c77 BOOL,
+  c78 BOOL, c79 BOOL, c80 BOOL, c81 BOOL, c82 BOOL, c83 BOOL,
+  c84 BOOL, c85 BOOL, c86 BOOL, c87 BOOL, c88 BOOL, c89 BOOL,
+  c90 BOOL, c91 BOOL, c92 BOOL, c93 BOOL, c94 BOOL, c95 BOOL,
+  c96 BOOL, c97 BOOL, c98 BOOL, c99 BOOL, c100 BOOL, c101 BOOL,
+  c102 BOOL, c103 BOOL, c104 BOOL, c105 BOOL, c106 BOOL, c107 BOOL,
+  c108 BOOL, c109 BOOL, c110 BOOL, c111 BOOL, c112 BOOL, c113 BOOL,
+  c114 BOOL, c115 BOOL, c116 BOOL, c117 BOOL, c118 BOOL, c119 BOOL,
+  c120 BOOL, c121 BOOL, c122 BOOL, c123 BOOL, c124 BOOL, c125 BOOL,
+  c126 BOOL, c127 BOOL, c128 BOOL, c129 BOOL, c130 BOOL, c131 BOOL,
+  c132 BOOL, c133 BOOL, c134 BOOL, c135 BOOL, c136 BOOL, c137 BOOL,
+  c138 BOOL, c139 BOOL, c140 BOOL, c141 BOOL, c142 BOOL, c143 BOOL,
+  c144 BOOL, c145 BOOL, c146 BOOL, c147 BOOL, c148 BOOL, c149 BOOL,
+  c150 BOOL, c151 BOOL, c152 BOOL, c153 BOOL, c154 BOOL, c155 BOOL,
+  c156 BOOL, c157 BOOL, c158 BOOL, c159 BOOL, c160 BOOL, c161 BOOL,
+  c162 BOOL, c163 BOOL, c164 BOOL, c165 BOOL, c166 BOOL, c167 BOOL,
+  c168 BOOL, c169 BOOL, c170 BOOL, c171 BOOL, c172 BOOL, c173 BOOL,
+  c174 BOOL, c175 BOOL, c176 BOOL, c177 BOOL, c178 BOOL, c179 BOOL,
+  c180 BOOL, c181 BOOL, c182 BOOL, c183 BOOL, c184 BOOL, c185 BOOL,
+  c186 BOOL, c187 BOOL, c188 BOOL, c189 BOOL, c190 BOOL, c191 BOOL,
+  c192 BOOL, c193 BOOL, c194 BOOL, c195 BOOL, c196 BOOL, c197 BOOL,
+  c198 BOOL, c199 BOOL, c200 BOOL, c201 BOOL, c202 BOOL, c203 BOOL,
+  c204 BOOL, c205 BOOL, c206 BOOL, c207 BOOL, c208 BOOL, c209 BOOL,
+  c210 BOOL, c211 BOOL, c212 BOOL, c213 BOOL, c214 BOOL, c215 BOOL,
+  c216 BOOL, c217 BOOL, c218 BOOL, c219 BOOL, c220 BOOL, c221 BOOL,
+  c222 BOOL, c223 BOOL, c224 BOOL, c225 BOOL, c226 BOOL, c227 BOOL,
+  c228 BOOL, c229 BOOL, c230 BOOL, c231 BOOL, c232 BOOL, c233 BOOL,
+  c234 BOOL, c235 BOOL, c236 BOOL, c237 BOOL, c238 BOOL, c239 BOOL,
+  c240 BOOL, c241 BOOL, c242 BOOL, c243 BOOL, c244 BOOL, c245 BOOL,
+  c246 BOOL, c247 BOOL, c248 BOOL, c249 BOOL, c250 BOOL, c251 BOOL,
+  c252 BOOL, c253 BOOL, c254 BOOL, c255 BOOL, c256 BOOL, c257 BOOL,
+  c258 BOOL, c259 BOOL, c260 BOOL, c261 BOOL, c262 BOOL, c263 BOOL,
+  c264 BOOL, c265 BOOL, c266 BOOL, c267 BOOL, c268 BOOL, c269 BOOL,
+  c270 BOOL, c271 BOOL, c272 BOOL, c273 BOOL, c274 BOOL, c275 BOOL,
+  c276 BOOL, c277 BOOL, c278 BOOL, c279 BOOL, c280 BOOL, c281 BOOL,
+  c282 BOOL, c283 BOOL, c284 BOOL, c285 BOOL, c286 BOOL, c287 BOOL,
+  c288 BOOL, c289 BOOL, c290 BOOL, c291 BOOL, c292 BOOL, c293 BOOL,
+  c294 BOOL, c295 BOOL, c296 BOOL, c297 BOOL, c298 BOOL, c299 BOOL,
+  c300 BOOL, c301 BOOL, c302 BOOL, c303 BOOL, c304 BOOL, c305 BOOL,
+  c306 BOOL, c307 BOOL, c308 BOOL, c309 BOOL, c310 BOOL, c311 BOOL,
+  c312 BOOL, c313 BOOL, c314 BOOL, c315 BOOL, c316 BOOL, c317 BOOL,
+  c318 BOOL, c319 BOOL, c320 BOOL, c321 BOOL, c322 BOOL, c323 BOOL,
+  c324 BOOL, c325 BOOL, c326 BOOL, c327 BOOL, c328 BOOL, c329 BOOL,
+  c330 BOOL, c331 BOOL, c332 BOOL, c333 BOOL, c334 BOOL, c335 BOOL,
+  c336 BOOL, c337 BOOL, c338 BOOL, c339 BOOL, c340 BOOL, c341 BOOL,
+  c342 BOOL, c343 BOOL, c344 BOOL, c345 BOOL, c346 BOOL, c347 BOOL,
+  c348 BOOL, c349 BOOL, c350 BOOL, c351 BOOL, c352 BOOL, c353 BOOL,
+  c354 BOOL, c355 BOOL, c356 BOOL, c357 BOOL, c358 BOOL, c359 BOOL,
+  c360 BOOL, c361 BOOL, c362 BOOL, c363 BOOL, c364 BOOL, c365 BOOL,
+  c366 BOOL, c367 BOOL, c368 BOOL, c369 BOOL, c370 BOOL, c371 BOOL,
+  c372 BOOL, c373 BOOL, c374 BOOL, c375 BOOL, c376 BOOL, c377 BOOL,
+  c378 BOOL, c379 BOOL, c380 BOOL, c381 BOOL, c382 BOOL, c383 BOOL,
+  c384 BOOL, c385 BOOL, c386 BOOL, c387 BOOL, c388 BOOL, c389 BOOL,
+  c390 BOOL, c391 BOOL, c392 BOOL, c393 BOOL, c394 BOOL, c395 BOOL,
+  c396 BOOL, c397 BOOL, c398 BOOL, c399 BOOL, c400 BOOL, c401 BOOL,
+  c402 BOOL, c403 BOOL, c404 BOOL, c405 BOOL, c406 BOOL, c407 BOOL,
+  c408 BOOL, c409 BOOL, c410 BOOL, c411 BOOL, c412 BOOL, c413 BOOL,
+  c414 BOOL, c415 BOOL, c416 BOOL, c417 BOOL, c418 BOOL, c419 BOOL,
+  c420 BOOL, c421 BOOL, c422 BOOL, c423 BOOL, c424 BOOL, c425 BOOL,
+  c426 BOOL, c427 BOOL, c428 BOOL, c429 BOOL, c430 BOOL, c431 BOOL,
+  c432 BOOL, c433 BOOL, c434 BOOL, c435 BOOL, c436 BOOL, c437 BOOL,
+  c438 BOOL, c439 BOOL, c440 BOOL, c441 BOOL, c442 BOOL, c443 BOOL,
+  c444 BOOL, c445 BOOL, c446 BOOL, c447 BOOL, c448 BOOL, c449 BOOL,
+  c450 BOOL, c451 BOOL, c452 BOOL, c453 BOOL, c454 BOOL, c455 BOOL,
+  c456 BOOL, c457 BOOL, c458 BOOL, c459 BOOL, c460 BOOL, c461 BOOL,
+  c462 BOOL, c463 BOOL, c464 BOOL, c465 BOOL, c466 BOOL, c467 BOOL,
+  c468 BOOL, c469 BOOL, c470 BOOL, c471 BOOL, c472 BOOL, c473 BOOL,
+  c474 BOOL, c475 BOOL, c476 BOOL, c477 BOOL, c478 BOOL, c479 BOOL,
+  c480 BOOL, c481 BOOL, c482 BOOL, c483 BOOL, c484 BOOL, c485 BOOL,
+  c486 BOOL, c487 BOOL, c488 BOOL, c489 BOOL, c490 BOOL, c491 BOOL,
+  c492 BOOL, c493 BOOL, c494 BOOL, c495 BOOL, c496 BOOL, c497 BOOL,
+  c498 BOOL, c499 BOOL, c500 BOOL, c501 BOOL, c502 BOOL, c503 BOOL,
+  c504 BOOL, c505 BOOL, c506 BOOL, c507 BOOL, c508 BOOL, c509 BOOL,
+  c510 BOOL, c511 BOOL, c512 BOOL, c513 BOOL, c514 BOOL, c515 BOOL,
+  c516 BOOL, c517 BOOL, c518 BOOL, c519 BOOL, c520 BOOL, c521 BOOL,
+  c522 BOOL, c523 BOOL, c524 BOOL, c525 BOOL, c526 BOOL, c527 BOOL,
+  c528 BOOL, c529 BOOL, c530 BOOL, c531 BOOL, c532 BOOL, c533 BOOL,
+  c534 BOOL, c535 BOOL, c536 BOOL, c537 BOOL, c538 BOOL, c539 BOOL,
+  c540 BOOL, c541 BOOL, c542 BOOL, c543 BOOL, c544 BOOL, c545 BOOL,
+  c546 BOOL, c547 BOOL, c548 BOOL, c549 BOOL, c550 BOOL, c551 BOOL,
+  c552 BOOL, c553 BOOL, c554 BOOL, c555 BOOL, c556 BOOL, c557 BOOL,
+  c558 BOOL, c559 BOOL, c560 BOOL, c561 BOOL, c562 BOOL, c563 BOOL,
+  c564 BOOL, c565 BOOL, c566 BOOL, c567 BOOL, c568 BOOL, c569 BOOL,
+  c570 BOOL, c571 BOOL, c572 BOOL, c573 BOOL, c574 BOOL, c575 BOOL,
+  c576 BOOL, c577 BOOL, c578 BOOL, c579 BOOL, c580 BOOL, c581 BOOL,
+  c582 BOOL, c583 BOOL, c584 BOOL, c585 BOOL, c586 BOOL, c587 BOOL,
+  c588 BOOL, c589 BOOL, c590 BOOL, c591 BOOL, c592 BOOL, c593 BOOL,
+  c594 BOOL, c595 BOOL, c596 BOOL, c597 BOOL, c598 BOOL, c599 BOOL,
+  c600 BOOL, c601 BOOL, c602 BOOL, c603 BOOL, c604 BOOL, c605 BOOL,
+  c606 BOOL, c607 BOOL, c608 BOOL, c609 BOOL, c610 BOOL, c611 BOOL,
+  c612 BOOL, c613 BOOL, c614 BOOL, c615 BOOL, c616 BOOL, c617 BOOL,
+  c618 BOOL, c619 BOOL, c620 BOOL, c621 BOOL, c622 BOOL, c623 BOOL,
+  c624 BOOL, c625 BOOL, c626 BOOL, c627 BOOL, c628 BOOL, c629 BOOL,
+  c630 BOOL, c631 BOOL, c632 BOOL, c633 BOOL, c634 BOOL, c635 BOOL,
+  c636 BOOL, c637 BOOL, c638 BOOL, c639 BOOL, c640 BOOL, c641 BOOL,
+  c642 BOOL, c643 BOOL, c644 BOOL, c645 BOOL, c646 BOOL, c647 BOOL,
+  c648 BOOL, c649 BOOL, c650 BOOL, c651 BOOL, c652 BOOL, c653 BOOL,
+  c654 BOOL, c655 BOOL, c656 BOOL, c657 BOOL, c658 BOOL, c659 BOOL,
+  c660 BOOL, c661 BOOL, c662 BOOL, c663 BOOL, c664 BOOL, c665 BOOL,
+  c666 BOOL, c667 BOOL, c668 BOOL, c669 BOOL, c670 BOOL, c671 BOOL,
+  c672 BOOL, c673 BOOL, c674 BOOL, c675 BOOL, c676 BOOL, c677 BOOL,
+  c678 BOOL, c679 BOOL, c680 BOOL, c681 BOOL, c682 BOOL, c683 BOOL,
+  c684 BOOL, c685 BOOL, c686 BOOL, c687 BOOL, c688 BOOL, c689 BOOL,
+  c690 BOOL, c691 BOOL, c692 BOOL, c693 BOOL, c694 BOOL, c695 BOOL,
+  c696 BOOL, c697 BOOL, c698 BOOL, c699 BOOL, c700 BOOL, c701 BOOL,
+  c702 BOOL, c703 BOOL, c704 BOOL, c705 BOOL, c706 BOOL, c707 BOOL,
+  c708 BOOL, c709 BOOL, c710 BOOL, c711 BOOL, c712 BOOL, c713 BOOL,
+  c714 BOOL, c715 BOOL, c716 BOOL, c717 BOOL, c718 BOOL, c719 BOOL,
+  c720 BOOL, c721 BOOL, c722 BOOL, c723 BOOL, c724 BOOL, c725 BOOL,
+  c726 BOOL, c727 BOOL, c728 BOOL, c729 BOOL, c730 BOOL, c731 BOOL,
+  c732 BOOL, c733 BOOL, c734 BOOL, c735 BOOL, c736 BOOL, c737 BOOL,
+  c738 BOOL, c739 BOOL, c740 BOOL, c741 BOOL, c742 BOOL, c743 BOOL,
+  c744 BOOL, c745 BOOL, c746 BOOL, c747 BOOL, c748 BOOL, c749 BOOL,
+  c750 BOOL, c751 BOOL, c752 BOOL, c753 BOOL, c754 BOOL, c755 BOOL,
+  c756 BOOL, c757 BOOL, c758 BOOL, c759 BOOL, c760 BOOL, c761 BOOL,
+  c762 BOOL, c763 BOOL, c764 BOOL, c765 BOOL, c766 BOOL, c767 BOOL,
+  c768 BOOL, c769 BOOL, c770 BOOL, c771 BOOL, c772 BOOL, c773 BOOL,
+  c774 BOOL, c775 BOOL, c776 BOOL, c777 BOOL, c778 BOOL, c779 BOOL,
+  c780 BOOL, c781 BOOL, c782 BOOL, c783 BOOL, c784 BOOL, c785 BOOL,
+  c786 BOOL, c787 BOOL, c788 BOOL, c789 BOOL, c790 BOOL, c791 BOOL,
+  c792 BOOL, c793 BOOL, c794 BOOL, c795 BOOL, c796 BOOL, c797 BOOL,
+  c798 BOOL, c799 BOOL, c800 BOOL, c801 BOOL, c802 BOOL, c803 BOOL,
+  c804 BOOL, c805 BOOL, c806 BOOL, c807 BOOL, c808 BOOL, c809 BOOL,
+  c810 BOOL, c811 BOOL, c812 BOOL, c813 BOOL, c814 BOOL, c815 BOOL,
+  c816 BOOL, c817 BOOL, c818 BOOL, c819 BOOL, c820 BOOL, c821 BOOL,
+  c822 BOOL, c823 BOOL, c824 BOOL, c825 BOOL, c826 BOOL, c827 BOOL,
+  c828 BOOL, c829 BOOL, c830 BOOL, c831 BOOL, c832 BOOL, c833 BOOL,
+  c834 BOOL, c835 BOOL, c836 BOOL, c837 BOOL, c838 BOOL, c839 BOOL,
+  c840 BOOL, c841 BOOL, c842 BOOL, c843 BOOL, c844 BOOL, c845 BOOL,
+  c846 BOOL, c847 BOOL, c848 BOOL, c849 BOOL, c850 BOOL, c851 BOOL,
+  c852 BOOL, c853 BOOL, c854 BOOL, c855 BOOL, c856 BOOL, c857 BOOL,
+  c858 BOOL, c859 BOOL, c860 BOOL, c861 BOOL, c862 BOOL, c863 BOOL,
+  c864 BOOL, c865 BOOL, c866 BOOL, c867 BOOL, c868 BOOL, c869 BOOL,
+  c870 BOOL, c871 BOOL, c872 BOOL, c873 BOOL, c874 BOOL, c875 BOOL,
+  c876 BOOL, c877 BOOL, c878 BOOL, c879 BOOL, c880 BOOL, c881 BOOL,
+  c882 BOOL, c883 BOOL, c884 BOOL, c885 BOOL, c886 BOOL, c887 BOOL,
+  c888 BOOL, c889 BOOL, c890 BOOL, c891 BOOL, c892 BOOL, c893 BOOL,
+  c894 BOOL, c895 BOOL, c896 BOOL, c897 BOOL, c898 BOOL, c899 BOOL,
+  c900 BOOL, c901 BOOL, c902 BOOL, c903 BOOL, c904 BOOL, c905 BOOL,
+  c906 BOOL, c907 BOOL, c908 BOOL, c909 BOOL, c910 BOOL, c911 BOOL,
+  c912 BOOL, c913 BOOL, c914 BOOL, c915 BOOL, c916 BOOL, c917 BOOL,
+  c918 BOOL, c919 BOOL, c920 BOOL, c921 BOOL, c922 BOOL, c923 BOOL,
+  c924 BOOL, c925 BOOL, c926 BOOL, c927 BOOL, c928 BOOL, c929 BOOL,
+  c930 BOOL, c931 BOOL, c932 BOOL, c933 BOOL, c934 BOOL, c935 BOOL,
+  c936 BOOL, c937 BOOL, c938 BOOL, c939 BOOL, c940 BOOL, c941 BOOL,
+  c942 BOOL, c943 BOOL, c944 BOOL, c945 BOOL, c946 BOOL, c947 BOOL,
+  c948 BOOL, c949 BOOL, c950 BOOL, c951 BOOL, c952 BOOL, c953 BOOL,
+  c954 BOOL, c955 BOOL, c956 BOOL, c957 BOOL, c958 BOOL, c959 BOOL,
+  c960 BOOL, c961 BOOL, c962 BOOL, c963 BOOL, c964 BOOL, c965 BOOL,
+  c966 BOOL, c967 BOOL, c968 BOOL, c969 BOOL, c970 BOOL, c971 BOOL,
+  c972 BOOL, c973 BOOL, c974 BOOL, c975 BOOL, c976 BOOL, c977 BOOL,
+  c978 BOOL, c979 BOOL, c980 BOOL, c981 BOOL, c982 BOOL, c983 BOOL,
+  c984 BOOL, c985 BOOL, c986 BOOL, c987 BOOL, c988 BOOL, c989 BOOL,
+  c990 BOOL, c991 BOOL, c992 BOOL, c993 BOOL, c994 BOOL, c995 BOOL,
+  c996 BOOL, c997 BOOL, c998 BOOL, c999 BOOL, c1000 BOOL, c1001 BOOL,
+  c1002 BOOL, c1003 BOOL, c1004 BOOL, c1005 BOOL, c1006 BOOL, c1007 BOOL,
+  c1008 BOOL, c1009 BOOL, c1010 BOOL, c1011 BOOL, c1012 BOOL, c1013 BOOL,
+  c1014 BOOL, c1015 BOOL, c1016 BOOL, c1017 BOOL, c1018 BOOL, c1019 BOOL,
+  c1020 BOOL, c1021 BOOL, c1022 BOOL, c1023 BOOL, c1024 BOOL,
+)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Model m1 has too many Inputs; the limit is 1024.
+==
+
+# Invalid inputs: empty name
+CREATE MODEL m1
+INPUT( INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Encountered ')' while parsing: column_type
+==
+
+# Invalid inputs: invalid name
+CREATE MODEL m1
+INPUT (feature! INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Encountered an unknown character ('!'). while parsing: column_type
+==
+
+# Invalid inputs: empty type
+CREATE MODEL m1
+INPUT (feature )
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Encountered ')' while parsing: column_type
+==
+
+# Invalid inputs: unsupported type
+CREATE MODEL m1
+INPUT (feature DATE)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Type DATE is not supported in model columns. Used in Model m1 column feature.
+==
+
+# Invalid inputs: duplicate column
+CREATE MODEL m1
+INPUT (feature INT64, feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Duplicate name in schema: m1.feature.
+==
+
+# Invalid inputs: duplicate column case sensitive
+CREATE MODEL m1
+INPUT (feature INT64, Feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Schema object names differ only in case: m1.Feature, m1.feature.
+==
+
+# Invalid inputs: not null
+CREATE MODEL m1
+INPUT (feature INT64 NOT NULL)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: NOT NULL constraint is not supported in models. Used in Model m1 column feature.
+==
+
+# Invalid inputs: hidden
+CREATE MODEL m1
+INPUT (feature INT64 HIDDEN)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: HIDDEN attribute is not supported in models. Used in Model m1 column feature.
+==
+
+# Invalid inputs: length
+CREATE MODEL m1
+INPUT (feature STRING(10))
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Length is not supported in model columns. Please use MAX. Used in Model m1 column feature.
+==
+
+# Invalid inputs: generated
+CREATE MODEL m1
+INPUT (feature INT64 AS (1))
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Generated columns are not supported in models. Used in Model m1 column feature.
+==
+
+# Invalid inputs: default
+CREATE MODEL m1
+INPUT (feature INT64 DEFAULT (0))
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Default values are not supported in models.
+==
+
+# Create model: empty outputs
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT()
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Encountered ')' while parsing: identifier
+==
+
+# Create model: too many outputs
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(
+  c0 BOOL, c1 BOOL, c2 BOOL, c3 BOOL, c4 BOOL, c5 BOOL,
+  c6 BOOL, c7 BOOL, c8 BOOL, c9 BOOL, c10 BOOL, c11 BOOL,
+  c12 BOOL, c13 BOOL, c14 BOOL, c15 BOOL, c16 BOOL, c17 BOOL,
+  c18 BOOL, c19 BOOL, c20 BOOL, c21 BOOL, c22 BOOL, c23 BOOL,
+  c24 BOOL, c25 BOOL, c26 BOOL, c27 BOOL, c28 BOOL, c29 BOOL,
+  c30 BOOL, c31 BOOL, c32 BOOL, c33 BOOL, c34 BOOL, c35 BOOL,
+  c36 BOOL, c37 BOOL, c38 BOOL, c39 BOOL, c40 BOOL, c41 BOOL,
+  c42 BOOL, c43 BOOL, c44 BOOL, c45 BOOL, c46 BOOL, c47 BOOL,
+  c48 BOOL, c49 BOOL, c50 BOOL, c51 BOOL, c52 BOOL, c53 BOOL,
+  c54 BOOL, c55 BOOL, c56 BOOL, c57 BOOL, c58 BOOL, c59 BOOL,
+  c60 BOOL, c61 BOOL, c62 BOOL, c63 BOOL, c64 BOOL, c65 BOOL,
+  c66 BOOL, c67 BOOL, c68 BOOL, c69 BOOL, c70 BOOL, c71 BOOL,
+  c72 BOOL, c73 BOOL, c74 BOOL, c75 BOOL, c76 BOOL, c77 BOOL,
+  c78 BOOL, c79 BOOL, c80 BOOL, c81 BOOL, c82 BOOL, c83 BOOL,
+  c84 BOOL, c85 BOOL, c86 BOOL, c87 BOOL, c88 BOOL, c89 BOOL,
+  c90 BOOL, c91 BOOL, c92 BOOL, c93 BOOL, c94 BOOL, c95 BOOL,
+  c96 BOOL, c97 BOOL, c98 BOOL, c99 BOOL, c100 BOOL, c101 BOOL,
+  c102 BOOL, c103 BOOL, c104 BOOL, c105 BOOL, c106 BOOL, c107 BOOL,
+  c108 BOOL, c109 BOOL, c110 BOOL, c111 BOOL, c112 BOOL, c113 BOOL,
+  c114 BOOL, c115 BOOL, c116 BOOL, c117 BOOL, c118 BOOL, c119 BOOL,
+  c120 BOOL, c121 BOOL, c122 BOOL, c123 BOOL, c124 BOOL, c125 BOOL,
+  c126 BOOL, c127 BOOL, c128 BOOL, c129 BOOL, c130 BOOL, c131 BOOL,
+  c132 BOOL, c133 BOOL, c134 BOOL, c135 BOOL, c136 BOOL, c137 BOOL,
+  c138 BOOL, c139 BOOL, c140 BOOL, c141 BOOL, c142 BOOL, c143 BOOL,
+  c144 BOOL, c145 BOOL, c146 BOOL, c147 BOOL, c148 BOOL, c149 BOOL,
+  c150 BOOL, c151 BOOL, c152 BOOL, c153 BOOL, c154 BOOL, c155 BOOL,
+  c156 BOOL, c157 BOOL, c158 BOOL, c159 BOOL, c160 BOOL, c161 BOOL,
+  c162 BOOL, c163 BOOL, c164 BOOL, c165 BOOL, c166 BOOL, c167 BOOL,
+  c168 BOOL, c169 BOOL, c170 BOOL, c171 BOOL, c172 BOOL, c173 BOOL,
+  c174 BOOL, c175 BOOL, c176 BOOL, c177 BOOL, c178 BOOL, c179 BOOL,
+  c180 BOOL, c181 BOOL, c182 BOOL, c183 BOOL, c184 BOOL, c185 BOOL,
+  c186 BOOL, c187 BOOL, c188 BOOL, c189 BOOL, c190 BOOL, c191 BOOL,
+  c192 BOOL, c193 BOOL, c194 BOOL, c195 BOOL, c196 BOOL, c197 BOOL,
+  c198 BOOL, c199 BOOL, c200 BOOL, c201 BOOL, c202 BOOL, c203 BOOL,
+  c204 BOOL, c205 BOOL, c206 BOOL, c207 BOOL, c208 BOOL, c209 BOOL,
+  c210 BOOL, c211 BOOL, c212 BOOL, c213 BOOL, c214 BOOL, c215 BOOL,
+  c216 BOOL, c217 BOOL, c218 BOOL, c219 BOOL, c220 BOOL, c221 BOOL,
+  c222 BOOL, c223 BOOL, c224 BOOL, c225 BOOL, c226 BOOL, c227 BOOL,
+  c228 BOOL, c229 BOOL, c230 BOOL, c231 BOOL, c232 BOOL, c233 BOOL,
+  c234 BOOL, c235 BOOL, c236 BOOL, c237 BOOL, c238 BOOL, c239 BOOL,
+  c240 BOOL, c241 BOOL, c242 BOOL, c243 BOOL, c244 BOOL, c245 BOOL,
+  c246 BOOL, c247 BOOL, c248 BOOL, c249 BOOL, c250 BOOL, c251 BOOL,
+  c252 BOOL, c253 BOOL, c254 BOOL, c255 BOOL, c256 BOOL, c257 BOOL,
+  c258 BOOL, c259 BOOL, c260 BOOL, c261 BOOL, c262 BOOL, c263 BOOL,
+  c264 BOOL, c265 BOOL, c266 BOOL, c267 BOOL, c268 BOOL, c269 BOOL,
+  c270 BOOL, c271 BOOL, c272 BOOL, c273 BOOL, c274 BOOL, c275 BOOL,
+  c276 BOOL, c277 BOOL, c278 BOOL, c279 BOOL, c280 BOOL, c281 BOOL,
+  c282 BOOL, c283 BOOL, c284 BOOL, c285 BOOL, c286 BOOL, c287 BOOL,
+  c288 BOOL, c289 BOOL, c290 BOOL, c291 BOOL, c292 BOOL, c293 BOOL,
+  c294 BOOL, c295 BOOL, c296 BOOL, c297 BOOL, c298 BOOL, c299 BOOL,
+  c300 BOOL, c301 BOOL, c302 BOOL, c303 BOOL, c304 BOOL, c305 BOOL,
+  c306 BOOL, c307 BOOL, c308 BOOL, c309 BOOL, c310 BOOL, c311 BOOL,
+  c312 BOOL, c313 BOOL, c314 BOOL, c315 BOOL, c316 BOOL, c317 BOOL,
+  c318 BOOL, c319 BOOL, c320 BOOL, c321 BOOL, c322 BOOL, c323 BOOL,
+  c324 BOOL, c325 BOOL, c326 BOOL, c327 BOOL, c328 BOOL, c329 BOOL,
+  c330 BOOL, c331 BOOL, c332 BOOL, c333 BOOL, c334 BOOL, c335 BOOL,
+  c336 BOOL, c337 BOOL, c338 BOOL, c339 BOOL, c340 BOOL, c341 BOOL,
+  c342 BOOL, c343 BOOL, c344 BOOL, c345 BOOL, c346 BOOL, c347 BOOL,
+  c348 BOOL, c349 BOOL, c350 BOOL, c351 BOOL, c352 BOOL, c353 BOOL,
+  c354 BOOL, c355 BOOL, c356 BOOL, c357 BOOL, c358 BOOL, c359 BOOL,
+  c360 BOOL, c361 BOOL, c362 BOOL, c363 BOOL, c364 BOOL, c365 BOOL,
+  c366 BOOL, c367 BOOL, c368 BOOL, c369 BOOL, c370 BOOL, c371 BOOL,
+  c372 BOOL, c373 BOOL, c374 BOOL, c375 BOOL, c376 BOOL, c377 BOOL,
+  c378 BOOL, c379 BOOL, c380 BOOL, c381 BOOL, c382 BOOL, c383 BOOL,
+  c384 BOOL, c385 BOOL, c386 BOOL, c387 BOOL, c388 BOOL, c389 BOOL,
+  c390 BOOL, c391 BOOL, c392 BOOL, c393 BOOL, c394 BOOL, c395 BOOL,
+  c396 BOOL, c397 BOOL, c398 BOOL, c399 BOOL, c400 BOOL, c401 BOOL,
+  c402 BOOL, c403 BOOL, c404 BOOL, c405 BOOL, c406 BOOL, c407 BOOL,
+  c408 BOOL, c409 BOOL, c410 BOOL, c411 BOOL, c412 BOOL, c413 BOOL,
+  c414 BOOL, c415 BOOL, c416 BOOL, c417 BOOL, c418 BOOL, c419 BOOL,
+  c420 BOOL, c421 BOOL, c422 BOOL, c423 BOOL, c424 BOOL, c425 BOOL,
+  c426 BOOL, c427 BOOL, c428 BOOL, c429 BOOL, c430 BOOL, c431 BOOL,
+  c432 BOOL, c433 BOOL, c434 BOOL, c435 BOOL, c436 BOOL, c437 BOOL,
+  c438 BOOL, c439 BOOL, c440 BOOL, c441 BOOL, c442 BOOL, c443 BOOL,
+  c444 BOOL, c445 BOOL, c446 BOOL, c447 BOOL, c448 BOOL, c449 BOOL,
+  c450 BOOL, c451 BOOL, c452 BOOL, c453 BOOL, c454 BOOL, c455 BOOL,
+  c456 BOOL, c457 BOOL, c458 BOOL, c459 BOOL, c460 BOOL, c461 BOOL,
+  c462 BOOL, c463 BOOL, c464 BOOL, c465 BOOL, c466 BOOL, c467 BOOL,
+  c468 BOOL, c469 BOOL, c470 BOOL, c471 BOOL, c472 BOOL, c473 BOOL,
+  c474 BOOL, c475 BOOL, c476 BOOL, c477 BOOL, c478 BOOL, c479 BOOL,
+  c480 BOOL, c481 BOOL, c482 BOOL, c483 BOOL, c484 BOOL, c485 BOOL,
+  c486 BOOL, c487 BOOL, c488 BOOL, c489 BOOL, c490 BOOL, c491 BOOL,
+  c492 BOOL, c493 BOOL, c494 BOOL, c495 BOOL, c496 BOOL, c497 BOOL,
+  c498 BOOL, c499 BOOL, c500 BOOL, c501 BOOL, c502 BOOL, c503 BOOL,
+  c504 BOOL, c505 BOOL, c506 BOOL, c507 BOOL, c508 BOOL, c509 BOOL,
+  c510 BOOL, c511 BOOL, c512 BOOL, c513 BOOL, c514 BOOL, c515 BOOL,
+  c516 BOOL, c517 BOOL, c518 BOOL, c519 BOOL, c520 BOOL, c521 BOOL,
+  c522 BOOL, c523 BOOL, c524 BOOL, c525 BOOL, c526 BOOL, c527 BOOL,
+  c528 BOOL, c529 BOOL, c530 BOOL, c531 BOOL, c532 BOOL, c533 BOOL,
+  c534 BOOL, c535 BOOL, c536 BOOL, c537 BOOL, c538 BOOL, c539 BOOL,
+  c540 BOOL, c541 BOOL, c542 BOOL, c543 BOOL, c544 BOOL, c545 BOOL,
+  c546 BOOL, c547 BOOL, c548 BOOL, c549 BOOL, c550 BOOL, c551 BOOL,
+  c552 BOOL, c553 BOOL, c554 BOOL, c555 BOOL, c556 BOOL, c557 BOOL,
+  c558 BOOL, c559 BOOL, c560 BOOL, c561 BOOL, c562 BOOL, c563 BOOL,
+  c564 BOOL, c565 BOOL, c566 BOOL, c567 BOOL, c568 BOOL, c569 BOOL,
+  c570 BOOL, c571 BOOL, c572 BOOL, c573 BOOL, c574 BOOL, c575 BOOL,
+  c576 BOOL, c577 BOOL, c578 BOOL, c579 BOOL, c580 BOOL, c581 BOOL,
+  c582 BOOL, c583 BOOL, c584 BOOL, c585 BOOL, c586 BOOL, c587 BOOL,
+  c588 BOOL, c589 BOOL, c590 BOOL, c591 BOOL, c592 BOOL, c593 BOOL,
+  c594 BOOL, c595 BOOL, c596 BOOL, c597 BOOL, c598 BOOL, c599 BOOL,
+  c600 BOOL, c601 BOOL, c602 BOOL, c603 BOOL, c604 BOOL, c605 BOOL,
+  c606 BOOL, c607 BOOL, c608 BOOL, c609 BOOL, c610 BOOL, c611 BOOL,
+  c612 BOOL, c613 BOOL, c614 BOOL, c615 BOOL, c616 BOOL, c617 BOOL,
+  c618 BOOL, c619 BOOL, c620 BOOL, c621 BOOL, c622 BOOL, c623 BOOL,
+  c624 BOOL, c625 BOOL, c626 BOOL, c627 BOOL, c628 BOOL, c629 BOOL,
+  c630 BOOL, c631 BOOL, c632 BOOL, c633 BOOL, c634 BOOL, c635 BOOL,
+  c636 BOOL, c637 BOOL, c638 BOOL, c639 BOOL, c640 BOOL, c641 BOOL,
+  c642 BOOL, c643 BOOL, c644 BOOL, c645 BOOL, c646 BOOL, c647 BOOL,
+  c648 BOOL, c649 BOOL, c650 BOOL, c651 BOOL, c652 BOOL, c653 BOOL,
+  c654 BOOL, c655 BOOL, c656 BOOL, c657 BOOL, c658 BOOL, c659 BOOL,
+  c660 BOOL, c661 BOOL, c662 BOOL, c663 BOOL, c664 BOOL, c665 BOOL,
+  c666 BOOL, c667 BOOL, c668 BOOL, c669 BOOL, c670 BOOL, c671 BOOL,
+  c672 BOOL, c673 BOOL, c674 BOOL, c675 BOOL, c676 BOOL, c677 BOOL,
+  c678 BOOL, c679 BOOL, c680 BOOL, c681 BOOL, c682 BOOL, c683 BOOL,
+  c684 BOOL, c685 BOOL, c686 BOOL, c687 BOOL, c688 BOOL, c689 BOOL,
+  c690 BOOL, c691 BOOL, c692 BOOL, c693 BOOL, c694 BOOL, c695 BOOL,
+  c696 BOOL, c697 BOOL, c698 BOOL, c699 BOOL, c700 BOOL, c701 BOOL,
+  c702 BOOL, c703 BOOL, c704 BOOL, c705 BOOL, c706 BOOL, c707 BOOL,
+  c708 BOOL, c709 BOOL, c710 BOOL, c711 BOOL, c712 BOOL, c713 BOOL,
+  c714 BOOL, c715 BOOL, c716 BOOL, c717 BOOL, c718 BOOL, c719 BOOL,
+  c720 BOOL, c721 BOOL, c722 BOOL, c723 BOOL, c724 BOOL, c725 BOOL,
+  c726 BOOL, c727 BOOL, c728 BOOL, c729 BOOL, c730 BOOL, c731 BOOL,
+  c732 BOOL, c733 BOOL, c734 BOOL, c735 BOOL, c736 BOOL, c737 BOOL,
+  c738 BOOL, c739 BOOL, c740 BOOL, c741 BOOL, c742 BOOL, c743 BOOL,
+  c744 BOOL, c745 BOOL, c746 BOOL, c747 BOOL, c748 BOOL, c749 BOOL,
+  c750 BOOL, c751 BOOL, c752 BOOL, c753 BOOL, c754 BOOL, c755 BOOL,
+  c756 BOOL, c757 BOOL, c758 BOOL, c759 BOOL, c760 BOOL, c761 BOOL,
+  c762 BOOL, c763 BOOL, c764 BOOL, c765 BOOL, c766 BOOL, c767 BOOL,
+  c768 BOOL, c769 BOOL, c770 BOOL, c771 BOOL, c772 BOOL, c773 BOOL,
+  c774 BOOL, c775 BOOL, c776 BOOL, c777 BOOL, c778 BOOL, c779 BOOL,
+  c780 BOOL, c781 BOOL, c782 BOOL, c783 BOOL, c784 BOOL, c785 BOOL,
+  c786 BOOL, c787 BOOL, c788 BOOL, c789 BOOL, c790 BOOL, c791 BOOL,
+  c792 BOOL, c793 BOOL, c794 BOOL, c795 BOOL, c796 BOOL, c797 BOOL,
+  c798 BOOL, c799 BOOL, c800 BOOL, c801 BOOL, c802 BOOL, c803 BOOL,
+  c804 BOOL, c805 BOOL, c806 BOOL, c807 BOOL, c808 BOOL, c809 BOOL,
+  c810 BOOL, c811 BOOL, c812 BOOL, c813 BOOL, c814 BOOL, c815 BOOL,
+  c816 BOOL, c817 BOOL, c818 BOOL, c819 BOOL, c820 BOOL, c821 BOOL,
+  c822 BOOL, c823 BOOL, c824 BOOL, c825 BOOL, c826 BOOL, c827 BOOL,
+  c828 BOOL, c829 BOOL, c830 BOOL, c831 BOOL, c832 BOOL, c833 BOOL,
+  c834 BOOL, c835 BOOL, c836 BOOL, c837 BOOL, c838 BOOL, c839 BOOL,
+  c840 BOOL, c841 BOOL, c842 BOOL, c843 BOOL, c844 BOOL, c845 BOOL,
+  c846 BOOL, c847 BOOL, c848 BOOL, c849 BOOL, c850 BOOL, c851 BOOL,
+  c852 BOOL, c853 BOOL, c854 BOOL, c855 BOOL, c856 BOOL, c857 BOOL,
+  c858 BOOL, c859 BOOL, c860 BOOL, c861 BOOL, c862 BOOL, c863 BOOL,
+  c864 BOOL, c865 BOOL, c866 BOOL, c867 BOOL, c868 BOOL, c869 BOOL,
+  c870 BOOL, c871 BOOL, c872 BOOL, c873 BOOL, c874 BOOL, c875 BOOL,
+  c876 BOOL, c877 BOOL, c878 BOOL, c879 BOOL, c880 BOOL, c881 BOOL,
+  c882 BOOL, c883 BOOL, c884 BOOL, c885 BOOL, c886 BOOL, c887 BOOL,
+  c888 BOOL, c889 BOOL, c890 BOOL, c891 BOOL, c892 BOOL, c893 BOOL,
+  c894 BOOL, c895 BOOL, c896 BOOL, c897 BOOL, c898 BOOL, c899 BOOL,
+  c900 BOOL, c901 BOOL, c902 BOOL, c903 BOOL, c904 BOOL, c905 BOOL,
+  c906 BOOL, c907 BOOL, c908 BOOL, c909 BOOL, c910 BOOL, c911 BOOL,
+  c912 BOOL, c913 BOOL, c914 BOOL, c915 BOOL, c916 BOOL, c917 BOOL,
+  c918 BOOL, c919 BOOL, c920 BOOL, c921 BOOL, c922 BOOL, c923 BOOL,
+  c924 BOOL, c925 BOOL, c926 BOOL, c927 BOOL, c928 BOOL, c929 BOOL,
+  c930 BOOL, c931 BOOL, c932 BOOL, c933 BOOL, c934 BOOL, c935 BOOL,
+  c936 BOOL, c937 BOOL, c938 BOOL, c939 BOOL, c940 BOOL, c941 BOOL,
+  c942 BOOL, c943 BOOL, c944 BOOL, c945 BOOL, c946 BOOL, c947 BOOL,
+  c948 BOOL, c949 BOOL, c950 BOOL, c951 BOOL, c952 BOOL, c953 BOOL,
+  c954 BOOL, c955 BOOL, c956 BOOL, c957 BOOL, c958 BOOL, c959 BOOL,
+  c960 BOOL, c961 BOOL, c962 BOOL, c963 BOOL, c964 BOOL, c965 BOOL,
+  c966 BOOL, c967 BOOL, c968 BOOL, c969 BOOL, c970 BOOL, c971 BOOL,
+  c972 BOOL, c973 BOOL, c974 BOOL, c975 BOOL, c976 BOOL, c977 BOOL,
+  c978 BOOL, c979 BOOL, c980 BOOL, c981 BOOL, c982 BOOL, c983 BOOL,
+  c984 BOOL, c985 BOOL, c986 BOOL, c987 BOOL, c988 BOOL, c989 BOOL,
+  c990 BOOL, c991 BOOL, c992 BOOL, c993 BOOL, c994 BOOL, c995 BOOL,
+  c996 BOOL, c997 BOOL, c998 BOOL, c999 BOOL, c1000 BOOL, c1001 BOOL,
+  c1002 BOOL, c1003 BOOL, c1004 BOOL, c1005 BOOL, c1006 BOOL, c1007 BOOL,
+  c1008 BOOL, c1009 BOOL, c1010 BOOL, c1011 BOOL, c1012 BOOL, c1013 BOOL,
+  c1014 BOOL, c1015 BOOL, c1016 BOOL, c1017 BOOL, c1018 BOOL, c1019 BOOL,
+  c1020 BOOL, c1021 BOOL, c1022 BOOL, c1023 BOOL, c1024 BOOL,
+)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Model m1 has too many Outputs; the limit is 1024.
+==
+
+# Invalid outputs: empty name
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT( STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Encountered '(' while parsing: column_type
+==
+
+# Invalid outputs: invalid name
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label! STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Encountered an unknown character ('!'). while parsing: column_type
+==
+
+# Invalid outputs: empty type
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Encountered ')' while parsing: column_type
+==
+
+# Invalid outputs: unsupported type
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label DATE)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Type DATE is not supported in model columns. Used in Model m1 column label.
+==
+
+# Invalid outputs: duplicate column
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX), label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Duplicate name in schema: m1.label.
+==
+
+# Invalid outputs: duplicate column case sensitive
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX), Label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Schema object names differ only in case: m1.Label, m1.label.
+==
+
+# Invalid outputs: not null
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX) NOT NULL)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: NOT NULL constraint is not supported in models. Used in Model m1 column label.
+==
+
+# Invalid outputs: hidden
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX) HIDDEN)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: HIDDEN attribute is not supported in models. Used in Model m1 column label.
+==
+
+# Invalid outputs: length
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(10))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Length is not supported in model columns. Please use MAX. Used in Model m1 column label.
+==
+
+# Invalid outputs: the number of struct field exceeds the limit
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRUCT<field0 BOOL, field1 BOOL, field2 BOOL, field3 BOOL,
+field4 BOOL, field5 BOOL, field6 BOOL, field7 BOOL, field8 BOOL, field9 BOOL,
+field10 BOOL>)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: The number of struct field exceeds the limit: 10.
+==
+
+# Invalid outputs: generated
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX) AS (""))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Generated columns are not supported in models. Used in Model m1 column label.
+==
+
+# Invalid outputs: default
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX) DEFAULT (""))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Default values are not supported in models.
+==
+
+# Invalid outputs: empty struct
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRUCT<>)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Empty STRUCT is not allowed.
+==
+
+# Invalid outputs: missing struct field names
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRUCT<BOOL, ARRAY<STRING(MAX)>>)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Encountered ',' while parsing: column_type
+==
+
+# Invalid inputs/outputs: shared column name
+CREATE MODEL m1
+INPUT (column INT64)
+OUTPUT(column INT64)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Duplicate name in schema: m1.column.
+==
+
+# Invalid inputs/outputs: the number of nesting structs exceeds the limit
+CREATE MODEL m1
+INPUT( feature STRUCT<l1 STRUCT<l2 STRUCT<l3 STRUCT<l4 STRUCT<l5 STRUCT<l6 INT64>>>>>> )
+OUTPUT( label STRUCT<l1 STRUCT<l2 STRUCT<l3 STRUCT<l4 STRUCT<l5 STRUCT<l6 INT64>>>>>> )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: DDL parser exceeded complex type nesting limit of 5
+==
+
+# Invalid inputs/outputs: the number of nesting layers exceeds the limit
+CREATE MODEL m1
+INPUT (column ARRAY<STRUCT<l2 ARRAY<STRUCT<l4 ARRAY<STRUCT<l6 BOOL>>>>>> )
+OUTPUT(label STRUCT<l1 ARRAY<STRUCT<l3 ARRAY<STRUCT<l5 ARRAY<BOOL>>>>>> )
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: DDL parser exceeded complex type nesting limit of 5
+==
+
+# Duplicate model
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Duplicate name in schema: m1.
+==
+
+# Non unique name
+CREATE TABLE m1 (
+  test STRING(MAX)
+) PRIMARY KEY();
+
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Duplicate name in schema: m1.
+==
+
+# Alter non-existent model
+ALTER MODEL m1 SET OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Model `m1` not found.
+==
+
+# Alter dropped model
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+
+DROP MODEL m1;
+
+ALTER MODEL m1 SET OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Model `m1` not found.
+==
+
+# Alter invalid options: unknown option name
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+
+ALTER MODEL m1 SET OPTIONS (unknown = true);
+--
+ERROR: Error parsing Spanner DDL statement: ALTER MODEL m1 SET OPTIONS (unknown = true) : Option: unknown is unknown.
+==
+

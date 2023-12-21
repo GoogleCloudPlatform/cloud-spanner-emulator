@@ -54,8 +54,26 @@ message DDLStatement {
     AlterSequence alter_sequence = 31;
     DropSequence drop_sequence = 32;
 
+    // Model statements.
+    CreateModel create_model = 71;
+    AlterModel alter_model = 72;
+    DropModel drop_model = 73;
+
+    // Schema statements.
+    CreateSchema create_schema = 68;
+    AlterSchema alter_schema = 69;
+    DropSchema drop_schema = 70;
+
     // Statistics statements.
     Analyze analyze = 75;
+
+    // FGAC statements
+    CreateRole create_role = 61;
+    DropRole drop_role = 62;
+    GrantPrivilege grant_privilege = 63;
+    RevokePrivilege revoke_privilege = 64;
+    GrantMembership grant_membership = 65;
+    RevokeMembership revoke_membership = 66;
   }
 }
 
@@ -68,6 +86,7 @@ message SetOption {
   optional int64 int64_value = 4;
   optional double double_value = 8;
   optional string string_value = 5;
+  repeated string string_list_value = 6;
 }
 
 // If database dialect, e.g., PostgreSQL compatible dialect, is different from
@@ -79,6 +98,41 @@ message SQLExpressionOrigin {
   // Expression in original dialect.
   optional string original_expression = 1;
   optional string serialized_parse_tree = 2;
+}
+
+message TypeDefinition {
+  enum Type {
+    NONE = 0;
+    DOUBLE = 1;
+    INT64 = 3;
+    BOOL = 7;
+    STRING = 8;
+    BYTES = 10;
+    TIMESTAMP = 18;
+    DATE = 15;
+    ARRAY = 16;
+    NUMERIC = 19;
+    JSON = 20;
+    PG_NUMERIC = 21;
+    TOKENLIST = 22;
+    BIGBYTES = 23;
+    PG_JSONB = 24;
+    STRUCT = 26;
+  }
+
+  optional Type type = 1;
+  optional string proto_type_name = 2;
+  optional bool proto_is_validated = 3;
+  optional int64 length = 4;
+  optional TypeDefinition array_subtype = 5;
+  message StructDescriptor {
+    message Field {
+      optional string name = 1;
+      optional TypeDefinition type = 2;
+    }
+    repeated Field field = 1;
+  }
+  optional StructDescriptor struct_descriptor = 6;  // Set iff type == STRUCT.
 }
 
 message ColumnDefinition {
@@ -101,6 +155,7 @@ message ColumnDefinition {
     PG_NUMERIC = 21;
 
     PG_JSONB = 24;
+    STRUCT = 26;
   }
 
   optional Type type = 2;
@@ -146,6 +201,8 @@ message ColumnDefinition {
   }
 
   optional ColumnDefaultDefinition column_default = 12;
+
+  optional TypeDefinition type_definition = 13;
 }
 
 // Used for CREATE TABLE and CREATE INDEX
@@ -371,6 +428,12 @@ message CreateSequence {
   optional ExistenceModifier existence_modifier = 10;
 }
 
+message CreateSchema {
+  optional string schema_name = 1;
+  optional ExistenceModifier existence_modifier = 2;
+  repeated SetOption set_options = 3;
+}
+
 message SetColumnOptions {
   message ColumnPath {
     optional string table_name = 1;
@@ -402,6 +465,8 @@ message AlterTable {
     enum AlterColumnOp {
       SET_DEFAULT = 1;
       DROP_DEFAULT = 2;
+      SET_NOT_NULL = 3;
+      DROP_NOT_NULL = 4;
     }
     // Defines the specific alter operation on the column.
     optional AlterColumnOp operation = 2;
@@ -470,11 +535,119 @@ message DropSequence {
   optional ExistenceModifier existence_modifier = 2;
 }
 
+message CreateModel {
+  optional string model_name = 1;
+  optional ExistenceModifier existence_modifier = 2;
+  repeated SetOption set_options = 3;
+  optional bool remote = 4;
+  repeated ColumnDefinition input = 5;
+  repeated ColumnDefinition output = 6;
+}
+
+message AlterModel {
+  optional string model_name = 1;
+  optional bool if_exists = 2;
+
+  message SetOptions {
+    repeated SetOption options = 1;
+  }
+  oneof alter_type {
+    SetOptions set_options = 3;
+  }
+}
+
+message DropModel {
+  optional string model_name = 1;
+  optional bool if_exists = 2;
+}
+
+message AlterSchema {
+  optional string schema_name = 1;
+  optional bool if_exists = 2;
+  repeated SetOption set_options = 3;
+}
+
+message DropSchema {
+  optional string schema_name = 1;
+  optional bool if_exists = 2;
+}
+
 // ANALYZE is a special DDL operation that doesn't trigger a schema change in
 // emulator. The emulator will accept it but perform no-op. This allows the same
 // script to run in both emulator and production.
 message Analyze {
   // Intentionally empty.
+}
+
+// FGAC protos.  For now, these are parsed by the DDL parser but do not
+// actually impact behavior of the emulator.
+message CreateRole {
+  optional string role_name = 1;
+}
+
+message DropRole {
+  optional string role_name = 1;
+}
+
+message Grantee {
+  enum Type {
+    ROLE = 0;
+  }
+  optional Type type = 1;
+  optional string name = 2;
+}
+
+message Privilege {
+  enum Type {
+    SELECT = 0;
+    INSERT = 1;
+    UPDATE = 2;
+    DELETE = 3;
+    EXECUTE = 4;
+    USAGE = 5;
+  }
+  optional Type type = 1;
+
+  // TODO: Add support for column-level FGAC
+  // repeated string column = 2;
+}
+
+message PrivilegeTarget {
+  enum Type {
+    TABLE = 0;
+    CHANGE_STREAM = 1;
+    VIEW = 2;
+    FUNCTION = 3;
+    TABLE_FUNCTION = 4;
+    SEQUENCE = 5;
+    ROUTINE = 6;
+    MODEL = 7;
+    SCHEMA = 8;
+  }
+  optional Type type = 1;
+  repeated string name = 2;  // Empty means all objects.
+}
+
+message GrantPrivilege {
+  repeated Privilege privilege = 1;
+  optional PrivilegeTarget target = 2;
+  repeated Grantee grantee = 3;
+}
+
+message RevokePrivilege {
+  repeated Privilege privilege = 1;
+  optional PrivilegeTarget target = 2;
+  repeated Grantee grantee = 3;
+}
+
+message GrantMembership {
+  repeated Grantee role = 1;
+  repeated Grantee grantee = 2;
+}
+
+message RevokeMembership {
+  repeated Grantee role = 1;
+  repeated Grantee grantee = 2;
 }
 
 message StoredColumnDefinition {

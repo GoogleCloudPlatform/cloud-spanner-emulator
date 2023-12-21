@@ -28,6 +28,7 @@
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 
 namespace google {
@@ -58,6 +59,9 @@ std::string PrintCheckConstraint(const CheckConstraint* check_constraint);
 
 // Prints the DDL statements for a foreign key.
 std::string PrintForeignKey(const ForeignKey* foreign_key);
+
+// Prints the DDL statements for a sequence.
+std::string PrintSequence(const Sequence* sequence);
 
 // Converts an OnDeleteAction to its string representation.
 std::string OnDeleteActionToString(Table::OnDeleteAction action);

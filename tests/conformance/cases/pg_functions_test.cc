@@ -63,13 +63,21 @@ class PGFunctionsTest : public DatabaseTest {
   }
 
  protected:
-  void PopulateDatabase() {
+  void PopulateDatabase(bool insert_nan = false) {
     ZETASQL_EXPECT_OK(MultiInsert(
         "values", {"id", "int_value", "double_value", "numeric_value"},
         {{1, 1, 1.0, *MakePgNumeric("123.0")},
          {2, 0, 2.0, *MakePgNumeric("12.0")},
          {3, 5, 3.0, *MakePgNumeric("3.0")},
          {4, Null<int64_t>(), Null<double>(), Null<PgNumeric>()}}));
+
+    if (insert_nan) {
+      // Only inserting a NaN value if requested by a test since inserting a NaN
+      // more generally prevents us from testing the correctness of sums.
+      ZETASQL_EXPECT_OK(Insert("values",
+                       {"id", "int_value", "double_value", "numeric_value"},
+                       {5, 2, 5.0, *MakePgNumeric("NaN")}));
+    }
   }
 
   // Testing this in an awkward way because MakePgNumeric strips trailing zeros
@@ -99,14 +107,13 @@ TEST_F(PGFunctionsTest, CastToDate) {
               IsOkAndHoldsRows({Date(2000, 1, 1)}));
 }
 
-// TODO: Re-enable after Spangres updates the error message.
-TEST_F(PGFunctionsTest, DISABLED_CastToDateUnsupportedDate) {
+TEST_F(PGFunctionsTest, CastToDateUnsupportedDate) {
   EXPECT_THAT(Query(
                   R"sql(
           SELECT CAST(col1 AS date) AS date
           FROM (SELECT 'jan 1, 0000' AS col1) subquery)sql"),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("date/time field value out of range")));
+                       HasSubstr("Date is out of supported range")));
 }
 
 TEST_F(PGFunctionsTest, CastToTimestamp) {
@@ -122,15 +129,14 @@ TEST_F(PGFunctionsTest, CastToTimestamp) {
           absl::CivilSecond(2000, 1, 1, 1, 2, 3), time_zone)))}));
 }
 
-// TODO: Re-enable after Spangres updates the error message.
-TEST_F(PGFunctionsTest, DISABLED_CastToTimestampUnsupportedTimestamp) {
+TEST_F(PGFunctionsTest, CastToTimestampUnsupportedTimestamp) {
   EXPECT_THAT(Query(
                   R"sql(
           SELECT CAST(col1 AS timestamptz) AS timestamptz
           FROM (SELECT
             '0000/1/1 01:02:03 America/Los_Angeles' AS col1) subquery)sql"),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("date/time field value out of range")));
+                       HasSubstr("Timestamp is out of supported range")));
 }
 
 TEST_F(PGFunctionsTest, MapDoubleToInt) {
@@ -199,6 +205,9 @@ TEST_F(PGFunctionsTest, MinNumericFromTable) {
   PopulateDatabase();
   EXPECT_THAT(Query("SELECT min(numeric_value) FROM values"),
               IsOkAndHoldsRows({{*MakePgNumeric("3.0")}}));
+  EXPECT_THAT(
+      Query("SELECT min(numeric_value) + min(numeric_value) FROM values"),
+      IsOkAndHoldsRows({{*MakePgNumeric("6.0")}}));
 }
 
 // Tests for pg.max with PG.NUMERIC.
@@ -222,6 +231,9 @@ TEST_F(PGFunctionsTest, MaxNumericFromTable) {
   PopulateDatabase();
   EXPECT_THAT(Query("SELECT max(numeric_value) FROM values"),
               IsOkAndHoldsRows({{*MakePgNumeric("123.0")}}));
+  EXPECT_THAT(
+      Query("SELECT max(numeric_value) + max(numeric_value) FROM values"),
+      IsOkAndHoldsRows({{*MakePgNumeric("246.0")}}));
 }
 
 // Tests for pg.sum with Int64.
@@ -245,6 +257,8 @@ TEST_F(PGFunctionsTest, SumInt64FromTable) {
   PopulateDatabase();
   EXPECT_THAT(Query("SELECT sum(int_value) FROM values"),
               IsOkAndHoldsRows({{*MakePgNumeric("6")}}));
+  EXPECT_THAT(Query("SELECT sum(int_value) + sum(int_value) FROM values"),
+              IsOkAndHoldsRows({{*MakePgNumeric("12")}}));
 }
 
 // Tests for pg.sum with Double.
@@ -301,6 +315,9 @@ TEST_F(PGFunctionsTest, SumNumericFromTable) {
   PopulateDatabase();
   EXPECT_THAT(Query("SELECT sum(numeric_value) FROM values"),
               IsOkAndHoldsRows({{*MakePgNumeric("138.0")}}));
+  EXPECT_THAT(
+      Query("SELECT sum(numeric_value) + sum(numeric_value) FROM values"),
+      IsOkAndHoldsRows({{*MakePgNumeric("276.0")}}));
 }
 
 // Tests for pg.avg with Int64.
@@ -322,6 +339,8 @@ TEST_F(PGFunctionsTest, AvgInt64FromTableWithOnlyNull) {
 TEST_F(PGFunctionsTest, AvgInt64FromTable) {
   PopulateDatabase();
   VerifySingleNumericRowValue("SELECT avg(int_value) FROM values", "2");
+  VerifySingleNumericRowValue(
+      "SELECT avg(int_value) + avg(int_value) FROM values", "4");
 }
 
 // Tests for pg.avg with Double.
@@ -376,6 +395,8 @@ TEST_F(PGFunctionsTest, AvgNumericFromTableWithOnlyNull) {
 TEST_F(PGFunctionsTest, AvgNumericFromTable) {
   PopulateDatabase();
   VerifySingleNumericRowValue("SELECT avg(numeric_value) FROM values", "46");
+  VerifySingleNumericRowValue(
+      "SELECT avg(numeric_value) + avg(numeric_value) FROM values", "92");
 }
 
 TEST_F(PGFunctionsTest, NumericAbs) {
@@ -849,6 +870,262 @@ TEST_F(PGFunctionsTest, NumericCastToString) {
       IsOkAndHoldsRows({{std::string(MinNumericString())}}));
 }
 
+TEST_F(PGFunctionsTest, NumericEquals) {
+  PopulateDatabase(/*insert_nan = */ true);
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value = 123.0)sql"),
+              IsOkAndHoldsRows({{1, 1}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value = NULL)sql"),
+              IsOkAndHoldsRows({}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value IS NULL)sql"),
+              IsOkAndHoldsRows({{4, Null<int64_t>()}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value = 135.1)sql"),
+              IsOkAndHoldsRows({}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value = 'NaN'::numeric)sql"),
+              IsOkAndHoldsRows({{5, 2}}));
+}
+
+TEST_F(PGFunctionsTest, NumericNotEquals) {
+  PopulateDatabase(/*insert_nan = */ true);
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value != 123.0
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{2, 0}, {3, 5}, {5, 2}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value != NULL
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value IS NOT NULL
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{1, 1}, {2, 0}, {3, 5}, {5, 2}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value != 135.1
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{1, 1}, {2, 0}, {3, 5}, {5, 2}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value != 'NaN'::numeric
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{1, 1}, {2, 0}, {3, 5}}));
+}
+
+TEST_F(PGFunctionsTest, NumericLessThan) {
+  PopulateDatabase(/*insert_nan = */ true);
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value < 123.0
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{2, 0}, {3, 5}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value < 12.0
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{3, 5}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value < NULL
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value < 'NaN'::numeric
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{1, 1}, {2, 0}, {3, 5}}));
+}
+
+TEST_F(PGFunctionsTest, NumericLessThanEquals) {
+  PopulateDatabase(/*insert_nan = */ true);
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value <= 123.0
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{1, 1}, {2, 0}, {3, 5}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value <= 12.0
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{2, 0}, {3, 5}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value <= NULL
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value <= 'NaN'::numeric
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{1, 1}, {2, 0}, {3, 5}, {5, 2}}));
+}
+
+TEST_F(PGFunctionsTest, NumericGreaterThan) {
+  PopulateDatabase(/*insert_nan = */ true);
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value > 120.0
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{1, 1}, {5, 2}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value > 11.0
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{1, 1}, {2, 0}, {5, 2}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value > NULL
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value > 'NaN'::numeric
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({}));
+}
+
+TEST_F(PGFunctionsTest, NumericGreaterThanEquals) {
+  PopulateDatabase(/*insert_nan = */ true);
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value >= 123.0
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{1, 1}, {5, 2}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value >= 12.0
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{1, 1}, {2, 0}, {5, 2}}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value >= NULL
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT id, int_value
+          FROM values
+          WHERE numeric_value >= 'NaN'::numeric
+          ORDER BY id)sql"),
+              IsOkAndHoldsRows({{5, 2}}));
+}
+
+TEST_F(PGFunctionsTest, ArrayLength) {
+  EXPECT_THAT(Query("SELECT array_length(ARRAY[true, false, true, false], 1)"),
+              IsOkAndHoldsRows({{4}}));
+  EXPECT_THAT(
+      Query("SELECT array_length(ARRAY['bytes1'::bytea, 'bytes2'::bytea], 1)"),
+      IsOkAndHoldsRows({{2}}));
+  EXPECT_THAT(Query("SELECT array_length(ARRAY['1970-01-01'::date, "
+                    "'1969-01-01'::date, '1968-01-01'::date], 1)"),
+              IsOkAndHoldsRows({{3}}));
+  EXPECT_THAT(Query("SELECT array_length(ARRAY[1::float8, 2::float8, "
+                    "3::float8, 4::float8, 5::float8], 1)"),
+              IsOkAndHoldsRows({{5}}));
+  EXPECT_THAT(Query("SELECT array_length(ARRAY[0,1,2,3,4,5,6,7,8,9], 1)"),
+              IsOkAndHoldsRows({{10}}));
+  EXPECT_THAT(
+      Query("SELECT array_length(ARRAY['test1'::text, 'test2'::text], 1)"),
+      IsOkAndHoldsRows({{2}}));
+  EXPECT_THAT(
+      Query("SELECT array_length(ARRAY['1970-01-01 02:03:04'::timestamptz], "
+            "1)"),
+      IsOkAndHoldsRows({{1}}));
+  EXPECT_THAT(Query("SELECT array_length(ARRAY[to_jsonb('hello'::text)], 1)"),
+              IsOkAndHoldsRows({{1}}));
+  EXPECT_THAT(Query("SELECT array_length(ARRAY[1::numeric], 1)"),
+              IsOkAndHoldsRows({{1}}));
+
+  // Returns null for empty array
+  EXPECT_THAT(Query("SELECT array_length(ARRAY[]::bigint[], 1)"),
+              IsOkAndHoldsRows({{Null<int64_t>()}}));
+
+  // Returns null for dimensions <= 0
+  EXPECT_THAT(Query("SELECT array_length(ARRAY[1,2,3], 0)"),
+              IsOkAndHoldsRows({{Null<int64_t>()}}));
+  EXPECT_THAT(Query("SELECT array_length(ARRAY[1,2,3], -1)"),
+              IsOkAndHoldsRows({{Null<int64_t>()}}));
+
+  // Error case
+  EXPECT_THAT(
+      Query("SELECT array_length(ARRAY[1,2,3], 2)"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("multi-dimensional arrays are not supported")));
+
+  // Should fail for GSQL's array_length signature.
+  // GSQL's signature is array_length(<array>) while PG's is
+  // array_length(<array>, <dimension>).
+  EXPECT_THAT(
+      Query("SELECT array_length(ARRAY[1,2,3])"),
+      // TODO: Remove check if the two environments ever
+      // become consistent.
+      StatusIs(
+          in_prod_env() ? absl::StatusCode::kInvalidArgument
+                        : absl::StatusCode::kNotFound,
+          HasSubstr("No function matches the given name and argument types")));
+}
+
 TEST_F(PGFunctionsTest, ArrayUpper) {
   EXPECT_THAT(Query("SELECT array_upper(ARRAY[true, false, true, false], 1)"),
               IsOkAndHoldsRows({{4}}));
@@ -1147,6 +1424,40 @@ TEST_F(PGFunctionsTest, ToJsonB) {
   EXPECT_THAT(
       Query(R"(select to_jsonb('-15e1500'::numeric))"),
       IsOkAndHoldsRows({JsonB(std::string("-15" + std::string(1500, '0')))}));
+}
+
+TEST_F(PGFunctionsTest, ExtendedTypeCastTest) {
+  // Cast <TYPE> to PG.NUMERIC.
+  EXPECT_THAT(Query(R"(SELECT CAST(1.1 AS numeric))"),
+              IsOkAndHoldsRows({{*MakePgNumeric("1.1")}}));
+  EXPECT_THAT(Query(R"(SELECT CAST(1 AS numeric))"),
+              IsOkAndHoldsRows({{*MakePgNumeric("1")}}));
+  EXPECT_THAT(Query(R"(SELECT CAST(1.1::float AS numeric))"),
+              IsOkAndHoldsRows({{*MakePgNumeric("1.1")}}));
+  EXPECT_THAT(Query(R"(SELECT CAST('1.1' AS numeric))"),
+              IsOkAndHoldsRows({{*MakePgNumeric("1.1")}}));
+
+  // Cast PG.NUMERIC to <TYPE>.
+  EXPECT_THAT(Query(R"(SELECT CAST('1.1'::numeric AS bigint))"),
+              IsOkAndHoldsRows({{1}}));
+  EXPECT_THAT(Query(R"(SELECT CAST('1.1'::numeric AS float))"),
+              IsOkAndHoldsRows({{1.1}}));
+  EXPECT_THAT(Query(R"(SELECT CAST('1.1'::numeric AS text))"),
+              IsOkAndHoldsRows({{"1.1"}}));
+
+  // Cast <TYPE> to PG.JSONB.
+  EXPECT_THAT(Query(R"(SELECT CAST('{"b":[1e0],"a":[20e-1]}' AS jsonb))"),
+              IsOkAndHoldsRows({{JsonB(R"({"a": [2.0], "b": [1]})")}}));
+
+  // Cast PG.JSONB to <TYPE>.
+  EXPECT_THAT(Query(R"(SELECT CAST('true'::jsonb AS boolean))"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query(R"(SELECT CAST('1.1'::jsonb AS float))"),
+              IsOkAndHoldsRows({{1.1}}));
+  EXPECT_THAT(Query(R"(SELECT CAST('1'::jsonb AS bigint))"),
+              IsOkAndHoldsRows({{1}}));
+  EXPECT_THAT(Query(R"(SELECT CAST('"hello"'::jsonb AS text))"),
+              IsOkAndHoldsRows({{"\"hello\""}}));
 }
 
 }  // namespace

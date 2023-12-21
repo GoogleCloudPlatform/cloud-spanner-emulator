@@ -23,7 +23,9 @@
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "absl/status/status.h"
+#include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
+#include "backend/query/query_context.h"
 #include "backend/query/query_validator.h"
 #include "backend/query/queryable_table.h"
 #include "backend/query/queryable_view.h"
@@ -43,7 +45,9 @@ class ColumnExpressionValidator : public QueryValidator {
       absl::string_view expression_use,
       absl::flat_hash_set<std::string>* dependent_column_names,
       bool allow_volatile_expression)
-      : QueryValidator({.schema = schema}, /*options=*/nullptr),
+      : QueryValidator(QueryContext{.schema = schema,
+                                    .allow_read_write_only_functions = true},
+                       /*options=*/nullptr),
         table_(table),
         expression_use_(expression_use),
         dependent_column_names_(dependent_column_names),
@@ -166,6 +170,7 @@ absl::Status AnalyzeColumnExpression(
     const std::vector<zetasql::SimpleTable::NameAndType>& name_and_types,
     absl::string_view expression_use,
     absl::flat_hash_set<std::string>* dependent_column_names,
+    absl::flat_hash_set<const SchemaNode*>* dependent_sequences,
     bool allow_volatile_expression) {
   zetasql::SimpleTable simple_table(table->Name(), name_and_types);
   zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
@@ -190,6 +195,10 @@ absl::Status AnalyzeColumnExpression(
         output->resolved_expr()->GetTreeDepth(),
         limits::kColumnExpressionMaxDepth);
   }
+  if (dependent_sequences != nullptr &&
+      !validator.dependent_sequences().empty()) {
+    *dependent_sequences = validator.dependent_sequences();
+  }
   return absl::OkStatus();
 }
 
@@ -202,7 +211,8 @@ absl::Status AnalyzeViewDefinition(
                                view_name, view_definition);
 
   // Analyze the view definition.
-  auto analyzer_options = MakeGoogleSqlAnalyzerOptionsForViews();
+  auto analyzer_options =
+      MakeGoogleSqlAnalyzerOptionsForViews(schema->dialect());
   analyzer_options.set_prune_unused_columns(true);
   FunctionCatalog function_catalog(type_factory);
   Catalog catalog(schema, &function_catalog, type_factory, analyzer_options);
@@ -220,6 +230,11 @@ absl::Status AnalyzeViewDefinition(
   for (const auto& c : create_view_stmt->output_column_list()) {
     output_columns->emplace_back(View::Column{c->name(), c->column().type()});
   }
+
+  for (const SchemaNode* sequence : validator.dependent_sequences()) {
+    dependencies->insert(sequence);
+  }
+
   return absl::OkStatus();
 }
 

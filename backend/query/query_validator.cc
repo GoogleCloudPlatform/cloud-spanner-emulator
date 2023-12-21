@@ -31,6 +31,8 @@
 #include "backend/query/feature_filter/gsql_supported_functions.h"
 #include "backend/query/feature_filter/sql_feature_filter.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/sequence.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
@@ -57,12 +59,19 @@ constexpr absl::string_view kHintParameterSensitiveNever = "never";
 constexpr absl::string_view kHintForceIndex = "force_index";
 constexpr absl::string_view kHintBaseTable = "_base_table";
 
+// Index strategy
+constexpr absl::string_view kHintIndexStrategy = "index_strategy";
+constexpr absl::string_view kHintIndexStrategyForceIndexUnion =
+    "force_index_union";
+
 // Joins
 constexpr absl::string_view kHintJoinForceOrder = "force_join_order";
 constexpr absl::string_view kHintJoinMethod = "join_method";
 constexpr absl::string_view kHintJoinTypeApply = "apply_join";
 constexpr absl::string_view kHintJoinTypeHash = "hash_join";
 constexpr absl::string_view kHintJoinTypeMerge = "merge_join";
+constexpr absl::string_view kHintJoinTypePushBroadcastHashJoin =
+    "push_broadcast_hash_join";
 
 constexpr absl::string_view kHintJoinBatch = "batch_mode";
 
@@ -170,7 +179,8 @@ absl::Status QueryValidator::CheckSpannerHintName(
       absl::flat_hash_set<absl::string_view, zetasql_base::StringViewCaseHash,
                           zetasql_base::StringViewCaseEqual>>{
       {zetasql::RESOLVED_TABLE_SCAN,
-       {kHintForceIndex, kHintTableScanGroupByScanOptimization}},
+       {kHintForceIndex, kHintTableScanGroupByScanOptimization,
+        kHintIndexStrategy}},
       {zetasql::RESOLVED_JOIN_SCAN,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
         kHintJoinForceOrder, kHashJoinExecution}},
@@ -181,10 +191,11 @@ absl::Status QueryValidator::CheckSpannerHintName(
         kHintJoinBatch, kHintJoinForceOrder}},
       {zetasql::RESOLVED_QUERY_STMT,
        {
-           kHintForceIndex, kHintJoinTypeDeprecated, kHintJoinMethod,
-           kHashJoinBuildSide, kHintJoinForceOrder, kHintConstantFolding,
-           kUseAdditionalParallelism, kHintEnableAdaptivePlans,
-           kHintLockScannedRange, kHintParameterSensitive,
+           kHintForceIndex, kHintIndexStrategy, kHintJoinTypeDeprecated,
+           kHintJoinMethod, kHashJoinBuildSide, kHintJoinForceOrder,
+           kHintConstantFolding, kUseAdditionalParallelism,
+           kHintEnableAdaptivePlans, kHintLockScannedRange,
+           kHintParameterSensitive,
            kHashJoinExecution
        }},
       {zetasql::RESOLVED_SUBQUERY_EXPR,
@@ -244,6 +255,7 @@ absl::Status QueryValidator::CheckHintValue(
           {kHintTableScanGroupByScanOptimization, zetasql::types::BoolType()},
           {kHintEnableAdaptivePlans, zetasql::types::BoolType()},
           {kHintDisableInline, zetasql::types::BoolType()},
+          {kHintIndexStrategy, zetasql::types::StringType()},
       }};
 
   const auto& iter = supported_hint_types->find(name);
@@ -272,6 +284,8 @@ absl::Status QueryValidator::CheckHintValue(
     if (!(absl::EqualsIgnoreCase(string_value, kHintJoinTypeApply) ||
           absl::EqualsIgnoreCase(string_value, kHintJoinTypeHash) ||
           absl::EqualsIgnoreCase(string_value, kHintJoinTypeMerge) ||
+          absl::EqualsIgnoreCase(string_value,
+                                 kHintJoinTypePushBroadcastHashJoin) ||
           absl::EqualsIgnoreCase(string_value,
                                  kHintJoinTypeNestedLoopDeprecated))) {
       return error::InvalidHintValue(name, value.DebugString());
@@ -325,6 +339,12 @@ absl::Status QueryValidator::CheckHintValue(
     if (!(absl::EqualsIgnoreCase(string_value,
                                  kHintLockScannedRangeExclusive) ||
           absl::EqualsIgnoreCase(string_value, kHintLockScannedRangeShared))) {
+      return error::InvalidHintValue(name, value.DebugString());
+    }
+  } else if (absl::EqualsIgnoreCase(name, kHintIndexStrategy)) {
+    const std::string& string_value = value.string_value();
+    if (!absl::EqualsIgnoreCase(string_value,
+                                kHintIndexStrategyForceIndexUnion)) {
       return error::InvalidHintValue(name, value.DebugString());
     }
   }
@@ -403,6 +423,13 @@ absl::Status QueryValidator::VisitResolvedLiteral(
   return DefaultVisit(node);
 }
 
+bool QueryValidator::IsReadWriteOnlyFunction(absl::string_view name) const {
+  if (name == kGetNextSequenceValueFunctionName) {
+    return true;
+  }
+  return false;
+}
+
 absl::Status QueryValidator::VisitResolvedFunctionCall(
     const zetasql::ResolvedFunctionCall* node) {
   // Check if function is part of supported subset of ZetaSQL
@@ -423,7 +450,62 @@ absl::Status QueryValidator::VisitResolvedFunctionCall(
         CheckAllowedCasts(node->argument_list(0)->type(), node->type()));
   }
 
+  if (IsSequenceFunction(node)) {
+    ZETASQL_RETURN_IF_ERROR(ValidateSequenceFunction(node));
+  }
+
+  if (!context_.allow_read_write_only_functions &&
+      IsReadWriteOnlyFunction(
+          node->function()->FullName(/*include_group=*/false))) {
+    return error::ReadOnlyTransactionDoesNotSupportReadWriteOnlyFunctions(
+        node->function()->FullName(/*include_group=*/false));
+  }
+
   return DefaultVisit(node);
+}
+
+bool QueryValidator::IsSequenceFunction(
+    const zetasql::ResolvedFunctionCall* node) const {
+  return (node->function()->FullName(/*include_group=*/false) ==
+              kGetNextSequenceValueFunctionName ||
+          node->function()->FullName(/*include_group=*/false) ==
+              kGetInternalSequenceStateFunctionName);
+}
+
+absl::Status QueryValidator::ValidateSequenceFunction(
+    const zetasql::ResolvedFunctionCall* node) {
+  if (schema()->dialect() ==
+      database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    if (node->generic_argument_list_size() != 1 ||
+        node->generic_argument_list(0)->sequence() == nullptr) {
+      return error::NoMatchingFunctionSignature(
+          node->function()->FullName(/*include_group=*/false), "SEQUENCE");
+    }
+    const std::string sequence_name =
+        node->generic_argument_list(0)->sequence()->sequence()->FullName();
+    const Sequence* current_sequence = schema()->FindSequence(sequence_name);
+    if (current_sequence == nullptr) {
+      return error::SequenceNotFound(sequence_name);
+    }
+    dependent_sequences_.insert(current_sequence);
+    return absl::OkStatus();
+  }
+
+  // This is when the dialect is PostgreSQL.
+  if (node->argument_list_size() == 1 &&
+      node->argument_list(0)->node_kind() == zetasql::RESOLVED_LITERAL) {
+    const zetasql::Value& value =
+        node->argument_list(0)->GetAs<zetasql::ResolvedLiteral>()->value();
+    if (value.type()->IsString()) {
+      const Sequence* current_sequence =
+          schema()->FindSequence(value.string_value());
+      if (current_sequence == nullptr) {
+        return error::SequenceNotFound(value.string_value());
+      }
+      dependent_sequences_.insert(current_sequence);
+    }
+  }
+  return absl::OkStatus();
 }
 
 absl::Status QueryValidator::VisitResolvedAggregateFunctionCall(

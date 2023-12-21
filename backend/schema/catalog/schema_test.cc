@@ -31,12 +31,14 @@
 #include "backend/schema/builders/change_stream_builder.h"
 #include "backend/schema/builders/column_builder.h"
 #include "backend/schema/builders/index_builder.h"
+#include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
 #include "backend/schema/builders/view_builder.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "common/errors.h"
@@ -84,6 +86,12 @@ class SchemaTest : public testing::Test {
 
   ChangeStream::Builder change_stream_builder(const std::string& name) {
     ChangeStream::Builder c;
+    c.set_name(name).set_id(name);
+    return c;
+  }
+
+  Sequence::Builder sequence_builder(const std::string& name) {
+    Sequence::Builder c;
     c.set_name(name).set_id(name);
     return c;
   }
@@ -189,6 +197,23 @@ TEST_F(SchemaTest, ChangeStreamBasic) {
   EXPECT_EQ(table->change_streams().size(), 1);
   EXPECT_EQ(col->FindChangeStream("change_stream_test_table"), change_stream);
   EXPECT_EQ(col->change_streams().size(), 1);
+}
+
+TEST_F(SchemaTest, SequenceBasic) {
+  EXPECT_EQ(base_schema_->sequences().size(), 0);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(base_schema_,
+                       test::CreateSchemaWithOneSequence(type_factory_.get()));
+  EXPECT_EQ(base_schema_->sequences().size(), 1);
+  const Sequence* sequence = base_schema_->FindSequence("myseq");
+  ASSERT_NE(sequence, nullptr);
+  EXPECT_FALSE(sequence->start_with_counter().has_value());
+  EXPECT_EQ(sequence->skip_range_min().value(), 1);
+  EXPECT_EQ(sequence->skip_range_max().value(), 1000);
+
+  const Table* table = base_schema_->FindTable("test_table");
+  const Column* col = table->FindColumn("int64_col");
+  EXPECT_TRUE(col->has_default_value());
+  EXPECT_EQ(col->expression(), "GET_NEXT_SEQUENCE_VALUE(SEQUENCE myseq)");
 }
 
 // TODO: Move this test to the unit test for
@@ -390,6 +415,18 @@ TEST_F(SchemaTest, ChangeStreamBuilderInvalid) {
   auto invalid_cs = change_stream_builder(change_stream_name).build();
   EXPECT_EQ(invalid_cs->Validate(&context_),
             error::InvalidSchemaName("Change Stream", change_stream_name));
+}
+
+TEST_F(SchemaTest, SequenceBuilderValid) {
+  auto c = sequence_builder("Sequence").build();
+  ZETASQL_EXPECT_OK(c->Validate(&context_));
+}
+
+TEST_F(SchemaTest, SequenceBuilderInvalid) {
+  const std::string sequence_name(130, 'S');
+  auto invalid_cs = sequence_builder(sequence_name).build();
+  EXPECT_EQ(invalid_cs->Validate(&context_),
+            error::InvalidSchemaName("Sequence", sequence_name));
 }
 
 TEST_F(SchemaTest, IndexBuilder) {
@@ -1396,6 +1433,39 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestChangeStreams) {
 ))",
                   R"(CREATE CHANGE STREAM change_stream
 FOR t)")));
+}
+
+TEST_F(SchemaTest, PrintDDLStatementsTestSequences) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+                       test::CreateSchemaWithOneSequence(type_factory_.get()));
+
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(
+                  R"(CREATE SEQUENCE myseq OPTIONS (
+  sequence_kind = 'bit_reversed_positive',
+  skip_range_min = 1,
+  skip_range_max = 1000 ))",
+                  R"(CREATE TABLE test_table (
+  int64_col INT64 NOT NULL DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE myseq)),
+  string_col STRING(MAX),
+) PRIMARY KEY(int64_col))")));
+}
+
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestSequences) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaWithOneSequence(
+          type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL));
+
+  EXPECT_THAT(
+      PrintDDLStatements(schema.get()),
+      IsOkAndHolds(ElementsAre("CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE "
+                               "START COUNTER WITH 1 SKIP RANGE 1 1000",
+                               R"(CREATE TABLE test_table (
+  int64_col bigint DEFAULT nextval('myseq'::text) NOT NULL,
+  string_col character varying,
+  PRIMARY KEY(int64_col)
+))")));
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestArrays) {

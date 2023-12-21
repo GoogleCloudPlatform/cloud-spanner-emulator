@@ -416,6 +416,91 @@ TEST_P(SchemaUpdaterTest, CreateTable_ParentNotFound) {
               StatusIs(error::TableNotFound("NoParent")));
 }
 
+TEST_P(SchemaUpdaterTest, CreateTable_ChildTableMissingPrimaryKey) {
+  EXPECT_THAT(
+      CreateSchema({
+          R"(
+      CREATE TABLE `Parent` (
+        k1 INT64 NOT NULL,
+        k2 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (k1, k2)
+    )",
+          R"(
+      CREATE TABLE Child (
+        k1 INT64 NOT NULL,
+        k2 INT64 NOT NULL,
+        k3 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (k1, k3),
+        INTERLEAVE IN PARENT `Parent` ON DELETE CASCADE
+    )"}),
+      StatusIs(error::MustReferenceParentKeyColumn("Table", "Child", "k2")));
+}
+
+TEST_P(SchemaUpdaterTest,
+       CreateTable_ChildTableCaseSensitiveMissingPrimaryKey) {
+  EXPECT_THAT(
+      CreateSchema({
+          R"(
+      CREATE TABLE `Parent` (
+        k1 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (k1)
+    )",
+          R"(
+      CREATE TABLE Child (
+        K1 INT64 NOT NULL,
+        k2 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (K1, k2),
+        INTERLEAVE IN PARENT `Parent` ON DELETE CASCADE
+    )"}),
+      StatusIs(error::MustReferenceParentKeyColumn("Table", "Child", "k1")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateTable_ChildTablePrimaryKeyInWrongOrder) {
+  EXPECT_THAT(
+      CreateSchema({
+          R"(
+      CREATE TABLE `Parent` (
+        k1 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (k1)
+    )",
+          R"(
+      CREATE TABLE Child (
+        k1 INT64 NOT NULL,
+        k2 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (k2, k1),
+        INTERLEAVE IN PARENT `Parent` ON DELETE CASCADE
+    )"}),
+      StatusIs(error::IncorrectParentKeyPosition("Table", "Child", "k1", 1)));
+}
+
+TEST_P(SchemaUpdaterTest, CreateTable_CreateChildTable) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+      CREATE TABLE `Parent` (
+        k1 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (k1)
+    )",
+                                        R"(
+      CREATE TABLE Child (
+        k1 INT64 NOT NULL,
+        k2 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (k1, k2),
+        INTERLEAVE IN PARENT `Parent` ON DELETE CASCADE
+    )"}));
+  auto parent_table = schema->FindTable("Parent");
+  EXPECT_NE(parent_table, nullptr);
+  auto child_table = schema->FindTable("Child");
+  EXPECT_NE(child_table, nullptr);
+}
+
 TEST_P(SchemaUpdaterTest, AlterTable_AddColumn) {
   // Only BYTES(MAX) is supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();

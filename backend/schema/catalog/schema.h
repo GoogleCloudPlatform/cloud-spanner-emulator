@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
@@ -26,10 +27,11 @@
 #include "backend/common/case.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/view.h"
 #include "backend/schema/graph/schema_graph.h"
-#include "backend/schema/graph/schema_node.h"
 
 namespace google {
 namespace spanner {
@@ -89,6 +91,16 @@ class Schema {
   const ChangeStream* FindChangeStream(
       const std::string& change_stream_name) const;
 
+  // Finds a sequence by its name. Returns a const pointer of the sequence, or
+  // a nullptr if the sequence is not found. Name comparison is
+  // case-insensitive.
+  const Sequence* FindSequence(const std::string& sequence_name) const;
+
+  // Finds a model by its name. Returns a const pointer of the model,
+  // or nullptr if the change stream is not found. Name comparison is
+  // case-insensitive.
+  const Model* FindModel(const std::string& model_name) const;
+
   // List all the user-visible tables in this schema.
   absl::Span<const Table* const> tables() const { return tables_; }
 
@@ -99,6 +111,12 @@ class Schema {
     return change_streams_;
   }
 
+  // List all the user-visible sequences in this schema.
+  absl::Span<const Sequence* const> sequences() const { return sequences_; }
+
+  // List all the user-visible models in this schema.
+  absl::Span<const Model* const> models() const { return models_; }
+
   // Return the underlying SchemaGraph owning the objects in the schema.
   const SchemaGraph* GetSchemaGraph() const { return graph_; }
 
@@ -107,6 +125,9 @@ class Schema {
 
   // Returns the number of change streams in the schema.
   int num_change_stream() const { return change_streams_map_.size(); }
+
+  // Returns the number of sequences in the schema.
+  int num_sequence() const { return sequences_map_.size(); }
 
   // Returns the database dialect.
   database_api::DatabaseDialect dialect() const { return dialect_; }
@@ -144,9 +165,23 @@ class Schema {
   // stream. Hash and comparison on the keys are case-insensitive.
   CaseInsensitiveStringMap<const ChangeStream*> change_streams_map_;
 
+  // A vector that maintains the original order of models in the DDL.
+  std::vector<const Model*> models_;
+
+  // A map that owns all the models. Key is the name of the model.
+  // Hash and comparison on the keys are case-insensitive.
+  CaseInsensitiveStringMap<const Model*> models_map_;
+
   // A map that owns all of the indexes. Key is the name of the index. Hash and
   // comparison on the keys are case-insensitive.
   CaseInsensitiveStringMap<const Index*> index_map_;
+
+  // A vector that maintains the original order of sequences in the DDL.
+  std::vector<const Sequence*> sequences_;
+
+  // A map that owns all the sequences. Key is the name of the sequence. Hash
+  // and comparison on the keys are case-insensitive.
+  CaseInsensitiveStringMap<const Sequence*> sequences_map_;
 
   // Holds the database dialect for this schema.
   const database_api::DatabaseDialect dialect_;

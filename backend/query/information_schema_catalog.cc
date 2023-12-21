@@ -33,6 +33,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
@@ -40,7 +41,9 @@
 #include "backend/query/tables_from_metadata.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/schema/catalog/sequence.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
@@ -58,6 +61,7 @@ namespace backend {
 namespace {
 
 using ::google::spanner::admin::database::v1::DatabaseDialect;
+using ::zetasql::Value;
 using ::zetasql::types::BoolType;
 using ::zetasql::types::Int64Type;
 using ::zetasql::types::StringType;
@@ -86,7 +90,10 @@ static constexpr char kSpannerState[] = "SPANNER_STATE";
 static constexpr char kColumns[] = "COLUMNS";
 static constexpr char kSchemaName[] = "SCHEMA_NAME";
 static constexpr char kSchemata[] = "SCHEMATA";
+static constexpr char kSequences[] = "SEQUENCES";
+static constexpr char kSequenceOptions[] = "SEQUENCE_OPTIONS";
 static constexpr char kSpannerStatistics[] = "SPANNER_STATISTICS";
+static constexpr char kPGCatalog[] = "PG_CATALOG";
 static constexpr char kDatabaseOptions[] = "DATABASE_OPTIONS";
 static constexpr char kOptionName[] = "OPTION_NAME";
 static constexpr char kOptionType[] = "OPTION_TYPE";
@@ -137,6 +144,7 @@ static constexpr char kAllowCommitTimestamp[] = "allow_commit_timestamp";
 static constexpr char kSpannerCommitTimestamp[] = "spanner.commit_timestamp";
 static constexpr char kBool[] = "BOOL";
 static constexpr char kTrue[] = "TRUE";
+static constexpr char kFalse[] = "FALSE";
 static constexpr char kConstraintType[] = "CONSTRAINT_TYPE";
 static constexpr char kIsDeferrable[] = "IS_DEFERRABLE";
 static constexpr char kInitiallyDeferred[] = "INITIALLY_DEFERRED";
@@ -176,6 +184,10 @@ static constexpr char kChangeStreamRetentionPeriodOptionName[] =
     "retention_period";
 static constexpr char kChangeStreamValueCaptureTypeOptionName[] =
     "value_capture_type";
+static constexpr char kModels[] = "MODELS";
+static constexpr char kModelOptions[] = "MODEL_OPTIONS";
+static constexpr char kModelColumns[] = "MODEL_COLUMNS";
+static constexpr char kModelColumnOptions[] = "MODEL_COLUMN_OPTIONS";
 
 static int kDoubleNumericPrecision = 53;
 static int kBigintNumericPrecision = 64;
@@ -201,8 +213,14 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
         kIndexes,
         kIndexColumns,
         kKeyColumnUsage,
+        kModels,
+        kModelOptions,
+        kModelColumns,
+        kModelColumnOptions,
         kReferentialConstraints,
         kSchemata,
+        kSequences,
+        kSequenceOptions,
         kSpannerStatistics,
         kTableConstraints,
         kTables,
@@ -230,6 +248,8 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
         absl::AsciiStrToLower(kKeyColumnUsage),
         absl::AsciiStrToLower(kReferentialConstraints),
         absl::AsciiStrToLower(kSchemata),
+        absl::AsciiStrToLower(kSequences),
+        absl::AsciiStrToLower(kSequenceOptions),
         absl::AsciiStrToLower(kSpannerStatistics),
         absl::AsciiStrToLower(kTableConstraints),
         absl::AsciiStrToLower(kTables),
@@ -495,6 +515,12 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   FillChangeStreamColumnsTable();
   FillChangeStreamOptionsTable();
   FillChangeStreamTablesTable();
+  FillSequencesTable();
+  FillSequenceOptionsTable();
+  FillModelsTable();
+  FillModelOptionsTable();
+  FillModelColumnsTable();
+  FillModelColumnOptionsTable();
 }
 
 inline std::string InformationSchemaCatalog::GetNameForDialect(
@@ -527,6 +553,11 @@ void InformationSchemaCatalog::FillSchemataTable() {
   // Row for the spanner_sys schema.
   rows.push_back(
       GetSchemaRow(table, String(GetNameForDialect(SpannerSysCatalog::kName))));
+
+  // Row for the pg_catalog schema for PG databases.
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    rows.push_back(GetSchemaRow(table, String(GetNameForDialect(kPGCatalog))));
+  }
 
   table->SetContents(rows);
 }
@@ -960,10 +991,10 @@ void InformationSchemaCatalog::FillIndexesTable() {
       if (dialect_ == DatabaseDialect::POSTGRESQL) {
         // PG has one more undocumented column than GSQL called "filter". There
         // is no support in the emulator Index object to print this value so we
-        // leave it as an empty string. It also means the value is not tested
+        // leave it as a null string. It also means the value is not tested
         // since otherwise the tests fail against production which does have a
         // value for it.
-        rows.back().push_back(String(""));
+        rows.back().push_back(NullString());
       }
     }
 
@@ -993,10 +1024,10 @@ void InformationSchemaCatalog::FillIndexesTable() {
     if (dialect_ == DatabaseDialect::POSTGRESQL) {
       // PG has one more undocumented column than GSQL called "filter". There
       // is no support in the emulator Index object to print this value so we
-      // leave it as an empty string. It also means the value is not tested
+      // leave it as a null string. It also means the value is not tested
       // since otherwise the tests fail against production which does have a
       // value for it.
-      rows.back().push_back(String(""));
+      rows.back().push_back(NullString());
     }
   }
 
@@ -2278,6 +2309,317 @@ void InformationSchemaCatalog::FillChangeStreamTablesTable() {
     }
   }
   change_stream_tables->SetContents(rows);
+}
+
+// Fills the "information_schema.sequences" table based on the
+// specifications provided for each dialect: ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#sequences
+// PostgreSQL:
+// https://cloud.google.com/spanner/docs/information-schema-pg#sequences
+//
+// Rows are added for each sequence defined in the default schema.
+void InformationSchemaCatalog::FillSequencesTable() {
+  auto sequences = tables_by_name_.at(GetNameForDialect(kSequences)).get();
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const Sequence* sequence : default_schema_->sequences()) {
+    if (dialect_ == DatabaseDialect::POSTGRESQL) {
+      rows.push_back({// sequence_catalog
+                      String(""),
+                      // sequence_schema
+                      DialectDefaultSchema(),
+                      // sequence_name
+                      String(sequence->Name()),
+                      // data_type
+                      String("INT64"),
+                      // numeric_precision
+                      NullInt64(),
+                      // numeric_precision_radix
+                      NullInt64(),
+                      // numeric_scale
+                      NullInt64(),
+                      // start_value
+                      NullInt64(),
+                      // minimum_value
+                      NullInt64(),
+                      // maximum_value
+                      NullInt64(),
+                      // increment
+                      NullInt64(),
+                      // cycle_option
+                      String(kNo),
+                      // sequence_kind
+                      String(GetNameForDialect(sequence->sequence_kind_name())),
+                      // counter_start_value
+                      (sequence->start_with_counter().has_value()
+                           ? Int64(sequence->start_with_counter().value())
+                           : NullInt64()),
+                      // skip_range_min
+                      (sequence->skip_range_min().has_value()
+                           ? Int64(sequence->skip_range_min().value())
+                           : NullInt64()),
+                      // skip_range_max
+                      (sequence->skip_range_max().has_value()
+                           ? Int64(sequence->skip_range_max().value())
+                           : NullInt64())});
+    } else {
+      rows.push_back({// catalog
+                      String(""),
+                      // schema
+                      DialectDefaultSchema(),
+                      // name
+                      String(sequence->Name()),
+                      // data_type
+                      String("INT64")});
+    }
+  }
+  sequences->SetContents(rows);
+}
+
+// Fills the "information_schema.sequences" table based on the
+// specifications provided for ZetaSQL:
+// https://cloud.google.com/spanner/docs/information-schema#sequence_options //
+// NOLINT
+void InformationSchemaCatalog::FillSequenceOptionsTable() {
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    // PostgreSQL dialect does not have the SEQUENCE_OPTIONS table.
+    return;
+  }
+  auto sequences =
+      tables_by_name_.at(GetNameForDialect(kSequenceOptions)).get();
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const Sequence* sequence : default_schema_->sequences()) {
+    rows.push_back(
+        {// catalog
+         String(""),
+         // schema
+         DialectDefaultSchema(),
+         // name
+         String(sequence->Name()),
+         // option_name
+         String("sequence_kind"),
+         // option_type
+         String("STRING"),
+         // option_value
+         String(absl::AsciiStrToLower(sequence->sequence_kind_name()))});
+    if (sequence->skip_range_min().has_value()) {
+      rows.push_back({// catalog
+                      String(""),
+                      // schema
+                      DialectDefaultSchema(),
+                      // name
+                      String(sequence->Name()),
+                      // option_name
+                      String("skip_range_min"),
+                      // option_type
+                      String("INT64"),
+                      // option_value
+                      Int64(sequence->skip_range_min().value())});
+    }
+    if (sequence->skip_range_max().has_value()) {
+      rows.push_back({// catalog
+                      String(""),
+                      // schema
+                      DialectDefaultSchema(),
+                      // name
+                      String(sequence->Name()),
+                      // option_name
+                      String("skip_range_max"),
+                      // option_type
+                      String("INT64"),
+                      // option_value
+                      Int64(sequence->skip_range_max().value())});
+    }
+    if (sequence->start_with_counter().has_value()) {
+      rows.push_back({// catalog
+                      String(""),
+                      // schema
+                      DialectDefaultSchema(),
+                      // name
+                      String(sequence->Name()),
+                      // option_name
+                      String("start_with_counter"),
+                      // option_type
+                      String("INT64"),
+                      // option_value
+                      Int64(sequence->start_with_counter().value())});
+    }
+  }
+  sequences->SetContents(rows);
+}
+
+void InformationSchemaCatalog::FillModelsTable() {
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const Model* model : default_schema_->models()) {
+    rows.push_back({
+        // model_catalog
+        String(""),
+        // model_schema
+        DialectDefaultSchema(),
+        // model_name
+        String(model->Name()),
+        // is_remote
+        Bool(model->is_remote()),
+    });
+  }
+
+  tables_by_name_.at(GetNameForDialect(kModels))->SetContents(rows);
+}
+
+void InformationSchemaCatalog::FillModelOptionsTable() {
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const Model* model : default_schema_->models()) {
+    if (model->default_batch_size().has_value()) {
+      rows.push_back({
+          // model_catalog
+          String(""),
+          // model_schema
+          DialectDefaultSchema(),
+          // model_name
+          String(model->Name()),
+          // option_name
+          String("default_batch_size"),
+          // option_type
+          String("INT64"),
+          // option_value
+          Int64(*model->default_batch_size()),
+      });
+    }
+    if (model->endpoint().has_value()) {
+      rows.push_back({
+          // model_catalog
+          String(""),
+          // model_schema
+          DialectDefaultSchema(),
+          // model_name
+          String(model->Name()),
+          // option_name
+          String("endpoint"),
+          // option_type
+          String("STRING"),
+          // option_value
+          String(*model->endpoint()),
+      });
+    }
+    if (!model->endpoints().empty()) {
+      rows.push_back({
+          // model_catalog
+          String(""),
+          // model_schema
+          DialectDefaultSchema(),
+          // model_name
+          String(model->Name()),
+          // option_name
+          String("endpoints"),
+          // option_type
+          String("ARRAY<STRING>"),
+          // option_value
+          String(absl::StrCat(
+              "[",
+              absl::StrJoin(model->endpoints(), ", ",
+                            [](std::string* out, const std::string& endpoint) {
+                              absl::StrAppend(out, "'", endpoint, "'");
+                            }),
+              "]")),
+      });
+    }
+  }
+
+  tables_by_name_.at(GetNameForDialect(kModelOptions))->SetContents(rows);
+}
+
+void InformationSchemaCatalog::FillModelColumnsTable() {
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const Model* model : default_schema_->models()) {
+    for (int i = 0; i < model->input().size(); ++i) {
+      FillModelColumnsTable(*model, model->input().at(i), "INPUT", i + 1,
+                            &rows);
+    }
+    for (int i = 0; i < model->output().size(); ++i) {
+      FillModelColumnsTable(*model, model->output().at(i), "OUTPUT", i + 1,
+                            &rows);
+    }
+  }
+
+  tables_by_name_.at(GetNameForDialect(kModelColumns))->SetContents(rows);
+}
+
+void InformationSchemaCatalog::FillModelColumnsTable(
+    const Model& model, const Model::ModelColumn& column,
+    absl::string_view column_kind, int64_t ordinal_position,
+    std::vector<std::vector<zetasql::Value>>* rows) {
+  rows->push_back({
+      // model_catalog
+      String(""),
+      // model_schema
+      DialectDefaultSchema(),
+      // model_name
+      String(model.Name()),
+      // column_kind
+      String(column_kind),
+      // column_name
+      String(column.name),
+      // ordinal_position
+      Int64(ordinal_position),
+      // data_type
+      GetSpannerType(column.type, std::nullopt),
+      // is_explicit
+      Bool(column.is_explicit),
+  });
+}
+
+void InformationSchemaCatalog::FillModelColumnOptionsTable() {
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const Model* model : default_schema_->models()) {
+    for (int i = 0; i < model->input().size(); ++i) {
+      FillModelColumnOptionsTable(*model, model->input().at(i), "INPUT", &rows);
+    }
+    for (int i = 0; i < model->output().size(); ++i) {
+      FillModelColumnOptionsTable(*model, model->output().at(i), "OUTPUT",
+                                  &rows);
+    }
+  }
+
+  tables_by_name_.at(GetNameForDialect(kModelColumnOptions))->SetContents(rows);
+}
+
+void InformationSchemaCatalog::FillModelColumnOptionsTable(
+    const Model& model, const Model::ModelColumn& column,
+    absl::string_view column_kind,
+    std::vector<std::vector<zetasql::Value>>* rows) {
+  rows->push_back({
+      // model_catalog
+      String(""),
+      // model_schema
+      DialectDefaultSchema(),
+      // model_name
+      String(model.Name()),
+      // column_kind
+      String(column_kind),
+      // column_name
+      String(column.name),
+      // option_name
+      String("required"),
+      // option_type
+      GetSpannerType(BoolType(), std::nullopt),
+      // option_value
+      String(column.is_required.value_or(true) ? kTrue : kFalse),
+  });
 }
 
 }  // namespace backend

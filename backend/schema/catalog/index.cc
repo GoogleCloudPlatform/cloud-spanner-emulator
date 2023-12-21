@@ -94,9 +94,15 @@ absl::Status Index::DeepClone(SchemaGraphEditor* editor,
     key_column = schema_node->As<const KeyColumn>();
   }
 
-  for (const Column*& stored_column : stored_columns_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(stored_column));
-    stored_column = schema_node->As<const Column>();
+  for (auto it = stored_columns_.begin(); it != stored_columns_.end();) {
+    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
+    // After CanonicalizeDeletion, the cloned node will be marked as deleted.
+    if (schema_node->is_deleted()) {
+      it = stored_columns_.erase(it);
+    } else {
+      *it = schema_node->As<const Column>();
+      ++it;
+    }
   }
 
   if (!managing_nodes_.empty()) {

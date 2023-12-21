@@ -79,4 +79,41 @@ absl::StatusOr<absl::Time> PgTimestamptzIn(absl::string_view timestamp_string) {
   return absl::UnimplementedError("invoked stub PgTimestamptzIn");
 }
 
+absl::StatusOr<absl::Time> PgTimestamptzAdd(absl::Time input_time,
+                                            absl::string_view interval_string) {
+  return absl::UnimplementedError("invoked stub PgTimestamptzAdd");
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzSubtract(
+    absl::Time input_time, absl::string_view interval_string) {
+  return absl::UnimplementedError("invoked stub PgTimestamptzSubtract");
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzBin(absl::string_view stride,
+                                            absl::Time source,
+                                            absl::Time origin) {
+  return absl::UnimplementedError("invoked stub PgTimestamptzBin");
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzTrunc(absl::string_view field,
+                                              absl::Time source) {
+  return absl::UnimplementedError("invoked stub PgTimestamptzTrunc");
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzTrunc(absl::string_view field,
+                                              absl::Time source,
+                                              absl::string_view timezone) {
+  return absl::UnimplementedError("invoked stub PgTimestamptzTrunc");
+}
+
+absl::StatusOr<absl::Cord> PgTimestamptzExtract(absl::string_view field,
+                                                absl::Time source) {
+  return absl::UnimplementedError("invoked stub PgTimestamptzExtract");
+}
+
+absl::StatusOr<absl::Cord> PgDateExtract(absl::string_view field,
+                                         int32_t source) {
+  return absl::UnimplementedError("invoked stub PgDateExtract");
+}
+
 }  // namespace postgres_translator::function_evaluators

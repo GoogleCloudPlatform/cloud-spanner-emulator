@@ -39,6 +39,18 @@ CREATE TABLE tablegen(
   v3     INT64 NOT NULL DEFAULT (2),
 ) PRIMARY KEY (k);
 CREATE INDEX nullableindex ON nullable(value);
+CREATE TABLE gpktable1(
+  k1 INT64 ,
+  v1 INT64 ,
+  k2_stored INT64 NOT NULL AS (v1+1) STORED,
+  v2 INT64,
+) PRIMARY KEY (k1, k2_stored);
+CREATE TABLE gpktable2(
+  k1 INT64 NOT NULL,
+  k2_stored INT64 AS (k1*3) STORED,
+  v1 INT64 NOT NULL,
+  v2_stored INT64 AS (v1+5) STORED,
+) PRIMARY KEY (k2_stored);
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE users(
@@ -67,4 +79,18 @@ CREATE TABLE tablegen(
   g2     bigint NOT NULL GENERATED ALWAYS AS (v1 + v2) STORED,
   g3     bigint GENERATED ALWAYS AS (v1) STORED,
   v3     bigint NOT NULL DEFAULT (2)
+);
+CREATE TABLE gpktable1(
+  k1 bigint ,
+  v1 bigint ,
+  k2_stored bigint GENERATED ALWAYS AS (v1+1) STORED NOT NULL,
+  v2 bigint,
+  PRIMARY KEY(k1, k2_stored)
+);
+CREATE TABLE gpktable2(
+  k1 bigint NOT NULL,
+  k2_stored bigint GENERATED ALWAYS AS (k1*3) STORED,
+  v1 bigint NOT NULL,
+  v2_stored bigint GENERATED ALWAYS AS (v1+5) STORED,
+  PRIMARY KEY (k2_stored)
 );

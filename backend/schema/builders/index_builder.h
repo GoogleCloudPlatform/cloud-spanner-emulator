@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_INDEX_BUILDER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_INDEX_BUILDER_H_
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -102,6 +103,11 @@ class Index::Editor {
   Editor& remove_managing_node(const SchemaNode* node) {
     auto& nodes = instance_->managing_nodes_;
     nodes.erase(std::remove(nodes.begin(), nodes.end(), node), nodes.end());
+    return *this;
+  }
+
+  Editor& add_stored_column(const Column* column) {
+    instance_->stored_columns_.push_back(column);
     return *this;
   }
 

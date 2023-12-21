@@ -55,6 +55,7 @@ cc_library(
     deps = [
         ":spanner_extended_type",
         "//third_party/spanner_pg/datatypes/common/jsonb:jsonb_parse",
+        "//third_party/spanner_pg/interface:pg_arena_factory",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/hash",
         "@com_google_absl//absl/log",
@@ -80,9 +81,7 @@ cc_test(
     name = "pg_jsonb_type_test",
     srcs = ["pg_jsonb_type_test.cc"],
     tags = [
-        "asan-stable",
-        "msan-stable",
-        "spanner.programmability",
+        "spanner.spangres",
     ],
     deps = [
         ":pg_jsonb_type",
@@ -109,6 +108,7 @@ cc_library(
     hdrs = ["spanner_extended_type_deserializer.h"],
     deps = [
         ":pg_jsonb_type",
+        ":pg_numeric_type",
         "//third_party/spanner_pg/errors:error_catalog",
         "@com_google_absl//absl/status:statusor",
         "@com_google_zetasql//zetasql/base:ret_check",
@@ -122,14 +122,14 @@ cc_test(
     name = "spanner_extended_type_deserializer_test",
     srcs = ["spanner_extended_type_deserializer_test.cc"],
     tags = [
-        "asan-stable",
-        "msan-stable",
-        "spanner.programmability",
+        "spanner.spangres",
     ],
     deps = [
         ":pg_jsonb_type",
+        ":pg_numeric_type",
         ":spanner_extended_type_deserializer",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
@@ -146,6 +146,7 @@ cc_library(
     deps = [
         ":spanner_extended_type",
         "//third_party/spanner_pg/datatypes/common:pg_numeric_parse",
+        "//third_party/spanner_pg/interface:pg_arena_factory",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
         "@com_google_absl//absl/flags:flag",
@@ -171,9 +172,7 @@ cc_test(
     name = "pg_numeric_type_test",
     srcs = ["pg_numeric_type_test.cc"],
     tags = [
-        "asan-stable",
-        "msan-stable",
-        "spanner.programmability",
+        "spanner.spangres",
     ],
     deps = [
         ":pg_numeric_type",
@@ -187,6 +186,106 @@ cc_test(
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:language_options",
         "@com_google_zetasql//zetasql/public:options_cc_proto",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_library(
+    name = "conversion_finder",
+    srcs = [
+        "conversion_finder.cc",
+        "conversion_functions.cc",
+        "pg_jsonb_conversion_functions.cc",
+        "pg_numeric_conversion_functions.cc",
+    ],
+    hdrs = [
+        "conversion_finder.h",
+        "conversion_functions.h",
+        "pg_jsonb_conversion_functions.h",
+        "pg_numeric_conversion_functions.h",
+    ],
+    deps = [
+        ":pg_jsonb_type",
+        ":pg_numeric_type",
+        "//third_party/spanner_pg/catalog:emulator_function_evaluators",
+        "//third_party/spanner_pg/catalog:emulator_functions",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:cord",
+        "@com_google_zetasql//zetasql/base:no_destructor",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:coercer",
+        "@com_google_zetasql//zetasql/public:function",
+        "@com_google_zetasql//zetasql/public:type",
+    ],
+)
+
+cc_test(
+    name = "conversion_finder_test",
+    srcs = ["conversion_finder_test.cc"],
+    deps = [
+        ":conversion_finder",
+        ":pg_jsonb_type",
+        ":pg_numeric_type",
+        "//third_party/spanner_pg/interface:pg_arena_factory",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:coercer",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "pg_numeric_conversion_functions_test",
+    srcs = ["pg_numeric_conversion_functions_test.cc"],
+    deps = [
+        ":conversion_finder",
+        ":pg_numeric_type",
+        "//third_party/spanner_pg/interface:pg_arena_factory",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_library(
+    name = "pg_jsonb_conversion_functions",
+    srcs = [
+        "pg_jsonb_conversion_functions.cc",
+    ],
+    hdrs = [
+        "pg_jsonb_conversion_functions.h",
+    ],
+    deps = [
+        ":pg_jsonb_type",
+        ":pg_numeric_type",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:cord",
+        "@com_google_zetasql//zetasql/public:function",
+    ],
+)
+
+cc_test(
+    name = "pg_jsonb_conversion_functions_test",
+    srcs = ["pg_jsonb_conversion_functions_test.cc"],
+    deps = [
+        ":conversion_finder",
+        ":pg_jsonb_type",
+        ":pg_numeric_type",
+        "//third_party/spanner_pg/datatypes/common:numeric_core",
+        "//third_party/spanner_pg/interface:pg_arena_factory",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base:no_destructor",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
     ],

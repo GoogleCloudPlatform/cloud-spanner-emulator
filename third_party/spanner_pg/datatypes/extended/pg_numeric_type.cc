@@ -57,6 +57,8 @@
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/datatypes/common/pg_numeric_parse.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
+#include "third_party/spanner_pg/interface/pg_arena.h"
+#include "third_party/spanner_pg/interface/pg_arena_factory.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "zetasql/base/compact_reference_counted.h"
@@ -355,6 +357,14 @@ absl::StatusOr<zetasql::Value> CreatePgNumericValue(
   return zetasql::Value::Extended(
       GetPgNumericType(),
       zetasql::ValueContent::Create(new PgNumericRef(normalized)));
+}
+
+absl::StatusOr<zetasql::Value> CreatePgNumericValueWithMemoryContext(
+    absl::string_view numeric_string) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
+      postgres_translator::interfaces::CreatePGArena(nullptr));
+  return CreatePgNumericValue(numeric_string);
 }
 
 absl::StatusOr<zetasql::Value> CreatePgNumericValueWithPrecisionAndScale(

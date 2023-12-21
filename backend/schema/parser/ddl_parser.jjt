@@ -91,6 +91,8 @@ void ddl_statement() :
   (   alter_statement()
     | create_statement()
     | drop_statement()
+    | grant_statement()
+    | revoke_statement()
     | analyze_statement()
   )
   <EOF>
@@ -107,6 +109,7 @@ void create_statement() #void :
     | create_or_replace_statement()
     | create_change_stream_statement()
     | create_sequence_statement()
+    | create_role_statement()
   )
 }
 
@@ -116,6 +119,8 @@ void create_or_replace_statement() :
   [ or_replace() ]
   (
       create_view_statement()
+    | create_model_statement()
+    | create_schema_statement()
   )
 }
 
@@ -187,8 +192,11 @@ void column_def_alter() :
 {
     LOOKAHEAD(2) <SET> ( options_clause()
                          | column_default_clause()
+                         | (<NOT> <NULLL> #set_not_null )
                        )
-  | LOOKAHEAD(2) <DROP> <DEFAULTT> #drop_column_default
+  | LOOKAHEAD(2) <DROP>  ( <DEFAULTT> #drop_column_default
+                          | ( <NOT> <NULLL> #drop_not_null )
+                        )
   | column_def_alter_attrs()
 }
 
@@ -207,6 +215,19 @@ void column_type() :
   | <JSON>
   | <ARRAY> "<" column_type() ">"
 
+  | <STRUCT> ( "<" struct_fields() ">" | "<>" )
+}
+
+void struct_fields() :
+{}
+{
+  struct_field() ( "," struct_field() )*
+}
+
+void struct_field() :
+{}
+{
+  [ identifier() #name ] column_type()
 }
 
 void column_length() :
@@ -352,6 +373,69 @@ void change_stream_tracked_tables_entry() :
   ]
 }
 
+void create_role_statement() :
+{}
+{
+  <ROLE> identifier() #name
+}
+
+void privilege() :
+{}
+{
+  ( <SELECT> | <INSERT> | <UPDATE> | <DELETE> | <EXECUTE> | <USAGE> ) ["(" identifier_list() ")"]
+}
+
+void privileges() :
+{}
+{
+  privilege() ("," privilege())*
+}
+
+// Only structures supported by the emulator are referenced here.
+void target_type():
+{}
+{
+    // TABLE FUNCTION and TABLE share prefix so putting TABLE as second.
+    LOOKAHEAD(2) <TABLE> <FUNCTION> #table_function
+  | <FUNCTION> #function
+  | <TABLE> #table
+  | <CHANGE> <STREAM> #change_stream
+  | <VIEW> #view
+  | <SEQUENCE> #sequence
+}
+
+void privilege_target():
+{}
+{
+  target_type() qualified_identifier_list()
+}
+
+void grantees() :
+{}
+{
+  identifier_list()
+}
+
+void grant_statement() :
+{}
+{
+  <GRANT>
+  (
+   LOOKAHEAD(2) <ROLE> grantees() <TO> <ROLE> grantees()
+   | privileges() <ON> privilege_target() <TO> <ROLE> grantees()
+  )
+}
+
+void revoke_statement() :
+{}
+{
+  <REVOKE>
+  (
+   LOOKAHEAD(2) <ROLE> grantees() <FROM> <ROLE> grantees()
+   | privileges() <ON> privilege_target() <FROM> <ROLE> grantees()
+  )
+}
+
 void create_sequence_statement() :
 {}
 {
@@ -411,6 +495,10 @@ void option_key_val() :
     | <FALSEE> #bool_false_val
     | <INTEGER_LITERAL> #integer_val
     | string_value() #str_val
+    | LOOKAHEAD(3) (
+       "[" ( string_value() #str_val )
+           ( LOOKAHEAD(2) "," string_value() #str_val )*
+       "]") #str_val_list
   )
 }
 
@@ -455,6 +543,29 @@ void if_exists() :
   <IF> <EXISTS>
 }
 
+void create_schema_statement() :
+{}
+{
+  <SCHEMA> [ if_not_exists() ] ( qualified_identifier() #name )
+  [ options_clause() ]
+}
+
+void create_model_statement() :
+{}
+{
+  <MODEL> [ if_not_exists() ] ( qualified_identifier() #name )
+  [ <INPUT> ( model_column_list() #input )
+    <OUTPUT> ( model_column_list() #output ) ]
+  [ <REMOTE> #remote ]
+  [ options_clause() ]
+}
+
+void model_column_list() #void:
+{}
+{
+  "(" column_def() ( LOOKAHEAD(2) "," column_def() )* [ "," ] ")"
+}
+
 void drop_statement() :
 {}
 {
@@ -464,7 +575,10 @@ void drop_statement() :
 
       | <VIEW> #view [ if_exists() ]
       | <CHANGE> <STREAM> #change_stream
+      | <ROLE> #role
       | <SEQUENCE> #sequence [ if_exists() ]
+      | <MODEL> #model [ if_exists() ]
+      | <SCHEMA> #schema [ if_exists() ]
     ) qualified_identifier() #name
 }
 
@@ -477,6 +591,8 @@ void alter_statement() #void :
     | alter_change_stream_statement()
     | alter_index_statement()
     | alter_sequence_statement()
+    | alter_model_statement()
+    | alter_schema_statement()
   )
 }
 
@@ -519,6 +635,20 @@ void alter_sequence_statement() :
 
 }
 
+void alter_schema_statement() :
+{}
+{
+  <SCHEMA> [ if_exists() ] (qualified_identifier() #name)
+  [ <SET> options_clause() ]
+}
+
+void alter_model_statement() :
+{}
+{
+  <MODEL> [ if_exists() ] (qualified_identifier() #name)
+  [<SET> options_clause()]
+}
+
 void analyze_statement() :
 {}
 {
@@ -533,3 +663,4 @@ TOKEN:  /* catch unexpected characters; must be last in file */
   | <ILLEGAL_STRING_ESCAPE: "\\" ~[]> : DEFAULT
   | <ILLEGAL_BYTES_ESCAPE: "\\" ~[]> : DEFAULT
 }
+

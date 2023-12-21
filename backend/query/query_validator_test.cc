@@ -128,6 +128,38 @@ TEST_F(QueryValidatorTest,
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+TEST_F(QueryValidatorTest, ValidateIndexStrategyHintWithCorrectValueReturnsOk) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
+      zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  resolved_table_scan->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"index_strategy",
+      zetasql::MakeResolvedLiteral(
+          zetasql::Value::String("force_index_union"))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ZETASQL_EXPECT_OK(resolved_table_scan->Accept(&validator));
+}
+
+TEST_F(QueryValidatorTest,
+       ValidateIndexStrategyHintWithInvalidValueReturnsError) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
+      zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  resolved_table_scan->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"index_strategy",
+      zetasql::MakeResolvedLiteral(
+          zetasql::Value::String("invalid_value"))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  EXPECT_THAT(resolved_table_scan->Accept(&validator),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 TEST_F(QueryValidatorTest, CollectEmulatorOnlyOptionsFromHints) {
   QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
   std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
@@ -225,6 +257,34 @@ TEST_F(QueryValidatorTest, HashJoinExecutionHintInvalidReturnsError) {
   QueryEngineOptions opts;
   QueryValidator validator{{.schema = schema()}, &opts};
   ASSERT_THAT(resolved_join_scan->Accept(&validator),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(QueryValidatorTest,
+       ValidateJoinMethodHintPushBroadcastHashJoinReturnsOk) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  auto resolved_join_scan = zetasql::MakeResolvedJoinScan();
+  resolved_join_scan->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"join_method",
+      zetasql::MakeResolvedLiteral(
+          zetasql::Value::String("push_broadcast_hash_join"))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ZETASQL_EXPECT_OK(resolved_join_scan->Accept(&validator));
+}
+
+TEST_F(QueryValidatorTest, ValidateJoinMethodHintInvalidValueReturnsError) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  auto resolved_join_scan = zetasql::MakeResolvedJoinScan();
+  resolved_join_scan->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"join_method",
+      zetasql::MakeResolvedLiteral(
+          zetasql::Value::String("invalid_value"))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  EXPECT_THAT(resolved_join_scan->Accept(&validator),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 

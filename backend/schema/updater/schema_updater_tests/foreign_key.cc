@@ -297,6 +297,31 @@ TEST_P(ForeignKeyTest, CreateTableWithForeignKeyAction) {
                               "IDX_T_X_Y_U_5AD6E41B495C5BB9", "CASCADE")));
 }
 
+TEST_P(ForeignKeyTest, CreateTableWithForeignKeyOnDeleteNoAction) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+      CREATE TABLE T (
+        X INT64,
+        Y INT64,
+      ) PRIMARY KEY (X)
+    )",
+                                        R"(
+      CREATE TABLE U (
+        A INT64,
+        B INT64,
+        CONSTRAINT C FOREIGN KEY (A, B) REFERENCES T (X, Y) ON DELETE NO ACTION,
+      ) PRIMARY KEY (A)
+    )"}));
+
+  const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
+  const ForeignKey* c = ASSERT_NOT_NULL(u->FindForeignKey("C"));
+  EXPECT_THAT(
+      c, IsForeignKeyOf(
+             u, BuildExpected(schema.get(), "C", "U", {"A", "B"},
+                              "IDX_U_A_B_N_8C11B65ACA7F01B9", "T", {"X", "Y"},
+                              "IDX_T_X_Y_U_5AD6E41B495C5BB9", "NO ACTION")));
+}
+
 TEST_P(SchemaUpdaterTest, CreateTableWithForeignKeyActionWhenFlagDisabled) {
   EXPECT_THAT(CreateSchema({
                   R"(
@@ -314,6 +339,32 @@ TEST_P(SchemaUpdaterTest, CreateTableWithForeignKeyActionWhenFlagDisabled) {
       ) PRIMARY KEY (A)
     )"}),
               StatusIs(error::ForeignKeyOnDeleteActionUnsupported("CASCADE")));
+}
+
+TEST_P(SchemaUpdaterTest,
+       CreateTableWithForeignKeyOnDeleteNoActionWhenFlagDisabled) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+      CREATE TABLE T (
+        X INT64,
+        Y INT64,
+      ) PRIMARY KEY (X)
+    )",
+                                        R"(
+      CREATE TABLE U (
+        A INT64,
+        B INT64,
+        CONSTRAINT C FOREIGN KEY (A, B) REFERENCES T (X, Y) ON DELETE NO ACTION,
+      ) PRIMARY KEY (A)
+    )"}));
+
+  const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
+  const ForeignKey* c = ASSERT_NOT_NULL(u->FindForeignKey("C"));
+  EXPECT_THAT(
+      c, IsForeignKeyOf(
+             u, BuildExpected(schema.get(), "C", "U", {"A", "B"},
+                              "IDX_U_A_B_N_8C11B65ACA7F01B9", "T", {"X", "Y"},
+                              "IDX_T_X_Y_U_5AD6E41B495C5BB9", "NO ACTION")));
 }
 
 TEST_P(SchemaUpdaterTest,

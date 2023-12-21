@@ -22,6 +22,8 @@
 #include <variant>
 #include <vector>
 
+#include "zetasql/public/json_value.h"
+#include "zetasql/public/numeric_value.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
@@ -32,7 +34,6 @@
 #include "absl/log/log.h"
 #include "absl/types/span.h"
 #include "absl/types/variant.h"
-#include "backend/actions/context.h"
 #include "backend/actions/ops.h"
 #include "backend/datamodel/key.h"
 #include "backend/schema/catalog/column.h"
@@ -48,8 +49,14 @@ namespace emulator {
 namespace backend {
 namespace {
 using JSON = ::nlohmann::json;
+using zetasql::JSONValue;
+using zetasql::NumericValue;
 using zetasql::values::Bool;
 using zetasql::values::Int64;
+using zetasql::values::Json;
+using zetasql::values::JsonArray;
+using zetasql::values::Numeric;
+using zetasql::values::NumericArray;
 using zetasql::values::String;
 
 class ChangeStreamTest : public test::ActionsTest {
@@ -85,32 +92,56 @@ class ChangeStreamTest : public test::ActionsTest {
                         )"},
                     &type_factory_)
                     .value()),
+        pg_schema_(
+            emulator::test::CreateSchemaFromDDL(
+                {
+                    R"(
+                          CREATE TABLE entended_pg_datatypes (
+                            int_col bigint NOT NULL PRIMARY KEY,
+                            jsonb_col jsonb,
+                            jsonb_arr jsonb[],
+                            numeric_col numeric,
+                            numeric_arr numeric[]
+                          )
+                        )",
+                    R"(CREATE CHANGE STREAM pg_stream FOR ALL WITH ( value_capture_type = 'NEW_VALUES' ))",
+                },
+                &type_factory_,
+                database_api::DatabaseDialect::POSTGRESQL)
+                .value()),
         table_(schema_->FindTable("TestTable")),
         table2_(schema_->FindTable("TestTable2")),
+        pg_table_(pg_schema_->FindTable("entended_pg_datatypes")),
         base_columns_(table_->columns()),
         base_columns_table_2_all_col_(table2_->columns()),
+        pg_columns_(pg_table_->columns()),
         change_stream_(schema_->FindChangeStream("ChangeStream_All")),
         change_stream2_(
             schema_->FindChangeStream("ChangeStream_TestTable2StrCol")),
         change_stream3_(
             schema_->FindChangeStream("ChangeStream_TestTable2KeyOnly")),
-        change_stream4_(schema_->FindChangeStream("ChangeStream_TestTable2")) {}
+        change_stream4_(schema_->FindChangeStream("ChangeStream_TestTable2")),
+        pg_change_stream_(pg_schema_->FindChangeStream("pg_stream")) {}
 
  protected:
   // Test components.
   zetasql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
+  std::unique_ptr<const Schema> pg_schema_;
 
   // Test variables.
   const Table* table_;
   const Table* table2_;
   const Table* table3_;
+  const Table* pg_table_;
   absl::Span<const Column* const> base_columns_;
   absl::Span<const Column* const> base_columns_table_2_all_col_;
+  absl::Span<const Column* const> pg_columns_;
   const ChangeStream* change_stream_;
   const ChangeStream* change_stream2_;
   const ChangeStream* change_stream3_;
   const ChangeStream* change_stream4_;
+  const ChangeStream* pg_change_stream_;
   std::vector<const Column*> key_and_another_string_col_table_1_ = {
       table_->FindColumn("int64_col"),
       table_->FindColumn("another_string_col")};
@@ -147,8 +178,9 @@ TEST_F(ChangeStreamTest, AddOneInsertOpAndCheckResultWriteOpContent) {
   buffered_write_ops.push_back(
       Insert(table_, Key({Int64(1)}), base_columns_,
              {Int64(1), String("value"), String("value2")}));
-  std::vector<WriteOp> change_stream_write_ops =
-      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<WriteOp> change_stream_write_ops,
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1));
   // Verify change stream entry is added to the transaction buffer.
   ASSERT_EQ(change_stream_write_ops.size(), 1);
   WriteOp op = change_stream_write_ops[0];
@@ -192,7 +224,6 @@ TEST_F(ChangeStreamTest, AddOneInsertOpAndCheckResultWriteOpContent) {
                                {zetasql::Value(String(col_1_type.dump())),
                                 zetasql::Value(String(col_2_type.dump())),
                                 zetasql::Value(String(col_3_type.dump()))}));
-  // ASSERT_EQ(operation->values[7], zetasql::Value(String("int64_col")));
   // Verify column_types_is_primary_key
   ASSERT_EQ(operation->values[8],
             zetasql::values::Array(
@@ -246,8 +277,9 @@ TEST_F(ChangeStreamTest, AddTwoInsertForDiffSetCols) {
   buffered_write_ops.push_back(
       Insert(table_, Key({Int64(2)}), base_columns_,
              {Int64(2), String("value"), String("value2")}));
-  std::vector<WriteOp> change_stream_write_ops =
-      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<WriteOp> change_stream_write_ops,
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1));
   // Verify change stream entry is added to the transaction buffer.
   ASSERT_EQ(change_stream_write_ops.size(), 1);
 }
@@ -266,8 +298,9 @@ TEST_F(ChangeStreamTest, AddTwoInsertDiffSetsNonKeyTrackedCols) {
                                               table_->FindColumn("string_col")};
   buffered_write_ops.push_back(Insert(table_, Key({Int64(2)}), base_columns2,
                                       {Int64(2), String("value")}));
-  std::vector<WriteOp> change_stream_write_ops =
-      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<WriteOp> change_stream_write_ops,
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1));
   // Verify change stream entry is added to the transaction buffer.
   ASSERT_EQ(change_stream_write_ops.size(), 1);
 }
@@ -297,8 +330,9 @@ TEST_F(ChangeStreamTest, AddMultipleDataChangeRecordsToChangeStreamDataTable) {
              {Int64(3), String("value_row3"), String("value2_row3")}));
   buffered_write_ops.push_back(Delete(table_, Key({Int64(1)})));
   buffered_write_ops.push_back(Delete(table_, Key({Int64(2)})));
-  std::vector<WriteOp> change_stream_write_ops =
-      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<WriteOp> change_stream_write_ops,
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1));
   // Verify the number of change stream entries is added to the transaction
   // buffer.
   // Insert, Insert, Update, Update, Insert, Delete, Delete -> 4 WriteOps
@@ -491,23 +525,28 @@ TEST_F(ChangeStreamTest, AddWriteOpForDiffUserTablesForSameChangeStream) {
   absl::flat_hash_map<const ChangeStream*, ModGroup>
       last_mod_group_by_change_stream;
   // Insert base table entry to TestTable.
-  LogTableMod(Insert(table_, Key({Int64(1)}), base_columns_,
-                     {Int64(1), String("value"), String("value2")}),
-              change_stream_, zetasql::Value::String("11111"),
-              &data_change_records_in_transaction_by_change_stream, 1,
-              &last_mod_group_by_change_stream);
+  ASSERT_THAT(LogTableMod(Insert(table_, Key({Int64(1)}), base_columns_,
+                                 {Int64(1), String("value"), String("value2")}),
+                          change_stream_, zetasql::Value::String("11111"),
+                          &data_change_records_in_transaction_by_change_stream,
+                          1, &last_mod_group_by_change_stream, store()),
+              ::zetasql_base::testing::IsOk());
   // Insert base table entry to TestTable2.
-  LogTableMod(Insert(table2_, Key({Int64(1)}), base_columns_table_2_all_col_,
-                     {Int64(1), String("value"), String("value2")}),
-              change_stream_, zetasql::Value::String("11111"),
-              &data_change_records_in_transaction_by_change_stream, 1,
-              &last_mod_group_by_change_stream);
+  ASSERT_THAT(LogTableMod(Insert(table2_, Key({Int64(1)}),
+                                 base_columns_table_2_all_col_,
+                                 {Int64(1), String("value"), String("value2")}),
+                          change_stream_, zetasql::Value::String("11111"),
+                          &data_change_records_in_transaction_by_change_stream,
+                          1, &last_mod_group_by_change_stream, store()),
+              ::zetasql_base::testing::IsOk());
   // Insert base table entry to TestTable.
-  LogTableMod(Insert(table_, Key({Int64(2)}), base_columns_,
-                     {Int64(2), String("value_row2"), String("value2_row2")}),
-              change_stream_, zetasql::Value::String("11111"),
-              &data_change_records_in_transaction_by_change_stream, 1,
-              &last_mod_group_by_change_stream);
+  ASSERT_THAT(LogTableMod(Insert(table_, Key({Int64(2)}), base_columns_,
+                                 {Int64(2), String("value_row2"),
+                                  String("value2_row2")}),
+                          change_stream_, zetasql::Value::String("11111"),
+                          &data_change_records_in_transaction_by_change_stream,
+                          1, &last_mod_group_by_change_stream, store()),
+              ::zetasql_base::testing::IsOk());
 
   // Set number_of_records_in_transaction in each DataChangeRecord after
   // finishing processing all operations
@@ -518,12 +557,10 @@ TEST_F(ChangeStreamTest, AddWriteOpForDiffUserTablesForSameChangeStream) {
   // buffer.
   ASSERT_EQ(write_ops.size(), 3);
   WriteOp op = write_ops[0];
-  ABSL_LOG(INFO) << "1st op: " << TableOf(op);
   InsertOp* insert_op = std::get_if<InsertOp>(&op);
   ASSERT_NE(insert_op, nullptr);
   EXPECT_EQ(insert_op->values[5], zetasql::Value(String("TestTable")));
   op = write_ops[1];
-  ABSL_LOG(INFO) << "2nd op: " << TableOf(op);
   insert_op = std::get_if<InsertOp>(&op);
   ASSERT_NE(insert_op, nullptr);
   EXPECT_EQ(insert_op->values[5], zetasql::Value(String("TestTable2")));
@@ -544,25 +581,29 @@ TEST_F(ChangeStreamTest, AddWriteOpForDiffNonKeyColsForSameChangeStream) {
   absl::flat_hash_map<const ChangeStream*, ModGroup>
       last_mod_group_by_change_stream;
   // Insert base table entry to TestTable.
-  LogTableMod(
-      Update(table_, Key({Int64(1)}), key_and_another_string_col_table_1_,
-             {Int64(1), String("another_string_value1")}),
-      change_stream_, zetasql::Value::String("11111"),
-      &data_change_records_in_transaction_by_change_stream, 1,
-      &last_mod_group_by_change_stream);
+  ASSERT_THAT(LogTableMod(Update(table_, Key({Int64(1)}),
+                                 key_and_another_string_col_table_1_,
+                                 {Int64(1), String("another_string_value1")}),
+                          change_stream_, zetasql::Value::String("11111"),
+                          &data_change_records_in_transaction_by_change_stream,
+                          1, &last_mod_group_by_change_stream, store()),
+              ::zetasql_base::testing::IsOk());
   // Insert base table entry to TestTable2.
-  LogTableMod(Update(table_, Key({Int64(1)}), key_and_string_col_table_1_,
-                     {Int64(1), String("string_value1")}),
-              change_stream_, zetasql::Value::String("11111"),
-              &data_change_records_in_transaction_by_change_stream, 1,
-              &last_mod_group_by_change_stream);
+  ASSERT_THAT(
+      LogTableMod(Update(table_, Key({Int64(1)}), key_and_string_col_table_1_,
+                         {Int64(1), String("string_value1")}),
+                  change_stream_, zetasql::Value::String("11111"),
+                  &data_change_records_in_transaction_by_change_stream, 1,
+                  &last_mod_group_by_change_stream, store()),
+      ::zetasql_base::testing::IsOk());
   // Insert base table entry to TestTable.
-  LogTableMod(
-      Update(table_, Key({Int64(2)}), key_and_another_string_col_table_1_,
-             {Int64(2), String("another_string_value2")}),
-      change_stream_, zetasql::Value::String("11111"),
-      &data_change_records_in_transaction_by_change_stream, 1,
-      &last_mod_group_by_change_stream);
+  ASSERT_THAT(LogTableMod(Update(table_, Key({Int64(2)}),
+                                 key_and_another_string_col_table_1_,
+                                 {Int64(2), String("another_string_value2")}),
+                          change_stream_, zetasql::Value::String("11111"),
+                          &data_change_records_in_transaction_by_change_stream,
+                          1, &last_mod_group_by_change_stream, store()),
+              ::zetasql_base::testing::IsOk());
   // Set number_of_records_in_transaction in each DataChangeRecord after
   // finishing processing all operations
   std::vector<WriteOp> write_ops =
@@ -587,27 +628,34 @@ TEST_F(ChangeStreamTest, AddWriteOpForDifferentChangeStreams) {
   absl::flat_hash_map<const ChangeStream*, ModGroup>
       last_mod_group_by_change_stream;
   // Insert base table entry to TestTable.
-  LogTableMod(Insert(table2_, Key({Int64(1)}), key_and_string_col_table_2_,
-                     {Int64(1), String("string_value1")}),
-              change_stream_, zetasql::Value::String("11111"),
-              &data_change_records_in_transaction_by_change_stream, 1,
-              &last_mod_group_by_change_stream);
-  LogTableMod(Insert(table2_, Key({Int64(2)}), key_and_string_col_table_2_,
-                     {Int64(2), String("string_value2")}),
-              change_stream2_, zetasql::Value::String("11111"),
-              &data_change_records_in_transaction_by_change_stream, 1,
-              &last_mod_group_by_change_stream);
-  LogTableMod(Insert(table2_, Key({Int64(1)}), key_and_string_col_table_2_,
-                     {Int64(3), String("string_value3")}),
-              change_stream_, zetasql::Value::String("11111"),
-              &data_change_records_in_transaction_by_change_stream, 1,
-              &last_mod_group_by_change_stream);
-  LogTableMod(
-      Insert(table2_, Key({Int64(1)}), key_and_another_string_col_table_2_,
-             {Int64(4), String("another_string_value4")}),
-      change_stream_, zetasql::Value::String("11111"),
-      &data_change_records_in_transaction_by_change_stream, 1,
-      &last_mod_group_by_change_stream);
+  ASSERT_THAT(
+      LogTableMod(Insert(table2_, Key({Int64(1)}), key_and_string_col_table_2_,
+                         {Int64(1), String("string_value1")}),
+                  change_stream_, zetasql::Value::String("11111"),
+                  &data_change_records_in_transaction_by_change_stream, 1,
+                  &last_mod_group_by_change_stream, store()),
+      ::zetasql_base::testing::IsOk());
+  ASSERT_THAT(
+      LogTableMod(Insert(table2_, Key({Int64(2)}), key_and_string_col_table_2_,
+                         {Int64(2), String("string_value2")}),
+                  change_stream2_, zetasql::Value::String("11111"),
+                  &data_change_records_in_transaction_by_change_stream, 1,
+                  &last_mod_group_by_change_stream, store()),
+      ::zetasql_base::testing::IsOk());
+  ASSERT_THAT(
+      LogTableMod(Insert(table2_, Key({Int64(1)}), key_and_string_col_table_2_,
+                         {Int64(3), String("string_value3")}),
+                  change_stream_, zetasql::Value::String("11111"),
+                  &data_change_records_in_transaction_by_change_stream, 1,
+                  &last_mod_group_by_change_stream, store()),
+      ::zetasql_base::testing::IsOk());
+  ASSERT_THAT(LogTableMod(Insert(table2_, Key({Int64(1)}),
+                                 key_and_another_string_col_table_2_,
+                                 {Int64(4), String("another_string_value4")}),
+                          change_stream_, zetasql::Value::String("11111"),
+                          &data_change_records_in_transaction_by_change_stream,
+                          1, &last_mod_group_by_change_stream, store()),
+              ::zetasql_base::testing::IsOk());
   // Set number_of_records_in_transaction in each DataChangeRecord after
   // finishing processing all operations
   std::vector<WriteOp> write_ops =
@@ -645,24 +693,28 @@ TEST_F(ChangeStreamTest,
   absl::flat_hash_map<const ChangeStream*, ModGroup>
       last_mod_group_by_change_stream;
   // Insert base table entry to TestTable.
-  LogTableMod(
-      Insert(table2_, Key({Int64(1)}), key_and_another_string_col_table_2_,
-             {Int64(1), String("another_string_value1")}),
-      change_stream3_, zetasql::Value::String("11111"),
-      &data_change_records_in_transaction_by_change_stream, 1,
-      &last_mod_group_by_change_stream);
+  ASSERT_THAT(LogTableMod(Insert(table2_, Key({Int64(1)}),
+                                 key_and_another_string_col_table_2_,
+                                 {Int64(1), String("another_string_value1")}),
+                          change_stream3_, zetasql::Value::String("11111"),
+                          &data_change_records_in_transaction_by_change_stream,
+                          1, &last_mod_group_by_change_stream, store()),
+              ::zetasql_base::testing::IsOk());
   // Update to an untracked column.
-  LogTableMod(
-      Update(table2_, Key({Int64(1)}), key_and_another_string_col_table_2_,
-             {Int64(1), String("another_string_value_update")}),
-      change_stream3_, zetasql::Value::String("11111"),
-      &data_change_records_in_transaction_by_change_stream, 1,
-      &last_mod_group_by_change_stream);
+  ASSERT_THAT(
+      LogTableMod(
+          Update(table2_, Key({Int64(1)}), key_and_another_string_col_table_2_,
+                 {Int64(1), String("another_string_value_update")}),
+          change_stream3_, zetasql::Value::String("11111"),
+          &data_change_records_in_transaction_by_change_stream, 1,
+          &last_mod_group_by_change_stream, store()),
+      ::zetasql_base::testing::IsOk());
   // Delete the row.
-  LogTableMod(Delete(table2_, Key({Int64(1)})), change_stream3_,
-              zetasql::Value::String("11111"),
-              &data_change_records_in_transaction_by_change_stream, 1,
-              &last_mod_group_by_change_stream);
+  ASSERT_THAT(LogTableMod(Delete(table2_, Key({Int64(1)})), change_stream3_,
+                          zetasql::Value::String("11111"),
+                          &data_change_records_in_transaction_by_change_stream,
+                          1, &last_mod_group_by_change_stream, store()),
+              ::zetasql_base::testing::IsOk());
   // Set number_of_records_in_transaction in each DataChangeRecord after
   // finishing processing all operations
   std::vector<WriteOp> write_ops =
@@ -751,24 +803,28 @@ TEST_F(ChangeStreamTest, InsertUpdateDeleteUntrackedColumnsSameRow) {
   absl::flat_hash_map<const ChangeStream*, ModGroup>
       last_mod_group_by_change_stream;
   // Insert base table entry to TestTable.
-  LogTableMod(
-      Insert(table2_, Key({Int64(1)}), key_and_another_string_col_table_2_,
-             {Int64(1), String("another_string_value1")}),
-      change_stream2_, zetasql::Value::String("11111"),
-      &data_change_records_in_transaction_by_change_stream, 1,
-      &last_mod_group_by_change_stream);
+  ASSERT_THAT(LogTableMod(Insert(table2_, Key({Int64(1)}),
+                                 key_and_another_string_col_table_2_,
+                                 {Int64(1), String("another_string_value1")}),
+                          change_stream2_, zetasql::Value::String("11111"),
+                          &data_change_records_in_transaction_by_change_stream,
+                          1, &last_mod_group_by_change_stream, store()),
+              ::zetasql_base::testing::IsOk());
   // Update to an untracked column.
-  LogTableMod(
-      Update(table2_, Key({Int64(1)}), key_and_another_string_col_table_2_,
-             {Int64(1), String("another_string_value_update")}),
-      change_stream2_, zetasql::Value::String("11111"),
-      &data_change_records_in_transaction_by_change_stream, 1,
-      &last_mod_group_by_change_stream);
+  ASSERT_THAT(
+      LogTableMod(
+          Update(table2_, Key({Int64(1)}), key_and_another_string_col_table_2_,
+                 {Int64(1), String("another_string_value_update")}),
+          change_stream2_, zetasql::Value::String("11111"),
+          &data_change_records_in_transaction_by_change_stream, 1,
+          &last_mod_group_by_change_stream, store()),
+      ::zetasql_base::testing::IsOk());
   // Delete the row.
-  LogTableMod(Delete(table2_, Key({Int64(1)})), change_stream2_,
-              zetasql::Value::String("11111"),
-              &data_change_records_in_transaction_by_change_stream, 1,
-              &last_mod_group_by_change_stream);
+  ASSERT_THAT(LogTableMod(Delete(table2_, Key({Int64(1)})), change_stream2_,
+                          zetasql::Value::String("11111"),
+                          &data_change_records_in_transaction_by_change_stream,
+                          1, &last_mod_group_by_change_stream, store()),
+              ::zetasql_base::testing::IsOk());
   // Set number_of_records_in_transaction in each DataChangeRecord after
   // finishing processing all operations
   std::vector<WriteOp> write_ops =
@@ -872,8 +928,9 @@ TEST_F(ChangeStreamTest, MultipleInsertToSeparateSubsetsColumnsSameTable) {
   buffered_write_ops.push_back(
       Insert(table_, Key({Int64(2)}), key_and_another_string_col_table_1_,
              {Int64(2), String("another_string_value2")}));
-  std::vector<WriteOp> change_stream_write_ops =
-      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<WriteOp> change_stream_write_ops,
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1));
   // Verify the number of rebuilt WriteOps added to the transaction
   // buffer.
   ASSERT_EQ(change_stream_write_ops.size(), 1);
@@ -932,6 +989,118 @@ TEST_F(ChangeStreamTest, MultipleInsertToSeparateSubsetsColumnsSameTable) {
   zetasql::Value mod_old_values = operation->values[12];
   ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
 }
+
+TEST_F(ChangeStreamTest, PgVerifyExtendedDatatypesValueAndType) {
+  set_up_partition_token_for_change_stream_partition_table(pg_change_stream_,
+                                                           store());
+  // Insert base table entry.
+  std::vector<WriteOp> buffered_write_ops;
+  buffered_write_ops.push_back(Insert(
+      pg_table_, Key({Int64(1)}), pg_columns_,
+      {Int64(1), Json(JSONValue(static_cast<int64_t>(2024))),
+       JsonArray({JSONValue(static_cast<int64_t>(1)),
+                  JSONValue(static_cast<int64_t>(2))}),
+       Numeric(11), NumericArray({NumericValue(22), NumericValue(33)})}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<WriteOp> change_stream_write_ops,
+                       BuildChangeStreamWriteOps(
+                           pg_schema_.get(), buffered_write_ops, store(), 1));
+  // Verify change stream entry is added to the transaction buffer.
+  ASSERT_EQ(change_stream_write_ops.size(), 1);
+  WriteOp op = change_stream_write_ops[0];
+  // Verify the table of the received WriteOp
+  ASSERT_EQ(TableOf(op), pg_change_stream_->change_stream_data_table());
+  // Verify the received WriteOp is InsertOp
+  auto* operation = std::get_if<InsertOp>(&op);
+  ASSERT_NE(operation, nullptr);
+  // Verify columns in the rebuilt InsertOp corresponds to columns in
+  // change_stream_data_table
+  ASSERT_EQ(operation->columns,
+            pg_change_stream_->change_stream_data_table()->columns());
+  ASSERT_EQ(operation->columns.size(), 19);
+  ASSERT_EQ(operation->values.size(), 19);
+  // Verify values in the rebuilt InsertOp are correct
+  // Verify partition_token
+  ASSERT_EQ(operation->values[0], zetasql::Value::String("11111"));
+  // Verify record_sequence
+  ASSERT_EQ(operation->values[3], zetasql::Value(String("00000000")));
+  // Verify is_last_record_in_transaction_in_partition
+  ASSERT_EQ(operation->values[4], zetasql::Value(Bool(true)));
+  // Verify table_name
+  ASSERT_EQ(operation->values[5],
+            zetasql::Value(String("entended_pg_datatypes")));
+  // Verify column_types_name
+  ASSERT_EQ(
+      operation->values[6],
+      zetasql::values::Array(zetasql::types::StringArrayType(),
+                               {zetasql::Value(String("int_col")),
+                                zetasql::Value(String("jsonb_col")),
+                                zetasql::Value(String("jsonb_arr")),
+                                zetasql::Value(String("numeric_col")),
+                                zetasql::Value(String("numeric_arr"))}));
+  // Verify column_types_type
+  JSON int_type;
+  int_type["code"] = "INT64";
+  JSON jsonb_type;
+  jsonb_type["code"] = "JSON";
+  jsonb_type["type_annotation"] = "PG_JSONB";
+  JSON json_arr_type;
+  json_arr_type["code"] = "ARRAY";
+  json_arr_type["array_element_type"]["code"] = "JSON";
+  json_arr_type["array_element_type"]["type_annotation"] = "PG_JSONB";
+  JSON numeric_type;
+  numeric_type["code"] = "NUMERIC";
+  numeric_type["type_annotation"] = "PG_NUMERIC";
+  JSON numeric_arr_type;
+  numeric_arr_type["code"] = "ARRAY";
+  numeric_arr_type["array_element_type"]["code"] = "NUMERIC";
+  numeric_arr_type["array_element_type"]["type_annotation"] = "PG_NUMERIC";
+  ASSERT_EQ(operation->values[7],
+            zetasql::values::Array(
+                zetasql::types::StringArrayType(),
+                {zetasql::Value(String(int_type.dump())),
+                 zetasql::Value(String(jsonb_type.dump())),
+                 zetasql::Value(String(json_arr_type.dump())),
+                 zetasql::Value(String(numeric_type.dump())),
+                 zetasql::Value(String(numeric_arr_type.dump()))}));
+  // Verify column_types_is_primary_key
+  ASSERT_EQ(operation->values[8],
+            zetasql::values::Array(
+                zetasql::types::BoolArrayType(),
+                {zetasql::Value(Bool(true)), zetasql::Value(Bool(false)),
+                 zetasql::Value(Bool(false)), zetasql::Value(Bool(false)),
+                 zetasql::Value(Bool(false))}));
+  // Verify column_types_ordinal_position
+  ASSERT_EQ(operation->values[9],
+            zetasql::values::Array(
+                zetasql::types::Int64ArrayType(),
+                {zetasql::Value(Int64(1)), zetasql::Value(Int64(2)),
+                 zetasql::Value(Int64(3)), zetasql::Value(Int64(4)),
+                 zetasql::Value(Int64(5))}));
+  // Verify mods
+  zetasql::Value mod_keys = operation->values[10];
+  ASSERT_EQ(mod_keys.element(0),
+            zetasql::Value(String("{\"int_col\":\"1\"}")));
+  zetasql::Value mod_new_values = operation->values[11];
+  ASSERT_EQ(
+      mod_new_values.element(0),
+      zetasql::Value(String(
+          R"({"jsonb_arr":["1","2"],"jsonb_col":"2024","numeric_arr":["22","33"],"numeric_col":"11"})")));
+  zetasql::Value mod_old_values = operation->values[12];
+  ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
+  // Verify mod_type
+  ASSERT_EQ(operation->values[13], zetasql::Value(String("INSERT")));
+  // Verify value_capture_type
+  ASSERT_EQ(operation->values[14], zetasql::Value(String("NEW_VALUES")));
+  // Verify number_of_records_in_transaction
+  ASSERT_EQ(operation->values[15], zetasql::Value(Int64(1)));
+  // Verify number_of_partitions_in_transaction
+  ASSERT_EQ(operation->values[16], zetasql::Value(Int64(1)));
+  // Verify transaction_tag
+  ASSERT_EQ(operation->values[17], zetasql::Value(String("")));
+  // Verify is_system_transaction
+  ASSERT_EQ(operation->values[18], zetasql::Value(Bool(false)));
+}
+
 }  // namespace
 }  // namespace backend
 }  // namespace emulator

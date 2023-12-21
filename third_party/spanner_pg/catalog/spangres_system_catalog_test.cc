@@ -604,6 +604,36 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
   const zetasql::Type* gsql_pg_jsonb_array = GetPgJsonbArrayType();
 
   // Array functions
+  AssertPGFunctionIsRegistered("array_length", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_int64_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_length", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_string_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_length", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_bool_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_length", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_double_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_length", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_bytes_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_length", {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_date_array),
+                                zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered(
+      "array_length", {ANYARRAYOID, INT8OID},
+      {zetasql::InputArgumentType(gsql_timestamp_array),
+       zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered(
+      "array_length", {ANYARRAYOID, INT8OID},
+      {zetasql::InputArgumentType(gsql_pg_numeric_array),
+       zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered(
+      "array_length", {ANYARRAYOID, INT8OID},
+      {zetasql::InputArgumentType(gsql_pg_jsonb_array),
+       zetasql::InputArgumentType(gsql_int64)});
 
   AssertPGFunctionIsRegistered("array_upper", {ANYARRAYOID, INT8OID},
                                {zetasql::InputArgumentType(gsql_int64_array),

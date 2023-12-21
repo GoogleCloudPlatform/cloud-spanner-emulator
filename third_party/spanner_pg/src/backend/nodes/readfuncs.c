@@ -3868,6 +3868,34 @@ _readAlterSeqStmt(void)
 	READ_DONE();
 }
 
+static RenameStmt*
+_readRenameStmt(void)
+{
+	READ_LOCALS(RenameStmt);
+
+	READ_ENUM_FIELD(renameType, ObjectType);
+  READ_ENUM_FIELD(relationType, ObjectType);
+  READ_NODE_FIELD(relation);
+  READ_NODE_FIELD(object);
+  READ_STRING_FIELD(subname);
+  READ_STRING_FIELD(newname);
+  READ_ENUM_FIELD(behavior, DropBehavior);
+	READ_BOOL_FIELD(missing_ok);
+  READ_BOOL_FIELD(addSynonym);
+
+  READ_DONE();
+}
+
+static SynonymClause*
+_readSynonymClause(void)
+{
+	READ_LOCALS(SynonymClause);
+
+  READ_STRING_FIELD(name);
+
+  READ_DONE();
+}
+
 /*
  * parseNodeString
  *
@@ -4270,6 +4298,10 @@ parseNodeString(void)
 		return_value = _readCreateSeqStmt();
 	else if (MATCH("ALTERSEQSTMT", 12))
 		return_value = _readAlterSeqStmt();
+	else if (MATCH("RENAMESTMT", 10))
+		return_value = _readRenameStmt();
+	else if (MATCH("SYNONYMCLAUSE", 13))
+		return_value = _readSynonymClause();
 	/* SPANGRES END */
 	else
 	{

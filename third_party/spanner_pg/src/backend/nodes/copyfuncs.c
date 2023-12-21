@@ -3778,6 +3778,7 @@ _copyRenameStmt(const RenameStmt *from)
 	COPY_STRING_FIELD(newname);
 	COPY_SCALAR_FIELD(behavior);
 	COPY_SCALAR_FIELD(missing_ok);
+	COPY_SCALAR_FIELD(addSynonym);
 
 	return newnode;
 }
@@ -4958,6 +4959,16 @@ _copyAlterChangeStreamStmt(const AlterChangeStreamStmt *from)
 	return newnode;
 }
 
+static SynonymClause *
+_copySynonymClause(const SynonymClause *from)
+{
+	SynonymClause *newnode = makeNode(SynonymClause);
+
+	COPY_STRING_FIELD(name);
+
+	return newnode;
+}
+
 /* ****************************************************************
  *					extensible.h copy functions
  * ****************************************************************
@@ -5962,7 +5973,9 @@ copyObjectImpl(const void *from)
 		case T_Ttl:
 			retval = _copyTtlSpangres(from);
 			break;
-
+		case T_SynonymClause:
+			retval = _copySynonymClause(from);
+			break;
 			/*
 			 * MISCELLANEOUS NODES
 			 */

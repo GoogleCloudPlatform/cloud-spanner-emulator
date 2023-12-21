@@ -74,7 +74,8 @@ class PgChangeStreamQueryValidatorTest : public testing::Test {
         std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
         postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
     return postgres_translator::spangres::ParseAndAnalyzePostgreSQL(
-        sql, catalog_.get(), analyzer_options_, &type_factory_);
+        sql, catalog_.get(), analyzer_options_, &type_factory_,
+        std::make_unique<FunctionCatalog>(&type_factory_));
   }
 
   zetasql::TypeFactory type_factory_;

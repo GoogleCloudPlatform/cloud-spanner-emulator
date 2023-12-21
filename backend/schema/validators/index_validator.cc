@@ -156,8 +156,6 @@ absl::Status IndexValidator::ValidateUpdate(const Index* index,
   ZETASQL_RET_CHECK_EQ(index->is_null_filtered_, old_index->is_null_filtered_);
   ZETASQL_RET_CHECK_EQ(index->is_unique_, old_index->is_unique_);
   ZETASQL_RET_CHECK_EQ(index->key_columns_.size(), old_index->key_columns_.size());
-  ZETASQL_RET_CHECK_EQ(index->stored_columns_.size(),
-               old_index->stored_columns_.size());
 
   for (int i = 0; i < index->key_columns_.size(); ++i) {
     const KeyColumn* new_key = index->key_columns_[i];

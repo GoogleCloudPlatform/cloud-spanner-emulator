@@ -129,6 +129,82 @@ CreateSchemaWithOneTableAndOneChangeStream(
   return std::move(maybe_schema.value());
 }
 
+absl::StatusOr<std::unique_ptr<const backend::Schema>>
+CreateSchemaWithOneSequence(zetasql::TypeFactory* type_factory,
+                            database_api::DatabaseDialect dialect) {
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_bit_reversed_positive_sequences = true,
+       .enable_bit_reversed_positive_sequences_postgresql = true});
+
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    return CreateSchemaFromDDL(
+        {
+            R"(
+                CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE SKIP RANGE 1 1000
+              )",
+            R"(
+              CREATE TABLE test_table (
+                int64_col bigint DEFAULT nextval('myseq'),
+                string_col varchar,
+                PRIMARY KEY (int64_col)
+              )
+            )",
+        },
+        type_factory
+        ,
+        dialect);
+  } else {
+    return CreateSchemaFromDDL(
+        {
+            R"(
+                CREATE SEQUENCE myseq OPTIONS (
+                  sequence_kind = "bit_reversed_positive",
+                  skip_range_min = 1,
+                  skip_range_max = 1000
+                )
+              )",
+            R"(
+                CREATE TABLE test_table (
+                  int64_col INT64 NOT NULL
+                      DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE myseq)),
+                  string_col STRING(MAX)
+                ) PRIMARY KEY (int64_col)
+              )",
+        },
+        type_factory);
+  }
+}
+
+std::unique_ptr<const backend::Schema> CreateSchemaWithOneModel(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect) {
+  absl::StatusOr<std::unique_ptr<const backend::Schema>> maybe_schema;
+
+  std::string test_table =
+      R"(
+          CREATE TABLE test_table (
+            int64_col INT64 NOT NULL,
+            string_col STRING(MAX)
+          ) PRIMARY KEY (int64_col)
+      )";
+  maybe_schema = CreateSchemaFromDDL(
+      {
+          test_table,
+          R"(
+              CREATE MODEL test_model
+              INPUT (string_col STRING(MAX))
+              OUTPUT (outcome BOOL)
+              REMOTE OPTIONS (endpoint = 'test')
+            )",
+      },
+      type_factory
+      ,
+      dialect);
+
+  ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
+  return std::move(maybe_schema.value());
+}
+
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
     zetasql::TypeFactory* type_factory) {
   auto maybe_schema = CreateSchemaFromDDL(

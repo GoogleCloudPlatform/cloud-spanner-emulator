@@ -40,11 +40,11 @@
 #include "backend/schema/catalog/versioned_catalog.h"
 #include "backend/storage/storage.h"
 #include "backend/transaction/actions.h"
+#include "backend/transaction/foreign_key_restrictions.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/resolve.h"
 #include "backend/transaction/transaction_store.h"
 #include "common/clock.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -195,6 +195,9 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
   const Schema* schema_ ABSL_GUARDED_BY(mu_);
 
   CaseInsensitiveStringMap<std::vector<KeyRange>> deleted_key_ranges_by_table_;
+
+  // Foreign Key action restriction for the transaction.
+  ForeignKeyRestrictions fk_restrictions_;
 };
 
 }  // namespace backend

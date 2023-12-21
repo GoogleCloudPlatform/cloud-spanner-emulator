@@ -59,6 +59,10 @@ class TransactionReadOnlyStore : public ReadOnlyStore {
   absl::StatusOr<bool> PrefixExists(const Table* table,
                                     const Key& prefix_key) const override;
 
+  absl::StatusOr<ValueList> ReadCommitted(
+      const Table* table, const Key& key,
+      std::vector<const Column*> columns) const override;
+
   absl::StatusOr<std::unique_ptr<StorageIterator>> Read(
       const Table* table, const KeyRange& key_range,
       absl::Span<const Column* const> columns) const override;

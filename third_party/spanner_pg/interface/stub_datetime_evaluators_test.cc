@@ -76,6 +76,44 @@ TEST(StubEvaluatorTest, PgTimestamptzIn) {
                                               HasSubstr("TimestamptzIn")));
 }
 
+TEST(StubEvaluatorTest, PgTimestamptzAdd) {
+  EXPECT_THAT(
+      PgTimestamptzAdd(absl::Now(), "a"),
+      StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("TimestamptzAdd")));
+}
+
+TEST(StubEvaluatorTest, PgTimestamptzSubtract) {
+  EXPECT_THAT(PgTimestamptzSubtract(absl::Now(), "a"),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("TimestamptzSubtract")));
+}
+
+TEST(StubEvaluatorTest, PgTimestamptzBin) {
+  EXPECT_THAT(
+      PgTimestamptzBin("a", absl::Now(), absl::Now()),
+      StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("TimestamptzBin")));
+}
+
+TEST(StubEvaluatorTest, PgTimestamptzTrunc) {
+  EXPECT_THAT(PgTimestamptzTrunc("a", absl::Now()),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("TimestamptzTrunc")));
+  EXPECT_THAT(PgTimestamptzTrunc("a", absl::Now(), "b"),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("TimestamptzTrunc")));
+}
+
+TEST(StubEvaluatorTest, PgTimestamptzExtract) {
+  EXPECT_THAT(PgTimestamptzExtract("a", absl::Now()),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("TimestamptzExtract")));
+}
+
+TEST(StubEvaluatorTest, PgDateExtract) {
+  EXPECT_THAT(PgDateExtract("a", 10), StatusIs(absl::StatusCode::kUnimplemented,
+                                               HasSubstr("DateExtract")));
+}
+
 }  // namespace
 }  // namespace postgres_translator::function_evaluators
 

@@ -64,15 +64,13 @@ class PostgresFunctionSignatureArguments {
  public:
   PostgresFunctionSignatureArguments(
       const zetasql::FunctionSignature& signature,
-      bool has_postgres_proc_oid = true, bool has_mapped_function = true,
+      bool has_mapped_function = true,
       const std::string& explicit_mapped_function_name = "")
       : signature_(signature),
-        has_postgres_proc_oid_(has_postgres_proc_oid),
         has_mapped_function_(has_mapped_function),
         explicit_mapped_function_name_(explicit_mapped_function_name) {}
 
   const zetasql::FunctionSignature& signature() const { return signature_; }
-  bool has_postgres_proc_oid() const { return has_postgres_proc_oid_; }
   bool has_mapped_function() const { return has_mapped_function_; }
   const std::string& explicit_mapped_function_name() const {
     return explicit_mapped_function_name_;
@@ -80,7 +78,6 @@ class PostgresFunctionSignatureArguments {
 
  private:
   zetasql::FunctionSignature signature_;
-  bool has_postgres_proc_oid_;
   bool has_mapped_function_;
   // If the mapped function name for this signature is different from the
   // general mapped function name in PostgresFunctionArguments.

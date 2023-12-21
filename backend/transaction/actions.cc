@@ -81,6 +81,14 @@ absl::StatusOr<bool> TransactionReadOnlyStore::PrefixExists(
   return false;
 }
 
+absl::StatusOr<ValueList> TransactionReadOnlyStore::ReadCommitted(
+    const Table* table, const Key& key,
+    std::vector<const Column*> columns) const {
+  ZETASQL_ASSIGN_OR_RETURN(ValueList values,
+                   read_only_store_->ReadCommitted(table, key, columns));
+  return values;
+}
+
 absl::StatusOr<std::unique_ptr<StorageIterator>> TransactionReadOnlyStore::Read(
     const Table* table, const KeyRange& key_range,
     absl::Span<const Column* const> columns) const {

@@ -24,21 +24,23 @@
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
-#include "zetasql/public/simple_catalog.h"
+#include "zetasql/public/types/type.h"
+#include "zetasql/public/types/type_factory.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
+#include "absl/synchronization/mutex.h"
+#include "absl/types/span.h"
 #include "backend/access/read.h"
 #include "backend/common/case.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/function_catalog.h"
+#include "backend/query/queryable_model.h"
+#include "backend/query/queryable_sequence.h"
 #include "backend/query/queryable_table.h"
 #include "backend/query/queryable_view.h"
 #include "backend/query/spanner_sys_catalog.h"
 #include "backend/schema/catalog/schema.h"
-#include "third_party/spanner_pg/catalog/pg_catalog.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -81,12 +83,18 @@ class Catalog : public zetasql::EnumerableCatalog {
                           const FindOptions& options) final;
   absl::Status GetTable(const std::string& name, const zetasql::Table** table,
                         const FindOptions& options) final;
+  absl::Status GetModel(const std::string& name, const zetasql::Model** model,
+                        const FindOptions& options = FindOptions()) final;
   absl::Status GetFunction(const std::string& name,
                            const zetasql::Function** function,
                            const FindOptions& options) final;
-  absl::Status GetTableValuedFunction(
-      const std::string& name, const zetasql::TableValuedFunction** tvf,
-      const FindOptions& options) final;
+  absl::Status FindTableValuedFunction(
+      const absl::Span<const std::string>& path,
+      const zetasql::TableValuedFunction** function,
+      const FindOptions& options = FindOptions()) final;
+  absl::Status GetSequence(const std::string& name,
+                           const zetasql::Sequence** sequence,
+                           const FindOptions& options) final;
 
   // Implementation of the zetasql::EnumerableCatalog interface.
   absl::Status GetCatalogs(
@@ -97,6 +105,9 @@ class Catalog : public zetasql::EnumerableCatalog {
       absl::flat_hash_set<const zetasql::Type*>* output) const final;
   absl::Status GetFunctions(
       absl::flat_hash_set<const zetasql::Function*>* output) const final;
+
+  absl::Status GetType(const std::string& name, const zetasql::Type** type,
+                       const FindOptions& options) final;
 
   // Returns the information schema catalog (creating one if needed).
   zetasql::Catalog* GetInformationSchemaCatalog() const
@@ -127,11 +138,18 @@ class Catalog : public zetasql::EnumerableCatalog {
   // Tables available in the default schema.
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableTable>> tables_;
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableView>> views_;
+  CaseInsensitiveStringMap<std::unique_ptr<const QueryableModel>> models_;
+
+  // Types available in the default schema.
+  CaseInsensitiveStringMap<const zetasql::Type*> types_;
 
   // Change Stream TVFs available in the default schema.
   CaseInsensitiveStringMap<
       std::unique_ptr<const zetasql::TableValuedFunction>>
       tvfs_;
+
+  // Sequences available in the default schema.
+  CaseInsensitiveStringMap<std::unique_ptr<const QueryableSequence>> sequences_;
 
   // Functions available in the default schema.
   const FunctionCatalog* function_catalog_ = nullptr;

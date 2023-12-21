@@ -99,6 +99,10 @@ absl::Status Column::DeepClone(SchemaGraphEditor* editor,
     ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));
     column = schema_node->As<const Column>();
   }
+  for (const SchemaNode*& dependency : sequences_used_) {
+    ZETASQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dependency));
+    dependency = cloned_dep;
+  }
 
   if (source_column_) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* source_column_clone,

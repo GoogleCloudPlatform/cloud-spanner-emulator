@@ -40,8 +40,11 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "zetasql/base/status_macros.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
@@ -65,8 +68,9 @@ TEST(ExtendedTypeDeserializer, DeserializeTypes) {
   SpannerExtendedTypeDeserializer extended_type_deserializer;
   zetasql::TypeDeserializer dummy_type_deserializer(GetTypeFactory());
   std::vector<const zetasql::Type*> types{
-                                            GetPgJsonbType(),
-                                            };
+      GetPgNumericType(),
+      GetPgJsonbType(),
+  };
 
   for (const zetasql::Type* type : types) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
@@ -76,6 +80,38 @@ TEST(ExtendedTypeDeserializer, DeserializeTypes) {
             dummy_type_deserializer));
     EXPECT_EQ(deserialized_type, type);
   }
+}
+
+TEST(ExtendedTypeDeserializer, DeserializeSerializedTypes) {
+  SpannerExtendedTypeDeserializer extended_type_deserializer;
+  zetasql::TypeDeserializer dummy_type_deserializer(GetTypeFactory());
+  std::vector<const zetasql::Type*> types{
+      GetPgNumericType(),
+      GetPgJsonbType(),
+  };
+
+  for (const zetasql::Type* type : types) {
+    zetasql::TypeProto type_proto =
+        MakeExtendedTypeProto(type->TypeName(zetasql::PRODUCT_INTERNAL));
+    // Added the following line to test round trip serialize to deserialize.
+    // Otherwise, this test is similar to the test above.
+    ZETASQL_ASSERT_OK(type->SerializeToProtoAndFileDescriptors(&type_proto));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(auto deserialized_type,
+                         extended_type_deserializer.Deserialize(
+                             type_proto, dummy_type_deserializer));
+    EXPECT_EQ(deserialized_type, type);
+  }
+}
+
+TEST(ExtendedTypeDeserializer, DeserializeUnknownType) {
+  SpannerExtendedTypeDeserializer extended_type_deserializer;
+  zetasql::TypeDeserializer dummy_type_deserializer(GetTypeFactory());
+  ASSERT_THAT(
+      extended_type_deserializer.Deserialize(
+          MakeExtendedTypeProto("PG.UNSUPPORTED"), dummy_type_deserializer),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          testing::HasSubstr("Failed to deserialized extended type")));
 }
 
 }  // namespace

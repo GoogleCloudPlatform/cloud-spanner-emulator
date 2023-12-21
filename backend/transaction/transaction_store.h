@@ -77,6 +77,12 @@ class TransactionStore {
       const Table* table, const Key& key,
       absl::Span<const Column* const> columns) const;
 
+  // Only reads committed values for the given key, ignoring any mutations
+  // buffered within the transaction. Acquires read locks.
+  absl::StatusOr<ValueList> ReadCommitted(
+      const Table* table, const Key& key,
+      std::vector<const Column*> columns) const;
+
   // Returns an iterator for column values of 'key_range' by merging information
   // from the buffered mutations and the base storage. Acquires read locks.
   //

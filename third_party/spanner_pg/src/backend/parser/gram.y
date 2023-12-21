@@ -502,6 +502,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 				 SetResetClause FunctionSetResetClause
 
 %type <node>	TableElement TypedTableElement ConstraintElem TableFuncElement
+%type <node>	TableSynonym
 %type <node>	columnDef columnOptions
 %type <defelt>	def_elem reloption_elem old_aggr_elem operator_def_elem
 %type <node>	def_arg columnElem where_clause where_or_current_clause
@@ -726,7 +727,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 	SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
 	SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL_P STABLE STANDALONE_P
 	START STATEMENT STATISTICS STDIN STDOUT STORAGE STORED STREAM STREAMS STRICT_P STRIP_P
-	SUBSCRIPTION SUBSTRING SUPPORT SYMMETRIC SYSID SYSTEM_P
+	SUBSCRIPTION SUBSTRING SUPPORT SYMMETRIC SYNONYM SYSID SYSTEM_P
 
 	TABLE TABLES TABLESAMPLE TABLESPACE TEMP TEMPLATE TEMPORARY TEXT_P THEN
 	TIES TIME TIMESTAMP TO TRAILING TRANSACTION TRANSFORM
@@ -2840,6 +2841,24 @@ alter_table_cmd:
 					n->def = (Node *)$1;
 					$$ = (Node *) n;
 				}
+			/* ALTER TABLE <name> ADD SYNONYM <synonym> */
+			| ADD_P SYNONYM name
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_AddSynonym;
+					n->name = $3;
+					n->missing_ok = false;
+					$$ = (Node *)n;
+				}
+			/* ALTER TABLE <name> DROP SYNONYM <synonym> */
+			| DROP SYNONYM name
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_DropSynonym;
+					n->name = $3;
+					n->missing_ok = false;
+					$$ = (Node *)n;
+				}
 		;
 
 alter_column_default:
@@ -3629,6 +3648,7 @@ TableElement:
 			columnDef							{ $$ = $1; }
 			| TableLikeClause					{ $$ = $1; }
 			| TableConstraint					{ $$ = $1; }
+			| TableSynonym						{ $$ = $1; }
 		;
 
 TypedTableElement:
@@ -4086,6 +4106,15 @@ ConstraintElem:
 								   &n->skip_validation, NULL,
 								   yyscanner);
 					n->initially_valid = !n->skip_validation;
+					$$ = (Node *)n;
+				}
+		;
+
+TableSynonym:
+			SYNONYM '(' name ')'
+				{
+					SynonymClause *n = makeNode(SynonymClause);
+					n->name = $3;
 					$$ = (Node *)n;
 				}
 		;
@@ -8945,6 +8974,18 @@ RenameStmt: ALTER AGGREGATE aggregate_with_argtypes RENAME TO name
 					n->subname = NULL;
 					n->newname = $6;
 					n->missing_ok = false;
+					n->addSynonym = false;
+					$$ = (Node *)n;
+				}
+			| ALTER TABLE relation_expr RENAME WITH SYNONYM TO name
+				{
+					RenameStmt *n = makeNode(RenameStmt);
+					n->renameType = OBJECT_TABLE;
+					n->relation = $3;
+					n->subname = NULL;
+					n->newname = $8;
+					n->missing_ok = false;
+					n->addSynonym = true;
 					$$ = (Node *)n;
 				}
 			| ALTER TABLE IF_P EXISTS relation_expr RENAME TO name
@@ -8955,6 +8996,18 @@ RenameStmt: ALTER AGGREGATE aggregate_with_argtypes RENAME TO name
 					n->subname = NULL;
 					n->newname = $8;
 					n->missing_ok = true;
+					n->addSynonym = false;
+					$$ = (Node *)n;
+				}
+			| ALTER TABLE IF_P EXISTS relation_expr RENAME WITH SYNONYM TO name
+				{
+					RenameStmt *n = makeNode(RenameStmt);
+					n->renameType = OBJECT_TABLE;
+					n->relation = $5;
+					n->subname = NULL;
+					n->newname = $10;
+					n->missing_ok = true;
+					n->addSynonym = true;
 					$$ = (Node *)n;
 				}
 			| ALTER SEQUENCE qualified_name RENAME TO name

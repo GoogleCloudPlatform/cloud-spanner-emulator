@@ -53,13 +53,18 @@ void AddExprFunctions(
     absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions) {
   functions.insert({PostgresExprIdentifier::Expr(T_CoalesceExpr), "coalesce"});
   functions.insert(
-      {PostgresExprIdentifier::CaseExpr(/*case_has_testexpr=*/ false),
+      {PostgresExprIdentifier::CaseExpr(/*case_has_testexpr=*/false),
        "$case_no_value"});
   functions.insert(
-      {PostgresExprIdentifier::CaseExpr(/*case_has_testexpr=*/ true),
+      {PostgresExprIdentifier::CaseExpr(/*case_has_testexpr=*/true),
        "$case_with_value"});
   functions.insert({PostgresExprIdentifier::Expr(T_NullIfExpr), "nullif"});
-  functions.insert({PostgresExprIdentifier::Expr(T_ScalarArrayOpExpr), "$in"});
+  functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
+                        /*array_op_arg_is_array=*/false),
+                    "$in"});
+  functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
+                        /*array_op_arg_is_array=*/true),
+                    "$in_array"});
 }
 
 void AddBoolExprFunctions(

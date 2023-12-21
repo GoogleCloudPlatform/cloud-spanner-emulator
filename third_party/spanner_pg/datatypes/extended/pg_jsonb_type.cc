@@ -57,6 +57,8 @@
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/datatypes/common/jsonb/jsonb_parse.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
+#include "third_party/spanner_pg/interface/pg_arena.h"
+#include "third_party/spanner_pg/interface/pg_arena_factory.h"
 #include "zetasql/base/compact_reference_counted.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_builder.h"
@@ -257,6 +259,14 @@ absl::StatusOr<zetasql::Value> CreatePgJsonbValue(
     absl::string_view denormalized_jsonb) {
   ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, ParseJson(denormalized_jsonb));
   return CreatePgJsonbValueFromNormalized(jsonb);
+}
+
+absl::StatusOr<zetasql::Value> CreatePgJsonbValueWithMemoryContext(
+    absl::string_view jsonb_string) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
+      postgres_translator::interfaces::CreatePGArena(nullptr));
+  return spangres::datatypes::CreatePgJsonbValue(jsonb_string);
 }
 
 zetasql::Value CreatePgJsonbValueFromNormalized(

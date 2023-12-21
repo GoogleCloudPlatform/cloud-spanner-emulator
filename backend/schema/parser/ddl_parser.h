@@ -40,6 +40,11 @@ extern const char kChangeStreamValueCaptureTypeOptionName[];
 // The option to set the retention period for a change stream.
 extern const char kChangeStreamRetentionPeriodOptionName[];
 
+extern const char kModelColumnRequiredOptionName[];
+extern const char kModelDefaultBatchSizeOptionName[];
+extern const char kModelEndpointOptionName[];
+extern const char kModelEndpointsOptionName[];
+
 absl::Status ParseDDLStatement(absl::string_view ddl, DDLStatement* statement);
 
 }  // namespace ddl

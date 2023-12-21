@@ -16,6 +16,7 @@
 
 #include "backend/query/analyzer_options.h"
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/language_options.h"
 #include "zetasql/public/options.pb.h"
@@ -27,6 +28,8 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+using admin::database::v1::DatabaseDialect;
 
 zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions() {
   zetasql::AnalyzerOptions options;
@@ -95,8 +98,14 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance() {
   return options;
 }
 
-zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViews() {
+zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViews(
+    DatabaseDialect dialect) {
   auto language_opts = MakeGoogleSqlLanguageOptions();
+  if (dialect == DatabaseDialect::POSTGRESQL) {
+    // PG needs ASC NULLS LAST and DESC NULLS FIRST for default values.
+    language_opts.EnableLanguageFeature(
+        zetasql::FEATURE_V_1_3_NULLS_FIRST_LAST_IN_ORDER_BY);
+  }
   // Only CREATE VIEW and CREATE FUNCTION are supported in DDL.
   language_opts.SetSupportedStatementKinds({
       zetasql::RESOLVED_CREATE_VIEW_STMT,

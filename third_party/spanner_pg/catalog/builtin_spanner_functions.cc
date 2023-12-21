@@ -117,7 +117,6 @@ static void AddPgNumericSignaturesForExistingFunctions(
         {"min",
          {{
              {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
-             /*has_postgres_proc_oid=*/true,
              /*has_mapped_function=*/true,
              /*explicit_mapped_function_name=*/"pg.numeric_min",
          }}});
@@ -125,7 +124,6 @@ static void AddPgNumericSignaturesForExistingFunctions(
         {"max",
          {{
              {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
-             /*has_postgres_proc_oid=*/true,
              /*has_mapped_function=*/true,
              /*explicit_mapped_function_name=*/"pg.numeric_max",
          }}});
@@ -133,7 +131,6 @@ static void AddPgNumericSignaturesForExistingFunctions(
         {"abs",
          {{
              {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
-             /*has_postgres_proc_oid=*/true,
              /*has_mapped_function=*/true,
              /*explicit_mapped_function_name=*/"pg.numeric_abs",
          }}});
@@ -141,7 +138,6 @@ static void AddPgNumericSignaturesForExistingFunctions(
         {"ceil",
          {{
              {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
-             /*has_postgres_proc_oid=*/true,
              /*has_mapped_function=*/true,
              /*explicit_mapped_function_name=*/"pg.numeric_ceil",
          }}});
@@ -149,7 +145,6 @@ static void AddPgNumericSignaturesForExistingFunctions(
         {"ceiling",
          {{
              {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
-             /*has_postgres_proc_oid=*/true,
              /*has_mapped_function=*/true,
              /*explicit_mapped_function_name=*/"pg.numeric_ceiling",
          }}});
@@ -157,7 +152,6 @@ static void AddPgNumericSignaturesForExistingFunctions(
         {"floor",
          {{
              {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
-             /*has_postgres_proc_oid=*/true,
              /*has_mapped_function=*/true,
              /*explicit_mapped_function_name=*/"pg.numeric_floor",
          }}});
@@ -166,7 +160,6 @@ static void AddPgNumericSignaturesForExistingFunctions(
          {{
              {gsql_pg_numeric, {gsql_pg_numeric, gsql_pg_numeric},
              /*context_ptr=*/nullptr},
-             /*has_postgres_proc_oid=*/true,
              /*has_mapped_function=*/true,
              /*explicit_mapped_function_name=*/"pg.numeric_mod",
          }}});
@@ -175,7 +168,6 @@ static void AddPgNumericSignaturesForExistingFunctions(
          {{
              {gsql_pg_numeric, {gsql_pg_numeric, gsql_int64},
              /*context_ptr=*/nullptr},
-             /*has_postgres_proc_oid=*/true,
              /*has_mapped_function=*/true,
              /*explicit_mapped_function_name=*/"pg.numeric_trunc",
          }}});
@@ -207,13 +199,18 @@ static void AddPgNumericNewFunctions(
   std::string emulator_mod_fn_name = "pg.numeric_mod";
   std::string emulator_div_trunc_fn_name = "pg.numeric_div_trunc";
   std::string emulator_uminus_fn_name = "pg.numeric_uminus";
+  std::string emulator_eq_fn_name = "pg.numeric_eq";
+  std::string emulator_neq_fn_name = "pg.numeric_ne";
+  std::string emulator_lt_fn_name = "pg.numeric_lt";
+  std::string emulator_le_fn_name = "pg.numeric_le";
+  std::string emulator_gt_fn_name = "pg.numeric_gt";
+  std::string emulator_ge_fn_name = "pg.numeric_ge";
   functions.push_back(
       {"numeric_add",
        "$add",
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
           /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_add_fn_name}}});
   functions.push_back(
@@ -222,7 +219,6 @@ static void AddPgNumericNewFunctions(
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
           /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_subtract_fn_name}}});
   functions.push_back(
@@ -231,7 +227,6 @@ static void AddPgNumericNewFunctions(
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
           /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_divide_fn_name}}});
   functions.push_back(
@@ -240,7 +235,6 @@ static void AddPgNumericNewFunctions(
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
           /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_multiply_fn_name}}});
   functions.push_back(
@@ -249,7 +243,6 @@ static void AddPgNumericNewFunctions(
        {{{gsql_pg_numeric,
           {gsql_pg_numeric},
           /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_abs_fn_name}}});
   functions.push_back(
@@ -258,7 +251,6 @@ static void AddPgNumericNewFunctions(
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
           /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_mod_fn_name}}});
   functions.push_back({"numeric_div_trunc",
@@ -266,7 +258,6 @@ static void AddPgNumericNewFunctions(
                        {{{gsql_pg_numeric,
                           {gsql_pg_numeric, gsql_pg_numeric},
           /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_div_trunc_fn_name}}});
   functions.push_back(
@@ -275,7 +266,6 @@ static void AddPgNumericNewFunctions(
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
           /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_div_trunc_fn_name}}});
   functions.push_back(
@@ -283,41 +273,58 @@ static void AddPgNumericNewFunctions(
        "$unary_minus",
        {{{gsql_pg_numeric, {gsql_pg_numeric},
           /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_uminus_fn_name}}});
 
   // Basic comparison functions
-  functions.push_back({"numeric_eq",
-                       "$equal",
-                       {{{gsql_bool,
-                          {gsql_pg_numeric, gsql_pg_numeric},
-                          /*context_ptr=*/nullptr}}}});
-  functions.push_back({"numeric_ne",
-                       "$not_equal",
-                       {{{gsql_bool,
-                          {gsql_pg_numeric, gsql_pg_numeric},
-                          /*context_ptr=*/nullptr}}}});
-  functions.push_back({"numeric_lt",
-                       "$less",
-                       {{{gsql_bool,
-                          {gsql_pg_numeric, gsql_pg_numeric},
-                          /*context_ptr=*/nullptr}}}});
-  functions.push_back({"numeric_le",
-                       "$less_or_equal",
-                       {{{gsql_bool,
-                          {gsql_pg_numeric, gsql_pg_numeric},
-                          /*context_ptr=*/nullptr}}}});
-  functions.push_back({"numeric_ge",
-                       "$greater_or_equal",
-                       {{{gsql_bool,
-                          {gsql_pg_numeric, gsql_pg_numeric},
-                          /*context_ptr=*/nullptr}}}});
-  functions.push_back({"numeric_gt",
-                       "$greater",
-                       {{{gsql_bool,
-                          {gsql_pg_numeric, gsql_pg_numeric},
-                          /*context_ptr=*/nullptr}}}});
+  functions.push_back(
+      {"numeric_eq",
+       "$equal",
+       {{{gsql_bool,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_eq_fn_name}}});
+  functions.push_back(
+      {"numeric_ne",
+       "$not_equal",
+       {{{gsql_bool,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_neq_fn_name}}});
+  functions.push_back(
+      {"numeric_lt",
+       "$less",
+       {{{gsql_bool,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_lt_fn_name}}});
+  functions.push_back(
+      {"numeric_le",
+       "$less_or_equal",
+       {{{gsql_bool,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_le_fn_name}}});
+  functions.push_back(
+      {"numeric_ge",
+       "$greater_or_equal",
+       {{{gsql_bool,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_ge_fn_name}}});
+  functions.push_back(
+      {"numeric_gt",
+       "$greater",
+       {{{gsql_bool,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr},
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/emulator_gt_fn_name}}});
 
   constexpr zetasql::Function::Mode AGGREGATE =
       zetasql::Function::AGGREGATE;
@@ -440,7 +447,6 @@ static void AddPgJsonbNewFunctions(
                        {{{gsql_string,
                           {gsql_pg_jsonb},
                           /*context_ptr=*/nullptr},
-                         /*has_postgres_proc_oid=*/true,
                          /*has_mapped_function=*/true,
                          /*explicit_mapped_function_name=*/
                          emulator_jsonb_typeof_fn_name}}});
@@ -451,7 +457,6 @@ static void AddPgJsonbNewFunctions(
                        {{{gsql_pg_jsonb,
                           {gsql_pg_jsonb, gsql_int64},
                           /*context_ptr=*/nullptr},
-                         /*has_postgres_proc_oid=*/true,
                          /*has_mapped_function=*/true,
                          /*explicit_mapped_function_name=*/
                          emulator_jsonb_array_element_fn_name}}});
@@ -462,7 +467,6 @@ static void AddPgJsonbNewFunctions(
                        {{{gsql_pg_jsonb,
                           {gsql_pg_jsonb, gsql_string},
                           /*context_ptr=*/nullptr},
-                         /*has_postgres_proc_oid=*/true,
                          /*has_mapped_function=*/true,
                          /*explicit_mapped_function_name=*/
                          emulator_jsonb_object_field_fn_name}}});
@@ -526,7 +530,6 @@ void AddPgArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
         {{gsql_int64,
           {gsql_pg_numeric_arr, gsql_int64},
           /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/"pg.array_upper"});
 
@@ -534,10 +537,49 @@ void AddPgArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
         {{gsql_int64,
           {gsql_pg_jsonb_arr, gsql_int64},
           /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/"pg.array_upper"});
   functions.push_back(array_upper_function);
+
+    PostgresFunctionArguments array_length_function(
+        {"array_length",
+         "pg.array_length",
+         {{{gsql_int64,
+            {gsql_int64_array, gsql_int64},
+            /*context_ptr=*/nullptr}},
+          {{gsql_int64,
+            {gsql_string_array, gsql_int64},
+            /*context_ptr=*/nullptr}},
+          {{gsql_int64,
+            {gsql_bool_array, gsql_int64},
+            /*context_ptr=*/nullptr}},
+          {{gsql_int64,
+            {gsql_double_array, gsql_int64},
+            /*context_ptr=*/nullptr}},
+          {{gsql_int64,
+            {gsql_bytes_array, gsql_int64},
+            /*context_ptr=*/nullptr}},
+          {{gsql_int64,
+            {gsql_date_array, gsql_int64},
+            /*context_ptr=*/nullptr}},
+          {{gsql_int64,
+            {gsql_timestamp_array, gsql_int64},
+            /*context_ptr=*/nullptr}}}});
+
+      array_length_function.add_signature(
+          {{gsql_int64,
+            {gsql_pg_numeric_arr, gsql_int64},
+            /*context_ptr=*/nullptr},
+           /*has_mapped_function=*/true,
+           /*explicit_mapped_function_name=*/"pg.array_length"});
+
+      array_length_function.add_signature(
+          {{gsql_int64,
+            {gsql_pg_jsonb_arr, gsql_int64},
+            /*context_ptr=*/nullptr},
+           /*has_mapped_function=*/true,
+           /*explicit_mapped_function_name=*/"pg.array_length"});
+    functions.push_back(array_length_function);
 }
 
 void AddPgComparisonFunctions(
@@ -585,7 +627,6 @@ void AddPgFormattingFunctions(
                             /*context_ptr=*/nullptr}}}});
     to_char_function.add_signature(
         {{gsql_string, {gsql_pg_numeric, gsql_string}, /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/"pg.to_char"});
   functions.push_back(to_char_function);
@@ -607,7 +648,6 @@ void AddPgFormattingFunctions(
     // Adds to_timestamp signature to existing function definition
     to_timestamp_function->add_signature(
         {{gsql_timestamp, {gsql_string, gsql_string}, /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/"pg.to_timestamp"});
   }
@@ -652,7 +692,6 @@ void AddPgStringFunctions(std::vector<PostgresFunctionArguments>& functions) {
     // Adds substring signature to existing function definition
     substring_function->add_signature(
         {{gsql_string, {gsql_string, gsql_string}, /*context_ptr=*/nullptr},
-         /*has_postgres_proc_oid=*/true,
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/"pg.substring"});
   }
@@ -705,6 +744,58 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
        {{gsql_timestamp, {gsql_timestamp}, /*context_ptr=*/nullptr}}},
        /*mode=*/zetasql::Function::SCALAR,
        /*postgres_namespace=*/"spanner"});
+
+    functions.push_back({"timestamptz_add",
+                         "pg.timestamptz_add",
+                         {{{gsql_timestamp,
+                            {gsql_timestamp, gsql_string},
+                            /*context_ptr=*/nullptr}}},
+                         /*mode=*/zetasql::Function::SCALAR,
+                         /*postgres_namespace=*/"spanner"});
+    functions.push_back({"timestamptz_subtract",
+                         "pg.timestamptz_subtract",
+                         {{{gsql_timestamp,
+                            {gsql_timestamp, gsql_string},
+                            /*context_ptr=*/nullptr}}},
+                         /*mode=*/zetasql::Function::SCALAR,
+                         /*postgres_namespace=*/"spanner"});
+    functions.push_back({"date_bin",
+                         "pg.date_bin",
+                         {{{gsql_timestamp,
+                            {gsql_string, gsql_timestamp, gsql_timestamp},
+                            /*context_ptr=*/nullptr}}},
+                         /*mode=*/zetasql::Function::SCALAR,
+                         /*postgres_namespace=*/"spanner"});
+    functions.push_back({"date_trunc",
+                         "pg.date_trunc",
+                         {{{gsql_timestamp,
+                            {gsql_string, gsql_timestamp},
+                            /*context_ptr=*/nullptr}},
+                          {{gsql_timestamp,
+                            {gsql_string, gsql_timestamp, gsql_string},
+                            /*context_ptr=*/nullptr}}}});
+      functions.push_back({"extract",
+                           "pg.extract",
+                           {{{gsql_pg_numeric,
+                              {gsql_string, gsql_timestamp},
+                              /*context_ptr=*/nullptr}},
+                            {{gsql_pg_numeric,
+                              {gsql_string, gsql_date},
+                              /*context_ptr=*/nullptr}}}});
+    functions.push_back({"euclidean_distance",
+                          "euclidean_distance",
+                        {{{gsql_double,
+                          {gsql_double_array, gsql_double_array},
+                          /*context_ptr=*/nullptr}}},
+                        /*mode=*/zetasql::Function::SCALAR,
+                        /*postgres_namespace=*/"spanner"});
+    functions.push_back({"cosine_distance",
+                          "cosine_distance",
+                        {{{gsql_double,
+                          {gsql_double_array, gsql_double_array},
+                          /*context_ptr=*/nullptr}}},
+                        /*mode=*/zetasql::Function::SCALAR,
+                        /*postgres_namespace=*/"spanner"});
 }
 
 void AddPgLeastGreatestFunctions(
@@ -750,7 +841,6 @@ static void RemapMinFunction(
       // Postgres' order semantics.
       function_signatures.push_back(
           {{gsql_double, {gsql_double}, /*context_ptr=*/nullptr},
-           /*has_postgres_proc_oid=*/true,
            /*has_mapped_function=*/true,
            /*explicit_mapped_function_name=*/"pg.min"});
     }

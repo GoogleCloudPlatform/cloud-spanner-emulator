@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_COMMON_IDS_H_
 
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <string>
 
@@ -75,6 +76,13 @@ using ColumnID = std::string;
 
 // A ColumnID generator. Each table has a single ColumnIDGenerator.
 using ColumnIDGenerator = UniqueIdGenerator<ColumnID>;
+
+// Unique identifier associated with a sequence. SequenceID is guaranteed to be
+// unique within a single database.
+using SequenceID = std::string;
+
+// A SequenceID generator. Each database has a single SequenceIDGenerator.
+using SequenceIDGenerator = UniqueIdGenerator<SequenceID>;
 
 // Unique identifier associated with a transaction.
 using TransactionID = int64_t;

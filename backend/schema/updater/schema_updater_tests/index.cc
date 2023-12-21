@@ -19,12 +19,15 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "zetasql/public/types/array_type.h"
+#include "zetasql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
+#include "common/errors.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 
 namespace google {
@@ -41,6 +44,8 @@ using database_api::DatabaseDialect::POSTGRESQL;
 using google::spanner::v1::TypeAnnotationCode::PG_JSONB;
 using google::spanner::v1::TypeAnnotationCode::PG_NUMERIC;
 using postgres_translator::spangres::datatypes::SpannerExtendedType;
+using testing::IsEmpty;
+using testing::UnorderedElementsAre;
 
 TEST_P(SchemaUpdaterTest, CreateIndex) {
   std::unique_ptr<const Schema> schema;
@@ -496,6 +501,90 @@ TEST_P(SchemaUpdaterTest, CreateIndex_ArrayStoredColumn) {
   ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(types::Int64Type(), &array_type));
 
   EXPECT_THAT(c2, ColumnIs("c2", array_type));
+}
+
+TEST_P(SchemaUpdaterTest, AlterIndex_AddColumn) {
+  const zetasql::ArrayType* int_array_type;
+  ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(types::Int64Type(), &int_array_type));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 INT64,
+        c2 ARRAY<INT64>,
+        c3 STRING(123),
+      ) PRIMARY KEY (k1)
+    )sql",
+                                                  R"sql(
+      CREATE INDEX Idx ON T(c1) STORING(c2)
+    )sql"}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto new_schema,
+      UpdateSchema(schema.get(),
+                   {R"sql(ALTER INDEX Idx ADD STORED COLUMN c3)sql"}));
+  auto idx = new_schema->FindIndex("Idx");
+  ASSERT_NOT_NULL(idx);
+
+  EXPECT_THAT(idx->stored_columns(),
+              UnorderedElementsAre(ColumnIs("c2", int_array_type),
+                                   ColumnIs("c3", types::StringType())));
+}
+
+TEST_P(SchemaUpdaterTest, AlterIndex_AddColumnNotFound) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 INT64
+      ) PRIMARY KEY (k1)
+    )sql",
+                                                  R"sql(
+      CREATE INDEX Idx ON T(c1)
+    )sql"}));
+
+  EXPECT_THAT(
+      UpdateSchema(schema.get(),
+                   {R"sql(ALTER INDEX Idx ADD STORED COLUMN not_existed)sql"}),
+      StatusIs(error::ColumnNotFound("T", "not_existed")));
+}
+
+TEST_P(SchemaUpdaterTest, AlterIndex_DropColumn) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 INT64,
+        c2 ARRAY<INT64>
+      ) PRIMARY KEY (k1)
+    )sql",
+                                                  R"sql(
+      CREATE INDEX Idx ON T(c1) STORING(c2)
+    )sql"}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto new_schema,
+      UpdateSchema(schema.get(),
+                   {R"sql(ALTER INDEX Idx DROP STORED COLUMN c2)sql"}));
+
+  auto idx = new_schema->FindIndex("Idx");
+  ASSERT_NOT_NULL(idx);
+  EXPECT_THAT(idx->stored_columns(), IsEmpty());
+}
+
+TEST_P(SchemaUpdaterTest, AlterIndex_DropColumnNotFound) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 INT64
+      ) PRIMARY KEY (k1)
+    )sql",
+                                                  R"sql(
+      CREATE INDEX Idx ON T(c1)
+    )sql"}));
+
+  EXPECT_THAT(
+      UpdateSchema(schema.get(),
+                   {R"sql(ALTER INDEX Idx DROP STORED COLUMN not_existed)sql"}),
+      StatusIs(error::ColumnNotFoundInIndex("Idx", "not_existed")));
 }
 
 TEST_P(SchemaUpdaterTest, DropTable_WithIndex) {

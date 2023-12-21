@@ -37,6 +37,7 @@
 #include "backend/common/rows.h"
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
+#include "backend/datamodel/value.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
@@ -84,6 +85,26 @@ absl::StatusOr<bool> TestReadOnlyStore::PrefixExists(
   }
   ZETASQL_RETURN_IF_ERROR(itr->Status());
   return false;
+}
+
+absl::StatusOr<ValueList> TestReadOnlyStore::ReadCommitted(
+    const Table* table, const Key& key,
+    std::vector<const Column*> columns) const {
+  std::unique_ptr<StorageIterator> itr;
+  ZETASQL_RETURN_IF_ERROR(store_.Read(absl::InfiniteFuture(), table->id(),
+                              KeyRange::Point(key), GetColumnIDs(columns),
+                              &itr));
+  ValueList values;
+  while (itr->Next()) {
+    for (int i = 0; i < itr->NumColumns(); i++) {
+      if (itr->ColumnValue(i).is_valid()) {
+        values.push_back(itr->ColumnValue(i));
+      } else {
+        values.push_back(zetasql::values::Null(columns[i]->GetType()));
+      }
+    }
+  }
+  return values;
 }
 
 absl::StatusOr<std::unique_ptr<StorageIterator>> TestReadOnlyStore::Read(

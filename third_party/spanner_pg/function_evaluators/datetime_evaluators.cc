@@ -221,4 +221,119 @@ absl::StatusOr<absl::Time> PgTimestamptzIn(absl::string_view timestamp_string) {
   return TimestampFromDatumOr(pg_timestamptz_or_error);
 }
 
+absl::StatusOr<absl::Time> PgTimestamptzAdd(absl::Time input_time,
+                                            absl::string_view interval_string) {
+  Datum input_timestamptz = AbslTimeToPgTimestamptz(input_time);
+
+  ZETASQL_ASSIGN_OR_RETURN(Type interval_type, CheckedPgTypeidType(INTERVALOID));
+  absl::StatusOr<Datum> pg_interval_or_error =
+      postgres_translator::CheckedPgStringTypeDatum(
+          interval_type,
+          const_cast<char*>(std::string(interval_string).c_str()),
+          /*atttypmod=*/-1);
+  ZETASQL_ASSIGN_OR_RETURN(Datum pg_interval, pg_interval_or_error);
+
+  absl::StatusOr<Datum> pg_timestamptz_or_error = CheckedOidFunctionCall2(
+      F_TIMESTAMPTZ_PL_INTERVAL, input_timestamptz, pg_interval);
+
+  return TimestampFromDatumOr(pg_timestamptz_or_error);
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzSubtract(
+    absl::Time input_time, absl::string_view interval_string) {
+  Datum input_timestamptz = AbslTimeToPgTimestamptz(input_time);
+
+  ZETASQL_ASSIGN_OR_RETURN(Type interval_type, CheckedPgTypeidType(INTERVALOID));
+  absl::StatusOr<Datum> pg_interval_or_error =
+      postgres_translator::CheckedPgStringTypeDatum(
+          interval_type,
+          const_cast<char*>(std::string(interval_string).c_str()),
+          /*atttypmod=*/-1);
+  ZETASQL_ASSIGN_OR_RETURN(Datum pg_interval, pg_interval_or_error);
+
+  absl::StatusOr<Datum> pg_timestamptz_or_error = CheckedOidFunctionCall2(
+      F_TIMESTAMPTZ_MI_INTERVAL, input_timestamptz, pg_interval);
+
+  return TimestampFromDatumOr(pg_timestamptz_or_error);
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzBin(absl::string_view stride,
+                                            absl::Time source,
+                                            absl::Time origin) {
+  ZETASQL_ASSIGN_OR_RETURN(Type interval_type, CheckedPgTypeidType(INTERVALOID));
+  absl::StatusOr<Datum> pg_interval_or_error =
+      postgres_translator::CheckedPgStringTypeDatum(
+          interval_type, const_cast<char*>(std::string(stride).c_str()),
+          /*atttypmod=*/-1);
+  ZETASQL_ASSIGN_OR_RETURN(Datum pg_interval, pg_interval_or_error);
+
+  Datum pg_source = AbslTimeToPgTimestamptz(source);
+  Datum pg_origin = AbslTimeToPgTimestamptz(origin);
+
+  absl::StatusOr<Datum> pg_timestamptz_or_error =
+      CheckedOidFunctionCall3(F_DATE_BIN_INTERVAL_TIMESTAMPTZ_TIMESTAMPTZ,
+                              pg_interval, pg_source, pg_origin);
+
+  return TimestampFromDatumOr(pg_timestamptz_or_error);
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzTrunc(absl::string_view field,
+                                              absl::Time source) {
+  ZETASQL_ASSIGN_OR_RETURN(Datum pg_field,
+                   CheckedPgStringToDatum(std::string(field).c_str(), TEXTOID));
+  Datum pg_source = AbslTimeToPgTimestamptz(source);
+  absl::StatusOr<Datum> pg_timestamptz_or_error = CheckedOidFunctionCall2(
+      F_DATE_TRUNC_TEXT_TIMESTAMPTZ, pg_field, pg_source);
+
+  return TimestampFromDatumOr(pg_timestamptz_or_error);
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzTrunc(absl::string_view field,
+                                              absl::Time source,
+                                              absl::string_view timezone) {
+  ZETASQL_ASSIGN_OR_RETURN(Datum pg_field,
+                   CheckedPgStringToDatum(std::string(field).c_str(), TEXTOID));
+  Datum pg_source = AbslTimeToPgTimestamptz(source);
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum pg_timezone,
+      CheckedPgStringToDatum(std::string(timezone).c_str(), TEXTOID));
+  absl::StatusOr<Datum> pg_timestamptz_or_error = CheckedOidFunctionCall3(
+      F_DATE_TRUNC_TEXT_TIMESTAMPTZ_TEXT, pg_field, pg_source, pg_timezone);
+
+  return TimestampFromDatumOr(pg_timestamptz_or_error);
+}
+
+absl::StatusOr<absl::Cord> PgTimestamptzExtract(absl::string_view field,
+                                                absl::Time source) {
+  ZETASQL_ASSIGN_OR_RETURN(Datum pg_field,
+                   CheckedPgStringToDatum(std::string(field).c_str(), TEXTOID));
+  Datum pg_source = AbslTimeToPgTimestamptz(source);
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum result,
+      CheckedOidFunctionCall2(F_EXTRACT_TEXT_TIMESTAMPTZ, pg_field, pg_source));
+  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_string_result,
+                   CheckedOidFunctionCall1(F_NUMERIC_OUT, result));
+  absl::string_view string_value = DatumGetCString(numeric_string_result);
+  ZETASQL_ASSIGN_OR_RETURN(std::string normalized_numeric,
+                   NormalizePgNumeric(string_value));
+  return absl::Cord(normalized_numeric);
+}
+
+absl::StatusOr<absl::Cord> PgDateExtract(absl::string_view field,
+                                         int32_t source) {
+  ZETASQL_ASSIGN_OR_RETURN(Datum pg_field,
+                   CheckedPgStringToDatum(std::string(field).c_str(), TEXTOID));
+  ZETASQL_ASSIGN_OR_RETURN(int32_t pg_date_offset,
+                   SafeGsqlDateOffsetToPgDateOffset(source));
+  Datum pg_source = Int32GetDatum(pg_date_offset);
+  ZETASQL_ASSIGN_OR_RETURN(Datum result, CheckedOidFunctionCall2(F_EXTRACT_TEXT_DATE,
+                                                         pg_field, pg_source));
+  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_string_result,
+                   CheckedOidFunctionCall1(F_NUMERIC_OUT, result));
+  absl::string_view string_value = DatumGetCString(numeric_string_result);
+  ZETASQL_ASSIGN_OR_RETURN(std::string normalized_numeric,
+                   NormalizePgNumeric(string_value));
+  return absl::Cord(normalized_numeric);
+}
+
 }  // namespace postgres_translator::function_evaluators

@@ -114,7 +114,12 @@ TEST_P(DmlTest, CanDeleteFromTable) {
               IsOkAndHoldsRows(
                   {{1, "Levin", 27}, {2, "Mark", 32}, {10, "Douglas", 31}}));
 
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("DELETE FROM users WHERE true")}));
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // PG doesn't need a WHERE clause.
+    ZETASQL_EXPECT_OK(CommitDml({SqlStatement("DELETE FROM users")}));
+  } else {
+    ZETASQL_EXPECT_OK(CommitDml({SqlStatement("DELETE FROM users WHERE true")}));
+  }
 
   EXPECT_THAT(Query("SELECT id, name, age FROM users"), IsOkAndHoldsRows({}));
 }
@@ -462,6 +467,14 @@ TEST_P(DmlTest, JsonType) {
   )")}));
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Can't insert a text value as a jsonb value.
+    EXPECT_THAT(CommitDml({SqlStatement(R"(
+          INSERT INTO jsontable(id, val) VALUES (10, 'abc'::text)
+    )")}),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(Query("SELECT t.val FROM jsontable t WHERE id = 3"),
                 IsOkAndHoldsRow({JsonB(R"({"a": "str"})")}));
   } else {
@@ -592,6 +605,58 @@ TEST_P(DmlTest, DISABLED_ReturningGeneratedColumns) {
   EXPECT_THAT(result_or, IsOkAndHoldsRow({5, 4, 6, 2}));
   EXPECT_THAT(Query("SELECT g1, g2, g3 + 1 FROM tablegen WHERE k = 1;"),
               IsOkAndHoldsRows({}));
+}
+
+TEST_P(DmlTest, InsertGPK) {
+  // Insert with `gpktable1`.
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("INSERT INTO gpktable1(k1, v1, v2) VALUES (1, 1, 0) ")}));
+  EXPECT_THAT(Query("SELECT k1, k2_stored, v2 + 5 FROM gpktable1 WHERE k1 = 1"),
+              IsOkAndHoldsRow({1, 2, 5}));
+
+  // Insert with `gpktable2`.
+  ZETASQL_EXPECT_OK(
+      CommitDml({SqlStatement("INSERT INTO gpktable2(k1, v1) VALUES (1, 1)")}));
+  EXPECT_THAT(
+      Query("SELECT k1, k2_stored, v2_stored + 5 FROM gpktable2 WHERE k1 = 1"),
+      IsOkAndHoldsRow({1, 3, 11}));
+}
+
+TEST_P(DmlTest, DISABLED_ReturningGPK) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_dml_returning = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  std::string returning =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
+                                                                : "THEN RETURN";
+
+  // Insert THEN RETURN with `gpktable1`.
+  std::vector<ValueRow> result_for_insert1;
+  ZETASQL_EXPECT_OK(CommitDmlReturning(
+      {SqlStatement(
+          absl::Substitute("INSERT INTO gpktable1(k1, v1, v2) VALUES (1, 1, 0) "
+                           "$0 k1, k2_stored, v2 + 5;",
+                           returning))},
+      result_for_insert1));
+  absl::StatusOr<std::vector<ValueRow>> result_or = result_for_insert1;
+  EXPECT_THAT(result_or, IsOkAndHoldsRow({1, 2, 5}));
+  EXPECT_THAT(Query("SELECT k1, k2_stored, v2 + 5 FROM gpktable1 WHERE k1 = 1"),
+              IsOkAndHoldsRow({1, 2, 5}));
+
+  // Insert THEN RETURN with `gpktable2`.
+  std::vector<ValueRow> result_for_insert2;
+  ZETASQL_EXPECT_OK(
+      CommitDmlReturning({SqlStatement(absl::Substitute(
+                             "INSERT INTO gpktable2(k1, v1) VALUES (1, 1) "
+                             "$0 k1, k2_stored, v2_stored + 5;",
+                             returning))},
+                         result_for_insert2));
+  result_or = result_for_insert2;
+  EXPECT_THAT(result_or, IsOkAndHoldsRow({1, 3, 11}));
+  EXPECT_THAT(
+      Query("SELECT k1, k2_stored, v2_stored + 5 FROM gpktable2 WHERE k1 = 1"),
+      IsOkAndHoldsRow({1, 3, 11}));
 }
 
 TEST_P(DmlTest, ReturningStructValues) {

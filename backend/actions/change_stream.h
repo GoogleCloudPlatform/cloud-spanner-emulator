@@ -24,6 +24,8 @@
 #include "backend/actions/action.h"
 #include "backend/actions/ops.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/storage/storage.h"
+#include "backend/transaction/actions.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -86,14 +88,15 @@ struct ModGroup {
 
 // Group table mods belonging to the same DataChangeRecord into the same
 // ModGroup.
-void LogTableMod(
+absl::Status LogTableMod(
     WriteOp op, const ChangeStream* change_stream,
     zetasql::Value partition_token,
     absl::flat_hash_map<const ChangeStream*, std::vector<DataChangeRecord>>*
         data_change_records_in_transaction_by_change_stream,
     TransactionID transaction_id,
     absl::flat_hash_map<const ChangeStream*, ModGroup>*
-        last_mod_group_by_change_stream);
+        last_mod_group_by_change_stream,
+    ReadOnlyStore* store);
 
 // Build DataChangeRecords with ModGroups, set the
 // number_of_records_in_transaction field of DataChangeRecords, and then convert
@@ -106,7 +109,7 @@ std::vector<WriteOp> BuildMutation(
         last_mod_group_by_change_stream);
 
 // Build change stream write_ops.
-std::vector<WriteOp> BuildChangeStreamWriteOps(
+absl::StatusOr<std::vector<WriteOp>> BuildChangeStreamWriteOps(
     const Schema* schema, std::vector<WriteOp> buffered_write_ops,
     ReadOnlyStore* store, TransactionID transaction_id);
 }  // namespace backend

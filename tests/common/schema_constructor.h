@@ -22,6 +22,7 @@
 
 #include "zetasql/public/type.h"
 #include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "backend/schema/catalog/schema.h"
 
 namespace google {
@@ -52,6 +53,17 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
 
 std::unique_ptr<const backend::Schema>
 CreateSchemaWithOneTableAndOneChangeStream(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+
+absl::StatusOr<std::unique_ptr<const backend::Schema>>
+CreateSchemaWithOneSequence(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+
+std::unique_ptr<const backend::Schema> CreateSchemaWithOneModel(
     zetasql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);

@@ -80,6 +80,11 @@ class ChangeStreamsHandler {
   backend::Query ConstructDataTablePartitionQuery(absl::Time start,
                                                   absl::Time end) const;
 
+  absl::Status ProcessDataChangeRecordsAndStreamBack(
+      backend::QueryResult& result, bool expect_heartbeat, absl::Time scan_end,
+      bool& expect_metadata, absl::Time* last_record_time,
+      ServerStream<spanner_api::PartialResultSet>* stream);
+
   const backend::ChangeStreamQueryValidator::ChangeStreamMetadata& metadata()
       const {
     return metadata_;

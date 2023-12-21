@@ -160,12 +160,12 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   // statement is an INSERT...VALUES statement with multiple rows.
   // If there is a second RangeTblEntry with rtekind = RTE_SUBQUERY, the
   // statement is an INSERT...SELECT statement.
-  // If the statement has on conflict clause then there are two more
-  // RangeTblEntry(s) for `excluded` alias that allows access to rows
+  // If the statement has on conflict clause then there is an additional
+  // RangeTblEntry for the `excluded` alias that allows access to rows
   // being inserted in the query.
   int rte_count = list_length(query.rtable);
   if (insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE) {
-    ZETASQL_RET_CHECK(rte_count == 3 || rte_count == 4);
+    ZETASQL_RET_CHECK(rte_count == 2 || rte_count == 3);
   } else {
     ZETASQL_RET_CHECK(rte_count == 1 || rte_count == 2);
   }
@@ -254,7 +254,9 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     std::unique_ptr<const zetasql::ResolvedInsertRow> insert_row =
         zetasql::MakeResolvedInsertRow(std::move(value_list));
     row_list.push_back(std::move(insert_row));
-  } else if (rte_count == 1 || rte_count == 3) {
+  } else if (rte_count == 1 ||
+             (rte_count == 2 &&
+              insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE)) {
     // A single row INSERT...VALUES statement.
     // Collect the list of Expr objects from the TargetEntry list.
     // Use the list of Expr objects to construct a row.
@@ -270,7 +272,9 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
         zetasql::MakeResolvedInsertRow(std::move(value_list));
     row_list.push_back(std::move(insert_row));
   } else {
-    ZETASQL_RET_CHECK(rte_count == 2 || rte_count == 4);
+    ZETASQL_RET_CHECK(rte_count == 2 ||
+              (rte_count == 3 &&
+               insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE));
     RangeTblEntry* rte = rt_fetch(2, query.rtable);
     switch (rte->rtekind) {
       case RTE_VALUES: {
@@ -312,13 +316,8 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     }
   }
 
-  if (query.returningList != nullptr &&
-      (insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE ||
-       insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE)) {
-    return absl::UnimplementedError(
-        "RETURNING with ON CONFLICT clause is not supported");
-  }
-  if (insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE) {
+  if (insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE ||
+      insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE) {
     return absl::UnimplementedError(
     "INSERT...ON CONFLICT DO UPDATE statements are not supported.");
   }

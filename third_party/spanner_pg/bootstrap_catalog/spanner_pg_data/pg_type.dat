@@ -1,0 +1,9 @@
+  [
+    { oid => '9009', array_type_oid => '9010',
+  descr => 'representation for TOKENLIST type in Spanner',
+  typname => 'tokenlist', typnamespace => 'spanner',
+  typlen => '-1', typbyval => 'f', typcategory => 'X',
+  typinput => 'spanner_tokenlist_in', typoutput => 'spanner_tokenlist_out',
+  typreceive => '-', typsend => '-',
+  typalign => 'i', typstorage => 'p' },
+  ]
