@@ -43,7 +43,17 @@ namespace postgres_translator::spangres::datatypes::common::jsonb {
 
 // Checks that `json` is a valid JSON document and converts it into Spanner
 // normalized representation.
-absl::StatusOr<absl::Cord> ParseJson(absl::string_view json);
+absl::StatusOr<absl::Cord> ParseJsonb(absl::string_view json);
+
+// Checks that `jsonb` is a valid JSONB array and converts each element into
+// Spanner normalized representation.
+absl::StatusOr<std::vector<absl::Cord>> ParseJsonbArray(
+    absl::string_view jsonb);
+
+// Checks that `jsonb` is a valid JSONB array and converts each element into
+// Spanner normalized representation.
+absl::StatusOr<std::vector<absl::Cord>> ParseJsonbArray(
+    absl::string_view jsonb);
 
 // Normalizes a string to conform to PG.JSONB's normalization rules, for
 // dealing with escaping characters and rejecting \u0000.

@@ -161,6 +161,7 @@ namespace types {
 const PostgresTypeMapping* PgBoolMapping();
 const PostgresTypeMapping* PgInt8Mapping();
 const PostgresTypeMapping* PgFloat8Mapping();
+const PostgresTypeMapping* PgFloat4Mapping();
 const PostgresTypeMapping* PgVarcharMapping();
 const PostgresTypeMapping* PgTextMapping();
 const PostgresTypeMapping* PgByteaMapping();
@@ -171,6 +172,7 @@ const PostgresTypeMapping* PgDateMapping();
 const PostgresTypeMapping* PgBoolArrayMapping();
 const PostgresTypeMapping* PgInt8ArrayMapping();
 const PostgresTypeMapping* PgFloat8ArrayMapping();
+const PostgresTypeMapping* PgFloat4ArrayMapping();
 const PostgresTypeMapping* PgVarcharArrayMapping();
 const PostgresTypeMapping* PgTextArrayMapping();
 const PostgresTypeMapping* PgByteaArrayMapping();

@@ -221,6 +221,35 @@ std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
   return std::move(maybe_schema.value());
 }
 
+std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableWithSynonym(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect) {
+  std::string test_table =
+      R"(
+          CREATE TABLE test_table (
+            int64_col INT64 NOT NULL,
+            string_col STRING(MAX),
+            SYNONYM(test_synonym)
+          ) PRIMARY KEY (int64_col)
+      )";
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    test_table =
+        R"(
+            CREATE TABLE test_table (
+              int64_col bigint NOT NULL PRIMARY KEY,
+              string_col varchar,
+              SYNONYM(test_synonym)
+            )
+        )";
+  }
+  auto maybe_schema = CreateSchemaFromDDL({test_table},
+                                          type_factory
+                                          ,
+                                          dialect);
+  ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
+  return std::move(maybe_schema.value());
+}
+
 std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
     zetasql::TypeFactory* const type_factory,
     database_api::DatabaseDialect dialect) {
@@ -495,6 +524,28 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithView(
   return std::move(maybe_schema.value());
 }
 
+std::unique_ptr<const backend::Schema> CreateSchemaWithNamedSchema(
+    zetasql::TypeFactory* type_factory) {
+  test::ScopedEmulatorFeatureFlagsSetter setter({.enable_views = true});
+  auto maybe_schema = CreateSchemaFromDDL(
+      {
+          R"(
+              CREATE TABLE test_table (
+                int64_col INT64 NOT NULL,
+                string_col STRING(MAX)
+              ) PRIMARY KEY (int64_col)
+            )",
+          R"(
+              CREATE SCHEMA Foo
+            )",
+      },
+      type_factory);
+  if (!maybe_schema.ok()) {
+    ABSL_LOG(ERROR) << "Failed to create the schema: " << maybe_schema.status();
+    return nullptr;
+  }
+  return std::move(maybe_schema.value());
+}
 }  // namespace test
 }  // namespace emulator
 }  // namespace spanner

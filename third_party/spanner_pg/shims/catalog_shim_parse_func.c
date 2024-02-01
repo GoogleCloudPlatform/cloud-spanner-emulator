@@ -387,6 +387,30 @@ void unify_hypothetical_args(ParseState* pstate, List* fargs,
 Node* ParseComplexProjection(ParseState* pstate, const char* funcname,
                              Node* first_arg, int location);
 
+/*
+ * SPANGRES: Unlike Postgres, Spanner function evaluators can not handle
+ * UNKNOWNOID values (and they will be rejected during forward transformation in
+ * BuildGsqlType). This function compensates for that by replacing UNKNOWNOID
+ * declared argument types with TEXTOID. The coercion itself will then be done
+ * in make_fn_arguments.
+ */
+static void coerce_unknown_literal_arguments(Oid funcid, List *fargs,
+                                             Oid *declared_arg_types) {
+  // For these functions UNKNOWNOID literals should be coerced as text values
+  if (funcid == F_JSONB_BUILD_ARRAY_ANY || funcid == F_JSONB_BUILD_OBJECT_ANY ||
+      funcid == F_CONCAT) {
+    ListCell *l;
+    int i = 0;
+    foreach (l, fargs) {
+      Node *arg = lfirst(l);
+      if (declared_arg_types[i] == ANYOID && IsA(arg, Const) &&
+          exprType(arg) == UNKNOWNOID) {
+        declared_arg_types[i] = TEXTOID;
+      }
+      i++;
+    }
+  }
+}
 
 /*
  *	Parse a function call
@@ -957,6 +981,14 @@ Node* ParseFuncOrColumn(ParseState* pstate, List* funcname,
 											   rettype,
 											   false);
 
+	/*
+	 * SPANGRES: handle unknown string literals in functions declared to take
+	 * "any" arguments
+	 */
+	if (ShouldCoerceUnknownLiterals()) {
+		coerce_unknown_literal_arguments(funcid, fargs, declared_arg_types);
+	}
+
 	/* perform the necessary typecasting of arguments */
 	make_fn_arguments(pstate, fargs, actual_arg_types, declared_arg_types);
 
@@ -1027,6 +1059,17 @@ Node* ParseFuncOrColumn(ParseState* pstate, List* funcname,
 	if (retset)
 		check_srf_call_placement(pstate, last_srf, location);
 
+	/* SPANGRES: Transform statement hints */
+	ListCell* lc;
+	List* function_hints = NIL;
+	if (fn) {
+		foreach(lc, fn->functionHints) {
+			function_hints =
+				lappend(function_hints,
+						transformSpangresHint(pstate, castNode(DefElem, lfirst(lc))));
+		}
+	}
+
 	/* build the appropriate output structure */
 	if (fdresult == FUNCDETAIL_NORMAL || fdresult == FUNCDETAIL_PROCEDURE)
 	{
@@ -1040,6 +1083,7 @@ Node* ParseFuncOrColumn(ParseState* pstate, List* funcname,
 		/* funccollid and inputcollid will be set by parse_collate.c */
 		funcexpr->args = fargs;
 		funcexpr->location = location;
+		funcexpr->functionHints = function_hints;
 
 		retval = (Node *) funcexpr;
 	}
@@ -1062,6 +1106,7 @@ Node* ParseFuncOrColumn(ParseState* pstate, List* funcname,
 		/* agglevelsup will be set by transformAggregateCall */
 		aggref->aggsplit = AGGSPLIT_SIMPLE; /* planner might change this */
 		aggref->location = location;
+		aggref->functionHints = function_hints;
 
 		/*
 		 * Reject attempt to call a parameterless aggregate without (*)
@@ -1117,6 +1162,7 @@ Node* ParseFuncOrColumn(ParseState* pstate, List* funcname,
 		wfunc->winagg = (fdresult == FUNCDETAIL_AGGREGATE);
 		wfunc->aggfilter = agg_filter;
 		wfunc->location = location;
+		wfunc->functionHints = function_hints;
 
 		/*
 		 * agg_star is allowed for aggregate functions but distinct isn't

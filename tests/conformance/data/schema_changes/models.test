@@ -250,6 +250,17 @@ REMOTE OPTIONS (
 ERROR: Model m1 has invalid default_batch_size option: 11. Must be between 1 and 10
 ==
 
+# Create model: array of arrays
+CREATE MODEL m1
+INPUT (f_array ARRAY<ARRAY<STRING(MAX)>>)
+OUTPUT(l_array ARRAY<ARRAY<BOOL>>)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: Array of arrays type is not supported by the schema.
+==
+
 # Create model: empty inputs
 CREATE MODEL m1
 OUTPUT(label STRING(MAX))
@@ -485,6 +496,17 @@ REMOTE OPTIONS (
 );
 --
 ERROR: Type DATE is not supported in model columns. Used in Model m1 column feature.
+==
+
+# Invalid inputs: invalid type
+CREATE MODEL m1
+INPUT (feature BAD)
+OUTPUT(label STRING(MAX))
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: BAD
 ==
 
 # Invalid inputs: duplicate column
@@ -800,6 +822,17 @@ REMOTE OPTIONS (
 );
 --
 ERROR: Type DATE is not supported in model columns. Used in Model m1 column label.
+==
+
+# Invalid outputs: invalid type
+CREATE MODEL m1
+INPUT (feature INT64)
+OUTPUT(label BAD)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/schemaless'
+);
+--
+ERROR: BAD
 ==
 
 # Invalid outputs: duplicate column

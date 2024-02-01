@@ -1552,6 +1552,7 @@ _copyAggref(const Aggref *from)
 	COPY_SCALAR_FIELD(aggno);
 	COPY_SCALAR_FIELD(aggtransno);
 	COPY_LOCATION_FIELD(location);
+	COPY_NODE_FIELD(functionHints);
 
 	return newnode;
 }
@@ -1591,6 +1592,7 @@ _copyWindowFunc(const WindowFunc *from)
 	COPY_SCALAR_FIELD(winstar);
 	COPY_SCALAR_FIELD(winagg);
 	COPY_LOCATION_FIELD(location);
+	COPY_NODE_FIELD(functionHints);
 
 	return newnode;
 }
@@ -1633,6 +1635,7 @@ _copyFuncExpr(const FuncExpr *from)
 	COPY_SCALAR_FIELD(inputcollid);
 	COPY_NODE_FIELD(args);
 	COPY_LOCATION_FIELD(location);
+	COPY_NODE_FIELD(functionHints);
 
 	return newnode;
 }
@@ -2791,6 +2794,7 @@ _copyFuncCall(const FuncCall *from)
 	COPY_SCALAR_FIELD(func_variadic);
 	COPY_SCALAR_FIELD(funcformat);
 	COPY_LOCATION_FIELD(location);
+	COPY_NODE_FIELD(functionHints);
 
 	return newnode;
 }
@@ -3076,6 +3080,7 @@ _copyConstraint(const Constraint *from)
 	COPY_NODE_FIELD(raw_expr);
 	COPY_STRING_FIELD(cooked_expr);
 	COPY_SCALAR_FIELD(generated_when);
+	COPY_SCALAR_FIELD(stored_kind);
 	COPY_NODE_FIELD(keys);
 	COPY_NODE_FIELD(including);
 	COPY_NODE_FIELD(exclusions);
@@ -3779,6 +3784,27 @@ _copyRenameStmt(const RenameStmt *from)
 	COPY_SCALAR_FIELD(behavior);
 	COPY_SCALAR_FIELD(missing_ok);
 	COPY_SCALAR_FIELD(addSynonym);
+
+	return newnode;
+}
+
+static TableRenameOp *
+_copyTableRenameOp(const TableRenameOp *from)
+{
+	TableRenameOp *newnode = makeNode(TableRenameOp);
+
+	COPY_NODE_FIELD(fromName);
+	COPY_STRING_FIELD(toName);
+
+	return newnode;
+}
+
+static TableChainedRenameStmt *
+_copyTableChainedRenameStmt(const TableChainedRenameStmt *from)
+{
+	TableChainedRenameStmt *newnode = makeNode(TableChainedRenameStmt);
+
+	COPY_NODE_FIELD(ops);
 
 	return newnode;
 }
@@ -5553,6 +5579,12 @@ copyObjectImpl(const void *from)
 			break;
 		case T_RenameStmt:
 			retval = _copyRenameStmt(from);
+			break;
+		case T_TableRenameOp:
+			retval = _copyTableRenameOp(from);
+			break;
+		case T_TableChainedRenameStmt:
+			retval = _copyTableChainedRenameStmt(from);
 			break;
 		case T_AlterObjectDependsStmt:
 			retval = _copyAlterObjectDependsStmt(from);

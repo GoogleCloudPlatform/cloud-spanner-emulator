@@ -407,27 +407,26 @@ ForwardTransformer::BuildGsqlResolvedScanForFunctionCall(
   // the other variants (for record or range). UNNEST becomes an ArrayScan in
   // ZetaSQL.
   if (func_expr->funcid == array_unnest_proc_oid) {
-      return BuildGsqlResolvedArrayScan(*rte, rtindex, external_scope,
+    return BuildGsqlResolvedArrayScan(*rte, rtindex, external_scope,
                                         output_scope);
   } else {
-    // Anything else had better be a TVF. For now that's Change Streams only.
+    // Anything else had better be a TVF. For now that's Change Streams, which
+    // is user defined and assigned a temporary oid in CatalogAdapter, or
+    // builtin TVFs.
     auto tvf_catalog_entry = catalog_adapter().GetTVFFromOid(func_expr->funcid);
     if (tvf_catalog_entry.ok()) {
-      return BuildGsqlResolvedTVFScan(*rte, rtindex, *tvf_catalog_entry,
-                                      output_scope);
-    } else {
-      // If CatalogAdapter doesn't know about this TVF, it's an unsupported
-      // builtin function.
-      return absl::InvalidArgumentError(
-          "Unsupported function call in FROM clause");
+      return BuildGsqlResolvedTVFScan(*rte, rtindex, external_scope,
+                                      *tvf_catalog_entry, output_scope);
     }
+    return absl::InvalidArgumentError(
+        "Unsupported function call in FROM clause");
   }
 }
 
 absl::Status ForwardTransformer::PrepareTVFInputArguments(
     const FuncExpr& func_expr,
     const zetasql::TableValuedFunction* tvf_catalog_entry,
-    VarIndexScope* output_scope,
+    const VarIndexScope* external_scope,
     std::unique_ptr<zetasql::FunctionSignature>* result_signature,
     std::vector<std::unique_ptr<const zetasql::ResolvedFunctionArgument>>*
         resolved_tvf_args,
@@ -444,7 +443,7 @@ absl::Status ForwardTransformer::PrepareTVFInputArguments(
   //     TableValuedFunction::Resolve() (computes the TVF's output signature).
   const int num_args = list_length(func_expr.args);
   ExprTransformerInfo expr_transformer_info =
-      ExprTransformerInfo::ForScalarFunctions(output_scope, "FROM");
+      ExprTransformerInfo::ForScalarFunctions(external_scope, "FROM");
   resolved_tvf_args->reserve(num_args);
   for (Expr* arg : StructList<Expr*>(func_expr.args)) {
     ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedExpr> expr,
@@ -1215,6 +1214,7 @@ ForwardTransformer::BuildGsqlResolvedArrayScan(
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedTVFScan>>
 ForwardTransformer::BuildGsqlResolvedTVFScan(
     const RangeTblEntry& rte, Index rtindex,
+    const VarIndexScope* external_scope,
     const zetasql::TableValuedFunction* tvf_catalog_entry,
     VarIndexScope* output_scope) {
   ZETASQL_RET_CHECK_NE(tvf_catalog_entry, nullptr);
@@ -1232,7 +1232,7 @@ ForwardTransformer::BuildGsqlResolvedTVFScan(
       resolved_tvf_args;
   std::vector<zetasql::TVFInputArgumentType> tvf_input_arguments;
   ZETASQL_RETURN_IF_ERROR(PrepareTVFInputArguments(
-      *func_expr, tvf_catalog_entry, output_scope, &result_signature,
+      *func_expr, tvf_catalog_entry, external_scope, &result_signature,
       &resolved_tvf_args, &tvf_input_arguments));
 
   std::shared_ptr<zetasql::TVFSignature> tvf_signature;

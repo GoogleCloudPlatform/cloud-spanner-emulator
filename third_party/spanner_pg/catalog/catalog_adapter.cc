@@ -210,13 +210,22 @@ absl::StatusOr<const FormData_pg_proc*> CatalogAdapter::GetUDFProcFromOid(
 
 absl::StatusOr<const zetasql::TableValuedFunction*>
 CatalogAdapter::GetTVFFromOid(Oid oid) const {
+  // TVFs can be user defined and assigned a temporary Oid in the CatalogAdapter
+  // or they can be builtin and found in the EngineSystemCatalog.
   auto iter = oid_to_tvf_map_.find(oid);
-  if (iter == oid_to_tvf_map_.end()) {
-    return absl::NotFoundError(absl::StrCat(
-        "No TVF with oid ", oid, " is tracked by the catalog adapter"));
+  if (iter != oid_to_tvf_map_.end()) {
+    return iter->second;
   }
-  return iter->second;
+
+  auto builtin_tvf = engine_system_catalog_->GetTableValuedFunction(oid);
+  if (builtin_tvf != nullptr) {
+    return builtin_tvf;
+  }
+
+  return absl::NotFoundError(
+      absl::StrCat("TVF with oid ", oid, " is not supported"));
 }
+
 absl::Status CatalogAdapter::AddOidAndTableNameToMaps(
     const Oid schema_oid, const Oid table_oid,
     const std::string& relation_name) {

@@ -27,6 +27,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
@@ -62,6 +63,9 @@ std::string PrintForeignKey(const ForeignKey* foreign_key);
 
 // Prints the DDL statements for a sequence.
 std::string PrintSequence(const Sequence* sequence);
+
+// Prints the DDL statements for a named schema.
+std::string PrintNamedSchema(const NamedSchema* named_schema);
 
 // Converts an OnDeleteAction to its string representation.
 std::string OnDeleteActionToString(Table::OnDeleteAction action);

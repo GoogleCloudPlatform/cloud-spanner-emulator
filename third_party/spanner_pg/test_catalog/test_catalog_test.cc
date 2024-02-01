@@ -80,7 +80,7 @@ TEST(TestCatalogTest, TableColumns) {
   const zetasql::Table* spangres_table;
   ZETASQL_ASSERT_OK(test_catalog->FindTable({"AllSpangresTypes"}, &spangres_table));
   ASSERT_NE(spangres_table, nullptr);
-  int all_types_num_columns = 9;
+  int all_types_num_columns = 10;
   EXPECT_EQ(spangres_table->NumColumns(), all_types_num_columns);
   const zetasql::Column* int64_column =
       spangres_table->FindColumnByName("int64_value");
@@ -118,6 +118,9 @@ TEST(TestCatalogTest, TableColumns) {
       spangres_table->FindColumnByName("jsonb_value");
   ASSERT_NE(jsonb_column, nullptr);
   EXPECT_TRUE(numeric_column->GetType()->IsExtendedType());
+  const zetasql::Column* float_column =
+      spangres_table->FindColumnByName("float_value");
+  ASSERT_NE(float_column, nullptr);
 }
 
 // Basic test of ArrayTypes table--verify it exists and has a couple of the

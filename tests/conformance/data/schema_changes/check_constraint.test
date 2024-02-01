@@ -399,6 +399,7 @@ ERROR:.* Error parsing the definition of generated column `T`.`B`: Expression is
 ==
 # Check constraint depending on chained non-deterministic generated column.
 # --regex
+# --skip_prod_env
 CREATE TABLE T (
   A INT64,
   B INT64 as (EXTRACT(YEAR from CURRENT_TIMESTAMP())),

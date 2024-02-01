@@ -237,6 +237,7 @@ _equalAggref(const Aggref *a, const Aggref *b)
 	COMPARE_SCALAR_FIELD(aggno);
 	COMPARE_SCALAR_FIELD(aggtransno);
 	COMPARE_LOCATION_FIELD(location);
+	COMPARE_NODE_FIELD(functionHints);
 
 	return true;
 }
@@ -269,6 +270,7 @@ _equalWindowFunc(const WindowFunc *a, const WindowFunc *b)
 	COMPARE_SCALAR_FIELD(winstar);
 	COMPARE_SCALAR_FIELD(winagg);
 	COMPARE_LOCATION_FIELD(location);
+	COMPARE_NODE_FIELD(functionHints);
 
 	return true;
 }
@@ -301,6 +303,7 @@ _equalFuncExpr(const FuncExpr *a, const FuncExpr *b)
 	COMPARE_SCALAR_FIELD(inputcollid);
 	COMPARE_NODE_FIELD(args);
 	COMPARE_LOCATION_FIELD(location);
+	COMPARE_NODE_FIELD(functionHints);
 
 	return true;
 }
@@ -1495,6 +1498,23 @@ _equalRenameStmt(const RenameStmt *a, const RenameStmt *b)
 }
 
 static bool
+_equalTableRenameOp(const TableRenameOp *a, const TableRenameOp *b)
+{
+	COMPARE_NODE_FIELD(fromName);
+	COMPARE_STRING_FIELD(toName);
+
+	return true;
+}
+
+static bool
+_equalTableChainedRenameStmt(const TableChainedRenameStmt *a, const TableChainedRenameStmt *b)
+{
+	COMPARE_NODE_FIELD(ops);
+
+	return true;
+}
+
+static bool
 _equalAlterObjectDependsStmt(const AlterObjectDependsStmt *a, const AlterObjectDependsStmt *b)
 {
 	COMPARE_SCALAR_FIELD(objectType);
@@ -2477,6 +2497,7 @@ _equalFuncCall(const FuncCall *a, const FuncCall *b)
 	COMPARE_SCALAR_FIELD(func_variadic);
 	COMPARE_COERCIONFORM_FIELD(funcformat);
 	COMPARE_LOCATION_FIELD(location);
+	COMPARE_NODE_FIELD(functionHints);
 
 	return true;
 }
@@ -2724,6 +2745,7 @@ _equalConstraint(const Constraint *a, const Constraint *b)
 	COMPARE_NODE_FIELD(raw_expr);
 	COMPARE_STRING_FIELD(cooked_expr);
 	COMPARE_SCALAR_FIELD(generated_when);
+	COMPARE_SCALAR_FIELD(stored_kind);
 	COMPARE_NODE_FIELD(keys);
 	COMPARE_NODE_FIELD(including);
 	COMPARE_NODE_FIELD(exclusions);
@@ -3542,6 +3564,12 @@ equal(const void *a, const void *b)
 			break;
 		case T_RenameStmt:
 			retval = _equalRenameStmt(a, b);
+			break;
+		case T_TableRenameOp:
+			retval = _equalTableRenameOp(a, b);
+			break;
+		case T_TableChainedRenameStmt:
+			retval = _equalTableChainedRenameStmt(a, b);
 			break;
 		case T_AlterObjectDependsStmt:
 			retval = _equalAlterObjectDependsStmt(a, b);

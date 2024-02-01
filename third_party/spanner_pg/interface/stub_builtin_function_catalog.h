@@ -75,6 +75,11 @@ class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
     }
   }
 
+  absl::StatusOr<const zetasql::TableValuedFunction*> GetTableValuedFunction(
+      const std::string& name) const override {
+    return absl::UnimplementedError("GetTableValuedFunction is not supported");
+  }
+
  private:
   // This is the full set of ZetaSQL built-in functions.
   // It is a superset of the built-in functions which are available through the

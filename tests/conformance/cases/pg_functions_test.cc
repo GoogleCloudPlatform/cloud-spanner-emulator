@@ -139,6 +139,71 @@ TEST_F(PGFunctionsTest, CastToTimestampUnsupportedTimestamp) {
                        HasSubstr("Timestamp is out of supported range")));
 }
 
+TEST_F(PGFunctionsTest, TimestamptzAdd) {
+  absl::TimeZone time_zone;
+  ASSERT_TRUE(absl::LoadTimeZone("America/Los_Angeles", &time_zone));
+  EXPECT_THAT(
+      Query(
+          R"sql(SELECT spanner.timestamptz_add('2000-01-01 02:03:04',
+                    '3 minutes'))sql"),
+      IsOkAndHoldsRows({MakeTimestamp(absl::ToChronoTime(absl::FromCivil(
+          absl::CivilSecond(2000, 1, 1, 2, 6, 4), time_zone)))}));
+}
+
+TEST_F(PGFunctionsTest, TimestamptzSubtract) {
+  absl::TimeZone time_zone;
+  ASSERT_TRUE(absl::LoadTimeZone("America/Los_Angeles", &time_zone));
+  EXPECT_THAT(
+      Query(
+          R"sql(SELECT spanner.timestamptz_subtract('2000-01-01 02:03:04',
+                    '3 minutes'))sql"),
+      IsOkAndHoldsRows({MakeTimestamp(absl::ToChronoTime(absl::FromCivil(
+          absl::CivilSecond(2000, 1, 1, 2, 0, 4), time_zone)))}));
+}
+
+TEST_F(PGFunctionsTest, TimestamptzBin) {
+  absl::TimeZone time_zone;
+  ASSERT_TRUE(absl::LoadTimeZone("America/Los_Angeles", &time_zone));
+  EXPECT_THAT(
+      Query(
+          R"sql(SELECT spanner.date_bin('1 day'::text,
+                    '2000-01-01 18:19:20'::timestamptz,
+                    '1970-01-01 16:01:02'::timestamptz))sql"),
+      IsOkAndHoldsRows({MakeTimestamp(absl::ToChronoTime(absl::FromCivil(
+          absl::CivilSecond(2000, 1, 1, 16, 1, 2), time_zone)))}));
+}
+
+TEST_F(PGFunctionsTest, TimestamptzTrunc) {
+  absl::TimeZone time_zone;
+  ASSERT_TRUE(absl::LoadTimeZone("America/Los_Angeles", &time_zone));
+  EXPECT_THAT(
+      Query(
+          R"sql(SELECT date_trunc('month',
+                    '2000-01-01 18:19:20'::timestamptz))sql"),
+      IsOkAndHoldsRows({MakeTimestamp(absl::ToChronoTime(absl::FromCivil(
+          absl::CivilSecond(2000, 1, 1, 0, 0, 0), time_zone)))}));
+}
+
+TEST_F(PGFunctionsTest, TimestamptzTruncTimezone) {
+  EXPECT_THAT(
+      Query(R"sql(SELECT date_trunc('day', '2000-01-01 18:19:20', 'zulu'))sql"),
+      IsOkAndHoldsRows({MakeTimestamp(absl::ToChronoTime(absl::FromCivil(
+          absl::CivilSecond(2000, 1, 2, 0, 0, 0), absl::UTCTimeZone())))}));
+}
+
+TEST_F(PGFunctionsTest, TimestamptzExtract) {
+  EXPECT_THAT(
+      Query(
+          R"sql(SELECT extract(hour from '2000-01-01 18:19:20'::timestamptz)
+               )sql"),
+      IsOkAndHoldsRows({*MakePgNumeric("18")}));
+}
+
+TEST_F(PGFunctionsTest, DateExtract) {
+  EXPECT_THAT(Query(R"sql(SELECT extract(year from '2023-01-01'::date))sql"),
+              IsOkAndHoldsRows({*MakePgNumeric("2023")}));
+}
+
 TEST_F(PGFunctionsTest, MapDoubleToInt) {
   EXPECT_THAT(Query("SELECT 'NaN'::float = 'NaN'::float"),
               IsOkAndHoldsRows({true}));

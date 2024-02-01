@@ -230,6 +230,9 @@ TEST_F(CatalogTest, FindBuiltInTableValuedFunction) {
   EXPECT_EQ(tvf->FullName(), "ML.PREDICT");
   ZETASQL_EXPECT_OK(catalog().FindTableValuedFunction({"SAFE.ML.PREDICT"}, &tvf, {}));
   EXPECT_EQ(tvf->FullName(), "SAFE.ML.PREDICT");
+  ZETASQL_EXPECT_OK(
+      catalog().FindTableValuedFunction({"pg.jsonb_array_elements"}, &tvf, {}));
+  EXPECT_EQ(tvf->FullName(), "pg.jsonb_array_elements");
 }
 
 TEST_F(CatalogTest, FindTableValuedFunction) {

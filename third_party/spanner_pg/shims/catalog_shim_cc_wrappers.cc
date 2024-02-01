@@ -1072,3 +1072,7 @@ extern "C" const FormData_pg_proc* GetProcByOid(Oid oid) {
     return nullptr;
   }
 }
+
+extern "C" bool ShouldCoerceUnknownLiterals() {
+  return false;
+}

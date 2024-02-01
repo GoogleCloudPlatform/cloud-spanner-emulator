@@ -51,9 +51,31 @@
 #include "absl/synchronization/mutex.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/type.h"
+#include "third_party/spanner_pg/util/nodetag_to_string.h"
 #include "zetasql/base/status_macros.h"
 
 namespace postgres_translator {
+
+static bool TypesMatch(const zetasql::Type* type1,
+                       const zetasql::Type* type2) {
+  if (type1 == type2) {
+    return true;
+  }
+
+  // The types may be null for templated types.
+  if (type1 == nullptr || type2 == nullptr) {
+    return false;
+  }
+
+  // The same type might be instantiated by two different TypeFactories and
+  // have two different memory pointers.
+  if (type1->IsArray() && type2->IsArray() &&
+      type1->AsArray()->element_type() == type2->AsArray()->element_type()) {
+    return true;
+  }
+  return false;
+}
+
 absl::StatusOr<std::unique_ptr<zetasql::Function>>
 EngineSystemCatalog::BuildMappedFunction(
     const zetasql::FunctionSignature& postgres_signature,
@@ -66,8 +88,8 @@ EngineSystemCatalog::BuildMappedFunction(
   for (const zetasql::FunctionSignature& googlesql_signature :
        mapped_function->signatures()) {
     if (googlesql_signature.result_type().kind() == zetasql::ARG_TYPE_FIXED &&
-        googlesql_signature.result_type().type() !=
-            postgres_signature.result_type().type()) {
+        !TypesMatch(googlesql_signature.result_type().type(),
+                    postgres_signature.result_type().type())) {
       // The return type is specified and does not match.
       continue;
     }
@@ -167,6 +189,27 @@ const zetasql::Function* EngineSystemCatalog::GetFunction(
   } else {
     return nullptr;
   }
+}
+
+const zetasql::TableValuedFunction*
+EngineSystemCatalog::GetTableValuedFunction(Oid proc_oid) const {
+  auto it = proc_oid_to_tvf_.find(proc_oid);
+  if (it != proc_oid_to_tvf_.end()) {
+    return it->second;
+  } else {
+    return nullptr;
+  }
+}
+
+absl::StatusOr<Oid> EngineSystemCatalog::GetOidForTVF(
+    const zetasql::TableValuedFunction* tvf) const {
+  auto it = tvf_to_proc_oid_.find(tvf);
+  if (it != tvf_to_proc_oid_.end()) {
+    return it->second;
+  }
+  return absl::NotFoundError(
+      absl::StrFormat("TableValuedFunction %s does not have a mapped proc oid.",
+                      tvf->FullName()));
 }
 
 bool EngineSystemCatalog::HasCastOverrideFunction(
@@ -295,8 +338,29 @@ EngineSystemCatalog::GetFunctionAndSignature(
       }
     }
   }
+  std::vector<absl::string_view> postgres_input_type_names;
+  for (const zetasql::InputArgumentType& input_arg : input_argument_types) {
+    const PostgresTypeMapping* pg_type =
+        GetTypeFromReverseMapping(input_arg.type());
+
+    // if we cannot reverse the input type, a null pointer is returned
+    // and we skip adding input types in the error message.
+    if (pg_type == nullptr) {
+      postgres_input_type_names.clear();
+      break;
+    } else {
+      ZETASQL_ASSIGN_OR_RETURN(const char* pg_type_name,
+                       pg_type->PostgresExternalTypeName());
+      postgres_input_type_names.push_back(pg_type_name);
+    }
+  }
+
+  std::string postgres_input_args_string = absl::StrJoin(
+      postgres_input_type_names.begin(), postgres_input_type_names.end(), ", ");
   return absl::UnimplementedError(
-      absl::StrCat("Unsupported Postgres expression: ", expr_id.node_tag()));
+      absl::StrCat("Unsupported Postgres expression. Expression type: ",
+                   NodeTagToNodeString(expr_id.node_tag()), ", Arguments: (",
+                   postgres_input_args_string, ")"));
 }
 
 absl::StatusOr<Oid> EngineSystemCatalog::GetPgProcOidFromReverseMapping(
@@ -587,7 +651,7 @@ absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
 
     // If the return type doesn't match, skip it, but permit pseudo ANYARRAY
     // type to match any particular array type.
-    if (postgres_signature->result_type().type() != return_type) {
+    if (!TypesMatch(postgres_signature->result_type().type(), return_type)) {
       if ((pg_proc->prorettype != ANYARRAYOID &&
            pg_proc->prorettype != ANYCOMPATIBLEARRAYOID) ||
           !return_type->IsArray()) {
@@ -604,6 +668,65 @@ absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
   }
   return absl::UnimplementedError(
       "No Postgres proc oid found for the provided argument types");
+}
+
+void EngineSystemCatalog::AddFunctionToReverseMappings(
+    const std::string& proc_name, Oid proc_oid) {
+  // Always add the function to the reverse non-operator map.
+  // Some functions that are variadic can use the operator in reverse
+  // transformation when there are exactly 2 arguments but should use the
+  // function in reverse transformation when there are 1 or 3+ arguments.
+  auto reverse_function_it =
+      engine_function_non_operators_reverse_map_.find(proc_name);
+  if (reverse_function_it == engine_function_non_operators_reverse_map_.end()) {
+    engine_function_non_operators_reverse_map_.insert({proc_name, {proc_oid}});
+  } else {
+    reverse_function_it->second.push_back(proc_oid);
+  }
+  // If the function is also an operator, add it to the reverse operator map.
+  absl::StatusOr<absl::Span<const Oid>> operator_oids =
+      PgBootstrapCatalog::Default()->GetOperatorOidsByOprcode(proc_oid);
+  if (operator_oids.ok()) {
+    // The function is also an operator. Add it to the reverse operator map.
+    auto reverse_operator_it =
+        engine_function_operators_reverse_map_.find(proc_name);
+    if (reverse_operator_it == engine_function_operators_reverse_map_.end()) {
+      engine_function_operators_reverse_map_.insert({proc_name, {proc_oid}});
+    } else {
+      reverse_operator_it->second.push_back(proc_oid);
+    }
+  }
+}
+
+absl::Status EngineSystemCatalog::AddTVF(Oid proc_oid,
+                                         const std::string& engine_tvf_name) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      const zetasql::TableValuedFunction* tvf,
+      builtin_function_catalog_->GetTableValuedFunction(engine_tvf_name));
+  proc_oid_to_tvf_[proc_oid] = tvf;
+  tvf_to_proc_oid_[tvf] = proc_oid;
+  return absl::OkStatus();
+}
+
+absl::StatusOr<std::unique_ptr<PostgresExtendedFunctionSignature>>
+EngineSystemCatalog::BuildVariadicPostgresExtendedFunctionSignature(
+    const std::string& mapped_function_name,
+    const zetasql::FunctionSignature& signature, Oid proc_oid) {
+  // Get the original builtin function.
+  const zetasql::Function* mapped_builtin_function;
+  ZETASQL_ASSIGN_OR_RETURN(
+      mapped_builtin_function,
+      builtin_function_catalog_->GetFunction(mapped_function_name));
+  ZETASQL_RET_CHECK_NE(mapped_builtin_function, nullptr);
+
+  return std::make_unique<PostgresExtendedFunctionSignature>(
+      signature,
+      std::make_unique<zetasql::Function>(
+          mapped_builtin_function->FunctionNamePath(),
+          mapped_builtin_function->GetGroup(), mapped_builtin_function->mode(),
+          mapped_builtin_function->signatures(),
+          mapped_builtin_function->function_options()),
+      proc_oid);
 }
 
 absl::Status EngineSystemCatalog::AddFunction(
@@ -636,12 +759,34 @@ absl::Status EngineSystemCatalog::AddFunction(
       function_signatures;
   for (const PostgresFunctionSignatureArguments& signature_arguments :
        function_arguments.signature_arguments()) {
+    // Get the mapped builtin function name and function.
+    const std::string& mapped_function_name =
+        signature_arguments.explicit_mapped_function_name().empty()
+            ? function_arguments.mapped_function_name()
+            : signature_arguments.explicit_mapped_function_name();
+
+    if (signature_arguments.postgres_proc_oid() != InvalidOid) {
+      // The proc oid is provided and validation should not be performed.
+      // Use the provided proc oid and signature as-is.
+      ZETASQL_RET_CHECK(signature_arguments.has_mapped_function());
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::unique_ptr<PostgresExtendedFunctionSignature> signature,
+          BuildVariadicPostgresExtendedFunctionSignature(
+              mapped_function_name, signature_arguments.signature(),
+              signature_arguments.postgres_proc_oid()));
+      function_signatures.push_back(std::move(signature));
+      AddFunctionToReverseMappings(mapped_function_name,
+                                   signature_arguments.postgres_proc_oid());
+      continue;
+    }
+
     zetasql::FunctionSignature engine_system_catalog_signature =
         signature_arguments.signature();
     if (engine_system_catalog_signature.NumRepeatedArguments() != 0 ||
         engine_system_catalog_signature.NumOptionalArguments() != 0) {
       return absl::UnimplementedError(
-          "Variadic Postgres functions are not supported yet");
+          "Variadic Postgres functions must have the proc oid explicitly "
+          "provided");
     }
 
     // Turn the EngineSystemCatalog signature into a list of input argument
@@ -653,17 +798,27 @@ absl::Status EngineSystemCatalog::AddFunction(
       input_arguments.emplace_back(arg.type());
     }
 
-    // Get the mapped builtin function name and function.
-    const std::string& mapped_function_name =
-        signature_arguments.explicit_mapped_function_name().empty()
-            ? function_arguments.mapped_function_name()
-            : signature_arguments.explicit_mapped_function_name();
+    // Get and verify the mapped PostgreSQL proc oid.
+    ZETASQL_ASSIGN_OR_RETURN(
+        Oid oid,
+        FindMatchingPgProcOid(
+            procs, input_arguments,
+            engine_system_catalog_signature.result_type().type(),
+            language_options),
+        _ << absl::StrCat(
+            "Function ", function_arguments.postgres_function_name(),
+            " with signature: ",
+            engine_system_catalog_signature.DebugString(/*function_name=*/"",
+                                                        /*verbose=*/true)));
 
-    Oid oid = InvalidOid;
-    std::unique_ptr<zetasql::Function> mapped_function;
-    // Get and verify a copy of the mapped builtin function and signature for
-    // specific signature.
-    if (signature_arguments.has_mapped_function()) {
+    if (!signature_arguments.has_mapped_function()) {
+      function_signatures.push_back(
+          std::make_unique<PostgresExtendedFunctionSignature>(
+              engine_system_catalog_signature, /*mapped_function=*/nullptr,
+              oid));
+    } else {
+      // Get and verify a copy of the mapped builtin function and signature for
+      // specific signature.
       ZETASQL_RET_CHECK(!mapped_function_name.empty());
       // Get the original builtin function.
       const zetasql::Function* mapped_builtin_function;
@@ -675,7 +830,7 @@ absl::Status EngineSystemCatalog::AddFunction(
       // Check that the original builtin function has a compatible signature and
       // create a copy of the function with just this signature.
       ZETASQL_ASSIGN_OR_RETURN(
-          mapped_function,
+          std::unique_ptr<zetasql::Function> mapped_function,
           BuildMappedFunction(engine_system_catalog_signature, input_arguments,
                               mapped_builtin_function, language_options));
 
@@ -688,59 +843,13 @@ absl::Status EngineSystemCatalog::AddFunction(
           engine_system_catalog_signature.result_type(),
           engine_system_catalog_signature.arguments(),
           mapped_signature->context_id(), mapped_signature->options());
-    }
 
-    // Get and verify the mapped PostgreSQL proc oid.
-    ZETASQL_ASSIGN_OR_RETURN(
-        oid,
-        FindMatchingPgProcOid(
-            procs, input_arguments,
-            engine_system_catalog_signature.result_type().type(),
-            language_options),
-        _ << absl::StrCat(
-            "Function ", function_arguments.postgres_function_name(),
-            " with signature: ",
-            engine_system_catalog_signature.DebugString(/*function_name=*/"",
-                                                        /*verbose=*/true)));
-
-    // Construct the PostgresExtendedFunctionSignature.
-    function_signatures.push_back(
-        std::make_unique<PostgresExtendedFunctionSignature>(
-            engine_system_catalog_signature, std::move(mapped_function), oid));
-
-    // If there is a mapped function and a PostgreSQL oid, add the pair to the
-    // reverse map.
-    if (signature_arguments.has_mapped_function()) {
-      ABSL_DCHECK_NE(oid, InvalidOid);
-
-      // Check if the function is also an operator.
-      absl::StatusOr<absl::Span<const Oid>> operator_or =
-          PgBootstrapCatalog::Default()->GetOperatorOidsByOprcode(oid);
-      if (operator_or.ok()) {
-        // The function is also an operator. Add it to the reverse operator map.
-        auto reverse_operator_it =
-            engine_function_operators_reverse_map_.find(mapped_function_name);
-        if (reverse_operator_it ==
-            engine_function_operators_reverse_map_.end()) {
-          engine_function_operators_reverse_map_.insert(
-              {mapped_function_name, {oid}});
-        } else {
-          reverse_operator_it->second.push_back(oid);
-        }
-      } else {
-        // The function is not an operator. Add it to the reverse non-operator
-        // map.
-        auto reverse_function_it =
-            engine_function_non_operators_reverse_map_.find(
-                mapped_function_name);
-        if (reverse_function_it ==
-            engine_function_non_operators_reverse_map_.end()) {
-          engine_function_non_operators_reverse_map_.insert(
-              {mapped_function_name, {oid}});
-        } else {
-          reverse_function_it->second.push_back(oid);
-        }
-      }
+      // Construct the PostgresExtendedFunctionSignature.
+      function_signatures.push_back(
+          std::make_unique<PostgresExtendedFunctionSignature>(
+              engine_system_catalog_signature, std::move(mapped_function),
+              oid));
+      AddFunctionToReverseMappings(mapped_function_name, oid);
     }
   }
 

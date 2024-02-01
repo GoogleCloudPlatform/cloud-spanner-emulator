@@ -636,8 +636,10 @@ FuncDetailCode func_get_detail(List* funcname, List* fargs, List* fargnames,
 
 // Parse (and disambiguate) a node that could represent either a column
 // reference or a function call. This is an exact copy of the PostgreSQL code
-// except that when the function is an aggregate we use bootstrap_catalog to get
-// the FormData struct instead of the syscache.
+// with two exceptions. First, when the function is an aggregate we use
+// bootstrap_catalog to get the FormData struct instead of the syscache.
+// Second, coercions are applied for specific functions so that string literals
+// passed to "any" typed parameters are coerced from unknownoid to textoid.
 Node* ParseFuncOrColumn(ParseState* pstate, List* funcname, List* fargs,
                         Node* last_srf, FuncCall* fn, bool proc_call,
                         int location);

@@ -43,6 +43,7 @@ using ::google::protobuf::contrib::parse_proto::ParseTextProtoOrDie;
 namespace postgres_translator {
 
 class PgCollationDataTest : public testing::TestWithParam<absl::string_view> {};
+class PgNamespaceDataTest : public testing::TestWithParam<absl::string_view> {};
 class PgTypeDataTest : public testing::TestWithParam<absl::string_view> {};
 
 
@@ -85,6 +86,39 @@ TEST_F(PgCollationDataTest, GetPgCollationDataFromBootstrapFailure) {
               zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
+TEST_P(PgNamespaceDataTest, GetPgNamespaceDataFromBootstrapSuccess) {
+  PgNamespaceData expected = ParseTextProtoOrDie(GetParam());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(PgNamespaceData actual,
+                       GetPgNamespaceDataFromBootstrap(GetPgBootstrapCatalog(),
+                                                      expected.nspname()));
+  EXPECT_THAT(actual, testing::EqualsProto(expected));
+}
+
+TEST_F(PgNamespaceDataTest, GetPgNamespaceDataFromBootstrapFailure) {
+  ASSERT_THAT(GetPgNamespaceDataFromBootstrap(GetPgBootstrapCatalog(),
+                                              "pg_toast"),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+  ASSERT_THAT(GetPgNamespaceDataFromBootstrap(GetPgBootstrapCatalog(), "invalid"),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  PgNamespaceDataTestData,
+  PgNamespaceDataTest,
+  testing::Values(
+    R"pb(
+      oid: 11
+      nspname: "pg_catalog"
+    )pb",
+    R"pb(
+      oid: 2200
+      nspname: "public"
+    )pb",
+    R"pb(
+      oid: 50000
+      nspname: "spanner"
+    )pb"));
+
 TEST_P(PgTypeDataTest, GetPgTypeDataFromBootstrapNameSuccess) {
   PgTypeData expected = ParseTextProtoOrDie(GetParam());
   ZETASQL_ASSERT_OK_AND_ASSIGN(PgTypeData actual,
@@ -100,7 +134,6 @@ TEST_P(PgTypeDataTest, GetPgTypeDataFromBootstrapOidSuccess) {
                                                   expected.oid()));
   EXPECT_THAT(actual, testing::EqualsProto(expected));
 }
-
 
 INSTANTIATE_TEST_SUITE_P(
   PgTypeDataTestData,

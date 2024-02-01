@@ -303,6 +303,9 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::StatusOr<google::spanner::emulator::backend::ddl::ForeignKey::Action> GetForeignKeyAction(
       char action) const;
 
+  absl::StatusOr<std::string> GetSchemaName(
+      const Value& value, absl::string_view parent_statement_type) const;
+
   absl::StatusOr<std::string> GetTableName(
       const RangeVar& range_var, absl::string_view parent_statement_type) const;
 
@@ -784,6 +787,17 @@ PostgreSQLToSpannerDDLTranslatorImpl::GetInterleaveParentDeleteActionType(
   }
 }
 
+absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::GetSchemaName(
+    const Value& value, absl::string_view parent_statement_type) const {
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(value));
+  if (value.val.str == nullptr) {
+    return absl::InvalidArgumentError(absl::Substitute(
+        "Schema name not specified in $0 statement.", parent_statement_type));
+  }
+  ZETASQL_RET_CHECK_EQ(value.type, T_String);
+  return value.val.str;
+}
+
 absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::GetTableName(
     const RangeVar& range_var, absl::string_view parent_statement_type) const {
   ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
@@ -959,9 +973,18 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateGeneratedColumn(
 
   google::spanner::emulator::backend::ddl::ColumnDefinition::GeneratedColumnDefinition*
       generated_column_def = out.mutable_generated_column();
-
-  // PosrgreSQL's generated column only support `stored`.
-  generated_column_def->set_stored(true);
+  // PostgreSQL's generated column only support `stored`. Spangres support
+  // non-stored generated column.
+  if (generated.stored_kind == GENERATED_COL_NON_STORED) {
+    if (!options.enable_virtual_generated_column) {
+      return UnsupportedTranslationError(
+          "<VIRTUAL> is not supported for generated column."
+          "Only <STORED> is supported.");
+    }
+    generated_column_def->set_stored(false);
+  }  else {
+    generated_column_def->set_stored(true);
+  }
   // `expression` is `required` field for spanner, set as empty here;
   generated_column_def->set_expression("");
 
@@ -1679,6 +1702,42 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
               first_cmd->raw_expr_string);
         }
       }
+      return absl::OkStatus();
+    }
+
+    case AT_SetNotNull: {
+      google::spanner::emulator::backend::ddl::AlterTable::AlterColumn* alter_column =
+          out.mutable_alter_column();
+      alter_column->mutable_column()->set_column_name(first_cmd->name);
+      alter_column->set_operation(
+          google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::SET_NOT_NULL);
+      // `type` is required in ColumnDefinition, so set it to NONE here.
+      // It will be replaced later using the type from current schema when
+      // applying the schema in analyzer.
+      alter_column->mutable_column()->set_type(
+          google::spanner::emulator::backend::ddl::ColumnDefinition::NONE);
+
+      google::spanner::emulator::backend::ddl::ColumnDefinition* out_column =
+          out.mutable_alter_column()->mutable_column();
+      out_column->set_not_null(true);
+      return absl::OkStatus();
+    }
+
+    case AT_DropNotNull: {
+      google::spanner::emulator::backend::ddl::AlterTable::AlterColumn* alter_column =
+          out.mutable_alter_column();
+      alter_column->mutable_column()->set_column_name(first_cmd->name);
+      alter_column->set_operation(
+          google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::DROP_NOT_NULL);
+      // `type` is required in ColumnDefinition, so set it to NONE here.
+      // It will be replaced later using the type from current schema when
+      // applying the schema in analyzer.
+      alter_column->mutable_column()->set_type(
+          google::spanner::emulator::backend::ddl::ColumnDefinition::NONE);
+
+      google::spanner::emulator::backend::ddl::ColumnDefinition* out_column =
+          out.mutable_alter_column()->mutable_column();
+      out_column->set_not_null(false);
       return absl::OkStatus();
     }
 

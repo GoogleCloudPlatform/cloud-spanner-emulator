@@ -260,7 +260,7 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Struct) {
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, InvalidGoogleSqlType) {
   ddl::ColumnDefinition unknown_type;
   unknown_type.set_type(ddl::ColumnDefinition::NONE);
-  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(type_factory_.get_float()),
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(type_factory_.get_geography()),
               test::EqualsProto(unknown_type));
 }
 

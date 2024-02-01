@@ -97,6 +97,15 @@ group {
 }
 
 group {
+  code: "WRONG_OBJECT_TYPE"
+
+  message {
+    name: "InvalidTypeForAnyAll"
+    pg_message_id: "op ANY/ALL (array) requires array on right side"
+  }
+}
+
+group {
   code: "SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION"
 
   message {

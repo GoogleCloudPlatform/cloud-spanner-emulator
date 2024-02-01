@@ -69,6 +69,8 @@ const char kModelColumnRequiredOptionName[] = "required";
 const char kModelDefaultBatchSizeOptionName[] = "default_batch_size";
 const char kModelEndpointOptionName[] = "endpoint";
 const char kModelEndpointsOptionName[] = "endpoints";
+const char kWitnessLocationOptionName[] = "witness_location";
+const char kDefaultLeaderOptionName[] = "default_leader";
 
 typedef google::protobuf::RepeatedPtrField<SetOption> OptionList;
 typedef google::protobuf::RepeatedPtrField<Grantee> Grantees;
@@ -892,6 +894,9 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
       case JJTPRIMARY_KEY:
         VisitKeyNode(child, table->mutable_primary_key(), errors);
         break;
+      case JJTSYNONYM_CLAUSE:
+        table->set_synonym(GetChildNode(child, 0)->image());
+        break;
       case JJTTABLE_INTERLEAVE_CLAUSE:
         VisitTableInterleaveNode(child, table->mutable_interleave_clause());
         break;
@@ -1060,13 +1065,19 @@ void VisitChangeStreamForClause(const SimpleNode* node,
   }
 }
 
-bool UnescapeStringLiteral(absl::string_view val, std::string* result) {
+bool UnescapeStringLiteral(absl::string_view val, std::string* result,
+                           std::string* error) {
   if (val.size() <= 2) {
-    ABSL_LOG(FATAL) << "Invalid string literal: " << val;
+    *error = absl::StrCat("Invalid string literal: ", val);
+    return false;
   }
   ABSL_CHECK_EQ(val[0], val[val.size() - 1]);
   ZETASQL_VLOG(val[0] == '\'' || val[0] == '"');
-  return absl::CUnescape(absl::ClippedSubstr(val, 1, val.size() - 2), result);
+  if (!absl::CUnescape(absl::ClippedSubstr(val, 1, val.size() - 2), result)) {
+    *error = absl::StrCat("Cannot parse string literal: ", val);
+    return false;
+  }
+  return true;
 }
 
 // Build a string representing a basic logical error for the given node.
@@ -1078,6 +1089,122 @@ bool UnescapeStringLiteral(absl::string_view val, std::string* result) {
 std::string LogicalError(const SimpleNode* node, const std::string& detail) {
   return absl::StrCat("Error on line ", node->begin_line(), ", column ",
                       node->begin_column(), ": ", detail);
+}
+
+// Handle witness_location for database options
+void VisitWitnessLocationDatabaseOptionValNode(
+    const SimpleNode* value_node, SetOption* option,
+    std::vector<std::string>* errors) {
+  if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+    return;
+  }
+  if (value_node->getId() != JJTSTR_VAL ||
+      !ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
+           .ok()) {
+    errors->push_back(
+        absl::StrCat("Unexpected value for option: witness_location."
+                     " Supported values are non-empty strings only."));
+    return;
+  }
+
+  std::string string_value;
+  std::string error = "";
+  if (!UnescapeStringLiteral(value_node->image(), &string_value, &error)) {
+    errors->push_back(error);
+    return;
+  }
+  option->set_string_value(string_value);
+}
+
+void VisitDefaultLeaderDatabaseOptionValNode(const SimpleNode* value_node,
+                                             SetOption* option,
+                                             std::vector<std::string>* errors) {
+  ABSL_DCHECK_EQ(option->option_name(), "default_leader");
+  if (value_node->getId() == JJTSTR_VAL &&
+      ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
+          .ok()) {
+    std::string string_value;
+    std::string error = "";
+    if (!UnescapeStringLiteral(value_node->image(), &string_value, &error)) {
+      errors->push_back(error);
+      return;
+    }
+    if (string_value.empty()) {
+      errors->push_back(
+          "Empty string is an invalid value for default_leader. If you'd like "
+          "to clear a previously set value, use NULL.");
+      return;
+    }
+    option->set_string_value(string_value);
+  } else if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+  } else {
+    errors->push_back(
+        absl::StrCat("Unexpected value for option: ", "default_leader",
+                     ". Supported option values are strings and NULL."));
+    return;
+  }
+}
+
+void VisitDatabaseOptionKeyValNode(const SimpleNode* node, OptionList* options,
+                                   std::vector<std::string>* errors) {
+  std::string option_name = CheckOptionKeyValNodeAndGetName(node);
+  if (absl::c_find_if(*options, [&option_name](const SetOption& option) {
+        return option.option_name() == option_name;
+      }) != options->end()) {
+    errors->push_back(absl::StrCat("Duplicate option: ", option_name));
+    return;
+  }
+
+  const SimpleNode* value_node = GetChildNode(node, 1);
+
+  if (option_name == kWitnessLocationOptionName) {
+    SetOption* option = options->Add();
+    option->set_option_name("witness_location");
+    VisitWitnessLocationDatabaseOptionValNode(value_node, option, errors);
+    if (option->has_null_value()) {
+      errors->push_back("Option: witness_location is null.");
+      return;
+    }
+  } else if (option_name == "witness_location_type") {
+    SetOption* option = options->Add();
+    option->set_option_name("spanner.internal.cloud_witness_location_type");
+    VisitWitnessLocationDatabaseOptionValNode(value_node, option, errors);
+  } else if (option_name == kDefaultLeaderOptionName) {
+    SetOption* option = options->Add();
+    option->set_option_name("default_leader");
+    VisitDefaultLeaderDatabaseOptionValNode(value_node, option, errors);
+    if (option->has_null_value()) {
+      errors->push_back("Option: default_leader is null.");
+      return;
+    }
+  } else {
+    errors->push_back(absl::StrCat("Option: ", option_name, " is unknown."));
+  }
+}
+
+void VisitDatabaseOptionListNode(const SimpleNode* node, int option_list_offset,
+                                 OptionList* options,
+                                 std::vector<std::string>* errors) {
+  CheckNode(node, JJTOPTIONS_CLAUSE);
+  // The option_list node is suppressed (defined #void in .jjt) so it is not
+  // created. The children of this node are OPTION_KEY_VALs.
+  for (int i = option_list_offset; i < node->jjtGetNumChildren(); ++i) {
+    VisitDatabaseOptionKeyValNode(GetChildNode(node, i, JJTOPTION_KEY_VAL),
+                                  options, errors);
+  }
+}
+
+void VisitAlterDatabaseNode(const SimpleNode* node, AlterDatabase* database,
+                            std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_DATABASE_STATEMENT);
+  // Alter Database DDL doesn't take db_name, setting it for the ability to
+  // print the DDL statement in sdl_printer
+  database->set_db_name(GetChildNode(node, 0, JJTDATABASE_NAME)->image());
+  VisitDatabaseOptionListNode(
+      GetChildNode(node, 1, JJTOPTIONS_CLAUSE), /*option_list_offset=*/0,
+      database->mutable_set_options()->mutable_options(), errors);
 }
 
 void VisitStringOrNullOptionValNode(const SimpleNode* value_node,
@@ -1096,10 +1223,9 @@ void VisitStringOrNullOptionValNode(const SimpleNode* value_node,
     return;
   }
   std::string string_value;
-  if (!UnescapeStringLiteral(value_node->image(), &string_value)) {
-    errors->push_back(LogicalError(
-        value_node,
-        absl::StrCat("Cannot parse string literal: ", value_node->image())));
+  std::string error = "";
+  if (!UnescapeStringLiteral(value_node->image(), &string_value, &error)) {
+    errors->push_back(error);
     return;
   }
   option->set_string_value(string_value);
@@ -1124,10 +1250,9 @@ void VisitStringArrayOrNullOptionValNode(const SimpleNode* value_node,
   for (int i = 0; i < value_node->jjtGetNumChildren(); ++i) {
     const SimpleNode* value = GetChildNode(value_node, i);
     CheckNode(value, JJTSTR_VAL);
-    if (!UnescapeStringLiteral(value->image(), values->Add())) {
-      errors->push_back(LogicalError(
-          value_node,
-          absl::StrCat("Cannot parse string literal: ", value->image())));
+    std::string error = "";
+    if (!UnescapeStringLiteral(value->image(), values->Add(), &error)) {
+      errors->push_back(error);
       return;
     }
   }
@@ -1300,7 +1425,7 @@ void VisitCreateSchemaNode(const SimpleNode* node, CreateSchema* schema,
   CheckNode(node, JJTCREATE_SCHEMA_STATEMENT);
   int offset = 0;
   if (GetFirstChildNode(node, JJTIF_NOT_EXISTS) != nullptr) {
-    schema->set_existence_modifier(IF_NOT_EXISTS);
+    schema->set_existence_modifier(CreateSchema::IF_NOT_EXISTS);
     ++offset;
   }
 
@@ -1396,6 +1521,16 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
     AlterTable* alter_table = statement->mutable_alter_table();
     alter_table->set_table_name(table_name);
     switch (child->getId()) {
+      case JJTRENAME_TO: {
+        alter_table->mutable_rename_to()->set_name(
+            GetQualifiedIdentifier(child));
+        if (node->jjtGetNumChildren() > 2) {
+          SimpleNode* synonym = GetChildNode(node, 2, JJTSYNONYM);
+          alter_table->mutable_rename_to()->set_synonym(
+              GetQualifiedIdentifier(synonym));
+        }
+        break;
+      }
       case JJTADD_COLUMN: {
         int offset = 2;
         if (GetChildNode(node, offset)->getId() == JJTIF_NOT_EXISTS) {
@@ -1451,6 +1586,16 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
       }
       case JJTDROP_ROW_DELETION_POLICY: {
         alter_table->mutable_drop_row_deletion_policy();
+        break;
+      }
+      case JJTADD_SYNONYM: {
+        alter_table->mutable_add_synonym()->set_synonym(
+            GetQualifiedIdentifier(child));
+        break;
+      }
+      case JJTDROP_SYNONYM: {
+        alter_table->mutable_drop_synonym()->set_synonym(
+            GetQualifiedIdentifier(child));
         break;
       }
       default:
@@ -1732,6 +1877,19 @@ void VisitAlterModelNode(const SimpleNode* node, AlterModel* alter_model,
   }
 }
 
+void VisitRenameTableNode(const SimpleNode* node, RenameTable* rename_table,
+                          std::vector<std::string>* errors) {
+  CheckNode(node, JJTRENAME_STATEMENT);
+  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
+    SimpleNode* op = GetChildNode(node, i);
+    CheckNode(op, JJTRENAME_OP);
+    ABSL_DCHECK_EQ(op->jjtGetNumChildren(), 2);
+    RenameTable::RenameOp* rename_op = rename_table->add_rename_op();
+    rename_op->set_from_name(GetChildNode(op, 0)->image());
+    rename_op->set_to_name(GetChildNode(op, 1)->image());
+  }
+}
+
 // End Visit functions
 //////////////////////////////////////////////////////////////////////////
 
@@ -1785,6 +1943,10 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       } else {
         ABSL_LOG(FATAL) << "Unexpected statement: " << stmt->toString();
       }
+      break;
+    }
+    case JJTRENAME_STATEMENT: {
+      VisitRenameTableNode(stmt, statement->mutable_rename_table(), errors);
       break;
     }
     case JJTCREATE_CHANGE_STREAM_STATEMENT:
@@ -1851,6 +2013,9 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
                      << GetChildNode(stmt, 0)->toString();
       }
     } break;
+    case JJTALTER_DATABASE_STATEMENT:
+      VisitAlterDatabaseNode(stmt, statement->mutable_alter_database(), errors);
+      break;
     case JJTALTER_TABLE_STATEMENT:
       VisitAlterTableNode(stmt, ddl_text, statement, errors);
       break;

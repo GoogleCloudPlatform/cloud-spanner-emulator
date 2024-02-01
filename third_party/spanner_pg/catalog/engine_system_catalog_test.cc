@@ -377,11 +377,11 @@ TEST_F(EngineSystemCatalogTest, FunctionSignaturesByOid) {
   std::vector<zetasql::InputArgumentType> input_argument_types;
   input_argument_types.emplace_back(zetasql::types::Int64Type());
 
-  // Get the function and signature for PG proc oid 1396 with signature
-  // abs(int8_t) -> int8_t.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(FunctionAndSignature function_and_signature,
-                       catalog->GetFunctionAndSignature(
-                           1396, input_argument_types, GetLanguageOptions()));
+  // Get the function and signature for PG proc abs(int8_t) -> int8_t.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      FunctionAndSignature function_and_signature,
+      catalog->GetFunctionAndSignature(F_ABS_INT8, input_argument_types,
+                                       GetLanguageOptions()));
   ASSERT_EQ(function_and_signature.signature().arguments().size(), 1);
   EXPECT_EQ(function_and_signature.signature().argument(0).type(),
             zetasql::types::Int64Type());
@@ -389,11 +389,11 @@ TEST_F(EngineSystemCatalogTest, FunctionSignaturesByOid) {
   input_argument_types.clear();
   input_argument_types.emplace_back(zetasql::types::DoubleType());
 
-  // Get the function and signature for PG proc oid 1395 with signature
-  // abs(float8) -> float8.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(FunctionAndSignature double_function_and_signature,
-                       catalog->GetFunctionAndSignature(
-                           1395, input_argument_types, GetLanguageOptions()));
+  // Get the function and signature for PG proc abs(float8) -> float8.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      FunctionAndSignature double_function_and_signature,
+      catalog->GetFunctionAndSignature(F_ABS_FLOAT8, input_argument_types,
+                                       GetLanguageOptions()));
   ASSERT_EQ(double_function_and_signature.signature().arguments().size(), 1);
   EXPECT_EQ(double_function_and_signature.signature().argument(0).type(),
             zetasql::types::DoubleType());
@@ -445,16 +445,16 @@ TEST_F(EngineSystemCatalogTest, ReverseFunctionSignatureLookup) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(Oid proc_oid,
                        catalog->GetPgProcOidFromReverseMapping(
                            "abs", input_argument_types, GetLanguageOptions()));
-  // Expect PG proc oid 1396 with signature abs(int8_t) -> int8_t.
-  EXPECT_EQ(proc_oid, 1396);
+  // Expect PG proc abs(int8_t) -> int8_t.
+  EXPECT_EQ(proc_oid, F_ABS_INT8);
 
   input_argument_types.clear();
   input_argument_types.emplace_back(zetasql::types::DoubleType());
   ZETASQL_ASSERT_OK_AND_ASSIGN(proc_oid,
                        catalog->GetPgProcOidFromReverseMapping(
                            "abs", input_argument_types, GetLanguageOptions()));
-  // Expect PG proc oid 1395 with signature abs(float8) -> float8.
-  EXPECT_EQ(proc_oid, 1395);
+  // Expect PG proc abs(float8) -> float8.
+  EXPECT_EQ(proc_oid, F_ABS_FLOAT8);
 }
 
 TEST_F(EngineSystemCatalogTest, AnyArgTypeMatch) {
@@ -471,21 +471,23 @@ TEST_F(EngineSystemCatalogTest, AnyArgTypeMatch) {
   ZETASQL_ASSERT_OK(catalog->AddTestFunction(function_arguments));
 }
 
-TEST_F(EngineSystemCatalogTest, AnyArgTypeMismatch) {
+TEST_F(EngineSystemCatalogTest, ArrayTypeMatch) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgBoolMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgInt8Mapping()));
+  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgInt8ArrayMapping()));
+  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgFloat8ArrayMapping()));
 
-  // The ZetaSQL $equals function accepts two ARG_TYPE_ANY_1 input parameters
-  // of the same type. It will not match signatures with two different types.
+  // The correct signature is float8_combine(float8_array, float8_array).
+  // Attempting to register the mapping as (float8_array, int8_array) will fail.
   PostgresFunctionArguments function_arguments{
-      "int48eq",
-      "$equal",
-      {{{gsql_bool, {gsql_int32, gsql_int64}, /*context_ptr=*/nullptr}}}};
+      "float8_combine",
+      "float8_combine",
+      {{{gsql_double_array,
+         {gsql_double_array, gsql_int64_array},
+         /*context_ptr=*/nullptr}}}};
   EXPECT_THAT(catalog->AddTestFunction(function_arguments),
-              StatusIs(absl::StatusCode::kNotFound,
-                       HasSubstr("does not have signature")));
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("No Postgres proc oid found")));
 }
 
 TEST_F(EngineSystemCatalogTest, ReverseFunctionOperatorOverride) {
@@ -500,8 +502,8 @@ TEST_F(EngineSystemCatalogTest, ReverseFunctionOperatorOverride) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(Oid proc_oid,
                        catalog->GetPgProcOidFromReverseMapping(
                            "abs", input_argument_types, GetLanguageOptions()));
-  // Expect PG proc oid 1395 with signature abs(float8) -> float8.
-  EXPECT_EQ(proc_oid, 1395);
+  // Expect PG proc abs(float8) -> float8.
+  EXPECT_EQ(proc_oid, F_ABS_FLOAT8);
 
   // Add the operator version of abs. The reverse lookup should choose the
   // operator function over the non-operator function
@@ -509,8 +511,8 @@ TEST_F(EngineSystemCatalogTest, ReverseFunctionOperatorOverride) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(proc_oid,
                        catalog->GetPgProcOidFromReverseMapping(
                            "abs", input_argument_types, GetLanguageOptions()));
-  // Expect PG proc oid 221 with signature float8abs(float8) -> float8.
-  EXPECT_EQ(proc_oid, 221);
+  // Expect PG proc float8abs(float8) -> float8.
+  EXPECT_EQ(proc_oid, F_FLOAT8ABS);
 }
 
 TEST_F(EngineSystemCatalogTest, VariableArgFunction) {
@@ -528,8 +530,8 @@ TEST_F(EngineSystemCatalogTest, VariableArgFunction) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       Oid proc_oid, catalog->GetPgProcOidFromReverseMapping(
                         "concat", input_argument_types, GetLanguageOptions()));
-  // Expect PG proc oid 1258 with signature textcat(text, text) -> text.
-  EXPECT_EQ(proc_oid, 1258);
+  // Expect PG proc textcat(text, text) -> text.
+  EXPECT_EQ(proc_oid, F_TEXTCAT);
 
   // However, more than 2 inputs will fail in the reverse transformer.
   input_argument_types.emplace_back(zetasql::types::StringType());
@@ -556,10 +558,10 @@ TEST_F(EngineSystemCatalogTest, NoMappedFunction) {
   std::vector<zetasql::InputArgumentType> input_argument_types;
   input_argument_types.emplace_back(zetasql::types::Int64Type());
 
-  // Get the function and signature for casting function PG proc oid 482
-  //  with signature float8(bigint) -> float8.
-  EXPECT_THAT(catalog->GetFunctionAndSignature(482, input_argument_types,
-                                               GetLanguageOptions()),
+  // Get the function and signature for casting function PG proc
+  // float8(bigint) -> float8.
+  EXPECT_THAT(catalog->GetFunctionAndSignature(
+                  F_FLOAT8_INT8, input_argument_types, GetLanguageOptions()),
               StatusIs(absl::StatusCode::kUnimplemented,
                        HasSubstr("requires an explicit cast")));
 }
@@ -579,6 +581,33 @@ TEST_F(EngineSystemCatalogTest, MismatchedFunction) {
                        HasSubstr("does not have signature")));
 }
 
+TEST_F(EngineSystemCatalogTest, UnvalidatedFunctionSignature) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+                       TestSystemCatalog::GetTestCatalog());
+
+  zetasql::FunctionArgumentTypeOptions repeated(
+      zetasql::FunctionArgumentType::REPEATED);
+  PostgresFunctionArguments arguments("concat", "concat",
+                                      {{{gsql_string,
+                                       {gsql_string, {gsql_string, repeated}},
+                                               /*context_ptr=*/nullptr},
+                         /*has_mapped_function=*/true,
+                         /*explicit_mapped_function_name=*/"",
+                         F_CONCAT}});
+  ZETASQL_ASSERT_OK(catalog->AddTestFunction(arguments));
+
+  std::vector<zetasql::InputArgumentType> input_argument_types;
+
+  // Function calls with one or more arguments are supported.
+  for (int i = 0; i < 20; ++i) {
+    input_argument_types.emplace_back(zetasql::types::StringType());
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        FunctionAndSignature concat,
+        catalog->GetFunctionAndSignature(F_CONCAT, input_argument_types,
+                                         GetLanguageOptions()));
+  }
+}
+
 TEST_F(EngineSystemCatalogTest, AnyOidAggregateFunction) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
@@ -588,6 +617,22 @@ TEST_F(EngineSystemCatalogTest, AnyOidAggregateFunction) {
   ASSERT_NE(function, nullptr);
   ASSERT_EQ(function->mode(), zetasql::Function::AGGREGATE);
   ASSERT_EQ(function->NumSignatures(), 1);
+}
+
+TEST_F(EngineSystemCatalogTest, UnsupportedExpr) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+                       TestSystemCatalog::GetTestCatalog());
+  ZETASQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgBoolMapping()));
+
+  PostgresExprIdentifier identifier =
+      PostgresExprIdentifier::Expr(T_AlternativeSubPlan);
+  std::vector<zetasql::InputArgumentType> input_argument_types;
+  input_argument_types.emplace_back(zetasql::types::BoolType());
+
+  EXPECT_THAT(catalog->GetFunctionAndSignature(identifier, input_argument_types,
+                                               GetLanguageOptions()),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("AlternativeSubPlan, Arguments: (boolean)")));
 }
 
 TEST_F(EngineSystemCatalogTest, BoolExpr) {
@@ -725,9 +770,10 @@ TEST_F(EngineSystemCatalogTest, ExplicitMappedFunction) {
   // select count(int8_t) should map to the "count" builtin function.
   std::vector<zetasql::InputArgumentType> input_argument_types;
   input_argument_types.emplace_back(zetasql::types::Int64Type());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(FunctionAndSignature count_int8,
-                       catalog->GetFunctionAndSignature(
-                           2147, input_argument_types, GetLanguageOptions()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      FunctionAndSignature count_int8,
+      catalog->GetFunctionAndSignature(F_COUNT_ANY, input_argument_types,
+                                       GetLanguageOptions()));
   ASSERT_NE(count_int8.function(), nullptr);
   EXPECT_EQ(count_int8.function()->Name(), "count");
   ASSERT_EQ(count_int8.signature().arguments().size(), 1);
@@ -736,9 +782,10 @@ TEST_F(EngineSystemCatalogTest, ExplicitMappedFunction) {
 
   // select count(*) should map to the $count_star builtin function.
   input_argument_types.clear();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(FunctionAndSignature count_star,
-                       catalog->GetFunctionAndSignature(
-                           2803, input_argument_types, GetLanguageOptions()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      FunctionAndSignature count_star,
+      catalog->GetFunctionAndSignature(F_COUNT_, input_argument_types,
+                                       GetLanguageOptions()));
   ASSERT_NE(count_star.function(), nullptr);
   EXPECT_EQ(count_star.function()->Name(), "$count_star");
   EXPECT_EQ(count_star.signature().arguments().size(), 0);
@@ -759,12 +806,11 @@ TEST_F(EngineSystemCatalogTest, AnyoidFunction) {
   // function.
   ZETASQL_ASSERT_OK(catalog->AddTestFunction(function_arguments));
 
-  Oid concat_oid = 3058;
   std::vector<zetasql::InputArgumentType> input_argument_types;
 
   // Function calls with one argument are unsupported.
   input_argument_types.emplace_back(zetasql::types::StringType());
-  EXPECT_THAT(catalog->GetFunctionAndSignature(concat_oid, input_argument_types,
+  EXPECT_THAT(catalog->GetFunctionAndSignature(F_CONCAT, input_argument_types,
                                                GetLanguageOptions()),
               StatusIs(absl::StatusCode::kUnimplemented,
                        HasSubstr("(text) is not supported")));
@@ -773,12 +819,12 @@ TEST_F(EngineSystemCatalogTest, AnyoidFunction) {
   input_argument_types.emplace_back(zetasql::types::StringType());
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       FunctionAndSignature concat,
-      catalog->GetFunctionAndSignature(concat_oid, input_argument_types,
+      catalog->GetFunctionAndSignature(F_CONCAT, input_argument_types,
                                        GetLanguageOptions()));
 
   // Function calls with three arguments are unsupported.
   input_argument_types.emplace_back(zetasql::types::StringType());
-  EXPECT_THAT(catalog->GetFunctionAndSignature(concat_oid, input_argument_types,
+  EXPECT_THAT(catalog->GetFunctionAndSignature(F_CONCAT, input_argument_types,
                                                GetLanguageOptions()),
               StatusIs(absl::StatusCode::kUnimplemented,
                        HasSubstr("(text, text, text) is not supported")));

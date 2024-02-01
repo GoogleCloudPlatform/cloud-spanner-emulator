@@ -164,8 +164,15 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
 ForwardTransformer::BuildGsqlResolvedFunctionCall(
     const FuncExpr& func, ExprTransformerInfo* expr_transformer_info) {
-  return BuildGsqlResolvedFunctionCall(func.funcid, func.args,
-                                       expr_transformer_info);
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<zetasql::ResolvedFunctionCall> function_call,
+      BuildGsqlResolvedFunctionCall(func.funcid, func.args,
+                                    expr_transformer_info));
+  if (func.functionHints) {
+      return absl::UnimplementedError(
+          "Functions with hints are not supported.");
+  }
+  return function_call;
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
@@ -279,6 +286,10 @@ ForwardTransformer::BuildGsqlResolvedAggregateFunctionCall(
       /*distinct=*/agg_function.aggdistinct != nullptr, null_handling_modifier,
       /*having_modifier=*/nullptr, std::move(order_by_item_list),
       /*limit=*/nullptr);
+  if (agg_function.functionHints) {
+      return absl::UnimplementedError(
+          "Functions with hints are not supported.");
+  }
 
   // Track the computed column in TransformerInfo.
   // Modeled after ZetaSQL's FinishResolvingAggregateFunction.
@@ -722,10 +733,6 @@ ForwardTransformer::BuildGsqlInFunctionCall(
     return absl::InvalidArgumentError(
         "ANY, SOME, and IN expressions with function or operator arguments are "
         "not supported");
-  } else if (IsA(array_argument, Param)) {
-    return absl::InvalidArgumentError(
-        "ANY, SOME, and IN expressions with parameter arguments are not "
-        "supported");
   }
 
   // Build the argument list for the googlesql function. The argument list is
@@ -747,6 +754,13 @@ ForwardTransformer::BuildGsqlInFunctionCall(
   ZETASQL_ASSIGN_OR_RETURN(bool array_op_arg_is_array,
                    AppendGsqlInFunctionCallArrayArg(
                        array_argument, expr_transformer_info, argument_list));
+  ZETASQL_RET_CHECK(argument_list.size() > 1);
+  if (array_op_arg_is_array &&
+      argument_list.at(1)->type()->AsArray()->element_type()->IsDouble()) {
+    return absl::InvalidArgumentError(
+          "ANY/SOME expressions with double precision[] column references are "
+          "not supported.");
+  }
   std::vector<zetasql::InputArgumentType> input_argument_types =
       GetInputArgumentTypes(argument_list);
 
@@ -767,10 +781,14 @@ absl::StatusOr<bool> ForwardTransformer::AppendGsqlInFunctionCallArrayArg(
   ZETASQL_RET_CHECK_EQ(argument_list.size(), 1)
       << "The scalar argument should be added to argument_list before the "
          "array arguments";
-  bool appended_arg_is_array = IsA(array_argument, Var);
-  if (appended_arg_is_array) {
+  bool appended_arg_is_array = IsA(array_argument, Var) ||
+      IsA(array_argument, Param);
+  if (IsA(array_argument, Var)) {
       return absl::InvalidArgumentError(
           "ANY/SOME expressions with column arguments are not supported");
+  } else if (IsA(array_argument, Param)) {
+      return absl::InvalidArgumentError(
+        "ANY/SOME expressions with parameter arguments are not supported");
   } else {
     ZETASQL_RET_CHECK(IsA(array_argument, ArrayExpr));
     // Get each expression from the array and add them to the argument list.

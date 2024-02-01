@@ -76,7 +76,7 @@ using TypeParameterValue = ::zetasql::TypeParameterValue;
 using TypeProto = ::zetasql::TypeProto;
 using ValueContent = ::zetasql::ValueContent;
 using ValueProto = ::zetasql::ValueProto;
-using postgres_translator::spangres::datatypes::common::jsonb::ParseJson;
+using postgres_translator::spangres::datatypes::common::jsonb::ParseJsonb;
 using TypeAnnotationCode = ::google::spanner::v1::TypeAnnotationCode;
 
 using absl::StrAppend;
@@ -257,7 +257,7 @@ const zetasql::ArrayType* GetPgJsonbArrayType() {
 
 absl::StatusOr<zetasql::Value> CreatePgJsonbValue(
     absl::string_view denormalized_jsonb) {
-  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, ParseJson(denormalized_jsonb));
+  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, ParseJsonb(denormalized_jsonb));
   return CreatePgJsonbValueFromNormalized(jsonb);
 }
 

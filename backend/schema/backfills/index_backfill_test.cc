@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "gmock/gmock.h"
@@ -26,12 +27,18 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/time/time.h"
 #include "absl/types/span.h"
+#include "backend/access/read.h"
+#include "backend/access/write.h"
 #include "backend/database/database.h"
+#include "backend/datamodel/value.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_only_transaction.h"
+#include "backend/transaction/read_write_transaction.h"
+#include "common/clock.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
@@ -45,374 +52,257 @@ namespace {
 using zetasql::values::Int64;
 using zetasql::values::NullString;
 using zetasql::values::String;
+using testing::ContainsRegex;
+using testing::ElementsAre;
+using testing::ElementsAreArray;
+using zetasql_base::testing::IsOkAndHolds;
+using zetasql_base::testing::StatusIs;
 
-// TODO: This is just a temporary test to verify basic
-// functionality until the schema constructor has been finished. Replace with
-// more robust testing after schema constructor has been finished.
-class BackfillTest : public ::testing::Test {
- public:
-  absl::Status UpdateSchema(absl::Span<const std::string> update_statements) {
-    int num_succesful;
-    absl::Status backfill_status;
-    absl::Time update_time;
-    ZETASQL_RETURN_IF_ERROR(database_->UpdateSchema(
-        SchemaChangeOperation{.statements = update_statements}, &num_succesful,
-        &update_time, &backfill_status));
-    return backfill_status;
-  }
+struct DbInfo {
+  std::unique_ptr<Clock> clock;
+  std::unique_ptr<Database> database;
+};
 
- protected:
-  void SetUp() override {
-    std::vector<std::string> create_statements = {R"(
+constexpr char kCreateTestTable[] = R"(
                             CREATE TABLE TestTable (
                               int64_col INT64,
                               string_col STRING(MAX),
                               another_string_col STRING(MAX),
                               extra_string_col STRING(MAX)
                             ) PRIMARY KEY (int64_col)
-                          )"};
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        database_,
-        Database::Create(
-            &clock_, SchemaChangeOperation{.statements = create_statements}));
+                          )";
 
-    index_update_statements_.push_back(R"(
-                            CREATE UNIQUE NULL_FILTERED INDEX TestIndex ON
+absl::StatusOr<DbInfo> CreateTestDb(
+    const absl::Span<const std::string> create_statements) {
+  DbInfo db_info = {.clock = std::make_unique<Clock>()};
+  ZETASQL_ASSIGN_OR_RETURN(
+      db_info.database,
+      Database::Create(db_info.clock.get(),
+                       SchemaChangeOperation{.statements = create_statements}));
+  return db_info;
+}
+
+absl::Status UpdateSchema(
+    const DbInfo& db_info,
+    const absl::Span<const std::string> update_statements) {
+  int num_succesful;
+  absl::Status backfill_status;
+  absl::Time update_time;
+  ZETASQL_RETURN_IF_ERROR(db_info.database->UpdateSchema(
+      SchemaChangeOperation{.statements = update_statements}, &num_succesful,
+      &update_time, &backfill_status));
+  return backfill_status;
+}
+
+absl::StatusOr<std::vector<ValueList>> ReadAllRows(const DbInfo& db_info,
+                                                   ReadArg read_arg) {
+  read_arg.key_set = KeySet::All();
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<ReadOnlyTransaction> txn,
+      db_info.database->CreateReadOnlyTransaction(ReadOnlyOptions()));
+  std::vector<ValueList> values;
+  std::unique_ptr<RowCursor> cursor;
+  ZETASQL_RETURN_IF_ERROR(txn->Read(read_arg, &cursor));
+  while (cursor->Next()) {
+    ValueList row_value;
+    row_value.reserve(read_arg.columns.size());
+    for (int i = 0; i < read_arg.columns.size(); i++) {
+      row_value.push_back(cursor->ColumnValue(i));
+    }
+    values.push_back(std::move(row_value));
+  }
+  return values;
+}
+
+absl::Status InsertValues(DbInfo& db_info, std::string table,
+                          std::vector<std::string> columns,
+                          std::vector<ValueList> values) {
+  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<ReadWriteTransaction> txn,
+                   db_info.database->CreateReadWriteTransaction(
+                       ReadWriteOptions(), RetryState()));
+
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, table, columns, values);
+  ZETASQL_EXPECT_OK(txn->Write(m));
+  ZETASQL_EXPECT_OK(txn->Commit());
+  return absl::OkStatus();
+}
+
+TEST(BackfillTest, SchemaChange) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(DbInfo db_info, CreateTestDb({kCreateTestTable}));
+  ZETASQL_ASSERT_OK(UpdateSchema(db_info, {R"(
+                            CREATE INDEX TestIndex ON
                             TestTable(string_col DESC)
                             STORING(another_string_col)
-                    )");
-  }
+                    )"}));
 
-  // Test components.
-  Clock clock_;
-  std::unique_ptr<Database> database_;
-  const Schema* schema_;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+                       db_info.database->CreateReadWriteTransaction(
+                           ReadWriteOptions(), RetryState()));
 
-  std::vector<std::string> index_update_statements_;
-};
-
-TEST_F(BackfillTest, BackfillIndex) {
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
-                         database_->CreateReadWriteTransaction(
-                             ReadWriteOptions(), RetryState()));
-
-    // Check that table exists and index doesn't.
-    schema_ = txn->schema();
-    EXPECT_THAT(schema_->tables().size(), 1);
-    EXPECT_THAT(schema_->tables()[0]->indexes().size(), 0);
-    EXPECT_THAT(schema_->tables()[0]->Name(), "TestTable");
-
-    // Buffer mutations.
-    Mutation m;
-    m.AddWriteOp(MutationOpType::kInsert, "TestTable",
-                 {"int64_col", "string_col"}, {{Int64(1), String("value1")}});
-    m.AddWriteOp(MutationOpType::kInsert, "TestTable",
-                 {"int64_col", "string_col", "another_string_col"},
-                 {{Int64(2), String("value2"), String("test")}});
-    ZETASQL_EXPECT_OK(txn->Write(m));
-    ZETASQL_EXPECT_OK(txn->Commit());
-  }
-
-  // Verify current values in table.
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadOnlyTransaction> txn,
-        database_->CreateReadOnlyTransaction(ReadOnlyOptions()));
-
-    std::unique_ptr<backend::RowCursor> cursor;
-    backend::ReadArg read_arg;
-    read_arg.table = "TestTable";
-    read_arg.columns = {"int64_col", "string_col"};
-    read_arg.key_set = KeySet::All();
-
-    ZETASQL_EXPECT_OK(txn->Read(read_arg, &cursor));
-    std::vector<zetasql::Value> values;
-    while (cursor->Next()) {
-      values.push_back(cursor->ColumnValue(0));
-      values.push_back(cursor->ColumnValue(1));
-    }
-    EXPECT_THAT(values, testing::ElementsAre(Int64(1), String("value1"),
-                                             Int64(2), String("value2")));
-  }
-
-  // Update the schema to include an index.
-  ZETASQL_EXPECT_OK(UpdateSchema(index_update_statements_));
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadOnlyTransaction> txn,
-        database_->CreateReadOnlyTransaction(ReadOnlyOptions()));
-
-    // Check that index now exists.
-    schema_ = txn->schema();
-    EXPECT_THAT(schema_->tables().size(), 1);
-    EXPECT_THAT(schema_->tables()[0]->indexes().size(), 1);
-    EXPECT_THAT(schema_->tables()[0]->Name(), "TestTable");
-    EXPECT_THAT(schema_->tables()[0]->indexes()[0]->Name(), "TestIndex");
-  }
-
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadOnlyTransaction> txn,
-        database_->CreateReadOnlyTransaction(ReadOnlyOptions()));
-    // Verify the values from the index.
-    std::unique_ptr<backend::RowCursor> cursor;
-    backend::ReadArg read_arg;
-    read_arg.table = "TestTable";
-    read_arg.index = "TestIndex";
-    read_arg.columns = {"string_col", "int64_col", "another_string_col"};
-    read_arg.key_set = KeySet::All();
-
-    ZETASQL_EXPECT_OK(txn->Read(read_arg, &cursor));
-    std::vector<zetasql::Value> values;
-    while (cursor->Next()) {
-      values.push_back(cursor->ColumnValue(0));
-      values.push_back(cursor->ColumnValue(1));
-      values.push_back(cursor->ColumnValue(2));
-    }
-    EXPECT_THAT(values,
-                testing::ElementsAre(String("value2"), Int64(2), String("test"),
-                                     String("value1"), Int64(1), NullString()));
-  }
+  const Schema* schema = txn->schema();
+  EXPECT_EQ(schema->tables().size(), 1);
+  EXPECT_EQ(schema->tables()[0]->Name(), "TestTable");
+  EXPECT_EQ(schema->tables()[0]->indexes().size(), 1);
+  EXPECT_EQ(schema->tables()[0]->Name(), "TestTable");
+  EXPECT_EQ(schema->tables()[0]->indexes()[0]->Name(), "TestIndex");
+  EXPECT_EQ(schema->tables()[0]->indexes()[0]->stored_columns().size(), 1);
 }
 
-TEST_F(BackfillTest, BackfillIndexWithNulls) {
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
-                         database_->CreateReadWriteTransaction(
-                             ReadWriteOptions(), RetryState()));
+TEST(BackfillTest, BasicTableValues) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(DbInfo db_info, CreateTestDb({kCreateTestTable}));
+  std::string table = "TestTable";
+  std::vector<std::string> columns = {"int64_col", "string_col",
+                                      "another_string_col", "extra_string_col"};
+  std::vector<ValueList> values_write = {
+      {Int64(1), String("value1"), NullString(), String("extra")},
+      {Int64(2), String("value2"), String("test"), NullString()}};
+  ZETASQL_ASSERT_OK(InsertValues(db_info, table, columns, values_write));
 
-    // Buffer mutations.
-    Mutation m;
-    m.AddWriteOp(MutationOpType::kInsert, "TestTable", {"int64_col"},
-                 {{Int64(1)}});
-    m.AddWriteOp(MutationOpType::kInsert, "TestTable", {"int64_col"},
-                 {{Int64(2)}});
-    ZETASQL_EXPECT_OK(txn->Write(m));
-    ZETASQL_EXPECT_OK(txn->Commit());
-  }
-
-  // Verify current values in table.
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadOnlyTransaction> txn,
-        database_->CreateReadOnlyTransaction(ReadOnlyOptions()));
-
-    std::unique_ptr<backend::RowCursor> cursor;
-    backend::ReadArg read_arg;
-    read_arg.table = "TestTable";
-    read_arg.columns = {"int64_col", "string_col"};
-    read_arg.key_set = KeySet::All();
-
-    ZETASQL_EXPECT_OK(txn->Read(read_arg, &cursor));
-    std::vector<zetasql::Value> values;
-    while (cursor->Next()) {
-      values.push_back(cursor->ColumnValue(0));
-      values.push_back(cursor->ColumnValue(1));
-    }
-    EXPECT_THAT(values, testing::ElementsAre(Int64(1), NullString(), Int64(2),
-                                             NullString()));
-  }
-
-  // Update the schema to include an index.
-  ZETASQL_EXPECT_OK(UpdateSchema({R"(
-      CREATE INDEX TestIndex ON TestTable(string_col DESC)
-  )"}));
-
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadOnlyTransaction> txn,
-        database_->CreateReadOnlyTransaction(ReadOnlyOptions()));
-
-    // Check that index now exists.
-    schema_ = txn->schema();
-    EXPECT_THAT(schema_->tables().size(), 1);
-    EXPECT_THAT(schema_->tables()[0]->indexes().size(), 1);
-    EXPECT_THAT(schema_->tables()[0]->Name(), "TestTable");
-    EXPECT_THAT(schema_->tables()[0]->indexes()[0]->Name(), "TestIndex");
-  }
-
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadOnlyTransaction> txn,
-        database_->CreateReadOnlyTransaction(ReadOnlyOptions()));
-    // Verify the values from the index.
-    std::unique_ptr<backend::RowCursor> cursor;
-    backend::ReadArg read_arg;
-    read_arg.table = "TestTable";
-    read_arg.index = "TestIndex";
-    read_arg.columns = {"string_col", "int64_col"};
-    read_arg.key_set = KeySet::All();
-
-    ZETASQL_EXPECT_OK(txn->Read(read_arg, &cursor));
-    std::vector<zetasql::Value> values;
-    while (cursor->Next()) {
-      values.push_back(cursor->ColumnValue(0));
-      values.push_back(cursor->ColumnValue(1));
-    }
-    EXPECT_THAT(values, testing::ElementsAre(NullString(), Int64(1),
-                                             NullString(), Int64(2)));
-  }
+  EXPECT_THAT(ReadAllRows(db_info, ReadArg{.table = table, .columns = columns}),
+              IsOkAndHolds(ElementsAreArray(values_write)));
 }
 
-TEST_F(BackfillTest, BackfillUniqueIndex) {
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
-                         database_->CreateReadWriteTransaction(
-                             ReadWriteOptions(), RetryState()));
+TEST(BackfillTest, BasicIndexValues) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(DbInfo db_info, CreateTestDb({kCreateTestTable}));
+  ZETASQL_ASSERT_OK(InsertValues(
+      db_info, "TestTable",
+      {"int64_col", "string_col", "another_string_col", "extra_string_col"},
+      {{Int64(1), String("value1"), NullString(), String("extra")},
+       {Int64(2), String("value2"), String("test"), NullString()}}));
 
-    // Check that table exists and index doesn't.
-    schema_ = txn->schema();
-    EXPECT_THAT(schema_->tables().size(), 1);
-    EXPECT_THAT(schema_->tables()[0]->indexes().size(), 0);
-    EXPECT_THAT(schema_->tables()[0]->Name(), "TestTable");
+  ZETASQL_ASSERT_OK(UpdateSchema(db_info, {R"(
+                            CREATE INDEX TestIndex ON
+                            TestTable(string_col DESC)
+                            STORING(another_string_col)
+                    )"}));
 
-    // Buffer mutations.
-    Mutation m;
-    m.AddWriteOp(MutationOpType::kInsert, "TestTable",
-                 {"int64_col", "string_col"}, {{Int64(1), String("value")}});
-    m.AddWriteOp(MutationOpType::kInsert, "TestTable",
-                 {"int64_col", "string_col"}, {{Int64(2), String("value")}});
-    ZETASQL_EXPECT_OK(txn->Write(m));
-    ZETASQL_EXPECT_OK(txn->Commit());
-  }
+  EXPECT_THAT(
+      ReadAllRows(db_info, ReadArg{.table = "TestTable",
+                                   .index = "TestIndex",
+                                   .columns = {"string_col", "int64_col",
+                                               "another_string_col"}}),
+      IsOkAndHolds(
+          ElementsAre(ValueList{String("value2"), Int64(2), String("test")},
+                      ValueList{String("value1"), Int64(1), NullString()})));
+}
 
-  // Verify current values in table.
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadOnlyTransaction> txn,
-        database_->CreateReadOnlyTransaction(ReadOnlyOptions()));
+TEST(BackfillTest, IndexNullValues) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(DbInfo db_info, CreateTestDb({kCreateTestTable}));
+  ZETASQL_ASSERT_OK(InsertValues(db_info, "TestTable", {"int64_col"},
+                         {{Int64(1)}, {Int64(2)}}));
 
-    std::unique_ptr<backend::RowCursor> cursor;
-    backend::ReadArg read_arg;
-    read_arg.table = "TestTable";
-    read_arg.columns = {"int64_col", "string_col"};
-    read_arg.key_set = KeySet::All();
+  ZETASQL_ASSERT_OK(UpdateSchema(db_info, {R"(
+                            CREATE INDEX TestIndex ON
+                            TestTable(string_col DESC)
+                    )"}));
 
-    ZETASQL_EXPECT_OK(txn->Read(read_arg, &cursor));
-    std::vector<zetasql::Value> values;
-    while (cursor->Next()) {
-      values.push_back(cursor->ColumnValue(0));
-      values.push_back(cursor->ColumnValue(1));
-    }
-    EXPECT_THAT(values, testing::ElementsAre(Int64(1), String("value"),
-                                             Int64(2), String("value")));
-  }
+  EXPECT_THAT(
+      ReadAllRows(db_info, ReadArg{.table = "TestTable",
+                                   .index = "TestIndex",
+                                   .columns = {"string_col", "int64_col"}}),
+      IsOkAndHolds(ElementsAre(ValueList{NullString(), Int64(1)},
+                               ValueList{NullString(), Int64(2)})));
+}
 
-  // Update the schema to include a unique index, which should fail on backfill.
-  EXPECT_EQ(UpdateSchema(index_update_statements_),
+TEST(BackfillTest, NullFilteredIndexValues) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(DbInfo db_info, CreateTestDb({kCreateTestTable}));
+  ZETASQL_ASSERT_OK(InsertValues(
+      db_info, "TestTable",
+      {"int64_col", "string_col", "another_string_col", "extra_string_col"},
+      {{Int64(1), String("value1"), NullString(), String("extra")},
+       {Int64(2), String("value2"), String("test"), NullString()}}));
+
+  ZETASQL_ASSERT_OK(UpdateSchema(db_info, {R"(
+                            CREATE NULL_FILTERED INDEX TestIndex ON
+                            TestTable(another_string_col DESC)
+                            STORING(extra_string_col)
+                    )"}));
+
+  EXPECT_THAT(ReadAllRows(db_info,
+                          ReadArg{.table = "TestTable",
+                                  .index = "TestIndex",
+                                  .columns = {"another_string_col", "int64_col",
+                                              "extra_string_col"}}),
+              IsOkAndHolds(ElementsAre(
+                  ValueList{String("test"), Int64(2), NullString()})));
+}
+
+TEST(BackfillTest, BackfillUniqueIndex) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(DbInfo db_info, CreateTestDb({kCreateTestTable}));
+  ZETASQL_ASSERT_OK(
+      InsertValues(db_info, "TestTable", {"int64_col", "string_col"},
+                   {{Int64(1), String("value")}, {Int64(2), String("value")}}));
+
+  EXPECT_EQ(UpdateSchema(db_info, {R"(
+                            CREATE UNIQUE INDEX TestIndex ON
+                            TestTable(string_col DESC)
+                    )"}),
             error::UniqueIndexViolationOnIndexCreation(
                 "TestIndex", R"({String("value")↓})"));
 }
 
-TEST_F(BackfillTest, BackfillAlterIndex) {
-  // Prepare test data.
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
-                         database_->CreateReadWriteTransaction(
-                             ReadWriteOptions(), RetryState()));
-    schema_ = txn->schema();
-    // Buffer mutations.
-    Mutation m;
-    m.AddWriteOp(MutationOpType::kInsert, "TestTable",
-                 {"int64_col", "string_col"}, {{Int64(1), String("value1")}});
-    m.AddWriteOp(MutationOpType::kInsert, "TestTable",
-                 {"int64_col", "string_col", "another_string_col"},
-                 {{Int64(2), String("value2"), String("test")}});
-    m.AddWriteOp(
-        MutationOpType::kInsert, "TestTable",
-        {"int64_col", "string_col", "another_string_col", "extra_string_col"},
-        {{Int64(3), String("value3"), String("test"), String("extra")}});
-    ZETASQL_ASSERT_OK(txn->Write(m));
-    ZETASQL_ASSERT_OK(txn->Commit());
-  }
+TEST(BackfillTest, AlterIndexDropColumn) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(DbInfo db_info, CreateTestDb({kCreateTestTable}));
+  ZETASQL_ASSERT_OK(InsertValues(
+      db_info, "TestTable",
+      {"int64_col", "string_col", "another_string_col", "extra_string_col"},
+      {{Int64(1), String("value1"), NullString(), String("extra")},
+       {Int64(2), String("value2"), String("test"), NullString()}}));
 
-  // Update the schema to include an index.
-  ZETASQL_ASSERT_OK(UpdateSchema(index_update_statements_));
+  ZETASQL_ASSERT_OK(UpdateSchema(db_info, {R"(
+                            CREATE INDEX TestIndex ON
+                            TestTable(string_col DESC)
+                            STORING(another_string_col, extra_string_col)
+                    )"}));
+
   ZETASQL_ASSERT_OK(UpdateSchema(
-      {"ALTER INDEX TestIndex ADD STORED COLUMN extra_string_col"}));
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadOnlyTransaction> txn,
-        database_->CreateReadOnlyTransaction(ReadOnlyOptions()));
+      db_info,
+      {R"(ALTER INDEX TestIndex DROP STORED COLUMN another_string_col)"}));
 
-    // Check that index now exists.
-    schema_ = txn->schema();
-    const Index* index = schema_->FindIndex("TestIndex");
-    ASSERT_THAT(index->stored_columns().size(), 2);
-  }
+  EXPECT_THAT(ReadAllRows(db_info, ReadArg{.table = "TestTable",
+                                           .index = "TestIndex",
+                                           .columns = {"another_string_col"}}),
+              StatusIs(absl::StatusCode::kNotFound,
+                       ContainsRegex(
+                           "does not have a column named another_string_col")));
 
-  // We will verify the data two times, so create a lambda here.
-  auto read_data = [&]() -> absl::StatusOr<std::vector<zetasql::Value>> {
-    ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<ReadOnlyTransaction> txn,
-                     database_->CreateReadOnlyTransaction(ReadOnlyOptions()));
-    // Verify the values from the index.
-    std::unique_ptr<backend::RowCursor> cursor;
-    backend::ReadArg read_arg = {
-        .table = "TestTable",
-        .index = "TestIndex",
-        .key_set = KeySet::All(),
-        .columns = {"string_col", "int64_col", "another_string_col",
-                    "extra_string_col"},
-    };
-    ZETASQL_RETURN_IF_ERROR(txn->Read(read_arg, &cursor));
-    std::vector<zetasql::Value> values;
-    while (cursor->Next()) {
-      values.push_back(cursor->ColumnValue(0));
-      values.push_back(cursor->ColumnValue(1));
-      values.push_back(cursor->ColumnValue(2));
-      values.push_back(cursor->ColumnValue(3));
-    }
-    return values;
-  };
+  EXPECT_THAT(
+      ReadAllRows(db_info, ReadArg{.table = "TestTable",
+                                   .index = "TestIndex",
+                                   .columns = {"string_col", "int64_col",
+                                               "extra_string_col"}}),
+      IsOkAndHolds(
+          ElementsAre(ValueList{String("value2"), Int64(2), NullString()},
+                      ValueList{String("value1"), Int64(1), String("extra")})));
+}
 
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<zetasql::Value> values, read_data());
-    EXPECT_THAT(values,
-                testing::ElementsAre(
-                    String("value3"), Int64(3), String("test"), String("extra"),
-                    String("value2"), Int64(2), String("test"), NullString(),
-                    String("value1"), Int64(1), NullString(), NullString()));
-  }
+TEST(BackfillTest, AlterIndexAddColumn) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(DbInfo db_info, CreateTestDb({kCreateTestTable}));
+  ZETASQL_ASSERT_OK(InsertValues(
+      db_info, "TestTable",
+      {"int64_col", "string_col", "another_string_col", "extra_string_col"},
+      {{Int64(1), String("value1"), NullString(), String("extra")},
+       {Int64(2), String("value2"), String("test"), NullString()}}));
 
-  // Remove the column from index to verify we can read it from index.
+  ZETASQL_ASSERT_OK(UpdateSchema(db_info, {R"(
+                            CREATE INDEX TestIndex ON
+                            TestTable(string_col DESC)
+                            STORING(another_string_col)
+                    )"}));
   ZETASQL_ASSERT_OK(UpdateSchema(
-      {"ALTER INDEX TestIndex DROP STORED COLUMN another_string_col"}));
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<ReadOnlyTransaction> txn,
-        database_->CreateReadOnlyTransaction(ReadOnlyOptions()));
-    std::unique_ptr<backend::RowCursor> cursor;
-    // Check that index now exists.
-    schema_ = txn->schema();
-    const Index* index = schema_->FindIndex("TestIndex");
-    ASSERT_THAT(index->stored_columns().size(), 1);
+      db_info, {"ALTER INDEX TestIndex ADD STORED COLUMN extra_string_col"}));
 
-    backend::ReadArg read_arg = {
-        .table = "TestTable",
-        .index = "TestIndex",
-        .key_set = KeySet::All(),
-        .columns = {"another_string_col"},
-    };
-
-    EXPECT_THAT(txn->Read(read_arg, &cursor),
-                zetasql_base::testing::StatusIs(
-                    absl::StatusCode::kNotFound,
-                    testing::ContainsRegex(
-                        "does not have a column named another_string_col")));
-  }
-
-  // Add the column back to verify the data is there.
-  ZETASQL_ASSERT_OK(UpdateSchema(
-      {"ALTER INDEX TestIndex ADD STORED COLUMN another_string_col"}));
-  {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<zetasql::Value> values, read_data());
-    EXPECT_THAT(values,
-                testing::ElementsAre(
-                    String("value3"), Int64(3), String("test"), String("extra"),
-                    String("value2"), Int64(2), String("test"), NullString(),
-                    String("value1"), Int64(1), NullString(), NullString()));
-  }
+  EXPECT_THAT(
+      ReadAllRows(db_info, ReadArg{.table = "TestTable",
+                                   .index = "TestIndex",
+                                   .columns = {"string_col", "int64_col",
+                                               "another_string_col",
+                                               "extra_string_col"}}),
+      IsOkAndHolds(ElementsAre(
+          ValueList{String("value2"), Int64(2), String("test"), NullString()},
+          ValueList{String("value1"), Int64(1), NullString(),
+                    String("extra")})));
 }
 }  // namespace
 }  // namespace backend

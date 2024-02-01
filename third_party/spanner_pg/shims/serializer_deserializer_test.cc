@@ -273,6 +273,7 @@ TEST_F(SerializationDeserializationTest, FuncCall) {
   func_call->func_variadic = true;
   // TODO:  Whenever we add support for WindowDef, test one here.
   func_call->over = nullptr;
+  func_call->functionHints = list_make2(PlaceHolderNode(), PlaceHolderNode());
 
   EXPECT_THAT(func_call, CanSerializeAndDeserialize());
 }
@@ -382,6 +383,7 @@ TEST_F(SerializationDeserializationTest, Constraint) {
       makeRangeVar(pstrdup("test_schema"), pstrdup("test_table"), 98);
   constraint->raw_expr = PlaceHolderNode();
   constraint->skip_validation = true;
+  constraint->stored_kind = GENERATED_COL_NON_STORED;
   constraint->where_clause = PlaceHolderNode();
 
   EXPECT_THAT(constraint, CanSerializeAndDeserialize());
@@ -1021,10 +1023,53 @@ TEST_F(SerializationDeserializationTest, RenameStmt) {
   EXPECT_THAT(rename_stmt, CanSerializeAndDeserialize());
 }
 
+TEST_F(SerializationDeserializationTest, TableRenameOp) {
+  TableRenameOp* rename_op = makeNode(TableRenameOp);
+  rename_op->fromName = makeNode(RangeVar);
+  rename_op->toName = pstrdup("new_name");
+  EXPECT_THAT(rename_op, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, TableChainedRenameStmt) {
+  TableChainedRenameStmt* rename_stmt = makeNode(TableChainedRenameStmt);
+  rename_stmt->ops = list_make1(makeNode(TableRenameOp));
+  EXPECT_THAT(rename_stmt, CanSerializeAndDeserialize());
+}
+
 TEST_F(SerializationDeserializationTest, SynonymClause) {
   SynonymClause* synonym_clause = makeNode(SynonymClause);
   synonym_clause->name = pstrdup("test_synonym");
   EXPECT_THAT(synonym_clause, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, FunctionHints) {
+  FuncExpr* function_expr = makeFuncExpr(F_CONCAT, TEXTOID,
+                                         /*args=*/NIL,
+                                         /*funccollid=*/InvalidOid,
+                                         /*inputcollid=*/InvalidOid,
+                                         COERCE_EXPLICIT_CALL);
+  function_expr->functionHints =
+      list_make2(PlaceHolderNode(), PlaceHolderNode());
+  EXPECT_THAT(function_expr, CanSerializeAndDeserialize());
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Aggref* aggref,
+                       internal::makeAggref(F_COUNT_ANY, INT8OID,
+                                            /*aggcollid=*/InvalidOid,
+                                            /*inputcollid=*/InvalidOid,
+                                            /*aggtranstype=*/InvalidOid,
+                                            /*arg_types=*/NIL,
+                                            /*aggdirectargs=*/nullptr,
+                                            /*args=*/NIL,
+                                            /*aggorder=*/nullptr,
+                                            /*aggdistinct=*/NIL,
+                                            /*aggfilter=*/nullptr,
+                                            /*aggstar=*/true));
+  aggref->functionHints = list_make2(PlaceHolderNode(), PlaceHolderNode());
+  EXPECT_THAT(aggref, CanSerializeAndDeserialize());
+
+  WindowFunc* window_func = makeNode(WindowFunc);
+  window_func->functionHints = list_make2(PlaceHolderNode(), PlaceHolderNode());
+  EXPECT_THAT(window_func, CanSerializeAndDeserialize());
 }
 
 }  // namespace

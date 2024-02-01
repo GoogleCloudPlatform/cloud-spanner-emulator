@@ -238,6 +238,7 @@ ddl::ColumnDefinition GoogleSqlTypeToDDLColumnType(
 
   ddl_column_def.set_type(ddl::ColumnDefinition::NONE);
   if (type->IsDouble()) ddl_column_def.set_type(ddl::ColumnDefinition::DOUBLE);
+  if (type->IsFloat()) ddl_column_def.set_type(ddl::ColumnDefinition::FLOAT);
   if (type->IsInt64()) ddl_column_def.set_type(ddl::ColumnDefinition::INT64);
   if (type->IsBool()) ddl_column_def.set_type(ddl::ColumnDefinition::BOOL);
   if (type->IsString()) ddl_column_def.set_type(ddl::ColumnDefinition::STRING);

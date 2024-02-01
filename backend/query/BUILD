@@ -64,6 +64,7 @@ cc_library(
         "//common:config",
         "//common:constants",
         "//common:errors",
+        "//common:feature_flags",
         "//common:limits",
         "//frontend/converters:values",
         "//third_party/spanner_pg/interface:emulator_parser",

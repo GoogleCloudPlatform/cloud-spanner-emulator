@@ -572,6 +572,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter) {
                          FieldTypeChecker<Node*>(node.raw_expr),
                          FieldTypeChecker<char*>(node.cooked_expr),
                          FieldTypeChecker<char>(node.generated_when),
+                         FieldTypeChecker<GeneratedColStoreOpt>(node.stored_kind),
                          FieldTypeChecker<List*>(node.keys),
                          FieldTypeChecker<List*>(node.including),
                          FieldTypeChecker<List*>(node.exclusions),
@@ -805,7 +806,7 @@ absl::Status ValidateParseTreeNode(const RangeVar& node,
   // `location` defines parsed token location of the text in the input, no
   // validation required.
 
-  // `tableHints` defines extra query options to faciliate DQL/DML handling.
+  // `tableHints` defines extra query options to facilitate DQL/DML handling.
   // This is not supported by DDL.
   if (node.tableHints != nullptr) {
     return UnsupportedTranslationError(
@@ -868,13 +869,6 @@ absl::Status ValidateParseTreeNode(const AlterTableStmt& node,
           const AlterTableCmd* first_cmd,
           (GetListItemAsNode<AlterTableCmd, T_AlterTableCmd>(node.cmds, 0)));
       ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*first_cmd, node.objtype, options));
-
-      if (first_cmd->subtype == AT_SetNotNull ||
-          first_cmd->subtype == AT_DropNotNull) {
-        return UnsupportedTranslationError(
-            "<SET/DROP NOT NULL> are allowed only after <ALTER COLUMN> action "
-            "of <ALTER TABLE> statement.");
-      }
 
       if (first_cmd->subtype == AT_AlterColumnType) {
         return ValidateAlterColumnType(node, first_cmd, options);
@@ -1294,6 +1288,36 @@ absl::Status ValidateParseTreeNode(const RenameStmt& node,
   return absl::OkStatus();
 }
 
+absl::Status ValidateParseTreeNode(const TableChainedRenameStmt& node,
+                                   const TranslationOptions& options) {
+  // Make sure that if TableChainedRenameStmt structure changes we update the
+  // translator.
+  AssertPGNodeConsistsOf(node, FieldTypeChecker<List*>(node.ops));
+
+  ZETASQL_RET_CHECK_EQ(node.type, T_TableChainedRenameStmt);
+
+  if (list_length(node.ops) < 2) {
+    return UnsupportedTranslationError(
+        "Chained <RENAME TABLE> statement must have at least two rename ops.");
+  }
+  for (int i = 0; i < list_length(node.ops); ++i) {
+    TableRenameOp* op = ::postgres_translator::internal::PostgresCastNode(
+        TableRenameOp, node.ops->elements[i].ptr_value);
+    ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*op));
+  }
+  return absl::OkStatus();
+}
+
+absl::Status ValidateParseTreeNode(const TableRenameOp& node) {
+  // Make sure that if TableRenameOp structure changes we update the translator.
+  AssertPGNodeConsistsOf(node, FieldTypeChecker<RangeVar*>(node.fromName),
+                         FieldTypeChecker<char*>(node.toName));
+
+  ZETASQL_RET_CHECK_EQ(node.type, T_TableRenameOp);
+
+  return absl::OkStatus();
+}
+
 absl::Status ValidateParseTreeNode(const CreateStmt& node,
                                    const TranslationOptions& options) {
   // Make sure that if CreateStmt structure changes we update the translator.
@@ -1689,6 +1713,9 @@ absl::Status ValidateParseTreeNode(const GrantStmt& node) {
       break;
     case ObjectType::OBJECT_SEQUENCE:
       object_type = "SEQUENCES";
+      break;
+    case ObjectType::OBJECT_SCHEMA:
+      object_type = "SCHEMAS";
       break;
     default:
       return UnsupportedTranslationError(absl::Substitute(
@@ -2124,5 +2151,12 @@ absl::Status ValidateParseTreeNode(const NullTest& node) {
 
   return absl::OkStatus();
 }
+
+absl::Status ValidateParseTreeNode(const Value& node) {
+  AssertStructConsistsOf(node, FieldTypeChecker<NodeTag>(node.type),
+                         FieldTypeChecker<Value::ValUnion>(node.val));
+  return absl::OkStatus();
+}
+
 }  // namespace spangres
 }  // namespace postgres_translator

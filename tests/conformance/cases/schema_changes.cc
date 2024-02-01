@@ -91,6 +91,7 @@ const absl::string_view kPgDdlTestFiles[] = {
     "ddl.alter_table.test",
     "ddl.alter_table_generatedcolumn_default.test",
     "ddl.alter_change_stream.test",
+    "ddl.alter_index.test",
     "ddl.drop_index.test",
     "ddl.drop_table.test",
     "ddl.drop_view.test",

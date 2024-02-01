@@ -236,6 +236,10 @@ absl::Status TableValidator::Validate(const Table* table,
   if (table->is_public()) {
     ZETASQL_RETURN_IF_ERROR(
         GlobalSchemaNames::ValidateSchemaName("Table", table->name_));
+    if (!table->synonym_.empty()) {
+      ZETASQL_RETURN_IF_ERROR(
+          GlobalSchemaNames::ValidateSchemaName("Synonym", table->synonym_));
+    }
   }
 
   const std::string object_type = OwningObjectType(table);
@@ -418,6 +422,9 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
                         }));
     }
     context->global_names()->RemoveName(table->Name());
+    if (!table->synonym().empty()) {
+      context->global_names()->RemoveName(table->synonym());
+    }
     return absl::OkStatus();
   }
 
@@ -470,6 +477,11 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
                        table->primary_key_[i]->column()->Name()),
           reason);
     }
+  }
+
+  if (!table->synonym().empty() && !old_table->synonym().empty() &&
+      table->synonym() != old_table->synonym()) {
+    return error::CannotAlterSynonym(table->synonym(), table->name_);
   }
 
   ZETASQL_RETURN_IF_ERROR(ValidateUpdateRowDeletionPolicy(table, old_table));

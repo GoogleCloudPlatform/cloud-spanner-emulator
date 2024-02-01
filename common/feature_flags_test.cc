@@ -36,8 +36,9 @@ TEST(EmulatorFeatureFlags, Basic) {
   EXPECT_TRUE(features.flags().enable_generated_pk);
   EXPECT_FALSE(features.flags().enable_fk_delete_cascade_action);
   EXPECT_TRUE(features.flags().enable_bit_reversed_positive_sequences);
-  EXPECT_FALSE(
+  EXPECT_TRUE(
       features.flags().enable_bit_reversed_positive_sequences_postgresql);
+  EXPECT_FALSE(features.flags().enable_upsert_queries);
 
   {
     EmulatorFeatureFlags::Flags flags;
@@ -46,7 +47,8 @@ TEST(EmulatorFeatureFlags, Basic) {
     flags.enable_generated_pk = false;
     flags.enable_fk_delete_cascade_action = true;
     flags.enable_bit_reversed_positive_sequences = false;
-    flags.enable_bit_reversed_positive_sequences_postgresql = true;
+    flags.enable_bit_reversed_positive_sequences_postgresql = false;
+    flags.enable_upsert_queries = true;
 
     test::ScopedEmulatorFeatureFlagsSetter setter(flags);
     EXPECT_FALSE(features.flags().enable_check_constraint);
@@ -54,16 +56,18 @@ TEST(EmulatorFeatureFlags, Basic) {
     EXPECT_FALSE(features.flags().enable_generated_pk);
     EXPECT_TRUE(features.flags().enable_fk_delete_cascade_action);
     EXPECT_FALSE(features.flags().enable_bit_reversed_positive_sequences);
-    EXPECT_TRUE(
+    EXPECT_FALSE(
         features.flags().enable_bit_reversed_positive_sequences_postgresql);
+    EXPECT_TRUE(features.flags().enable_upsert_queries);
   }
   EXPECT_TRUE(features.flags().enable_check_constraint);
   EXPECT_TRUE(features.flags().enable_column_default_values);
   EXPECT_TRUE(features.flags().enable_generated_pk);
   EXPECT_FALSE(features.flags().enable_fk_delete_cascade_action);
   EXPECT_TRUE(features.flags().enable_bit_reversed_positive_sequences);
-  EXPECT_FALSE(
+  EXPECT_TRUE(
       features.flags().enable_bit_reversed_positive_sequences_postgresql);
+  EXPECT_FALSE(features.flags().enable_upsert_queries);
 }
 
 TEST(EmulatorFeatureFlags, DmlReturningFlag) {

@@ -306,15 +306,16 @@ CREATE TABLE "AllUsers_2" (
 );
 ==
 
-ALTER TABLE Users ALTER COLUMN name SET NOT NULL;
---
-ERROR: <SET/DROP NOT NULL> are allowed only after <ALTER COLUMN> action of <ALTER TABLE> statement.
-==
-
-ALTER TABLE Users ALTER COLUMN name DROP NOT NULL;
---
-ERROR: <SET/DROP NOT NULL> are allowed only after <ALTER COLUMN> action of <ALTER TABLE> statement.
-==
+# TODO: Creating support for SET/DROP NOT NULL in Spanner, will
+# delete and update this once complete
+# ALTER TABLE Users ALTER COLUMN name SET NOT NULL;
+# --
+# ERROR: <SET/DROP NOT NULL> are allowed only after <ALTER COLUMN> action of <ALTER TABLE> statement.
+# ==
+# ALTER TABLE Users ALTER COLUMN name DROP NOT NULL;
+# --
+# ERROR: <SET/DROP NOT NULL> are allowed only after <ALTER COLUMN> action of <ALTER TABLE> statement.
+# ==
 
 ALTER TABLE Users ADD COLUMN newcol bigint PRIMARY KEY;
 --

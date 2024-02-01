@@ -341,6 +341,10 @@ typedef struct Aggref
 	int			aggno;			/* unique ID within the Agg node */
 	int			aggtransno;		/* unique ID of transition state in the Agg */
 	int			location;		/* token location, or -1 if unknown */
+	/* BEGIN SPANGRES ADDITIONAL FIELDS */
+	List		*functionHints;	/* function hints. Only applies to standard
+								 * function calls, not special expressions that
+								 * are similar to function calls. */
 } Aggref;
 
 /*
@@ -394,6 +398,10 @@ typedef struct WindowFunc
 	bool		winstar;		/* true if argument list was really '*' */
 	bool		winagg;			/* is function a simple aggregate? */
 	int			location;		/* token location, or -1 if unknown */
+	/* BEGIN SPANGRES ADDITIONAL FIELDS */
+	List		*functionHints;	/* function hints. Only applies to standard
+								 * function calls, not special expressions that
+								 * are similar to function calls. */
 } WindowFunc;
 
 /*
@@ -503,6 +511,10 @@ typedef struct FuncExpr
 	Oid			inputcollid;	/* OID of collation that function should use */
 	List	   *args;			/* arguments to the function */
 	int			location;		/* token location, or -1 if unknown */
+	/* BEGIN SPANGRES ADDITIONAL FIELDS */
+	List		*functionHints;	/* function hints. Only applies to standard
+								 * function calls, not special expressions that
+								 * are similar to function calls. */
 } FuncExpr;
 
 /*

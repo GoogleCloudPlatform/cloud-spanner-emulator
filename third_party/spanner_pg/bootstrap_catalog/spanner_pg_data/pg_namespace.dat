@@ -1,3 +1,4 @@
 [
-{ oid_symbol => 'SPANNER_NSP', nspname => 'spanner', nspacl => '_null_' },
+{ oid => '50000', oid_symbol => 'SPANNER_NSP', nspname => 'spanner',
+  nspacl => '_null_' },
 ]

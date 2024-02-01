@@ -661,6 +661,7 @@ absl::Status ComparisonNotSupported(int arg_num,
                                     absl::string_view function_name);
 absl::Status StructComparisonNotSupported(absl::string_view function_name);
 absl::Status PendingCommitTimestampDmlValueOnly();
+absl::Status UnsupportedUpsertQueries(absl::string_view insert_mode);
 absl::Status NoFeatureSupportDifferentTypeArrayCasts(
     absl::string_view from_type, absl::string_view to_type);
 absl::Status UnsupportedTablesampleRepeatable();
@@ -711,6 +712,14 @@ absl::Status RowDeletionPolicyOnAncestors(
 absl::Status ForeignKeyRowDeletionPolicyAddNotAllowed(
     absl::string_view table_name, absl::string_view foreign_keys);
 
+// Table synonym errors.
+absl::Status SynonymDoesNotExist(absl::string_view synonym,
+                                 absl::string_view table_name);
+absl::Status SynonymAlreadyExists(absl::string_view synonym,
+                                  absl::string_view table_name);
+absl::Status CannotAlterSynonym(absl::string_view synonym,
+                                absl::string_view table_name);
+
 // Views errors.
 absl::Status ViewsNotSupported(absl::string_view view_op_name);
 absl::Status TooManyViewsPerDatabase(absl::string_view function_name,
@@ -758,6 +767,19 @@ absl::Status SequenceNeedsAccessToSchema();
 absl::Status SequenceExhausted(absl::string_view name);
 absl::Status InvalidDropSequenceWithColumnDependents(
     absl::string_view sequence_name, absl::string_view dependent_name);
+
+// AlterDatabase related errors
+absl::Status UnsupportedAlterDatabaseOption(absl::string_view option_name);
+absl::Status NullValueAlterDatabaseOption();
+
+// Named Schema-related errors
+absl::Status NamedSchemaNotFound(absl::string_view named_schema_name);
+absl::Status AlterNamedSchemaNotSupported();
+absl::Status DropNamedSchemaHasDependencies(
+    absl::string_view named_schema_name, const std::vector<std::string>& tables,
+    const std::vector<std::string>& views,
+    const std::vector<std::string>& indexes,
+    const std::vector<std::string>& sequences);
 
 }  // namespace error
 }  // namespace emulator

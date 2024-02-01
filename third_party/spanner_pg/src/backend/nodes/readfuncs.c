@@ -823,6 +823,7 @@ _readFuncCall(void)
 	READ_BOOL_FIELD(func_variadic);
 	READ_ENUM_FIELD(funcformat, CoercionForm);
 	READ_LOCATION_FIELD(location);
+	READ_NODE_FIELD(functionHints);
 
 	READ_DONE();
 }
@@ -927,6 +928,7 @@ _readAggref(void)
 	READ_INT_FIELD(aggno);
 	READ_INT_FIELD(aggtransno);
 	READ_LOCATION_FIELD(location);
+	READ_NODE_FIELD(functionHints);
 
 	READ_DONE();
 }
@@ -966,6 +968,7 @@ _readWindowFunc(void)
 	READ_BOOL_FIELD(winstar);
 	READ_BOOL_FIELD(winagg);
 	READ_LOCATION_FIELD(location);
+	READ_NODE_FIELD(functionHints);
 
 	READ_DONE();
 }
@@ -1008,6 +1011,7 @@ _readFuncExpr(void)
 	READ_OID_FIELD(inputcollid);
 	READ_NODE_FIELD(args);
 	READ_LOCATION_FIELD(location);
+	READ_NODE_FIELD(functionHints);
 
 	READ_DONE();
 }
@@ -3608,6 +3612,7 @@ _readConstraint(void)
 	READ_NODE_FIELD(pktable);
 	READ_NODE_FIELD(raw_expr);
 	READ_BOOL_FIELD(skip_validation);
+	READ_ENUM_FIELD(stored_kind, GeneratedColStoreOpt);
 	READ_NODE_FIELD(where_clause);
   READ_STRING_FIELD(constraint_expr_string);
 
@@ -3882,6 +3887,27 @@ _readRenameStmt(void)
   READ_ENUM_FIELD(behavior, DropBehavior);
 	READ_BOOL_FIELD(missing_ok);
   READ_BOOL_FIELD(addSynonym);
+
+  READ_DONE();
+}
+
+static TableRenameOp*
+_readTableRenameOp(void)
+{
+	READ_LOCALS(TableRenameOp);
+
+  READ_NODE_FIELD(fromName);
+  READ_STRING_FIELD(toName);
+
+  READ_DONE();
+}
+
+static TableChainedRenameStmt*
+_readTableChainedRenameStmt(void)
+{
+	READ_LOCALS(TableChainedRenameStmt);
+
+  READ_NODE_FIELD(ops);
 
   READ_DONE();
 }
@@ -4300,6 +4326,10 @@ parseNodeString(void)
 		return_value = _readAlterSeqStmt();
 	else if (MATCH("RENAMESTMT", 10))
 		return_value = _readRenameStmt();
+	else if (MATCH("TABLERENAMEOP", 13))
+		return_value = _readTableRenameOp();
+	else if (MATCH("TABLECHAINEDRENAMESTMT", 22))
+		return_value = _readTableChainedRenameStmt();
 	else if (MATCH("SYNONYMCLAUSE", 13))
 		return_value = _readSynonymClause();
 	/* SPANGRES END */

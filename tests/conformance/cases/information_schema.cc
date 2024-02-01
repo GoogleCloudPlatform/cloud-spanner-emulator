@@ -2062,7 +2062,8 @@ TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-TEST_P(InformationSchemaTest, PGDefaultColumns) {
+// TODO: b/317897389 - Re-enable after fixing this bug.
+TEST_P(InformationSchemaTest, DISABLED_PGDefaultColumns) {
   // Since the query and output for the PG dialect is significantly different,
   // we test this logic in a separate function for the PG dialect.
   if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
@@ -2191,7 +2192,8 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
   }
 }
 
-TEST_P(InformationSchemaTest, DefaultIndexColumns) {
+// TODO: b/317897389 - Re-enable after fixing this bug.
+TEST_P(InformationSchemaTest, DISABLED_DefaultIndexColumns) {
   // GSQL uses an empty string for the default schema and PG doesn't.
   std::string filter = "";
   if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {

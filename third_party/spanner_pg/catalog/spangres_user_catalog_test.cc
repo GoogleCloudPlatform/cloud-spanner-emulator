@@ -39,8 +39,10 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "third_party/spanner_pg/catalog/spangres_system_catalog.h"
 #include "third_party/spanner_pg/catalog/table_name.h"
 #include "third_party/spanner_pg/test_catalog/spanner_test_catalog.h"
+#include "third_party/spanner_pg/test_catalog/test_catalog.h"
 
 namespace postgres_translator {
 class EngineUserCatalogTestPeer{
@@ -55,6 +57,7 @@ namespace spangres {
 namespace {
 
 using ::postgres_translator::spangres::test::GetSpangresTestSpannerUserCatalog;
+using ::postgres_translator::spangres::test::GetSpangresTestSystemCatalog;
 using ::zetasql_base::testing::IsOkAndHolds;
 using ::zetasql_base::testing::StatusIs;
 

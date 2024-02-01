@@ -737,21 +737,15 @@ TEST_P(QueryEngineTest, PartitionableSimpleScanSubqueryColumn) {
 }
 
 TEST_P(QueryEngineTest, PartitionableSimpleScanNoTable) {
-  std::string error_msg = kQueryNotASimpleTableScanError;
   Query query{"SELECT a FROM UNNEST(ARRAY[1, 2, 3]) AS a"};
-  EXPECT_THAT(
-      query_engine().IsPartitionable(
-          query, QueryContext{multi_table_schema(), reader()}),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr(error_msg)));
+  ZETASQL_ASSERT_OK(query_engine().IsPartitionable(
+      query, QueryContext{multi_table_schema(), reader()}));
 }
 
 TEST_P(QueryEngineTest, PartitionableSimpleScanFilterNoTable) {
-  std::string error_msg = kQueryNotASimpleTableScanError;
   Query query{"SELECT a FROM UNNEST(ARRAY[1, 2, 3]) AS a WHERE a = 1"};
-  EXPECT_THAT(
-      query_engine().IsPartitionable(
-          query, QueryContext{multi_table_schema(), reader()}),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr(error_msg)));
+  ZETASQL_ASSERT_OK(query_engine().IsPartitionable(
+      query, QueryContext{multi_table_schema(), reader()}));
 }
 
 TEST_P(QueryEngineTest, PartitionableExecuteSqlSimpleScanFilterSubquery) {

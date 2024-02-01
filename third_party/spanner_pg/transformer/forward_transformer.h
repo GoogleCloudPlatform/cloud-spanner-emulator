@@ -193,6 +193,7 @@ class ForwardTransformer {
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedTVFScan>>
   BuildGsqlResolvedTVFScan(
       const RangeTblEntry& rte, Index rtindex,
+      const VarIndexScope* external_scope,
       const zetasql::TableValuedFunction* tvf_catalog_entry,
       VarIndexScope* output_scope);
 
@@ -310,7 +311,7 @@ class ForwardTransformer {
   absl::Status PrepareTVFInputArguments(
       const FuncExpr& func_expr,
       const zetasql::TableValuedFunction* tvf_catalog_entry,
-      VarIndexScope* output_scope,
+      const VarIndexScope* external_scope,
       std::unique_ptr<zetasql::FunctionSignature>* result_signature,
       std::vector<std::unique_ptr<const zetasql::ResolvedFunctionArgument>>*
           resolved_tvf_args,

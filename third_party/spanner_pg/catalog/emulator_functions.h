@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "zetasql/public/function.h"
+#include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
@@ -111,6 +112,12 @@ inline constexpr char kPGJsonBArrayElementFunctionName[] =
 inline constexpr char kPGJsonBObjectFieldFunctionName[] =
     "pg.jsonb_object_field";
 inline constexpr char kPGJsonBTypeofFunctionName[] = "pg.jsonb_typeof";
+inline constexpr char kPGJsonBArrayElementsFunctionName[] =
+    "pg.jsonb_array_elements";
+inline constexpr char kPGJsonBQueryArrayFunctionName[] = "pg.jsonb_query_array";
+inline constexpr char kPGJsonBBuildArrayFunctionName[] = "pg.jsonb_build_array";
+inline constexpr char kPGJsonBBuildObjectFunctionName[] =
+    "pg.jsonb_build_object";
 
 // PG NUMERIC functions.
 inline constexpr char kPGNumericAddFunctionName[] = "pg.numeric_add";
@@ -137,9 +144,14 @@ inline constexpr char kPGNumericGreaterThanEqualsFunctionName[] =
     "pg.numeric_ge";
 
 using SpannerPGFunctions = std::vector<std::unique_ptr<zetasql::Function>>;
+using SpannerPGTVFs =
+    std::vector<std::unique_ptr<zetasql::TableValuedFunction>>;
 
 // Returns Spanner-specific implementations of PG functions.
 SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name);
+
+// Returns Spanner-specific implementations of PG TVFs.
+SpannerPGTVFs GetSpannerPGTVFs(const std::string& catalog_name);
 
 // Evaluators exported for supporting type coercion.
 absl::StatusOr<zetasql::Value> EvalNumericCastToInt64(

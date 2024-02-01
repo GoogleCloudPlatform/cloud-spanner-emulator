@@ -67,6 +67,7 @@
 #include "backend/schema/builders/foreign_key_builder.h"
 #include "backend/schema/builders/index_builder.h"
 #include "backend/schema/builders/model_builder.h"
+#include "backend/schema/builders/named_schema_builder.h"
 #include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
 #include "backend/schema/builders/view_builder.h"
@@ -75,6 +76,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
@@ -128,6 +130,18 @@ struct ColumnsUsedByIndex {
   std::vector<const KeyColumn*> index_key_columns;
   std::vector<const Column*> stored_columns;
 };
+
+// Get all the names of objects in a vector of objects. Useful for creating
+// error messages with multiple objects, i.e. getting all the names of tables in
+// a schema.
+template <typename T>
+std::vector<std::string> GetObjectNames(absl::Span<const T* const> objects) {
+  std::vector<std::string> names;
+  for (const auto* object : objects) {
+    names.push_back(object->Name());
+  }
+  return names;
+}
 
 // A class that processes a set of Cloud Spanner DDL statements, and applies
 // them to an existing (or empty) `Schema` to obtain the updated `Schema`.
@@ -403,9 +417,14 @@ class SchemaUpdaterImpl {
   absl::StatusOr<const Sequence*> CreateSequence(
       const ddl::CreateSequence& create_sequence);
 
+  absl::Status CreateNamedSchema(const ddl::CreateSchema& create_schema);
+
   absl::Status AlterRowDeletionPolicy(
       std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
       const Table* table);
+  absl::Status ValidateAlterDatabaseOptions(
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options);
+  absl::Status AlterDatabase(const ddl::AlterDatabase& alter_database);
   absl::Status AlterTable(const ddl::AlterTable& alter_table,
                           const database_api::DatabaseDialect& dialect);
   absl::Status AlterChangeStream(
@@ -419,12 +438,18 @@ class SchemaUpdaterImpl {
       const Table* table);
   absl::Status AlterSequence(const ddl::AlterSequence& alter_sequence,
                              const Sequence* current_sequence);
+  absl::Status AlterNamedSchema(const ddl::AlterSchema& alter_schema);
+
   absl::Status AddCheckConstraint(
       const ddl::CheckConstraint& ddl_check_constraint, const Table* table);
   absl::Status AddForeignKey(const ddl::ForeignKey& ddl_foreign_key,
                              const Table* table);
   absl::Status DropConstraint(const std::string& constraint_name,
                               const Table* table);
+  absl::Status AddSynonym(const ddl::AlterTable::AddSynonym& add_synonym,
+                          const Table* table);
+  absl::Status DropSynonym(const ddl::AlterTable::DropSynonym& drop_synonym,
+                           const Table* table);
 
   absl::Status DropTable(const ddl::DropTable& drop_table);
 
@@ -435,6 +460,8 @@ class SchemaUpdaterImpl {
 
   absl::Status DropSequence(const ddl::DropSequence& drop_sequence,
                             const Sequence* current_sequence);
+
+  absl::Status DropNamedSchema(const ddl::DropSchema& drop_schema);
 
   absl::Status ApplyImplSetColumnOptions(
       const ddl::SetColumnOptions& set_column_options,
@@ -646,6 +673,14 @@ SchemaUpdaterImpl::ApplyDDLStatement(
           CreateSequence(ddl_statement->create_sequence()).status());
       break;
     }
+    case ddl::DDLStatement::kCreateSchema: {
+      ZETASQL_RETURN_IF_ERROR(CreateNamedSchema(ddl_statement->create_schema()));
+      break;
+    }
+    case ddl::DDLStatement::kAlterDatabase: {
+      ZETASQL_RETURN_IF_ERROR(AlterDatabase(ddl_statement->alter_database()));
+      break;
+    }
     case ddl::DDLStatement::kAlterTable: {
       ZETASQL_RETURN_IF_ERROR(AlterTable(ddl_statement->alter_table(), dialect));
       break;
@@ -672,6 +707,10 @@ SchemaUpdaterImpl::ApplyDDLStatement(
     }
     case ddl::DDLStatement::kAlterIndex: {
       ZETASQL_RETURN_IF_ERROR(AlterIndex(ddl_statement->alter_index()));
+      break;
+    }
+    case ddl::DDLStatement::kAlterSchema: {
+      ZETASQL_RETURN_IF_ERROR(AlterNamedSchema(ddl_statement->alter_schema()));
       break;
     }
     case ddl::DDLStatement::kDropTable: {
@@ -703,6 +742,10 @@ SchemaUpdaterImpl::ApplyDDLStatement(
         return error::SequenceNotFound(drop_sequence.sequence_name());
       }
       ZETASQL_RETURN_IF_ERROR(DropSequence(drop_sequence, current_sequence));
+      break;
+    }
+    case ddl::DDLStatement::kDropSchema: {
+      ZETASQL_RETURN_IF_ERROR(DropNamedSchema(ddl_statement->drop_schema()));
       break;
     }
     case ddl::DDLStatement::kAnalyze:
@@ -2186,6 +2229,10 @@ absl::Status SchemaUpdaterImpl::CreateTable(
     ZETASQL_RETURN_IF_ERROR(
         CreateRowDeletionPolicy(ddl_table.row_deletion_policy(), &builder));
   }
+  if (ddl_table.has_synonym()) {
+    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", ddl_table.synonym()));
+    builder.set_synonym(ddl_table.synonym());
+  }
   if (builder.get()->is_trackable_by_change_stream()) {
     // If change streams implicitly tracking the entire database, newly added
     // tables should be automatically watched by those change streams.
@@ -3055,6 +3102,21 @@ absl::StatusOr<const Sequence*> SchemaUpdaterImpl::CreateSequence(
   return sequence;
 }
 
+absl::Status SchemaUpdaterImpl::CreateNamedSchema(
+    const ddl::CreateSchema& create_schema) {
+  if (latest_schema_->FindNamedSchema(create_schema.schema_name()) != nullptr &&
+      create_schema.existence_modifier() == ddl::IF_NOT_EXISTS) {
+    return absl::OkStatus();
+  }
+  // Validate the named schema name in global_names_
+  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Schema", create_schema.schema_name()));
+
+  NamedSchema::Builder builder;
+  builder.set_name(create_schema.schema_name());
+  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  return absl::OkStatus();
+}
+
 absl::Status SchemaUpdaterImpl::AlterRowDeletionPolicy(
     std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
     const Table* table) {
@@ -3062,6 +3124,55 @@ absl::Status SchemaUpdaterImpl::AlterRowDeletionPolicy(
     editor->set_row_deletion_policy(row_deletion_policy);
     return absl::OkStatus();
   });
+}
+
+absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
+    const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options) {
+  for (const ddl::SetOption& option : set_options) {
+    if (option.option_name() == ddl::kWitnessLocationOptionName) {
+      if (option.has_string_value()) {
+        continue;
+      } else if (option.has_null_value()) {
+        return error::NullValueAlterDatabaseOption();
+      }
+    } else if (option.option_name() == ddl::kDefaultLeaderOptionName) {
+      if (option.has_string_value()) {
+        continue;
+      } else if (option.has_null_value()) {
+        return error::NullValueAlterDatabaseOption();
+      }
+    } else {
+      return error::UnsupportedAlterDatabaseOption(option.option_name());
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AddSynonym(
+    const ddl::AlterTable::AddSynonym& add_synonym, const Table* table) {
+  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", add_synonym.synonym()));
+  return AlterNode(table, [&](Table::Editor* editor) {
+    editor->set_synonym(add_synonym.synonym());
+    return absl::OkStatus();
+  });
+}
+
+absl::Status SchemaUpdaterImpl::DropSynonym(
+    const ddl::AlterTable::DropSynonym& drop_synonym, const Table* table) {
+  global_names_.RemoveName(drop_synonym.synonym());
+  return AlterNode(table, [&](Table::Editor* editor) {
+    editor->drop_synonym(drop_synonym.synonym());
+    return absl::OkStatus();
+  });
+}
+
+absl::Status SchemaUpdaterImpl::AlterDatabase(
+    const ddl::AlterDatabase& alter_database) {
+  const auto& set_options = alter_database.set_options();
+  if (!set_options.options().empty()) {
+    ZETASQL_RETURN_IF_ERROR(ValidateAlterDatabaseOptions(set_options.options()));
+  }
+  return absl::OkStatus();
 }
 
 absl::Status SchemaUpdaterImpl::AlterChangeStream(
@@ -3160,6 +3271,19 @@ absl::Status SchemaUpdaterImpl::AlterSequence(
         return SetSequenceOptions(repeated_set_options, editor);
       }));
   return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AlterNamedSchema(
+    const ddl::AlterSchema& alter_schema) {
+  const NamedSchema* current_named_schema =
+      latest_schema_->FindNamedSchema(alter_schema.schema_name());
+  if (current_named_schema == nullptr) {
+    if (alter_schema.if_exists() == true) {
+      return absl::OkStatus();
+    }
+    return error::NamedSchemaNotFound(alter_schema.schema_name());
+  }
+  return error::AlterNamedSchemaNotSupported();
 }
 
 absl::Status SchemaUpdaterImpl::AlterTable(
@@ -3321,6 +3445,23 @@ absl::Status SchemaUpdaterImpl::AlterTable(
         return AlterRowDeletionPolicy(std::nullopt, table);
       } else {
         return error::RowDeletionPolicyDoesNotExist(table->Name());
+      }
+    }
+    case ddl::AlterTable::kAddSynonym: {
+      const auto& add_synonym = alter_table.add_synonym();
+      if (table->synonym().empty()) {
+        return AddSynonym(add_synonym, table);
+      } else {
+        return error::SynonymAlreadyExists(table->synonym(), table->Name());
+      }
+    }
+    case ddl::AlterTable::kDropSynonym: {
+      const auto& drop_synonym = alter_table.drop_synonym();
+      if (drop_synonym.synonym() == table->synonym()) {
+        return DropSynonym(drop_synonym, table);
+      } else {
+        return error::SynonymDoesNotExist(drop_synonym.synonym(),
+                                          table->Name());
       }
     }
     default:
@@ -3506,6 +3647,20 @@ absl::Status SchemaUpdaterImpl::DropSequence(
   global_names_.RemoveName(drop_sequence.sequence_name());
   ZETASQL_RETURN_IF_ERROR(DropNode(current_sequence));
   return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::DropNamedSchema(
+    const ddl::DropSchema& drop_schema) {
+  const NamedSchema* current_named_schema =
+      latest_schema_->FindNamedSchema(drop_schema.schema_name());
+  if (current_named_schema == nullptr) {
+    if (drop_schema.if_exists() == true) {
+      return absl::OkStatus();
+    }
+    return error::NamedSchemaNotFound(drop_schema.schema_name());
+  }
+  global_names_.RemoveName(drop_schema.schema_name());
+  return DropNode(current_named_schema);
 }
 
 absl::Status SchemaUpdaterImpl::ApplyImplSetColumnOptions(

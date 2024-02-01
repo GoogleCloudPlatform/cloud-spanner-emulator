@@ -347,6 +347,13 @@ ForwardTransformer::BuildGsqlCastExpression(
 
   // PG.NUMERIC cast overrides are treated separately.
     if (result_type == NUMERICOID || source_type_oid == NUMERICOID) {
+
+    if (source_type_oid == NUMERICOID && result_type == FLOAT4OID) {
+      // PG.NUMERIC does not have a cast function to FLOAT32 yet.
+      // In the meantime, cast from PG.NUMERIC to FLOAT64 to FLOAT32.
+      target_type = zetasql::types::DoubleType();
+    }
+
     ZETASQL_ASSIGN_OR_RETURN(
         FunctionAndSignature function_and_signature,
         catalog_adapter_->GetEngineSystemCatalog()->GetPgNumericCastFunction(
@@ -378,10 +385,18 @@ ForwardTransformer::BuildGsqlCastExpression(
           "supported cast with a typmod is varchar(<length>) and "
           "numeric(<precision>,<scale>).");
     }
-    return zetasql::MakeResolvedFunctionCall(
+    resolved_input = zetasql::MakeResolvedFunctionCall(
         target_type, function_and_signature.function(),
         function_and_signature.signature(), std::move(argument_list),
         zetasql::ResolvedFunctionCallBase::DEFAULT_ERROR_MODE);
+    if (!(source_type_oid == NUMERICOID && result_type == FLOAT4OID)) {
+      return resolved_input;
+    }
+    // For a cast from PG.NUMERIC to FLOAT32, the casting function call has
+    // performed the cast from PG.NUMERIC to FLOAT64. Now we need to cast from
+    // FLOAT64 to FLOAT32.
+    source_type = zetasql::types::DoubleType();
+    target_type = zetasql::types::FloatType();
   }
 
   // If not pg.numeric, rely on ResolvedCast.
@@ -866,39 +881,38 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
     }
     case ARRAY_SUBLINK: {
       // ARRAY(SELECT with single output column ...)
-        const Query* subquery =
-            PostgresConstCastNode(Query, pg_sublink.subselect);
-        ZETASQL_RET_CHECK_GT(list_length(subquery->targetList), 0)
-            << "Array subquery should have exactly 1 output column.";
-        // It can be assumed that resjunk columns come after non-junk columns.
-        for (int i = 1; i < list_length(subquery->targetList); ++i) {
-          const TargetEntry* target_entry = list_nth_node(
-            TargetEntry, subquery->targetList, i);
-          if (!target_entry->resjunk) {
-            return absl::InvalidArgumentError(
-                "Array subquery should have exactly 1 output column.");
-          }
-        }
+      const Query* subquery =
+          PostgresConstCastNode(Query, pg_sublink.subselect);
+      ZETASQL_RET_CHECK_GT(list_length(subquery->targetList), 0)
+          << "Array subquery should have exactly 1 output column.";
+      // It can be assumed that resjunk columns come after non-junk columns.
+      for (int i = 1; i < list_length(subquery->targetList); ++i) {
         const TargetEntry* target_entry = list_nth_node(
-            TargetEntry, subquery->targetList, 0);
-        ZETASQL_ASSIGN_OR_RETURN(Oid output_type_oid, CheckedPgExprType(
-            PostgresCastToNode(target_entry->expr)));
-        ZETASQL_ASSIGN_OR_RETURN(const zetasql::Type* output_type,
-                        BuildGsqlType(output_type_oid));
-        if (output_type->IsArray()) {
+          TargetEntry, subquery->targetList, i);
+        if (!target_entry->resjunk) {
           return absl::InvalidArgumentError(
-              "Cannot use array subquery with column of type " +
-              OidToTypeString(output_type_oid) +
-              " because nested arrays are not supported.");
+              "Array subquery should have exactly 1 output column.");
         }
-        const zetasql::ArrayType* array_type = nullptr;
-        ZETASQL_RETURN_IF_ERROR(GetTypeFactory()->MakeArrayType(output_type,
-                                                          &array_type));
-        std::unique_ptr<zetasql::ResolvedSubqueryExpr> subquery_expr;
-        return BuildGsqlResolvedSubqueryExpr(
-            *subquery, /*in_testexpr=*/nullptr, /*hint_list=*/nullptr,
-            array_type, zetasql::ResolvedSubqueryExpr::ARRAY,
-            expr_transformer_info);
+      }
+      const TargetEntry* target_entry = list_nth_node(
+          TargetEntry, subquery->targetList, 0);
+      ZETASQL_ASSIGN_OR_RETURN(Oid output_type_oid, CheckedPgExprType(
+          PostgresCastToNode(target_entry->expr)));
+      ZETASQL_ASSIGN_OR_RETURN(const zetasql::Type* output_type,
+                      BuildGsqlType(output_type_oid));
+      if (output_type->IsArray()) {
+        return absl::InvalidArgumentError(
+            "Cannot use array subquery with column of type " +
+            OidToTypeString(output_type_oid) +
+            " because nested arrays are not supported.");
+      }
+      const zetasql::ArrayType* array_type = nullptr;
+      ZETASQL_RETURN_IF_ERROR(GetTypeFactory()->MakeArrayType(output_type,
+                                                        &array_type));
+      return BuildGsqlResolvedSubqueryExpr(
+          *subquery, /*in_testexpr=*/nullptr, /*hint_list=*/nullptr,
+          array_type, zetasql::ResolvedSubqueryExpr::ARRAY,
+          expr_transformer_info);
     }
     // Error cases to cover the remaining enum types. We handle each
     // individually to provide helpful error messages.

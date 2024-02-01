@@ -415,6 +415,7 @@ cc_library(
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/transformer",
         "//third_party/spanner_pg/util:pg_list_iterators",
+        "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

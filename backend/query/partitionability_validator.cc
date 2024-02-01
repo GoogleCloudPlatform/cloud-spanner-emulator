@@ -33,9 +33,47 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+namespace {
+
+class HasTableScanVisitor : public zetasql::ResolvedASTVisitor {
+ public:
+  HasTableScanVisitor() = default;
+
+  absl::StatusOr<bool> HasTableScan(const zetasql::ResolvedNode* node) {
+    has_table_scan_ = false;
+    ZETASQL_RETURN_IF_ERROR(node->Accept(this));
+    return has_table_scan_;
+  }
+
+  absl::Status VisitResolvedTableScan(
+      const zetasql::ResolvedTableScan* node) override {
+    has_table_scan_ = true;
+    return absl::OkStatus();
+  }
+
+ private:
+  bool has_table_scan_ = false;
+};
+
+// Returns true if the expression tree has TableScan.
+absl::StatusOr<bool> HasTableScan(const zetasql::ResolvedNode* node) {
+  HasTableScanVisitor visitor;
+  return visitor.HasTableScan(node);
+}
+
+}  // namespace
+
 absl::Status PartitionabilityValidator::ValidatePartitionability(
     const zetasql::ResolvedNode* node) {
   ABSL_DCHECK(node->node_kind() == zetasql::RESOLVED_QUERY_STMT);
+  if (EmulatorFeatureFlags::instance()
+          .flags()
+          .enable_batch_query_with_no_table_scan) {
+    ZETASQL_ASSIGN_OR_RETURN(bool has_table_scan, HasTableScan(node));
+    if (!has_table_scan) {
+      return absl::OkStatus();
+    }
+  }
   if (HasSubquery(node)) {
     return error::NonPartitionableQuery("Query contains subquery.");
   }

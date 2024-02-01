@@ -84,6 +84,13 @@ using SequenceID = std::string;
 // A SequenceID generator. Each database has a single SequenceIDGenerator.
 using SequenceIDGenerator = UniqueIdGenerator<SequenceID>;
 
+// Unique identifier associated with a named schema. NamedSchemaID is guaranteed
+// to be unique within a single database.
+using NamedSchemaID = std::string;
+
+// A NamedSchemaID generator. Each database has a single NamedSchemaIDGenerator.
+using NamedSchemaIDGenerator = UniqueIdGenerator<NamedSchemaID>;
+
 // Unique identifier associated with a transaction.
 using TransactionID = int64_t;
 

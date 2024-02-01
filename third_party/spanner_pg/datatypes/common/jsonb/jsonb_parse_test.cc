@@ -84,17 +84,40 @@ absl::StatusOr<std::string> ReadJsonFile(std::string path) {
   return buffer.str();
 }
 
-class SimpleArrayTest : public testing::TestWithParam<std::string> {};
+struct ArrayTestCase {
+  ArrayTestCase(const std::string& input_in,
+                const std::vector<std::string>& array_in)
+      : input(input_in), array(array_in) {}
+
+  std::string input;
+  std::vector<std::string> array;
+};
+
+class SimpleArrayTest : public testing::TestWithParam<ArrayTestCase> {};
 
 INSTANTIATE_TEST_SUITE_P(
     ArrayTestValues, SimpleArrayTest,
     testing::Values(
-        "[\"str 1\", \"str 2\", \"str 3\"]", "[]", "[null, \"str\", null]",
-        "[[null, \"inner array string\"], \"outer array string\"]"));
+        ArrayTestCase("[\"str 1\", \"str 2\", \"str 3\"]",
+                      {"\"str 1\"", "\"str 2\"", "\"str 3\""}),
+        ArrayTestCase("[]", {}),
+        ArrayTestCase("[null, \"str\", null]", {"null", "\"str\"", "null"}),
+        ArrayTestCase(
+            "[[null, \"inner array string\"], \"outer array string\"]",
+            {"[null, \"inner array string\"]", "\"outer array string\""})));
 
 TEST_P(SimpleArrayTest, ArrayTest) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJson(GetParam()));
-  EXPECT_EQ(jsonb, GetParam());
+  const ArrayTestCase& test_case = GetParam();
+  const std::string& input = test_case.input;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(input));
+  EXPECT_EQ(jsonb, input);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_array,
+                       ParseJsonbArray(input));
+  ASSERT_EQ(jsonb_array.size(), test_case.array.size());
+  for (int i = 0; i < jsonb_array.size(); ++i) {
+    EXPECT_EQ(jsonb_array[i], test_case.array[i]);
+  }
 }
 
 // Ensure that parsing nested json arrays does not result in out of memory error
@@ -106,10 +129,32 @@ TEST_P(SimpleArrayTest, NestedArrayTest) {
   // So a nested array with depth n will have 2n ascii chars aka bytes
   // Hence max depth = (2 ^ 22) / 2 = 2 ^ 21
   constexpr uint32_t max_depth = 1 << 21;
-  const std::string json_input = StrCat(std::string(max_depth, '['), GetParam(),
-                                        std::string(max_depth, ']'));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJson(json_input));
+  const std::string json_input =
+      StrCat(std::string(max_depth, '['), GetParam().input,
+             std::string(max_depth, ']'));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(json_input));
   EXPECT_EQ(jsonb, json_input);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_inner_array,
+                       ParseJsonbArray(json_input));
+  ASSERT_EQ(jsonb_inner_array.size(), 1);
+  EXPECT_EQ(jsonb_inner_array[0], json_input.substr(1, json_input.size() - 2));
+}
+
+// Test that parsing a single huge array does not result in out of memory error
+TEST(JSONBParseTest, LargeArrayTest) {
+  constexpr uint32_t max_elements = 500000;
+  std::string json_input = "[";
+  json_input.reserve(3 * max_elements + 3);
+  for (int i = 0; i < max_elements; ++i) {
+    StrAppend(&json_input, "1, ");
+  }
+  StrAppend(&json_input, "1]");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_inner_array,
+                       ParseJsonbArray(json_input));
+  ASSERT_EQ(jsonb_inner_array.size(), max_elements + 1);
+  EXPECT_EQ(jsonb_inner_array[0], "1");
 }
 
 class SimpleStringTest : public testing::TestWithParam<std::string> {};
@@ -122,7 +167,7 @@ INSTANTIATE_TEST_SUITE_P(
                     "\"String with \\\"quotes\\\"('', \\\").\""));
 
 TEST_P(SimpleStringTest, StringTest) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJson(GetParam()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(GetParam()));
   EXPECT_EQ(jsonb, GetParam());
 }
 
@@ -155,7 +200,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(NumberTest, NumberTest) {
   TestCase test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJson(test_case.input));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(test_case.input));
   EXPECT_EQ(jsonb, test_case.expected_output);
 }
 
@@ -165,7 +210,7 @@ INSTANTIATE_TEST_SUITE_P(BooleanTestValues, BooleanTest,
                          testing::Values("true", "false"));
 
 TEST_P(BooleanTest, BooleanTest) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJson(GetParam()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(GetParam()));
   EXPECT_EQ(jsonb, GetParam());
 }
 
@@ -178,7 +223,7 @@ INSTANTIATE_TEST_SUITE_P(
                     "{\"array_with_array_with_object\": [[1, {}], null]}"));
 
 TEST_P(RoundtripObjectTest, ObjectTest) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJson(GetParam()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(GetParam()));
   EXPECT_EQ(jsonb, GetParam());
 }
 
@@ -203,7 +248,7 @@ TEST_P(RoundtripObjectTest, NestedObjectTest) {
 
   const std::string json =
       StrCat(prefix, GetParam(), std::string(max_depth, '}'));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJson(json));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(json));
   EXPECT_EQ(jsonb, json);
 }
 
@@ -231,12 +276,12 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(ObjectStorageTest, ObjectStorageTest) {
   TestCase test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJson(test_case.input));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(test_case.input));
   EXPECT_EQ(jsonb, test_case.expected_output);
 }
 
 TEST(JSONBParseTest, NullJSON) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJson("null"));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb("null"));
   EXPECT_EQ(jsonb, "null");
 }
 
@@ -254,7 +299,18 @@ INSTANTIATE_TEST_SUITE_P(
                     "{\"\test\u0000key\": \"\test\u0000value\"}"));
 
 TEST_P(ParsingErrorTest, ErrorTestValue) {
-  EXPECT_FALSE(ParseJson(GetParam()).ok());
+  EXPECT_FALSE(ParseJsonb(GetParam()).ok());
+  EXPECT_FALSE(ParseJsonbArray(GetParam()).ok());
+}
+
+// Test cases that are not arrays and should result in an error.
+class ArrayParsingErrorTest : public testing::TestWithParam<std::string> {};
+INSTANTIATE_TEST_SUITE_P(ErrorTestValues, ArrayParsingErrorTest,
+                         testing::Values("{\"key\": 1}", "1", "abc", "{}",
+                                         "null"));
+
+TEST_P(ArrayParsingErrorTest, ErrorTestValue) {
+  EXPECT_FALSE(ParseJsonbArray(GetParam()).ok());
 }
 
 using JsonbParseTest = ValidMemoryContext;
@@ -263,7 +319,7 @@ using JsonbParseTest = ValidMemoryContext;
 // digits after the decimal point.
 TEST_F(JsonbParseTest, FullScaleTest) {
   auto input_str = "0." + std::string(16383, '9');
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJson(input_str));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(input_str));
   EXPECT_EQ(jsonb, input_str);
 }
 
@@ -271,7 +327,7 @@ TEST_F(JsonbParseTest, FullScaleTest) {
 // result in a stack overflow error due to recursive destructor calls.
 TEST_F(JsonbParseTest, DeepNestedArrayWithError) {
   std::string test_str = StrCat(std::string(502335, '['), "S", "[[");
-  auto jsonb_or = ParseJson(test_str);
+  auto jsonb_or = ParseJsonb(test_str);
   EXPECT_FALSE(jsonb_or.ok());
 }
 
@@ -289,14 +345,14 @@ class PostgresComparisonTest : public ValidMemoryContext {
     // are not valid UTF-8, while nlohmann will not accept some invalid UTF-8
     // values.
     if (!zetasql::IsWellFormedUTF8(input)) {
-      EXPECT_FALSE(ParseJson(input).ok());
+      EXPECT_FALSE(ParseJsonb(input).ok());
       return;
     }
 
     absl::StatusOr<Datum> pg_normalized =
         postgres_translator::CheckedDirectFunctionCall1(
             jsonb_in, CStringGetDatum(input.data()));
-    absl::StatusOr<absl::Cord> jsonb_normalized = ParseJson(input);
+    absl::StatusOr<absl::Cord> jsonb_normalized = ParseJsonb(input);
     EXPECT_EQ(pg_normalized.ok(), jsonb_normalized.ok());
 
     if (pg_normalized.ok() && jsonb_normalized.ok()) {

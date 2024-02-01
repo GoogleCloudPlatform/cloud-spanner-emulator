@@ -134,6 +134,8 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
       const google::spanner::emulator::backend::ddl::DropTable& statement) const;
   absl::StatusOr<std::string> PrintDropIndex(
       const google::spanner::emulator::backend::ddl::DropIndex& statement) const;
+  absl::StatusOr<std::string> PrintDropSchema(
+      const google::spanner::emulator::backend::ddl::DropSchema& statement) const;
   absl::StatusOr<std::string> PrintDropFunction(
       const google::spanner::emulator::backend::ddl::DropFunction& statement) const;
   absl::StatusOr<std::string> PrintCreateSequence(
@@ -146,6 +148,8 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
       const google::spanner::emulator::backend::ddl::CreateIndex& statement) const;
   absl::StatusOr<std::string> PrintAlterIndex(
       const google::spanner::emulator::backend::ddl::AlterIndex& statement) const;
+  absl::StatusOr<std::string> PrintCreateSchema(
+      const google::spanner::emulator::backend::ddl::CreateSchema& statement) const;
   absl::StatusOr<std::string> PrintAnalyze(
       const google::spanner::emulator::backend::ddl::Analyze& statement) const;
   absl::StatusOr<std::string> PrintSQLSecurityType(
@@ -234,6 +238,10 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
       return WrapOutput(PrintCreateIndex(statement.create_index()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kAlterIndex:
       return WrapOutput(PrintAlterIndex(statement.alter_index()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kCreateSchema:
+      return WrapOutput(PrintCreateSchema(statement.create_schema()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kDropSchema:
+      return WrapOutput(PrintDropSchema(statement.drop_schema()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kAnalyze:
       return WrapOutput(PrintAnalyze(statement.analyze()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kCreateFunction:
@@ -339,6 +347,12 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
                     : "";
             return StrCat(alter_table, " ", alter_column, " SET DEFAULT",
                           expression_output);
+          }
+          case google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::SET_NOT_NULL: {
+            return StrCat(alter_table, " ", alter_column, " SET NOT NULL");
+          }
+          case google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::DROP_NOT_NULL: {
+            return StrCat(alter_table, " ", alter_column, " DROP NOT NULL");
           }
           default: {
             // We need this here to allow us to add the SET_NOT_NULL and
@@ -625,6 +639,11 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropIndex(
                     QuoteQualifiedIdentifier(statement.index_name()));
 }
 
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropSchema(
+    const google::spanner::emulator::backend::ddl::DropSchema& statement) const {
+  return Substitute("DROP SCHEMA $0", QuoteIdentifier(statement.schema_name()));
+}
+
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropFunction(
     const google::spanner::emulator::backend::ddl::DropFunction& statement) const {
   std::string if_exists = "";
@@ -738,6 +757,19 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
                 " ON ", QuoteQualifiedIdentifier(statement.index_base_name()),
                 " (", absl::StrJoin(key_parts, ", "), ")", include,
                 interleave_in, where);
+}
+
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSchema(
+    const google::spanner::emulator::backend::ddl::CreateSchema& statement) const {
+  switch (statement.existence_modifier()) {
+    case google::spanner::emulator::backend::ddl::CreateSchema::NONE:
+      return Substitute("CREATE SCHEMA $0",
+                        QuoteIdentifier(statement.schema_name()));
+    default:
+      return absl::UnimplementedError(
+          StrCat("CREATE SCHEMA existence modifier ",
+                 statement.existence_modifier(), " not supported."));
+  }
 }
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSequence(
@@ -983,9 +1015,16 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
     ZETASQL_RET_CHECK(column.generated_column().has_expression_origin());
     const google::spanner::emulator::backend::ddl::SQLExpressionOrigin& generated_column =
         column.generated_column().expression_origin();
-    constraint =
-        StrCat(" GENERATED ALWAYS AS (", generated_column.original_expression(),
-               ")", column.generated_column().has_stored() ? " STORED" : "");
+    if (column.generated_column().has_stored() &&
+        column.generated_column().stored()) {
+      constraint =
+        StrCat(" GENERATED ALWAYS AS (",
+               generated_column.original_expression(), ")", " STORED");
+    } else {
+      constraint =
+        StrCat(" GENERATED ALWAYS AS (",
+               generated_column.original_expression(), ")", " VIRTUAL");
+    }
   }
 
   if (column.has_column_default()) {

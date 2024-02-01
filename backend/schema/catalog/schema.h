@@ -26,8 +26,10 @@
 #include "absl/types/span.h"
 #include "backend/common/case.h"
 #include "backend/schema/catalog/change_stream.h"
+#include "backend/schema/catalog/database_options.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/view.h"
@@ -71,12 +73,21 @@ class Schema {
   // Same as FindView but case-sensitive.
   const View* FindViewCaseSensitive(const std::string& view_name) const;
 
-  // Finds a table by its name. Returns a const pointer of the table, or nullptr
-  // if the table is not found. Name comparison is case-insensitive.
+  // Finds a table by its name or synonym. Returns a const pointer of the table,
+  // or nullptr if the table is not found. Name comparison is case-insensitive.
   const Table* FindTable(const std::string& table_name) const;
+
+  // Finds a table by its synonym. Returns a const pointer of the table, or
+  // nullptr if a table using the synonym is not found. Name comparison is
+  // case-insensitive.
+  const Table* FindTableUsingSynonym(const std::string& table_synonym) const;
 
   // Same as FindTable but case-sensitive.
   const Table* FindTableCaseSensitive(const std::string& table_name) const;
+
+  // Same as FindTableUsingSynonym but case-sensitive.
+  const Table* FindTableUsingSynonymCaseSensitive(
+      const std::string& table_synonym) const;
 
   // Finds an index by its name. Returns a const pointer of the index, or
   // nullptr if the index is not found. Name comparison is case-insensitive.
@@ -101,8 +112,17 @@ class Schema {
   // case-insensitive.
   const Model* FindModel(const std::string& model_name) const;
 
+  // Finds a named schema by its name. Returns a const pointer of the named
+  // schema, or a nullptr if the named schema is not found. Name comparison is
+  // case-insensitive.
+  const NamedSchema* FindNamedSchema(
+      const std::string& named_schema_name) const;
+
   // List all the user-visible tables in this schema.
   absl::Span<const Table* const> tables() const { return tables_; }
+
+  // List all the user-visible synonyms in this schema.
+  absl::Span<const std::string> synonyms() const { return synonyms_; }
 
   absl::Span<const View* const> views() const { return views_; }
 
@@ -117,6 +137,14 @@ class Schema {
   // List all the user-visible models in this schema.
   absl::Span<const Model* const> models() const { return models_; }
 
+  // List all the user-visible named schemas in this schema.
+  absl::Span<const NamedSchema* const> named_schemas() const {
+    return named_schemas_;
+  }
+
+  // Return user-visible options in this schema.
+  const DatabaseOptions* const options() const { return database_options_; }
+
   // Return the underlying SchemaGraph owning the objects in the schema.
   const SchemaGraph* GetSchemaGraph() const { return graph_; }
 
@@ -128,6 +156,12 @@ class Schema {
 
   // Returns the number of sequences in the schema.
   int num_sequence() const { return sequences_map_.size(); }
+
+  // Returns the number of named schemas in the schema.
+  int num_named_schema() const { return named_schemas_map_.size(); }
+
+  // Returns the number of table synonyms in the schema.
+  int num_table_synonym() const { return synonyms_map_.size(); }
 
   // Returns the database dialect.
   database_api::DatabaseDialect dialect() const { return dialect_; }
@@ -158,6 +192,14 @@ class Schema {
   // comparison on the keys are case-insensitive.
   CaseInsensitiveStringMap<const Table*> tables_map_;
 
+  // A map for synonyms to target tables. Hash and comparison on the keys are
+  // case-insensitive.
+  CaseInsensitiveStringMap<const Table*> synonyms_map_;
+
+  // A vector that lists table synonyms in the DDL for quicker retrieval of
+  // the synonym list.
+  std::vector<std::string> synonyms_;
+
   // A vector that maintains the original order of change streams in the DDL.
   std::vector<const ChangeStream*> change_streams_;
 
@@ -182,6 +224,16 @@ class Schema {
   // A map that owns all the sequences. Key is the name of the sequence. Hash
   // and comparison on the keys are case-insensitive.
   CaseInsensitiveStringMap<const Sequence*> sequences_map_;
+
+  // A vector that maintains the original order of named schemas in the DDL.
+  std::vector<const NamedSchema*> named_schemas_;
+
+  // A map that owns all the named schemas. Key is the name of the named
+  // schemas. Hash and comparison on the keys are case-insensitive.
+  CaseInsensitiveStringMap<const NamedSchema*> named_schemas_map_;
+
+  // Database options in the DDL.
+  const DatabaseOptions* database_options_ = nullptr;
 
   // Holds the database dialect for this schema.
   const database_api::DatabaseDialect dialect_;

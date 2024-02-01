@@ -44,6 +44,7 @@
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/functions/arithmetics.h"
 #include "zetasql/public/functions/date_time_util.h"
+#include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/type.pb.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
@@ -88,6 +89,7 @@ using spangres::datatypes::GetPgJsonbNormalizedValue;
 using spangres::datatypes::GetPgNumericNormalizedValue;
 using spangres::datatypes::common::jsonb::IsValidJsonbString;
 using spangres::datatypes::common::jsonb::NormalizeJsonbString;
+using spangres::datatypes::common::jsonb::ParseJsonbArray;
 
 const zetasql::Type* gsql_bool = zetasql::types::BoolType();
 const zetasql::Type* gsql_bytes = zetasql::types::BytesType();
@@ -1804,6 +1806,94 @@ std::unique_ptr<zetasql::Function> JsonBTypeofFunction(
       function_options);
 }
 
+absl::StatusOr<zetasql::Value> EvalJsonBQueryArray(
+    absl::Span<const zetasql::Value> args) {
+  static const zetasql::ArrayType* gsql_pg_jsonb_array =
+      spangres::datatypes::GetPgJsonbArrayType();
+  ZETASQL_RET_CHECK(args.size() == 1);
+  if (args[0].is_null()) {
+    return zetasql::values::Null(spangres::datatypes::GetPgJsonbType());
+  }
+
+  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
+  ZETASQL_ASSIGN_OR_RETURN(std::vector<absl::Cord> array,
+                   ParseJsonbArray(std::string(jsonb)));
+  std::vector<zetasql::Value> values;
+  values.reserve(array.size());
+  std::for_each(array.begin(), array.end(), [&values](absl::Cord json_element) {
+    values.emplace_back(
+        spangres::datatypes::CreatePgJsonbValueFromNormalized(json_element));
+  });
+  return zetasql::Value::MakeArray(gsql_pg_jsonb_array, values);
+}
+
+std::unique_ptr<zetasql::Function> JsonBQueryArrayFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  const zetasql::Type* gsql_pg_jsonb_array =
+      postgres_translator::spangres::datatypes::GetPgJsonbArrayType();
+
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonBQueryArray));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonBQueryArrayFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_pg_jsonb_array,
+                                       {gsql_pg_jsonb},
+                                       /*context_ptr=*/nullptr},
+      },
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonBBuildArray(
+    absl::Span<const zetasql::Value> args) {
+  return absl::UnimplementedError("jsonb_build_array is not supported");
+}
+
+std::unique_ptr<zetasql::Function> JsonBBuildArrayFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonBBuildArray));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonBBuildArrayFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature(
+          gsql_pg_jsonb,
+          {{zetasql::ARG_TYPE_ARBITRARY,
+            zetasql::FunctionArgumentTypeOptions().set_cardinality(
+                zetasql::FunctionArgumentType::REPEATED)}},
+          /*context_ptr=*/nullptr)},
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonBBuildObject(
+    absl::Span<const zetasql::Value> args) {
+  return absl::UnimplementedError("jsonb_build_object is not supported");
+}
+
+std::unique_ptr<zetasql::Function> JsonBBuildObjectFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonBBuildObject));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonBBuildObjectFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature(
+          gsql_pg_jsonb,
+          {{gsql_string,
+            zetasql::FunctionArgumentTypeOptions().set_cardinality(
+                zetasql::FunctionArgumentType::REPEATED)},
+           {zetasql::ARG_TYPE_ARBITRARY,
+            zetasql::FunctionArgumentTypeOptions().set_cardinality(
+                zetasql::FunctionArgumentType::REPEATED)}},
+          /*context_ptr=*/nullptr)},
+      function_options);
+}
+
 // PgDoubleLess and PgDoubleGreater are alternatives to std::less<double> and
 // std::greater<double> which capture Postgres' ordering semantics.
 // std::less<double> and std::greater<double> do not have proper ordering
@@ -2518,6 +2608,20 @@ std::unique_ptr<zetasql::Function> NumericGreaterThanEqualsFunction(
       function_options);
 }
 
+std::unique_ptr<zetasql::TableValuedFunction> JsonbArrayElementsTVF(
+    absl::string_view catalog_name) {
+  const zetasql::Type* pg_jsonb_type = spangres::datatypes::GetPgJsonbType();
+  zetasql::TVFRelation jsonb_result_schema({{"", pg_jsonb_type}});
+  return std::make_unique<zetasql::FixedOutputSchemaTVF>(
+      std::vector<std::string>{kPGJsonBArrayElementsFunctionName},
+      zetasql::FunctionSignature(
+          zetasql::FunctionArgumentType::RelationWithSchema(
+              jsonb_result_schema,
+              /*extra_relation_input_columns_allowed=*/false),
+          {pg_jsonb_type}, nullptr),
+      jsonb_result_schema);
+}
+
 }  // namespace
 
 absl::StatusOr<zetasql::Value> EvalNumericCastToInt64(
@@ -2723,6 +2827,12 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(jsonb_object_field_func));
   auto jsonb_typeof_func = JsonBTypeofFunction(catalog_name);
   functions.push_back(std::move(jsonb_typeof_func));
+  auto jsonb_query_array_func = JsonBQueryArrayFunction(catalog_name);
+  functions.push_back(std::move(jsonb_query_array_func));
+  auto jsonb_build_array_func = JsonBBuildArrayFunction(catalog_name);
+  functions.push_back(std::move(jsonb_build_array_func));
+  auto jsonb_build_object_func = JsonBBuildObjectFunction(catalog_name);
+  functions.push_back(std::move(jsonb_build_object_func));
 
   auto numeric_abs_func = NumericAbsFunction(catalog_name);
   functions.push_back(std::move(numeric_abs_func));
@@ -2772,6 +2882,13 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(numeric_greater_than_equals_func));
 
   return functions;
+}
+
+SpannerPGTVFs GetSpannerPGTVFs(const std::string& catalog_name) {
+  SpannerPGTVFs tvfs;
+  auto jsonb_array_elements_tvf = JsonbArrayElementsTVF(catalog_name);
+  tvfs.push_back(std::move(jsonb_array_elements_tvf));
+  return tvfs;
 }
 
 }  // namespace postgres_translator
