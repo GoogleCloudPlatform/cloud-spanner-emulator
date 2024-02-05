@@ -71,6 +71,11 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneModel(
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
     zetasql::TypeFactory* type_factory);
 
+std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableWithSynonym(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+
 // Creates a schema with a single table and generated primary key column.
 inline absl::StatusOr<std::unique_ptr<const backend::Schema>>
 CreateGpkSchemaWithOneTable(zetasql::TypeFactory* type_factory) {
@@ -114,6 +119,9 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKeyOnDelete(
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithView(
+    zetasql::TypeFactory* type_factory);
+
+std::unique_ptr<const backend::Schema> CreateSchemaWithNamedSchema(
     zetasql::TypeFactory* type_factory);
 
 }  // namespace test

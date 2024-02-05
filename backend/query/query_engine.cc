@@ -69,6 +69,7 @@
 #include "common/config.h"
 #include "common/constants.h"
 #include "common/errors.h"
+#include "common/feature_flags.h"
 #include "common/limits.h"
 #include "frontend/converters/values.h"
 #include "third_party/spanner_pg/interface/emulator_parser.h"
@@ -410,6 +411,19 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedInsert(
     const zetasql::ResolvedInsertStmt* insert_statement,
     const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory) {
+  bool is_upsert_query = insert_statement->insert_mode() ==
+                             zetasql::ResolvedInsertStmt::OR_IGNORE ||
+                         insert_statement->insert_mode() ==
+                             zetasql::ResolvedInsertStmt::OR_UPDATE;
+  if (is_upsert_query &&
+      !EmulatorFeatureFlags::instance().flags().enable_upsert_queries) {
+    std::string insert_mode_name = (insert_statement->insert_mode() ==
+                                    zetasql::ResolvedInsertStmt::OR_IGNORE)
+                                       ? "Insert or ignore"
+                                       : "Insert or update";
+    return error::UnsupportedUpsertQueries(insert_mode_name);
+  }
+
   ZETASQL_ASSIGN_OR_RETURN(auto pending_ts_columns,
                    PendingCommitTimestampColumnsInInsert(
                        insert_statement->insert_column_list(),
@@ -663,8 +677,10 @@ ExtractValidatedResolvedStatementAndOptions(
 
   // Validate the index hints.
   IndexHintValidator index_hint_validator{
-      context.schema, options.disable_query_null_filtered_index_check ||
-                          config::disable_query_null_filtered_index_check()};
+      context.schema,
+      options.disable_query_null_filtered_index_check ||
+          config::disable_query_null_filtered_index_check()
+  };
   ZETASQL_RETURN_IF_ERROR(statement->Accept(&index_hint_validator));
 
   // Check the query size limits

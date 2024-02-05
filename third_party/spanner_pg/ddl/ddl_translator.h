@@ -102,6 +102,9 @@ struct TranslationOptions {
   // enable_set_drop_not_null allows translation of <SET/DROP NOT NULL> without
   // specifying a column type.
   bool enable_set_drop_not_null = false;
+  // enable_virtual_generated_column allows translation of <VIRTUAL>,
+  // which is a non-stored generated column.
+  bool enable_virtual_generated_column = false;
 };
 
 // Interface for translating PostgreSQL DDL parse tree (AST) to Spanner schema

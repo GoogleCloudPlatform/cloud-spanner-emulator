@@ -82,7 +82,7 @@ RUN for file in $(find -L src/bazel-src/external                               \
 ################################################################################
 
 # Now build the release image from the build image.
-FROM gcr.io/distroless/cc-debian11
+FROM gcr.io/distroless/cc-debian12
 
 # Copy binaries.
 COPY --from=build /src/bazel-bin/binaries/emulator_main .

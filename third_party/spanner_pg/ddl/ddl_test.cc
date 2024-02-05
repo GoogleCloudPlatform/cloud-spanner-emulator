@@ -504,6 +504,5 @@ TEST_F(DdlTest, PrintRowDeletionPolicyForEmulator) {
   ASSERT_THAT(result,
               zetasql_base::testing::IsOkAndHolds("INTERVAL '7 DAYS' ON user_id"));
 }
-
 }  // namespace
 }  // namespace postgres_translator::spangres

@@ -1280,6 +1280,19 @@ absl::Status MultipleRefsToKeyColumn(absl::string_view object_type,
                        object_type, object_name, key_column));
 }
 
+absl::Status UnsupportedAlterDatabaseOption(absl::string_view option_name) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Invalid Alter Database Option: $0."
+                                       "Supported options are witness_location "
+                                       "and default_leader.",
+                                       option_name));
+}
+
+absl::Status NullValueAlterDatabaseOption() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Alter Database Option has null value."));
+}
 absl::Status IncorrectParentKeyPosition(absl::string_view child_object_type,
                                         absl::string_view child_object_name,
                                         absl::string_view parent_key_column,
@@ -2670,6 +2683,13 @@ absl::Status PendingCommitTimestampDmlValueOnly() {
       "expression.");
 }
 
+absl::Status UnsupportedUpsertQueries(absl::string_view insert_mode) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("$0 statement is not supported in Emulator",
+                       insert_mode));
+}
+
 absl::Status NoFeatureSupportDifferentTypeArrayCasts(
     absl::string_view from_type, absl::string_view to_type) {
   return absl::Status(
@@ -2942,6 +2962,33 @@ absl::Status RowDeletionPolicyOnAncestors(
           table_name, ancestor_table_name));
 }
 
+absl::Status SynonymDoesNotExist(absl::string_view synonym,
+                                 absl::string_view table_name) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("SYNONYM $0 does not exist on table $1.",
+                                       synonym, table_name));
+}
+
+absl::Status SynonymAlreadyExists(absl::string_view synonym,
+                                  absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Cannot add a synonym to table $1 because the table already has a "
+          "synonym $0.",
+          synonym, table_name));
+}
+
+absl::Status CannotAlterSynonym(absl::string_view synonym,
+                                absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Cannot alter synonym $0 in table $1. The existing synonym must "
+          "be dropped first.",
+          synonym, table_name));
+}
+
 absl::Status ForeignKeyRowDeletionPolicyAddNotAllowed(
     absl::string_view table_name, absl::string_view foreign_keys) {
   return absl::Status(
@@ -3096,6 +3143,69 @@ absl::Status SequenceSkippedRangeHasAtleastOnePositiveNumber() {
   return absl::Status(
       absl::StatusCode::kFailedPrecondition,
       "The sequence skipped range has to contain at least one positive value");
+}
+
+absl::Status NamedSchemaNotFound(absl::string_view named_schema_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::Substitute("Schema not found: $0", named_schema_name));
+}
+
+absl::Status AlterNamedSchemaNotSupported() {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      "ALTER SCHEMA not supported.");
+}
+
+absl::Status DropNamedSchemaHasDependencies(
+    absl::string_view named_schema_name, const std::vector<std::string>& tables,
+    const std::vector<std::string>& views,
+    const std::vector<std::string>& indexes,
+    const std::vector<std::string>& sequences) {
+  std::string dependencies;
+  if (!tables.empty()) {
+    dependencies +=
+        absl::StrCat("\nDependent tables:", absl::StrJoin(tables, ", "));
+  }
+  if (!views.empty()) {
+    dependencies +=
+        absl::StrCat("\nDependent views:", absl::StrJoin(views, ", "));
+  }
+  if (!indexes.empty()) {
+    dependencies +=
+        absl::StrCat("\nDependent indexes:", absl::StrJoin(indexes, ", "));
+  }
+  if (!sequences.empty()) {
+    dependencies +=
+        absl::StrCat("\nDependent sequences:", absl::StrJoin(sequences, ", "));
+  }
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::StrCat(
+          absl::Substitute("Cannot drop schema $0 while it has dependencies.",
+                           named_schema_name),
+          dependencies));
+}
+
+absl::Status DropNamedSchemaHasViews(absl::string_view named_schema_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot drop schema $0 while it has dependent views.",
+                       named_schema_name));
+}
+
+absl::Status DropNamedSchemaHasIndexes(absl::string_view named_schema_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot drop schema $0 while it has dependent indexes.",
+                       named_schema_name));
+}
+
+absl::Status DropNamedSchemaHasSequences(absl::string_view named_schema_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot drop schema $0 while it has dependent sequences.",
+          named_schema_name));
 }
 
 absl::Status SequenceSkipRangeMinLargerThanMax() {

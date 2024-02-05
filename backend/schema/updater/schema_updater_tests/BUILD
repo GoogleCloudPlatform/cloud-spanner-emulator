@@ -66,6 +66,7 @@ cc_library(
         "generated_column.cc",
         "index.cc",
         "model_test.cc",
+        "named_schema.cc",
         "sequence.cc",
         "table.cc",
         "views.cc",

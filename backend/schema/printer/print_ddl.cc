@@ -38,6 +38,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/view.h"
@@ -355,6 +356,10 @@ std::string PrintTable(const Table* table) {
     absl::StrAppend(&table_string, "  ", PrintCheckConstraint(check_constraint),
                     ",\n");
   }
+  if (!table->synonym().empty()) {
+    absl::StrAppend(&table_string, "  SYNONYM(", PrintName(table->synonym()),
+                    "),\n");
+  }
   absl::StrAppend(&table_string, ") PRIMARY KEY(");
 
   std::vector<std::string> pk_clause;
@@ -455,6 +460,10 @@ std::string PrintSequence(const Sequence* sequence) {
   absl::StrAppend(&sequence_string, " )");
 
   return sequence_string;
+}
+
+std::string PrintNamedSchema(const NamedSchema* named_schema) {
+  return absl::Substitute("CREATE SCHEMA $0", PrintName(named_schema->Name()));
 }
 
 absl::StatusOr<std::vector<std::string>> PrintDDLStatements(

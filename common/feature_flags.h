@@ -38,7 +38,9 @@ class EmulatorFeatureFlags {
     bool enable_postgresql_interface = true;
     bool enable_fk_delete_cascade_action = false;
     bool enable_bit_reversed_positive_sequences = true;
-    bool enable_bit_reversed_positive_sequences_postgresql = false;
+    bool enable_bit_reversed_positive_sequences_postgresql = true;
+    bool enable_upsert_queries = false;
+    bool enable_batch_query_with_no_table_scan = true;
   };
 
   static const EmulatorFeatureFlags& instance() {

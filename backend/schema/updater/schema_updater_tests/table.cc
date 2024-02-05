@@ -501,6 +501,88 @@ TEST_P(SchemaUpdaterTest, CreateTable_CreateChildTable) {
   EXPECT_NE(child_table, nullptr);
 }
 
+TEST_P(SchemaUpdaterTest, CreateTable_WithSynonym) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    CREATE TABLE T(
+      col1 INT64,
+      col2 STRING(MAX),
+      SYNONYM(S),
+    ) PRIMARY KEY(col1))"}));
+
+  auto t = schema->FindTable("T");
+  EXPECT_NE(t, nullptr);
+  auto s = schema->FindTable("S");
+  EXPECT_NE(s, nullptr);
+  EXPECT_EQ(t, s);
+
+  auto t1 = schema->FindTableUsingSynonym("T");
+  EXPECT_EQ(t1, nullptr);
+  auto s1 = schema->FindTableUsingSynonym("S");
+  EXPECT_NE(s1, nullptr);
+
+  t1 = schema->FindTableCaseSensitive("T");
+  EXPECT_NE(t1, nullptr);
+  t1 = schema->FindTableCaseSensitive("t");
+  EXPECT_EQ(t1, nullptr);
+  s1 = schema->FindTableUsingSynonymCaseSensitive("S");
+  EXPECT_NE(s1, nullptr);
+  s1 = schema->FindTableUsingSynonymCaseSensitive("s");
+  EXPECT_EQ(s1, nullptr);
+}
+
+TEST_P(SchemaUpdaterTest, CreateTable_TableNameConflictsWithSynonym) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"(
+      CREATE TABLE T(
+        col1 INT64,
+        SYNONYM(S),
+      ) PRIMARY KEY(col1)
+    )",
+                  R"(
+      CREATE TABLE S(
+        col1 INT64
+      ) PRIMARY KEY(col1)
+    )"}),
+              StatusIs(error::SchemaObjectAlreadyExists("Table", "S")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateTable_SynonymConflictsWithTableName) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"(
+      CREATE TABLE T(
+        col1 INT64,
+      ) PRIMARY KEY(col1)
+    )",
+                  R"(
+      CREATE TABLE T2(
+        col1 INT64,
+        SYNONYM(T),
+      ) PRIMARY KEY(col1)
+    )"}),
+              StatusIs(error::SchemaObjectAlreadyExists("Table", "T")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateTable_SynonymConflictsWithSynonym) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"(
+      CREATE TABLE T1(
+        col1 INT64,
+        SYNONYM(S),
+      ) PRIMARY KEY(col1)
+    )",
+                  R"(
+      CREATE TABLE T2(
+        col1 INT64,
+        SYNONYM(S),
+      ) PRIMARY KEY(col1)
+    )"}),
+              StatusIs(error::SchemaObjectAlreadyExists("Table", "S")));
+}
+
 TEST_P(SchemaUpdaterTest, AlterTable_AddColumn) {
   // Only BYTES(MAX) is supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
@@ -899,6 +981,119 @@ TEST_P(SchemaUpdaterTest, AlterTable_ChangeOnDelete) {
   EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kNoAction);
 }
 
+TEST_P(SchemaUpdaterTest, AlterTable_AddSynonym) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+      ) PRIMARY KEY (k1)
+    )"}));
+
+  auto t_old = schema->FindTable("T");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T ADD SYNONYM S
+    )"}));
+
+  auto t_new = new_schema->FindTable("T");
+  EXPECT_NE(t_old, t_new);
+
+  auto s_new = new_schema->FindTable("S");
+  EXPECT_EQ(t_new, s_new);
+}
+
+TEST_P(SchemaUpdaterTest, AlterTable_CannotAddDuplicateSynonym) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+      ) PRIMARY KEY (k1)
+    )",
+                                                  R"(
+      CREATE TABLE S (
+        k1 INT64,
+      ) PRIMARY KEY (k1)
+    )"}));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T ADD SYNONYM S
+    )"}),
+              StatusIs(error::SchemaObjectAlreadyExists("Table", "S")));
+}
+
+TEST_P(SchemaUpdaterTest, AlterTable_CannotAddTwoSynonyms) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+        SYNONYM(S),
+      ) PRIMARY KEY (k1)
+    )"}));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T ADD SYNONYM S2
+    )"}),
+              StatusIs(error::SynonymAlreadyExists("S", "T")));
+}
+
+TEST_P(SchemaUpdaterTest, AlterTable_DropSynonym) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+        SYNONYM(S),
+      ) PRIMARY KEY (k1)
+    )"}));
+
+  auto t_old = schema->FindTable("T");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T DROP SYNONYM S
+    )"}));
+
+  auto t_new = new_schema->FindTable("T");
+  EXPECT_NE(t_old, t_new);
+
+  auto s_new = new_schema->FindTable("S");
+  EXPECT_EQ(s_new, nullptr);
+
+  // S is now available for reuse.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema1, UpdateSchema(new_schema.get(), {R"(
+      CREATE TABLE S (
+        k1 INT64,
+      ) PRIMARY KEY (k1)
+    )"}));
+  s_new = new_schema1->FindTable("S");
+  EXPECT_NE(s_new, nullptr);
+}
+
+TEST_P(SchemaUpdaterTest, AlterTable_CannotDropNonExistentSynonym) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+      ) PRIMARY KEY (k1)
+    )"}));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T DROP SYNONYM S
+    )"}),
+              StatusIs(error::SynonymDoesNotExist("S", "T")));
+}
+
+TEST_P(SchemaUpdaterTest, AlterTable_CannotDropInvalidSynonym) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+        SYNONYM(S),
+      ) PRIMARY KEY (k1)
+    )"}));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T DROP SYNONYM S2
+    )"}),
+              StatusIs(error::SynonymDoesNotExist("S2", "T")));
+}
+
 TEST_P(SchemaUpdaterTest, DropTableNonexistentIfExists) {
   // IF NOT EXISTS isn't yet supported on the PG side of the emulator
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
@@ -1079,6 +1274,33 @@ TEST_P(SchemaUpdaterTest, DropTable_Recreate) {
 
   auto t1 = new_schema->FindTable("T1");
   EXPECT_NE(t1, nullptr);
+}
+
+TEST_P(SchemaUpdaterTest, DropTableWithSynonym) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T1 (
+        k1 INT64,
+        SYNONYM(S1)
+      ) PRIMARY KEY (k1)
+    )"}));
+
+  auto t1 = schema->FindTable("T1");
+  EXPECT_NE(t1, nullptr);
+  auto s1 = schema->FindTable("S1");
+  EXPECT_NE(s1, nullptr);
+  EXPECT_EQ(t1, s1);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      DROP TABLE T1
+    )"}));
+
+  // Dropped table and its dependent nodes like columns, key columns etc.
+  // are deleted.
+  t1 = new_schema->FindTable("T1");
+  EXPECT_EQ(t1, nullptr);
+  s1 = new_schema->FindTable("S1");
+  EXPECT_EQ(s1, nullptr);
 }
 
 TEST_P(SchemaUpdaterTest, ChangeKeyColumn) {

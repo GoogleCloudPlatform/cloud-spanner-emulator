@@ -56,7 +56,9 @@ namespace backend {
 
 namespace {
 using postgres_translator::GetSpannerPGFunctions;
+using postgres_translator::GetSpannerPGTVFs;
 using postgres_translator::SpannerPGFunctions;
+using postgres_translator::SpannerPGTVFs;
 
 absl::StatusOr<zetasql::Value> EvalPendingCommitTimestamp(
     absl::Span<const zetasql::Value> args) {
@@ -197,6 +199,12 @@ void FunctionCatalog::AddSpannerPGFunctions(
   for (auto& function : spanner_pg_functions) {
     functions_[function->Name()] = std::move(function);
   }
+
+  SpannerPGTVFs spanner_pg_tvfs = GetSpannerPGTVFs(catalog_name_);
+
+  for (auto& tvf : spanner_pg_tvfs) {
+    table_valued_functions_[tvf->FullName()] = std::move(tvf);
+  }
 }
 
 void FunctionCatalog::GetFunction(const std::string& name,
@@ -261,9 +269,16 @@ FunctionCatalog::GetInternalSequenceStateFunction(
     if (latest_schema_ == nullptr) {
       return error::SequenceNeedsAccessToSchema();
     }
-    // ZetaSQL algebrizer prepends a prefix to the sequence name.
-    std::string sequence_name =
-        std::string(absl::StripPrefix(args[0].string_value(), "_sequence_"));
+
+    std::string sequence_name;
+    if (latest_schema_->dialect() ==
+        database_api::DatabaseDialect::POSTGRESQL) {
+      sequence_name = args[0].string_value();
+    } else {
+      // ZetaSQL algebrizer prepends a prefix to the sequence name.
+      sequence_name =
+          std::string(absl::StripPrefix(args[0].string_value(), "_sequence_"));
+    }
     const backend::Sequence* sequence =
         latest_schema_->FindSequence(sequence_name);
     if (sequence == nullptr) {
@@ -305,9 +320,16 @@ FunctionCatalog::GetNextSequenceValueFunction(const std::string& catalog_name) {
     if (latest_schema_ == nullptr) {
       return error::SequenceNeedsAccessToSchema();
     }
+
     // ZetaSQL algebrizer prepends a prefix to the sequence name.
-    std::string sequence_name =
-        std::string(absl::StripPrefix(args[0].string_value(), "_sequence_"));
+    std::string sequence_name;
+    if (latest_schema_->dialect() ==
+        database_api::DatabaseDialect::POSTGRESQL) {
+      sequence_name = args[0].string_value();
+    } else {
+      sequence_name =
+          std::string(absl::StripPrefix(args[0].string_value(), "_sequence_"));
+    }
     const backend::Sequence* sequence =
         latest_schema_->FindSequence(sequence_name);
     if (sequence == nullptr) {

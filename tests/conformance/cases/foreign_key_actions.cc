@@ -130,6 +130,17 @@ TEST_F(ForeignKeyActionsTest, ReferencedPK_ReferencingPK_Restriction) {
               StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
+TEST_F(ForeignKeyActionsTest, ReferencedPK_ReferencingPK_NoRestrictionWithDml) {
+  // You can insert and delete the same referenced row within the same
+  // transaction under different flush boundaries. Each DML statement in the
+  // transaction converts into mutations and flushes separately, therefore FK
+  // transaction restriction should not stop this transaction.
+  ZETASQL_EXPECT_OK(
+      CommitDml({SqlStatement("INSERT ReferencedPK (referenced_pk) Values (1)"),
+                 SqlStatement("INSERT ReferencedPK (referenced_pk) Values (2)"),
+                 SqlStatement("DELETE ReferencedPK WHERE referenced_pk = 1")}));
+}
+
 TEST_F(ForeignKeyActionsTest,
        ReferencedPK_ReferencingPK_Restriction_WithEmptyRangeDelete) {
   ZETASQL_ASSERT_OK(Insert("ReferencedPK", {"referenced_pk"}, {1}));

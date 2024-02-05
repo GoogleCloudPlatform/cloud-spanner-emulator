@@ -135,6 +135,7 @@ absl::StatusOr<ValuePairVector> ConstValuePairs() {
       PostgresCastToExpr(float8_const),
       zetasql::MakeResolvedLiteral(zetasql::types::DoubleType(),
                                      zetasql::Value::NullDouble()));
+
   // text <-> string
   ZETASQL_ASSIGN_OR_RETURN(auto string_const,
                    internal::makeStringConst(TEXTOID, "hello world",

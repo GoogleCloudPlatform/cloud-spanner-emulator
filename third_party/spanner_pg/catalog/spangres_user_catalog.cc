@@ -37,6 +37,8 @@
 #include "zetasql/public/table_valued_function.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_split.h"
+#include "backend/query/queryable_table.h"
+#include "backend/schema/catalog/column.h"
 
 const absl::flat_hash_map<std::string, std::string> kPgToSpannerSchemaMapping =
     {{"information_schema", "pg_information_schema"}};

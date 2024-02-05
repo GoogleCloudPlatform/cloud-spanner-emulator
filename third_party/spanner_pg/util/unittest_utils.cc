@@ -32,6 +32,8 @@
 #include "third_party/spanner_pg/util/unittest_utils.h"
 
 #include "zetasql/public/catalog.h"
+#include "zetasql/public/types/type.h"
+#include "zetasql/public/types/type_factory.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
@@ -169,6 +171,8 @@ absl::StatusOr<const zetasql::Type*> ParseTypeName(const std::string& type) {
     return zetasql::types::Int64Type();
   } else if (type == "double") {
     return zetasql::types::DoubleType();
+  } else if (type == "float") {
+    return zetasql::types::FloatType();
   } else if (type == "string") {
     return zetasql::types::StringType();
   } else if (type == "bool") {
@@ -189,6 +193,8 @@ absl::StatusOr<const zetasql::Type*> ParseTypeName(const std::string& type) {
     return zetasql::types::Int64ArrayType();
   } else if (type == "double_array") {
     return zetasql::types::DoubleArrayType();
+  } else if (type == "float_array") {
+    return zetasql::types::FloatArrayType();
   } else if (type == "string_array") {
     return zetasql::types::StringType();
   } else if (type == "bool_array") {

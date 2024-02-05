@@ -196,6 +196,7 @@ ERROR:.* Cannot convert generated column `Users.id_plus_one` to a regular column
 ==
 # Cannot change the STOREDness of a generated column.
 # --regex
+# --skip_prod_env
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),

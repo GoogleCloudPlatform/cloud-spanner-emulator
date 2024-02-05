@@ -60,6 +60,53 @@ using ::postgres_translator::spangres::test::
     GetSpangresTestCatalogAdapterHolder;
 using ::testing::UnorderedElementsAreArray;
 
+// Helper function for testing with parse tree nodes. Near-direct copy of the
+// static helper in gram.y.
+Node* makeTypeCast(Node* arg, TypeName* type_name, int location) {
+  TypeCast* n = makeNode(TypeCast);
+  n->arg = arg;
+  n->typeName = type_name;
+  n->location = location;
+  return internal::PostgresCastToNode(n);
+}
+
+// Helper function for testing with parse tree nodes. Near-direct copy of the
+// static helper in gram.y.
+Node* makeBoolAConst(bool state) {
+  A_Const* n = makeNode(A_Const);
+  n->val.type = T_String;
+  n->val.val.str = (state ? pstrdup("t") : pstrdup("f"));
+  n->location = -1;
+  return makeTypeCast(internal::PostgresCastToNode(n),
+                      SystemTypeName(pstrdup("bool")), -1);
+}
+
+// Helper function to create a 2-member hint list for analyzer testing.
+List* CreateHintList() {
+  List* result = NIL;
+  DefElem* hint1 = makeNode(DefElem);
+  hint1->defname = pstrdup("hint_name");
+  hint1->arg = makeBoolAConst(true);
+  result = lappend(result, hint1);
+  DefElem* hint2 = makeNode(DefElem);
+  hint2->defname = pstrdup("hint_name");
+  hint2->arg = makeBoolAConst(false);
+  result = lappend(result, hint2);
+  return result;
+}
+
+absl::Status ValidateTransformedHints(List* original_hints,
+                                      List* transformed_hints) {
+  ZETASQL_RET_CHECK_NE(original_hints, nullptr);
+  ZETASQL_RET_CHECK_NE(transformed_hints, nullptr);
+  ZETASQL_RET_CHECK_EQ(list_length(original_hints), list_length(transformed_hints));
+  for (DefElem* def_elem : StructList<DefElem*>(transformed_hints)) {
+    // Const (and not A_Const) verifies it went through the Analyzer.
+    ZETASQL_RET_CHECK(IsA(def_elem->arg, Const));
+  }
+  return absl::OkStatus();
+}
+
 List* MakeFunctionName(const char* namespace_name, const char* function_name) {
   if (namespace_name != nullptr) {
     return list_make2(makeString(pstrdup(namespace_name)),
@@ -83,6 +130,22 @@ Const* MakeInt4Const(int value, bool isnull) {
   return makeConst(INT4OID, -1, /*constcollid=*/InvalidOid, sizeof(int32_t),
                    Int32GetDatum(value), isnull,
                    /*constbyval=*/true);
+}
+
+// Helper function to create a Const node containing a string value of unknown
+// type (or null).
+Const* MakeUnknownStringConst(const char* value) {
+  // See "make_const" in parse_node.c
+  if (value == nullptr) {
+    return makeConst(UNKNOWNOID, -1, /*constcollid=*/InvalidOid,
+                     /*constlen=*/-2 /* cstring-stype varwidth */, (Datum)0,
+                     /*isnull=*/true,
+                     /*constbyval=*/false);
+  }
+  return makeConst(UNKNOWNOID, -1, /*constcollid=*/InvalidOid,
+                   /*constlen=*/-2 /* cstring-stype varwidth */,
+                   CStringGetDatum(pstrdup(value)), /*isnull=*/false,
+                   /*constbyval=*/false);
 }
 
 // Helper function to parse, analyze, and deparse a query to confirm that a SQL
@@ -1035,18 +1098,56 @@ TEST_F(CatalogShimTestWithMemory, FuncGetDetailSum) {
   EXPECT_EQ(argdefaults, nullptr);
 }
 
-TEST_F(CatalogShimTestWithMemory, ParseFuncOrColumn) {
+TEST_F(CatalogShimTestWithMemory, ParseFuncOrColumnFuncExpr) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
-  // Set up inputs for "SELECT sum(1)" test query.
+  // Set up inputs for "SELECT now() /*@ function_hint = 1 */" test query.
+  ParseState* pstate = make_parsestate(/*parentParseState=*/nullptr);
+  pstate->p_expr_kind = EXPR_KIND_SELECT_TARGET;
+  List* funcname = MakeNamespacedName("now");
+  List* fargs = NIL;
+  const int location = -1;  // "Unknown location"
+  FuncCall* fn = makeFuncCall(funcname, fargs, COERCE_EXPLICIT_CALL, location);
+  fn->functionHints = CreateHintList();
+
+  // This calling convention (passing fields redundantly) matches the real
+  // PostgreSQL call we are supporting. It is redundant for functions but other
+  // cases (column names) use these fields differently.
+  Node* tree =
+      ParseFuncOrColumn(pstate, fn->funcname, fargs, pstate->p_last_srf, fn,
+                        /*proc_call=*/false, fn->location);
+
+  EXPECT_NE(tree, nullptr);
+  FuncExpr* func_expr = internal::PostgresCastNode(FuncExpr, tree);
+  ASSERT_NE(func_expr, nullptr);
+  EXPECT_EQ(func_expr->funcid, F_NOW);
+  EXPECT_EQ(func_expr->funcresulttype, TIMESTAMPTZOID);
+  EXPECT_FALSE(func_expr->funcretset);
+  EXPECT_FALSE(func_expr->funcvariadic);
+  EXPECT_EQ(func_expr->funcformat, COERCE_EXPLICIT_CALL);
+  EXPECT_EQ(func_expr->args, NIL);
+  EXPECT_EQ(func_expr->location, location);
+  ZETASQL_EXPECT_OK(
+      ValidateTransformedHints(fn->functionHints, func_expr->functionHints));
+
+  free_parsestate(pstate);
+}
+
+TEST_F(CatalogShimTestWithMemory, ParseFuncOrColumnAggref) {
+  zetasql::AnalyzerOptions analyzer_options =
+      GetSpangresTestAnalyzerOptions();
+  std::unique_ptr<CatalogAdapterHolder> holder =
+      GetSpangresTestCatalogAdapterHolder(analyzer_options);
+  // Set up inputs for "SELECT sum(1) /*@ function_hint = 1 */" test query.
   ParseState* pstate = make_parsestate(/*parentParseState=*/nullptr);
   pstate->p_expr_kind = EXPR_KIND_SELECT_TARGET;
   List* funcname = MakeNamespacedName("sum");
   List* fargs = list_make1(MakeInt4Const(1, /*isnull=*/false));
   const int location = -1;  // "Unknown location"
   FuncCall* fn = makeFuncCall(funcname, fargs, COERCE_EXPLICIT_CALL, location);
+  fn->functionHints = CreateHintList();
 
   // This calling convention (passing fields redundantly) matches the real
   // PostgreSQL call we are supporting. It is redundant for functions but other
@@ -1058,10 +1159,7 @@ TEST_F(CatalogShimTestWithMemory, ParseFuncOrColumn) {
   EXPECT_NE(tree, nullptr);
   Aggref* aggref = internal::PostgresCastNode(Aggref, tree);
   ASSERT_NE(aggref, nullptr);
-  // This value comes from pg_proc.h entry for the sum of Int4s. It is not
-  // defined as a code constant for us to reference.
-  constexpr Oid int_sum_oid = 2108;
-  EXPECT_EQ(aggref->aggfnoid, int_sum_oid);
+  EXPECT_EQ(aggref->aggfnoid, F_SUM_INT4);
   EXPECT_EQ(aggref->aggtype, INT8OID);
   EXPECT_EQ(list_nth_oid(aggref->aggargtypes, 0), INT4OID);
   EXPECT_EQ(aggref->aggfilter, nullptr);
@@ -1069,6 +1167,44 @@ TEST_F(CatalogShimTestWithMemory, ParseFuncOrColumn) {
   EXPECT_FALSE(aggref->aggvariadic);
   EXPECT_EQ(aggref->aggkind, AGGKIND_NORMAL);
   EXPECT_EQ(aggref->location, location);
+  ZETASQL_EXPECT_OK(ValidateTransformedHints(fn->functionHints, aggref->functionHints));
+
+  free_parsestate(pstate);
+}
+
+TEST_F(CatalogShimTestWithMemory, ParseFuncOrColumnWindowFunc) {
+  zetasql::AnalyzerOptions analyzer_options =
+      GetSpangresTestAnalyzerOptions();
+  std::unique_ptr<CatalogAdapterHolder> holder =
+      GetSpangresTestCatalogAdapterHolder(analyzer_options);
+  // Set up inputs for "SELECT sum(1) /*@ function_hint = 1 */ over()" query.
+  ParseState* pstate = make_parsestate(/*parentParseState=*/nullptr);
+  pstate->p_expr_kind = EXPR_KIND_SELECT_TARGET;
+  List* funcname = MakeNamespacedName("sum");
+  List* fargs = list_make1(MakeInt4Const(1, /*isnull=*/false));
+  const int location = -1;  // "Unknown location"
+  FuncCall* fn = makeFuncCall(funcname, fargs, COERCE_EXPLICIT_CALL, location);
+  fn->over = makeNode(WindowDef);
+  fn->functionHints = CreateHintList();
+
+  // This calling convention (passing fields redundantly) matches the real
+  // PostgreSQL call we are supporting. It is redundant for functions but other
+  // cases (column names) use these fields differently.
+  Node* tree =
+      ParseFuncOrColumn(pstate, fn->funcname, fargs, pstate->p_last_srf, fn,
+                        /*proc_call=*/false, fn->location);
+
+  EXPECT_NE(tree, nullptr);
+  WindowFunc* window_func = internal::PostgresCastNode(WindowFunc, tree);
+  ASSERT_NE(window_func, nullptr);
+  EXPECT_EQ(window_func->winfnoid, F_SUM_INT4);
+  EXPECT_EQ(window_func->wintype, INT8OID);
+  EXPECT_TRUE(window_func->winagg);
+  EXPECT_EQ(window_func->location, location);
+  ZETASQL_EXPECT_OK(
+      ValidateTransformedHints(fn->functionHints, window_func->functionHints));
+
+  free_parsestate(pstate);
 }
 
 TEST_F(CatalogShimTestWithMemory, ParseFuncOrColumnError) {
@@ -1756,6 +1892,23 @@ TEST_F(CatalogShimTestWithMemory, DeparseSetOperationSubqueryWithSetOperation) {
   RoundTripQuery(sql);
 }
 
+TEST_F(CatalogShimTestWithMemory, DeparseFunctionHints) {
+  std::vector<std::string> test_strings{
+      "SELECT pi() /*@ function_hint='1'::bigint */ AS pi",
+      "SELECT max(key) /*@ function_hint='1'::bigint */ AS max FROM keyvalue",
+      "SELECT count(*) /*@ function_hint='1'::bigint */ AS count FROM keyvalue",
+      "SELECT mode() /*@ function_hint='1'::bigint */ WITHIN GROUP (ORDER BY "
+      "key)"
+      " AS mode FROM keyvalue",
+      "SELECT sum(key) /*@ function_hint='1'::bigint */ FILTER (WHERE (value = "
+      "'abc'::text)) "
+      "AS sum FROM keyvalue"};
+
+  for (const std::string& test_case : test_strings) {
+    RoundTripQuery(test_case);
+  }
+}
+
 // Helper function for testing with parse tree nodes. Near-direct copy of the
 // static helper in gram.y.
 Node* makeIntConst(int val) {
@@ -1783,27 +1936,6 @@ TEST_F(HintTransformTest, Integer) {
   EXPECT_EQ(DatumGetInt64(val->constvalue), 21);
   EXPECT_EQ(val->consttype, INT8OID);  // INT8 because of the Spangres override.
   free_parsestate(pstate);
-}
-
-// Helper function for testing with parse tree nodes. Near-direct copy of the
-// static helper in gram.y.
-Node* makeTypeCast(Node* arg, TypeName* type_name, int location) {
-  TypeCast* n = makeNode(TypeCast);
-  n->arg = arg;
-  n->typeName = type_name;
-  n->location = location;
-  return internal::PostgresCastToNode(n);
-}
-
-// Helper function for testing with parse tree nodes. Near-direct copy of the
-// static helper in gram.y.
-Node* makeBoolAConst(bool state) {
-  A_Const* n = makeNode(A_Const);
-  n->val.type = T_String;
-  n->val.val.str = (state ? pstrdup("t") : pstrdup("f"));
-  n->location = -1;
-  return makeTypeCast(internal::PostgresCastToNode(n),
-                      SystemTypeName(pstrdup("bool")), -1);
 }
 
 // A literal boolean value ("true", "false") parses as a string with a cast
@@ -1879,20 +2011,6 @@ TEST_F(HintTransformTest, Identifier) {
   free_parsestate(pstate);
 }
 
-// Helper function to create a 2-member hint list for analyzer testing.
-List* CreateHintList() {
-  List* result = NIL;
-  DefElem* hint1 = makeNode(DefElem);
-  hint1->defname = pstrdup("hint_name");
-  hint1->arg = makeBoolAConst(true);
-  result = lappend(result, hint1);
-  DefElem* hint2 = makeNode(DefElem);
-  hint2->defname = pstrdup("hint_name");
-  hint2->arg = makeBoolAConst(false);
-  result = lappend(result, hint2);
-  return result;
-}
-
 // Unit test statement hint transformation from the public analyzer API.
 TEST_F(CatalogShimTestWithMemory, TopLevelStatementHintTransforms) {
   ParseState* pstate = make_parsestate(/*parentParseState=*/nullptr);
@@ -1906,13 +2024,8 @@ TEST_F(CatalogShimTestWithMemory, TopLevelStatementHintTransforms) {
   Query* query = transformTopLevelStmt(pstate, stmt);
 
   ASSERT_NE(query, nullptr);
-  ASSERT_NE(query->statementHints, nullptr);
-  EXPECT_EQ(list_length(query->statementHints),
-            list_length(stmt->statementHints));
-  for (DefElem* def_elem : StructList<DefElem*>(query->statementHints)) {
-    // Const (and not A_Const) verifies it went through the Analyzer.
-    EXPECT_TRUE(IsA(def_elem->arg, Const));
-  }
+  ZETASQL_EXPECT_OK(
+      ValidateTransformedHints(stmt->statementHints, query->statementHints));
 
   free_parsestate(pstate);
 }
@@ -1940,13 +2053,8 @@ TEST_F(CatalogShimTestWithMemory, JoinExprHintTransforms) {
 
   JoinExpr* transformed_expr = linitial_node(JoinExpr, pstate->p_joinlist);
   ASSERT_NE(transformed_expr, nullptr);
-  ASSERT_NE(transformed_expr->joinHints, nullptr);
-  EXPECT_EQ(list_length(transformed_expr->joinHints),
-            list_length(join_expr->joinHints));
-  for (DefElem* def_elem : StructList<DefElem*>(transformed_expr->joinHints)) {
-    // Const (and not A_Const) verifies it went through the Analyzer.
-    EXPECT_TRUE(IsA(def_elem->arg, Const));
-  }
+  ZETASQL_EXPECT_OK(ValidateTransformedHints(join_expr->joinHints,
+                                     transformed_expr->joinHints));
 
   free_parsestate(pstate);
 }
@@ -1981,13 +2089,8 @@ TEST_F(CatalogShimTestWithMemory, SubLinkHintTransforms) {
                              EXPR_KIND_OTHER));
 
   ASSERT_NE(transformed_link, nullptr);
-  ASSERT_NE(transformed_link->joinHints, nullptr);
-  EXPECT_EQ(list_length(transformed_link->joinHints),
-            list_length(sublink->joinHints));
-  for (DefElem* def_elem : StructList<DefElem*>(transformed_link->joinHints)) {
-    // Const (and not A_Const) verifies it went through the Analzyer.
-    EXPECT_TRUE(IsA(def_elem->arg, Const));
-  }
+  ZETASQL_EXPECT_OK(ValidateTransformedHints(sublink->joinHints,
+                                     transformed_link->joinHints));
 
   free_parsestate(pstate);
 }
@@ -2008,12 +2111,7 @@ TEST_F(CatalogShimTestWithMemory, TableHintTransforms) {
 
   RangeTblEntry* rte = linitial_node(RangeTblEntry, pstate->p_rtable);
   ASSERT_NE(rte, nullptr);
-  ASSERT_NE(rte->tableHints, nullptr);
-  EXPECT_EQ(list_length(rte->tableHints), list_length(range_var->tableHints));
-  for (DefElem* def_elem : StructList<DefElem*>(rte->tableHints)) {
-    // Const (and not A_Const) verifies it went through the Analzyer.
-    EXPECT_TRUE(IsA(def_elem->arg, Const));
-  }
+  ZETASQL_EXPECT_OK(ValidateTransformedHints(range_var->tableHints, rte->tableHints));
 
   free_parsestate(pstate);
 }
@@ -2104,6 +2202,39 @@ TEST_F(CatalogShimTestWithMemory, TableHintGrammarParsesHint) {
     ASSERT_EQ(list_length(range_var->tableHints), 1);
     DefElem* hint = list_nth_node(DefElem, range_var->tableHints, 0);
     EXPECT_STREQ(hint->defname, "table_hint");
+    ASSERT_TRUE(IsA(hint->arg, A_Const));
+    EXPECT_EQ(intVal(&castNode(A_Const, hint->arg)->val), 1);
+  }
+}
+
+// Test all PostgreSQL function syntaxes to ensure hints are picked up by them.
+TEST_F(CatalogShimTestWithMemory, FunctionGrammarParsesHint) {
+  // These are all equivalent for the parts we care about.
+  std::vector<std::string> test_strings{
+      "SELECT count() /*@ function_hint = 1 */ AS pi",
+      "SELECT count(key) /*@ function_hint = 1 */ FROM keyvalue",
+      "SELECT count(*) /*@ function_hint = 1 */ FROM keyvalue",
+      "SELECT count() /*@ function_hint = 1 */ WITHIN GROUP (ORDER BY key) "
+      "FROM keyvalue",
+      "SELECT count(key) /*@ function_hint = 1 */ FILTER (WHERE (value = "
+      "'abc'))"
+      " FROM keyvalue"};
+
+  for (const std::string& test_case : test_strings) {
+    SpangresTokenLocations locations;
+
+    List* parse_tree =
+        raw_parser_spangres(test_case.c_str(), RAW_PARSE_DEFAULT, &locations);
+
+    ASSERT_EQ(list_length(parse_tree), 1);
+    RawStmt* stmt = list_nth_node(RawStmt, parse_tree, 0);
+    SelectStmt* select = castNode(SelectStmt, stmt->stmt);
+    ResTarget* target = list_nth_node(ResTarget, select->targetList, 0);
+    FuncCall* func = castNode(FuncCall, target->val);
+    ASSERT_NE(func->functionHints, nullptr);
+    ASSERT_EQ(list_length(func->functionHints), 1);
+    DefElem* hint = list_nth_node(DefElem, func->functionHints, 0);
+    EXPECT_STREQ(hint->defname, "function_hint");
     ASSERT_TRUE(IsA(hint->arg, A_Const));
     EXPECT_EQ(intVal(&castNode(A_Const, hint->arg)->val), 1);
   }

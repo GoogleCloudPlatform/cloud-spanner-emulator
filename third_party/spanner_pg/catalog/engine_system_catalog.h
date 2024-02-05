@@ -152,6 +152,15 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   const zetasql::Function* GetFunction(
       const PostgresExprIdentifier& expr_id) const;
 
+  // Get the builtin TableValuedFunction by oid.
+  // Returns nullptr if the function is not found.
+  const zetasql::TableValuedFunction* GetTableValuedFunction(
+      Oid proc_oid) const;
+
+  // Returns the Oid for the TVF or an error if the TVF is not found.
+  absl::StatusOr<Oid> GetOidForTVF(
+      const zetasql::TableValuedFunction* tvf) const;
+
   // Get the matching function and signature for this oid and set of input
   // argument types.
   // Returns an error if the function call is not supported.
@@ -305,6 +314,10 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
     return builtin_function_catalog_->type_factory();
   }
 
+  EngineBuiltinFunctionCatalog* builtin_function_catalog() {
+    return builtin_function_catalog_.get();
+  }
+
   // Like GetFunctions(), but return PostgresExtendedFunction objects
   // rather than breaking each supported PostgreSQL function
   // down into the various ZetaSQL functions that implement its different
@@ -407,6 +420,15 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   absl::Status AddType(const PostgresTypeMapping* type,
                        const zetasql::LanguageOptions& language_options);
 
+  // Creates a PostgresExtendedFunctionSignature for a variadic signature.
+  // Variadic function signatures are not validated when the EngineSystemCatalog
+  // is initialized. Sufficient golden tests or unit tests should be added to
+  // catch mismatched signatures, bugs due to incorrect signatures, etc.
+  absl::StatusOr<std::unique_ptr<PostgresExtendedFunctionSignature>>
+  BuildVariadicPostgresExtendedFunctionSignature(
+      const std::string& mapped_function_name,
+      const zetasql::FunctionSignature& signature, Oid proc_oid);
+
   // Creates a PostgresExtendedFunction using the arguments and adds it to the
   // catalog.
   // For each signature, if there is an expected PostgreSQL proc oid or mapped
@@ -414,6 +436,13 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // if either is not found.
   absl::Status AddFunction(const PostgresFunctionArguments& function_arguments,
                            const zetasql::LanguageOptions& language_options);
+
+  void AddFunctionToReverseMappings(const std::string& proc_name, Oid proc_oid);
+
+  // Creates a mapping between a PostgreSQL proc oid and a ZetaSQL
+  // TableValuedFunction by name. Note that the engine_tvf_name is not
+  // required to match the PostgreSQL proc name.
+  absl::Status AddTVF(Oid proc_oid, const std::string& engine_tvf_name);
 
   // Add a mapping between the PG Expr Identifier and a builtin function.
   absl::Status AddExprFunction(const PostgresExprIdentifier& expr_id,
@@ -531,6 +560,12 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   absl::flat_hash_map<std::pair<const zetasql::Type*, const zetasql::Type*>,
                       FunctionAndSignature>
       pg_cast_to_builtin_function_;
+
+  // Store mappings between PostgreSQL proc oids and TableValuedFunctions.
+  absl::flat_hash_map<Oid, const zetasql::TableValuedFunction*>
+      proc_oid_to_tvf_;
+  absl::flat_hash_map<const zetasql::TableValuedFunction*, Oid>
+      tvf_to_proc_oid_;
 
   // Stores the reverse mapping for operator functions.
   // Only used by the reverse transformer.

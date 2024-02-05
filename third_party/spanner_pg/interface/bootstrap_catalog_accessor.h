@@ -49,6 +49,12 @@ const PgBootstrapCatalog* GetPgBootstrapCatalog();
 absl::StatusOr<PgCollationData> GetPgCollationDataFromBootstrap(
     const PgBootstrapCatalog* catalog, absl::string_view collation_name);
 
+// Returns either a struct containing namespace data or an error based on the
+// given namespace_name. If the namespace is not an allowed type (see allowlist)
+// or is not in the catalog, return NotFoundError.
+absl::StatusOr<PgNamespaceData> GetPgNamespaceDataFromBootstrap(
+    const PgBootstrapCatalog* catalog, absl::string_view namespace_name);
+
 // Returns either a struct containing type data or an error based on the given
 // type_name. The type name should use the PG format e.g. "jsonb", "_jsonb".
 // If type_name is not an allowed type (see allowlist) or is not in the catalog,

@@ -30,12 +30,14 @@
 #include "absl/time/time.h"
 #include "backend/schema/builders/change_stream_builder.h"
 #include "backend/schema/builders/column_builder.h"
+#include "backend/schema/builders/database_options_builder.h"
 #include "backend/schema/builders/index_builder.h"
 #include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
 #include "backend/schema/builders/view_builder.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/database_options.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/sequence.h"
@@ -69,9 +71,13 @@ class SchemaTest : public testing::Test {
         }) {}
 
  protected:
-  Table::Builder table_builder(const std::string& name) {
+  Table::Builder table_builder(const std::string& name,
+                               const std::string& synonym = "") {
     Table::Builder b;
     b.set_name(name).set_id(name);
+    if (!synonym.empty()) {
+      b.set_synonym(synonym);
+    }
     return b;
   }
 
@@ -93,6 +99,12 @@ class SchemaTest : public testing::Test {
   Sequence::Builder sequence_builder(const std::string& name) {
     Sequence::Builder c;
     c.set_name(name).set_id(name);
+    return c;
+  }
+
+  DatabaseOptions::Builder database_options_builder(const std::string& name) {
+    DatabaseOptions::Builder c;
+    c.set_db_name(name);
     return c;
   }
 
@@ -405,6 +417,22 @@ TEST_F(SchemaTest, TableBuilder) {
             error::InvalidSchemaName("Table", table_name));
 }
 
+TEST_F(SchemaTest, TableSynonymBuilder) {
+  auto t = table_builder("T", "S").build();
+  ZETASQL_EXPECT_OK(t->Validate(&context_));
+
+  Table::Builder tb = table_builder("T1", "S1");
+  auto c1 = column_builder("C1", tb.get()).build();
+  auto k1 = KeyColumn::Builder().set_column(c1.get()).build();
+  auto t1 = tb.add_column(c1.get()).add_key_column(k1.get()).build();
+  ZETASQL_EXPECT_OK(t1->Validate(&context_));
+
+  const std::string synonym(130, 'S');
+  auto t2 = table_builder("T1", synonym).build();
+  EXPECT_EQ(t2->Validate(&context_),
+            error::InvalidSchemaName("Synonym", synonym));
+}
+
 TEST_F(SchemaTest, ChangeStreamBuilderValid) {
   auto c = change_stream_builder("CS").build();
   ZETASQL_EXPECT_OK(c->Validate(&context_));
@@ -427,6 +455,19 @@ TEST_F(SchemaTest, SequenceBuilderInvalid) {
   auto invalid_cs = sequence_builder(sequence_name).build();
   EXPECT_EQ(invalid_cs->Validate(&context_),
             error::InvalidSchemaName("Sequence", sequence_name));
+}
+
+TEST_F(SchemaTest, DatabaseOptionsBuilderValid) {
+  auto c = database_options_builder("C").build();
+  ZETASQL_EXPECT_OK(c->Validate(&context_));
+}
+
+TEST_F(SchemaTest, DatabaseOptionsBuilderInvalid) {
+  DatabaseOptions::Builder cs = database_options_builder("C1");
+  const std::string database_name(130, 'C');
+  auto invalid_cs = database_options_builder(database_name).build();
+  EXPECT_EQ(invalid_cs->Validate(&context_),
+            error::InvalidSchemaName("Database Options", database_name));
 }
 
 TEST_F(SchemaTest, IndexBuilder) {
@@ -587,6 +628,20 @@ TEST_F(SchemaTest, PrintDDLStatementsTestOneTable) {
   string_col STRING(MAX),
 ) PRIMARY KEY(int64_col))",
           "CREATE UNIQUE INDEX test_index ON test_table(string_col DESC)")));
+}
+
+TEST_F(SchemaTest, PrintDDLStatementsTestOneTableWithSynonym) {
+  std::unique_ptr<const Schema> schema =
+      test::CreateSchemaWithOneTableWithSynonym(type_factory_.get());
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
+                              R"(CREATE TABLE test_table (
+  int64_col INT64 NOT NULL,
+  string_col STRING(MAX),
+  SYNONYM(test_synonym),
+) PRIMARY KEY(int64_col))")));
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestOneTableDrop) {

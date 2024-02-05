@@ -33,9 +33,11 @@ namespace backend {
 class IndexHintValidator : public zetasql::ResolvedASTVisitor {
  public:
   IndexHintValidator(const Schema* schema,
-                     bool disable_null_filtered_index_check = false)
+                     bool disable_null_filtered_index_check = false
+                     )
       : schema_(schema),
-        disable_null_filtered_index_check_(disable_null_filtered_index_check) {}
+        disable_null_filtered_index_check_(disable_null_filtered_index_check)
+  {}
 
  private:
   absl::Status VisitResolvedQueryStmt(

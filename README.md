@@ -173,6 +173,9 @@ Notable supported features:
 - The [Cloud Spanner PostgreSQL interface](
   https://cloud.google.com/spanner/docs/postgresql-interface).
 
+- [Connecting with PostgreSQL drivers and tools through PGAdapter](
+  https://github.com/GoogleCloudPlatform/pgadapter/blob/postgresql-dialect/docs/emulator.md).
+
 
 Notable limitations:
 

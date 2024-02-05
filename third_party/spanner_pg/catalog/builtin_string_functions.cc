@@ -45,20 +45,22 @@ void AddStringFunctions(std::vector<PostgresFunctionArguments>& functions) {
   const zetasql::Type* gsql_bytes = zetasql::types::BytesType();
   const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
   const zetasql::Type* gsql_string = zetasql::types::StringType();
+  zetasql::FunctionArgumentTypeOptions repeated(
+      zetasql::FunctionArgumentType::REPEATED);
   functions.push_back(
       {"textcat",
        "concat",
        {{{gsql_string, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"concat",
-       "concat",
-       {{{gsql_string, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}},
-        {{gsql_string,
-          {gsql_string, gsql_string, gsql_string},
-          /*context_ptr=*/nullptr}},
-        {{gsql_string,
-          {gsql_string, gsql_string, gsql_string, gsql_string},
-          /*context_ptr=*/nullptr}}}});
+  // Concat is a variadic function that is not validated when the
+  // EngineSystemCatalog is initialized.
+  functions.push_back({"concat",
+                       "concat",
+                       {{{gsql_string,
+                          {gsql_string, {gsql_string, repeated}},
+                          /*context_ptr=*/nullptr},
+                         /*has_mapped_function=*/true,
+                         /*explicit_mapped_function_name=*/"",
+                         F_CONCAT}}});
   functions.push_back(
       {"byteacat",
        "concat",

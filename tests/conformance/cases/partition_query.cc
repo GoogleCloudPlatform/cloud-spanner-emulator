@@ -203,6 +203,23 @@ TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlOrderBy) {
       StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+TEST_F(PartitionQueryTest, SelectFromUnnestConstantValueArray) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  ZETASQL_EXPECT_OK(PartitionQuery(txn, "SELECT a FROM UNNEST([1, 2, 3]) AS a"));
+}
+
+TEST_F(PartitionQueryTest, SelectFromUnnestConstantValueArrayWithFilter) {
+  PopulateDatabase();
+
+  Transaction txn{Transaction::ReadOnlyOptions{}};
+
+  ZETASQL_EXPECT_OK(
+      PartitionQuery(txn, "SELECT a FROM UNNEST([1, 2, 3]) AS a WHERE a = 1"));
+}
+
 TEST_F(PartitionQueryTest, CannotQueryNonRootPartitionableSqlSubquery) {
   PopulateDatabase();
 

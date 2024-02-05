@@ -160,28 +160,41 @@ TEST_F(PartitionabilityValidatorTest,
               zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(PartitionabilityValidatorTest, ValidateEmptyQueryNotPartitionable) {
+TEST_F(PartitionabilityValidatorTest, SelectOneIsPartitionable) {
+  test::ScopedEmulatorFeatureFlagsSetter feature_flag_setter(
+      EmulatorFeatureFlags::Flags{.enable_batch_query_with_no_table_scan =
+                                      true});
   PartitionabilityValidator validator{schema()};
-  std::unique_ptr<const zetasql::ResolvedQueryStmt> query_stmt =
-      zetasql::MakeResolvedQueryStmt();
 
-  ASSERT_THAT(query_stmt->Accept(&validator),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
+  zetasql::SimpleCatalog catalog("test simple catalog");
+  zetasql::TypeFactory type_factory;
+  ZETASQL_ASSERT_OK(zetasql::AnalyzeStatement("SELECT 1",
+                                        zetasql::AnalyzerOptions(), &catalog,
+                                        &type_factory, &analyzer_output));
+
+  const zetasql::ResolvedStatement* resolved_statement =
+      analyzer_output->resolved_statement();
+  ZETASQL_EXPECT_OK(resolved_statement->Accept(&validator));
 }
 
-TEST_F(PartitionabilityValidatorTest, ValidateNoTableScanNonPartitionable) {
+TEST_F(PartitionabilityValidatorTest,
+       SelectConstValuesWithSortIsPartitionable) {
+  test::ScopedEmulatorFeatureFlagsSetter feature_flag_setter(
+      EmulatorFeatureFlags::Flags{.enable_batch_query_with_no_table_scan =
+                                      true});
   PartitionabilityValidator validator{schema()};
-  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
 
-  std::unique_ptr<const zetasql::ResolvedScan> project_scan =
-      zetasql::MakeResolvedProjectScan();
-  std::unique_ptr<const zetasql::ResolvedQueryStmt> query_stmt =
-      zetasql::MakeResolvedQueryStmt(/*output_column_list=*/{},
-                                       /*is_value_table=*/false,
-                                       std::move(project_scan));
+  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
+  zetasql::SimpleCatalog catalog("test simple catalog");
+  zetasql::TypeFactory type_factory;
+  ZETASQL_ASSERT_OK(zetasql::AnalyzeStatement(
+      "SELECT a FROM UNNEST([3, 2, 1]) AS a ORDER BY a",
+      zetasql::AnalyzerOptions(), &catalog, &type_factory, &analyzer_output));
 
-  ASSERT_THAT(query_stmt->Accept(&validator),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+  const zetasql::ResolvedStatement* resolved_statement =
+      analyzer_output->resolved_statement();
+  ZETASQL_EXPECT_OK(resolved_statement->Accept(&validator));
 }
 
 }  // namespace

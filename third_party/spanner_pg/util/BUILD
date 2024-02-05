@@ -243,6 +243,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/public:analyzer",
         "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:type",
     ],
 )
 

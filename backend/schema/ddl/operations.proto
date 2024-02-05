@@ -28,12 +28,14 @@ message DDLStatement {
   oneof statement {
     // Database statements.
     CreateDatabase create_database = 1;
+    AlterDatabase alter_database = 78;
 
     // Table statements.
     CreateTable create_table = 8;
     SetColumnOptions set_column_options = 10;
     AlterTable alter_table = 11;
     DropTable drop_table = 12;
+    RenameTable rename_table = 88;
 
     // Index statements.
     CreateIndex create_index = 13;
@@ -118,6 +120,7 @@ message TypeDefinition {
     BIGBYTES = 23;
     PG_JSONB = 24;
     STRUCT = 26;
+    FLOAT = 27;
   }
 
   optional Type type = 1;
@@ -156,6 +159,7 @@ message ColumnDefinition {
 
     PG_JSONB = 24;
     STRUCT = 26;
+    FLOAT = 27;
   }
 
   optional Type type = 2;
@@ -329,6 +333,18 @@ message CreateDatabase {
   optional string db_name = 4;
 }
 
+message AlterDatabase {
+  optional string db_name = 4;
+
+  message SetOptions {
+    repeated SetOption options = 1;
+  }
+
+  oneof alter_type {
+    SetOptions set_options = 5;
+  }
+}
+
 message RowDeletionPolicy {
   // The timestamp column based on which we set the policy.
   optional string column_name = 1;
@@ -365,6 +381,7 @@ message CreateTable {
   optional RowDeletionPolicy row_deletion_policy = 9;
   // How to handle creation if the table already exists.
   optional ExistenceModifier existence_modifier = 13;
+  optional string synonym = 15;
 }
 
 message ChangeStreamForClause {
@@ -430,6 +447,16 @@ message CreateSequence {
 
 message CreateSchema {
   optional string schema_name = 1;
+
+  enum ExistenceModifier {
+    // Create will fail if schema pre-exists.
+    NONE = 0;
+    // Both will pass the create if the schema pre-exists. IF_NOT_EXISTS will
+    // not replace options, while OR_REPLACE will replace options if this is
+    // the case.
+    IF_NOT_EXISTS = 1;
+    OR_REPLACE = 2;
+  }
   optional ExistenceModifier existence_modifier = 2;
   repeated SetOption set_options = 3;
 }
@@ -455,6 +482,10 @@ message DropChangeStream {
 message AlterTable {
   optional string table_name = 1;
 
+  message RenameTo {
+    optional string name = 1;
+    optional string synonym = 2;
+  }
   message AddColumn {
     optional ColumnDefinition column = 1;
     // How to handle the ADD COLUMN if the column is already part of the table.
@@ -487,7 +518,14 @@ message AlterTable {
   message AddCheckConstraint {
     optional CheckConstraint check_constraint = 1;
   }
+  message AddSynonym {
+    optional string synonym = 1;
+  }
+  message DropSynonym {
+    optional string synonym = 1;
+  }
   oneof alter_type {
+    RenameTo rename_to = 2;
     AddColumn add_column = 3;
     string drop_column = 4;
     AlterColumn alter_column = 5;
@@ -499,7 +537,17 @@ message AlterTable {
     DropConstraint drop_constraint = 15;
     AddForeignKey add_foreign_key = 16;
     AddCheckConstraint add_check_constraint = 17;
+    AddSynonym add_synonym = 22;
+    DropSynonym drop_synonym = 23;
   }
+}
+
+message RenameTable {
+  message RenameOp {
+    optional string from_name = 1;
+    optional string to_name = 2;
+  }
+  repeated RenameOp rename_op = 1;
 }
 
 message AlterChangeStream {

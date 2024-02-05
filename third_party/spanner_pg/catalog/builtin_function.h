@@ -62,19 +62,29 @@ namespace postgres_translator {
 // existence of an identical FunctionSignature in the mapped builtin function.
 class PostgresFunctionSignatureArguments {
  public:
+  // Only explicitly set postgres proc oid for signatures that cannot be
+  // validated (variadic signatures).
+  // Otherwise, allow the EngineSystemCatalog to validate that the provided
+  // signature is compatible with native PostgreSQL and ZetaSQL before
+  // identifying the proc oid.
   PostgresFunctionSignatureArguments(
       const zetasql::FunctionSignature& signature,
       bool has_mapped_function = true,
-      const std::string& explicit_mapped_function_name = "")
+      const std::string& explicit_mapped_function_name = "",
+      Oid postgres_proc_oid = InvalidOid)
       : signature_(signature),
         has_mapped_function_(has_mapped_function),
-        explicit_mapped_function_name_(explicit_mapped_function_name) {}
+        explicit_mapped_function_name_(explicit_mapped_function_name),
+        postgres_proc_oid_(postgres_proc_oid) {}
 
   const zetasql::FunctionSignature& signature() const { return signature_; }
   bool has_mapped_function() const { return has_mapped_function_; }
   const std::string& explicit_mapped_function_name() const {
     return explicit_mapped_function_name_;
   }
+  // Returns the postgres proc oid for unvalidated signatures, or InvalidOid
+  // for validated signatures.
+  Oid postgres_proc_oid() const { return postgres_proc_oid_; }
 
  private:
   zetasql::FunctionSignature signature_;
@@ -82,6 +92,7 @@ class PostgresFunctionSignatureArguments {
   // If the mapped function name for this signature is different from the
   // general mapped function name in PostgresFunctionArguments.
   std::string explicit_mapped_function_name_;
+  Oid postgres_proc_oid_;
 };
 
 // Helper class used by AddFunction to create a PostgresExtendedFunction.
@@ -92,6 +103,8 @@ class PostgresFunctionSignatureArguments {
 // in the storage engine and does not need to reuse a builtin function.
 class PostgresFunctionArguments {
  public:
+  // Most function mappings should use this constructor because the mapped
+  // signatures will be validated when the EngineSystemCatalog is initialized.
   PostgresFunctionArguments(
       absl::string_view postgres_function_name,
       absl::string_view mapped_function_name,
@@ -108,6 +121,7 @@ class PostgresFunctionArguments {
   const std::string& postgres_function_name() const {
     return postgres_function_name_;
   }
+
 
   const std::string& mapped_function_name() const {
     return mapped_function_name_;

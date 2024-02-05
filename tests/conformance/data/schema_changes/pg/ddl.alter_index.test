@@ -1,0 +1,47 @@
+CREATE TABLE users (
+  id bigint NOT NULL,
+  firstname varchar NOT NULL,
+  "Address" varchar,
+  "PhoneNumber" varchar,
+  PRIMARY KEY(id)
+);
+CREATE INDEX firstname_idx ON users (firstname) INCLUDE ("PhoneNumber");
+ALTER INDEX firstname_idx ADD INCLUDE COLUMN "Address";
+--
+CREATE INDEX firstname_idx ON users (firstname) INCLUDE ("PhoneNumber", "Address");
+==
+
+ALTER INDEX catalog."Schema_a"."Firstname_idx" Drop INCLUDE COLUMN "Address"
+--
+ERROR: Catalog in the name is not supported in <ALTER INDEX> statement.
+
+==
+# TODO: b/316211520 Enable it after table renmaing is done.
+# ALTER INDEX "Schema_a"."Firstname_idx" RENAME TO "Address"
+# --
+# ERROR: Statement is not supported.
+# ==
+
+ALTER INDEX "Schema_a"."Firstname_idx" ADD INCLUDE COLUMN IF NOT EXISTS "Address"
+--
+ERROR: <IF [NOT] EXISTS> is not supported in <ALTER> statement operations.
+==
+
+ALTER INDEX "Schema_a"."Firstname_idx" DROP INCLUDE COLUMN IF EXISTS "Address"
+--
+ERROR: <IF [NOT] EXISTS> is not supported in <ALTER> statement operations.
+==
+
+ALTER INDEX "Schema_a"."Firstname_idx" SET (param = 1)
+--
+ERROR: syntax error at or near "SET"
+==
+
+ALTER INDEX "Schema_a"."Firstname_idx" RESET param
+--
+ERROR: syntax error at or near "RESET"
+==
+
+ALTER INDEX "Schema_a"."Firstname_idx" ALTER column1
+--
+ERROR: syntax error at or near "ALTER"

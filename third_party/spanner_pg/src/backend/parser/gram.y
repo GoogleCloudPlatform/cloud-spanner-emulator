@@ -266,6 +266,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 	struct SelectLimit	*selectlimit;
 	SetQuantifier	 setquantifier;
 	struct GroupClause  *groupclause;
+	GeneratedColStoreOpt generatedcolstoreopt;
 
 	InterleaveSpec		*interleavespec;
 	Ttl                 *ttlopt;
@@ -298,8 +299,8 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 		GrantStmt GrantRoleStmt ImportForeignSchemaStmt IndexStmt InsertStmt
 		ListenStmt LoadStmt LockStmt NotifyStmt ExplainableStmt PreparableStmt
 		CreateFunctionStmt AlterFunctionStmt ReindexStmt RemoveAggrStmt
-		RemoveFuncStmt RemoveOperStmt RenameStmt ReturnStmt RevokeStmt RevokeRoleStmt
-		RuleActionStmt RuleActionStmtOrEmpty RuleStmt
+		RemoveFuncStmt RemoveOperStmt RenameStmt RenameTableStmts ReturnStmt RevokeStmt
+		RevokeRoleStmt RuleActionStmt RuleActionStmtOrEmpty RuleStmt
 		SecLabelStmt SelectStmt TransactionStmt TransactionStmtLegacy TruncateStmt
 		UnlistenStmt UpdateStmt VacuumStmt
 		VariableResetStmt VariableSetStmt VariableShowStmt
@@ -315,6 +316,8 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 %type <node>	select_no_parens select_with_parens select_clause
 				simple_select values_clause
 				PLpgSQL_Expr PLAssignStmt
+%type <node>	rename_op
+%type <list>	rename_ops
 
 %type <node>	alter_column_default opclass_item opclass_drop alter_using
 %type <ival>	add_drop opt_asc_desc opt_nulls_order
@@ -614,6 +617,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 %type <str>		opt_existing_window_name
 %type <boolean> opt_if_not_exists
 %type <ival>	generated_when override_kind
+%type <generatedcolstoreopt>  stored_kind
 %type <partspec>	PartitionSpec OptPartitionSpec
 %type <partelem>	part_elem
 %type <list>		part_params
@@ -738,7 +742,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 	UNLISTEN UNLOGGED UNTIL UPDATE USER USING
 
 	VACUUM VALID VALIDATE VALIDATOR VALUE_P VALUES VARCHAR VARIADIC VARYING
-	VERBOSE VERSION_P VIEW VIEWS VOLATILE
+	VERBOSE VERSION_P VIEW VIEWS VIRTUAL VOLATILE
 
 	WHEN WHERE WHITESPACE_P WINDOW WITH WITHIN WITHOUT WORK WRAPPER WRITE
 
@@ -1046,6 +1050,7 @@ stmt:
 			| RemoveFuncStmt
 			| RemoveOperStmt
 			| RenameStmt
+			| RenameTableStmts
 			| RevokeStmt
 			| RevokeRoleStmt
 			| RuleStmt
@@ -3848,7 +3853,7 @@ ColConstraintElem:
 					n->location = @1;
 					$$ = (Node *)n;
 				}
-			| GENERATED generated_when AS '(' a_expr ')' STORED
+			| GENERATED generated_when AS '(' a_expr ')' stored_kind
 				{
 					Constraint *n = makeNode(Constraint);
 					n->contype = CONSTR_GENERATED;
@@ -3856,6 +3861,7 @@ ColConstraintElem:
 					n->raw_expr = $5;
 					n->cooked_expr = NULL;
 					n->location = @1;
+					n->stored_kind = $7;
 
 					/*
 					 * Can't do this in the grammar because of shift/reduce
@@ -3897,9 +3903,13 @@ generated_when:
 			| BY DEFAULT	{ $$ = ATTRIBUTE_IDENTITY_BY_DEFAULT; }
 		;
 
+stored_kind:
+			STORED { $$ = GENERATED_COL_STORED; }
+			| VIRTUAL { $$ = GENERATED_COL_NON_STORED; }
+		;
 /*
  * ConstraintAttr represents constraint attributes, which we parse as if
- * they were independent constraint clauses, in order to avoid shift/reduce
+ * they were independent constraint clauses,1 in order to avoid shift/reduce
  * conflicts (since NOT might start either an independent NOT NULL clause
  * or an attribute).  parse_utilcmd.c is responsible for attaching the
  * attribute information to the preceding "real" constraint node, and for
@@ -8777,6 +8787,43 @@ AlterTblSpcStmt:
 					$$ = (Node *)n;
 				}
 		;
+
+/*****************************************************************************
+ *
+ * ALTER TABLE name RENAME TO newname, ALTER TABLE name RENAME TO newname, ...
+ *
+ * This syntax is specifically for chained table rename operations, which
+ * involve more than one table rename operations. All the operations listed in
+ * the statement must be executed together. For the single table rename case,
+ * RenameStmt will handle it.
+ *
+ *****************************************************************************/
+
+RenameTableStmts: rename_ops
+				{
+					TableChainedRenameStmt *n = makeNode(TableChainedRenameStmt);
+					n->ops = $1;
+					$$ = (Node *)n;
+				}
+		;
+
+rename_ops: rename_op ',' rename_op
+				{
+					$$ = lappend(list_make1($1), $3);
+				}
+			| rename_ops ',' rename_op
+				{
+					$$ = lappend($1, $3);
+				}
+
+/* TODO: ideally, the target name should be qualified_name */
+rename_op: ALTER TABLE relation_expr RENAME TO name
+				{
+					TableRenameOp *n = makeNode(TableRenameOp);
+					n->fromName = $3;
+					n->toName = $6;
+					$$ = (Node *)n;
+				}
 
 /*****************************************************************************
  *
@@ -14590,7 +14637,7 @@ func_application: func_name '(' ')'
  * (Note that many of the special SQL functions wouldn't actually make any
  * sense as functional index entries, but we ignore that consideration here.)
  */
-func_expr: func_application within_group_clause filter_clause over_clause
+func_expr: func_application opt_spangres_hint within_group_clause filter_clause over_clause
 				{
 					FuncCall *n = (FuncCall *) $1;
 					/*
@@ -14601,28 +14648,29 @@ func_expr: func_application within_group_clause filter_clause over_clause
 					 * location.  Other consistency checks are deferred to
 					 * parse analysis.
 					 */
-					if ($2 != NIL)
+					if ($3 != NIL)
 					{
 						if (n->agg_order != NIL)
 							ereport(ERROR,
 									(errcode(ERRCODE_SYNTAX_ERROR),
 									 errmsg("cannot use multiple ORDER BY clauses with WITHIN GROUP"),
-									 parser_errposition(@2)));
+									 parser_errposition(@3)));
 						if (n->agg_distinct)
 							ereport(ERROR,
 									(errcode(ERRCODE_SYNTAX_ERROR),
 									 errmsg("cannot use DISTINCT with WITHIN GROUP"),
-									 parser_errposition(@2)));
+									 parser_errposition(@3)));
 						if (n->func_variadic)
 							ereport(ERROR,
 									(errcode(ERRCODE_SYNTAX_ERROR),
 									 errmsg("cannot use VARIADIC with WITHIN GROUP"),
-									 parser_errposition(@2)));
-						n->agg_order = $2;
+									 parser_errposition(@3)));
+						n->agg_order = $3;
 						n->agg_within_group = true;
 					}
-					n->agg_filter = $3;
-					n->over = $4;
+					n->agg_filter = $4;
+					n->over = $5;
+					n->functionHints = $2;
 					$$ = (Node *) n;
 				}
 			| func_expr_common_subexpr
@@ -14636,7 +14684,12 @@ func_expr: func_application within_group_clause filter_clause over_clause
  * disambiguate the grammar (e.g. in CREATE INDEX).
  */
 func_expr_windowless:
-			func_application						{ $$ = $1; }
+			func_application opt_spangres_hint
+			{
+				FuncCall *n = (FuncCall *) $1;
+				n->functionHints = $2;
+				$$ = (Node *) n;
+			}
 			| func_expr_common_subexpr				{ $$ = $1; }
 		;
 
@@ -16406,6 +16459,7 @@ unreserved_keyword:
 			| VERSION_P
 			| VIEW
 			| VIEWS
+			| VIRTUAL
 			| VOLATILE
 			| WHITESPACE_P
 			| WITHIN
@@ -17021,6 +17075,7 @@ bare_label_keyword:
 			| VERSION_P
 			| VIEW
 			| VIEWS
+			| VIRTUAL
 			| VOLATILE
 			| WHEN
 			| WHITESPACE_P

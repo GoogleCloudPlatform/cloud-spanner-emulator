@@ -244,6 +244,7 @@ absl::StatusOr<Aggref*> makeAggref(
   aggref->agglevelsup = agglevelsup;
   aggref->aggsplit = aggsplit;
   aggref->location = location;
+  aggref->functionHints = NIL;
   return aggref;
 }
 

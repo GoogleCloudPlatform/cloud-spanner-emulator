@@ -36,6 +36,7 @@
 
 #include "zetasql/public/function.h"
 #include "zetasql/public/language_options.h"
+#include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/types/type_factory.h"
 #include "absl/status/statusor.h"
 
@@ -58,6 +59,9 @@ class EngineBuiltinFunctionCatalog {
   // Returns a nullptr if the function is not found.
   virtual absl::StatusOr<const zetasql::Function*> GetFunction(
       const std::string& name) const = 0;
+
+  virtual absl::StatusOr<const zetasql::TableValuedFunction*>
+  GetTableValuedFunction(const std::string& name) const = 0;
 
   // Gets the full list of functions in the catalog.
   // TODO: switch this to pure virtual when the on-branch

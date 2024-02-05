@@ -45,6 +45,11 @@ message PgCollationData {
   optional string collctype = 7;
 }
 
+message PgNamespaceData {
+  optional uint32 oid = 1;
+  optional string nspname = 2;
+}
+
 message PgTypeData {
   optional uint32 oid = 1;
   optional string typname = 2;

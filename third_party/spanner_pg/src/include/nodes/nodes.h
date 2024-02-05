@@ -344,6 +344,7 @@ typedef enum NodeTag
 	T_AlterFunctionStmt,
 	T_DoStmt,
 	T_RenameStmt,
+	T_TableChainedRenameStmt,
 	T_RuleStmt,
 	T_NotifyStmt,
 	T_ListenStmt,
@@ -497,6 +498,7 @@ typedef enum NodeTag
 	T_InterleaveSpec,
   T_ChangeStreamTrackedTable,
 	T_SynonymClause,
+	T_TableRenameOp,
 
 	/*
 	 * TAGS FOR REPLICATION GRAMMAR PARSE NODES (replnodes.h)

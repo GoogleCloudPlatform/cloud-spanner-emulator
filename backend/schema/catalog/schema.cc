@@ -27,9 +27,11 @@
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/database_options.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/view.h"
@@ -68,7 +70,8 @@ const View* Schema::FindViewCaseSensitive(const std::string& view_name) const {
 const Table* Schema::FindTable(const std::string& table_name) const {
   auto itr = tables_map_.find(table_name);
   if (itr == tables_map_.end()) {
-    return nullptr;
+    // Fall back to synonyms.
+    return FindTableUsingSynonym(table_name);
   }
   return itr->second;
 }
@@ -77,6 +80,25 @@ const Table* Schema::FindTableCaseSensitive(
     const std::string& table_name) const {
   auto table = FindTable(table_name);
   if (!table || table->Name() != table_name) {
+    // Fall back to synonyms.
+    return FindTableUsingSynonymCaseSensitive(table_name);
+  }
+  return table;
+}
+
+const Table* Schema::FindTableUsingSynonym(
+    const std::string& table_synonym) const {
+  auto itr = synonyms_map_.find(table_synonym);
+  if (itr == synonyms_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
+const Table* Schema::FindTableUsingSynonymCaseSensitive(
+    const std::string& table_synonym) const {
+  auto table = FindTableUsingSynonym(table_synonym);
+  if (!table || table->synonym() != table_synonym) {
     return nullptr;
   }
   return table;
@@ -119,6 +141,15 @@ const Sequence* Schema::FindSequence(const std::string& sequence_name) const {
 const Model* Schema::FindModel(const std::string& model_name) const {
   auto itr = models_map_.find(model_name);
   if (itr == models_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
+const NamedSchema* Schema::FindNamedSchema(
+    const std::string& named_schema_name) const {
+  auto itr = named_schemas_map_.find(named_schema_name);
+  if (itr == named_schemas_map_.end()) {
     return nullptr;
   }
   return itr->second;
@@ -319,6 +350,11 @@ void DumpSequence(const Sequence* sequence,
   }
 }
 
+void DumpNamedSchema(const NamedSchema* named_schema,
+                     ddl::CreateSchema& create_schema) {
+  create_schema.set_schema_name(named_schema->Name());
+}
+
 void DumpModelColumn(const Model::ModelColumn& model_column,
                      ddl::ColumnDefinition& column_definition) {
   column_definition = GoogleSqlTypeToDDLColumnType(model_column.type);
@@ -364,9 +400,27 @@ void DumpModel(const Model* model, ddl::CreateModel& create_model) {
   }
 }
 
+void DumpDatabaseOptions(const DatabaseOptions* database_option,
+                         ddl::AlterDatabase& alter_database) {
+  alter_database.set_db_name(database_option->Name());
+  if (database_option->options()->has_option_name()) {
+    ddl::SetOption* set_option =
+        alter_database.mutable_set_options()->add_options();
+    set_option->set_option_name(database_option->options()->option_name());
+    set_option->set_string_value(database_option->options()->string_value());
+  }
+}
+
 ddl::DDLStatementList Schema::Dump() const {
   ddl::DDLStatementList ddl_statements;
-  // Print sequences first, since other schema objects may use them.
+  // Do named schemas first since tables, views, sequences, and indexes rely on
+  // them.
+  for (const NamedSchema* named_schema : named_schemas_) {
+    DumpNamedSchema(named_schema,
+                    *ddl_statements.add_statement()->mutable_create_schema());
+  }
+
+  // Print sequences next, since other schema objects may use them.
   for (const Sequence* sequence : sequences_) {
     DumpSequence(sequence,
                  *ddl_statements.add_statement()->mutable_create_sequence());
@@ -445,6 +499,12 @@ ddl::DDLStatementList Schema::Dump() const {
         *ddl_statements.add_statement()->mutable_create_change_stream());
   }
 
+  if (database_options_ != nullptr) {
+    DumpDatabaseOptions(
+        database_options_,
+        *ddl_statements.add_statement()->mutable_alter_database());
+  }
+
   return ddl_statements;
 }
 
@@ -465,6 +525,10 @@ Schema::Schema(const SchemaGraph* graph
   models_map_.clear();
   sequences_.clear();
   sequences_map_.clear();
+  named_schemas_.clear();
+  named_schemas_map_.clear();
+  synonyms_.clear();
+  synonyms_map_.clear();
   for (const SchemaNode* node : graph_->GetSchemaNodes()) {
     const View* view = node->As<const View>();
     if (view != nullptr) {
@@ -477,6 +541,10 @@ Schema::Schema(const SchemaGraph* graph
     if (table != nullptr && table->is_public()) {
       tables_.push_back(table);
       tables_map_[table->Name()] = table;
+      if (!table->synonym().empty()) {
+        synonyms_.push_back(table->synonym());
+        synonyms_map_[table->synonym()] = table;
+      }
       continue;
     }
 
@@ -507,6 +575,18 @@ Schema::Schema(const SchemaGraph* graph
       continue;
     }
 
+    const NamedSchema* named_schema = node->As<NamedSchema>();
+    if (named_schema != nullptr) {
+      named_schemas_.push_back(named_schema);
+      named_schemas_map_[named_schema->Name()] = named_schema;
+      continue;
+    }
+
+    const DatabaseOptions* database_options = node->As<DatabaseOptions>();
+    if (database_options != nullptr) {
+      database_options_ = database_options;
+      continue;
+    }
     // Columns need not be stored in the schema, they are just owned by the
     // graph.
   }

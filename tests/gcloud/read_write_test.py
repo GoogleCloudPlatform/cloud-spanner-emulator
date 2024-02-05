@@ -237,6 +237,53 @@ class GCloudReadWriteTest(emulator.TestCase):
         self.JoinLines(''),
     )
 
+  def testExecuteSqlWitnessLocation(self):
+    # Create an instance.
+    self.RunGCloud(
+        'spanner',
+        'instances',
+        'create',
+        'test-instance',
+        '--config=emulator-config',
+        '--description=Test Instance',
+        '--nodes',
+        '3',
+    )
+    # Create the database.
+    self.assertEqual(
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'create',
+            'test-database',
+            '--instance=test-instance',
+            '--ddl=CREATE TABLE mytable (a INT64, b INT64) PRIMARY KEY(a)',
+        ),
+        self.JoinLines(''),
+    )
+    # Perform an update to set options.
+    self.RunGCloud(
+        'spanner',
+        'databases',
+        'ddl',
+        'update',
+        'test-database',
+        '--instance=test-instance',
+        '--ddl=ALTER DATABASE `test-database` SET OPTIONS ( witness_location ='
+        ' "us-east1" )',
+    )
+    # Perform an update to set options.
+    self.RunGCloud(
+        'spanner',
+        'databases',
+        'ddl',
+        'update',
+        'test-database',
+        '--instance=test-instance',
+        '--ddl=ALTER DATABASE `test-database` SET OPTIONS ( default_leader ='
+        " 'us-east1' )",
+    )
+
 
 if __name__ == '__main__':
   emulator.RunTests()

@@ -92,6 +92,60 @@ TEST(ParseCreateDatabase, CannotParseEmptyDatabaseName) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+TEST(ParseAlterDatabase, ValidSetWitnessLocationToNonEmptyString) {
+  absl::string_view ddl = R"(
+    ALTER DATABASE db SET OPTIONS ( witness_location = 'us-east1' )
+  )";
+  DDLStatement statement;
+  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(statement, test::EqualsProto(
+                             R"pb(alter_database {
+                                    set_options {
+                                      options {
+                                        option_name: "witness_location"
+                                        string_value: "us-east1"
+                                      }
+                                    }
+                                    db_name: "db"
+                                  })pb"));
+}
+
+TEST(ParseAlterDatabase, ValidSetDefaultLeaderToNonEmptyString) {
+  absl::string_view ddl = R"(
+    ALTER DATABASE db SET OPTIONS ( default_leader = 'us-east1' )
+  )";
+  DDLStatement statement;
+  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(statement, test::EqualsProto(
+                             R"pb(alter_database {
+                                    set_options {
+                                      options {
+                                        option_name: "default_leader"
+                                        string_value: "us-east1"
+                                      }
+                                    }
+                                    db_name: "db"
+                                  })pb"));
+}
+
+TEST(ParseAlterDatabase, Invalid_NoOptionSet) {
+  absl::string_view ddl = R"(
+    ALTER DATABASE db SET OPTIONS ()
+  )";
+  EXPECT_THAT(ParseDDLStatement(ddl),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Encountered ')' while parsing: identifier")));
+}
+
+TEST(ParseAlterDatabase, Invalid_EmptyString) {
+  absl::string_view ddl = R"(
+    ALTER DATABASE db SET OPTIONS ( default_leader = '' )
+  )";
+  EXPECT_THAT(ParseDDLStatement(ddl),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Invalid string literal: ''")));
+}
+
 // CREATE TABLE
 
 TEST(ParseCreateTable, CanParseCreateTableWithNoColumns) {
@@ -640,6 +694,30 @@ TEST(ParseCreateTable, CanParseCreateTableWithForeignKeyDeleteNoAction) {
                   )pb")));
 }
 
+TEST(ParseCreateTable, CanParseCreateTableWithSynonym) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE TABLE People (
+                      Name STRING(MAX),
+                      SYNONYM (Folks)
+                    ) PRIMARY KEY(Name)
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "People"
+                      column {
+                        column_name: "Name"
+                        type: STRING
+                      }
+                      primary_key {
+                        key_name: "Name"
+                      }
+                      synonym: "Folks"
+                    }
+                  )pb")));
+}
+
 TEST(ParseCreateTable, CanParseAlterTableAddForeignKeyWithDeleteNoAction) {
   EXPECT_THAT(ParseDDLStatement(
                   R"sql(
@@ -1154,6 +1232,103 @@ TEST(ParseAlterTable, CannotParseAddColumnMissingTableName) {
       StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+TEST(ParseAlterTable, CanParseAddSynonym) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE foo ADD SYNONYM bar
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "foo"
+                      add_synonym { synonym: "bar" }
+                    }
+                  )pb")));
+}
+
+TEST(ParseAlterTable, CanParseDropSynonym) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE foo DROP SYNONYM bar
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "foo"
+                      drop_synonym { synonym: "bar" }
+                    }
+                  )pb")));
+}
+
+TEST(ParseAlterTable, CannotParseMalformedAddDropSynonym) {
+  EXPECT_THAT(ParseDDLStatement("ALTER TABLE foo ADD SYNONYM"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(ParseDDLStatement("ALTER TABLE foo ADD SYNONYM (bar)"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(ParseDDLStatement("ALTER TABLE foo SYNONYM bar"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(ParseDDLStatement("ALTER TABLE foo DROP SYNONYM (bar)"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(ParseAlterTable, CanParseRename) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE Users RENAME TO NewUsers
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "Users"
+                      rename_to { name: "NewUsers" }
+                    }
+                  )pb")));
+}
+
+TEST(ParseAlterTable, CanParseRenameWithQuote) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE Users RENAME TO `TABLE`
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "Users"
+                      rename_to { name: "TABLE" }
+                    }
+                  )pb")));
+}
+
+TEST(ParseAlterTable, CanParseRenameWithSynonym) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE Users RENAME TO NewUsers, ADD SYNONYM Users
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "Users"
+                      rename_to { name: "NewUsers" synonym: "Users" }
+                    }
+                  )pb")));
+}
+
+TEST(ParseAlterTable, CannotParseMalformedRename) {
+  EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users RENAME NewUsers"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(ParseDDLStatement(
+                  "ALTER TABLE Users RENAME TO NewUsers ADD SYNONYM Users"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(
+      ParseDDLStatement("ALTER TABLE Users RENAME TO NewUsers, SYNONYM "),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 // ALTER TABLE DROP COLUMN
 
 TEST(ParseAlterTable, CanParseDropColumn) {
@@ -1406,6 +1581,41 @@ TEST(ParseAlterTable, CanParseAlterTableWithRowDeletionPolicy) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Syntax error on line 2, column 44: Expecting "
                                  "'EOF' but found '('")));
+}
+
+TEST(ParseRenameTable, CanParseRenameTable) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+                    RENAME TABLE Foo TO Bar
+                  )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            rename_table { rename_op { from_name: "Foo" to_name: "Bar" } }
+          )pb")));
+}
+
+TEST(ParseRenameTable, CanParseRenameTableChain) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    RENAME TABLE Bar TO Foobar, Foo TO Bar, Foobar TO Foo
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    rename_table {
+                      rename_op { from_name: "Bar" to_name: "Foobar" }
+                      rename_op { from_name: "Foo" to_name: "Bar" }
+                      rename_op { from_name: "Foobar" to_name: "Foo" }
+                    }
+                  )pb")));
+}
+
+TEST(ParseRenameTable, CannotParseMalformedRenameTable) {
+  EXPECT_THAT(ParseDDLStatement("RENAME TABLE Foo Bar"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(ParseDDLStatement("RENAME TABLE Bar TO Foo, Foo TO;"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // MISCELLANEOUS

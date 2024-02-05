@@ -273,6 +273,32 @@ class PostgresFloat8Mapping : public PostgresTypeMapping {
   }
 };
 
+class PostgresFloat4Mapping : public PostgresTypeMapping {
+ public:
+  explicit PostgresFloat4Mapping(const zetasql::TypeFactory* factory)
+      : PostgresTypeMapping(factory, FLOAT4OID) {}
+
+  const zetasql::Type* mapped_type() const override {
+    return zetasql::types::FloatType();
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValue(
+      const Const* pg_const) const override {
+    if (pg_const->constisnull) {
+      return zetasql::Value::NullFloat();
+    }
+    float4 float4_value = DatumGetFloat4(pg_const->constvalue);
+    return zetasql::Value::Float(float4_value);
+  }
+
+  absl::StatusOr<Const*> MakePgConst(
+      const zetasql::Value& val) const override {
+    float4 float_val = (!val.is_null() ? val.float_value() : 0.0);
+    return internal::makeScalarConst(PostgresTypeOid(),
+                                     Float4GetDatum(float_val), val.is_null());
+  }
+};
+
 class PostgresVarcharMapping : public PostgresTypeMapping {
  public:
   PostgresVarcharMapping(const zetasql::TypeFactory* factory)
@@ -564,17 +590,6 @@ class PostgresInt4Mapping : public PostgresTypeMapping {
   }
 };
 
-class PostgresFloat4Mapping : public PostgresTypeMapping {
- public:
-  PostgresFloat4Mapping(const zetasql::TypeFactory* factory)
-      : PostgresTypeMapping(factory, FLOAT4OID) {}
-
-  const zetasql::Type* mapped_type() const override {
-    // Not supported.
-    return nullptr;
-  }
-};
-
 zetasql::TypeFactory* GetTypeFactory() {
   static zetasql::TypeFactory* s_type_factory =
       new zetasql::TypeFactory(zetasql::TypeFactoryOptions{
@@ -601,6 +616,12 @@ const PostgresTypeMapping* PgFloat8Mapping() {
   static const zetasql_base::NoDestructor<PostgresFloat8Mapping> s_pg_float8_mapping(
       GetTypeFactory());
   return s_pg_float8_mapping.get();
+}
+
+const PostgresTypeMapping* PgFloat4Mapping() {
+  static const zetasql_base::NoDestructor<PostgresFloat4Mapping> s_pg_float4_mapping(
+      GetTypeFactory());
+  return s_pg_float4_mapping.get();
 }
 
 const PostgresTypeMapping* PgVarcharMapping() {
@@ -662,6 +683,16 @@ const PostgresTypeMapping* PgFloat8ArrayMapping() {
           /*mapped_type=*/zetasql::types::DoubleArrayType(),
           /*requires_nan_handling=*/true);
   return s_pg_float8_array_mapping.get();
+}
+
+const PostgresTypeMapping* PgFloat4ArrayMapping() {
+  static const zetasql_base::NoDestructor<PostgresExtendedArrayMapping>
+      s_pg_float4_array_mapping(
+          /*type_factory=*/GetTypeFactory(), /*array_type_oid=*/FLOAT4ARRAYOID,
+          /*element_type=*/types::PgFloat4Mapping(),
+          /*mapped_type=*/zetasql::types::FloatArrayType(),
+          /*requires_nan_handling=*/true);
+  return s_pg_float4_array_mapping.get();
 }
 
 const PostgresTypeMapping* PgVarcharArrayMapping() {

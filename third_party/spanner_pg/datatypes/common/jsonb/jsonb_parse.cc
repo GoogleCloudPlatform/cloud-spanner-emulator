@@ -276,16 +276,7 @@ class PGJSONBParser {
     return false;
   }
 
-  // Converts the constructed in-memory JSONB tree representation into a
-  // normalized textual output matching Postgres' semantics. Creates the output
-  // using a non-recursive iterative algorithm to prevent any stack-overflow
-  // from occurring. Returns an error if any was encountered during parsing.
-  // Note that this function must be called exactly once, as it frees resources
-  // which were created during the sax_parse phase.
-  absl::StatusOr<absl::Cord> GetResultDestructive() && {
-    if (!status_.ok()) {
-      return status_;
-    }
+  absl::StatusOr<absl::Cord> PrintTreeNode(TreeNode* node) {
     std::string output;
     output.reserve(total_bytes_);
 
@@ -293,7 +284,7 @@ class PGJSONBParser {
     std::vector<PrintingStackNode> printing_stack;
     printing_stack.reserve(max_depth_);
     ZETASQL_RET_CHECK_EQ(working_stack_.size(), 1);
-    AddToPrintingStack(printing_stack, &output, working_stack_[0]);
+    AddToPrintingStack(printing_stack, &output, node);
 
     while (!printing_stack.empty()) {
       PrintingStackNode& printing_stack_node = printing_stack.back();
@@ -357,11 +348,48 @@ class PGJSONBParser {
 
     ABSL_DCHECK_GE(total_bytes_, output.size())
         << "Did not pre-allocate enough for output buffer";
-    status_.Update(absl::Status(absl::StatusCode::kFailedPrecondition,
-                                "Cannot call GetResultDestructive twice"));
     auto* external = new std::string(output);
     return absl::MakeCordFromExternal(
         *external, [external](absl::string_view) { delete external; });
+  }
+
+  // Converts the constructed in-memory JSONB tree representation into a
+  // normalized textual output matching Postgres' semantics. Creates the output
+  // using a non-recursive iterative algorithm to prevent any stack-overflow
+  // from occurring. Returns an error if any was encountered during parsing.
+  // Note that this function must be called exactly once, as it frees resources
+  // which were created during the sax_parse phase.
+  absl::StatusOr<absl::Cord> GetResultDestructive() && {
+    ZETASQL_RETURN_IF_ERROR(status_);
+
+    ZETASQL_RET_CHECK_EQ(working_stack_.size(), 1);
+    ZETASQL_ASSIGN_OR_RETURN(absl::Cord result, PrintTreeNode(working_stack_[0]));
+
+    status_.Update(absl::Status(absl::StatusCode::kFailedPrecondition,
+                                "Cannot call GetResultDestructive twice"));
+    return result;
+  }
+
+  absl::StatusOr<std::vector<absl::Cord>> GetResultArrayDestructive() && {
+    ZETASQL_RETURN_IF_ERROR(status_);
+
+    std::vector<absl::Cord> result_array;
+    ZETASQL_RET_CHECK_EQ(working_stack_.size(), 1);
+    TreeNode* array_ptr = working_stack_[0];
+    if (array_ptr->tag != NodeType::kArray) {
+      return absl::InvalidArgumentError(
+          "ParseJsonbArray can only be called on a JSONB array");
+    }
+
+    JsonbArray& vec = std::get<JsonbArray>(array_ptr->value);
+    result_array.reserve(vec.size());
+    for (const auto& element : vec) {
+      ZETASQL_ASSIGN_OR_RETURN(absl::Cord result, PrintTreeNode(element));
+      result_array.push_back(result);
+    }
+    status_.Update(absl::Status(absl::StatusCode::kFailedPrecondition,
+                                "Cannot call GetResultArrayDestructive twice"));
+    return result_array;
   }
 
   absl::StatusOr<std::string> NormalizePgNumericForJsonB(
@@ -518,13 +546,23 @@ class PGJSONBParser {
   uint32_t total_bytes_;
 };
 
-absl::StatusOr<absl::Cord> ParseJson(absl::string_view json) {
+absl::StatusOr<absl::Cord> ParseJsonb(absl::string_view json) {
   PGJSONBParser parser;
   using jsonb_parser =
       nlohmann::basic_json<std::map, std::vector, std::string, bool,
                            std::int64_t, std::uint64_t, long double>;
   jsonb_parser::sax_parse(json, &parser);
   return std::move(parser).GetResultDestructive();
+}
+
+absl::StatusOr<std::vector<absl::Cord>> ParseJsonbArray(
+    absl::string_view jsonb) {
+  PGJSONBParser parser;
+  using jsonb_parser =
+      nlohmann::basic_json<std::map, std::vector, std::string, bool,
+                           std::int64_t, std::uint64_t, long double>;
+  jsonb_parser::sax_parse(jsonb, &parser);
+  return std::move(parser).GetResultArrayDestructive();
 }
 
 std::string NormalizeJsonbString(absl::string_view value) {

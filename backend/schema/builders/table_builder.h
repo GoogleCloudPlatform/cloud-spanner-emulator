@@ -113,6 +113,11 @@ class Table::Builder {
     return *this;
   }
 
+  Builder& set_synonym(const std::string& synonym) {
+    instance_->synonym_ = synonym;
+    return *this;
+  }
+
  private:
   std::unique_ptr<Table> instance_;
 };
@@ -196,6 +201,18 @@ class Table::Editor {
         });
     if (itr_2 != instance_->change_streams_explicitly_tracking_table_.end()) {
       instance_->change_streams_explicitly_tracking_table_.erase(itr_2);
+    }
+    return *this;
+  }
+
+  Editor& set_synonym(const std::string& synonym) {
+    instance_->synonym_ = synonym;
+    return *this;
+  }
+
+  Editor& drop_synonym(const std::string& synonym) {
+    if (instance_->synonym_ == synonym) {
+      instance_->synonym_ = "";
     }
     return *this;
   }

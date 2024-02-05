@@ -204,6 +204,9 @@ void GetProcsByName(const char* name, const FormData_pg_proc*** outlist,
 // Returns NULL on lookup failure.
 const FormData_pg_proc* GetProcByOid(Oid oid);
 
+// Flags accessed in shims
+bool ShouldCoerceUnknownLiterals();
+
 #ifdef __cplusplus
 }
 #endif  // ifdef __cplusplus

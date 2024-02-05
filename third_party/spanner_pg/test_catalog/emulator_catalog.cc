@@ -137,7 +137,8 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
   //       timestamp_value TIMESTAMP,
   //       date_value DATE,
   //       numeric_value PG.NUMERIC,
-  //       jsonb_value PG.JSONB
+  //       jsonb_value PG.JSONB,
+  //       float_value DOUBLE,
   //     ) PRIMARY KEY(int64_value)
   //   )",
   Table::Builder tb = table_builder("AllSpangresTypes");
@@ -175,6 +176,10 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
           postgres_translator::spangres::types::PgJsonbMapping()->mapped_type())
           .build();
 
+  // TODO: b/299250195 - change to float when it is available in the emulator.
+  std::unique_ptr<const Column> float_value =
+      column_builder("float_value", tb.get(), type_factory.get_double()).build();
+
   std::unique_ptr<const KeyColumn> int64_value_primary =
       KeyColumn::Builder().set_column(int64_value.get()).build();
   std::unique_ptr<const Table> table =
@@ -187,6 +192,7 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
           .add_column(date_value.get())
           .add_column(numeric_value.get())
           .add_column(jsonb_value.get())
+          .add_column(float_value.get())
           .add_key_column(int64_value_primary.get())
           .build();
   graph->Add(std::move(int64_value));
@@ -198,6 +204,7 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
   graph->Add(std::move(date_value));
   graph->Add(std::move(numeric_value));
   graph->Add(std::move(jsonb_value));
+  graph->Add(std::move(float_value));
   graph->Add(std::move(int64_value_primary));
   graph->Add(std::move(table));
 }
@@ -215,7 +222,8 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
   //       timestamp_array ARRAY<TIMESTAMP>,
   //       date_array ARRAY<DATE>,
   //       numeric_array ARRAY<PG.NUMERIC>,
-  //       jsonb_array ARRAY<PG.JSONB>
+  //       jsonb_array ARRAY<PG.JSONB>,
+  //       float_array ARRAY<DOUBLE>,
   //     ) PRIMARY KEY(key)
   //   )",
   Table::Builder tb = table_builder("ArrayTypes");
@@ -268,6 +276,12 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
                          ->mapped_type())
           .build();
 
+  // TODO: b/299250195 - change to float when it is available in the emulator.
+  const zetasql::Type* float_array_type =
+      get_array_type(type_factory, type_factory.get_double()).value();
+  std::unique_ptr<const Column> float_array =
+      column_builder("float_array", tb.get(), float_array_type).build();
+
   std::unique_ptr<const KeyColumn> primary_key_constraint =
       KeyColumn::Builder().set_column(key_column.get()).build();
   std::unique_ptr<const Table> table =
@@ -281,6 +295,7 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
           .add_column(date_array.get())
           .add_column(numeric_array.get())
           .add_column(jsonb_array.get())
+          .add_column(float_array.get())
           .add_key_column(primary_key_constraint.get())
           .build();
   graph->Add(std::move(key_column));
@@ -293,6 +308,7 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
   graph->Add(std::move(date_array));
   graph->Add(std::move(numeric_array));
   graph->Add(std::move(jsonb_array));
+  graph->Add(std::move(float_array));
   graph->Add(std::move(primary_key_constraint));
   graph->Add(std::move(table));
 }

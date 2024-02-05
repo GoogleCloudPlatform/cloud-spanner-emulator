@@ -59,6 +59,7 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
             .enable_views = true,
             .enable_generated_pk = true,
             .enable_fk_delete_cascade_action = true,
+            .enable_batch_query_with_no_table_scan = true,
         }) {}
   void SetUp() override {
     // Setup emulator server.

@@ -1,5 +1,5 @@
   [
-    { oid => '9009', array_type_oid => '9010',
+    { oid => '50001', array_type_oid => '50002',
   descr => 'representation for TOKENLIST type in Spanner',
   typname => 'tokenlist', typnamespace => 'spanner',
   typlen => '-1', typbyval => 'f', typcategory => 'X',

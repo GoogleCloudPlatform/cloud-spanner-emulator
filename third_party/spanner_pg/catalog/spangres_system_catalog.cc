@@ -54,6 +54,7 @@
 #include "third_party/spanner_pg/datatypes/extended/conversion_finder.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/interface/emulator_builtin_function_catalog.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include <map>
 #include <set>
@@ -66,13 +67,15 @@ namespace spangres {
 namespace builtin_types = ::postgres_translator::types;
 namespace spangres_types = ::postgres_translator::spangres::types;
 
-const auto kComparisonOidMap = std::map<Oid, Oid>({
-    {F_FLOAT8LT, F_INT8LT},
-    {F_FLOAT8GT, F_INT8GT},
-    {F_FLOAT8EQ, F_INT8EQ},
-    {F_FLOAT8LE, F_INT8LE},
-    {F_FLOAT8GE, F_INT8GE},
-    {F_FLOAT8NE, F_INT8NE},
+    const auto kComparisonOidMap = std::map<Oid, Oid>({
+    {F_FLOAT8LT, F_INT8LT},  {F_FLOAT8GT, F_INT8GT},  {F_FLOAT8EQ, F_INT8EQ},
+    {F_FLOAT8LE, F_INT8LE},  {F_FLOAT8GE, F_INT8GE},  {F_FLOAT8NE, F_INT8NE},
+    {F_FLOAT4LT, F_INT8LT},  {F_FLOAT4GT, F_INT8GT},  {F_FLOAT4EQ, F_INT8EQ},
+    {F_FLOAT4LE, F_INT8LE},  {F_FLOAT4GE, F_INT8GE},  {F_FLOAT4NE, F_INT8NE},
+    {F_FLOAT48LT, F_INT8LT}, {F_FLOAT48GT, F_INT8GT}, {F_FLOAT48EQ, F_INT8EQ},
+    {F_FLOAT48LE, F_INT8LE}, {F_FLOAT48GE, F_INT8GE}, {F_FLOAT48NE, F_INT8NE},
+    {F_FLOAT84LT, F_INT8LT}, {F_FLOAT84GT, F_INT8GT}, {F_FLOAT84EQ, F_INT8EQ},
+    {F_FLOAT84LE, F_INT8LE}, {F_FLOAT84GE, F_INT8GE}, {F_FLOAT84NE, F_INT8NE},
 });
 
 const auto kNanOrderingFunctions =
@@ -116,6 +119,14 @@ absl::StatusOr<bool> SpangresSystemCatalog::TryInitializeEngineSystemCatalog(
       EngineSystemCatalog::GetEngineSystemCatalogPtr();
   if (*engine_system_catalog != nullptr) {
     // The EngineSystemCatalog singleton was already initialized.
+      EmulatorBuiltinFunctionCatalog* source_builtin_function_catalog =
+          static_cast<EmulatorBuiltinFunctionCatalog*>(
+              builtin_function_catalog.get());
+      EmulatorBuiltinFunctionCatalog* target_builtin_function_catalog =
+          static_cast<EmulatorBuiltinFunctionCatalog*>(
+              (*engine_system_catalog)->builtin_function_catalog());
+      target_builtin_function_catalog->SetLatestSchema(
+          source_builtin_function_catalog->GetLatestSchema());
     return false;
   }
 
@@ -262,10 +273,10 @@ SpangresSystemCatalog::GetPgNumericCastFunction(
 bool SpangresSystemCatalog::IsTransformationRequiredForComparison(
     const zetasql::ResolvedExpr& gsql_expr) {
 
-  // Transformation is required for expression of type double as Postgres'
-  // comparison semantics for double differ from native double comparison
-  // semantics.
-  if (gsql_expr.type()->IsDouble()) {
+  // Transformation is required for expressions of type double and float as
+  // Postgres' comparison semantics for double and float differ from Spanner
+  // native double comparison semantics.
+  if (gsql_expr.type()->IsDouble() || gsql_expr.type()->IsFloat()) {
     return true;
   }
 
@@ -291,8 +302,16 @@ absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
 SpangresSystemCatalog::GetResolvedExprForDoubleComparison(
     std::unique_ptr<zetasql::ResolvedExpr> gsql_expr,
     const zetasql::LanguageOptions& language_options) {
-  if (!gsql_expr->type()->IsDouble()) {
+  if (!(gsql_expr->type()->IsDouble() || gsql_expr->type()->IsFloat())) {
     return gsql_expr;
+  }
+
+  if (gsql_expr->type()->IsFloat()) {
+    // First cast the float to a double, then use the standard mapping from
+    // double to int64_t.
+    gsql_expr = zetasql::MakeResolvedCast(zetasql::types::DoubleType(),
+                                            std::move(gsql_expr),
+                                            /*return_null_on_error=*/false);
   }
 
   ZETASQL_ASSIGN_OR_RETURN(FunctionAndSignature function_and_signature,

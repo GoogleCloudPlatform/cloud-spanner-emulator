@@ -33,8 +33,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-constexpr char kCloudSpannerEmulatorFunctionCatalogName[] =
-    "CloudSpannerEmulatorCatalog";
+constexpr char kCloudSpannerEmulatorFunctionCatalogName[] = "Spanner";
 
 // A catalog of all SQL functions.
 //

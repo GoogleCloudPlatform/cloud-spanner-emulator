@@ -378,6 +378,25 @@ INSTANTIATE_TEST_SUITE_P(
             kPGJsonBTypeofFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("false")},
             zetasql::Value::String("bool")},
+        // pg.jsonb_query_array
+        PGScalarFunctionTestCase{
+            kPGJsonBQueryArrayFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[1, 2, 3]")},
+            *zetasql::Value::MakeArray(
+                spangres::datatypes::GetPgJsonbArrayType(),
+                {*CreatePgJsonbValueWithMemoryContext("1"),
+                 *CreatePgJsonbValueWithMemoryContext("2"),
+                 *CreatePgJsonbValueWithMemoryContext("3")})},
+        PGScalarFunctionTestCase{
+            kPGJsonBQueryArrayFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[\"abc\", \"def\"]")},
+            *zetasql::Value::MakeArray(
+                spangres::datatypes::GetPgJsonbArrayType(),
+                {*CreatePgJsonbValueWithMemoryContext("\"abc\""),
+                 *CreatePgJsonbValueWithMemoryContext("\"def\"")})},
+        PGScalarFunctionTestCase{kPGJsonBQueryArrayFunctionName,
+                                 {CreatePgJsonBNullValue()},
+                                 CreatePgJsonBNullValue()},
 
         PGScalarFunctionTestCase{
             kPGNumericAddFunctionName,
@@ -2479,6 +2498,30 @@ TEST_F(EmulatorFunctionsTest,
           {*CreatePgNumericValueWithMemoryContext(MinNumericString())})),
       StatusIs(absl::StatusCode::kOutOfRange,
                HasSubstr("bigint out of range")));
+}
+
+TEST_F(EmulatorFunctionsTest, JsonbConstructorFunctions) {
+  const zetasql::Function* build_array_function =
+      functions_[kPGJsonBBuildArrayFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+                       (build_array_function->GetFunctionEvaluatorFactory())(
+                           build_array_function->signatures().front()));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {zetasql::Value::Int64(0), zetasql::Value::Int64(1)})),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("jsonb_build_array is not supported")));
+
+  const zetasql::Function* build_object_function =
+      functions_[kPGJsonBBuildObjectFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+                       (build_object_function->GetFunctionEvaluatorFactory())(
+                           build_object_function->signatures().front()));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {zetasql::Value::String("key1"), zetasql::Value::Int64(0),
+           zetasql::Value::String("key2"), zetasql::Value::Int64(1)})),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("jsonb_build_object is not supported")));
 }
 
 class EvalToJsonBTest : public EmulatorFunctionsTest {

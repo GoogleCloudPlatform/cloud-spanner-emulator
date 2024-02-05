@@ -177,10 +177,10 @@ static void AddPgNumericSignaturesForExistingFunctions(
                                                 {gsql_pg_numeric},
                                                 /*context_ptr=*/nullptr}}}});
 
-    functions_with_new_signatures.push_back({"count",
-                                             {{{gsql_int64,
-                                                {gsql_pg_numeric_array},
-                                                /*context_ptr=*/nullptr}}}});
+  functions_with_new_signatures.push_back({"count",
+                                            {{{gsql_int64,
+                                              {gsql_pg_numeric_array},
+                                              /*context_ptr=*/nullptr}}}});
 
   AddNewSignaturesForExistingFunctions(functions,
                                        functions_with_new_signatures);
@@ -370,9 +370,8 @@ static void AddPgJsonbSignaturesForExistingFunctions(
     std::vector<PostgresFunctionArguments>& functions) {
   const zetasql::Type* gsql_pg_jsonb =
       types::PgJsonbMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_jsonb_arr = nullptr;
-  ABSL_CHECK_OK(
-      GetTypeFactory()->MakeArrayType(gsql_pg_jsonb, &gsql_pg_jsonb_arr));
+  const zetasql::Type* gsql_pg_jsonb_arr =
+      types::PgJsonbArrayMapping()->mapped_type();
 
     std::vector<FunctionNameWithSignature>
         existing_jsonb_functions_with_signature = {
@@ -386,11 +385,11 @@ static void AddPgJsonbSignaturesForExistingFunctions(
               {gsql_pg_jsonb},
               /*context_ptr=*/nullptr}}}});
 
-      existing_jsonb_functions_with_signature.push_back({
-        "count",
-        {{{gsql_int64, {gsql_pg_jsonb_arr},
-           /*context_ptr=*/nullptr}}}
-      });
+    existing_jsonb_functions_with_signature.push_back({
+      "count",
+      {{{gsql_int64, {gsql_pg_jsonb_arr},
+          /*context_ptr=*/nullptr}}}
+    });
 
     AddNewSignaturesForExistingFunctions(
         functions, existing_jsonb_functions_with_signature);
@@ -410,11 +409,10 @@ static void AddPgJsonbNewFunctions(
   const zetasql::Type* gsql_date_arr = zetasql::types::DateArrayType();
   const zetasql::Type* gsql_pg_numeric =
       types::PgNumericMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_numeric_arr = nullptr;
-  ABSL_CHECK_OK(
-      GetTypeFactory()->MakeArrayType(gsql_pg_numeric, &gsql_pg_numeric_arr));
-  const zetasql::Type* gsql_pg_jsonb_arr = nullptr;
-  ABSL_CHECK_OK(GetTypeFactory()->MakeArrayType(gsql_pg_jsonb, &gsql_pg_jsonb_arr));
+  const zetasql::Type* gsql_pg_numeric_arr =
+      types::PgNumericArrayMapping()->mapped_type();
+  const zetasql::Type* gsql_pg_jsonb_arr =
+      types::PgJsonbArrayMapping()->mapped_type();
 
   functions.push_back(
       {"to_jsonb",
@@ -441,6 +439,7 @@ static void AddPgJsonbNewFunctions(
   std::string emulator_jsonb_typeof_fn_name = "pg.jsonb_typeof";
   std::string emulator_jsonb_array_element_fn_name = "pg.jsonb_array_element";
   std::string emulator_jsonb_object_field_fn_name = "pg.jsonb_object_field";
+  std::string emulator_jsonb_query_array_fn_name = "pg.jsonb_query_array";
 
   functions.push_back({"jsonb_typeof",
                        "json_type",
@@ -491,16 +490,11 @@ void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions) {
 }
 
 void AddPgArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
-  const zetasql::Type* gsql_pg_jsonb =
-      types::PgJsonbMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_jsonb_arr = nullptr;
-  ABSL_CHECK_OK(
-      GetTypeFactory()->MakeArrayType(gsql_pg_jsonb, &gsql_pg_jsonb_arr));
-  const zetasql::Type* gsql_pg_numeric =
-      types::PgNumericMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_numeric_arr = nullptr;
-  ABSL_CHECK_OK(
-      GetTypeFactory()->MakeArrayType(gsql_pg_numeric, &gsql_pg_numeric_arr));
+  const zetasql::Type* gsql_pg_jsonb_arr =
+      types::PgJsonbArrayMapping()->mapped_type();
+  const zetasql::Type* gsql_pg_numeric_arr =
+      types::PgNumericArrayMapping()->mapped_type();
+
   PostgresFunctionArguments array_upper_function(
       {"array_upper",
        "pg.array_upper",
@@ -541,45 +535,45 @@ void AddPgArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
          /*explicit_mapped_function_name=*/"pg.array_upper"});
   functions.push_back(array_upper_function);
 
-    PostgresFunctionArguments array_length_function(
-        {"array_length",
-         "pg.array_length",
-         {{{gsql_int64,
-            {gsql_int64_array, gsql_int64},
-            /*context_ptr=*/nullptr}},
-          {{gsql_int64,
-            {gsql_string_array, gsql_int64},
-            /*context_ptr=*/nullptr}},
-          {{gsql_int64,
-            {gsql_bool_array, gsql_int64},
-            /*context_ptr=*/nullptr}},
-          {{gsql_int64,
-            {gsql_double_array, gsql_int64},
-            /*context_ptr=*/nullptr}},
-          {{gsql_int64,
-            {gsql_bytes_array, gsql_int64},
-            /*context_ptr=*/nullptr}},
-          {{gsql_int64,
-            {gsql_date_array, gsql_int64},
-            /*context_ptr=*/nullptr}},
-          {{gsql_int64,
-            {gsql_timestamp_array, gsql_int64},
-            /*context_ptr=*/nullptr}}}});
+  PostgresFunctionArguments array_length_function(
+      {"array_length",
+        "pg.array_length",
+        {{{gsql_int64,
+          {gsql_int64_array, gsql_int64},
+          /*context_ptr=*/nullptr}},
+        {{gsql_int64,
+          {gsql_string_array, gsql_int64},
+          /*context_ptr=*/nullptr}},
+        {{gsql_int64,
+          {gsql_bool_array, gsql_int64},
+          /*context_ptr=*/nullptr}},
+        {{gsql_int64,
+          {gsql_double_array, gsql_int64},
+          /*context_ptr=*/nullptr}},
+        {{gsql_int64,
+          {gsql_bytes_array, gsql_int64},
+          /*context_ptr=*/nullptr}},
+        {{gsql_int64,
+          {gsql_date_array, gsql_int64},
+          /*context_ptr=*/nullptr}},
+        {{gsql_int64,
+          {gsql_timestamp_array, gsql_int64},
+          /*context_ptr=*/nullptr}}}});
 
-      array_length_function.add_signature(
-          {{gsql_int64,
-            {gsql_pg_numeric_arr, gsql_int64},
-            /*context_ptr=*/nullptr},
-           /*has_mapped_function=*/true,
-           /*explicit_mapped_function_name=*/"pg.array_length"});
+    array_length_function.add_signature(
+        {{gsql_int64,
+          {gsql_pg_numeric_arr, gsql_int64},
+          /*context_ptr=*/nullptr},
+          /*has_mapped_function=*/true,
+          /*explicit_mapped_function_name=*/"pg.array_length"});
 
-      array_length_function.add_signature(
-          {{gsql_int64,
-            {gsql_pg_jsonb_arr, gsql_int64},
-            /*context_ptr=*/nullptr},
-           /*has_mapped_function=*/true,
-           /*explicit_mapped_function_name=*/"pg.array_length"});
-    functions.push_back(array_length_function);
+    array_length_function.add_signature(
+        {{gsql_int64,
+          {gsql_pg_jsonb_arr, gsql_int64},
+          /*context_ptr=*/nullptr},
+          /*has_mapped_function=*/true,
+          /*explicit_mapped_function_name=*/"pg.array_length"});
+  functions.push_back(array_length_function);
 }
 
 void AddPgComparisonFunctions(
@@ -745,57 +739,72 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
        /*mode=*/zetasql::Function::SCALAR,
        /*postgres_namespace=*/"spanner"});
 
-    functions.push_back({"timestamptz_add",
-                         "pg.timestamptz_add",
-                         {{{gsql_timestamp,
-                            {gsql_timestamp, gsql_string},
-                            /*context_ptr=*/nullptr}}},
+  functions.push_back({"timestamptz_add",
+      "pg.timestamptz_add",
+      {{{gsql_timestamp,
+         {gsql_timestamp, gsql_string},
+         /*context_ptr=*/nullptr}}},
+      /*mode=*/zetasql::Function::SCALAR,
+      /*postgres_namespace=*/"spanner"});
+  functions.push_back({"timestamptz_subtract",
+      "pg.timestamptz_subtract",
+      {{{gsql_timestamp,
+         {gsql_timestamp, gsql_string},
+         /*context_ptr=*/nullptr}}},
+      /*mode=*/zetasql::Function::SCALAR,
+      /*postgres_namespace=*/"spanner"});
+  functions.push_back({"date_bin",
+      "pg.date_bin",
+      {{{gsql_timestamp,
+         {gsql_string, gsql_timestamp, gsql_timestamp},
+         /*context_ptr=*/nullptr}}},
+      /*mode=*/zetasql::Function::SCALAR,
+      /*postgres_namespace=*/"spanner"});
+  functions.push_back({"date_trunc",
+      "pg.date_trunc",
+      {{{gsql_timestamp,
+         {gsql_string, gsql_timestamp},
+         /*context_ptr=*/nullptr}},
+       {{gsql_timestamp,
+         {gsql_string, gsql_timestamp, gsql_string},
+         /*context_ptr=*/nullptr}}}});
+    functions.push_back({"extract",
+        "pg.extract",
+        {{{gsql_pg_numeric,
+           {gsql_string, gsql_timestamp},
+           /*context_ptr=*/nullptr}},
+         {{gsql_pg_numeric,
+           {gsql_string, gsql_date},
+           /*context_ptr=*/nullptr}}}});
+  functions.push_back({"euclidean_distance",
+      "euclidean_distance",
+      {{{gsql_double,
+         {gsql_double_array, gsql_double_array},
+         /*context_ptr=*/nullptr}}},
+      /*mode=*/zetasql::Function::SCALAR,
+      /*postgres_namespace=*/"spanner"});
+  functions.push_back({"cosine_distance",
+      "cosine_distance",
+      {{{gsql_double,
+         {gsql_double_array, gsql_double_array},
+         /*context_ptr=*/nullptr}}},
+      /*mode=*/zetasql::Function::SCALAR,
+      /*postgres_namespace=*/"spanner"});
+
+    const zetasql::Type* gsql_pg_jsonb =
+        types::PgJsonbMapping()->mapped_type();
+    functions.push_back({"ml_predict_row",
+                         "ml_predict_row",
+                         {
+                             {{gsql_pg_jsonb,
+                               {gsql_string, gsql_pg_jsonb},
+                               /*context_ptr=*/nullptr}},
+                             {{gsql_pg_jsonb,
+                               {gsql_pg_jsonb, gsql_pg_jsonb},
+                               /*context_ptr=*/nullptr}},
+                         },
                          /*mode=*/zetasql::Function::SCALAR,
                          /*postgres_namespace=*/"spanner"});
-    functions.push_back({"timestamptz_subtract",
-                         "pg.timestamptz_subtract",
-                         {{{gsql_timestamp,
-                            {gsql_timestamp, gsql_string},
-                            /*context_ptr=*/nullptr}}},
-                         /*mode=*/zetasql::Function::SCALAR,
-                         /*postgres_namespace=*/"spanner"});
-    functions.push_back({"date_bin",
-                         "pg.date_bin",
-                         {{{gsql_timestamp,
-                            {gsql_string, gsql_timestamp, gsql_timestamp},
-                            /*context_ptr=*/nullptr}}},
-                         /*mode=*/zetasql::Function::SCALAR,
-                         /*postgres_namespace=*/"spanner"});
-    functions.push_back({"date_trunc",
-                         "pg.date_trunc",
-                         {{{gsql_timestamp,
-                            {gsql_string, gsql_timestamp},
-                            /*context_ptr=*/nullptr}},
-                          {{gsql_timestamp,
-                            {gsql_string, gsql_timestamp, gsql_string},
-                            /*context_ptr=*/nullptr}}}});
-      functions.push_back({"extract",
-                           "pg.extract",
-                           {{{gsql_pg_numeric,
-                              {gsql_string, gsql_timestamp},
-                              /*context_ptr=*/nullptr}},
-                            {{gsql_pg_numeric,
-                              {gsql_string, gsql_date},
-                              /*context_ptr=*/nullptr}}}});
-    functions.push_back({"euclidean_distance",
-                          "euclidean_distance",
-                        {{{gsql_double,
-                          {gsql_double_array, gsql_double_array},
-                          /*context_ptr=*/nullptr}}},
-                        /*mode=*/zetasql::Function::SCALAR,
-                        /*postgres_namespace=*/"spanner"});
-    functions.push_back({"cosine_distance",
-                          "cosine_distance",
-                        {{{gsql_double,
-                          {gsql_double_array, gsql_double_array},
-                          /*context_ptr=*/nullptr}}},
-                        /*mode=*/zetasql::Function::SCALAR,
-                        /*postgres_namespace=*/"spanner"});
 }
 
 void AddPgLeastGreatestFunctions(

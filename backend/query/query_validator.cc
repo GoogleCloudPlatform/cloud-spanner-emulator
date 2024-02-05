@@ -30,6 +30,8 @@
 #include "absl/strings/string_view.h"
 #include "backend/query/feature_filter/gsql_supported_functions.h"
 #include "backend/query/feature_filter/sql_feature_filter.h"
+#include "backend/query/query_context.h"
+#include "backend/query/query_engine_options.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/sequence.h"
 #include "common/constants.h"
@@ -273,7 +275,9 @@ absl::Status QueryValidator::CheckHintValue(
       }
       const Index* index = context_.schema->FindIndex(index_name);
       if (index == nullptr) {
-        return error::InvalidHintValue(name, value.DebugString());
+        // We don't have the table name here. So this will not match prod error
+        // message.
+        return error::QueryHintIndexNotFound("", index_name);
       }
 
       indexes_used_.insert(index);

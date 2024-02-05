@@ -75,6 +75,12 @@ typedef enum InterleaveInType {
   INTERLEAVE_IN,
   INTERLEAVE_IN_PARENT
 } InterleaveInType;
+
+typedef enum GeneratedColStoreOpt {
+  GENERATAED_COL_STORE_UNSPECIFIED = 0,
+  GENERATED_COL_STORED,
+  GENERATED_COL_NON_STORED
+} GeneratedColStoreOpt;
 /* SPANGRES END */
 
 /*
@@ -381,6 +387,10 @@ typedef struct FuncCall
 	bool		func_variadic;	/* last argument was labeled VARIADIC */
 	CoercionForm funcformat;	/* how to display this node */
 	int			location;		/* token location, or -1 if unknown */
+	/* BEGIN SPANGRES ADDITIONAL FIELDS */
+	List		*functionHints;	/* function hints. Only applies to standard
+								   function calls, not special expressions that
+								   are similar to function calls. */
 } FuncCall;
 
 /*
@@ -3127,6 +3137,25 @@ typedef struct RenameStmt
 	bool		missing_ok;		/* skip error if missing? */
 	bool		addSynonym;	/* add old name as synonym */
 } RenameStmt;
+
+/* ----------------------
+ *		Table Rename Op Clause
+ * ----------------------
+ */
+typedef struct TableRenameOp {
+  NodeTag type;
+  RangeVar *fromName; /* the old table name */
+  char *toName;				/* the new table name */
+} TableRenameOp;
+
+/* ----------------------
+ *		Table Chained Rename Statement
+ * ----------------------
+ */
+typedef struct TableChainedRenameStmt {
+  NodeTag type;
+  List *ops; /* list of TableRenameOp */
+} TableChainedRenameStmt;
 
 /* ----------------------
  * ALTER object DEPENDS ON EXTENSION extname

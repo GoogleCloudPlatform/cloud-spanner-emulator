@@ -59,6 +59,7 @@
 #include "backend/transaction/actions.h"
 #include "backend/transaction/commit_timestamp.h"
 #include "backend/transaction/flush.h"
+#include "backend/transaction/foreign_key_restrictions.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/resolve.h"
 #include "backend/transaction/row_cursor.h"
@@ -456,6 +457,7 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
 absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
   return GuardedCall(OpType::kWrite, [&]() -> absl::Status {
     mu_.AssertHeld();
+    ForeignKeyRestrictions fk_restrictions;
 
     // When writing, comparison may be required in the process. Comparison of
     // PG.NUMERIC calls PG to get comparison result (see function
@@ -477,7 +479,7 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
         const std::string& table_name = resolved_mutation_op.table->Name();
 
         if (has_delete_cascade_foreign_key) {
-          ZETASQL_RETURN_IF_ERROR(fk_restrictions_.ValidateReferencedDeleteMods(
+          ZETASQL_RETURN_IF_ERROR(fk_restrictions.ValidateReferencedDeleteMods(
               table_name, resolved_mutation_op.key_ranges));
         }
 
@@ -538,7 +540,7 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
                   resolved_mutation_op.rows[i], transaction_store_.get()));
 
           if (has_delete_cascade_foreign_key) {
-            ZETASQL_RETURN_IF_ERROR(fk_restrictions_.ValidateReferencedMods(
+            ZETASQL_RETURN_IF_ERROR(fk_restrictions.ValidateReferencedMods(
                 write_ops, table_name, schema_));
           }
 

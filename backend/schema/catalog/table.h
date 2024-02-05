@@ -152,6 +152,9 @@ class Table : public SchemaNode {
     return owner_change_stream_ == nullptr && owner_index_ == nullptr;
   }
 
+  // Returns the synonym of this table.
+  const std::string& synonym() const { return synonym_; }
+
   // Finds a column by its name. Returns a const pointer to the column, or
   // nullptr if the column is not found. Name comparison is case-insensitive.
   const Column* FindColumn(const std::string& column_name) const;
@@ -301,6 +304,9 @@ class Table : public SchemaNode {
 
   // Row deletion policy of this table. Set to nullopt if not specified.
   std::optional<ddl::RowDeletionPolicy> row_deletion_policy_ = std::nullopt;
+
+  // Synonym.
+  std::string synonym_;
 };
 
 // Returns the name of the schema declared owning object (index or table) of

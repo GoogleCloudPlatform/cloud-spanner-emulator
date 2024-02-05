@@ -61,7 +61,7 @@ class SequenceReadWriteTest
   absl::StatusOr<int64_t> GetCurrentSequenceState(const std::string& name) {
     std::string query;
     if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-      return -1;
+      query = "SELECT spanner.GET_INTERNAL_SEQUENCE_STATE('$0')";
     } else {
       query = "SELECT GET_INTERNAL_SEQUENCE_STATE(SEQUENCE $0)";
     }
@@ -85,7 +85,6 @@ class SequenceReadWriteTest
 
   void ExpectEmptyInternalState(const std::string& name) {
     if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-      return;
       EXPECT_THAT(
           Query("SELECT spanner.GET_INTERNAL_SEQUENCE_STATE('mysequence')"),
           IsOkAndHoldsRows({Null<std::int64_t>()}));
@@ -109,12 +108,7 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 TEST_P(SequenceReadWriteTest, Dml_Basic) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   ExpectEmptyInternalState("mysequence");
-
   InsertThreeRowsWithDML();
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
@@ -139,10 +133,6 @@ TEST_P(SequenceReadWriteTest, Dml_Basic) {
 }
 
 TEST_P(SequenceReadWriteTest, Mutation_Basic) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   ExpectEmptyInternalState("mysequence");
 
   // Insert 3 rows
@@ -163,17 +153,20 @@ TEST_P(SequenceReadWriteTest, Mutation_Basic) {
                                          {"Mark", 32},
                                          {"Douglas", 31}}));
 
-  EXPECT_THAT(
-      Query("SELECT (get_internal_sequence_state(sequence mysequence) >=6) "
-            "is true"),
-      IsOkAndHoldsRows({{true}}));
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(
+        Query("SELECT (spanner.get_internal_sequence_state('mysequence') >=6) "
+              "is true"),
+        IsOkAndHoldsRows({{true}}));
+  } else {
+    EXPECT_THAT(
+        Query("SELECT (get_internal_sequence_state(sequence mysequence) >=6) "
+              "is true"),
+        IsOkAndHoldsRows({{true}}));
+  }
 }
 
 TEST_P(SequenceReadWriteTest, WithThenReturn) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   ExpectEmptyInternalState("mysequence");
 
   // Insert 3 rows with value = 1, 2, 3
@@ -310,10 +303,6 @@ TEST_P(SequenceReadWriteTest, WithBigHalfSkippedRange) {
 }
 
 TEST_P(SequenceReadWriteTest, SkippedRangeExhaustsSequence) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   // Skip the entire positive int64_t range, from 0 - 2^63-1, the sequence
   // API should fail fast.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
@@ -428,10 +417,6 @@ TEST_P(SequenceReadWriteTest, AlterSequenceMultipleTimes) {
 
 TEST_P(SequenceReadWriteTest, MovesStartWithCounterBackward) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     ZETASQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence
             RESTART COUNTER 10000;
@@ -487,10 +472,6 @@ TEST_P(SequenceReadWriteTest, MovesStartWithCounterBackward) {
 
 // Verifies that a deleted and re-created sequence works as expected.
 TEST_P(SequenceReadWriteTest, DropAndRecreateSequence) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   ExpectEmptyInternalState("mysequence");
 
   InsertThreeRowsWithDML();
@@ -551,10 +532,6 @@ TEST_P(SequenceReadWriteTest, DropAndRecreateSequence) {
 
 // Verifies that backfill works as expected
 TEST_P(SequenceReadWriteTest, AddColumn) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   ExpectEmptyInternalState("mysequence");
 
   InsertThreeRowsWithDML();
@@ -618,7 +595,6 @@ TEST_P(SequenceReadWriteTest,
        GetNextSequenceValueCanBeUsedInReadWriteTransaction) {
   std::vector<ValueRow> value_row;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         value_row,
         QueryTransaction(Transaction(Transaction::ReadWriteOptions()),
@@ -635,7 +611,6 @@ TEST_P(SequenceReadWriteTest,
        GetInternalSequenceStateCanBeUsedInAllTypesOfTransaction) {
   std::vector<ValueRow> value_row;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
   } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         value_row,

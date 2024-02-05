@@ -94,6 +94,7 @@ void ddl_statement() :
     | grant_statement()
     | revoke_statement()
     | analyze_statement()
+    | rename_statement()
   )
   <EOF>
 }
@@ -165,6 +166,7 @@ void table_element() #void :
 {
     LOOKAHEAD(3) foreign_key()
   | LOOKAHEAD(3) check_constraint()
+  | LOOKAHEAD(3) synonym_clause()
   | column_def()
 }
 
@@ -286,6 +288,12 @@ void check_constraint() :
   <CHECK> "(" expression() #check_constraint_expression ")"
 }
 
+void synonym_clause() :
+{}
+{
+  <SYNONYM> "(" qualified_identifier() #synonym ")"
+}
+
 void table_interleave_clause() :
 {}
 {
@@ -402,6 +410,18 @@ void target_type():
   | <CHANGE> <STREAM> #change_stream
   | <VIEW> #view
   | <SEQUENCE> #sequence
+}
+
+void rename_op() :
+{}
+{
+  qualified_identifier() #from_name <TO> qualified_identifier() #to_name
+}
+
+void rename_statement() :
+{}
+{
+  <RENAME> <TABLE> rename_op() ( "," rename_op() )*
 }
 
 void privilege_target():
@@ -587,7 +607,8 @@ void alter_statement() #void :
 {
   <ALTER>
   (
-    alter_table_statement()
+    alter_database_statement()
+    | alter_table_statement()
     | alter_change_stream_statement()
     | alter_index_statement()
     | alter_sequence_statement()
@@ -596,20 +617,30 @@ void alter_statement() #void :
   )
 }
 
+void alter_database_statement() :
+{}
+{
+  <DATABASE> (identifier() #database_name) <SET> options_clause()
+}
+
 void alter_table_statement() :
 {}
 {
   <TABLE> (qualified_identifier() #table_name)
   (   LOOKAHEAD(3) <DROP> <CONSTRAINT> #drop_constraint identifier() #constraint_name
     | LOOKAHEAD(3) <DROP> <ROW> <DELETION> <POLICY> #drop_row_deletion_policy
+    | LOOKAHEAD(3) <DROP> <SYNONYM> qualified_identifier() #drop_synonym
     | LOOKAHEAD(3) <DROP> #drop_column [LOOKAHEAD(2) <COLUMN>]
         (identifier() #column_name)
     | LOOKAHEAD(1) <ALTER> #alter_column [LOOKAHEAD(2) <COLUMN>]
         (identifier() #name) column_def_alter()
     | LOOKAHEAD(2) <SET> #set_on_delete on_delete_clause()
+    | LOOKAHEAD(2) <RENAME> <TO> qualified_identifier() #rename_to
+        ["," <ADD> <SYNONYM> qualified_identifier() #synonym]
     | LOOKAHEAD(4) <ADD> foreign_key()
     | LOOKAHEAD(4) <ADD> check_constraint()
     | LOOKAHEAD(4) <ADD> row_deletion_policy_clause() #add_row_deletion_policy
+    | LOOKAHEAD(4) <ADD> <SYNONYM> qualified_identifier() #add_synonym
     // ADD COLUMN could mask the above ADD clauses, so putting it at the end.
     | LOOKAHEAD(1) <ADD> #add_column [
         LOOKAHEAD(6) <COLUMN> [ if_not_exists() ]

@@ -1196,6 +1196,7 @@ _outAggref(StringInfo str, const Aggref *node)
 	WRITE_INT_FIELD(aggno);
 	WRITE_INT_FIELD(aggtransno);
 	WRITE_LOCATION_FIELD(location);
+	WRITE_NODE_FIELD(functionHints);
 }
 
 static void
@@ -1225,6 +1226,7 @@ _outWindowFunc(StringInfo str, const WindowFunc *node)
 	WRITE_BOOL_FIELD(winstar);
 	WRITE_BOOL_FIELD(winagg);
 	WRITE_LOCATION_FIELD(location);
+	WRITE_NODE_FIELD(functionHints);
 }
 
 static void
@@ -1257,6 +1259,7 @@ _outFuncExpr(StringInfo str, const FuncExpr *node)
 	WRITE_OID_FIELD(inputcollid);
 	WRITE_NODE_FIELD(args);
 	WRITE_LOCATION_FIELD(location);
+	WRITE_NODE_FIELD(functionHints);
 }
 
 static void
@@ -2902,6 +2905,7 @@ _outFuncCall(StringInfo str, const FuncCall *node)
 	WRITE_BOOL_FIELD(func_variadic);
 	WRITE_ENUM_FIELD(funcformat, CoercionForm);
 	WRITE_LOCATION_FIELD(location);
+	WRITE_NODE_FIELD(functionHints);
 }
 
 static void
@@ -3720,6 +3724,7 @@ _outConstraint(StringInfo str, const Constraint *node)
 	WRITE_NODE_FIELD(pktable);
 	WRITE_NODE_FIELD(raw_expr);
 	WRITE_BOOL_FIELD(skip_validation);
+	WRITE_ENUM_FIELD(stored_kind, GeneratedColStoreOpt);
 	WRITE_NODE_FIELD(where_clause);
   WRITE_STRING_FIELD(constraint_expr_string);
 }
@@ -4180,6 +4185,19 @@ static void _outRenameStmt(StringInfo str, const RenameStmt *node)
 	WRITE_ENUM_FIELD(behavior, DropBehavior);
 	WRITE_BOOL_FIELD(missing_ok);
 	WRITE_BOOL_FIELD(addSynonym);
+}
+
+static void _outTableRenameOp(StringInfo str, const TableRenameOp *node)
+{
+	WRITE_NODE_TYPE("TABLERENAMEOP");
+	WRITE_NODE_FIELD(fromName);
+	WRITE_STRING_FIELD(toName);
+}
+
+static void _outTableChainedRenameStmt(StringInfo str, const TableChainedRenameStmt *node)
+{
+	WRITE_NODE_TYPE("TABLECHAINEDRENAMESTMT");
+	WRITE_NODE_FIELD(ops);
 }
 
 static void _outSynonymClause(StringInfo str, const SynonymClause *node)
@@ -5000,6 +5018,12 @@ outNode(StringInfo str, const void *obj)
 				break;
 			case T_RenameStmt:
 				_outRenameStmt(str, obj);
+				break;
+			case T_TableRenameOp:
+				_outTableRenameOp(str, obj);
+				break;
+			case T_TableChainedRenameStmt:
+				_outTableChainedRenameStmt(str, obj);
 				break;
 			case T_SynonymClause:
 				_outSynonymClause(str, obj);

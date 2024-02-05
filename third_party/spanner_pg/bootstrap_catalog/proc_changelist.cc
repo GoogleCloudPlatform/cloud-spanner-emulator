@@ -72,11 +72,28 @@ static PgProcId MakePgProcId(const FormData_pg_proc& proc) {
 // Metadata to unique identify procs to remove from the bootstrap catalog.
 // Initially populated with all casts to int4.
 absl::flat_hash_set<PgProcId> procs_to_remove = {
-    {"int4", {{BITOID}, INT4OID}},    {"int4", {{BOOLOID}, INT4OID}},
-    {"int4", {{CHAROID}, INT4OID}},   {"int4", {{FLOAT4OID}, INT4OID}},
-    {"int4", {{FLOAT8OID}, INT4OID}}, {"int4", {{INT2OID}, INT4OID}},
-    {"int4", {{INT8OID}, INT4OID}},   {"int4", {{JSONBOID}, INT4OID}},
-    {"int4", {{NUMERICOID}, INT4OID}}};
+    {"int4", {{BITOID}, INT4OID}},
+    {"int4", {{BOOLOID}, INT4OID}},
+    {"int4", {{CHAROID}, INT4OID}},
+    {"int4", {{FLOAT4OID}, INT4OID}},
+    {"int4", {{FLOAT8OID}, INT4OID}},
+    {"int4", {{INT2OID}, INT4OID}},
+    {"int4", {{INT8OID}, INT4OID}},
+    {"int4", {{JSONBOID}, INT4OID}},
+    {"int4", {{NUMERICOID}, INT4OID}},
+    {"float4pl", {{FLOAT4OID, FLOAT4OID}, FLOAT4OID}},
+    {"float48pl", {{FLOAT4OID, FLOAT8OID}, FLOAT8OID}},
+    {"float84pl", {{FLOAT8OID, FLOAT4OID}, FLOAT8OID}},
+    {"float4mi", {{FLOAT4OID, FLOAT4OID}, FLOAT4OID}},
+    {"float48mi", {{FLOAT4OID, FLOAT8OID}, FLOAT8OID}},
+    {"float84mi", {{FLOAT8OID, FLOAT4OID}, FLOAT8OID}},
+    {"float4div", {{FLOAT4OID, FLOAT4OID}, FLOAT4OID}},
+    {"float48div", {{FLOAT4OID, FLOAT8OID}, FLOAT8OID}},
+    {"float84div", {{FLOAT8OID, FLOAT4OID}, FLOAT8OID}},
+    {"float4mul", {{FLOAT4OID, FLOAT4OID}, FLOAT4OID}},
+    {"float48mul", {{FLOAT4OID, FLOAT8OID}, FLOAT8OID}},
+    {"float84mul", {{FLOAT8OID, FLOAT4OID}, FLOAT8OID}},
+};
 
 // Metadata to unique identify procs to update in the bootstrap catalog, along
 // with the new signature for each proc.

@@ -56,7 +56,7 @@
 #endif
 
 
-#define MAX_TOKEN	256
+#define MAX_TOKEN	10240
 
 /* callback data for check_network_callback */
 typedef struct check_network_data
