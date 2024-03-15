@@ -71,6 +71,26 @@ bool IsAllowedTypeChange(const zetasql::Type* old_column_type,
     return true;
   }
 
+  // Allow conversions from PROTO to BYTES and BYTES to PROTO
+  if ((new_column_type->IsProto() && old_column_type->IsBytes()) ||
+      (new_column_type->IsBytes() && old_column_type->IsProto())) {
+    return true;
+  }
+
+  // Allow conversion from PROTO to PROTO or enum to enum
+  if ((new_column_type->IsProto() && old_column_type->IsProto()) ||
+      (new_column_type->IsEnum() && old_column_type->IsEnum())) {
+    return true;
+  }
+
+  // Allow conversion from enum to INT64 and INT64 to enum (this should ideally
+  // be INT32 but since cloud spanner doesn't support INT32 columns we support
+  // INT64 here)
+  if ((new_column_type->IsInt64() && old_column_type->IsEnum()) ||
+      (new_column_type->IsEnum() && old_column_type->IsInt64())) {
+    return true;
+  }
+
   return false;
 }
 
@@ -114,6 +134,35 @@ absl::Status CheckAllowedColumnTypeChange(
 
 }  // namespace
 
+bool ColumnValidator::TypeExistsInProtoBundle(const zetasql::Type* type,
+                                              const ProtoBundle* proto_bundle) {
+  if (type->IsProto()) {
+    const google::protobuf::Descriptor* type_descriptor = type->AsProto()->descriptor();
+    absl::StatusOr<const google::protobuf::Descriptor*> descriptor =
+        proto_bundle->GetTypeDescriptor(type_descriptor->full_name());
+    return descriptor.ok();
+  }
+  if (type->IsEnum()) {
+    const google::protobuf::EnumDescriptor* enum_descriptor =
+        type->AsEnum()->enum_descriptor();
+    absl::StatusOr<const google::protobuf::EnumDescriptor*> descriptor =
+        proto_bundle->GetEnumTypeDescriptor(enum_descriptor->full_name());
+    return descriptor.ok();
+  }
+  return false;
+}
+
+absl::Status ColumnValidator::ValidateTypeExistsInProtoBundle(
+    const zetasql::Type* type, const ProtoBundle* proto_bundle,
+    const std::string& column_name) {
+  ZETASQL_RET_CHECK(proto_bundle != nullptr && (type->IsProto() || type->IsEnum()));
+
+  return TypeExistsInProtoBundle(type, proto_bundle)
+             ? absl::OkStatus()
+             : error::DeletedTypeStillInUse(
+                   type->TypeName(zetasql::PRODUCT_EXTERNAL), column_name);
+}
+
 absl::Status ColumnValidator::Validate(const Column* column,
                                        SchemaValidationContext* context) {
   ZETASQL_RET_CHECK_NE(column->table_, nullptr);
@@ -149,6 +198,11 @@ absl::Status ColumnValidator::Validate(const Column* column,
                                         column->declared_max_length_.value(), 1,
                                         limits::kMaxBytesColumnLength);
     }
+  }
+
+  if (base_type->IsProto() || base_type->IsEnum()) {
+    ZETASQL_RETURN_IF_ERROR(ValidateTypeExistsInProtoBundle(
+        base_type, context->proto_bundle(), column->FullName()));
   }
 
   if (column->has_allows_commit_timestamp() && !column->type_->IsTimestamp()) {
@@ -237,6 +291,10 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
     }
     if (column->expression().value() != old_column->expression().value()) {
       return error::CannotAlterGeneratedColumnExpression(
+          column->table()->Name(), column->Name());
+    }
+    if (column->is_stored() != old_column->is_stored()) {
+      return error::CannotAlterGeneratedColumnStoredAttribute(
           column->table()->Name(), column->Name());
     }
   }

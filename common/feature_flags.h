@@ -32,15 +32,17 @@ class EmulatorFeatureFlags {
   struct Flags {
     bool enable_check_constraint = true;
     bool enable_column_default_values = true;
+    bool enable_protos = true;
     bool enable_dml_returning = true;
     bool enable_views = true;
     bool enable_generated_pk = true;
     bool enable_postgresql_interface = true;
-    bool enable_fk_delete_cascade_action = false;
+    bool enable_fk_delete_cascade_action = true;
     bool enable_bit_reversed_positive_sequences = true;
     bool enable_bit_reversed_positive_sequences_postgresql = true;
-    bool enable_upsert_queries = false;
+    bool enable_upsert_queries = true;
     bool enable_batch_query_with_no_table_scan = true;
+    bool enable_upsert_queries_with_returning = false;
   };
 
   static const EmulatorFeatureFlags& instance() {

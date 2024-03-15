@@ -48,6 +48,7 @@ static constexpr const char kValueCaptureTypeNewValues[] = "NEW_VALUES";
 // Container holding all the required inputs for processing a schema change.
 struct SchemaChangeOperation {
   absl::Span<const std::string> statements;
+  absl::string_view proto_descriptor_bytes;
   ::google::spanner::admin::database::v1::DatabaseDialect database_dialect =
       ::google::spanner::admin::database::v1::GOOGLE_STANDARD_SQL;
 };

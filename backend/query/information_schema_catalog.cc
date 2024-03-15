@@ -683,7 +683,11 @@ zetasql::Value InformationSchemaCatalog::GetSpannerType(
   if (dialect_ == DatabaseDialect::POSTGRESQL) {
     ddl::ColumnDefinition column_def = GoogleSqlTypeToDDLColumnType(type);
     if (length != std::nullopt) {
-      column_def.set_length(length.value());
+      if (type->IsArray()) {
+        column_def.mutable_array_subtype()->set_length(length.value());
+      } else {
+        column_def.set_length(length.value());
+      }
     }
     absl::StatusOr<std::string> spanner_type =
         pg_schema_printer_->PrintTypeForEmulator(column_def);
@@ -1087,35 +1091,29 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
       int pos = 1;
       // Add key columns.
       for (const KeyColumn* key_column : index->key_columns()) {
-        rows.push_back({
-            // table_catalog
-            String(""),
-            // table_schema
-            DialectDefaultSchema(),
-            // table_name
-            String(table->Name()),
-            // index_name
-            String(index->Name()),
-            // index_type
-            String(kIndex),
-            // column_name
-            String(key_column->column()->Name()),
-            // ordinal_position
-            Int64(pos++),
-            // column_ordering
-            DialectColumnOrdering(key_column),
-            // is_nullable
-            String(key_column->column()->is_nullable() &&
-                           !index->is_null_filtered()
-                       ? kYes
-                       : kNo),
-            // spanner_type
-            dialect_ == DatabaseDialect::POSTGRESQL
-                ?
-                // In prod the length is not printed, just the type.
-                GetSpannerType(key_column->column()->GetType(), std::nullopt)
-                : GetSpannerType(key_column->column()),
-        });
+        rows.push_back({// table_catalog
+                        String(""),
+                        // table_schema
+                        DialectDefaultSchema(),
+                        // table_name
+                        String(table->Name()),
+                        // index_name
+                        String(index->Name()),
+                        // index_type
+                        String(kIndex),
+                        // column_name
+                        String(key_column->column()->Name()),
+                        // ordinal_position
+                        Int64(pos++),
+                        // column_ordering
+                        DialectColumnOrdering(key_column),
+                        // is_nullable
+                        String(key_column->column()->is_nullable() &&
+                                       !index->is_null_filtered()
+                                   ? kYes
+                                   : kNo),
+                        // spanner_type
+                        GetSpannerType(key_column->column())});
       }
 
       // Add storing columns.
@@ -1140,11 +1138,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
             // is_nullable
             String(column->is_nullable() ? kYes : kNo),
             // spanner_type
-            dialect_ == DatabaseDialect::POSTGRESQL
-                ?
-                // In prod the length is not printed, just the type.
-                GetSpannerType(column->GetType(), std::nullopt)
-                : GetSpannerType(column),
+            GetSpannerType(column),
         });
       }
     }
@@ -1173,11 +1167,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
             // is_nullable
             String(key_column->column()->is_nullable() ? kYes : kNo),
             // spanner_type
-            dialect_ == DatabaseDialect::POSTGRESQL
-                ?
-                // In prod the length is not printed, just the type.
-                GetSpannerType(key_column->column()->GetType(), std::nullopt)
-                : GetSpannerType(key_column->column()),
+            GetSpannerType(key_column->column()),
         });
       }
     }

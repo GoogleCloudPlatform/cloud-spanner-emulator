@@ -3100,6 +3100,7 @@ _copyConstraint(const Constraint *from)
 	COPY_SCALAR_FIELD(old_pktable_oid);
 	COPY_SCALAR_FIELD(skip_validation);
 	COPY_SCALAR_FIELD(initially_valid);
+	COPY_SCALAR_FIELD(vector_length);
   COPY_STRING_FIELD(constraint_expr_string);
 
 	return newnode;

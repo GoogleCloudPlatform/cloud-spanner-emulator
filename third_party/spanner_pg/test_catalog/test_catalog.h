@@ -51,15 +51,6 @@ std::unique_ptr<EngineBuiltinFunctionCatalog>
 GetSpangresTestBuiltinFunctionCatalog(
     const zetasql::LanguageOptions& language_options);
 
-// If the test catalog singleton is not already initialized, initialize it.
-// Return a raw pointer to the test catalog singleton.
-// This test catalog is a wrapper over SimpleCatalog with added conversions for
-// extended types that is quick to load and used in most Spangres tests that do
-// not test schemas. If unsure, use this catalog.
-//
-// b/257978803: Delete the simple catalog.
-zetasql::EnumerableCatalog* GetSpangresTestCatalog_UNUSED();
-
 // If the EngineSystemCatalog singleton is not already initialized, initialize
 // it using the SpangresBuiltinFunctionCatalog.
 // Return a raw pointer to the EngineSystemCatalog singleton.

@@ -97,3 +97,21 @@ cc_library(
     ],
     alwayslink = 1,
 )
+
+cc_library(
+    name = "proto_bundle_tests",
+    testonly = 1,
+    srcs = ["proto_bundle.cc"],
+    deps = [
+        ":base",
+        "//tests/common:test_2_cc_proto",
+        "//tests/common:test_cc_proto",
+        "@com_google_absl//absl/container:btree",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest",
+        "@com_google_protobuf//:protobuf",
+    ],
+    alwayslink = 1,
+)

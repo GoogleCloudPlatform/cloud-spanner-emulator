@@ -261,6 +261,74 @@ TEST_F(ReadApiTest, CanPerformDefaultStrongReadUsingTemporaryTransaction) {
                                     })"));
 }
 
+TEST_F(ReadApiTest, DirectedReadsWithROTxnSucceeds) {
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"pb(
+    transaction { single_use { read_only { strong: true } } }
+    table: "test_table"
+    columns: "int64_col"
+    columns: "string_col"
+    key_set {
+      ranges {
+        start_open { values { string_value: "1" } }
+        end_open { values { string_value: "3" } }
+      }
+    }
+    directed_read_options {
+      include_replicas { replica_selections { type: READ_ONLY } }
+    }
+  )pb");
+  read_request.set_session(test_session_uri_);
+
+  // Directed Reads accepted in non-streaming case.
+  {
+    spanner_api::ResultSet unused_read_response;
+    ZETASQL_EXPECT_OK(Read(read_request, &unused_read_response));
+  }
+
+  // Directed Reads accepted in streaming case.
+  {
+    std::vector<spanner_api::PartialResultSet> unused_read_response;
+    ZETASQL_EXPECT_OK(StreamingRead(read_request, &unused_read_response));
+  }
+}
+
+TEST_F(ReadApiTest, DirectedReadsWithRWTxnFails) {
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"pb(
+    transaction { begin { read_write {} } }
+    table: "test_table"
+    columns: "int64_col"
+    columns: "string_col"
+    key_set {
+      ranges {
+        start_open { values { string_value: "1" } }
+        end_open { values { string_value: "3" } }
+      }
+    }
+    directed_read_options {
+      include_replicas { replica_selections { type: READ_ONLY } }
+    }
+  )pb");
+  read_request.set_session(test_session_uri_);
+
+  spanner_api::ResultSet unused_read_response;
+  EXPECT_THAT(Read(read_request, &unused_read_response),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+
+  // Directed Reads accepted in non-streaming case.
+  {
+    spanner_api::ResultSet unused_read_response;
+    EXPECT_THAT(Read(read_request, &unused_read_response),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+
+  // Directed Reads accepted in streaming case.
+  {
+    std::vector<spanner_api::PartialResultSet> unused_read_response;
+    EXPECT_THAT(StreamingRead(read_request, &unused_read_response),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+}
+
 TEST_F(ReadApiTest, CanBeginNewReadWriteTransactionAndPerformRead) {
   // A new read write transaction will be started by the server, which will
   // also be used to perform the read. The transaction returned may be re-used

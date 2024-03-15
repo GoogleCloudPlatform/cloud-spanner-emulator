@@ -77,6 +77,8 @@
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
@@ -206,6 +208,8 @@ class SchemaUpdaterImpl {
   // Applies the given `statement` on to `latest_schema_`.
   absl::StatusOr<std::unique_ptr<const Schema>> ApplyDDLStatement(
       absl::string_view statement
+      ,
+      absl::string_view proto_descriptor_bytes
       ,
       const database_api::DatabaseDialect& dialect);
 
@@ -355,12 +359,21 @@ class SchemaUpdaterImpl {
   absl::Status CreateRowDeletionPolicy(
       const ddl::RowDeletionPolicy& row_deletion_policy,
       Table::Builder* builder);
+  absl::StatusOr<std::shared_ptr<const ProtoBundle>> CreateProtoBundle(
+      const ddl::CreateProtoBundle& ddl_proto_bundle,
+      absl::string_view proto_descriptor_bytes);
   absl::Status CreateTable(const ddl::CreateTable& ddl_table,
                            const database_api::DatabaseDialect& dialect);
 
   absl::StatusOr<const Column*> CreateIndexDataTableColumn(
       const Table* indexed_table, const std::string& source_column_name,
       const Table* index_data_table, bool null_filtered_key_column);
+
+  absl::Status AddSearchIndexColumnsByName(const std::string& column_name,
+                                           const Table* indexed_table,
+                                           bool is_null_filtered,
+                                           std::vector<const Column*>& columns,
+                                           Table::Builder& builder);
 
   absl::Status AddSearchIndexColumns(
       const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>& key_parts,
@@ -440,6 +453,17 @@ class SchemaUpdaterImpl {
                              const Sequence* current_sequence);
   absl::Status AlterNamedSchema(const ddl::AlterSchema& alter_schema);
 
+  absl::StatusOr<std::shared_ptr<const ProtoBundle>> AlterProtoBundle(
+      const ddl::AlterProtoBundle& ddl_alter_proto_bundle,
+      absl::string_view proto_descriptor_bytes);
+  absl::Status AlterProtoColumnTypes(
+      const ProtoBundle* proto_bundle,
+      const ddl::AlterProtoBundle& ddl_alter_proto_bundle);
+  absl::Status AlterProtoColumnType(const Column* column,
+                                    const ProtoBundle* proto_bundle,
+                                    Column::Editor* editor);
+  absl::StatusOr<const zetasql::Type*> GetProtoTypeFromBundle(
+      const zetasql::Type* type, const ProtoBundle* proto_bundle);
   absl::Status AddCheckConstraint(
       const ddl::CheckConstraint& ddl_check_constraint, const Table* table);
   absl::Status AddForeignKey(const ddl::ForeignKey& ddl_foreign_key,
@@ -466,6 +490,8 @@ class SchemaUpdaterImpl {
   absl::Status ApplyImplSetColumnOptions(
       const ddl::SetColumnOptions& set_column_options,
       const database_api::DatabaseDialect& dialect);
+
+  absl::StatusOr<std::shared_ptr<const ProtoBundle>> DropProtoBundle();
 
   absl::Status DropFunction(const ddl::DropFunction& drop_function);
 
@@ -564,30 +590,6 @@ absl::Status SchemaUpdaterImpl::DropNode(const SchemaNode* node) {
 
 absl::Status ValidateDdlStatement(const ddl::DDLStatement& ddl,
                                   database_api::DatabaseDialect dialect) {
-  auto check_generated_column = [&](const ddl::ColumnDefinition& col) {
-    if (col.has_generated_column()) {
-      if (!col.generated_column().stored()) {
-        return error::NonStoredGeneratedColumnUnsupported(col.column_name());
-      }
-    }
-    return absl::OkStatus();
-  };
-
-  if (ddl.has_create_table()) {
-    for (const auto& col : ddl.create_table().column()) {
-      ZETASQL_RETURN_IF_ERROR(check_generated_column(col));
-    }
-  }
-  if (ddl.has_alter_table()) {
-    if (ddl.alter_table().has_add_column()) {
-      ZETASQL_RETURN_IF_ERROR(
-          check_generated_column(ddl.alter_table().add_column().column()));
-    } else if (ddl.alter_table().has_alter_column()) {
-      ZETASQL_RETURN_IF_ERROR(
-          check_generated_column(ddl.alter_table().alter_column().column()));
-    }
-  }
-
   if ((ddl.has_create_function() || ddl.has_drop_function()) &&
       !EmulatorFeatureFlags::instance().flags().enable_views) {
     return error::ViewsNotSupported(ddl.has_create_function() ? "CREATE"
@@ -610,6 +612,8 @@ absl::StatusOr<std::unique_ptr<const Schema>>
 SchemaUpdaterImpl::ApplyDDLStatement(
     absl::string_view statement
     ,
+    absl::string_view proto_descriptor_bytes
+    ,
     const database_api::DatabaseDialect& dialect) {
   if (statement.empty()) {
     return error::EmptyDDLStatement();
@@ -620,7 +624,14 @@ SchemaUpdaterImpl::ApplyDDLStatement(
                    ParseDDLByDialect(statement, dialect));
   ZETASQL_RETURN_IF_ERROR(ValidateDdlStatement(*ddl_statement, dialect));
   // Apply the statement to the schema graph.
+  auto proto_bundle = latest_schema_->proto_bundle();
   switch (ddl_statement->statement_case()) {
+    case ddl::DDLStatement::kCreateProtoBundle: {
+      ZETASQL_ASSIGN_OR_RETURN(proto_bundle,
+                       CreateProtoBundle(ddl_statement->create_proto_bundle(),
+                                         proto_descriptor_bytes));
+      break;
+    }
     case ddl::DDLStatement::kCreateTable: {
       ZETASQL_RETURN_IF_ERROR(CreateTable(ddl_statement->create_table(), dialect));
       break;
@@ -713,6 +724,12 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       ZETASQL_RETURN_IF_ERROR(AlterNamedSchema(ddl_statement->alter_schema()));
       break;
     }
+    case ddl::DDLStatement::kAlterProtoBundle: {
+      ZETASQL_ASSIGN_OR_RETURN(proto_bundle,
+                       AlterProtoBundle(ddl_statement->alter_proto_bundle(),
+                                        proto_descriptor_bytes));
+      break;
+    }
     case ddl::DDLStatement::kDropTable: {
       ZETASQL_RETURN_IF_ERROR(DropTable(ddl_statement->drop_table()));
       break;
@@ -748,6 +765,10 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       ZETASQL_RETURN_IF_ERROR(DropNamedSchema(ddl_statement->drop_schema()));
       break;
     }
+    case ddl::DDLStatement::kDropProtoBundle: {
+      ZETASQL_ASSIGN_OR_RETURN(proto_bundle, DropProtoBundle());
+      break;
+    }
     case ddl::DDLStatement::kAnalyze:
       // Intentionally no=op.
       break;
@@ -768,8 +789,18 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       ZETASQL_RET_CHECK(false) << "Unsupported ddl statement: "
                        << ddl_statement->statement_case();
   }
+  // Since Proto bundle needs to be used for column validation (via
+  // SchemaGraphEditor),this needs to be passed in statement context.
+  // SchemaValidationContext is being used and updated in both editor and
+  // updater and hence needs to be passed by reference.
+  // Use this proto_bundle only during validation (before schema
+  // generation). If there is a need to access proto_bundle after
+  // validation, please use schema->proto_bundle().
+  statement_context_->set_proto_bundle(proto_bundle);
   ZETASQL_ASSIGN_OR_RETURN(auto new_schema_graph, editor_->CanonicalizeGraph());
   return std::make_unique<const OwningSchema>(std::move(new_schema_graph)
+                                              ,
+                                              proto_bundle
                                               ,
                                               dialect);
 }
@@ -801,6 +832,8 @@ SchemaUpdaterImpl::ApplyDDLStatements(
           new_tmp_schema =
               std::make_unique<const Schema>(unowned_graph
                                              ,
+                                             latest_schema_->proto_bundle()
+                                             ,
                                              latest_schema_->dialect());
           return new_tmp_schema.get();
         });
@@ -813,6 +846,8 @@ SchemaUpdaterImpl::ApplyDDLStatements(
     ZETASQL_ASSIGN_OR_RETURN(
         auto new_schema,
         ApplyDDLStatement(statement
+                          ,
+                          schema_change_operation.proto_descriptor_bytes
                           ,
                           schema_change_operation.database_dialect));
 
@@ -1027,6 +1062,8 @@ absl::Status SchemaUpdaterImpl::InitColumnNameAndTypesFromTable(
           const zetasql::Type* type,
           DDLColumnTypeToGoogleSqlType(ddl_column,
                                        type_factory_
+                                       ,
+                                       latest_schema_->proto_bundle().get()
                                        ));
       name_and_types->emplace_back(ddl_column.column_name(), type);
     }
@@ -1142,6 +1179,8 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
       const zetasql::Type* column_type,
       DDLColumnTypeToGoogleSqlType(ddl_column,
                                    type_factory_
+                                   ,
+                                   latest_schema_->proto_bundle().get()
                                    ));
   modifier->set_type(column_type);
 
@@ -1165,12 +1204,8 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
           table->Name(), ddl_column.column_name(), s.message());
     }
   } else if (ddl_column.has_generated_column()) {
-    if (!ddl_column.generated_column().stored()) {
-      return error::NonStoredGeneratedColumnUnsupported(
-          ddl_column.column_name());
-    }
-
     std::string expression = ddl_column.generated_column().expression();
+
     if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
       ZETASQL_ASSIGN_OR_RETURN(expression, TranslatePGExpression(
                                        ddl_column.generated_column(), table,
@@ -1217,6 +1252,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
       }
       modifier->add_dependent_column_name(column_name);
     }
+    modifier->set_stored(ddl_column.generated_column().stored());
   }
 
   if (!is_generated && !has_default_value) {
@@ -2158,6 +2194,22 @@ absl::Status SchemaUpdaterImpl::CreateRowDeletionPolicy(
   return absl::OkStatus();
 }
 
+absl::StatusOr<std::shared_ptr<const ProtoBundle>>
+SchemaUpdaterImpl::CreateProtoBundle(
+    const ddl::CreateProtoBundle& ddl_proto_bundle,
+    absl::string_view proto_descriptor_bytes) {
+  ZETASQL_ASSIGN_OR_RETURN(auto proto_bundle_builder,
+                   ProtoBundle::Builder::New(proto_descriptor_bytes));
+  auto insert_types = ddl_proto_bundle.insert_type();
+  std::vector<std::string> insert_type_names;
+  insert_type_names.reserve(insert_types.size());
+  for (int i = 0; i < insert_types.size(); ++i) {
+    insert_type_names.push_back(insert_types.at(i).source_name());
+  }
+  ZETASQL_RETURN_IF_ERROR(proto_bundle_builder->InsertTypes(insert_type_names));
+  return proto_bundle_builder->Build();
+}
+
 absl::Status SchemaUpdaterImpl::CreateTable(
     const ddl::CreateTable& ddl_table,
     const database_api::DatabaseDialect& dialect) {
@@ -2300,21 +2352,31 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
   return column;
 }
 
+absl::Status SchemaUpdaterImpl::AddSearchIndexColumnsByName(
+    const std::string& column_name, const Table* indexed_table,
+    bool is_null_filtered, std::vector<const Column*>& columns,
+    Table::Builder& builder) {
+  const Column* column = builder.get()->FindColumn(column_name);
+  // Skip already added columns
+  if (column == nullptr) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        column, CreateIndexDataTableColumn(indexed_table, column_name,
+                                           builder.get(), is_null_filtered));
+    builder.add_column(column);
+  }
+  columns.push_back(column);
+
+  return absl::OkStatus();
+}
+
 absl::Status SchemaUpdaterImpl::AddSearchIndexColumns(
     const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>& key_parts,
     const Table* indexed_table, bool is_null_filtered,
     std::vector<const Column*>& columns, Table::Builder& builder) {
   for (const ddl::KeyPartClause& ddl_key_part : key_parts) {
     const std::string& column_name = ddl_key_part.key_name();
-    const Column* column = builder.get()->FindColumn(column_name);
-    // Skip already added columns
-    if (column == nullptr) {
-      ZETASQL_ASSIGN_OR_RETURN(
-          column, CreateIndexDataTableColumn(indexed_table, column_name,
-                                             builder.get(), is_null_filtered));
-      builder.add_column(column);
-    }
-    columns.push_back(column);
+    ZETASQL_RETURN_IF_ERROR(AddSearchIndexColumnsByName(
+        column_name, indexed_table, is_null_filtered, columns, builder));
   }
 
   return absl::OkStatus();
@@ -2953,9 +3015,9 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
     }
     return AlterNode<View>(existing_view,
                            [&](View::Editor* editor) -> absl::Status {
-                             // Just replace the view definition completely. The
-                             // temp instance inside builder will be cleaned up
-                             // when the builder goes out of scope.
+                             // Just replace the view definition completely.
+                             // The temp instance inside builder will be
+                             // cleaned up when the builder goes out of scope.
                              editor->copy_from(builder.get());
                              return absl::OkStatus();
                            });
@@ -3044,8 +3106,9 @@ absl::Status SchemaUpdaterImpl::ValidateSequenceOptions(
 
   std::optional<int64_t> skip_range_min, skip_range_max;
   if (current_sequence != nullptr) {
-    // We are altering the sequence to set options. So we're loading the current
-    // values of these options to compare against the new values we're seeing.
+    // We are altering the sequence to set options. So we're loading the
+    // current values of these options to compare against the new values we're
+    // seeing.
     skip_range_min = current_sequence->skip_range_min();
     skip_range_max = current_sequence->skip_range_max();
   }
@@ -3558,6 +3621,117 @@ absl::Status SchemaUpdaterImpl::AlterInterleaveAction(
   });
 }
 
+
+absl::StatusOr<const zetasql::Type*>
+SchemaUpdaterImpl::GetProtoTypeFromBundle(const zetasql::Type* type,
+                                          const ProtoBundle* proto_bundle) {
+  ZETASQL_RET_CHECK(type->IsProto() || type->IsEnum());
+  auto ddl_type = GoogleSqlTypeToDDLColumnType(type);
+  return DDLColumnTypeToGoogleSqlType(ddl_type, type_factory_, proto_bundle);
+}
+
+absl::Status SchemaUpdaterImpl::AlterProtoColumnType(
+    const Column* column, const ProtoBundle* proto_bundle,
+    Column::Editor* editor) {
+  const zetasql::Type* type = column->GetType();
+  ZETASQL_RET_CHECK(proto_bundle != nullptr &&
+            (type->IsProto() || type->IsEnum() || type->IsArray()));
+
+  if (type->IsArray()) {
+    const zetasql::Type* element_type = type->AsArray()->element_type();
+    ZETASQL_RET_CHECK(element_type->IsProto() || element_type->IsEnum());
+    ZETASQL_ASSIGN_OR_RETURN(auto updated_element_type,
+                     GetProtoTypeFromBundle(element_type, proto_bundle));
+    const zetasql::Type* updated_array_type;
+    ZETASQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(updated_element_type,
+                                                 &updated_array_type));
+    editor->set_type(updated_array_type);
+    return absl::OkStatus();
+  }
+
+  ZETASQL_ASSIGN_OR_RETURN(auto updated_type,
+                   GetProtoTypeFromBundle(type, proto_bundle));
+  editor->set_type(updated_type);
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AlterProtoColumnTypes(
+    const ProtoBundle* proto_bundle,
+    const ddl::AlterProtoBundle& ddl_alter_proto_bundle) {
+  ZETASQL_RET_CHECK_NE(proto_bundle, nullptr);
+  // Return if no types are being updated
+  if (ddl_alter_proto_bundle.update_type().empty()) return absl::OkStatus();
+  absl::flat_hash_set<std::string> update_types;
+  for (const auto& type : ddl_alter_proto_bundle.update_type()) {
+    update_types.insert(type.source_name());
+  }
+  const auto& tables = latest_schema_->tables();
+  for (const auto& table : tables) {
+    auto columns = table->columns();
+    for (const Column* column : columns) {
+      const zetasql::Type* column_type = column->GetType();
+      if (column_type->IsArray()) {
+        column_type = column_type->AsArray()->element_type();
+      }
+      if (!column_type->IsProto() && !column_type->IsEnum()) continue;
+      // Types not in alter proto bundle do not require edits
+      std::string type_name =
+          column_type->IsProto()
+              ? column_type->AsProto()->descriptor()->full_name()
+              : column_type->AsEnum()->enum_descriptor()->full_name();
+      if (!update_types.contains(type_name)) {
+        continue;
+      }
+      ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+          column,
+          [this, &column,
+           &proto_bundle](Column::Editor* editor) -> absl::Status {
+            return AlterProtoColumnType(column, proto_bundle, editor);
+          }));
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::StatusOr<std::shared_ptr<const ProtoBundle>>
+SchemaUpdaterImpl::AlterProtoBundle(
+    const ddl::AlterProtoBundle& ddl_alter_proto_bundle,
+    absl::string_view proto_descriptor_bytes) {
+  if (latest_schema_->proto_bundle()->empty()) {
+    return absl::FailedPreconditionError(
+        "Proto bundle does not yet exist; cannot alter it");
+  }
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto proto_bundle_builder,
+      ProtoBundle::Builder::New(proto_descriptor_bytes,
+                                latest_schema_->proto_bundle().get()));
+  auto insert_types = ddl_alter_proto_bundle.insert_type();
+  std::vector<std::string> insert_type_names;
+  insert_type_names.reserve(insert_types.size());
+  for (int i = 0; i < insert_types.size(); ++i) {
+    insert_type_names.push_back(insert_types.at(i).source_name());
+  }
+  ZETASQL_RETURN_IF_ERROR(proto_bundle_builder->InsertTypes(insert_type_names));
+
+  auto update_types = ddl_alter_proto_bundle.update_type();
+  std::vector<std::string> update_type_names;
+  update_type_names.reserve(update_types.size());
+  for (int i = 0; i < update_types.size(); ++i) {
+    update_type_names.push_back(update_types.at(i).source_name());
+  }
+  ZETASQL_RETURN_IF_ERROR(proto_bundle_builder->UpdateTypes(update_type_names));
+
+  auto delete_types = ddl_alter_proto_bundle.delete_type();
+  ZETASQL_RETURN_IF_ERROR(proto_bundle_builder->DeleteTypes(
+      std::vector(delete_types.begin(), delete_types.end())));
+
+  ZETASQL_ASSIGN_OR_RETURN(auto proto_bundle, proto_bundle_builder->Build());
+  ZETASQL_RETURN_IF_ERROR(
+      AlterProtoColumnTypes(proto_bundle.get(), ddl_alter_proto_bundle));
+  return proto_bundle;
+}
+
 absl::Status SchemaUpdaterImpl::AddCheckConstraint(
     const ddl::CheckConstraint& ddl_check_constraint, const Table* table) {
   return AlterNode<Table>(table, [&](Table::Editor* editor) -> absl::Status {
@@ -3711,6 +3885,8 @@ absl::StatusOr<Model::ModelColumn> SchemaUpdaterImpl::CreateModelColumn(
       const zetasql::Type* column_type,
       DDLColumnTypeToGoogleSqlType(ddl_column,
                                    type_factory_
+                                   ,
+                                   latest_schema_->proto_bundle().get()
                                    ));
   if (ddl_column.not_null()) {
     return error::ModelColumnNotNull(model->Name(), column_name);
@@ -3873,10 +4049,21 @@ absl::Status SchemaUpdaterImpl::DropModel(const ddl::DropModel& drop_model) {
   return DropNode(model);
 }
 
+absl::StatusOr<std::shared_ptr<const ProtoBundle>>
+SchemaUpdaterImpl::DropProtoBundle() {
+  if (latest_schema_->proto_bundle()->empty()) {
+    return absl::FailedPreconditionError(
+        "Proto bundle does not yet exist; cannot drop it");
+  }
+  return ProtoBundle::CreateEmpty();
+}
+
 const Schema* EmptySchema(database_api::DatabaseDialect dialect) {
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
     static const Schema* empty_pg_schema =
         new Schema(SchemaGraph::CreateEmpty()
+                   ,
+                   ProtoBundle::CreateEmpty()
                    ,
                    dialect);
     return empty_pg_schema;

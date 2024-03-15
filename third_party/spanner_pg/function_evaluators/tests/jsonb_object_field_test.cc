@@ -44,41 +44,41 @@ using spangres::datatypes::CreatePgJsonbValue;
 using ::zetasql_base::testing::IsOkAndHolds;
 using ::zetasql_base::testing::StatusIs;
 
-static zetasql::Value CreatePgJsonBNullValue() {
+static zetasql::Value CreatePgJsonbNullValue() {
   static const zetasql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
   return zetasql::values::Null(gsql_pg_jsonb);
 }
 
-class JsonBObjectFieldTest : public PgEvaluatorTest {};
+class JsonbObjectFieldTest : public PgEvaluatorTest {};
 
-TEST_F(JsonBObjectFieldTest, ReturnsJsonbValue) {
-  EXPECT_THAT(JsonBObjectField(R"({"a": "string val"})", "a"),
+TEST_F(JsonbObjectFieldTest, ReturnsJsonbValue) {
+  EXPECT_THAT(JsonbObjectField(R"({"a": "string val"})", "a"),
               IsOkAndHolds(*CreatePgJsonbValue(R"("string val")")));
-  EXPECT_THAT(JsonBObjectField(R"({"a": {"b": "string_val"}})", "a"),
+  EXPECT_THAT(JsonbObjectField(R"({"a": {"b": "string_val"}})", "a"),
               IsOkAndHolds(*CreatePgJsonbValue(R"({"b": "string_val"})")));
-  EXPECT_THAT(JsonBObjectField(R"([1.00, "string val"])", "a"),
-              IsOkAndHolds(CreatePgJsonBNullValue()));
-  EXPECT_THAT(JsonBObjectField(R"({"a": "string val"})", "no match"),
-              IsOkAndHolds(CreatePgJsonBNullValue()));
-  EXPECT_THAT(JsonBObjectField(R"({"a": ""})", "a"),
+  EXPECT_THAT(JsonbObjectField(R"([1.00, "string val"])", "a"),
+              IsOkAndHolds(CreatePgJsonbNullValue()));
+  EXPECT_THAT(JsonbObjectField(R"({"a": "string val"})", "no match"),
+              IsOkAndHolds(CreatePgJsonbNullValue()));
+  EXPECT_THAT(JsonbObjectField(R"({"a": ""})", "a"),
               IsOkAndHolds(*CreatePgJsonbValue(R"("")")));
-  EXPECT_THAT(JsonBObjectField(R"({"a": null})", "a"),
+  EXPECT_THAT(JsonbObjectField(R"({"a": null})", "a"),
               IsOkAndHolds(*CreatePgJsonbValue("null")));
-  EXPECT_THAT(JsonBObjectField(R"({"a": true})", "a"),
+  EXPECT_THAT(JsonbObjectField(R"({"a": true})", "a"),
               IsOkAndHolds(*CreatePgJsonbValue("true")));
-  EXPECT_THAT(JsonBObjectField(R"({"a": false})", "a"),
+  EXPECT_THAT(JsonbObjectField(R"({"a": false})", "a"),
               IsOkAndHolds(*CreatePgJsonbValue("false")));
-  EXPECT_THAT(JsonBObjectField(R"({"a": 1})", "a"),
+  EXPECT_THAT(JsonbObjectField(R"({"a": 1})", "a"),
               IsOkAndHolds(*CreatePgJsonbValue("1")));
-  EXPECT_THAT(JsonBObjectField(R"({"a": 1.5})", "a"),
+  EXPECT_THAT(JsonbObjectField(R"({"a": 1.5})", "a"),
               IsOkAndHolds(*CreatePgJsonbValue("1.5")));
 }
 
-TEST_F(JsonBObjectFieldTest, ReturnsErrorWhenInvalidArgumentIsGiven) {
-  EXPECT_THAT(JsonBObjectField("a", "a"),
+TEST_F(JsonbObjectFieldTest, ReturnsErrorWhenInvalidArgumentIsGiven) {
+  EXPECT_THAT(JsonbObjectField("a", "a"),
               StatusIs(absl::StatusCode::kInvalidArgument));
-  EXPECT_THAT(JsonBObjectField("", "a"),
+  EXPECT_THAT(JsonbObjectField("", "a"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 

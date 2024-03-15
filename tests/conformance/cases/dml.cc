@@ -46,7 +46,11 @@ class DmlTest
     : public DatabaseTest,
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
-  DmlTest() : feature_flags_({.enable_postgresql_interface = true}) {}
+  // TODO: b/296685434 - Remove `enable_upsert_queries` after it is enabled by
+  // default.
+  DmlTest()
+      : feature_flags_({.enable_postgresql_interface = true,
+                        .enable_upsert_queries = true}) {}
 
   void SetUp() override {
     dialect_ = GetParam();

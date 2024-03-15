@@ -32,6 +32,7 @@
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/errors.h"
+#include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
@@ -322,7 +323,10 @@ TEST_P(ForeignKeyTest, CreateTableWithForeignKeyOnDeleteNoAction) {
                               "IDX_T_X_Y_U_5AD6E41B495C5BB9", "NO ACTION")));
 }
 
-TEST_P(SchemaUpdaterTest, CreateTableWithForeignKeyActionWhenFlagDisabled) {
+TEST_P(ForeignKeyTest, CreateTableWithForeignKeyActionWhenFlagDisabled) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_fk_delete_cascade_action = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(CreateSchema({
                   R"(
       CREATE TABLE T (
@@ -369,6 +373,9 @@ TEST_P(SchemaUpdaterTest,
 
 TEST_P(SchemaUpdaterTest,
        CreateTableWithUnnamedForeignKeyActionWhenFlagDisabled) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_fk_delete_cascade_action = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   EXPECT_THAT(CreateSchema({
                   R"(
       CREATE TABLE T (

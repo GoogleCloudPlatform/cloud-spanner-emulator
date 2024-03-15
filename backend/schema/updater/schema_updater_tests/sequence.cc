@@ -72,6 +72,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceNotSupportedWhenFlagIsOff) {
   EXPECT_THAT(CreateSchema({R"(
       CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
       )"},
+                           /*proto_descriptor_bytes=*/"",
                            /*dialect=*/POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false),
               StatusIs(error::SequenceNotSupportedInPostgreSQL()));
@@ -79,6 +80,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceNotSupportedWhenFlagIsOff) {
   EXPECT_THAT(CreateSchema({R"(
       ALTER SEQUENCE myseq RESTART COUNTER 1
       )"},
+                           /*proto_descriptor_bytes=*/"",
                            /*dialect=*/POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false),
               StatusIs(error::SequenceNotSupportedInPostgreSQL()));
@@ -86,6 +88,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceNotSupportedWhenFlagIsOff) {
   EXPECT_THAT(CreateSchema({R"(
       DROP SEQUENCE myseq
       )"},
+                           /*proto_descriptor_bytes=*/"",
                            /*dialect=*/POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false),
               StatusIs(error::SequenceNotSupportedInPostgreSQL()));
@@ -98,6 +101,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_Basic) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -137,6 +141,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_BasicWithDefaultValue) {
             value bigint
           )
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -173,6 +178,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_AllOptions) {
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
             SKIP RANGE 1 1000 START COUNTER 5000;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -260,6 +266,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_NegativeStartWithCounter) {
     EXPECT_THAT(CreateSchema({R"(
         CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE START COUNTER -1
         )"},
+                             /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 StatusIs(error::InvalidSequenceStartWithCounterValue()));
@@ -280,6 +287,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_NegativeSkippedRange) {
         CreateSchema({R"(
         CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE SKIP RANGE -100 -1
         )"},
+                     /*proto_descriptor_bytes=*/"",
                      /*dialect=*/POSTGRESQL,
                      /*use_gsql_to_pg_translation=*/false),
         StatusIs(error::SequenceSkippedRangeHasAtleastOnePositiveNumber()));
@@ -301,6 +309,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_InvaliSkippedRange) {
     EXPECT_THAT(CreateSchema({R"(
         CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE SKIP RANGE 100 1
         )"},
+                             /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 StatusIs(error::SequenceSkipRangeMinLargerThanMax()));
@@ -323,6 +332,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_DuplicateSequenceGivesError) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -340,6 +350,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_DuplicateSequenceGivesError) {
         CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
           SKIP RANGE 1 1000 START COUNTER 500
         )"},
+                     /*proto_descriptor_bytes=*/"",
                      /*dialect=*/POSTGRESQL,
                      /*use_gsql_to_pg_translation=*/false),
         StatusIs(error::SchemaObjectAlreadyExists("Sequence", "myseq")));
@@ -374,6 +385,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -395,6 +407,7 @@ TEST_P(SequenceSchemaUpdaterTest,
         CREATE SEQUENCE IF NOT EXISTS myseq BIT_REVERSED_POSITIVE
           SKIP RANGE 1 1000 START COUNTER 500
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -418,6 +431,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_AlterNonExistsSequence) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -432,6 +446,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_AlterNonExistsSequence) {
     EXPECT_THAT(UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE nonexist SKIP RANGE 1 1000
         )"},
+                             /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 StatusIs(error::SequenceNotFound("nonexist")));
@@ -453,6 +468,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_WithIfExists) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -468,6 +484,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_WithIfExists) {
                          UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE IF EXISTS nonexist SKIP RANGE 1 1000
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -487,6 +504,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_SetAllOptions) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -502,6 +520,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_SetAllOptions) {
                          UpdateSchema(schema.get(), {R"(
           ALTER SEQUENCE myseq SKIP RANGE 1 1000 RESTART COUNTER 5000;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -529,6 +548,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeStartWithCounter) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -553,6 +573,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeStartWithCounter) {
                          UpdateSchema(schema.get(), {R"(
           ALTER SEQUENCE myseq RESTART COUNTER 5000;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -578,6 +599,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeAllOptions) {
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
             SKIP RANGE 1 1000 START COUNTER 2000 ;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -602,6 +624,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeAllOptions) {
                          UpdateSchema(schema.get(), {R"(
           ALTER SEQUENCE myseq SKIP RANGE 1000 10000 RESTART COUNTER 5000;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -630,6 +653,7 @@ TEST_P(SequenceSchemaUpdaterTest,
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
             SKIP RANGE 1 1000 START COUNTER 2000 ;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -654,6 +678,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                          UpdateSchema(schema.get(), {R"(
           ALTER SEQUENCE myseq RESTART COUNTER 3456;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -682,6 +707,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ClearAllOptions) {
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
             SKIP RANGE 1 1000 START COUNTER 2000 ;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -723,6 +749,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeOneSkipRangeValue) {
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
             SKIP RANGE 1 1000 START COUNTER 2000 ;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -747,6 +774,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeOneSkipRangeValue) {
                          UpdateSchema(schema.get(), {R"(
           ALTER SEQUENCE myseq SKIP RANGE 1 10000;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -802,6 +830,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_NegativeStartWithCounter) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -816,6 +845,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_NegativeStartWithCounter) {
     EXPECT_THAT(UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq RESTART COUNTER -1
         )"},
+                             /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 StatusIs(error::InvalidSequenceStartWithCounterValue()));
@@ -836,6 +866,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_NegativeSkippedRange) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -851,6 +882,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_NegativeSkippedRange) {
         UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq SKIP RANGE -100 -1
         )"},
+                     /*proto_descriptor_bytes=*/"",
                      /*dialect=*/POSTGRESQL,
                      /*use_gsql_to_pg_translation=*/false),
         StatusIs(error::SequenceSkippedRangeHasAtleastOnePositiveNumber()));
@@ -873,6 +905,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_InvaliSkippedRange) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -887,6 +920,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_InvaliSkippedRange) {
     EXPECT_THAT(UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq SKIP RANGE 100 1
         )"},
+                             /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 StatusIs(error::SequenceSkipRangeMinLargerThanMax()));
@@ -908,6 +942,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_Basic) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -923,6 +958,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_Basic) {
                          UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -941,6 +977,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropAndCreateAgain) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -956,6 +993,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropAndCreateAgain) {
                          UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -971,6 +1009,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropAndCreateAgain) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -991,6 +1030,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropNonExistSequence) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1005,6 +1045,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropNonExistSequence) {
     EXPECT_THAT(UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE notmyseq
     )"},
+                             /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 StatusIs(error::SequenceNotFound("notmyseq")));
@@ -1026,6 +1067,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                          CreateSchema({R"(
           CREATE SEQUENCE IF NOT EXISTS myseq BIT_REVERSED_POSITIVE;
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1041,6 +1083,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                          UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE IF EXISTS notmyseq
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1066,6 +1109,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndDropColumn) {
             value bigint
           )
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1130,6 +1174,7 @@ TEST_P(SequenceSchemaUpdaterTest,
             value bigint
           )
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1162,6 +1207,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                          UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq RESTART COUNTER 100
       )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1211,6 +1257,7 @@ TEST_P(SequenceSchemaUpdaterTest,
             value bigint
           )
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1275,6 +1322,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoColumnDefaultValues) {
             value bigint
           )
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1369,6 +1417,7 @@ TEST_P(SequenceSchemaUpdaterTest,
             value bigint
           )
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1450,6 +1499,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_AlterColumnToUseSequence) {
             value bigint
           )
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1481,6 +1531,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_AlterColumnToUseSequence) {
         ALTER TABLE test_table ALTER COLUMN int64_col SET DEFAULT
           nextval('myseq')
       )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1515,6 +1566,7 @@ TEST_P(SequenceSchemaUpdaterTest,
             value bigint
           )
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1554,6 +1606,7 @@ TEST_P(SequenceSchemaUpdaterTest,
         ALTER TABLE test_table ALTER COLUMN int64_col SET DEFAULT
           nextval('myseq') + nextval('myseq2')
       )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1581,6 +1634,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1598,6 +1652,7 @@ TEST_P(SequenceSchemaUpdaterTest,
             value bigint
           )
         )"},
+                             /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 zetasql_base::testing::StatusIs(
@@ -1632,6 +1687,7 @@ TEST_P(SequenceSchemaUpdaterTest,
             value bigint
           )
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1657,6 +1713,7 @@ TEST_P(SequenceSchemaUpdaterTest,
           ALTER TABLE test_table ALTER COLUMN second_col SET DEFAULT
               nextval('nonexist')
         )"},
+                             /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 zetasql_base::testing::StatusIs(
@@ -1696,6 +1753,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndDropView) {
           CREATE VIEW myview SQL SECURITY INVOKER AS
             SELECT spanner.get_internal_sequence_state('myseq') AS myseq_state
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1758,6 +1816,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateViewQueryTable) {
             SELECT spanner.get_internal_sequence_state('myseq') AS myseq_state,
                    t.int64_col AS col FROM test_table t
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1822,6 +1881,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndReplaceView) {
           CREATE VIEW myview SQL SECURITY INVOKER AS
             SELECT spanner.get_internal_sequence_state('myseq') AS myseq_state
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1863,6 +1923,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndReplaceView) {
                          UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
       )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1895,6 +1956,7 @@ TEST_P(SequenceSchemaUpdaterTest,
           CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS
             SELECT spanner.get_internal_sequence_state('myseq') AS myseq_state
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1924,6 +1986,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                          UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq RESTART COUNTER 100
       )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1950,6 +2013,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                          UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
       )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -1982,6 +2046,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoViewsUseOneSequence) {
           CREATE OR REPLACE VIEW myview2 SQL SECURITY INVOKER AS
           SELECT spanner.get_internal_sequence_state('myseq') AS myseq_state
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -2031,6 +2096,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoViewsUseOneSequence) {
                          UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
       )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -2077,6 +2143,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoSequencesInOneView) {
             SELECT spanner.get_internal_sequence_state('myseq') AS myseq_state,
                    spanner.get_internal_sequence_state('myseq2') AS myseq2_state
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -2132,6 +2199,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoSequencesInOneView) {
                          UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
       )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -2161,6 +2229,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ReplaceViewToUseSequence) {
                                        R"(
           CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -2188,6 +2257,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ReplaceViewToUseSequence) {
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS
           SELECT spanner.get_internal_sequence_state('myseq') AS myseq_state
       )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -2212,6 +2282,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ViewUsesNonExistSequence) {
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -2227,6 +2298,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ViewUsesNonExistSequence) {
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS
           SELECT spanner.get_internal_sequence_state('nonexist') AS myseq_state
         )"},
+                             /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 zetasql_base::testing::StatusIs(

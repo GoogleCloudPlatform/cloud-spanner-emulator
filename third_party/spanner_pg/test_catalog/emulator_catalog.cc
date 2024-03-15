@@ -138,7 +138,7 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
   //       date_value DATE,
   //       numeric_value PG.NUMERIC,
   //       jsonb_value PG.JSONB,
-  //       float_value DOUBLE,
+  //       float_value FLOAT32,
   //     ) PRIMARY KEY(int64_value)
   //   )",
   Table::Builder tb = table_builder("AllSpangresTypes");
@@ -176,9 +176,8 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
           postgres_translator::spangres::types::PgJsonbMapping()->mapped_type())
           .build();
 
-  // TODO: b/299250195 - change to float when it is available in the emulator.
   std::unique_ptr<const Column> float_value =
-      column_builder("float_value", tb.get(), type_factory.get_double()).build();
+      column_builder("float_value", tb.get(), type_factory.get_float()).build();
 
   std::unique_ptr<const KeyColumn> int64_value_primary =
       KeyColumn::Builder().set_column(int64_value.get()).build();
@@ -223,7 +222,7 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
   //       date_array ARRAY<DATE>,
   //       numeric_array ARRAY<PG.NUMERIC>,
   //       jsonb_array ARRAY<PG.JSONB>,
-  //       float_array ARRAY<DOUBLE>,
+  //       float_array ARRAY<FLOAT>,
   //     ) PRIMARY KEY(key)
   //   )",
   Table::Builder tb = table_builder("ArrayTypes");
@@ -253,11 +252,11 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
       column_builder("bytes_array", tb.get(), bytes_array_type)
           .build();
   const zetasql::Type* timestamp_array_type =
-      get_array_type(type_factory, type_factory.get_bytes()).value();
+      get_array_type(type_factory, type_factory.get_timestamp()).value();
   std::unique_ptr<const Column> timestamp_array =
       column_builder("timestamp_array", tb.get(), timestamp_array_type).build();
   const zetasql::Type* date_array_type =
-      get_array_type(type_factory, type_factory.get_bytes()).value();
+      get_array_type(type_factory, type_factory.get_date()).value();
   std::unique_ptr<const Column> date_array =
       column_builder("date_array", tb.get(), date_array_type).build();
 
@@ -276,9 +275,8 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
                          ->mapped_type())
           .build();
 
-  // TODO: b/299250195 - change to float when it is available in the emulator.
   const zetasql::Type* float_array_type =
-      get_array_type(type_factory, type_factory.get_double()).value();
+      get_array_type(type_factory, type_factory.get_float()).value();
   std::unique_ptr<const Column> float_array =
       column_builder("float_array", tb.get(), float_array_type).build();
 
@@ -408,13 +406,18 @@ void create_many_columns_table(const std::string table_name,
       column_builder("four", tb.get(), type_factory.get_int64()).build();
   std::unique_ptr<const Column> five_column =
       column_builder("five", tb.get(), type_factory.get_int64()).build();
-  std::unique_ptr<const Table> table = tb.add_column(one_column.get())
-                                           .add_column(two_column.get())
-                                           .add_column(three_column.get())
-                                           .add_column(four_column.get())
-                                           .add_column(five_column.get())
-                                           .build();
+  std::unique_ptr<const KeyColumn> primary_key_constraint =
+      KeyColumn::Builder().set_column(one_column.get()).build();
+  std::unique_ptr<const Table> table =
+      tb.add_column(one_column.get())
+          .add_column(two_column.get())
+          .add_column(three_column.get())
+          .add_column(four_column.get())
+          .add_column(five_column.get())
+          .add_key_column(primary_key_constraint.get())
+          .build();
   graph->Add(std::move(one_column));
+  graph->Add(std::move(primary_key_constraint));
   graph->Add(std::move(two_column));
   graph->Add(std::move(three_column));
   graph->Add(std::move(four_column));

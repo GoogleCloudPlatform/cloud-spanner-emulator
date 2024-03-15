@@ -97,6 +97,7 @@
 #include "third_party/spanner_pg/src/include/parser/parse_agg.h"
 #include "third_party/spanner_pg/src/include/parser/parse_clause.h"
 #include "third_party/spanner_pg/src/include/parser/parse_coerce.h"
+#include "third_party/spanner_pg/src/include/parser/parse_collate.h"
 #include "third_party/spanner_pg/src/include/parser/parse_expr.h"
 #include "third_party/spanner_pg/src/include/parser/parse_func.h"
 #include "third_party/spanner_pg/src/include/parser/parse_oper.h"
@@ -105,9 +106,6 @@
 #include "third_party/spanner_pg/src/include/parser/parse_type.h"
 #include "third_party/spanner_pg/src/include/utils/array.h"
 #include "third_party/spanner_pg/src/include/utils/builtins.h"
-// TODO: remove catcache when FuncnameGetCandidatesSpangres is
-// done with it.
-#include "third_party/spanner_pg/src/include/utils/catcache.h"
 #include "third_party/spanner_pg/src/include/utils/date.h"
 #include "third_party/spanner_pg/src/include/utils/datetime.h"
 #include "third_party/spanner_pg/src/include/utils/elog.h"

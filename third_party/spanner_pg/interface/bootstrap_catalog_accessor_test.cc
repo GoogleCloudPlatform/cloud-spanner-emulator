@@ -44,6 +44,7 @@ namespace postgres_translator {
 
 class PgCollationDataTest : public testing::TestWithParam<absl::string_view> {};
 class PgNamespaceDataTest : public testing::TestWithParam<absl::string_view> {};
+class PgProcDataTest : public testing::TestWithParam<absl::string_view> {};
 class PgTypeDataTest : public testing::TestWithParam<absl::string_view> {};
 
 
@@ -79,9 +80,6 @@ INSTANTIATE_TEST_SUITE_P(
     )pb"));
 
 TEST_F(PgCollationDataTest, GetPgCollationDataFromBootstrapFailure) {
-  // POSIX is an unsupported PG collation.
-  ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), "POSIX"),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), "invalid"),
               zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
@@ -96,9 +94,7 @@ TEST_P(PgNamespaceDataTest, GetPgNamespaceDataFromBootstrapSuccess) {
 
 TEST_F(PgNamespaceDataTest, GetPgNamespaceDataFromBootstrapFailure) {
   ASSERT_THAT(GetPgNamespaceDataFromBootstrap(GetPgBootstrapCatalog(),
-                                              "pg_toast"),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
-  ASSERT_THAT(GetPgNamespaceDataFromBootstrap(GetPgBootstrapCatalog(), "invalid"),
+                                              "invalid"),
               zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
@@ -118,6 +114,64 @@ INSTANTIATE_TEST_SUITE_P(
       oid: 50000
       nspname: "spanner"
     )pb"));
+
+TEST_P(PgProcDataTest, GetPgProcDataFromBootstrapSuccess) {
+  PgProcData expected = ParseTextProtoOrDie(GetParam());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      PgProcData actual,
+      GetPgProcDataFromBootstrap(GetPgBootstrapCatalog(), expected.oid()));
+  EXPECT_THAT(actual, testing::EqualsProto(expected));
+}
+
+TEST_F(PgProcDataTest, GetPgProcDataFromBootstrapFailure) {
+  // default (100) is a collation, not a proc.
+  ASSERT_THAT(
+      GetPgProcDataFromBootstrap(GetPgBootstrapCatalog(), 100),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+}
+
+INSTANTIATE_TEST_SUITE_P(PgProcDataTestData, PgProcDataTest,
+                         testing::Values(
+                             R"pb(
+                               oid: 1973
+                               proname: "div"
+                               pronamespace: 11
+                               prorows: 0
+                               provariadic: 0
+                               prokind: 'f'
+                               proretset: false
+                               provolatile: 'i'
+                               pronargs: 2
+                               prorettype: 1700
+                               proargtypes: 1700
+                               proargtypes: 1700
+                             )pb",
+                             R"pb(
+                               oid: 3058
+                               proname: "concat"
+                               pronamespace: 11
+                               prorows: 0
+                               provariadic: 2276
+                               prokind: 'f'
+                               proretset: false
+                               provolatile: 's'
+                               pronargs: 1
+                               prorettype: 25
+                               proargtypes: 2276
+                             )pb",
+                             R"pb(
+                               oid: 3219
+                               proname: "jsonb_array_elements"
+                               pronamespace: 11
+                               prorows: 100
+                               provariadic: 0
+                               prokind: 'f'
+                               proretset: true
+                               provolatile: 'i'
+                               pronargs: 1
+                               prorettype: 3802
+                               proargtypes: 3802
+                             )pb"));
 
 TEST_P(PgTypeDataTest, GetPgTypeDataFromBootstrapNameSuccess) {
   PgTypeData expected = ParseTextProtoOrDie(GetParam());
@@ -167,17 +221,11 @@ INSTANTIATE_TEST_SUITE_P(
     )pb"));
 
 TEST_F(PgTypeDataTest, GetPgTypeDataFromBootstrapNameFailure) {
-  // xid is an unsupported PG type.
-  ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), "xid"),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), "invalid"),
               zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(PgTypeDataTest, GetPgTypeDataFromBootstrapOidFailure) {
-  // xml (142) is an unsupported PG type.
-  ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), 142),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   // default (100) is a collation, not a type.
   ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), 100),
               zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));

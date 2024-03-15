@@ -84,6 +84,7 @@ static auto kTypeMap =
     {google::spanner::emulator::backend::ddl::ColumnDefinition::BOOL, "boolean"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::BYTES, "bytea"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::DOUBLE, "double precision"},
+    {google::spanner::emulator::backend::ddl::ColumnDefinition::FLOAT, "real"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::PG_NUMERIC, "numeric"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::INT64, "bigint"},
     // Forward translation maps both varchar and text to the STRING type
@@ -187,6 +188,8 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
       const google::spanner::emulator::backend::ddl::AlterChangeStream& statement) const;
   std::string PrintDropChangeStream(
       const google::spanner::emulator::backend::ddl::DropChangeStream& statement) const;
+  absl::StatusOr<std::string> PrintRenameTable(
+      const google::spanner::emulator::backend::ddl::RenameTable& statement) const;
 
   absl::StatusOr<std::vector<std::string>> WrapOutput(
       absl::StatusOr<std::string> printing_result) const;
@@ -263,6 +266,8 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
       return WrapOutput(PrintAlterSequence(statement.alter_sequence()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kDropSequence:
       return WrapOutput(PrintDropSequence(statement.drop_sequence()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kRenameTable:
+      return WrapOutput(PrintRenameTable(statement.rename_table()));
     default:
       // Ignore unsupported statements
       return StatementTranslationError("Unsupported statement");
@@ -423,6 +428,25 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
       return StrCat(alter_table, " SET ON DELETE", action);
     }
 
+    case google::spanner::emulator::backend::ddl::AlterTable::kRenameTo: {
+      std::string rename_clause = statement.rename_to().has_synonym() ?
+          " RENAME WITH SYNONYM TO " : " RENAME TO ";
+      return StrCat(alter_table, rename_clause,
+                    QuoteQualifiedIdentifier(statement.rename_to().name()));
+    }
+
+    case google::spanner::emulator::backend::ddl::AlterTable::kAddSynonym: {
+      return StrCat(
+          alter_table, " ADD SYNONYM ",
+          QuoteQualifiedIdentifier(statement.add_synonym().synonym()));
+    }
+
+    case google::spanner::emulator::backend::ddl::AlterTable::kDropSynonym: {
+      return StrCat(
+          alter_table, " DROP SYNONYM ",
+          QuoteQualifiedIdentifier(statement.drop_synonym().synonym()));
+    }
+
     default: {
       const google::protobuf::FieldDescriptor* field_descriptor =
           google::spanner::emulator::backend::ddl::AlterTable::GetDescriptor()->FindFieldByNumber(
@@ -473,6 +497,13 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateTable(
                      PrintCheckConstraint(check_constraint));
     create_table_entries.push_back(
         Substitute(pattern, check_constraint_string));
+  }
+
+  if (statement.has_synonym()) {
+    std::string synonym_string;
+    StrAppend(&synonym_string,
+              Substitute("SYNONYM($0)", QuoteIdentifier(statement.synonym())));
+    create_table_entries.push_back(Substitute(pattern, synonym_string));
   }
 
   output.push_back(absl::StrJoin(create_table_entries, ",\n"));
@@ -536,6 +567,9 @@ std::string SpangresSchemaPrinterImpl::PrintChangeStreamSetOptions(
     StrAppend(&output, " = ");
     if (item.null_value()) {
       StrAppend(&output, "NULL");
+    } else if (item.has_bool_value()) {
+      StrAppend(&output, item.bool_value() ? PGConstants::kPgTrueLiteral
+                                           : PGConstants::kPgFalseLiteral);
     } else {
       StrAppend(&output, QuoteStringLiteral(item.string_value()));
     }
@@ -660,6 +694,19 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropFunction(
   // Should never get here.
   ZETASQL_RET_CHECK_FAIL() << "Unknown Function type:"
                    << static_cast<int64_t>(statement.function_kind());
+}
+
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintRenameTable(
+    const google::spanner::emulator::backend::ddl::RenameTable& statement) const {
+  std::string output;
+  const char* sep = "";
+  for (const google::spanner::emulator::backend::ddl::RenameTable::RenameOp& op : statement.rename_op()) {
+    StrAppend(&output, sep, "ALTER TABLE ",
+              QuoteQualifiedIdentifier(op.from_name()), " RENAME TO ",
+              QuoteQualifiedIdentifier(op.to_name()));
+    sep = ", ";
+  }
+  return output;
 }
 
 namespace {
@@ -930,7 +977,8 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintType(
   if (type_name_it == kTypeMap.end()) {
     // type not found -> schema is not a valid Spangres schema
     return StatementTranslationError(
-        StrCat("Type <", google::spanner::emulator::backend::ddl::ColumnDefinition::Type_Name(type),
+        StrCat("Spanner type <",
+               google::spanner::emulator::backend::ddl::ColumnDefinition::Type_Name(type),
                "> is not supported."));
   }
   absl::string_view type_name = type_name_it->second;
@@ -1037,7 +1085,6 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
             : "";
     constraint = StrCat(" DEFAULT", expression_output);
   }
-
   StrAppend(&constraint, column.not_null() ? " NOT NULL" : "");
   ZETASQL_ASSIGN_OR_RETURN(absl::string_view printed_type, PrintType(column));
   return StrCat(QuoteIdentifier(column.column_name()), " ", printed_type,

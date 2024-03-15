@@ -56,21 +56,32 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
   options.set_name_resolution_mode(zetasql::NAME_RESOLUTION_DEFAULT);
   options.set_product_mode(zetasql::PRODUCT_EXTERNAL);
   options.SetEnabledLanguageFeatures({
-      zetasql::FEATURE_EXTENDED_TYPES, zetasql::FEATURE_NAMED_ARGUMENTS,
-      zetasql::FEATURE_NUMERIC_TYPE, zetasql::FEATURE_TABLESAMPLE,
+      zetasql::FEATURE_EXTENDED_TYPES,
+      zetasql::FEATURE_NAMED_ARGUMENTS,
+      zetasql::FEATURE_NUMERIC_TYPE,
+      zetasql::FEATURE_TABLESAMPLE,
       zetasql::FEATURE_TIMESTAMP_NANOS,
       zetasql::FEATURE_V_1_1_HAVING_IN_AGGREGATE,
       zetasql::FEATURE_V_1_1_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
       zetasql::FEATURE_V_1_1_ORDER_BY_COLLATE,
       zetasql::FEATURE_V_1_1_SELECT_STAR_EXCEPT_REPLACE,
-      zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL, zetasql::FEATURE_JSON_TYPE,
+      zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL,
+      zetasql::FEATURE_JSON_TYPE,
       zetasql::FEATURE_JSON_ARRAY_FUNCTIONS,
       zetasql::FEATURE_JSON_STRICT_NUMBER_PARSING,
+      zetasql::FEATURE_JSON_VALUE_EXTRACTION_FUNCTIONS,
+      zetasql::FEATURE_JSON_LAX_VALUE_EXTRACTION_FUNCTIONS,
       zetasql::FEATURE_V_1_3_DML_RETURNING,
       zetasql::FEATURE_V_1_4_WITH_EXPRESSION,
       zetasql::FEATURE_TABLE_VALUED_FUNCTIONS,
       zetasql::FEATURE_V_1_4_SEQUENCE_ARG,
   });
+  if (EmulatorFeatureFlags::instance().flags().enable_protos) {
+    options.EnableLanguageFeature(zetasql::FEATURE_PROTO_BASE);
+    options.EnableLanguageFeature(
+        zetasql::FEATURE_V_1_3_BRACED_PROTO_CONSTRUCTORS);
+    options.EnableLanguageFeature(zetasql::FEATURE_V_1_3_REPLACE_FIELDS);
+  }
 
   options.SetSupportedStatementKinds({
       zetasql::RESOLVED_QUERY_STMT,

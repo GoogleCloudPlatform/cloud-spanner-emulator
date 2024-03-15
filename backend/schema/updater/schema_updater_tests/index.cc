@@ -66,6 +66,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex) {
       )sql",
                                          R"sql(
         CREATE INDEX Idx2 ON T(c1) INCLUDE (c2, c3, c4))sql"},
+                                     /*proto_descriptor_bytes=*/"",
                                      /*dialect=*/POSTGRESQL,
                                      /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -238,6 +239,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_AscKeys) {
                                        R"sql(
         CREATE INDEX Idx ON T(c1, k1)
       )sql"},
+                                      /*proto_descriptor_bytes=*/"",
                                       POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -762,6 +764,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_NumericColumn) {
                         R"sql(
         CREATE INDEX Idx ON T(col2)
       )sql"},
+                    /*proto_descriptor_bytes=*/"",
                     /*dialect=*/POSTGRESQL,
                     /*use_gsql_to_pg_translation=*/false),
                 StatusIs(error::CannotCreateIndexOnColumn("idx", "col2",
@@ -805,6 +808,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_JsonColumn) {
                 R"sql(
         CREATE INDEX idx ON T(col2)
       )sql"},
+            /*proto_descriptor_bytes=*/"",
             /*dialect=*/POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false),
         StatusIs(error::CannotCreateIndexOnColumn("idx", "col2", "PG.JSONB")));

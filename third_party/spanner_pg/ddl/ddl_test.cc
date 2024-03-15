@@ -394,6 +394,50 @@ TEST_F(DdlTest, DisableCreateChangeStream) {
                   "<CREATE CHANGE STREAM> statement is not supported."));
 }
 
+TEST_F(DdlTest, DisableChangeStreamModTypeFilter) {
+  const std::string input =
+      "CREATE CHANGE STREAM change_stream FOR table1 WITH ( exclude_insert = "
+      "true, exclude_update = false, exclude_delete = null)";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements,
+          {.enable_change_streams = true,
+           .enable_change_streams_mod_type_filter_options = false});
+  EXPECT_THAT(statements, zetasql_base::testing::StatusIs(
+                              absl::StatusCode::kFailedPrecondition,
+                              "Options exclude_insert, exclude_update, and "
+                              "exclude_delete are not supported yet."));
+}
+
+TEST_F(DdlTest, DisableChangeStreamTtlDeletesFilter) {
+  const std::string input =
+      "CREATE CHANGE STREAM change_stream FOR table1 WITH ( "
+      "exclude_ttl_deletes = true)";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements,
+          {.enable_change_streams = true,
+           .enable_change_streams_ttl_deletes_filter_option = false});
+  EXPECT_THAT(statements,
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kFailedPrecondition,
+                  "Option exclude_ttl_deletes is not supported yet."));
+}
+
 TEST_F(DdlTest, CreateDatabaseForEmulator) {
   const std::string input = "CREATE DATABASE test_db";
 

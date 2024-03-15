@@ -207,8 +207,14 @@ FuncCandidateList FuncnameGetCandidates(List* names, int nargs,
 		 */
 		if (include_out_arguments)
 		{
-			ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-											errmsg("Include out arguments are not supported")));
+			/*
+			 * SPANGRES does not have support for OUT arguments.
+			 * TODO: b/329162323 - add back support for OUT arguments
+			 */
+			if (procform->prorettype != VOIDOID) {
+				ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								errmsg("Procedures with output arguments are not supported")));
+			}
 		}
 
 		if (argnames != NIL) {

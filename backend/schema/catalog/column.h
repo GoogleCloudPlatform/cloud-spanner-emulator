@@ -91,6 +91,10 @@ class Column : public SchemaNode {
         (type_->IsArray() && type_->AsArray()->element_type()->IsBytes())) {
       return declared_max_length_.value_or(limits::kMaxBytesColumnLength);
     }
+    if (type_->IsProto() ||
+        (type_->IsArray() && type_->AsArray()->element_type()->IsProto())) {
+      return declared_max_length_.value_or(limits::kMaxBytesColumnLength);
+    }
     return 0;
   }
 
@@ -98,6 +102,10 @@ class Column : public SchemaNode {
   bool is_generated() const {
     return expression_.has_value() && !has_default_value_;
   }
+
+  // Returns if a generated column is stored.
+  // Valid only if is_generated() is true.
+  bool is_stored() const { return is_stored_; }
 
   // Returns whether the column has a default value.
   bool has_default_value() const {
@@ -239,6 +247,9 @@ class Column : public SchemaNode {
 
   // List of sequences used by this column in its expression.
   std::vector<const SchemaNode*> sequences_used_;
+
+  // If a generated column is stored. Valid only if is_generated() is true.
+  bool is_stored_ = false;
 
   // The table containing the column.
   const Table* table_ = nullptr;

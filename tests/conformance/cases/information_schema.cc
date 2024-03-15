@@ -80,19 +80,21 @@ class InformationSchemaTest
            GetNameForDialect("ROLE_ROUTINE_GRANTS"),
            GetNameForDialect("TABLE_SYNONYMS"),
            GetNameForDialect("INDEX_OPTIONS"),
+           GetNameForDialect("COLUMN_PARAMETERS"),
            // Unsupported PG-specific tables.
            "applicable_roles", "enabled_roles",
            "information_schema_catalog_name"})};
 
   // Information schema columns not yet supported.
   const std::pair<std::string, Value> kUnsupportedColumns{
-      "unsupported_columns", std::vector<std::string>({})};
+      "unsupported_columns", std::vector<std::string>({"IS_HIDDEN"})};
 
   // Information schema constraints not yet supported.
   const std::pair<std::string, Value> kUnsupportedConstraints{
       "unsupported_constraints", std::vector<std::string>({
                                      "CK_IS_NOT_NULL_TABLES_TABLE_TYPE",
                                      "CK_IS_NOT_NULL_VIEWS_SECURITY_TYPE",
+                                     "CK_IS_NOT_NULL_COLUMNS_IS_HIDDEN",
                                  })};
 
   // Returns the given rows, replacing matching string patterns with their
@@ -1094,7 +1096,8 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_OPTIONS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_PRIVILEGES%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_TABLE_SYNONYMS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_INDEX_OPTIONS%')";
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_INDEX_OPTIONS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_COLUMN_PARAMETERS%')";
   }
 
   std::string query = absl::Substitute(R"(
@@ -2062,8 +2065,7 @@ TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
-// TODO: b/317897389 - Re-enable after fixing this bug.
-TEST_P(InformationSchemaTest, DISABLED_PGDefaultColumns) {
+TEST_P(InformationSchemaTest, PGDefaultColumns) {
   // Since the query and output for the PG dialect is significantly different,
   // we test this logic in a separate function for the PG dialect.
   if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
@@ -2112,7 +2114,7 @@ TEST_P(InformationSchemaTest, DISABLED_PGDefaultColumns) {
     {"public", "base", "bool_array", 10, Ns(), "ARRAY", "NO", "boolean[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base", "int_array", 11, Ns(), "ARRAY", "YES", "bigint[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base", "double_array", 12, Ns(), "ARRAY", "YES", "double precision[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "str_array", 13, Ns(), "ARRAY", "YES", "character varying[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "str_array", 13, Ns(), "ARRAY", "YES", "character varying(256)[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base", "byte_array", 14, Ns(), "ARRAY", "YES", "bytea[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base", "timestamp_array", 15, Ns(), "ARRAY", "YES", "timestamp with time zone[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base", "date_array", 16, Ns(), "ARRAY", "YES", "date[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
@@ -2192,8 +2194,7 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
   }
 }
 
-// TODO: b/317897389 - Re-enable after fixing this bug.
-TEST_P(InformationSchemaTest, DISABLED_DefaultIndexColumns) {
+TEST_P(InformationSchemaTest, DefaultIndexColumns) {
   // GSQL uses an empty string for the default schema and PG doesn't.
   std::string filter = "";
   if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
@@ -2238,19 +2239,19 @@ TEST_P(InformationSchemaTest, DISABLED_DefaultIndexColumns) {
     // clang-format off
     auto expected = ExpectedRows(StripFirstColumnFromRows(*results), {
       {"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "bool_value", 1, "ASC NULLS FIRST", "NO", "boolean"},  // NOLINT
-      {"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "key2", 2, "ASC", "NO", "character varying"},  // NOLINT
+      {"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
       {"public", "base", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
-      {"public", "base", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying"},  // NOLINT
+      {"public", "base", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
       {"public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", 1, "ASC", "NO", "boolean"},  // NOLINT
-      {"public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", 2, "ASC NULLS FIRST", "NO", "character varying"},  // NOLINT
+      {"public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", 2, "ASC NULLS FIRST", "NO", "character varying(256)"},  // NOLINT
       {"public", "cascade_child", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
-      {"public", "cascade_child", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying"},  // NOLINT
+      {"public", "cascade_child", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
       {"public", "cascade_child", "PRIMARY_KEY", "child_key", 3, "ASC", "NO", "boolean"},  // NOLINT
       {"public", "cascade_child", "cascade_child_by_value", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
-      {"public", "cascade_child", "cascade_child_by_value", "key2", 2, "ASC", "NO", "character varying"},  // NOLINT
-      {"public", "cascade_child", "cascade_child_by_value", "value1", Ni(), Ns(), "NO", "character varying"},  // NOLINT
+      {"public", "cascade_child", "cascade_child_by_value", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
+      {"public", "cascade_child", "cascade_child_by_value", "value1", Ni(), Ns(), "NO", "character varying(256)"},  // NOLINT
       {"public", "no_action_child", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
-      {"public", "no_action_child", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying"},  // NOLINT
+      {"public", "no_action_child", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
       {"public", "no_action_child", "PRIMARY_KEY", "child_key", 3, "ASC", "NO", "boolean"},  // NOLINT
       {"public", "no_action_child", "no_action_child_by_value", "value", 1, "ASC", "YES", "character varying"},  // NOLINT
       {"public", "row_deletion_policy", "PRIMARY_KEY", "key", 1, "ASC", "NO", "bigint"},  // NOLINT

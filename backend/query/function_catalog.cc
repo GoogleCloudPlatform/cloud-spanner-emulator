@@ -16,7 +16,6 @@
 
 #include "backend/query/function_catalog.h"
 
-#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -29,6 +28,7 @@
 #include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/types/type_factory.h"
+#include "zetasql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
@@ -39,7 +39,9 @@
 #include "absl/strings/strip.h"
 #include "absl/types/span.h"
 #include "backend/query/analyzer_options.h"
+#include "backend/query/ml/ml_predict_row_function.h"
 #include "backend/query/ml/ml_predict_table_valued_function.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "common/bit_reverse.h"
@@ -114,6 +116,33 @@ std::unique_ptr<zetasql::Function> BitReverseFunction(
           nullptr}},
       function_options);
 }
+
+std::unique_ptr<zetasql::Function> MlPredictRowFunction(
+    const std::string& catalog_name) {
+  auto pg_jsonb = postgres_translator::spangres::datatypes::GetPgJsonbType();
+  auto gsql_string = zetasql::types::StringType();
+
+  zetasql::FunctionArgumentTypeOptions model_endpoint_opt;
+  model_endpoint_opt.set_argument_name(kMlPredictRowParamModelEndpoint,
+                                       zetasql::kPositionalOrNamed);
+
+  zetasql::FunctionArgumentTypeOptions arg_opt;
+  arg_opt.set_argument_name(kMlPredictRowParamArgs,
+                            zetasql::kPositionalOrNamed);
+
+  return std::make_unique<zetasql::Function>(
+      kMlPredictRowFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{
+              pg_jsonb,
+              {{gsql_string, model_endpoint_opt}, {pg_jsonb, arg_opt}},
+              nullptr},
+          zetasql::FunctionSignature{
+              pg_jsonb,
+              {{pg_jsonb, model_endpoint_opt}, {pg_jsonb, arg_opt}},
+              nullptr}},
+      zetasql::FunctionOptions().set_evaluator({EvalMlPredictRow}));
+}
 }  // namespace
 
 FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory,
@@ -171,6 +200,9 @@ void FunctionCatalog::AddSpannerFunctions() {
       GetNextSequenceValueFunction(catalog_name_);
   functions_[get_next_sequence_value_func->Name()] =
       std::move(get_next_sequence_value_func);
+
+  auto ml_predict_row_func = MlPredictRowFunction(catalog_name_);
+  functions_[ml_predict_row_func->Name()] = std::move(ml_predict_row_func);
 }
 
 void FunctionCatalog::AddMlFunctions() {

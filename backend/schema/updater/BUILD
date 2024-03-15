@@ -27,10 +27,12 @@ cc_library(
     srcs = ["ddl_type_conversion.cc"],
     hdrs = ["ddl_type_conversion.h"],
     deps = [
+        "//backend/schema/catalog:proto_bundle",
         "//backend/schema/ddl:operations_cc_proto",
         "//third_party/spanner_pg/catalog:spangres_type",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_protobuf//:protobuf",
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:type",
     ],
@@ -41,6 +43,7 @@ cc_test(
     srcs = ["ddl_type_conversion_test.cc"],
     deps = [
         ":ddl_type_conversion",
+        "//backend/schema/catalog:proto_bundle",
         "//backend/schema/ddl:operations_cc_proto",
         "//tests/common:proto_matchers",
         "//third_party/spanner_pg/catalog:spangres_type",
@@ -137,6 +140,7 @@ cc_library(
         "//backend/query:function_catalog",
         "//backend/schema/backfills:schema_backfillers",
         "//backend/schema/builders:schema_builders",
+        "//backend/schema/catalog:proto_bundle",
         "//backend/schema/catalog:schema",
         "//backend/schema/ddl:operations_cc_proto",
         "//backend/schema/graph:schema_graph",
@@ -192,6 +196,7 @@ cc_test(
     ],
     deps = [
         "//backend/schema/updater/schema_updater_tests",
+        "//backend/schema/updater/schema_updater_tests:proto_bundle_tests",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest",
@@ -203,6 +208,7 @@ cc_library(
     name = "schema_validation_context",
     hdrs = ["schema_validation_context.h"],
     deps = [
+        "//backend/schema/catalog:proto_bundle",
         "//backend/schema/graph:schema_graph",
         "//backend/schema/graph:schema_node",
         "//backend/storage",

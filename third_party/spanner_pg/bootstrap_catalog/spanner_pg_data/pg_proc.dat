@@ -260,4 +260,13 @@
   prorettype => '_jsonb', proargtypes => 'jsonb',
   prosrc => 'jsonb_query_array' },
 
+#############################
+# QUERY CANCELLATION PROCEDURES
+#############################
+
+{ oid => '50048', proname => 'cancel_query', pronamespace => 'spanner',
+  prokind => 'p', prorettype => 'void',
+  proargtypes => 'text',
+  prosrc => 'cancel_query' },
+
 ]

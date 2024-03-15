@@ -30,6 +30,11 @@ message DDLStatement {
     CreateDatabase create_database = 1;
     AlterDatabase alter_database = 78;
 
+    // Global statements (other than "* DATABASE" statements).
+    CreateProtoBundle create_proto_bundle = 20;
+    AlterProtoBundle alter_proto_bundle = 21;
+    DropProtoBundle drop_proto_bundle = 22;
+
     // Table statements.
     CreateTable create_table = 8;
     SetColumnOptions set_column_options = 10;
@@ -89,6 +94,11 @@ message SetOption {
   optional double double_value = 8;
   optional string string_value = 5;
   repeated string string_list_value = 6;
+}
+
+// Used for CREATE PROTO BUNDLE and ALTER PROTO BUNDLE
+message ProtoType {
+  optional string source_name = 1;
 }
 
 // If database dialect, e.g., PostgreSQL compatible dialect, is different from
@@ -163,8 +173,11 @@ message ColumnDefinition {
   }
 
   optional Type type = 2;
+  // Fully-qualified proto type name.
+  optional string proto_type_name = 3;
   optional bool not_null = 6;
   // User-specified max length for this column (STRING, BYTES
+  // PROTO
   // only).
   // This field will only be set if the user defines a specific column length;
   // if 'MAX' is specified, it will be unset.
@@ -343,6 +356,32 @@ message AlterDatabase {
   oneof alter_type {
     SetOptions set_options = 5;
   }
+}
+
+message CreateProtoBundle {
+  repeated ProtoType insert_type = 1;
+}
+
+// A single ALTER PROTO BUNDLE statement can have multiple operations linked to
+// it. E.g.:
+// ALTER PROTO BUNDLE INSERT (
+//   package1.Proto1,
+//   package1.Enum1,
+// ) UPDATE (
+//   package1.Proto2,
+//   package1.Enum2,
+// ) DELETE (
+//   package1.Proto3,
+//   package1.Enum3,
+// );
+message AlterProtoBundle {
+  repeated ProtoType insert_type = 1;
+  repeated ProtoType update_type = 2;
+  repeated string delete_type = 3;
+}
+
+message DropProtoBundle {
+  // Nothing!
 }
 
 message RowDeletionPolicy {

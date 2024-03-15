@@ -44,6 +44,7 @@
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/util/postgres.h"
@@ -87,6 +88,28 @@ Const* MakeJsonbConst(absl::string_view value, bool is_null = false) {
       /*constvalue=*/const_value,
       /*constisnull=*/is_null,
       /*constbyval=*/false);
+
+  ABSL_CHECK_OK(retval);
+  return *retval;
+}
+
+// Returns an OID `Const` from the given string.
+Const* MakeOidConst(absl::string_view value, bool is_null = false) {
+  Datum const_value = 0;
+
+  if (!is_null) {
+    Datum conval = CStringGetDatum(value.data());
+    const_value = DirectFunctionCall1(oidin, conval);
+  }
+
+  absl::StatusOr<Const*> retval = CheckedPgMakeConst(
+      /*consttype=*/OIDOID,
+      /*consttypmod=*/-1,
+      /*constcollid=*/InvalidOid,
+      /*constlen=*/4,
+      /*constvalue=*/const_value,
+      /*constisnull=*/is_null,
+      /*constbyval=*/true);
 
   ABSL_CHECK_OK(retval);
   return *retval;
@@ -189,6 +212,50 @@ TEST_F(SpangresTypeTest, PgJsonbArrayMapping) {
   EXPECT_TRUE(
       pg_jsonb_array_type->IsSupportedType(zetasql::LanguageOptions()));
   EXPECT_TRUE(pg_jsonb_array_type->Equals(types::PgJsonbArrayMapping()));
+}
+
+TEST_F(SpangresTypeTest, PgOidMapping) {
+  const PostgresTypeMapping* pg_oid_type = types::PgOidMapping();
+  const absl::string_view oid_string = "12345";
+  const uint32_t oid_value = 12345;
+  EXPECT_TRUE(pg_oid_type->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_EQ(pg_oid_type->TypeName(zetasql::PRODUCT_EXTERNAL), "pg.oid");
+  EXPECT_EQ(pg_oid_type->PostgresTypeOid(), OIDOID);
+
+  zetasql::Value val;
+    EXPECT_EQ(
+        pg_oid_type->MakeGsqlValue(MakeOidConst(oid_string, /*is_null=*/false)),
+        spangres_datatypes::CreatePgOidValue(oid_value));
+    EXPECT_THAT(pg_oid_type->MakeGsqlValue(MakeOidConst("", /*is_null=*/true)),
+                zetasql_base::testing::IsOkAndHolds(zetasql::Value::Null(
+                    spangres_datatypes::GetPgOidType())));
+
+    ZETASQL_ASSERT_OK_AND_ASSIGN(val, spangres_datatypes::CreatePgOidValue(oid_value));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * built_const, pg_oid_type->MakePgConst(val));
+  EXPECT_NE(built_const, nullptr);
+  EXPECT_FALSE(built_const->constisnull);
+  absl::string_view const_value =
+      DatumGetCString(DirectFunctionCall1(oidout, built_const->constvalue));
+  EXPECT_EQ(const_value, oid_string);
+
+    val = zetasql::Value::Null(spangres_datatypes::GetPgOidType());
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_oid_type->MakePgConst(val));
+  EXPECT_NE(built_const, nullptr);
+  EXPECT_TRUE(built_const->constisnull);
+}
+
+TEST_F(SpangresTypeTest, PgOidArrayMapping) {
+  const PostgresTypeMapping* pg_oid_array_type = types::PgOidArrayMapping();
+  EXPECT_TRUE(pg_oid_array_type->mapped_type()->IsArray());
+  EXPECT_TRUE(pg_oid_array_type->mapped_type()
+                  ->AsArray()
+                  ->element_type()
+                  ->IsExtendedType());
+  EXPECT_EQ(pg_oid_array_type->TypeName(zetasql::PRODUCT_EXTERNAL),
+            "pg._oid");
+  EXPECT_EQ(pg_oid_array_type->PostgresTypeOid(), OIDARRAYOID);
+  EXPECT_TRUE(pg_oid_array_type->IsSupportedType(zetasql::LanguageOptions()));
 }
 
 }  // namespace

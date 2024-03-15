@@ -24,6 +24,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/storage/storage.h"
@@ -171,6 +172,14 @@ class SchemaValidationContext {
     return nullptr;
   }
 
+  // This method is used to set the recently parsed Proto Bundle to schema
+  // validation context. This will be used during the validation of columns.
+  void set_proto_bundle(std::shared_ptr<const ProtoBundle> proto_bundle) {
+    proto_bundle_ = proto_bundle;
+  }
+
+  const ProtoBundle* proto_bundle() const { return proto_bundle_.get(); }
+
  private:
   friend class SchemaGraphEditor;
 
@@ -233,6 +242,12 @@ class SchemaValidationContext {
   // This instance is not owned by SchemaValidationContext but is guaranteed
   // to be alive during the validation phase.
   const Schema* tmp_new_schema_ = nullptr;
+
+  // Proto bundle for schema validation.
+  // Use this only during schema validation when the schema isn't created. Once
+  // the validation is completed, a schema object is created and has the proto
+  // bundle which can be accessed by schema->proto_bundle()
+  std::shared_ptr<const ProtoBundle> proto_bundle_;
 };
 
 }  // namespace backend

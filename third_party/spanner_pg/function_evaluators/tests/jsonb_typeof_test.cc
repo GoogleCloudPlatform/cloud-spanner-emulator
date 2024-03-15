@@ -46,47 +46,47 @@ namespace {
 using ::zetasql_base::testing::IsOkAndHolds;
 using ::zetasql_base::testing::StatusIs;
 
-class JsonBTypeofTest : public PgEvaluatorTest {};
+class JsonbTypeofTest : public PgEvaluatorTest {};
 
-TEST_F(JsonBTypeofTest, ReturnsTypeString) {
-  EXPECT_THAT(JsonBTypeof("null"),
+TEST_F(JsonbTypeofTest, ReturnsTypeString) {
+  EXPECT_THAT(JsonbTypeof("null"),
               IsOkAndHolds(zetasql::Value::String("null")));
-  EXPECT_THAT(JsonBTypeof("[null, null]"),
+  EXPECT_THAT(JsonbTypeof("[null, null]"),
               IsOkAndHolds(zetasql::Value::String("array")));
-  EXPECT_THAT(JsonBTypeof("[1,2,3.56]"),
+  EXPECT_THAT(JsonbTypeof("[1,2,3.56]"),
               IsOkAndHolds(zetasql::Value::String("array")));
-  EXPECT_THAT(JsonBTypeof(R"([{"a": "abc"}, {"x": "xyz"}])"),
+  EXPECT_THAT(JsonbTypeof(R"([{"a": "abc"}, {"x": "xyz"}])"),
               IsOkAndHolds(zetasql::Value::String("array")));
-  EXPECT_THAT(JsonBTypeof(R"("hello")"),
+  EXPECT_THAT(JsonbTypeof(R"("hello")"),
               IsOkAndHolds(zetasql::Value::String("string")));
-  EXPECT_THAT(JsonBTypeof(R"("")"),
+  EXPECT_THAT(JsonbTypeof(R"("")"),
               IsOkAndHolds(zetasql::Value::String("string")));
-  EXPECT_THAT(JsonBTypeof(R"("nan")"),
+  EXPECT_THAT(JsonbTypeof(R"("nan")"),
               IsOkAndHolds(zetasql::Value::String("string")));
-  EXPECT_THAT(JsonBTypeof(R"({ "a" : { "b" : [null, 3.5, -214215, true] } })"),
+  EXPECT_THAT(JsonbTypeof(R"({ "a" : { "b" : [null, 3.5, -214215, true] } })"),
               IsOkAndHolds(zetasql::Value::String("object")));
-  EXPECT_THAT(JsonBTypeof(R"({ "a" : [null, null] })"),
+  EXPECT_THAT(JsonbTypeof(R"({ "a" : [null, null] })"),
               IsOkAndHolds(zetasql::Value::String("object")));
-  EXPECT_THAT(JsonBTypeof("-18446744073709551615124125"),
+  EXPECT_THAT(JsonbTypeof("-18446744073709551615124125"),
               IsOkAndHolds(zetasql::Value::String("number")));
-  EXPECT_THAT(JsonBTypeof("18446744073709551615124125"),
+  EXPECT_THAT(JsonbTypeof("18446744073709551615124125"),
               IsOkAndHolds(zetasql::Value::String("number")));
-  EXPECT_THAT(JsonBTypeof("0.00"),
+  EXPECT_THAT(JsonbTypeof("0.00"),
               IsOkAndHolds(zetasql::Value::String("number")));
-  EXPECT_THAT(JsonBTypeof(postgres_translator::spangres::datatypes::common::
-                              MaxJsonBNumericString()),
+  EXPECT_THAT(JsonbTypeof(postgres_translator::spangres::datatypes::common::
+                              MaxJsonbNumericString()),
               IsOkAndHolds(zetasql::Value::String("number")));
   std::string bool_type = "bool";
 
-  EXPECT_THAT(JsonBTypeof("true"),
+  EXPECT_THAT(JsonbTypeof("true"),
               IsOkAndHolds(zetasql::Value::String(bool_type)));
-  EXPECT_THAT(JsonBTypeof("false"),
+  EXPECT_THAT(JsonbTypeof("false"),
               IsOkAndHolds(zetasql::Value::String(bool_type)));
 }
 
-TEST_F(JsonBTypeofTest, ReturnsErrorWhenInvalidArgumentIsGiven) {
-  EXPECT_THAT(JsonBTypeof("a"), StatusIs(absl::StatusCode::kInvalidArgument));
-  EXPECT_THAT(JsonBTypeof(""), StatusIs(absl::StatusCode::kInvalidArgument));
+TEST_F(JsonbTypeofTest, ReturnsErrorWhenInvalidArgumentIsGiven) {
+  EXPECT_THAT(JsonbTypeof("a"), StatusIs(absl::StatusCode::kInvalidArgument));
+  EXPECT_THAT(JsonbTypeof(""), StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 }  // namespace

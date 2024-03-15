@@ -135,6 +135,11 @@ class Column::Builder {
     return *this;
   }
 
+  Builder& set_stored(bool stored) {
+    instance_->is_stored_ = stored;
+    return *this;
+  }
+
  private:
   std::unique_ptr<Column> instance_;
 };
@@ -226,6 +231,11 @@ class Column::Editor {
     for (const SchemaNode* node : sequences_used) {
       instance_->sequences_used_.push_back(node);
     }
+    return *this;
+  }
+
+  Editor& set_stored(bool stored) {
+    instance_->is_stored_ = stored;
     return *this;
   }
 

@@ -161,17 +161,12 @@ absl::Status ForeignKeyActionEffector::ProcessDeleteForUnorderedReferencingKey(
   // If the foreign key is a prefix but the order of the columns is
   // different, then we need to read all the rows in the referencing table
   // that match the prefix of the key.
-  if (referencing_key.NumColumns() <
-      foreign_key_->referencing_table()->primary_key().size()) {
     ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
                      ctx->store()->Read(foreign_key_->referencing_table(),
                                         KeyRange::Prefix(referencing_key), {}));
     while (itr->Next()) {
       ctx->effects()->Delete(foreign_key_->referencing_table(), itr->Key());
     }
-  } else {
-    ctx->effects()->Delete(foreign_key_->referencing_table(), referencing_key);
-  }
   return absl::OkStatus();
 }
 
@@ -210,11 +205,17 @@ absl::Status ForeignKeyActionEffector::ProcessDeleteForNonPKReferencingKey(
 absl::Status ForeignKeyActionEffector::ProcessDeleteByKey(
     const ActionContext* ctx, const Key& referenced_key) const {
   switch (referencing_key_prefix_shape_) {
-    case FKPrefixShape::kInOrder:
+    case FKPrefixShape::kInOrder: {
       // Since the referenced key and primary key have the same shape, we can
       // use the primary key.
-      ctx->effects()->Delete(foreign_key_->referencing_table(), referenced_key);
+      ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
+                       ctx->store()->Read(foreign_key_->referencing_table(),
+                                          KeyRange::Point(referenced_key), {}));
+      while (itr->Next()) {
+        ctx->effects()->Delete(foreign_key_->referencing_table(), itr->Key());
+      }
       break;
+    }
     case FKPrefixShape::kInOrderPrefix: {
       // The referencing table could have multiple rows that reference the same
       // foreign key value.

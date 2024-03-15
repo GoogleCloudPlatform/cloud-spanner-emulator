@@ -57,6 +57,7 @@ cc_test(
         "//common:clock",
         "//common:errors",
         "//tests/common:proto_matchers",
+        "//tests/common:test_cc_proto",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",

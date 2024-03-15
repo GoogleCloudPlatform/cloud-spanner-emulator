@@ -53,6 +53,9 @@
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/util/nodetag_to_string.h"
 #include "zetasql/base/status_macros.h"
+#include "zetasql/public/builtin_function.h"
+#include "zetasql/public/builtin_function_options.h"
+
 
 namespace postgres_translator {
 
@@ -276,16 +279,15 @@ EngineSystemCatalog::GetFunctionAndSignature(
       std::unique_ptr<zetasql::FunctionSignature> result_signature;
       if (SignatureMatches(input_argument_types, *signature, &result_signature,
                            language_options)) {
-        // We don't expect a mapped function to exist if function signature has
-        // defined a rewrite.
-        if (signature->options().rewrite_options() &&
+         if (!signature->mapped_function()) {
+          if (signature->options().rewrite_options() &&
             !signature->options().rewrite_options()->sql().empty()) {
-          return FunctionAndSignature(function, *result_signature);
-        }
-        // If there isn't a mapped function, the signature is unsupported and
-        // requires an explicit cast on the output.
-        // TODO : support explicit casting on function output.
-        if (!signature->mapped_function()) {
+            return FunctionAndSignature(function, *result_signature);
+          }
+          // If there isn't a mapped function and the signature has not defined
+          // a rewrite in the engine system catalog, the signature is
+          // unsupported and requires an explicit cast on the output.
+          // TODO : support explicit casting on function output.
           return absl::UnimplementedError(absl::StrCat(
               "Postgres Function requires an explicit cast: ", "Name: ",
               proc_name, ", ", "Oid: ", proc_oid, ", ", "Arguments: ", "(",
@@ -462,6 +464,15 @@ absl::Status EngineSystemCatalog::GetFunctions(
     output->insert(function.function());
   }
 
+  return absl::OkStatus();
+}
+
+absl::Status EngineSystemCatalog::GetTableValuedFunctions(
+    absl::flat_hash_map<Oid, const zetasql::TableValuedFunction*>* output)
+    const {
+  for (const auto& [tvf_oid, tvf] : proc_oid_to_tvf_) {
+    output->insert({tvf_oid, tvf});
+  }
   return absl::OkStatus();
 }
 
@@ -825,7 +836,9 @@ absl::Status EngineSystemCatalog::AddFunction(
       ZETASQL_ASSIGN_OR_RETURN(
           mapped_builtin_function,
           builtin_function_catalog_->GetFunction(mapped_function_name));
-      ZETASQL_RET_CHECK_NE(mapped_builtin_function, nullptr);
+      ZETASQL_RET_CHECK_NE(mapped_builtin_function, nullptr)
+          << "Original function " << mapped_function_name
+          << " not found in builtin function catalog";
 
       // Check that the original builtin function has a compatible signature and
       // create a copy of the function with just this signature.
@@ -842,7 +855,8 @@ absl::Status EngineSystemCatalog::AddFunction(
       engine_system_catalog_signature = zetasql::FunctionSignature(
           engine_system_catalog_signature.result_type(),
           engine_system_catalog_signature.arguments(),
-          mapped_signature->context_id(), mapped_signature->options());
+          mapped_signature->context_id(),
+          mapped_signature->options());
 
       // Construct the PostgresExtendedFunctionSignature.
       function_signatures.push_back(
@@ -937,6 +951,31 @@ absl::Status EngineSystemCatalog::AddCastOverrideFunction(
 absl::StatusOr<const zetasql::Function*>
 EngineSystemCatalog::GetBuiltinFunction(const std::string& name) const {
   return builtin_function_catalog_->GetFunction(name);
+}
+
+bool EngineSystemCatalog::IsBuiltinSqlRewriteFunction(
+    const std::string& function_name,
+    const zetasql::LanguageOptions& language_options,
+    zetasql::TypeFactory* type_factory) {
+  zetasql::BuiltinFunctionOptions function_options(language_options);
+  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
+      spanner_function_map;
+  absl::flat_hash_map<std::string, const zetasql::Type*> types;
+  zetasql::GetBuiltinFunctionsAndTypes(function_options, *type_factory,
+                               spanner_function_map, types);
+  if (spanner_function_map.find(function_name) ==
+      spanner_function_map.end()) {
+    return false;
+  }
+  const zetasql::Function* builtin_function =
+      spanner_function_map.at(function_name).get();
+  for (const auto& signature : builtin_function->signatures()) {
+    if (!signature.options().rewrite_options() ||
+        signature.options().rewrite_options()->sql().empty()) {
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace postgres_translator

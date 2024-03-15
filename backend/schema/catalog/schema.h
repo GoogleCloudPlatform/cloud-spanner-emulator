@@ -30,6 +30,7 @@
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/view.h"
@@ -52,9 +53,13 @@ class Schema {
   Schema()
       : graph_(SchemaGraph::CreateEmpty())
         ,
+        proto_bundle_(ProtoBundle::CreateEmpty())
+        ,
         dialect_(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {}
 
   explicit Schema(const SchemaGraph* graph
+                  ,
+                  std::shared_ptr<const ProtoBundle> proto_bundle
                   ,
                   const database_api::DatabaseDialect& dialect);
 
@@ -163,6 +168,10 @@ class Schema {
   // Returns the number of table synonyms in the schema.
   int num_table_synonym() const { return synonyms_map_.size(); }
 
+  // Returns the shared pointer to the ProtoBundle holding the proto types.
+  std::shared_ptr<const ProtoBundle> proto_bundle() const {
+    return proto_bundle_;
+  }
   // Returns the database dialect.
   database_api::DatabaseDialect dialect() const { return dialect_; }
 
@@ -218,6 +227,11 @@ class Schema {
   // comparison on the keys are case-insensitive.
   CaseInsensitiveStringMap<const Index*> index_map_;
 
+  // Holds the proto type information for this schema. This is a shared pointer
+  // to prevent creating multiple copies of the ProtoBundle for every schema
+  // update even though there is no type change.
+  const std::shared_ptr<const ProtoBundle> proto_bundle_;
+
   // A vector that maintains the original order of sequences in the DDL.
   std::vector<const Sequence*> sequences_;
 
@@ -243,11 +257,15 @@ class Schema {
 // schema nodes.
 class OwningSchema : public Schema {
  public:
-  explicit OwningSchema(std::unique_ptr<const SchemaGraph> graph
-                        ,
+  explicit OwningSchema(std::unique_ptr<const SchemaGraph> graph,
+                        std::shared_ptr<const ProtoBundle> proto_bundle,
                         const database_api::DatabaseDialect& dialect)
-      : Schema(graph.get()
-               ,
+      : Schema(graph.get(), proto_bundle, dialect), graph_(std::move(graph)) {}
+
+  explicit OwningSchema(std::unique_ptr<const SchemaGraph> graph,
+                        const database_api::DatabaseDialect& dialect)
+      : Schema(graph.get(),
+               google::spanner::emulator::backend::ProtoBundle::CreateEmpty(),
                dialect),
         graph_(std::move(graph)) {}
 

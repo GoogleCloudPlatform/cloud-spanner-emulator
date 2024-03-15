@@ -60,7 +60,7 @@ static absl::StatusOr<std::string> JsonbOut(Datum jsonb_datum) {
   return postgres_translator::CheckedPgCStringDatumToCString(jsonb_out_datum);
 }
 
-absl::StatusOr<zetasql::Value> JsonBArrayElement(
+absl::StatusOr<zetasql::Value> JsonbArrayElement(
     absl::string_view jsonb_string, int64_t element) {
   if (element < std::numeric_limits<int32_t>::min() ||
       element > std::numeric_limits<int32_t>::max()) {
@@ -91,7 +91,7 @@ absl::StatusOr<zetasql::Value> JsonBArrayElement(
   return postgres_translator::spangres::datatypes::CreatePgJsonbValue(result);
 }
 
-absl::StatusOr<zetasql::Value> JsonBObjectField(
+absl::StatusOr<zetasql::Value> JsonbObjectField(
     absl::string_view jsonb_string, absl::string_view key) {
   Datum key_in = CStringGetTextDatum(std::string(key).c_str());
   ZETASQL_ASSIGN_OR_RETURN(Datum jsonb_in, JsonbIn(jsonb_string));
@@ -106,7 +106,7 @@ absl::StatusOr<zetasql::Value> JsonBObjectField(
   return postgres_translator::spangres::datatypes::CreatePgJsonbValue(result);
 }
 
-absl::StatusOr<zetasql::Value> JsonBTypeof(absl::string_view jsonb_string) {
+absl::StatusOr<zetasql::Value> JsonbTypeof(absl::string_view jsonb_string) {
   ZETASQL_ASSIGN_OR_RETURN(Datum jsonb_in, JsonbIn(jsonb_string));
   ZETASQL_ASSIGN_OR_RETURN(Datum type_out,
                    postgres_translator::CheckedNullableOidFunctionCall1(

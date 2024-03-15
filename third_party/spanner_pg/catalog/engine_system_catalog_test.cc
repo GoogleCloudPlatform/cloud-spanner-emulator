@@ -306,24 +306,16 @@ TEST_F(EngineSystemCatalogTest, GetTypes) {
       type_mappings,
       UnorderedElementsAre(
           // Scalar type mappings.
-          types::PgBoolMapping(),
-          types::PgInt8Mapping(),
-          types::PgFloat8Mapping(),
-          types::PgVarcharMapping(),
-          types::PgTextMapping(),
-          types::PgByteaMapping(),
-          types::PgTimestamptzMapping(),
-          types::PgDateMapping(),
+          types::PgBoolMapping(), types::PgInt8Mapping(),
+          types::PgFloat8Mapping(), types::PgVarcharMapping(),
+          types::PgTextMapping(), types::PgByteaMapping(),
+          types::PgTimestamptzMapping(), types::PgDateMapping(),
 
           // Array type mappings.
-          types::PgBoolArrayMapping(),
-          types::PgInt8ArrayMapping(),
-          types::PgFloat8ArrayMapping(),
-          types::PgVarcharArrayMapping(),
-          types::PgTextArrayMapping(),
-          types::PgByteaArrayMapping(),
-          types::PgTimestamptzArrayMapping(),
-          types::PgDateArrayMapping()));
+          types::PgBoolArrayMapping(), types::PgInt8ArrayMapping(),
+          types::PgFloat8ArrayMapping(), types::PgVarcharArrayMapping(),
+          types::PgTextArrayMapping(), types::PgByteaArrayMapping(),
+          types::PgTimestamptzArrayMapping(), types::PgDateArrayMapping()));
 }
 
 TEST_F(EngineSystemCatalogTest, TypeNotFound) {
@@ -589,11 +581,11 @@ TEST_F(EngineSystemCatalogTest, UnvalidatedFunctionSignature) {
       zetasql::FunctionArgumentType::REPEATED);
   PostgresFunctionArguments arguments("concat", "concat",
                                       {{{gsql_string,
-                                       {gsql_string, {gsql_string, repeated}},
-                                               /*context_ptr=*/nullptr},
-                         /*has_mapped_function=*/true,
-                         /*explicit_mapped_function_name=*/"",
-                         F_CONCAT}});
+                                         {gsql_string, {gsql_string, repeated}},
+                                         /*context_ptr=*/nullptr},
+                                        /*has_mapped_function=*/true,
+                                        /*explicit_mapped_function_name=*/"",
+                                        F_CONCAT}});
   ZETASQL_ASSERT_OK(catalog->AddTestFunction(arguments));
 
   std::vector<zetasql::InputArgumentType> input_argument_types;
@@ -902,6 +894,41 @@ TEST_F(EngineSystemCatalogTest, CastOverrideFunction) {
   EXPECT_EQ(function_and_signature.signature().argument(0).type(), gsql_string);
   EXPECT_EQ(function_and_signature.signature().result_type().type(), gsql_date);
   EXPECT_TRUE(catalog->IsGsqlFunctionMappedToPgCast("date"));
+}
+
+TEST_F(EngineSystemCatalogTest, SqlRewriteFunctionWithNamedArgs) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+                       TestSystemCatalog::GetTestCatalog());
+  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgBoolMapping()));
+  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgInt8ArrayMapping()));
+
+  // Add a PostgreSQL function that maps to a googlesql function that is
+  // implemented as a rewrite with named args.
+  PostgresFunctionArguments arguments{"arrayoverlap",
+                                      "array_includes_any",
+                                      {{{gsql_bool,
+                                         {gsql_int64_array, gsql_int64_array},
+                                         /*context_ptr=*/nullptr}}}};
+  ZETASQL_ASSERT_OK(catalog->AddTestFunction(arguments));
+
+  std::vector<zetasql::InputArgumentType> input_argument_types;
+  input_argument_types.emplace_back(zetasql::types::Int64ArrayType());
+  input_argument_types.emplace_back(zetasql::types::Int64ArrayType());
+
+  // Get the function and signature for checking whether two arrays overlap.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      FunctionAndSignature function_and_signature,
+      catalog->GetFunctionAndSignature(F_ARRAYOVERLAP, input_argument_types,
+                                       GetLanguageOptions()));
+  ASSERT_NE(function_and_signature.function(), nullptr);
+  EXPECT_EQ(function_and_signature.function()->Name(), "array_includes_any");
+  ASSERT_EQ(function_and_signature.signature().arguments().size(), 2);
+  EXPECT_TRUE(
+      function_and_signature.signature().argument(0).has_argument_name());
+  EXPECT_EQ(function_and_signature.signature().argument(0).argument_name(),
+            "array_to_search");
+  EXPECT_EQ(function_and_signature.signature().argument(1).argument_name(),
+            "search_values");
 }
 
 }  // namespace

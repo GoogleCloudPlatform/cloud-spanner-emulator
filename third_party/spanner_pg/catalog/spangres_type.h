@@ -44,6 +44,9 @@ const PostgresTypeMapping* PgNumericArrayMapping();
 const PostgresTypeMapping* PgJsonbMapping();
 const PostgresTypeMapping* PgJsonbArrayMapping();
 
+const PostgresTypeMapping* PgOidMapping();
+const PostgresTypeMapping* PgOidArrayMapping();
+
 }  // namespace types
 }  // namespace spangres
 }  // namespace postgres_translator

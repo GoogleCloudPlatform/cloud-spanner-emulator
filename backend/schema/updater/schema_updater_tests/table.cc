@@ -78,6 +78,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_MultiKey) {
       col2 varchar,
       PRIMARY KEY(col1, col2)
     ))"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -173,6 +174,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
         col1 bigint PRIMARY KEY,
         col2 spanner.commit_timestamp
       ))"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -502,7 +504,6 @@ TEST_P(SchemaUpdaterTest, CreateTable_CreateChildTable) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_WithSynonym) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
@@ -532,7 +533,6 @@ TEST_P(SchemaUpdaterTest, CreateTable_WithSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_TableNameConflictsWithSynonym) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({
                   R"(
       CREATE TABLE T(
@@ -549,7 +549,6 @@ TEST_P(SchemaUpdaterTest, CreateTable_TableNameConflictsWithSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_SynonymConflictsWithTableName) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({
                   R"(
       CREATE TABLE T(
@@ -566,7 +565,6 @@ TEST_P(SchemaUpdaterTest, CreateTable_SynonymConflictsWithTableName) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_SynonymConflictsWithSynonym) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({
                   R"(
       CREATE TABLE T1(
@@ -982,7 +980,6 @@ TEST_P(SchemaUpdaterTest, AlterTable_ChangeOnDelete) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_AddSynonym) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -1002,7 +999,6 @@ TEST_P(SchemaUpdaterTest, AlterTable_AddSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_CannotAddDuplicateSynonym) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -1021,7 +1017,6 @@ TEST_P(SchemaUpdaterTest, AlterTable_CannotAddDuplicateSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_CannotAddTwoSynonyms) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -1036,7 +1031,6 @@ TEST_P(SchemaUpdaterTest, AlterTable_CannotAddTwoSynonyms) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_DropSynonym) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -1066,7 +1060,6 @@ TEST_P(SchemaUpdaterTest, AlterTable_DropSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_CannotDropNonExistentSynonym) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -1080,7 +1073,6 @@ TEST_P(SchemaUpdaterTest, AlterTable_CannotDropNonExistentSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_CannotDropInvalidSynonym) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
@@ -1277,7 +1269,6 @@ TEST_P(SchemaUpdaterTest, DropTable_Recreate) {
 }
 
 TEST_P(SchemaUpdaterTest, DropTableWithSynonym) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,

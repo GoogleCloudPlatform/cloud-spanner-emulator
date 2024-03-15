@@ -57,6 +57,7 @@ cc_library(
         "//backend/access:read",
         "//backend/access:write",
         "//backend/common:case",
+        "//backend/datamodel:key",
         "//backend/datamodel:value",
         "//backend/query/change_stream:change_stream_query_validator",
         "//backend/query/feature_filter:query_size_limits_checker",
@@ -118,6 +119,7 @@ cc_test(
         "//common:limits",
         "//tests/common:proto_matchers",
         "//tests/common:scoped_feature_flags_setter",
+        "//tests/common:test_cc_proto",
         "//tests/common:test_row_reader",
         "//tests/common:test_schema_constructor",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
@@ -598,6 +600,7 @@ cc_library(
     deps = [
         ":analyzer_options",
         "//backend/common:case",
+        "//backend/query/ml:ml_predict_row_function",
         "//backend/query/ml:ml_predict_table_valued_function",
         "//backend/schema/catalog:schema",
         "//common:bit_reverse",
@@ -605,6 +608,7 @@ cc_library(
         "//common:errors",
         "//common:feature_flags",
         "//third_party/spanner_pg/catalog:emulator_functions",
+        "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log",
@@ -618,6 +622,7 @@ cc_library(
         "@com_google_zetasql//zetasql/public:builtin_function_options",
         "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 

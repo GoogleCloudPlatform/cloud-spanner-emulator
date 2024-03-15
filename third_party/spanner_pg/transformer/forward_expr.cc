@@ -317,7 +317,7 @@ absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
 ForwardTransformer::BuildGsqlCastExpression(
     Oid result_type, const Expr& input, int32_t typmod,
     ExprTransformerInfo* expr_transformer_info) {
-  ZETASQL_ASSIGN_OR_RETURN(const Oid source_type_oid,
+  ZETASQL_ASSIGN_OR_RETURN(Oid source_type_oid,
                    CheckedPgExprType(PostgresConstCastToNode(&input)));
 
   ZETASQL_ASSIGN_OR_RETURN(const zetasql::Type* resolved_type,
@@ -325,6 +325,20 @@ ForwardTransformer::BuildGsqlCastExpression(
 
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedExpr> resolved_input,
                    BuildGsqlResolvedExpr(input, expr_transformer_info));
+
+  // Casts between FLOAT4 and NUMERIC/JSONB must go through TEXT.
+  // Casts from FLOAT4 -> JSONB are not supported in native PG so they are
+  // not handled here.
+  // TODO: b/324455289 - remove when casts between FLOAT4 and NUMERIC/JSONB are
+  // supported in Spanner.
+  if ((source_type_oid == JSONBOID && result_type == FLOAT4OID) ||
+      (source_type_oid == FLOAT4OID && result_type == NUMERICOID) ||
+      (source_type_oid == NUMERICOID && result_type == FLOAT4OID)) {
+    ZETASQL_ASSIGN_OR_RETURN(resolved_input,
+                     BuildGsqlCastExpression(TEXTOID, input, typmod,
+                                             expr_transformer_info));
+    source_type_oid = TEXTOID;
+  }
 
   const zetasql::Type* target_type = resolved_type;
   const zetasql::Type* source_type = resolved_input->type();
@@ -347,12 +361,6 @@ ForwardTransformer::BuildGsqlCastExpression(
 
   // PG.NUMERIC cast overrides are treated separately.
     if (result_type == NUMERICOID || source_type_oid == NUMERICOID) {
-
-    if (source_type_oid == NUMERICOID && result_type == FLOAT4OID) {
-      // PG.NUMERIC does not have a cast function to FLOAT32 yet.
-      // In the meantime, cast from PG.NUMERIC to FLOAT64 to FLOAT32.
-      target_type = zetasql::types::DoubleType();
-    }
 
     ZETASQL_ASSIGN_OR_RETURN(
         FunctionAndSignature function_and_signature,

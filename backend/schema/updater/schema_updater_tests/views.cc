@@ -79,6 +79,7 @@ TEST_P(ViewsTest, Basic) {
                                        R"(
     CREATE OR REPLACE VIEW "MyView" SQL SECURITY INVOKER AS SELECT T.col1, T.col2 FROM T
   )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       database_api::DatabaseDialect::POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -134,6 +135,7 @@ TEST_P(ViewsTest, OrderBy) {
                                        R"(
     CREATE OR REPLACE VIEW "MyView" SQL SECURITY INVOKER AS SELECT T.col1, T.col2 FROM T ORDER BY T.col2
   )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       database_api::DatabaseDialect::POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -544,10 +546,12 @@ TEST_P(ViewsTest, ViewIfExistsNotFoundPG) {
       CreateSchema(
           {R"(CREATE VIEW users_view SQL SECURITY INVOKER AS SELECT 1)",
            R"(DROP VIEW users_view)"},
+          /*proto_descriptor_bytes=*/"",
           database_api::DatabaseDialect::POSTGRESQL,
           /*use_gsql_to_pg_translation=*/false));
 
   ZETASQL_ASSERT_OK(UpdateSchema(schema.get(), {"DROP VIEW IF EXISTS users_view"},
+                         /*proto_descriptor_bytes=*/"",
                          database_api::DatabaseDialect::POSTGRESQL,
                          /*use_gsql_to_pg_translation=*/false));
 }

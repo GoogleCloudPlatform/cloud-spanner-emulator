@@ -49,6 +49,7 @@ TEST_P(SchemaUpdaterTest, NonKeyColumns) {
           )
         )",
                 "alter table \"T\" add column \"D2\" bigint default (2)"},
+            /*proto_descriptor_bytes=*/"",
             database_api::DatabaseDialect::POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -117,6 +118,7 @@ TEST_P(SchemaUpdaterTest, FunctionAsDefault) {
           "V" timestamptz DEFAULT (NOW())
         )
       )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       database_api::DatabaseDialect::POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -161,6 +163,7 @@ TEST_P(SchemaUpdaterTest, KeyColumn) {
         )
       )",
                       "alter table \"T\" alter column \"K3\" set default (30)"},
+                     /*proto_descriptor_bytes=*/"",
                      database_api::DatabaseDialect::POSTGRESQL,
                      /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -237,6 +240,7 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
                 "alter table \"T\" alter column \"K3\" set default (30)",
                 "alter table \"T\" alter column \"K2\" set default (2)",
                 "alter table \"T\" alter column \"V\" drop default"},
+            /*proto_descriptor_bytes=*/"",
             database_api::DatabaseDialect::POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -315,6 +319,7 @@ TEST_P(SchemaUpdaterTest, NumericColumnDefault) {
           value numeric DEFAULT 0.0 NOT NULL
         )
       )"},
+                                     /*proto_descriptor_bytes=*/"",
                                      database_api::DatabaseDialect::POSTGRESQL,
                                      /*use_gsql_to_pg_translation=*/false));
     EXPECT_EQ(schema->dialect(), database_api::DatabaseDialect::POSTGRESQL);

@@ -48,9 +48,9 @@ http_archive(
     build_file = "@//build/bazel:googleapis.BUILD",
     patch_args = ["-p1"],
     patches = ["//build/bazel:googleapis.patch"],
-    sha256 = "42a09adf83c5d43abacb4fb07d9958e37ffe50e9835f5ff82ba8e02ddb149a59",
-    strip_prefix = "googleapis-eda81ef50cbc08ddf39e9e0689e116421581a234",
-    url = "https://github.com/googleapis/googleapis/archive/eda81ef50cbc08ddf39e9e0689e116421581a234.tar.gz",
+    sha256 = "d10709f46a9936ac4eab1fdf37b0688d064c4c43e1b205ce5ac9e6e0caa6b9dc",
+    strip_prefix = "googleapis-9a9bc9b427e4516f79b9753c4fad91d425334755",
+    url = "https://github.com/googleapis/googleapis/archive/9a9bc9b427e4516f79b9753c4fad91d425334755.tar.gz",
 )
 
 load("@com_google_googleapis//:repository_rules.bzl", "switched_rules_by_language")

@@ -2291,6 +2291,7 @@ typedef enum ConstrType			/* types of constraints */
 	CONSTR_UNIQUE,
 	CONSTR_EXCLUSION,
 	CONSTR_FOREIGN,
+	CONSTR_VECTOR_LENGTH,
 	CONSTR_ATTR_DEFERRABLE,		/* attributes for previous constraint node */
 	CONSTR_ATTR_NOT_DEFERRABLE,
 	CONSTR_ATTR_DEFERRED,

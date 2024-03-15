@@ -129,6 +129,8 @@ class CatalogTest : public testing::Test {
         schema_, test::CreateSchemaFromDDL(statements,
                                            &type_factory_
                                            ,
+                                           ""
+                                           ,
                                            dialect));
     catalog_ = std::make_unique<Catalog>(schema_.get(), &function_catalog_,
                                          &type_factory_);

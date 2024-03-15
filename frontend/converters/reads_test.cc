@@ -316,66 +316,66 @@ TEST_F(AccessProtosTest, CanConvertEmptyRowCursorToResultSet) {
   ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
 
   EXPECT_THAT(result_pb, test::EqualsProto(
-                             R"(metadata {
-                                  row_type {
-                                    fields {
-                                      name: "int64"
-                                      type { code: INT64 }
-                                    }
-                                    fields {
-                                      name: "bool"
-                                      type { code: BOOL }
-                                    }
-                                    fields {
-                                      name: "double"
-                                      type { code: FLOAT64 }
-                                    }
-                                    fields {
-                                      name: "string"
-                                      type { code: STRING }
-                                    }
-                                    fields {
-                                      name: "bytes"
-                                      type { code: BYTES }
-                                    }
-                                    fields {
-                                      name: "timestamp"
-                                      type { code: TIMESTAMP }
-                                    }
-                                    fields {
-                                      name: "date"
-                                      type { code: DATE }
-                                    }
-                                    fields {
-                                      name: "array"
-                                      type {
-                                        code: ARRAY
-                                        array_element_type { code: INT64 }
+                             R"pb(metadata {
+                                    row_type {
+                                      fields {
+                                        name: "int64"
+                                        type { code: INT64 }
                                       }
-                                    }
-                                    fields {
-                                      name: "struct"
-                                      type {
-                                        code: STRUCT
-                                        struct_type {
-                                          fields {
-                                            name: "element1"
-                                            type { code: INT64 }
-                                          }
-                                          fields {
-                                            name: "element2"
-                                            type { code: INT64 }
-                                          }
-                                          fields {
-                                            name: "element3"
-                                            type { code: INT64 }
+                                      fields {
+                                        name: "bool"
+                                        type { code: BOOL }
+                                      }
+                                      fields {
+                                        name: "double"
+                                        type { code: FLOAT64 }
+                                      }
+                                      fields {
+                                        name: "string"
+                                        type { code: STRING }
+                                      }
+                                      fields {
+                                        name: "bytes"
+                                        type { code: BYTES }
+                                      }
+                                      fields {
+                                        name: "timestamp"
+                                        type { code: TIMESTAMP }
+                                      }
+                                      fields {
+                                        name: "date"
+                                        type { code: DATE }
+                                      }
+                                      fields {
+                                        name: "array"
+                                        type {
+                                          code: ARRAY
+                                          array_element_type { code: INT64 }
+                                        }
+                                      }
+                                      fields {
+                                        name: "struct"
+                                        type {
+                                          code: STRUCT
+                                          struct_type {
+                                            fields {
+                                              name: "element1"
+                                              type { code: INT64 }
+                                            }
+                                            fields {
+                                              name: "element2"
+                                              type { code: INT64 }
+                                            }
+                                            fields {
+                                              name: "element3"
+                                              type { code: INT64 }
+                                            }
                                           }
                                         }
                                       }
                                     }
                                   }
-                                }
-                             )"));
+                             )pb"));
 }
 
 TEST_F(AccessProtosTest, CannotConvertInvalidRowCursorToResultSet) {

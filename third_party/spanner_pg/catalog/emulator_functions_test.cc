@@ -83,7 +83,7 @@ using testing::HasSubstr;
 using zetasql_base::testing::IsOkAndHolds;
 using zetasql_base::testing::StatusIs;
 
-static zetasql::Value CreatePgJsonBNullValue() {
+static zetasql::Value CreatePgJsonbNullValue() {
   static const zetasql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
   return zetasql::values::Null(gsql_pg_jsonb);
@@ -263,124 +263,124 @@ INSTANTIATE_TEST_SUITE_P(
         },
         // pg.jsonb_array_element
         PGScalarFunctionTestCase{
-            kPGJsonBArrayElementFunctionName,
+            kPGJsonbArrayElementFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
              zetasql::Value::Int64(0)},
             *CreatePgJsonbValueWithMemoryContext("null")},
         PGScalarFunctionTestCase{
-            kPGJsonBArrayElementFunctionName,
+            kPGJsonbArrayElementFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([1.00, "string val"])"),
              zetasql::Value::Int64(1)},
             *CreatePgJsonbValueWithMemoryContext(R"("string val")")},
         PGScalarFunctionTestCase{
-            kPGJsonBArrayElementFunctionName,
+            kPGJsonbArrayElementFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
              zetasql::Value::Int64(2)},
-            CreatePgJsonBNullValue()},
+            CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kPGJsonBArrayElementFunctionName,
+            kPGJsonbArrayElementFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
              zetasql::Value::Int64(-1)},
-            CreatePgJsonBNullValue()},
+            CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kPGJsonBArrayElementFunctionName,
-            {CreatePgJsonBNullValue(), zetasql::Value::Int64(0)},
-            CreatePgJsonBNullValue()},
+            kPGJsonbArrayElementFunctionName,
+            {CreatePgJsonbNullValue(), zetasql::Value::Int64(0)},
+            CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kPGJsonBArrayElementFunctionName,
+            kPGJsonbArrayElementFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
              zetasql::Value::NullInt64()},
-            CreatePgJsonBNullValue()},
+            CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kPGJsonBArrayElementFunctionName,
-            {CreatePgJsonBNullValue(), zetasql::Value::NullInt64()},
-            CreatePgJsonBNullValue()},
+            kPGJsonbArrayElementFunctionName,
+            {CreatePgJsonbNullValue(), zetasql::Value::NullInt64()},
+            CreatePgJsonbNullValue()},
 
         // pg.jsonb_object_field
         PGScalarFunctionTestCase{
-            kPGJsonBObjectFieldFunctionName,
+            kPGJsonbObjectFieldFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"({"a": "string val"})"),
              zetasql::Value::String("a")},
             *CreatePgJsonbValueWithMemoryContext(R"("string val")")},
         PGScalarFunctionTestCase{
-            kPGJsonBObjectFieldFunctionName,
+            kPGJsonbObjectFieldFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                  R"({"a": {"b": "string_val"}})"),
              zetasql::Value::String("a")},
             *CreatePgJsonbValueWithMemoryContext(R"({"b": "string_val"})")},
-        PGScalarFunctionTestCase{kPGJsonBObjectFieldFunctionName,
+        PGScalarFunctionTestCase{kPGJsonbObjectFieldFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                       R"({"a": {"b": "string_val"}})"),
                                   zetasql::Value::String("c")},
-                                 CreatePgJsonBNullValue()},
-        PGScalarFunctionTestCase{kPGJsonBObjectFieldFunctionName,
+                                 CreatePgJsonbNullValue()},
+        PGScalarFunctionTestCase{kPGJsonbObjectFieldFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                       R"({"a": {"b": "string_val"}})"),
                                   zetasql::Value::String("no match")},
-                                 CreatePgJsonBNullValue()},
+                                 CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kPGJsonBObjectFieldFunctionName,
+            kPGJsonbObjectFieldFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"({"a": ""})"),
              zetasql::Value::String("a")},
             *CreatePgJsonbValueWithMemoryContext(R"("")")},
         PGScalarFunctionTestCase{
-            kPGJsonBObjectFieldFunctionName,
+            kPGJsonbObjectFieldFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"({"a": ""})"),
              kNullStringValue},
-            CreatePgJsonBNullValue()},
-        PGScalarFunctionTestCase{kPGJsonBObjectFieldFunctionName,
-                                 {CreatePgJsonBNullValue(), kNullStringValue},
-                                 CreatePgJsonBNullValue()},
+            CreatePgJsonbNullValue()},
+        PGScalarFunctionTestCase{kPGJsonbObjectFieldFunctionName,
+                                 {CreatePgJsonbNullValue(), kNullStringValue},
+                                 CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kPGJsonBObjectFieldFunctionName,
-            {CreatePgJsonBNullValue(), zetasql::Value::String("a")},
-            CreatePgJsonBNullValue()},
+            kPGJsonbObjectFieldFunctionName,
+            {CreatePgJsonbNullValue(), zetasql::Value::String("a")},
+            CreatePgJsonbNullValue()},
 
         // pg.jsonb_typeof
-        PGScalarFunctionTestCase{kPGJsonBTypeofFunctionName,
+        PGScalarFunctionTestCase{kPGJsonbTypeofFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext("null")},
                                  zetasql::Value::String("null")},
         PGScalarFunctionTestCase{
-            kPGJsonBTypeofFunctionName,
+            kPGJsonbTypeofFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[1,2,3.56]")},
             zetasql::Value::String("array")},
         PGScalarFunctionTestCase{
-            kPGJsonBTypeofFunctionName,
+            kPGJsonbTypeofFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"("hello")")},
             zetasql::Value::String("string")},
         PGScalarFunctionTestCase{
-            kPGJsonBTypeofFunctionName,
+            kPGJsonbTypeofFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                 R"({ "a" : { "b" : [null, 3.5, -214215, true] } })")},
             zetasql::Value::String("object")},
-        PGScalarFunctionTestCase{kPGJsonBTypeofFunctionName,
+        PGScalarFunctionTestCase{kPGJsonbTypeofFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                      "-18446744073709551615124125")},
                                  zetasql::Value::String("number")},
-        PGScalarFunctionTestCase{kPGJsonBTypeofFunctionName,
+        PGScalarFunctionTestCase{kPGJsonbTypeofFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                      "18446744073709551615124125")},
                                  zetasql::Value::String("number")},
         PGScalarFunctionTestCase{
-            kPGJsonBTypeofFunctionName,
+            kPGJsonbTypeofFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
-                spangres::datatypes::common::MaxJsonBNumericString())},
+                spangres::datatypes::common::MaxJsonbNumericString())},
             zetasql::Value::String("number")},
         PGScalarFunctionTestCase{
-            kPGJsonBTypeofFunctionName,
+            kPGJsonbTypeofFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
-                spangres::datatypes::common::MinJsonBNumericString())},
+                spangres::datatypes::common::MinJsonbNumericString())},
             zetasql::Value::String("number")},
-        PGScalarFunctionTestCase{kPGJsonBTypeofFunctionName,
+        PGScalarFunctionTestCase{kPGJsonbTypeofFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext("true")},
                                  zetasql::Value::String("bool")},
         PGScalarFunctionTestCase{
-            kPGJsonBTypeofFunctionName,
+            kPGJsonbTypeofFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("false")},
             zetasql::Value::String("bool")},
         // pg.jsonb_query_array
         PGScalarFunctionTestCase{
-            kPGJsonBQueryArrayFunctionName,
+            kPGJsonbQueryArrayFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[1, 2, 3]")},
             *zetasql::Value::MakeArray(
                 spangres::datatypes::GetPgJsonbArrayType(),
@@ -388,15 +388,48 @@ INSTANTIATE_TEST_SUITE_P(
                  *CreatePgJsonbValueWithMemoryContext("2"),
                  *CreatePgJsonbValueWithMemoryContext("3")})},
         PGScalarFunctionTestCase{
-            kPGJsonBQueryArrayFunctionName,
+            kPGJsonbQueryArrayFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[\"abc\", \"def\"]")},
             *zetasql::Value::MakeArray(
                 spangres::datatypes::GetPgJsonbArrayType(),
                 {*CreatePgJsonbValueWithMemoryContext("\"abc\""),
                  *CreatePgJsonbValueWithMemoryContext("\"def\"")})},
-        PGScalarFunctionTestCase{kPGJsonBQueryArrayFunctionName,
-                                 {CreatePgJsonBNullValue()},
-                                 CreatePgJsonBNullValue()},
+        PGScalarFunctionTestCase{kPGJsonbQueryArrayFunctionName,
+                                 {CreatePgJsonbNullValue()},
+                                 CreatePgJsonbNullValue()},
+        // pg.jsonb_build_array
+        PGScalarFunctionTestCase{kPGJsonbBuildArrayFunctionName,
+                                 {},
+                                 *CreatePgJsonbValueWithMemoryContext("[]")},
+        PGScalarFunctionTestCase{kPGJsonbBuildArrayFunctionName,
+                                 {zetasql::Value::Int64(1)},
+                                 *CreatePgJsonbValueWithMemoryContext("[1]")},
+        PGScalarFunctionTestCase{
+            kPGJsonbBuildArrayFunctionName,
+            {zetasql::Value::Int64(1), zetasql::Value::Int64(2)},
+            *CreatePgJsonbValueWithMemoryContext("[1, 2]")},
+        PGScalarFunctionTestCase{
+            kPGJsonbBuildArrayFunctionName,
+            {kNullStringValue},
+            *CreatePgJsonbValueWithMemoryContext("[null]")},
+
+        // pg.jsonb_build_object
+        PGScalarFunctionTestCase{kPGJsonbBuildObjectFunctionName,
+                                 {},
+                                 *CreatePgJsonbValueWithMemoryContext("{}")},
+        PGScalarFunctionTestCase{
+            kPGJsonbBuildObjectFunctionName,
+            {zetasql::Value::String("a"), zetasql::Value::Int64(1)},
+            *CreatePgJsonbValueWithMemoryContext("{\"a\": 1}")},
+        PGScalarFunctionTestCase{
+            kPGJsonbBuildObjectFunctionName,
+            {zetasql::Value::String("a"), zetasql::Value::Int64(1),
+             zetasql::Value::String("b"), zetasql::Value::Int64(2)},
+            *CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": 2}")},
+        PGScalarFunctionTestCase{
+            kPGJsonbBuildObjectFunctionName,
+            {zetasql::Value::String("key"), kNullStringValue},
+            *CreatePgJsonbValueWithMemoryContext("{\"key\": null}")},
 
         PGScalarFunctionTestCase{
             kPGNumericAddFunctionName,
@@ -2500,31 +2533,7 @@ TEST_F(EmulatorFunctionsTest,
                HasSubstr("bigint out of range")));
 }
 
-TEST_F(EmulatorFunctionsTest, JsonbConstructorFunctions) {
-  const zetasql::Function* build_array_function =
-      functions_[kPGJsonBBuildArrayFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
-                       (build_array_function->GetFunctionEvaluatorFactory())(
-                           build_array_function->signatures().front()));
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::Int64(0), zetasql::Value::Int64(1)})),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("jsonb_build_array is not supported")));
-
-  const zetasql::Function* build_object_function =
-      functions_[kPGJsonBBuildObjectFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
-                       (build_object_function->GetFunctionEvaluatorFactory())(
-                           build_object_function->signatures().front()));
-  EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String("key1"), zetasql::Value::Int64(0),
-           zetasql::Value::String("key2"), zetasql::Value::Int64(1)})),
-      StatusIs(absl::StatusCode::kUnimplemented,
-               HasSubstr("jsonb_build_object is not supported")));
-}
-
-class EvalToJsonBTest : public EmulatorFunctionsTest {
+class EvalToJsonbTest : public EmulatorFunctionsTest {
  protected:
   const std::string kMaxPgJsonbNumericWholeDigitStr = std::string(
       spangres::datatypes::common::kMaxPGJSONBNumericWholeDigits, '9');
@@ -2536,44 +2545,44 @@ class EvalToJsonBTest : public EmulatorFunctionsTest {
 
   void SetUp() override {
     const zetasql::Function* function =
-        functions_[kPGToJsonBFunctionName].get();
+        functions_[kPGToJsonbFunctionName].get();
     ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 };
 
-MATCHER_P(NullToJsonB, input, "") {
+MATCHER_P(NullToJsonb, input, "") {
   EXPECT_THAT(arg(absl::MakeConstSpan({input})),
               zetasql_base::testing::IsOkAndHolds(zetasql::values::Null(
                   spangres::datatypes::GetPgJsonbType())));
   return true;
 }
 
-TEST_F(EvalToJsonBTest, NullValueInput) {
-  EXPECT_THAT(evaluator_, NullToJsonB(zetasql::values::NullBool()));
-  EXPECT_THAT(evaluator_, NullToJsonB(zetasql::values::NullInt64()));
-  EXPECT_THAT(evaluator_, NullToJsonB(zetasql::values::NullDouble()));
-  EXPECT_THAT(evaluator_, NullToJsonB(zetasql::values::NullDate()));
-  EXPECT_THAT(evaluator_, NullToJsonB(zetasql::values::NullTimestamp()));
-  EXPECT_THAT(evaluator_, NullToJsonB(kNullStringValue));
-  EXPECT_THAT(evaluator_, NullToJsonB(zetasql::values::NullBytes()));
-  EXPECT_THAT(evaluator_, NullToJsonB(zetasql::values::Null(
+TEST_F(EvalToJsonbTest, NullValueInput) {
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullBool()));
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullInt64()));
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullDouble()));
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullDate()));
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullTimestamp()));
+  EXPECT_THAT(evaluator_, NullToJsonb(kNullStringValue));
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullBytes()));
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::Null(
                               spangres::datatypes::GetPgJsonbType())));
-  EXPECT_THAT(evaluator_, NullToJsonB(zetasql::values::Null(
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::Null(
                               spangres::datatypes::GetPgNumericType())));
-  EXPECT_THAT(evaluator_, NullToJsonB(zetasql::values::Null(
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::Null(
                               zetasql::types::StringArrayType())));
   EXPECT_THAT(
       evaluator_,
-      NullToJsonB(zetasql::values::Null(zetasql::types::Int64ArrayType())));
-  EXPECT_THAT(evaluator_, NullToJsonB(zetasql::values::Null(
+      NullToJsonb(zetasql::values::Null(zetasql::types::Int64ArrayType())));
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::Null(
                               zetasql::types::DoubleArrayType())));
   EXPECT_THAT(
       evaluator_,
-      NullToJsonB(zetasql::values::Null(zetasql::types::BytesArrayType())));
+      NullToJsonb(zetasql::values::Null(zetasql::types::BytesArrayType())));
 }
 
-MATCHER_P2(TimestampToJsonB, input, expected_string, "") {
+MATCHER_P2(TimestampToJsonb, input, expected_string, "") {
   absl::Time timestamp;
   absl::Status status = zetasql::functions::ConvertStringToTimestamp(
       input, absl::UTCTimeZone(),
@@ -2590,46 +2599,46 @@ MATCHER_P2(TimestampToJsonB, input, expected_string, "") {
   return true;
 }
 
-TEST_F(EvalToJsonBTest, TimestampInput) {
-  EXPECT_THAT(evaluator_, TimestampToJsonB("1986-01-01T00:00:01Z",
+TEST_F(EvalToJsonbTest, TimestampInput) {
+  EXPECT_THAT(evaluator_, TimestampToJsonb("1986-01-01T00:00:01Z",
                                            "\"1986-01-01T00:00:01+00:00\""));
-  EXPECT_THAT(evaluator_, TimestampToJsonB("1986-01-01T00:00:01.0Z",
+  EXPECT_THAT(evaluator_, TimestampToJsonb("1986-01-01T00:00:01.0Z",
                                            "\"1986-01-01T00:00:01+00:00\""));
-  EXPECT_THAT(evaluator_, TimestampToJsonB("1986-01-01T00:00:01.1Z",
+  EXPECT_THAT(evaluator_, TimestampToJsonb("1986-01-01T00:00:01.1Z",
                                            "\"1986-01-01T00:00:01.1+00:00\""));
-  EXPECT_THAT(evaluator_, TimestampToJsonB("1986-01-01T00:00:01.01Z",
+  EXPECT_THAT(evaluator_, TimestampToJsonb("1986-01-01T00:00:01.01Z",
                                            "\"1986-01-01T00:00:01.01+00:00\""));
   EXPECT_THAT(evaluator_,
-              TimestampToJsonB("1986-01-01T00:00:01.001Z",
+              TimestampToJsonb("1986-01-01T00:00:01.001Z",
                                "\"1986-01-01T00:00:01.001+00:00\""));
   EXPECT_THAT(evaluator_,
-              TimestampToJsonB("1986-01-01T00:00:01.0001Z",
+              TimestampToJsonb("1986-01-01T00:00:01.0001Z",
                                "\"1986-01-01T00:00:01.0001+00:00\""));
   EXPECT_THAT(evaluator_,
-              TimestampToJsonB("1986-01-01T00:00:01.00001Z",
+              TimestampToJsonb("1986-01-01T00:00:01.00001Z",
                                "\"1986-01-01T00:00:01.00001+00:00\""));
   EXPECT_THAT(evaluator_,
-              TimestampToJsonB("1986-01-01T00:00:01.000100Z",
+              TimestampToJsonb("1986-01-01T00:00:01.000100Z",
                                "\"1986-01-01T00:00:01.0001+00:00\""));
   EXPECT_THAT(evaluator_,
-              TimestampToJsonB("1986-01-01T00:00:01.000101Z",
+              TimestampToJsonb("1986-01-01T00:00:01.000101Z",
                                "\"1986-01-01T00:00:01.000101+00:00\""));
   EXPECT_THAT(evaluator_,
-              TimestampToJsonB("1986-01-01T00:00:01.001001100Z",
+              TimestampToJsonb("1986-01-01T00:00:01.001001100Z",
                                "\"1986-01-01T00:00:01.001001+00:00\""));
-  EXPECT_THAT(evaluator_, TimestampToJsonB("1986-01-01 00:00:01Z",
+  EXPECT_THAT(evaluator_, TimestampToJsonb("1986-01-01 00:00:01Z",
                                            "\"1986-01-01T00:00:01+00:00\""));
-  EXPECT_THAT(evaluator_, TimestampToJsonB("1986-01-01T00:00:01",
+  EXPECT_THAT(evaluator_, TimestampToJsonb("1986-01-01T00:00:01",
                                            "\"1986-01-01T00:00:01+00:00\""));
-  EXPECT_THAT(evaluator_, TimestampToJsonB("1986-01-01 00:00:01",
+  EXPECT_THAT(evaluator_, TimestampToJsonb("1986-01-01 00:00:01",
                                            "\"1986-01-01T00:00:01+00:00\""));
-  EXPECT_THAT(evaluator_, TimestampToJsonB("1986-01-01T00:00:01+5:30",
+  EXPECT_THAT(evaluator_, TimestampToJsonb("1986-01-01T00:00:01+5:30",
                                            "\"1985-12-31T18:30:01+00:00\""));
-  EXPECT_THAT(evaluator_, TimestampToJsonB("1986-01-01T00:00:01+5:30",
+  EXPECT_THAT(evaluator_, TimestampToJsonb("1986-01-01T00:00:01+5:30",
                                            "\"1985-12-31T18:30:01+00:00\""));
 }
 
-MATCHER_P2(BoolToJsonB, input, expected_string, "") {
+MATCHER_P2(BoolToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan({zetasql::values::Bool(input)})),
       zetasql_base::testing::IsOkAndHolds(
@@ -2637,12 +2646,12 @@ MATCHER_P2(BoolToJsonB, input, expected_string, "") {
   return true;
 }
 
-TEST_F(EvalToJsonBTest, BoolInput) {
-  EXPECT_THAT(evaluator_, BoolToJsonB(true, "true"));
-  EXPECT_THAT(evaluator_, BoolToJsonB(false, "false"));
+TEST_F(EvalToJsonbTest, BoolInput) {
+  EXPECT_THAT(evaluator_, BoolToJsonb(true, "true"));
+  EXPECT_THAT(evaluator_, BoolToJsonb(false, "false"));
 }
 
-MATCHER_P2(Int64ToJsonB, input, expected_string, "") {
+MATCHER_P2(Int64ToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan({zetasql::values::Int64(input)})),
       zetasql_base::testing::IsOkAndHolds(
@@ -2650,15 +2659,15 @@ MATCHER_P2(Int64ToJsonB, input, expected_string, "") {
   return true;
 }
 
-TEST_F(EvalToJsonBTest, Int64Input) {
-  EXPECT_THAT(evaluator_, Int64ToJsonB(10, "10"));
-  EXPECT_THAT(evaluator_, Int64ToJsonB(std::numeric_limits<int64_t>::max(),
+TEST_F(EvalToJsonbTest, Int64Input) {
+  EXPECT_THAT(evaluator_, Int64ToJsonb(10, "10"));
+  EXPECT_THAT(evaluator_, Int64ToJsonb(std::numeric_limits<int64_t>::max(),
                                        "9223372036854775807"));
-  EXPECT_THAT(evaluator_, Int64ToJsonB(std::numeric_limits<int64_t>::min(),
+  EXPECT_THAT(evaluator_, Int64ToJsonb(std::numeric_limits<int64_t>::min(),
                                        "-9223372036854775808"));
 }
 
-MATCHER_P2(DoubleToJsonB, input, expected_string, "") {
+MATCHER_P2(DoubleToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan({zetasql::values::Double(input)})),
       zetasql_base::testing::IsOkAndHolds(
@@ -2666,37 +2675,37 @@ MATCHER_P2(DoubleToJsonB, input, expected_string, "") {
   return true;
 }
 
-TEST_F(EvalToJsonBTest, DoubleInput) {
-  EXPECT_THAT(evaluator_, DoubleToJsonB(0.0, "0"));
-  EXPECT_THAT(evaluator_, DoubleToJsonB(3.14, "3.14"));
-  EXPECT_THAT(evaluator_, DoubleToJsonB(3.14000000, "3.14"));
+TEST_F(EvalToJsonbTest, DoubleInput) {
+  EXPECT_THAT(evaluator_, DoubleToJsonb(0.0, "0"));
+  EXPECT_THAT(evaluator_, DoubleToJsonb(3.14, "3.14"));
+  EXPECT_THAT(evaluator_, DoubleToJsonb(3.14000000, "3.14"));
   EXPECT_THAT(evaluator_,
-              DoubleToJsonB(3.14567897543568997764, "3.14567897543569"));
+              DoubleToJsonb(3.14567897543568997764, "3.14567897543569"));
   EXPECT_THAT(evaluator_,
-              DoubleToJsonB(3.14567897543562524102, "3.1456789754356254"));
-  EXPECT_THAT(evaluator_, DoubleToJsonB(-33.1234954500, "-33.12349545"));
-  EXPECT_THAT(evaluator_, DoubleToJsonB(0.0000134200, "0.00001342"));
-  EXPECT_THAT(evaluator_, DoubleToJsonB(0.0000000000000000000100000000000000001,
+              DoubleToJsonb(3.14567897543562524102, "3.1456789754356254"));
+  EXPECT_THAT(evaluator_, DoubleToJsonb(-33.1234954500, "-33.12349545"));
+  EXPECT_THAT(evaluator_, DoubleToJsonb(0.0000134200, "0.00001342"));
+  EXPECT_THAT(evaluator_, DoubleToJsonb(0.0000000000000000000100000000000000001,
                                         "0.00000000000000000001"));
   EXPECT_THAT(evaluator_,
-              DoubleToJsonB(0.000000000000000000010000000000000001,
+              DoubleToJsonb(0.000000000000000000010000000000000001,
                             "0.000000000000000000010000000000000001"));
-  EXPECT_THAT(evaluator_, DoubleToJsonB(NAN, "\"NaN\""));
-  EXPECT_THAT(evaluator_, DoubleToJsonB(-INFINITY, "\"-Infinity\""));
-  EXPECT_THAT(evaluator_, DoubleToJsonB(+INFINITY, "\"Infinity\""));
-  EXPECT_THAT(evaluator_, DoubleToJsonB(std::numeric_limits<double>::max(),
+  EXPECT_THAT(evaluator_, DoubleToJsonb(NAN, "\"NaN\""));
+  EXPECT_THAT(evaluator_, DoubleToJsonb(-INFINITY, "\"-Infinity\""));
+  EXPECT_THAT(evaluator_, DoubleToJsonb(+INFINITY, "\"Infinity\""));
+  EXPECT_THAT(evaluator_, DoubleToJsonb(std::numeric_limits<double>::max(),
                                         absl::StrCat("17976931348623157",
                                                      std::string(292, '0'))));
   EXPECT_THAT(evaluator_,
-              DoubleToJsonB(std::numeric_limits<double>::min(),
+              DoubleToJsonb(std::numeric_limits<double>::min(),
                             absl::StrCat("0.", std::string(307, '0'),
                                          "22250738585072014")));
-  EXPECT_THAT(evaluator_, DoubleToJsonB(std::numeric_limits<double>::lowest(),
+  EXPECT_THAT(evaluator_, DoubleToJsonb(std::numeric_limits<double>::lowest(),
                                         absl::StrCat("-17976931348623157",
                                                      std::string(292, '0'))));
 }
 
-MATCHER_P2(DateToJsonB, input, expected_string, "") {
+MATCHER_P2(DateToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan(
           {zetasql::values::Date(input - absl::CivilDay(1970, 1, 1))})),
@@ -2705,16 +2714,16 @@ MATCHER_P2(DateToJsonB, input, expected_string, "") {
   return true;
 }
 
-TEST_F(EvalToJsonBTest, DateInput) {
+TEST_F(EvalToJsonbTest, DateInput) {
   EXPECT_THAT(evaluator_,
-              DateToJsonB(absl::CivilDay(1970, 1, 1), "\"1970-01-01\""));
+              DateToJsonb(absl::CivilDay(1970, 1, 1), "\"1970-01-01\""));
   EXPECT_THAT(evaluator_,
-              DateToJsonB(absl::CivilDay(1971, 1, 1), "\"1971-01-01\""));
+              DateToJsonb(absl::CivilDay(1971, 1, 1), "\"1971-01-01\""));
   EXPECT_THAT(evaluator_,
-              DateToJsonB(absl::CivilDay(1971, 1, 1), "\"1971-01-01\""));
+              DateToJsonb(absl::CivilDay(1971, 1, 1), "\"1971-01-01\""));
 }
 
-MATCHER_P2(StringToJsonB, input, expected_string, "") {
+MATCHER_P2(StringToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan({zetasql::values::String(input)})),
       zetasql_base::testing::IsOkAndHolds(
@@ -2722,21 +2731,21 @@ MATCHER_P2(StringToJsonB, input, expected_string, "") {
   return true;
 }
 
-TEST_F(EvalToJsonBTest, StringInput) {
-  EXPECT_THAT(evaluator_, StringToJsonB("hello", "\"hello\""));
+TEST_F(EvalToJsonbTest, StringInput) {
+  EXPECT_THAT(evaluator_, StringToJsonb("hello", "\"hello\""));
   EXPECT_THAT(evaluator_,
-              StringToJsonB("special characters(', \", \r, \n)",
+              StringToJsonb("special characters(', \", \r, \n)",
                             "\"special characters(', \\\", \\r, \\n)\""));
   EXPECT_THAT(evaluator_,
-              StringToJsonB("non ascii characters(ß, Д, \u0001)",
+              StringToJsonb("non ascii characters(ß, Д, \u0001)",
                             "\"non ascii characters(ß, Д, \\u0001)\""));
-  EXPECT_THAT(evaluator_, StringToJsonB("", "\"\""));
-  EXPECT_THAT(evaluator_, StringToJsonB("例子", R"("例子")"));
+  EXPECT_THAT(evaluator_, StringToJsonb("", "\"\""));
+  EXPECT_THAT(evaluator_, StringToJsonb("例子", R"("例子")"));
   EXPECT_THAT(evaluator_,
-              StringToJsonB("{\"a\":      1}", "\"{\\\"a\\\":      1}\""));
+              StringToJsonb("{\"a\":      1}", "\"{\\\"a\\\":      1}\""));
 }
 
-MATCHER_P2(BytesToJsonB, input, expected_string, "") {
+MATCHER_P2(BytesToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan({zetasql::values::Bytes(input)})),
       zetasql_base::testing::IsOkAndHolds(
@@ -2744,20 +2753,20 @@ MATCHER_P2(BytesToJsonB, input, expected_string, "") {
   return true;
 }
 
-TEST_F(EvalToJsonBTest, BytesInput) {
-  EXPECT_THAT(evaluator_, BytesToJsonB(" ", "\"\\\\x20\""));
-  EXPECT_THAT(evaluator_, BytesToJsonB("hello", "\"\\\\x68656c6c6f\""));
-  EXPECT_THAT(evaluator_, BytesToJsonB("special characters(', \\\", \\r, \\n)",
+TEST_F(EvalToJsonbTest, BytesInput) {
+  EXPECT_THAT(evaluator_, BytesToJsonb(" ", "\"\\\\x20\""));
+  EXPECT_THAT(evaluator_, BytesToJsonb("hello", "\"\\\\x68656c6c6f\""));
+  EXPECT_THAT(evaluator_, BytesToJsonb("special characters(', \\\", \\r, \\n)",
                                        "\"\\\\x7370656369616c206368617261637465"
                                        "727328272c205c222c205c722c205c6e29\""));
-  EXPECT_THAT(evaluator_, BytesToJsonB("non ascii characters(ß, Д, \u0001)",
+  EXPECT_THAT(evaluator_, BytesToJsonb("non ascii characters(ß, Д, \u0001)",
                                        "\"\\\\x6e6f6e20617363696920636861726163"
                                        "7465727328c39f2c20d0942c200129\""));
-  EXPECT_THAT(evaluator_, BytesToJsonB("", "\"\\\\x\""));
-  EXPECT_THAT(evaluator_, BytesToJsonB("例子", "\"\\\\xe4be8be5ad90\""));
+  EXPECT_THAT(evaluator_, BytesToJsonb("", "\"\\\\x\""));
+  EXPECT_THAT(evaluator_, BytesToJsonb("例子", "\"\\\\xe4be8be5ad90\""));
 }
 
-MATCHER_P2(JsonBToJsonB, input, expected_string, "") {
+MATCHER_P2(JsonbToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan(
           {CreatePgJsonbValueWithMemoryContext(input).value()})),
@@ -2766,23 +2775,23 @@ MATCHER_P2(JsonBToJsonB, input, expected_string, "") {
   return true;
 }
 
-TEST_F(EvalToJsonBTest, JsonBInput) {
-  EXPECT_THAT(evaluator_, JsonBToJsonB(R"({"a":1.0, "b" : null})",
+TEST_F(EvalToJsonbTest, JsonbInput) {
+  EXPECT_THAT(evaluator_, JsonbToJsonb(R"({"a":1.0, "b" : null})",
                                        R"({"a": 1.0, "b": null})"));
   EXPECT_THAT(evaluator_,
-              JsonBToJsonB(R"({"a"  :[ "b" , "c" ]})", R"({"a": ["b", "c"]})"));
-  EXPECT_THAT(evaluator_, JsonBToJsonB("  1.0 ", "1.0"));
-  EXPECT_THAT(evaluator_, JsonBToJsonB(R"(   "abcd"  )", R"("abcd")"));
-  EXPECT_THAT(evaluator_, JsonBToJsonB("[1,2,  3,   4]", "[1, 2, 3, 4]"));
+              JsonbToJsonb(R"({"a"  :[ "b" , "c" ]})", R"({"a": ["b", "c"]})"));
+  EXPECT_THAT(evaluator_, JsonbToJsonb("  1.0 ", "1.0"));
+  EXPECT_THAT(evaluator_, JsonbToJsonb(R"(   "abcd"  )", R"("abcd")"));
+  EXPECT_THAT(evaluator_, JsonbToJsonb("[1,2,  3,   4]", "[1, 2, 3, 4]"));
 
   // Test normalization of PG.NUMERIC and PG.JSONB
   EXPECT_THAT(evaluator_,
-              JsonBToJsonB(R"({"a":[2],"a":[1]})", R"({"a": [1]})"));
-  EXPECT_THAT(evaluator_, JsonBToJsonB(R"({"b":[1e0],"a":[2]})",
+              JsonbToJsonb(R"({"a":[2],"a":[1]})", R"({"a": [1]})"));
+  EXPECT_THAT(evaluator_, JsonbToJsonb(R"({"b":[1e0],"a":[2]})",
                                        R"({"a": [2], "b": [1]})"));
 }
 
-MATCHER_P2(NumericToJsonB, input, expected_string, "") {
+MATCHER_P2(NumericToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan(
           {CreatePgNumericValueWithMemoryContext(input).value()})),
@@ -2791,19 +2800,19 @@ MATCHER_P2(NumericToJsonB, input, expected_string, "") {
   return true;
 }
 
-TEST_F(EvalToJsonBTest, NumericInput) {
-  EXPECT_THAT(evaluator_, NumericToJsonB("0  ", "0"));
+TEST_F(EvalToJsonbTest, NumericInput) {
+  EXPECT_THAT(evaluator_, NumericToJsonb("0  ", "0"));
   EXPECT_THAT(evaluator_,
-              NumericToJsonB(absl::StrCat(" -", kMaxPgJsonbNumericDigitStr),
+              NumericToJsonb(absl::StrCat(" -", kMaxPgJsonbNumericDigitStr),
                              absl::StrCat("-", kMaxPgJsonbNumericDigitStr)));
-  EXPECT_THAT(evaluator_, NumericToJsonB(kMaxPgJsonbNumericDigitStr,
+  EXPECT_THAT(evaluator_, NumericToJsonb(kMaxPgJsonbNumericDigitStr,
                                          kMaxPgJsonbNumericDigitStr));
   EXPECT_THAT(evaluator_,
-              NumericToJsonB(" 0.0000000001230 ", "0.0000000001230"));
-  EXPECT_THAT(evaluator_, NumericToJsonB("  NaN", "\"NaN\""));
+              NumericToJsonb(" 0.0000000001230 ", "0.0000000001230"));
+  EXPECT_THAT(evaluator_, NumericToJsonb("  NaN", "\"NaN\""));
 }
 
-MATCHER_P2(ArrayToJsonB, array_input, expected_string, "") {
+MATCHER_P2(ArrayToJsonb, array_input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan({array_input})),
       zetasql_base::testing::IsOkAndHolds(
@@ -2811,22 +2820,22 @@ MATCHER_P2(ArrayToJsonB, array_input, expected_string, "") {
   return true;
 }
 
-TEST_F(EvalToJsonBTest, ArrayInput) {
+TEST_F(EvalToJsonbTest, ArrayInput) {
   EXPECT_THAT(evaluator_,
-              ArrayToJsonB(zetasql::values::Int64Array({1, 9007199254740993}),
+              ArrayToJsonb(zetasql::values::Int64Array({1, 9007199254740993}),
                            "[1, 9007199254740993]"));
   EXPECT_THAT(
       evaluator_,
-      ArrayToJsonB(zetasql::Value::MakeArray(
+      ArrayToJsonb(zetasql::Value::MakeArray(
                        zetasql::types::StringArrayType(),
                        {zetasql::values::String("a"), kNullStringValue})
                        .value(),
                    "[\"a\", null]"));
   EXPECT_THAT(evaluator_,
-              ArrayToJsonB(zetasql::values::BytesArray({" ", "ab"}),
+              ArrayToJsonb(zetasql::values::BytesArray({" ", "ab"}),
                            "[\"\\\\x20\", \"\\\\x6162\"]"));
   EXPECT_THAT(evaluator_,
-              ArrayToJsonB(zetasql::Value::MakeArray(
+              ArrayToJsonb(zetasql::Value::MakeArray(
                                spangres::datatypes::GetPgNumericArrayType(),
                                {CreatePgNumericValueWithMemoryContext(
                                     absl::StrCat(kMaxPgJsonbNumericDigitStr))
@@ -2834,20 +2843,20 @@ TEST_F(EvalToJsonBTest, ArrayInput) {
                                .value(),
                            absl::StrCat("[", kMaxPgJsonbNumericDigitStr, "]")));
   EXPECT_THAT(evaluator_,
-              ArrayToJsonB(zetasql::values::DoubleArray({}), "[]"));
+              ArrayToJsonb(zetasql::values::DoubleArray({}), "[]"));
 }
 
-class EvalJsonBSubscriptText : public EmulatorFunctionsTest {
+class EvalJsonbSubscriptText : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
     const zetasql::Function* function =
-        functions_[kPGJsonBSubscriptTextFunctionName].get();
+        functions_[kPGJsonbSubscriptTextFunctionName].get();
     ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 };
 
-MATCHER_P3(JsonBArrayElementText, jsonb, element_index, expected_string_value,
+MATCHER_P3(JsonbArrayElementText, jsonb, element_index, expected_string_value,
            "") {
   EXPECT_THAT(arg(absl::MakeConstSpan(
                   {jsonb.value(), zetasql::values::Int64(element_index)})),
@@ -2855,7 +2864,7 @@ MATCHER_P3(JsonBArrayElementText, jsonb, element_index, expected_string_value,
   return true;
 }
 
-MATCHER_P3(JsonBObjectFieldText, jsonb, object_field, expected_string_value,
+MATCHER_P3(JsonbObjectFieldText, jsonb, object_field, expected_string_value,
            "") {
   EXPECT_THAT(arg(absl::MakeConstSpan(
                   {jsonb.value(), zetasql::values::String(object_field)})),
@@ -2863,26 +2872,26 @@ MATCHER_P3(JsonBObjectFieldText, jsonb, object_field, expected_string_value,
   return true;
 }
 
-TEST_F(EvalJsonBSubscriptText, ElementIndexInput) {
+TEST_F(EvalJsonbSubscriptText, ElementIndexInput) {
   EXPECT_THAT(evaluator_,
-              JsonBArrayElementText(CreatePgJsonbValueWithMemoryContext(
+              JsonbArrayElementText(CreatePgJsonbValueWithMemoryContext(
                                         R"([null, "string val"])"),
                                     0, kNullStringValue));
   EXPECT_THAT(
       evaluator_,
-      JsonBArrayElementText(
+      JsonbArrayElementText(
           CreatePgJsonbValueWithMemoryContext(R"([1.00, "string val"])"), 1,
           zetasql::values::String("string val")));
   EXPECT_THAT(evaluator_,
-              JsonBArrayElementText(CreatePgJsonbValueWithMemoryContext(
+              JsonbArrayElementText(CreatePgJsonbValueWithMemoryContext(
                                         R"([null, "string val"])"),
                                     2, kNullStringValue));
   EXPECT_THAT(evaluator_,
-              JsonBArrayElementText(CreatePgJsonbValueWithMemoryContext(
+              JsonbArrayElementText(CreatePgJsonbValueWithMemoryContext(
                                         R"([null, "string val"])"),
                                     -1, kNullStringValue));
   EXPECT_THAT(evaluator_,
-              JsonBArrayElementText(
+              JsonbArrayElementText(
                   CreatePgJsonbValueWithMemoryContext(R"({"a": "string val"})"),
                   0, kNullStringValue));
 
@@ -2904,27 +2913,27 @@ TEST_F(EvalJsonBSubscriptText, ElementIndexInput) {
       zetasql_base::testing::IsOkAndHolds(kNullStringValue));
 }
 
-TEST_F(EvalJsonBSubscriptText, ObjectFieldInput) {
+TEST_F(EvalJsonbSubscriptText, ObjectFieldInput) {
   EXPECT_THAT(evaluator_,
-              JsonBObjectFieldText(
+              JsonbObjectFieldText(
                   CreatePgJsonbValueWithMemoryContext(R"({"a": "string val"})"),
                   "a", zetasql::values::String("string val")));
   EXPECT_THAT(
       evaluator_,
-      JsonBObjectFieldText(
+      JsonbObjectFieldText(
           CreatePgJsonbValueWithMemoryContext(R"({"a": {"b": "string_val"}})"),
           "a", zetasql::values::String(R"({"b": "string_val"})")));
   EXPECT_THAT(evaluator_,
-              JsonBObjectFieldText(CreatePgJsonbValueWithMemoryContext(
+              JsonbObjectFieldText(CreatePgJsonbValueWithMemoryContext(
                                        R"([1.00, "string val"])"),
                                    "a", kNullStringValue));
   EXPECT_THAT(evaluator_,
-              JsonBObjectFieldText(
+              JsonbObjectFieldText(
                   CreatePgJsonbValueWithMemoryContext(R"({"a": "string val"})"),
                   "no match", kNullStringValue));
   EXPECT_THAT(
       evaluator_,
-      JsonBObjectFieldText(CreatePgJsonbValueWithMemoryContext(R"({"a": ""})"),
+      JsonbObjectFieldText(CreatePgJsonbValueWithMemoryContext(R"({"a": ""})"),
                            "a", zetasql::values::String("")));
 
   // Following is a test case when STRING argument is NULL. There is no error
@@ -2935,7 +2944,7 @@ TEST_F(EvalJsonBSubscriptText, ObjectFieldInput) {
               zetasql_base::testing::IsOkAndHolds(kNullStringValue));
 }
 
-TEST_F(EvalJsonBSubscriptText, ErrorCases) {
+TEST_F(EvalJsonbSubscriptText, ErrorCases) {
   // More than 2 arguments
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {CreatePgJsonbValueWithMemoryContext("[null]").value(),
@@ -2954,17 +2963,17 @@ TEST_F(EvalJsonBSubscriptText, ErrorCases) {
               StatusIs(absl::StatusCode::kUnimplemented));
 }
 
-class EvalJsonBArrayElement : public EmulatorFunctionsTest {
+class EvalJsonbArrayElement : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
     const zetasql::Function* function =
-        functions_[kPGJsonBArrayElementFunctionName].get();
+        functions_[kPGJsonbArrayElementFunctionName].get();
     ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 };
 
-TEST_F(EvalJsonBArrayElement, ErrorCases) {
+TEST_F(EvalJsonbArrayElement, ErrorCases) {
   // More than 2 arguments
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {CreatePgJsonbValueWithMemoryContext("[null]").value(),
@@ -2983,17 +2992,17 @@ TEST_F(EvalJsonBArrayElement, ErrorCases) {
               StatusIs(absl::StatusCode::kUnimplemented));
 }
 
-class EvalJsonBObjectField : public EmulatorFunctionsTest {
+class EvalJsonbObjectField : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
     const zetasql::Function* function =
-        functions_[kPGJsonBObjectFieldFunctionName].get();
+        functions_[kPGJsonbObjectFieldFunctionName].get();
     ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 };
 
-TEST_F(EvalJsonBObjectField, ErrorCases) {
+TEST_F(EvalJsonbObjectField, ErrorCases) {
   // More than 2 arguments
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
@@ -3013,17 +3022,17 @@ TEST_F(EvalJsonBObjectField, ErrorCases) {
               StatusIs(absl::StatusCode::kUnimplemented));
 }
 
-class EvalJsonBTypeof : public EmulatorFunctionsTest {
+class EvalJsonbTypeof : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
     const zetasql::Function* function =
-        functions_[kPGJsonBTypeofFunctionName].get();
+        functions_[kPGJsonbTypeofFunctionName].get();
     ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 };
 
-TEST_F(EvalJsonBTypeof, ErrorCases) {
+TEST_F(EvalJsonbTypeof, ErrorCases) {
   // More than 1 argument
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgJsonbValueWithMemoryContext("[1,2,3.56]"),
@@ -3085,7 +3094,7 @@ TEST_P(EvalCastFromJsonbTest, TestEvalCastFromJsonb) {
   const EvalCastFromJsonbTestCase& test_case = GetParam();
 
   const zetasql::Function* function =
-      functions[kPGCastFromJsonBFunctionName].get();
+      functions[kPGCastFromJsonbFunctionName].get();
   auto callback = function->GetFunctionEvaluatorFactory();
 
   auto iter = signature_map.find(test_case.expected_value.type_kind());

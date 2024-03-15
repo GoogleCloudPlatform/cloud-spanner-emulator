@@ -22,20 +22,23 @@
 
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
+#include "zetasql/public/evaluator_table_iterator.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/types/type_factory.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 
-namespace google {
-namespace spanner {
-namespace emulator {
-namespace backend {
+namespace google::spanner::emulator::backend {
 
+// Implementation of ML.PREDICT function.
 class MlPredictTableValuedFunction : public zetasql::TableValuedFunction {
  public:
   explicit MlPredictTableValuedFunction(bool safe);
 
+  bool is_safe() const { return safe_; }
+
+  // Resolves output schema by combining model output and pass-through columns.
   absl::Status Resolve(
       const zetasql::AnalyzerOptions* analyzer_options,
       const std::vector<zetasql::TVFInputArgumentType>& actual_arguments,
@@ -44,15 +47,10 @@ class MlPredictTableValuedFunction : public zetasql::TableValuedFunction {
       std::shared_ptr<zetasql::TVFSignature>* output_tvf_signature)
       const override;
 
-  bool IsSafe() const { return safe_; }
-
  private:
   const bool safe_ = false;
 };
 
-}  // namespace backend
-}  // namespace emulator
-}  // namespace spanner
-}  // namespace google
+}  // namespace google::spanner::emulator::backend
 
 #endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ML_ML_PREDICT_TABLE_VALUED_FUNCTION_H_

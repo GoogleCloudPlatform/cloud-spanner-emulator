@@ -398,6 +398,7 @@ CREATE TABLE T (
 ERROR:.* Error parsing the definition of generated column `T`.`B`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
 ==
 # Check constraint depending on chained non-deterministic generated column.
+# TODO, emulator and prod returns different error messages for this test.
 # --regex
 # --skip_prod_env
 CREATE TABLE T (
@@ -407,7 +408,7 @@ CREATE TABLE T (
   check (C > A),
 ) PRIMARY KEY(A);
 --
-ERROR:.* Generated column `B` without the STORED attribute is not supported.
+ERROR:.* Error parsing the definition of generated column `T`.`B`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
 ==
 # Commit timestamp column not supported.
 # --regex

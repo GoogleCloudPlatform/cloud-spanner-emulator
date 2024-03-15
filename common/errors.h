@@ -94,6 +94,8 @@ absl::Status ArrayTypeMustSpecifyElementType(absl::string_view proto);
 absl::Status ValueProtoTypeMismatch(absl::string_view proto,
                                     absl::string_view expected_type);
 absl::Status CouldNotParseStringAsInteger(absl::string_view str);
+absl::Status CouldNotParseStringAsPgOid(absl::string_view str);
+absl::Status CouldNotParseStringAsFloat(absl::string_view str);
 absl::Status CouldNotParseStringAsDouble(absl::string_view str);
 absl::Status CouldNotParseStringAsNumeric(absl::string_view str);
 absl::Status CouldNotParseStringAsPgNumeric(absl::string_view str);
@@ -133,6 +135,7 @@ absl::Status CannotReturnReadTimestampForReadWriteTransaction();
 absl::Status InvalidReadOptionForMultiUseTransaction(
     absl::string_view timestamp_bound);
 absl::Status InvalidModeForReadOnlySingleUseTransaction();
+absl::Status DirectedReadNeedsReadOnlyTxn();
 absl::Status DmlDoesNotSupportSingleUseTransaction();
 absl::Status DmlSequenceOutOfOrder(int64_t request_seqno, int64_t last_seqno,
                                    absl::string_view sql_statement);
@@ -366,6 +369,25 @@ absl::Status InvalidModelDefaultBatchSize(absl::string_view model_name,
 absl::Status ModelDuplicateColumn(absl::string_view column_name);
 absl::Status ModelCaseInsensitiveDuplicateColumn(
     absl::string_view column_name, absl::string_view original_column_name);
+absl::Status MlInputColumnMissing(absl::string_view column_name,
+                                  absl::string_view column_type);
+absl::Status MlInputColumnAmbiguous(absl::string_view column_name);
+absl::Status MlInputColumnTypeMismatch(absl::string_view column_name,
+                                       absl::string_view input_column_type,
+                                       absl::string_view model_column_type);
+absl::Status MlPassThroughColumnAmbiguous(absl::string_view column_name);
+absl::Status MlPredictRow_Argument_Null(absl::string_view arg_name);
+absl::Status MlPredictRow_Argument_NotObject(absl::string_view arg_name);
+absl::Status MlPredictRow_Argument_UnexpectedValueType(
+    absl::string_view arg_name, absl::string_view key, absl::string_view type);
+absl::Status MlPredictRow_Argument_UnexpectedKey(absl::string_view arg_name,
+                                                 absl::string_view key);
+absl::Status MlPredictRow_ModelEndpoint_NoEndpoints();
+absl::Status MlPredictRow_ModelEndpoint_EndpointsAmbiguous();
+absl::Status MlPredictRow_ModelEndpoint_InvalidBatchSize(int64_t value_num,
+                                                         int64_t min_num,
+                                                         int64_t max_num);
+absl::Status MlPredictRow_Args_NoInstances();
 absl::Status EmptyStruct();
 absl::Status StructFieldNumberExceedsLimit(int64_t limit);
 absl::Status MissingStructFieldName(absl::string_view struct_type);
@@ -573,7 +595,6 @@ absl::Status CannotAlterColumnDataTypeWithDependentCheckConstraint(
 
 // Generated column errors
 absl::Status GeneratedColumnsNotEnabled();
-absl::Status NonStoredGeneratedColumnUnsupported(absl::string_view column_name);
 absl::Status GeneratedColumnDefinitionParseError(absl::string_view table_name,
                                                  absl::string_view column_name,
                                                  absl::string_view message);
@@ -592,6 +613,8 @@ absl::Status CannotAlterGeneratedColumnExpression(
     absl::string_view table_name, absl::string_view column_name);
 absl::Status CannotAlterColumnDataTypeWithDependentStoredGeneratedColumn(
     absl::string_view column_name);
+absl::Status CannotAlterGeneratedColumnStoredAttribute(
+    absl::string_view table_name, absl::string_view column_name);
 absl::Status CannotUseCommitTimestampOnGeneratedColumnDependency(
     absl::string_view column_name);
 absl::Status CannotUseGeneratedColumnInPrimaryKey(
@@ -647,6 +670,7 @@ absl::Status ReadOnlyTransactionDoesNotSupportDml(
     absl::string_view transaction_type);
 absl::Status ReadOnlyTransactionDoesNotSupportReadWriteOnlyFunctions(
     absl::string_view functions);
+absl::Status CannotInsertDuplicateKeyInsertOrUpdateDml(absl::string_view key);
 // Unsupported query shape errors.
 absl::Status UnsupportedReturnStructAsColumn();
 absl::Status UnsupportedArrayConstructorSyntaxForEmptyStructArray();
@@ -662,6 +686,9 @@ absl::Status ComparisonNotSupported(int arg_num,
 absl::Status StructComparisonNotSupported(absl::string_view function_name);
 absl::Status PendingCommitTimestampDmlValueOnly();
 absl::Status UnsupportedUpsertQueries(absl::string_view insert_mode);
+absl::Status UnsupportedReturningWithUpsertQueries(
+    absl::string_view insert_mode);
+absl::Status UnsupportedGeneratedKeyWithUpsertQueries();
 absl::Status NoFeatureSupportDifferentTypeArrayCasts(
     absl::string_view from_type, absl::string_view to_type);
 absl::Status UnsupportedTablesampleRepeatable();
@@ -719,6 +746,27 @@ absl::Status SynonymAlreadyExists(absl::string_view synonym,
                                   absl::string_view table_name);
 absl::Status CannotAlterSynonym(absl::string_view synonym,
                                 absl::string_view table_name);
+
+// Proto / enum type errors.
+absl::Status ProtoTypeNotFound(absl::string_view type);
+absl::Status ProtoEnumTypeNotFound(absl::string_view type);
+absl::Status UnrecognizedColumnType(absl::string_view column_name,
+                                    absl::string_view type);
+absl::Status InvalidEnumValue(absl::string_view column_name, int64_t int_value,
+                              absl::string_view column_type,
+                              absl::string_view key);
+absl::Status ExtensionNotSupported(int tag_number,
+                                   absl::string_view field_name);
+absl::Status MessageExtensionsNotSupported(absl::string_view message_name);
+absl::Status MessageTypeNotSupported(absl::string_view message_name);
+
+// Proto / enum type errors.
+absl::Status ProtoTypeNotFound(absl::string_view type);
+absl::Status ProtoEnumTypeNotFound(absl::string_view type);
+absl::Status DeletedTypeStillInUse(absl::string_view type_name,
+                                   absl::string_view column_name);
+absl::Status RestrictedPackagesCantBeUsed(absl::string_view type_name,
+                                          absl::string_view package_name);
 
 // Views errors.
 absl::Status ViewsNotSupported(absl::string_view view_op_name);

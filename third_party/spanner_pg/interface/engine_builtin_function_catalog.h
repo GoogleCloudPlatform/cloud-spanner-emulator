@@ -60,14 +60,25 @@ class EngineBuiltinFunctionCatalog {
   virtual absl::StatusOr<const zetasql::Function*> GetFunction(
       const std::string& name) const = 0;
 
+  // TODO: switch this to pure virtual when the on-branch
+  // SpangresBuiltinFunctionCatalog overrides it.
+  virtual absl::StatusOr<const zetasql::Procedure*> GetProcedure(
+      const std::string& name) const {
+    return absl::UnimplementedError("GetProcedure is not supported");
+  }
+
   virtual absl::StatusOr<const zetasql::TableValuedFunction*>
   GetTableValuedFunction(const std::string& name) const = 0;
 
   // Gets the full list of functions in the catalog.
+  virtual absl::Status GetFunctions(
+      absl::flat_hash_set<const zetasql::Function*>* output) const = 0;
+
+  // Gets the full list of procedures in the catalog.
   // TODO: switch this to pure virtual when the on-branch
   // SpangresBuiltinFunctionCatalog overrides it.
-  virtual absl::Status GetFunctions(
-      absl::flat_hash_set<const zetasql::Function*>* output) const {
+  virtual absl::Status GetProcedures(
+      absl::flat_hash_set<const zetasql::Procedure*>* output) const {
     return absl::OkStatus();
   }
 

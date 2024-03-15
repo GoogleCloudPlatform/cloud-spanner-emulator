@@ -31,6 +31,7 @@
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
@@ -510,8 +511,12 @@ ddl::DDLStatementList Schema::Dump() const {
 
 Schema::Schema(const SchemaGraph* graph
                ,
+               std::shared_ptr<const ProtoBundle> proto_bundle
+               ,
                const database_api::DatabaseDialect& dialect)
     : graph_(graph)
+      ,
+      proto_bundle_(proto_bundle)
       ,
       dialect_(dialect) {
   views_.clear();

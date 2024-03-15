@@ -315,6 +315,22 @@ absl::Status CouldNotParseStringAsInteger(absl::string_view str) {
                       absl::StrCat("Could not parse ", str, " as an integer"));
 }
 
+absl::Status CouldNotParseStringAsPgOid(absl::string_view str) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::StrCat("Could not parse ", str, " as PG.OID "));
+}
+
+absl::Status CouldNotParseStringAsFloat(absl::string_view str) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::StrCat(
+          "Could not parse ", str,
+          " as a FLOAT32. Only the following string values are supported for "
+          "FLOAT32: 'Infinity', 'NaN', and '-Infinity'. See "
+          "https://cloud.google.com/spanner/docs/"
+          "data-types#floating-point-type for more details"));
+}
+
 absl::Status CouldNotParseStringAsDouble(absl::string_view str) {
   return absl::Status(
       absl::StatusCode::kFailedPrecondition,
@@ -525,6 +541,12 @@ absl::Status InvalidModeForReadOnlySingleUseTransaction() {
   return absl::Status(absl::StatusCode::kInvalidArgument,
                       "Transaction mode for read only single use transaction "
                       "should be read_only.");
+}
+
+absl::Status DirectedReadNeedsReadOnlyTxn() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      "Directed reads can only be performed in a read-only transaction.");
 }
 
 absl::Status DmlDoesNotSupportSingleUseTransaction() {
@@ -1473,6 +1495,106 @@ absl::Status ModelCaseInsensitiveDuplicateColumn(
                        column_name, original_column_name));
 }
 
+absl::Status MlInputColumnMissing(absl::string_view column_name,
+                                  absl::string_view column_type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "The schema of a table or query provided to ML.PREDICT function "
+          "doesn't match the model: the schema doesn't have required column "
+          "`$0` with type `$1`.",
+          column_name, column_type));
+}
+
+absl::Status MlInputColumnAmbiguous(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "The schema of a table or query provided to ML.PREDICT function is "
+          "ambiguous: it contains multiple columns named `$0`.",
+          column_name));
+}
+
+absl::Status MlInputColumnTypeMismatch(absl::string_view column_name,
+                                       absl::string_view input_column_type,
+                                       absl::string_view model_column_type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The schema of a table or query provided to ML.PREDICT "
+                       "function doesn't match the model: column `$0` has "
+                       "type `$1` while the model's column has type `$2`",
+                       column_name, input_column_type, model_column_type));
+}
+
+absl::Status MlPassThroughColumnAmbiguous(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Column name $0 is ambiguous", column_name));
+}
+
+absl::Status MlPredictRow_Argument_Null(absl::string_view arg_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The `$0` argument to ML_PREDICT_ROW cannot be NULL",
+                       arg_name));
+}
+
+absl::Status MlPredictRow_Argument_NotObject(absl::string_view arg_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "The `$0` argument to ML_PREDICT_ROW function must be a JSON object",
+          arg_name));
+}
+
+absl::Status MlPredictRow_Argument_UnexpectedValueType(
+    absl::string_view arg_name, absl::string_view key, absl::string_view type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The `$0` argument to ML_PREDICT_ROW function expects "
+                       "key `$1` to contain value of type `$2`",
+                       arg_name, key, type));
+}
+
+absl::Status MlPredictRow_Argument_UnexpectedKey(absl::string_view arg_name,
+                                                 absl::string_view key) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("The `$0` argument to ML_PREDICT_ROW "
+                                       "function does not support key: `$1`",
+                                       arg_name, key));
+}
+
+absl::Status MlPredictRow_ModelEndpoint_NoEndpoints() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "The model_endpoint argument passed to ML_PREDICT_ROW function must "
+      "specify either 'endpoint' or 'endpoints'");
+}
+
+absl::Status MlPredictRow_ModelEndpoint_EndpointsAmbiguous() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "The model_endpoint argument passed to ML_PREDICT_ROW function cannot "
+      "specify both 'endpoint' and 'endpoints'");
+}
+
+absl::Status MlPredictRow_ModelEndpoint_InvalidBatchSize(int64_t value_num,
+                                                         int64_t min_num,
+                                                         int64_t max_num) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The model_endpoint argument passed to ML_PREDICT_ROW "
+                       "function contains \'default_batch_size\' with value of "
+                       "`$0 outside` of allowed range [$1, $2]",
+                       value_num, min_num, max_num));
+}
+
+absl::Status MlPredictRow_Args_NoInstances() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "The args argument passed to ML_PREDICT_ROW function "
+                      "must contain 'instances'");
+}
+
 absl::Status EmptyStruct() {
   return absl::Status(absl::StatusCode::kFailedPrecondition,
                       "Empty STRUCT is not allowed.");
@@ -2264,15 +2386,6 @@ absl::Status GeneratedColumnsNotEnabled() {
                       "Generated columns are not enabled.");
 }
 
-absl::Status NonStoredGeneratedColumnUnsupported(
-    absl::string_view column_name) {
-  return absl::Status(
-      absl::StatusCode::kUnimplemented,
-      absl::Substitute("Generated column `$0` without the STORED "
-                       "attribute is not supported.",
-                       column_name));
-}
-
 absl::Status GeneratedColumnDefinitionParseError(absl::string_view table_name,
                                                  absl::string_view column_name,
                                                  absl::string_view message) {
@@ -2350,6 +2463,15 @@ absl::Status CannotAlterColumnDataTypeWithDependentStoredGeneratedColumn(
       absl::Substitute("Cannot change the data type of column `$0`, which "
                        "has a dependent stored generated column.",
                        column_name));
+}
+
+absl::Status CannotAlterGeneratedColumnStoredAttribute(
+    absl::string_view table_name, absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Cannot change the STORED attribute for generated column `$0.$1`.",
+          table_name, column_name));
 }
 
 absl::Status CannotUseCommitTimestampOnGeneratedColumnDependency(
@@ -2683,11 +2805,33 @@ absl::Status PendingCommitTimestampDmlValueOnly() {
       "expression.");
 }
 
+absl::Status CannotInsertDuplicateKeyInsertOrUpdateDml(absl::string_view key) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot affect a row second time for key: $0", key));
+}
+
 absl::Status UnsupportedUpsertQueries(absl::string_view insert_mode) {
   return absl::Status(
       absl::StatusCode::kUnimplemented,
       absl::Substitute("$0 statement is not supported in Emulator",
                        insert_mode));
+}
+
+absl::Status UnsupportedReturningWithUpsertQueries(
+    absl::string_view insert_mode) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("Returning clause in $0 statement is not supported "
+                       "in Emulator",
+                       insert_mode));
+}
+
+absl::Status UnsupportedGeneratedKeyWithUpsertQueries() {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("Insert query with ON CONFLICT clause on table with "
+                       "generated key is not supported in Emulator"));
 }
 
 absl::Status NoFeatureSupportDifferentTypeArrayCasts(
@@ -2996,6 +3140,70 @@ absl::Status ForeignKeyRowDeletionPolicyAddNotAllowed(
       absl::Substitute("Cannot add a row deletion policy to table `$0`. It is "
                        "referenced by one or more foreign keys: `$1`.",
                        table_name, foreign_keys));
+}
+
+absl::Status ProtoTypeNotFound(absl::string_view type) {
+  return absl::NotFoundError(absl::Substitute("Type not found: `$0`", type));
+}
+
+absl::Status ProtoEnumTypeNotFound(absl::string_view type) {
+  return absl::NotFoundError(
+      absl::Substitute("Enum type not found: `$0`", type));
+}
+
+absl::Status UnrecognizedColumnType(absl::string_view column_name,
+                                    absl::string_view type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Column $0 has an unrecognized column type $1.",
+                       column_name, type));
+}
+
+absl::Status InvalidEnumValue(absl::string_view column_name, int64_t int_value,
+                              absl::string_view column_type,
+                              absl::string_view key) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Enum validation on column $0 failed at key $1 "
+                       "because type $2 cannot be set to $3",
+                       column_name, key, column_type, int_value));
+}
+
+absl::Status DeletedTypeStillInUse(absl::string_view type_name,
+                                   absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Removed type $0 is still being used by column $1",
+                       type_name, column_name));
+}
+
+absl::Status ExtensionNotSupported(int tag_number,
+                                   absl::string_view field_name) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("`$1` options has reserved extension tag `$0`.",
+                       tag_number, field_name));
+}
+
+absl::Status MessageExtensionsNotSupported(absl::string_view message_name) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("Message extensions are not supported for message `$0`.",
+                       message_name));
+}
+
+absl::Status MessageTypeNotSupported(absl::string_view message_name) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("Message type `$0` is not supported.", message_name));
+}
+
+absl::Status RestrictedPackagesCantBeUsed(absl::string_view type_name,
+                                          absl::string_view package_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Message `$0` has reserved package `$1`.", type_name,
+                       package_name));
 }
 
 absl::Status ViewsNotSupported(absl::string_view view_op_name) {

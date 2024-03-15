@@ -1,9 +1,3 @@
-# TODO: When DROP VIEW IE is supported, re-enable this test.
-# DROP VIEW IF EXISTS Users;
-# --
-# ERROR: <IF EXISTS> is not supported by <DROP> statement.
-# ==
-
 DROP VIEW Users CASCADE;
 --
 ERROR: Only <RESTRICT> behavior is supported by <DROP> statement.
@@ -25,6 +19,7 @@ CREATE TABLE test (
   val bigint NOT NULL
 );
 CREATE VIEW users SECURITY INVOKER AS SELECT name FROM test WHERE val > 18;
+DROP VIEW IF EXISTS notexists;
 DROP VIEW Users;
 --
 ^CREATE TABLE test \(

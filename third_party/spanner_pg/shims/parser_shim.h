@@ -158,6 +158,7 @@ typedef struct Constraint {
                                  // used for the constraints with expression
                                  // (ABSL_CHECK, GENERATED and DEFAULT)
 
+  int vector_length; /* Vector length */
   /* END SPANGRES ADDITIONAL FIELDS */
 } Constraint;
 

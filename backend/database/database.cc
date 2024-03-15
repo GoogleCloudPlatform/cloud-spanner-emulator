@@ -68,6 +68,8 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
       database->versioned_catalog_ = std::make_unique<VersionedCatalog>(
           std::make_unique<const Schema>(SchemaGraph::CreateEmpty()
                                          ,
+                                         ProtoBundle::CreateEmpty()
+                                         ,
                                          database->dialect_));
     } else {
       database->versioned_catalog_ = std::make_unique<VersionedCatalog>();

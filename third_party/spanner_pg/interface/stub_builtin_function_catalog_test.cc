@@ -54,6 +54,15 @@ TEST(StubBuiltinFunctionCatalogTest, GetFunction) {
   EXPECT_EQ(function, nullptr);
 }
 
+TEST(StubBuiltinFunctionCatalogTest, GetFunctions) {
+  StubBuiltinFunctionCatalog catalog =
+      StubBuiltinFunctionCatalog(zetasql::LanguageOptions());
+
+  absl::flat_hash_set<const zetasql::Function*> all_functions;
+  ZETASQL_ASSERT_OK(catalog.GetFunctions(&all_functions));
+  EXPECT_GT(all_functions.size(), 1);
+}
+
 }  // namespace
 
 }  // namespace postgres_translator

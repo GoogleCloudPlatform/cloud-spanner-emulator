@@ -123,6 +123,14 @@ struct PostgreSQLConstants {
       "value_capture_type";
   static constexpr absl::string_view kChangeStreamRetentionPeriodOptionName =
       "retention_period";
+  static constexpr absl::string_view kChangeStreamExcludeInsertOptionName =
+      "exclude_insert";
+  static constexpr absl::string_view kChangeStreamExcludeUpdateOptionName =
+      "exclude_update";
+  static constexpr absl::string_view kChangeStreamExcludeDeleteOptionName =
+      "exclude_delete";
+  static constexpr absl::string_view kChangeStreamExcludeTtlDeletesOptionName =
+      "exclude_ttl_deletes";
   static constexpr absl::string_view kInternalDatabaseDefaultLeaderOptionName =
     "spanner.internal.cloud_default_leader";
 

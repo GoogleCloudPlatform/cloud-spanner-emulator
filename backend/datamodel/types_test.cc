@@ -37,18 +37,22 @@ class TypesTest : public ::testing::Test {
   TypesTest() = default;
 
   std::vector<const zetasql::Type*> supported_types() {
-    return {type_factory_.get_int64(),     type_factory_.get_bool(),
-            type_factory_.get_double(),    type_factory_.get_string(),
-            type_factory_.get_bytes(),     type_factory_.get_date(),
-            type_factory_.get_timestamp(), type_factory_.get_numeric(),
-            type_factory_.get_json()};
+    return {
+        type_factory_.get_int64(), type_factory_.get_bool(),
+        type_factory_.get_double(), type_factory_.get_string(),
+        type_factory_.get_bytes(), type_factory_.get_date(),
+        type_factory_.get_timestamp(), type_factory_.get_numeric(),
+        type_factory_.get_json(),
+    };
   }
 
   std::vector<const zetasql::Type*> unsupported_types() {
-    return {
+    std::vector<const zetasql::Type*> unsupported_types = {
         type_factory_.get_int32(),
         type_factory_.get_float(),
     };
+
+    return unsupported_types;
   }
 
  protected:

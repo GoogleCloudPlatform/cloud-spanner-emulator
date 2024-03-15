@@ -516,6 +516,8 @@ List* transformUpdateTargetList(ParseState* pstate, List* origTlist);
 OnConflictExpr* transformOnConflictClause(ParseState* pstate,
                                           OnConflictClause* onConflictClause);
 
+Query *transformCallStmt(ParseState *pstate, CallStmt *stmt);
+
 /*---------------------------------------------------------------------------*/
 /* Shimmed functions from parser/parse_clause.c*/
 

@@ -56,6 +56,7 @@ TEST_P(SchemaUpdaterTest, CheckConstraintBasic) {
               CONSTRAINT "C1" CHECK("K" > 0)
             ))",
              R"(ALTER TABLE "T" ADD CONSTRAINT "C2" CHECK("K" + "V" > 0))"},
+            /*proto_descriptor_bytes=*/"",
             POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -133,9 +134,11 @@ TEST_P(SchemaUpdaterTest, CheckConstraintColumnNameIsCaseInsensitive) {
   if (GetParam() == POSTGRESQL) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                          CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
+                                      /*proto_descriptor_bytes=*/"",
                                       POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
     ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {add_constraint_ddl},
+                           /*proto_descriptor_bytes=*/"",
                            POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -151,9 +154,11 @@ TEST_P(SchemaUpdaterTest, CheckConstraintConstraintNameIsCaseInsensitive) {
   if (GetParam() == POSTGRESQL) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                          CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
+                                      /*proto_descriptor_bytes=*/"",
                                       POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
     ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {drop_constraint_ddl},
+                           /*proto_descriptor_bytes=*/"",
                            POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false));
   } else {

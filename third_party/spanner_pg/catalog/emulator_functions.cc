@@ -82,6 +82,7 @@ namespace {
 
 using postgres_translator::spangres::datatypes::GetPgNumericNormalizedValue;
 using spangres::datatypes::CreatePgJsonbValue;
+using spangres::datatypes::CreatePgJsonbValueFromNormalized;
 using spangres::datatypes::CreatePgNumericValue;
 using spangres::datatypes::CreatePgNumericValueWithMemoryContext;
 using spangres::datatypes::CreatePgNumericValueWithPrecisionAndScale;
@@ -119,8 +120,8 @@ constexpr char kNegInfString[] = "\"-Infinity\"";
 constexpr char kFalse[] = "false";
 constexpr char kTrue[] = "true";
 
-using ::postgres_translator::EmulatorJsonBArrayElementText;
-using ::postgres_translator::EmulatorJsonBObjectFieldText;
+using ::postgres_translator::EmulatorJsonbArrayElementText;
+using ::postgres_translator::EmulatorJsonbObjectFieldText;
 using ::postgres_translator::function_evaluators::Abs;
 using ::postgres_translator::function_evaluators::Add;
 using ::postgres_translator::function_evaluators::CastNumericToInt8;
@@ -135,9 +136,9 @@ using ::postgres_translator::function_evaluators::DivideTruncateTowardsZero;
 using ::postgres_translator::function_evaluators::Float8ToChar;
 using ::postgres_translator::function_evaluators::Floor;
 using ::postgres_translator::function_evaluators::Int8ToChar;
-using ::postgres_translator::function_evaluators::JsonBArrayElement;
-using ::postgres_translator::function_evaluators::JsonBObjectField;
-using ::postgres_translator::function_evaluators::JsonBTypeof;
+using ::postgres_translator::function_evaluators::JsonbArrayElement;
+using ::postgres_translator::function_evaluators::JsonbObjectField;
+using ::postgres_translator::function_evaluators::JsonbTypeof;
 using ::postgres_translator::function_evaluators::Mod;
 using ::postgres_translator::function_evaluators::Multiply;
 using ::postgres_translator::function_evaluators::NumericToChar;
@@ -1345,12 +1346,13 @@ std::unique_ptr<zetasql::Function> MapDoubleToIntFunction(
 }
 
 // PG Cast functions
-absl::StatusOr<zetasql::Value> EvalToJsonBFromValue(zetasql::Value arg);
+absl::StatusOr<zetasql::Value> EvalToJsonbFromValue(zetasql::Value arg);
 
 // Converts a `Value` to its unquoted string representation. `null` value is
 // printed as a `null_string`. The return string from certain Value types may be
-// normalized later when converted to PG.JSONB by calling `EvalToJsonBFrom<Type>`.
-// Otherwise, this function does not guarantee a normalized return.
+// normalized later when converted to PG.JSONB by calling
+// `EvalToJsonbFrom<Type>`. Otherwise, this function does not guarantee a
+// normalized return.
 absl::StatusOr<std::string> GetStringRepresentation(
     const zetasql::Value& value, std::string null_string = "null") {
   if (value.is_null()) {
@@ -1393,12 +1395,12 @@ absl::StatusOr<std::string> GetStringRepresentation(
       absl::Cord ret_cord;
       ret_cord.Append("[");
       ret_cord.Append(GetStringRepresentation(
-                          EvalToJsonBFromValue(value.element(0)).value())
+                          EvalToJsonbFromValue(value.element(0)).value())
                           .value());
       for (int i = 1; i < value.num_elements(); ++i) {
         ret_cord.Append(", ");
         ret_cord.Append(GetStringRepresentation(
-                            EvalToJsonBFromValue(value.element(i)).value())
+                            EvalToJsonbFromValue(value.element(i)).value())
                             .value());
       }
       ret_cord.Append("]");
@@ -1425,36 +1427,33 @@ absl::StatusOr<std::string> GetStringRepresentation(
 }
 
 // Returns a normalized PG.JSONB value from the int64_t input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromInt64(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromInt64(
     const zetasql::Value arg) {
   return CreatePgJsonbValue(GetStringRepresentation(arg).value());
 }
 
 // Returns a normalized PG.JSONB value from the bool input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromBool(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromBool(
     const zetasql::Value arg) {
   return CreatePgJsonbValue(GetStringRepresentation(arg).value());
 }
 
 // Returns a normalized PG.JSONB value from the double input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromDouble(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromDouble(
     const zetasql::Value arg) {
   if (std::isnan(arg.double_value())) {
-    return spangres::datatypes::CreatePgJsonbValueFromNormalized(
-        absl::Cord(kNanString));
+    return CreatePgJsonbValueFromNormalized(absl::Cord(kNanString));
   }
   if (std::isinf(arg.double_value())) {
     return arg.double_value() > 0
-               ? spangres::datatypes::CreatePgJsonbValueFromNormalized(
-                     absl::Cord(kInfString))
-               : spangres::datatypes::CreatePgJsonbValueFromNormalized(
-                     absl::Cord(kNegInfString));
+               ? CreatePgJsonbValueFromNormalized(absl::Cord(kInfString))
+               : CreatePgJsonbValueFromNormalized(absl::Cord(kNegInfString));
   }
   return CreatePgJsonbValue(GetStringRepresentation(arg).value());
 }
 
 // Returns a normalized PG.JSONB value from the string input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromString(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromString(
     const zetasql::Value arg) {
   if (IsValidJsonbString(arg.string_value())) {
     return CreatePgJsonbValue(
@@ -1466,67 +1465,66 @@ absl::StatusOr<zetasql::Value> EvalToJsonBFromString(
 }
 
 // Returns a normalized PG.JSONB value from the bytes input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromBytes(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromBytes(
     const zetasql::Value arg) {
-  return EvalToJsonBFromString(
+  return EvalToJsonbFromString(
       zetasql::values::String(GetStringRepresentation(arg).value()));
 }
 
 // Returns a normalized PG.JSONB value from the date input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromDate(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromDate(
     const zetasql::Value arg) {
   return CreatePgJsonbValue(
       absl::StrCat("\"", GetStringRepresentation(arg).value(), "\""));
 }
 
 // Returns a normalized PG.JSONB value from the timestamp input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromTimestamp(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromTimestamp(
     const zetasql::Value arg) {
   return CreatePgJsonbValue(
       absl::StrCat("\"", GetStringRepresentation(arg).value(), "\""));
 }
 
 // Returns a normalized PG.JSONB value from the array input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromArray(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromArray(
     const zetasql::Value arg) {
   return CreatePgJsonbValue(GetStringRepresentation(arg).value());
 }
 
 // Returns a normalized PG.JSONB value from the PG.JSONB input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromPgJsonB(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromPgJsonb(
     const zetasql::Value arg) {
   return arg;
 }
 
 // Returns a normalized PG.JSONB value from the PG.NUMERIC input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromPgNumeric(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromPgNumeric(
     const zetasql::Value arg) {
   if (std::string(GetPgNumericNormalizedValue(arg).value()) == kNan) {
-    return spangres::datatypes::CreatePgJsonbValueFromNormalized(
-        absl::Cord(kNanString));
+    return CreatePgJsonbValueFromNormalized(absl::Cord(kNanString));
   }
 
   return CreatePgJsonbValue(GetStringRepresentation(arg).value());
 }
 
 // Returns a normalized PG.JSONB value from the extended type input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromExtended(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromExtended(
     const zetasql::Value arg) {
   auto type_code =
       static_cast<const spangres::datatypes::SpannerExtendedType*>(arg.type())
           ->code();
   switch (type_code) {
     case spangres::datatypes::TypeAnnotationCode::PG_JSONB:
-      return EvalToJsonBFromPgJsonB(arg);
+      return EvalToJsonbFromPgJsonb(arg);
     case spangres::datatypes::TypeAnnotationCode::PG_NUMERIC:
-      return EvalToJsonBFromPgNumeric(arg);
+      return EvalToJsonbFromPgNumeric(arg);
     default:
       ZETASQL_RET_CHECK_FAIL() << "Encountered unexpected type " << arg.type_kind();
   }
 }
 
 // Returns a normalized PG.JSONB value from the input.
-absl::StatusOr<zetasql::Value> EvalToJsonBFromValue(
+absl::StatusOr<zetasql::Value> EvalToJsonbFromValue(
     const zetasql::Value arg) {
   if (arg.is_null()) {
     // `null` input results in `null` JSONB value.
@@ -1536,29 +1534,29 @@ absl::StatusOr<zetasql::Value> EvalToJsonBFromValue(
   zetasql::TypeKind type_kind = arg.type_kind();
   switch (type_kind) {
     case zetasql::TYPE_INT64:
-      return EvalToJsonBFromInt64(arg);
+      return EvalToJsonbFromInt64(arg);
     case zetasql::TYPE_BOOL:
-      return EvalToJsonBFromBool(arg);
+      return EvalToJsonbFromBool(arg);
     case zetasql::TYPE_DOUBLE:
-      return EvalToJsonBFromDouble(arg);
+      return EvalToJsonbFromDouble(arg);
     case zetasql::TYPE_STRING:
-      return EvalToJsonBFromString(arg);
+      return EvalToJsonbFromString(arg);
     case zetasql::TYPE_BYTES:
-      return EvalToJsonBFromBytes(arg);
+      return EvalToJsonbFromBytes(arg);
     case zetasql::TYPE_DATE:
-      return EvalToJsonBFromDate(arg);
+      return EvalToJsonbFromDate(arg);
     case zetasql::TYPE_TIMESTAMP:
-      return EvalToJsonBFromTimestamp(arg);
+      return EvalToJsonbFromTimestamp(arg);
     case zetasql::TYPE_ARRAY:
-      return EvalToJsonBFromArray(arg);
+      return EvalToJsonbFromArray(arg);
     case zetasql::TYPE_EXTENDED:
-      return EvalToJsonBFromExtended(arg);
+      return EvalToJsonbFromExtended(arg);
     default:
       ZETASQL_RET_CHECK_FAIL() << "Encountered unexpected type " << type_kind;
   }
 }
 
-std::unique_ptr<zetasql::Function> ToJsonBFunction(
+std::unique_ptr<zetasql::Function> ToJsonbFunction(
     absl::string_view catalog_name) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
@@ -1570,9 +1568,9 @@ std::unique_ptr<zetasql::Function> ToJsonBFunction(
       spangres::datatypes::GetPgJsonbArrayType();
 
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalToJsonB));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalToJsonb));
   return std::make_unique<zetasql::Function>(
-      kPGToJsonBFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kPGToJsonbFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{
               gsql_pg_jsonb, {gsql_bool}, /*context_ptr=*/nullptr},
@@ -1616,7 +1614,7 @@ std::unique_ptr<zetasql::Function> ToJsonBFunction(
 
 // Returns a normalized PG.JSONB value from the input.
 template <zetasql::TypeKind T>
-absl::StatusOr<zetasql::Value> EvalCastFromJsonB(
+absl::StatusOr<zetasql::Value> EvalCastFromJsonb(
     absl::Span<const zetasql::Value> args) {
   switch (T) {
     case zetasql::TYPE_INT64:
@@ -1633,7 +1631,7 @@ absl::StatusOr<zetasql::Value> EvalCastFromJsonB(
   }
 }
 
-std::unique_ptr<zetasql::Function> CastFromJsonBFunction(
+std::unique_ptr<zetasql::Function> CastFromJsonbFunction(
     absl::string_view catalog_name) {
   static const zetasql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
@@ -1642,13 +1640,13 @@ std::unique_ptr<zetasql::Function> CastFromJsonBFunction(
       [&](const zetasql::FunctionSignature& signature)
           -> absl::StatusOr<zetasql::FunctionEvaluator> {
         if (signature.result_type().type()->IsInt64()) {
-          return EvalCastFromJsonB<zetasql::TYPE_INT64>;
+          return EvalCastFromJsonb<zetasql::TYPE_INT64>;
         } else if (signature.result_type().type()->IsBool()) {
-          return EvalCastFromJsonB<zetasql::TYPE_BOOL>;
+          return EvalCastFromJsonb<zetasql::TYPE_BOOL>;
         } else if (signature.result_type().type()->IsDouble()) {
-          return EvalCastFromJsonB<zetasql::TYPE_DOUBLE>;
+          return EvalCastFromJsonb<zetasql::TYPE_DOUBLE>;
         } else if (signature.result_type().type()->IsString()) {
-          return EvalCastFromJsonB<zetasql::TYPE_STRING>;
+          return EvalCastFromJsonb<zetasql::TYPE_STRING>;
         } else {
           return absl::InvalidArgumentError(
               absl::StrCat("cannot cast jsonb object to type ",
@@ -1658,7 +1656,7 @@ std::unique_ptr<zetasql::Function> CastFromJsonBFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator_factory(evaluator_factory);
   return std::make_unique<zetasql::Function>(
-      kPGCastFromJsonBFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kPGCastFromJsonbFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{
               gsql_bool, {gsql_pg_jsonb}, /*context_ptr=*/nullptr},
@@ -1672,7 +1670,7 @@ std::unique_ptr<zetasql::Function> CastFromJsonBFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalJsonBSubscriptText(
+absl::StatusOr<zetasql::Value> EvalJsonbSubscriptText(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
   if (args[1].type_kind() != zetasql::TYPE_INT64 &&
@@ -1686,21 +1684,21 @@ absl::StatusOr<zetasql::Value> EvalJsonBSubscriptText(
   const std::string jsonb(GetStringRepresentation(args[0]).value());
   if (args[1].type_kind() == zetasql::TYPE_INT64) {
     const int32_t element = static_cast<int32_t>(args[1].int64_value());
-    return EmulatorJsonBArrayElementText(jsonb, element);
+    return EmulatorJsonbArrayElementText(jsonb, element);
   } else {
     const std::string key(args[1].string_value());
-    return EmulatorJsonBObjectFieldText(jsonb, key);
+    return EmulatorJsonbObjectFieldText(jsonb, key);
   }
 }
 
-std::unique_ptr<zetasql::Function> JsonBSubscriptTextFunction(
+std::unique_ptr<zetasql::Function> JsonbSubscriptTextFunction(
     absl::string_view catalog_name) {
   const zetasql::Type* gsql_pg_jsonb =
       postgres_translator::spangres::datatypes::GetPgJsonbType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonBSubscriptText));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbSubscriptText));
   return std::make_unique<zetasql::Function>(
-      kPGJsonBSubscriptTextFunctionName, catalog_name,
+      kPGJsonbSubscriptTextFunctionName, catalog_name,
       zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_string,
@@ -1713,7 +1711,7 @@ std::unique_ptr<zetasql::Function> JsonBSubscriptTextFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalJsonBArrayElement(
+absl::StatusOr<zetasql::Value> EvalJsonbArrayElement(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
   if (args[1].type_kind() != zetasql::TYPE_INT64) {
@@ -1726,17 +1724,17 @@ absl::StatusOr<zetasql::Value> EvalJsonBArrayElement(
   }
 
   ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  return JsonBArrayElement(std::string(jsonb), args[1].int64_value());
+  return JsonbArrayElement(std::string(jsonb), args[1].int64_value());
 }
 
-std::unique_ptr<zetasql::Function> JsonBArrayElementFunction(
+std::unique_ptr<zetasql::Function> JsonbArrayElementFunction(
     absl::string_view catalog_name) {
   const zetasql::Type* gsql_pg_jsonb =
       postgres_translator::spangres::datatypes::GetPgJsonbType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonBArrayElement));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbArrayElement));
   return std::make_unique<zetasql::Function>(
-      kPGJsonBArrayElementFunctionName, catalog_name,
+      kPGJsonbArrayElementFunctionName, catalog_name,
       zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_pg_jsonb,
@@ -1746,7 +1744,7 @@ std::unique_ptr<zetasql::Function> JsonBArrayElementFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalJsonBObjectField(
+absl::StatusOr<zetasql::Value> EvalJsonbObjectField(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
   if (args[1].type_kind() != zetasql::TYPE_STRING) {
@@ -1759,17 +1757,17 @@ absl::StatusOr<zetasql::Value> EvalJsonBObjectField(
   }
 
   ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  return JsonBObjectField(std::string(jsonb), args[1].string_value());
+  return JsonbObjectField(std::string(jsonb), args[1].string_value());
 }
 
-std::unique_ptr<zetasql::Function> JsonBObjectFieldFunction(
+std::unique_ptr<zetasql::Function> JsonbObjectFieldFunction(
     absl::string_view catalog_name) {
   const zetasql::Type* gsql_pg_jsonb =
       postgres_translator::spangres::datatypes::GetPgJsonbType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonBObjectField));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbObjectField));
   return std::make_unique<zetasql::Function>(
-      kPGJsonBObjectFieldFunctionName, catalog_name,
+      kPGJsonbObjectFieldFunctionName, catalog_name,
       zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_pg_jsonb,
@@ -1779,7 +1777,7 @@ std::unique_ptr<zetasql::Function> JsonBObjectFieldFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalJsonBTypeof(
+absl::StatusOr<zetasql::Value> EvalJsonbTypeof(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 1);
   if (args[0].is_null()) {
@@ -1787,17 +1785,17 @@ absl::StatusOr<zetasql::Value> EvalJsonBTypeof(
   }
 
   ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  return JsonBTypeof(std::string(jsonb));
+  return JsonbTypeof(std::string(jsonb));
 }
 
-std::unique_ptr<zetasql::Function> JsonBTypeofFunction(
+std::unique_ptr<zetasql::Function> JsonbTypeofFunction(
     absl::string_view catalog_name) {
   const zetasql::Type* gsql_pg_jsonb =
       postgres_translator::spangres::datatypes::GetPgJsonbType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonBTypeof));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbTypeof));
   return std::make_unique<zetasql::Function>(
-      kPGJsonBTypeofFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kPGJsonbTypeofFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_string,
                                        {gsql_pg_jsonb},
@@ -1806,7 +1804,7 @@ std::unique_ptr<zetasql::Function> JsonBTypeofFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalJsonBQueryArray(
+absl::StatusOr<zetasql::Value> EvalJsonbQueryArray(
     absl::Span<const zetasql::Value> args) {
   static const zetasql::ArrayType* gsql_pg_jsonb_array =
       spangres::datatypes::GetPgJsonbArrayType();
@@ -1821,13 +1819,12 @@ absl::StatusOr<zetasql::Value> EvalJsonBQueryArray(
   std::vector<zetasql::Value> values;
   values.reserve(array.size());
   std::for_each(array.begin(), array.end(), [&values](absl::Cord json_element) {
-    values.emplace_back(
-        spangres::datatypes::CreatePgJsonbValueFromNormalized(json_element));
+    values.emplace_back(CreatePgJsonbValueFromNormalized(json_element));
   });
   return zetasql::Value::MakeArray(gsql_pg_jsonb_array, values);
 }
 
-std::unique_ptr<zetasql::Function> JsonBQueryArrayFunction(
+std::unique_ptr<zetasql::Function> JsonbQueryArrayFunction(
     absl::string_view catalog_name) {
   const zetasql::Type* gsql_pg_jsonb =
       postgres_translator::spangres::datatypes::GetPgJsonbType();
@@ -1835,9 +1832,9 @@ std::unique_ptr<zetasql::Function> JsonBQueryArrayFunction(
       postgres_translator::spangres::datatypes::GetPgJsonbArrayType();
 
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonBQueryArray));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbQueryArray));
   return std::make_unique<zetasql::Function>(
-      kPGJsonBQueryArrayFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kPGJsonbQueryArrayFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_pg_jsonb_array,
                                        {gsql_pg_jsonb},
@@ -1846,19 +1843,35 @@ std::unique_ptr<zetasql::Function> JsonBQueryArrayFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalJsonBBuildArray(
+absl::StatusOr<zetasql::Value> EvalJsonbBuildArray(
     absl::Span<const zetasql::Value> args) {
-  return absl::UnimplementedError("jsonb_build_array is not supported");
+  absl::Cord jsonb_value("[");
+  for (int i = 0; i < args.size(); ++i) {
+    if (i > 0) {
+      jsonb_value.Append(", ");
+    }
+    if (args[i].is_null()) {
+      jsonb_value.Append("null");
+    } else {
+      ZETASQL_ASSIGN_OR_RETURN(zetasql::Value value_as_jsonb,
+                       EvalToJsonbFromValue(args[i]));
+      ZETASQL_ASSIGN_OR_RETURN(absl::Cord value,
+                       GetPgJsonbNormalizedValue(value_as_jsonb));
+      jsonb_value.Append(value);
+    }
+  }
+  jsonb_value.Append("]");
+  return CreatePgJsonbValueFromNormalized(jsonb_value);
 }
 
-std::unique_ptr<zetasql::Function> JsonBBuildArrayFunction(
+std::unique_ptr<zetasql::Function> JsonbBuildArrayFunction(
     absl::string_view catalog_name) {
   const zetasql::Type* gsql_pg_jsonb =
       postgres_translator::spangres::datatypes::GetPgJsonbType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonBBuildArray));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbBuildArray));
   return std::make_unique<zetasql::Function>(
-      kPGJsonBBuildArrayFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kPGJsonbBuildArrayFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature(
           gsql_pg_jsonb,
           {{zetasql::ARG_TYPE_ARBITRARY,
@@ -1868,19 +1881,44 @@ std::unique_ptr<zetasql::Function> JsonBBuildArrayFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalJsonBBuildObject(
+absl::StatusOr<zetasql::Value> EvalJsonbBuildObject(
     absl::Span<const zetasql::Value> args) {
-  return absl::UnimplementedError("jsonb_build_object is not supported");
+  absl::Cord jsonb_value("{");
+  for (int i = 0; i < args.size(); i += 2) {
+    if (i > 0) {
+      jsonb_value.Append(", ");
+    }
+    if (args[i].is_null()) {
+      return absl::InvalidArgumentError("JSONB key must not be null");
+    }
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::Value key_as_jsonb,
+                     EvalToJsonbFromValue(args[i]));
+    ZETASQL_ASSIGN_OR_RETURN(absl::Cord key, GetPgJsonbNormalizedValue(key_as_jsonb));
+    jsonb_value.Append(key);
+    jsonb_value.Append(": ");
+
+    if (args[i + 1].is_null()) {
+      jsonb_value.Append("null");
+    } else {
+      ZETASQL_ASSIGN_OR_RETURN(zetasql::Value value_as_jsonb,
+                       EvalToJsonbFromValue(args[i + 1]));
+      ZETASQL_ASSIGN_OR_RETURN(absl::Cord value,
+                       GetPgJsonbNormalizedValue(value_as_jsonb));
+      jsonb_value.Append(value);
+    }
+  }
+  jsonb_value.Append("}");
+  return CreatePgJsonbValueFromNormalized(jsonb_value);
 }
 
-std::unique_ptr<zetasql::Function> JsonBBuildObjectFunction(
+std::unique_ptr<zetasql::Function> JsonbBuildObjectFunction(
     absl::string_view catalog_name) {
   const zetasql::Type* gsql_pg_jsonb =
       postgres_translator::spangres::datatypes::GetPgJsonbType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonBBuildObject));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbBuildObject));
   return std::make_unique<zetasql::Function>(
-      kPGJsonBBuildObjectFunctionName, catalog_name,
+      kPGJsonbBuildObjectFunctionName, catalog_name,
       zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature(
           gsql_pg_jsonb,
@@ -2613,7 +2651,7 @@ std::unique_ptr<zetasql::TableValuedFunction> JsonbArrayElementsTVF(
   const zetasql::Type* pg_jsonb_type = spangres::datatypes::GetPgJsonbType();
   zetasql::TVFRelation jsonb_result_schema({{"", pg_jsonb_type}});
   return std::make_unique<zetasql::FixedOutputSchemaTVF>(
-      std::vector<std::string>{kPGJsonBArrayElementsFunctionName},
+      std::vector<std::string>{kPGJsonbArrayElementsFunctionName},
       zetasql::FunctionSignature(
           zetasql::FunctionArgumentType::RelationWithSchema(
               jsonb_result_schema,
@@ -2735,10 +2773,10 @@ absl::StatusOr<zetasql::Value> EvalCastToNumeric(
                                 input_to_string, precision, scale);
 }
 
-absl::StatusOr<zetasql::Value> EvalToJsonB(
+absl::StatusOr<zetasql::Value> EvalToJsonb(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 1);
-  return EvalToJsonBFromValue(args[0]);
+  return EvalToJsonbFromValue(args[0]);
 }
 
 SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
@@ -2815,23 +2853,23 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   auto substring_func = SubstringFunction(catalog_name);
   functions.push_back(std::move(substring_func));
 
-  auto to_jsonb_func = ToJsonBFunction(catalog_name);
+  auto to_jsonb_func = ToJsonbFunction(catalog_name);
   functions.push_back(std::move(to_jsonb_func));
-  auto cast_from_jsonb_func = CastFromJsonBFunction(catalog_name);
+  auto cast_from_jsonb_func = CastFromJsonbFunction(catalog_name);
   functions.push_back(std::move(cast_from_jsonb_func));
-  auto jsonb_subscript_text_func = JsonBSubscriptTextFunction(catalog_name);
+  auto jsonb_subscript_text_func = JsonbSubscriptTextFunction(catalog_name);
   functions.push_back(std::move(jsonb_subscript_text_func));
-  auto jsonb_array_element_func = JsonBArrayElementFunction(catalog_name);
+  auto jsonb_array_element_func = JsonbArrayElementFunction(catalog_name);
   functions.push_back(std::move(jsonb_array_element_func));
-  auto jsonb_object_field_func = JsonBObjectFieldFunction(catalog_name);
+  auto jsonb_object_field_func = JsonbObjectFieldFunction(catalog_name);
   functions.push_back(std::move(jsonb_object_field_func));
-  auto jsonb_typeof_func = JsonBTypeofFunction(catalog_name);
+  auto jsonb_typeof_func = JsonbTypeofFunction(catalog_name);
   functions.push_back(std::move(jsonb_typeof_func));
-  auto jsonb_query_array_func = JsonBQueryArrayFunction(catalog_name);
+  auto jsonb_query_array_func = JsonbQueryArrayFunction(catalog_name);
   functions.push_back(std::move(jsonb_query_array_func));
-  auto jsonb_build_array_func = JsonBBuildArrayFunction(catalog_name);
+  auto jsonb_build_array_func = JsonbBuildArrayFunction(catalog_name);
   functions.push_back(std::move(jsonb_build_array_func));
-  auto jsonb_build_object_func = JsonBBuildObjectFunction(catalog_name);
+  auto jsonb_build_object_func = JsonbBuildObjectFunction(catalog_name);
   functions.push_back(std::move(jsonb_build_object_func));
 
   auto numeric_abs_func = NumericAbsFunction(catalog_name);

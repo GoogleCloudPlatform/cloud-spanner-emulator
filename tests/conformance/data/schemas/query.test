@@ -32,6 +32,12 @@ CREATE TABLE numeric_table(
   key     NUMERIC,
   val     INT64,
 ) PRIMARY KEY (key);
+CREATE MODEL users_model
+INPUT (Age INT64, Name STRING(MAX))
+OUTPUT (Outcome BOOL)
+REMOTE OPTIONS (
+  endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/te'
+);
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE users(

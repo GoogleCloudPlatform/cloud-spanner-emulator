@@ -282,7 +282,6 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::Status TranslateColumnDefault(
       const Constraint& column_default, const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
-
   // Translates PostgreSQL <column_definition> used with <CREATE TABLE> and
   // <ALTER TABLE> statements. Updates table translation state stored in
   // <context> with information about processed columns.
@@ -347,9 +346,9 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       absl::string_view parent_statement,
       google::spanner::emulator::backend::ddl::ChangeStreamForClause* change_stream_for_clause) const;
 
-  absl::Status PopulateChangeStreamOptions(List* opt_options,
-                                           absl::string_view parent_statement,
-                                           OptionList* options_out) const;
+  absl::Status PopulateChangeStreamOptions(
+      List* opt_options, absl::string_view parent_statement,
+      OptionList* options_out, const TranslationOptions& options) const;
 
   // Translate the ALTER CHANGE STREAM statement.
   absl::Status TranslateAlterChangeStream(
@@ -371,6 +370,15 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::Status TranslateAlterSequence(const AlterSeqStmt& alter_statement,
                                       const TranslationOptions& options,
                                       google::spanner::emulator::backend::ddl::AlterSequence& out) const;
+
+  // Rename translation statement.
+  absl::Status TranslateRenameStatement(const RenameStmt& rename_statement,
+                                        const TranslationOptions& options,
+                                        google::spanner::emulator::backend::ddl::AlterTable& out) const;
+  // Rename Chain translation statement.
+  absl::Status TranslateTableChainedRenameStatement(
+      const TableChainedRenameStmt& table_chained_rename_statement,
+      const TranslationOptions& options, google::spanner::emulator::backend::ddl::RenameTable& out) const;
 };
 
 // IntervalString extracts the interval from a TTL struct, or returns an
@@ -398,6 +406,7 @@ GetTypeMap() {
       {"bool", google::spanner::emulator::backend::ddl::ColumnDefinition::BOOL},
       {"bytea", google::spanner::emulator::backend::ddl::ColumnDefinition::BYTES},
       // Both <float8> and <double precision> are named <float8> in PG AST.
+      {"float4", google::spanner::emulator::backend::ddl::ColumnDefinition::FLOAT},
       {"float8", google::spanner::emulator::backend::ddl::ColumnDefinition::DOUBLE},
       // Both <int8_t> and <bigint> are named <int8_t> in PG AST.
       {"int8", google::spanner::emulator::backend::ddl::ColumnDefinition::INT64},
@@ -436,8 +445,6 @@ GetTypeMap() {
       {"daterange", absl::nullopt},
       {"event_trigger", absl::nullopt},
       {"fdw_handler", absl::nullopt},
-      {"float4", absl::nullopt},
-      {"float8", absl::nullopt},
       {"gtsvector", absl::nullopt},
       {"index_am_handler", absl::nullopt},
       {"inet", absl::nullopt},
@@ -795,7 +802,11 @@ absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::GetSchemaName(
         "Schema name not specified in $0 statement.", parent_statement_type));
   }
   ZETASQL_RET_CHECK_EQ(value.type, T_String);
-  return value.val.str;
+  if (strcmp(value.val.str, "public") != 0) {
+    return value.val.str;
+  }
+  // Return empty string for public schema.
+  return "";
 }
 
 absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::GetTableName(
@@ -1000,7 +1011,6 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateGeneratedColumn(
   }
   return absl::OkStatus();
 }
-
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateForeignKey(
     const Constraint& constraint,
     const google::spanner::emulator::backend::ddl::ColumnDefinition* target_column,
@@ -1465,6 +1475,13 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
         break;
       }
 
+      case T_SynonymClause: {
+        ZETASQL_ASSIGN_OR_RETURN(const SynonymClause* synonym_clause,
+                         (DowncastNode<SynonymClause, T_SynonymClause>(node)));
+        out.set_synonym(synonym_clause->name);
+        break;
+      }
+
       case T_TableLikeClause: {
         return UnsupportedTranslationError(
             "<LIKE> clause is not supported in <CREATE TABLE> statement.");
@@ -1771,6 +1788,15 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
     case AT_SetOnDeleteNoAction: {
       out.mutable_set_on_delete()->set_action(
           google::spanner::emulator::backend::ddl::InterleaveClause::NO_ACTION);
+      return absl::OkStatus();
+    }
+
+    case AT_AddSynonym: {
+      out.mutable_add_synonym()->set_synonym(first_cmd->name);
+      return absl::OkStatus();
+    }
+    case AT_DropSynonym: {
+      out.mutable_drop_synonym()->set_synonym(first_cmd->name);
       return absl::OkStatus();
     }
 
@@ -2113,7 +2139,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterChangeStream(
   if (alter_change_stream_stmt.opt_options != nullptr) {
     ZETASQL_RETURN_IF_ERROR(PopulateChangeStreamOptions(
         alter_change_stream_stmt.opt_options, "ALTER CHANGE STREAM",
-        out.mutable_set_options()->mutable_options()));
+        out.mutable_set_options()->mutable_options(), options));
   }
 
   // Populate the change stream reset options, if any.
@@ -2138,6 +2164,19 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterChangeStream(
         option_out->set_option_name(internal::PostgreSQLConstants::
                                     kChangeStreamRetentionPeriodOptionName);
         option_out->set_string_value("24h");
+      } else if (option_string == internal::PostgreSQLConstants::
+                                      kChangeStreamExcludeInsertOptionName ||
+                 option_string == internal::PostgreSQLConstants::
+                                      kChangeStreamExcludeUpdateOptionName ||
+                 option_string == internal::PostgreSQLConstants::
+                                      kChangeStreamExcludeDeleteOptionName ||
+                 option_string ==
+                     internal::PostgreSQLConstants::
+                         kChangeStreamExcludeTtlDeletesOptionName) {
+        google::spanner::emulator::backend::ddl::SetOption* option_out =
+            out.mutable_set_options()->mutable_options()->Add();
+        option_out->set_option_name(option_string);
+        option_out->set_bool_value(false);
       } else {
         return absl::InvalidArgumentError(
             "Invalid change stream option in <ALTER CHANGE STREAM> statement.");
@@ -2177,7 +2216,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateChangeStream(
   if (create_change_stream_stmt.opt_options != nullptr) {
     ZETASQL_RETURN_IF_ERROR(PopulateChangeStreamOptions(
         create_change_stream_stmt.opt_options, "CREATE CHANGE STREAM",
-        out.mutable_set_options()));
+        out.mutable_set_options(), options));
   }
 
   return absl::OkStatus();
@@ -2185,7 +2224,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateChangeStream(
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamOptions(
     List* opt_options, absl::string_view parent_statement,
-    OptionList* options_out) const {
+    OptionList* options_out, const TranslationOptions& options) const {
   ABSL_DCHECK(opt_options != nullptr);
   absl::flat_hash_set<std::string> seen_options;
   for (DefElem* def_elem : StructList<DefElem*>(opt_options)) {
@@ -2220,6 +2259,47 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamOptions(
         option_out->set_null_value(true);
       } else {
         option_out->set_string_value(value);
+      }
+    } else if (def_elem->defname == internal::PostgreSQLConstants::
+                                        kChangeStreamExcludeInsertOptionName ||
+               def_elem->defname == internal::PostgreSQLConstants::
+                                        kChangeStreamExcludeUpdateOptionName ||
+               def_elem->defname == internal::PostgreSQLConstants::
+                                        kChangeStreamExcludeDeleteOptionName ||
+               def_elem->defname ==
+                   internal::PostgreSQLConstants::
+                       kChangeStreamExcludeTtlDeletesOptionName) {
+      if (def_elem->defname == internal::PostgreSQLConstants::
+                                   kChangeStreamExcludeTtlDeletesOptionName &&
+          !options.enable_change_streams_ttl_deletes_filter_option) {
+        return UnsupportedTranslationError(
+            "Option exclude_ttl_deletes is not supported yet.");
+      } else if (!options.enable_change_streams_mod_type_filter_options) {
+        return UnsupportedTranslationError(
+            "Options exclude_insert, exclude_update, and exclude_delete are "
+            "not supported yet.");
+      }
+      if (def_elem->arg->type != T_String) {
+        return absl::InvalidArgumentError(absl::Substitute(
+            "Failed to provide valid option value for '$0' in <$1> statement.",
+            def_elem->defname, parent_statement));
+      }
+      ZETASQL_ASSIGN_OR_RETURN(const Value* arg_value,
+                       (DowncastNode<Value, T_String>(def_elem->arg)));
+      std::string value = arg_value->val.str;
+      google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
+      option_out->set_option_name(def_elem->defname);
+      if (absl::AsciiStrToLower(value) == "null") {
+        option_out->set_null_value(true);
+      } else if (value == PGConstants::kPgTrueLiteral) {
+        option_out->set_bool_value(true);
+      } else if (value == PGConstants::kPgFalseLiteral) {
+        option_out->set_bool_value(false);
+      } else {
+        return UnsupportedTranslationError(
+            absl::Substitute("Unsupported option value in change stream option "
+                             "'$0' in <$1> statement.",
+                             def_elem->defname, parent_statement));
       }
     } else {
       return absl::InvalidArgumentError(absl::Substitute(
@@ -2266,6 +2346,40 @@ PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamForClause(
     }
   } else if (for_or_drop_for_all == true) {
     change_stream_for_clause->set_all(true);
+  }
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateRenameStatement(
+    const RenameStmt& rename_statement, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::AlterTable& out) const {
+  ZETASQL_RET_CHECK_EQ(rename_statement.renameType, OBJECT_TABLE);
+
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(rename_statement, options));
+
+  ZETASQL_ASSIGN_OR_RETURN(*out.mutable_table_name(),
+                   GetTableName(*rename_statement.relation, "RENAME TABLE"));
+
+  *out.mutable_rename_to()->mutable_name() = rename_statement.newname;
+
+  if (rename_statement.addSynonym) {
+    *out.mutable_rename_to()->mutable_synonym() = out.table_name();
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status
+PostgreSQLToSpannerDDLTranslatorImpl::TranslateTableChainedRenameStatement(
+    const TableChainedRenameStmt& table_chained_rename_statement,
+    const TranslationOptions& options, google::spanner::emulator::backend::ddl::RenameTable& out) const {
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(table_chained_rename_statement, options));
+  for (TableRenameOp* rename_op :
+       StructList<TableRenameOp*>(table_chained_rename_statement.ops)) {
+    auto op = out.add_rename_op();
+    ZETASQL_ASSIGN_OR_RETURN(*op->mutable_from_name(),
+                     GetTableName(*rename_op->fromName, "RENAME TABLE"));
+    *op->mutable_to_name() = rename_op->toName;
   }
   return absl::OkStatus();
 }
@@ -2431,6 +2545,29 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
       break;
     }
 
+    case T_RenameStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const RenameStmt* statement,
+          (DowncastNode<RenameStmt, T_RenameStmt>(raw_statement.stmt)));
+      if (statement->renameType != ObjectType::OBJECT_TABLE) {
+        return ddl_translator_.UnsupportedTranslationError(
+            "Only <TABLE> is supported for renaming.");
+      }
+      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateRenameStatement(
+          *statement, options_, *result_statement.mutable_alter_table()));
+
+      break;
+    }
+    case T_TableChainedRenameStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const TableChainedRenameStmt* statement,
+          (DowncastNode<TableChainedRenameStmt, T_TableChainedRenameStmt>(
+              raw_statement.stmt)));
+      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateTableChainedRenameStatement(
+          *statement, options_, *result_statement.mutable_rename_table()));
+
+      break;
+    }
     default:
       return ddl_translator_.UnsupportedTranslationError(
           "Statement is not supported.");

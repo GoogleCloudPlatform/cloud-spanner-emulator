@@ -98,6 +98,9 @@ class EngineUserCatalog : public zetasql::EnumerableCatalog {
   virtual const std::vector<std::string> GetCatalogPathForTable(
       const zetasql::Table* table) const = 0;
 
+  virtual absl::StatusOr<std::vector<absl::string_view>> GetPrimaryKeyColumns(
+      const zetasql::Table& table) const = 0;
+
   // The methods below use the implementations of the held
   // engine_provided_catalog object.
   absl::Status GetCatalogs(absl::flat_hash_set<const zetasql::Catalog*>*

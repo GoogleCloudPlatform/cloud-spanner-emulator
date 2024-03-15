@@ -233,6 +233,7 @@ cc_library(
         "//third_party/spanner_pg/bootstrap_catalog",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
+        "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/util:postgres",
@@ -280,6 +281,7 @@ cc_test(
         ":type",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
+        "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
@@ -565,6 +567,10 @@ cc_library(
     name = "emulator_function_evaluators",
     srcs = ["emulator_function_evaluators.cc"],
     hdrs = ["emulator_function_evaluators.h"],
+    visibility = [
+        "//:__subpackages__",
+        "//backend/query:__subpackages__",
+    ],
     deps = [
         "//third_party/spanner_pg/function_evaluators:pg_evaluators_implementations",  # build_cleaner: keep
         "//third_party/spanner_pg/interface:pg_evaluators",

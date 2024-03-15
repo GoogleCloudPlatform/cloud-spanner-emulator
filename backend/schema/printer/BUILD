@@ -29,6 +29,7 @@ cc_library(
         "print_ddl.h",
     ],
     deps = [
+        "//backend/schema/catalog:proto_bundle",
         "//backend/schema/catalog:schema",
         "//backend/schema/ddl:operations_cc_proto",
         "//backend/schema/graph:schema_node",

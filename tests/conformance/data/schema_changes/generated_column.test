@@ -194,17 +194,27 @@ ALTER TABLE Users ALTER COLUMN id_plus_one INT64;
 --
 ERROR:.* Cannot convert generated column `Users.id_plus_one` to a regular column.
 ==
-# Cannot change the STOREDness of a generated column.
+# Cannot drop the STOREDness of a generated column.
 # --regex
-# --skip_prod_env
 CREATE TABLE Users (
   id INT64 NOT NULL,
   UserName STRING(MAX),
-  id_plus_one INT64 AS (id + 1) STORED
+  id_plus_one INT64 AS (id + 1) STORED,
 ) PRIMARY KEY(id);
 ALTER TABLE Users ALTER COLUMN id_plus_one INT64 AS (id + 1);
 --
-ERROR:.* Generated column `id_plus_one` without the STORED attribute is not supported.
+ERROR:.* Cannot change the STORED attribute for generated column `Users.id_plus_one`.
+==
+# Cannot add the STOREDness of a generated column.
+# --regex
+CREATE TABLE Users (
+  id INT64 NOT NULL,
+  UserName STRING(MAX),
+  id_plus_two INT64 AS (id + 2)
+) PRIMARY KEY(id);
+ALTER TABLE Users ALTER COLUMN id_plus_two INT64 AS (id + 2) STORED;
+--
+ERROR:.* Cannot change the STORED attribute for generated column `Users.id_plus_two`.
 ==
 # Generated column definition uses an unknown column.
 # --regex

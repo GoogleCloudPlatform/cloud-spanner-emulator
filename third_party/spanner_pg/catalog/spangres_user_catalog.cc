@@ -54,5 +54,26 @@ const std::vector<std::string> SpangresUserCatalog::GetCatalogPathForTable(
     const zetasql::Table* table) const {
   return absl::StrSplit(table->FullName(), '.');
 }
+
+absl::StatusOr<std::vector<absl::string_view>>
+SpangresUserCatalog::GetPrimaryKeyColumns(const zetasql::Table& table) const {
+  std::vector<absl::string_view> key_columns;
+    if (table.Is<google::spanner::emulator::backend::QueryableTable>()) {
+    const google::spanner::emulator::backend::QueryableTable* queryable_table =
+        table.GetAs<google::spanner::emulator::backend::QueryableTable>();
+    if (queryable_table == nullptr) {
+      return absl::InternalError(
+          absl::StrCat("Table ", table.FullName(), " is not found."));
+    }
+    absl::Span<const google::spanner::emulator::backend::KeyColumn* const>
+        primary_key = queryable_table->wrapped_table()->primary_key();
+    key_columns.reserve(primary_key.size());
+    for (const auto& key : primary_key) {
+      key_columns.push_back(key->column()->Name());
+    }
+  }
+  return key_columns;
+}
+
 }  // namespace spangres
 }  // namespace postgres_translator

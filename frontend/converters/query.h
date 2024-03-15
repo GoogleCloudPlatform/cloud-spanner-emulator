@@ -23,6 +23,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "absl/status/statusor.h"
 #include "backend/query/query_engine.h"
+#include "backend/schema/catalog/proto_bundle.h"
 
 namespace google {
 namespace spanner {
@@ -34,6 +35,8 @@ absl::StatusOr<backend::Query> QueryFromProto(
     std::string sql, const google::protobuf::Struct& params,
     google::protobuf::Map<std::string, google::spanner::v1::Type> param_types,
     zetasql::TypeFactory* type_factory
+    ,
+    std::shared_ptr<const backend::ProtoBundle> proto_bundle = nullptr
 );
 
 }  // namespace frontend

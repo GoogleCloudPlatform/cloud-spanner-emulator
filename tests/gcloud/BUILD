@@ -46,6 +46,7 @@ py_test(
     name = "database_admin_test",
     srcs = ["database_admin_test.py"],
     data = [
+        "//tests/common:testproto",
     ],
     python_version = "PY3",
     deps = [

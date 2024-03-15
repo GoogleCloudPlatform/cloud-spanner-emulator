@@ -702,7 +702,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 	KEY
 
 	LABEL LANGUAGE LARGE_P LAST_P LATERAL_P
-	LEADING LEAKPROOF LEAST LEFT LEVEL LIKE LIMIT LISTEN LOAD LOCAL
+	LEADING LEAKPROOF LEAST LEFT LENGTH LEVEL LIKE LIMIT LISTEN LOAD LOCAL
 	LOCALTIME LOCALTIMESTAMP LOCATION LOCK_P LOCKED LOGGED
 
 	MAPPING MATCH MATERIALIZED MAXVALUE METHOD MINUTE_P MINVALUE MODE MONTH_P MOVE
@@ -741,7 +741,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 	UESCAPE UNBOUNDED UNCOMMITTED UNENCRYPTED UNION UNIQUE UNKNOWN
 	UNLISTEN UNLOGGED UNTIL UPDATE USER USING
 
-	VACUUM VALID VALIDATE VALIDATOR VALUE_P VALUES VARCHAR VARIADIC VARYING
+	VACUUM VALID VALIDATE VALIDATOR VALUE_P VALUES VARCHAR VARIADIC VARYING VECTOR
 	VERBOSE VERSION_P VIEW VIEWS VIRTUAL VOLATILE
 
 	WHEN WHERE WHITESPACE_P WINDOW WITH WITHIN WITHOUT WORK WRAPPER WRITE
@@ -3896,6 +3896,14 @@ ColConstraintElem:
 					n->initially_valid  = true;
 					$$ = (Node *)n;
 				}
+			| VECTOR LENGTH SignedIconst
+				{
+					Constraint *n = makeNode(Constraint);
+					n->contype = CONSTR_VECTOR_LENGTH;
+					n->location = @1;
+					n->vector_length = $3;
+					$$ = (Node *)n;
+				}
 		;
 
 generated_when:
@@ -4737,10 +4745,6 @@ SeqOptElem: AS SimpleTypename
 			| RESTART opt_with NumericOnly
 				{
 					$$ = makeDefElem("restart", (Node *)$3, @1);
-				}
-			| RESTART COUNTER
-  			{
-					$$ = makeDefElem("restart_counter", NULL, @1);
 				}
 			| RESTART COUNTER opt_with NumericOnly
 				{
@@ -16295,6 +16299,7 @@ unreserved_keyword:
 			| LARGE_P
 			| LAST_P
 			| LEAKPROOF
+			| LENGTH
 			| LEVEL
 			| LISTEN
 			| LOAD
@@ -16456,6 +16461,7 @@ unreserved_keyword:
 			| VALIDATOR
 			| VALUE_P
 			| VARYING
+			| VECTOR
 			| VERSION_P
 			| VIEW
 			| VIEWS
@@ -16867,6 +16873,7 @@ bare_label_keyword:
 			| LEAKPROOF
 			| LEAST
 			| LEFT
+			| LENGTH
 			| LEVEL
 			| LIKE
 			| LISTEN
@@ -17071,6 +17078,7 @@ bare_label_keyword:
 			| VALUES
 			| VARCHAR
 			| VARIADIC
+			| VECTOR
 			| VERBOSE
 			| VERSION_P
 			| VIEW

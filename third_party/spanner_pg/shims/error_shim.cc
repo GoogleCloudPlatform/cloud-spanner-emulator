@@ -34,6 +34,7 @@
 #include <stddef.h>
 
 #include <csetjmp>
+#include <utility>
 
 #include "zetasql/base/logging.h"
 #include "absl/status/status.h"
@@ -141,8 +142,9 @@ absl::StatusOr<interfaces::ParserOutput> CheckedPgRawParserFullOutput(
   ZETASQL_ASSIGN_OR_RETURN(List * parse_tree,
                    ErrorCheckedPgCall(raw_parser_spangres, sql,
                                       RAW_PARSE_DEFAULT, &locations));
-  return interfaces::ParserOutput(parse_tree,
-                                  std::move(locations.start_end_pairs));
+  return interfaces::ParserOutput(
+      parse_tree, {.token_locations = std::move(locations.start_end_pairs),
+                   .serialized_parse_tree_size = 0});
 }
 
 absl::StatusOr<List*> CheckedPgRawParser(const char* sql) {

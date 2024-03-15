@@ -24,6 +24,7 @@
 #include "backend/common/ids.h"
 #include "common/errors.h"
 #include "frontend/common/protos.h"
+#include "frontend/common/validations.h"
 #include "frontend/entities/session.h"
 #include "frontend/entities/transaction.h"
 #include "frontend/server/handler.h"
@@ -72,6 +73,8 @@ absl::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* request,
   ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForRead(request->transaction()));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
+  ZETASQL_RETURN_IF_ERROR(
+      ValidateDirectedReadsOption(request->directed_read_options(), txn));
 
   // Wrap all operations on this transaction so they are atomic .
   return txn->GuardedCall(Transaction::OpType::kRead, [&]() -> absl::Status {
@@ -124,6 +127,8 @@ absl::Status StreamingRead(
   ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForRead(request->transaction()));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
+  ZETASQL_RETURN_IF_ERROR(
+      ValidateDirectedReadsOption(request->directed_read_options(), txn));
 
   // Wrap all operations on this transaction so they are atomic.
   return txn->GuardedCall(Transaction::OpType::kRead, [&]() -> absl::Status {
