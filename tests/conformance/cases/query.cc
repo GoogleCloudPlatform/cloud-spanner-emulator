@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include <cstdint>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -29,6 +30,7 @@
 #include "absl/strings/substitute.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
+#include "google/cloud/spanner/bytes.h"
 #include "google/cloud/spanner/json.h"
 #include "google/cloud/spanner/numeric.h"
 #include "common/feature_flags.h"
@@ -98,9 +100,10 @@ class QueryTest
   }
 
   void PopulateDatabase() {
-    ZETASQL_EXPECT_OK(MultiInsert(
-        "users", {"user_id", "name"},
-        {{1, "Douglas Adams"}, {2, "Suzanne Collins"}, {3, "J.R.R. Tolkien"}}));
+    ZETASQL_EXPECT_OK(MultiInsert("users", {"user_id", "name", "age"},
+                          {{1, "Douglas Adams", 49},
+                           {2, "Suzanne Collins", 61},
+                           {3, "J.R.R. Tolkien", 81}}));
 
     ZETASQL_EXPECT_OK(MultiInsert("threads", {"user_id", "thread_id", "starred"},
                           {{1, 1, true},

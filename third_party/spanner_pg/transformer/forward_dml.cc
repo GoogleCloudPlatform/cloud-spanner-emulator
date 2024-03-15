@@ -132,6 +132,146 @@ ForwardTransformer::BuildGsqlReturningClauseForDML(
                                                 std::move(computed_columns));
 }
 
+absl::Status ForwardTransformer::CheckForUnsupportedOnConflictClause(
+    const Query& query, Index rte_index, const zetasql::Table& table,
+    const std::vector<zetasql::ResolvedColumn>& insert_column_list,
+    VarIndexScope* scope, bool is_ignore_mode) {
+  ZETASQL_RET_CHECK_NE(query.onConflict, nullptr);
+  OnConflictExpr* expr = query.onConflict;
+
+  //
+  // Check that the conflict target columns are primary key columns.
+  //
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto key_columns,
+      catalog_adapter().GetEngineUserCatalog()->GetPrimaryKeyColumns(table));
+  if (key_columns.empty()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("ON CONFLICT clauses for tables without primary "
+                     "key columns are not supported"));
+  }
+  std::unordered_set<std::string> key_columns_in_conflict_target;
+  for (InferenceElem* elem : StructList<InferenceElem*>(expr->arbiterElems)) {
+    ZETASQL_RET_CHECK_EQ(nodeTag(elem->expr), NodeTag::T_Var);
+    ZETASQL_ASSIGN_OR_RETURN(
+        zetasql::ResolvedColumn column,
+        GetResolvedColumn(
+            *scope, 1,
+            ((const Var*)internal::PostgresCastToNode(elem->expr))->varattno,
+            /*var_levels_up=*/0));
+    if (std::find(key_columns.begin(), key_columns.end(), column.name()) !=
+        key_columns.end()) {
+      key_columns_in_conflict_target.insert(column.name());
+    } else {
+      return absl::UnimplementedError(
+          absl::StrCat("Column '", column.name(),
+                       "' is not a key column. "
+                       "Columns other than primary key columns are not "
+                       "supported as ON CONFLICT targets"));
+    }
+  }
+  if (key_columns_in_conflict_target.size() != key_columns.size()) {
+    return absl::InvalidArgumentError(
+        "ON CONFLICT target must list all key columns");
+  }
+
+  // Below validations are not relevant for OR_IGNORE mode.
+  if (is_ignore_mode) {
+    return absl::OkStatus();
+  }
+
+  // Get the table entry that exposes `excluded` alias. Build the scan that
+  // allows further validation on the values in SET clause below.
+  RangeTblEntry* rte_for_on_conflict = rt_fetch(rte_index, query.rtable);
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<zetasql::ResolvedTableScan> alias_table_scan,
+      BuildGsqlResolvedTableScan(*rte_for_on_conflict, rte_index, scope));
+  ZETASQL_RET_CHECK(!alias_table_scan->alias().empty() &&
+            alias_table_scan->alias() == kExcludedAlias);
+
+  //
+  // Validate the set clause for supported use cases.
+  //
+  List* set_clauses = expr->onConflictSet;
+  std::set<std::string> insert_column_names;
+  for (const zetasql::ResolvedColumn& column : insert_column_list) {
+    insert_column_names.insert(column.name());
+  }
+  for (TargetEntry* entry : StructList<TargetEntry*>(set_clauses)) {
+    // Get the column in SET clause.
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::ResolvedColumn table_column,
+                     GetResolvedColumn(*scope, rte_index, entry->resno,
+                                       /*var_levels_up=*/0));
+    // Get the value expression in SET clause.
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<zetasql::ResolvedExpr> resolved_expr,
+        BuildGsqlResolvedScalarExpr(*entry->expr, scope, "ON CONFLICT"));
+
+    // 1. Value expressions other than reference to same column in the
+    // insert row is not supported.
+    if (resolved_expr->node_kind() != zetasql::RESOLVED_COLUMN_REF) {
+      return absl::UnimplementedError(
+          absl::StrCat("Column '", table_column.name(),
+                       "' must be set to the insert value in the statement "
+                       "using excluded.",
+                       table_column.name(),
+                       " in the "
+                       "ON CONFLICT DO UPDATE SET clause"));
+    }
+
+    const zetasql::ResolvedColumnRef* referenced_column =
+        resolved_expr->GetAs<zetasql::ResolvedColumnRef>();
+    if (referenced_column == nullptr ||
+        referenced_column->column().name() != table_column.name()) {
+      return absl::UnimplementedError(
+          absl::StrCat("Column '", table_column.name(),
+                       "' must be set to the insert value in the statement "
+                       "using excluded.",
+                       table_column.name(),
+                       " in the "
+                       "ON CONFLICT DO UPDATE SET clause"));
+    }
+
+    // 2. Setting columns not in the insert column list is not supported.
+    if (insert_column_names.find(table_column.name()) ==
+        insert_column_names.end()) {
+      return absl::UnimplementedError(
+          absl::StrCat("Column '", table_column.name(),
+                       "' is not specified "
+                       "in insert column list. ON CONFLICT DO "
+                       "UPDATE SET clause can only include columns that are in "
+                       "insert column list."));
+    }
+    insert_column_names.erase(table_column.name());
+  }
+
+  // 3. All columns in the insert list must be present in the SET clause.
+  // In case of INSERT...DEFAULT VALUES, all writable columns must be specified
+  // in the SET clause.
+  if (!insert_column_names.empty()) {
+    std::string missing_columns = std::accumulate(
+        std::begin(insert_column_names), std::end(insert_column_names),
+        std::string{}, [](const std::string& a, const std::string& b) {
+          return a.empty() ? b : a + ',' + b;
+        });
+    return absl::UnimplementedError(absl::StrCat(
+        "Column", insert_column_names.size() > 1 ? "(s) '" : " '",
+        missing_columns, "' ", insert_column_names.size() > 1 ? "are " : "is ",
+        "not specified in the SET clause. "
+        "ON CONFLICT DO UPDATE statements "
+        "must include all columns in the insert list"));
+  }
+
+  //
+  // Return error if ON CONFLICT clause has WHERE clause.
+  //
+  if (query.onConflict->onConflictWhere != nullptr) {
+    return absl::UnimplementedError(
+        "WHERE clause in ON CONFLICT DO UPDATE is not supported");
+  }
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedInsertStmt>>
 ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   zetasql::ResolvedInsertStmt::InsertMode insert_mode =
@@ -139,12 +279,10 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   if (query.onConflict != nullptr) {
     switch (query.onConflict->action) {
       case ONCONFLICT_NOTHING:
-          return absl::UnimplementedError(
-              "INSERT...ON CONFLICT DO NOTHING statements are not supported.");
+          insert_mode = zetasql::ResolvedInsertStmt::OR_IGNORE;
         break;
       case ONCONFLICT_UPDATE:
-          return absl::UnimplementedError(
-              "INSERT...ON CONFLICT DO UPDATE statements are not supported.");
+        insert_mode = zetasql::ResolvedInsertStmt::OR_UPDATE;
         break;
       case ONCONFLICT_NONE:
         return absl::UnimplementedError(
@@ -182,28 +320,27 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
                                 : table_scan->alias();
 
   ZETASQL_ASSIGN_OR_RETURN(const zetasql::Table* table, GetTableFromRTE(*rte));
-  absl::flat_hash_map<int, const zetasql::Column*> unwritable_columns =
+  absl::flat_hash_map<int, const zetasql::Column*> unwritable_table_columns =
       GetUnwritableColumns(table);
 
   // insert_column_list is the list of table columns in the same order as the
   // the inserted row, but not necessarily the same order as the target table.
   std::vector<zetasql::ResolvedColumn> insert_column_list;
+  absl::flat_hash_map<int, const zetasql::Column*>
+      unwritable_insert_list_columns;
   if (list_length(query.targetList) == 0) {
-    // This is an INSERT...DEFAULT VALUES statement. Use all columns from the
-    // target table if they are all writable.
-    if (!unwritable_columns.empty()) {
-      return absl::InvalidArgumentError(absl::StrFormat(
-          "Table \"%s\" has non-writable columns. Please provide "
-          "an explicit INSERT column list without the "
-          "non-writable columns instead of using DEFAULT VALUES",
-          table->Name()));
-    }
+    // This is an INSERT...DEFAULT VALUES statement. Use all writable columns
+    // from the target table.
 
     // Use insertedCols to build the insert_column_list since no TargetEntry
     // objects are provided.
     ZETASQL_RET_CHECK_EQ(table_scan->column_list().size(),
                  table_scan->column_index_list().size());
     for (int i = 0; i < table_scan->column_list().size(); ++i) {
+      // Skip over unwritable columns.
+      if (unwritable_table_columns.find(i) != unwritable_table_columns.end()) {
+        continue;
+      }
       int column_index = table_scan->column_index_list()[i];
       int column_attnum = column_index - FirstLowInvalidHeapAttributeNumber + 1;
       ZETASQL_ASSIGN_OR_RETURN(bool inserted,
@@ -214,19 +351,43 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     }
   } else {
     // Use the columns from the target list.
+    int i = 0;
     for (TargetEntry* entry : StructList<TargetEntry*>(query.targetList)) {
       // Adjust from 1-based to 0-based indexing.
       int column_index = entry->resno - 1;
-      auto it = unwritable_columns.find(column_index);
-      if (it != unwritable_columns.end()) {
-        return absl::InvalidArgumentError(absl::StrFormat(
-            "Cannot insert into column \"%s\", which is a non-writable column",
-            it->second->Name()));
+      auto it = unwritable_table_columns.find(column_index);
+      if (it == unwritable_table_columns.end()) {
+        ZETASQL_ASSIGN_OR_RETURN(zetasql::ResolvedColumn column,
+                         GetResolvedColumn(target_table_scope, rtindex,
+                                           entry->resno, /*var_levels_up=*/0));
+        insert_column_list.push_back(column);
+      } else {
+        // There is an unwritable column in the INSERT list.
+        // If this is an INSERT...SELECT statement, return an error immediately
+        // because INSERT...SELECT cannot generate DEFAULT values.
+        if ((rte_count == 2 || rte_count == 4) &&
+            rt_fetch(2, query.rtable)->rtekind == RTE_SUBQUERY) {
+          return absl::InvalidArgumentError(
+              absl::StrFormat("Cannot insert into column \"%s\", which is a "
+                              "non-writable column",
+                              it->second->Name()));
+        }
+
+        // Otherwise, this is a single row or multi row INSERT...VALUES
+        // statement. If the provided value for this column is always DEFAULT,
+        // the statement is valid and Spangres will simply omit the unwritable
+        // column from the resolved AST.
+        //
+        // Skip adding unwritable columns to the insert list and also collect
+        // their original index into the insert list so we can validate that
+        // the specified values are DEFAULT and skip over them when building the
+        // insert rows. Note that the insert list index may differ from the
+        // table column index if the insert list does not include all of the
+        // table columns or if the table columns are in a different order in
+        // the insert list.
+        unwritable_insert_list_columns[i] = it->second;
       }
-      ZETASQL_ASSIGN_OR_RETURN(zetasql::ResolvedColumn column,
-                       GetResolvedColumn(target_table_scope, rtindex,
-                                         entry->resno, /*var_levels_up=*/0));
-      insert_column_list.push_back(column);
+      ++i;
     }
   }
 
@@ -267,7 +428,8 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     ZETASQL_ASSIGN_OR_RETURN(
         std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>>
             value_list,
-        BuildGsqlResolvedDMLValueList(expr_list, &target_table_scope));
+        BuildGsqlResolvedDMLValueList(expr_list, unwritable_insert_list_columns,
+                                      &target_table_scope));
     std::unique_ptr<const zetasql::ResolvedInsertRow> insert_row =
         zetasql::MakeResolvedInsertRow(std::move(value_list));
     row_list.push_back(std::move(insert_row));
@@ -286,7 +448,9 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
           ZETASQL_ASSIGN_OR_RETURN(
               std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>>
                   value_list,
-              BuildGsqlResolvedDMLValueList(expr_list, &target_table_scope));
+              BuildGsqlResolvedDMLValueList(expr_list,
+                                            unwritable_insert_list_columns,
+                                            &target_table_scope));
           std::unique_ptr<const zetasql::ResolvedInsertRow> insert_row =
               zetasql::MakeResolvedInsertRow(std::move(value_list));
           row_list.push_back(std::move(insert_row));
@@ -318,8 +482,14 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
 
   if (insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE ||
       insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE) {
-    return absl::UnimplementedError(
-    "INSERT...ON CONFLICT DO UPDATE statements are not supported.");
+    if (query.returningList != nullptr) {
+      return absl::UnimplementedError(
+          "RETURNING with ON CONFLICT clause is not supported");
+    }
+    ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedOnConflictClause(
+        query, rte_count, *table_scan->table(), insert_column_list,
+        &target_table_scope,
+        (insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE)));
   }
 
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const zetasql::ResolvedReturningClause>
@@ -369,7 +539,7 @@ ForwardTransformer::BuildPartialGsqlResolvedUpdateStmt(const Query& query) {
                                      &target_table_scope));
 
   ZETASQL_ASSIGN_OR_RETURN(const zetasql::Table* table, GetTableFromRTE(*rte));
-  absl::flat_hash_map<int, const zetasql::Column*> unwritable_columns =
+  absl::flat_hash_map<int, const zetasql::Column*> unwritable_table_columns =
       GetUnwritableColumns(table);
 
   absl::flat_hash_set<int> updated_resnos;
@@ -386,8 +556,8 @@ ForwardTransformer::BuildPartialGsqlResolvedUpdateStmt(const Query& query) {
     }
     // Adjust from 1-based to 0-based indexing.
     int column_index = entry->resno - 1;
-    auto it = unwritable_columns.find(column_index);
-    if (it != unwritable_columns.end()) {
+    auto it = unwritable_table_columns.find(column_index);
+    if (it != unwritable_table_columns.end()) {
       return absl::InvalidArgumentError(
           absl::StrFormat("Cannot UPDATE value on non-writable column \"%s\"",
                           it->second->Name()));
@@ -466,13 +636,29 @@ ForwardTransformer::BuildGsqlResolvedDMLValue(
 // Build an INSERT row from the Expr list.
 absl::StatusOr<std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>>>
 ForwardTransformer::BuildGsqlResolvedDMLValueList(
-    List* expr_list, const VarIndexScope* var_index_scope) {
+    List* expr_list,
+    const absl::flat_hash_map<int, const zetasql::Column*>&
+        unwritable_insert_list_columns,
+    const VarIndexScope* var_index_scope) {
   std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>> value_list;
+  int i = 0;
   for (Expr* expr : StructList<Expr*>(expr_list)) {
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<const zetasql::ResolvedDMLValue> dml_value,
-        BuildGsqlResolvedDMLValue(*expr, var_index_scope, "INSERT VALUES"));
-    value_list.push_back(std::move(dml_value));
+    auto it = unwritable_insert_list_columns.find(i);
+    if (it != unwritable_insert_list_columns.end()) {
+      // This is an unwritable column. If the value is DEFAULT, just skip
+      // over it. Otherwise, return an error.
+      if (expr->type != T_SetToDefault) {
+        return absl::InvalidArgumentError(absl::StrFormat(
+            "Cannot insert into column \"%s\", which is a non-writable column",
+            it->second->Name()));
+      }
+    } else {
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::unique_ptr<const zetasql::ResolvedDMLValue> dml_value,
+          BuildGsqlResolvedDMLValue(*expr, var_index_scope, "INSERT VALUES"));
+      value_list.push_back(std::move(dml_value));
+    }
+    ++i;
   }
   return value_list;
 }

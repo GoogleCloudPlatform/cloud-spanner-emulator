@@ -52,13 +52,13 @@ zetasql::FunctionEvaluator PGFunctionEvaluator(
 // This function calls `F_JSONB_ARRAY_ELEMENT_TEXT` to compute the results on
 // arguments `jsonb` and `element`. The function returns `Value::String`
 // (`Value::NullString` to represent a SQL null).
-absl::StatusOr<zetasql::Value> EmulatorJsonBArrayElementText(
+absl::StatusOr<zetasql::Value> EmulatorJsonbArrayElementText(
     absl::string_view jsonb, int32_t element);
 
 // This function calls `F_JSONB_OBJECT_FIELD_TEXT` to compute the results on
 // arguments `jsonb` and `key`. The function returns `Value::String`
 // (`Value::NullString` to represent a SQL null).
-absl::StatusOr<zetasql::Value> EmulatorJsonBObjectFieldText(
+absl::StatusOr<zetasql::Value> EmulatorJsonbObjectFieldText(
     absl::string_view jsonb, absl::string_view key);
 
 }  // namespace postgres_translator

@@ -3613,6 +3613,7 @@ _readConstraint(void)
 	READ_NODE_FIELD(raw_expr);
 	READ_BOOL_FIELD(skip_validation);
 	READ_ENUM_FIELD(stored_kind, GeneratedColStoreOpt);
+	READ_INT_FIELD(vector_length);
 	READ_NODE_FIELD(where_clause);
   READ_STRING_FIELD(constraint_expr_string);
 
@@ -3879,16 +3880,16 @@ _readRenameStmt(void)
 	READ_LOCALS(RenameStmt);
 
 	READ_ENUM_FIELD(renameType, ObjectType);
-  READ_ENUM_FIELD(relationType, ObjectType);
-  READ_NODE_FIELD(relation);
-  READ_NODE_FIELD(object);
-  READ_STRING_FIELD(subname);
-  READ_STRING_FIELD(newname);
-  READ_ENUM_FIELD(behavior, DropBehavior);
+	READ_ENUM_FIELD(relationType, ObjectType);
+	READ_NODE_FIELD(relation);
+	READ_NODE_FIELD(object);
+	READ_STRING_FIELD(subname);
+	READ_STRING_FIELD(newname);
+	READ_ENUM_FIELD(behavior, DropBehavior);
 	READ_BOOL_FIELD(missing_ok);
-  READ_BOOL_FIELD(addSynonym);
+	READ_BOOL_FIELD(addSynonym);
 
-  READ_DONE();
+	READ_DONE();
 }
 
 static TableRenameOp*
@@ -3896,10 +3897,10 @@ _readTableRenameOp(void)
 {
 	READ_LOCALS(TableRenameOp);
 
-  READ_NODE_FIELD(fromName);
-  READ_STRING_FIELD(toName);
+	READ_NODE_FIELD(fromName);
+	READ_STRING_FIELD(toName);
 
-  READ_DONE();
+	READ_DONE();
 }
 
 static TableChainedRenameStmt*
@@ -3907,9 +3908,9 @@ _readTableChainedRenameStmt(void)
 {
 	READ_LOCALS(TableChainedRenameStmt);
 
-  READ_NODE_FIELD(ops);
+	READ_NODE_FIELD(ops);
 
-  READ_DONE();
+	READ_DONE();
 }
 
 static SynonymClause*
@@ -3917,9 +3918,21 @@ _readSynonymClause(void)
 {
 	READ_LOCALS(SynonymClause);
 
-  READ_STRING_FIELD(name);
+	READ_STRING_FIELD(name);
 
-  READ_DONE();
+	READ_DONE();
+}
+
+static CallStmt*
+_readCallStmt(void)
+{
+	READ_LOCALS(CallStmt);
+
+	READ_NODE_FIELD(funccall);
+	READ_NODE_FIELD(funcexpr);
+	READ_NODE_FIELD(outargs);
+
+	READ_DONE();
 }
 
 /*
@@ -4332,6 +4345,8 @@ parseNodeString(void)
 		return_value = _readTableChainedRenameStmt();
 	else if (MATCH("SYNONYMCLAUSE", 13))
 		return_value = _readSynonymClause();
+	else if (MATCH("CALLSTMT", 8))
+		return_value = _readCallStmt();
 	/* SPANGRES END */
 	else
 	{

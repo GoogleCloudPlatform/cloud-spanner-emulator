@@ -42,6 +42,8 @@ absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
     absl::Span<const std::string> statements,
     zetasql::TypeFactory* type_factory
     ,
+    std::string proto_descriptor_bytes
+    ,
     database_api::DatabaseDialect dialect) {
   backend::TableIDGenerator table_id_gen;
   backend::ColumnIDGenerator column_id_gen;
@@ -54,6 +56,8 @@ absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
   return updater.ValidateSchemaFromDDL(
       backend::SchemaChangeOperation{
           .statements = statements
+          ,
+          .proto_descriptor_bytes = proto_descriptor_bytes
           ,
           .database_dialect = dialect},
       context);
@@ -86,6 +90,8 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
             )",
       },
       type_factory
+      ,
+      "" /*proto_descriptor_bytes*/
       ,
       dialect);
   ABSL_CHECK_OK(maybe_schema.status());
@@ -123,6 +129,8 @@ CreateSchemaWithOneTableAndOneChangeStream(
       },
       type_factory
       ,
+      "" /*proto_descriptor_bytes*/
+      ,
       dialect);
 
   ABSL_CHECK_OK(maybe_schema.status());
@@ -151,6 +159,8 @@ CreateSchemaWithOneSequence(zetasql::TypeFactory* type_factory,
             )",
         },
         type_factory
+        ,
+        "" /*proto_descriptor_bytes*/
         ,
         dialect);
   } else {
@@ -199,6 +209,8 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneModel(
       },
       type_factory
       ,
+      "" /*proto_descriptor_bytes*/
+      ,
       dialect);
 
   ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
@@ -218,6 +230,78 @@ std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
       },
       type_factory);
   ABSL_DCHECK_OK(maybe_schema.status());
+  return std::move(maybe_schema.value());
+}
+
+std::unique_ptr<const backend::Schema> CreateSimpleDefaultKeySchema(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect) {
+  std::string table_ddl = R"sql(
+            CREATE TABLE players_default_key (
+              prefix INT64 NOT NULL DEFAULT(100),
+              player_id INT64 NOT NULL,
+              balance INT64 DEFAULT(1),
+            ) PRIMARY KEY(prefix, player_id)
+          )sql";
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    table_ddl = R"sql(
+            CREATE TABLE players_default_key (
+              prefix bigint DEFAULT(100),
+              player_id bigint NOT NULL,
+              balance bigint DEFAULT(1),
+              PRIMARY KEY(prefix, player_id)
+            )
+          )sql";
+  }
+  auto maybe_schema = CreateSchemaFromDDL(
+      {
+          table_ddl,
+      },
+      type_factory
+      // copybara:protos_strip_begin
+      ,
+      "" /*proto_descriptor_bytes*/
+      // copybara:protos_strip_end
+      ,
+      dialect);
+  ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
+  return std::move(maybe_schema.value());
+}
+
+std::unique_ptr<const backend::Schema> CreateSimpleTimestampKeySchema(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect) {
+  std::string table_ddl =
+      R"sql(
+            CREATE TABLE timestamp_key_table (
+              k INT64 NOT NULL,
+              ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+              val INT64,
+            ) PRIMARY KEY(k, ts)
+          )sql";
+
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    table_ddl = R"sql(
+            CREATE TABLE timestamp_key_table (
+              k bigint NOT NULL,
+              ts spanner.commit_timestamp,
+              val bigint,
+              PRIMARY KEY(k, ts)
+            )
+          )sql";
+  }
+  auto maybe_schema = CreateSchemaFromDDL(
+      {
+          table_ddl,
+      },
+      type_factory
+      // copybara:protos_strip_begin
+      ,
+      "" /*proto_descriptor_bytes*/
+      // copybara:protos_strip_end
+      ,
+      dialect);
+  ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
   return std::move(maybe_schema.value());
 }
 
@@ -245,7 +329,35 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableWithSynonym(
   auto maybe_schema = CreateSchemaFromDDL({test_table},
                                           type_factory
                                           ,
+                                          "" /*proto_descriptor_bytes*/
+                                          ,
                                           dialect);
+  ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
+  return std::move(maybe_schema.value());
+}
+
+std::unique_ptr<const backend::Schema> CreateSchemaWithProtoEnumColumn(
+    zetasql::TypeFactory* type_factory, std::string proto_descriptors) {
+  auto maybe_schema = test::CreateSchemaFromDDL(
+      {
+          R"sql(
+            CREATE PROTO BUNDLE (
+              emulator.tests.common.Simple,
+              emulator.tests.common.TestEnum,
+            )
+
+          )sql",
+          R"sql(
+              CREATE TABLE test_table (
+                int64_col INT64 NOT NULL,
+                proto_col emulator.tests.common.Simple,
+                enum_col emulator.tests.common.TestEnum,
+                array_proto_col ARRAY<emulator.tests.common.Simple>,
+                array_enum_col ARRAY<emulator.tests.common.TestEnum>,
+              ) PRIMARY KEY (int64_col)
+            )sql",
+      },
+      type_factory, proto_descriptors);
   ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
   return std::move(maybe_schema.value());
 }
@@ -313,6 +425,8 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
       },
       type_factory
       ,
+      "" /*proto_descriptor_bytes*/
+      ,
       dialect);
   ABSL_CHECK_OK(maybe_schema.status());
   return std::move(maybe_schema.value());
@@ -375,6 +489,8 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithMultiTables(
       },
       type_factory
       ,
+      "" /*proto_descriptor_bytes*/
+      ,
       dialect);
   ABSL_CHECK_OK(maybe_schema.status());
   return std::move(maybe_schema.value());
@@ -431,6 +547,8 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKey(
               referencing_table,
           },
           type_factory
+          ,
+          "" /*proto_descriptor_bytes*/
           ,
           dialect);
   if (!schema.ok()) {
@@ -493,6 +611,8 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKeyOnDelete(
               referencing_table,
           },
           type_factory
+          ,
+          "" /*proto_descriptor_bytes*/
           ,
           dialect);
   if (!schema.ok()) {

@@ -437,7 +437,7 @@ class PGJSONBParser {
       }
       case NodeType::kArray: {
         TreeNodeIterator tree_node_iterator;
-        tree_node_iterator.iterator = 0;
+        tree_node_iterator.iterator = size_t(0);
         printing_stack.emplace_back(node, tree_node_iterator);
         return;
       }

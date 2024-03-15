@@ -538,3 +538,7 @@ DecodeTimezoneAbbrev(int field, char *lowtoken,
 					 int *offset, pg_tz **tz) {
   abort();
 }
+
+Query *transformCallStmt(ParseState *pstate, CallStmt *stmt) {
+  abort();
+}

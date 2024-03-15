@@ -277,3 +277,47 @@ cc_library(
         "@com_google_zetasql//zetasql/base:ret_check",
     ],
 )
+
+proto_library(
+    name = "test_proto",
+    testonly = 1,
+    srcs = ["test.proto"],
+)
+
+cc_proto_library(
+    name = "test_cc_proto",
+    testonly = 1,
+    deps = [":test_proto"],
+)
+
+proto_library(
+    name = "test_2_proto",
+    testonly = 1,
+    srcs = ["test_2.proto"],
+    deps = [":test_proto"],
+)
+
+cc_proto_library(
+    name = "test_2_cc_proto",
+    testonly = 1,
+    deps = [":test_2_proto"],
+)
+
+genrule(
+    name = "test_proto_descriptors_pb",
+    testonly = 1,
+    srcs = [
+        "test.proto",
+        "test_2.proto",
+    ],
+    outs = ["test_proto_descriptors.pb"],
+    cmd = ("$(location %s) --include_imports --descriptor_set_out=$@ $(SRCS)" %
+           "@com_google_protobuf//:protoc"),
+    tools = ["@com_google_protobuf//:protoc"],
+)
+
+# E2E test data for gcloud tests
+filegroup(
+    name = "testproto",
+    srcs = ["test_proto_descriptors.pb"],
+)

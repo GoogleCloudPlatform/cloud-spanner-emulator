@@ -39,6 +39,27 @@ class GCloudDatabaseAdminTest(emulator.TestCase):
             'name: projects/test-project/instances/test-instance/'
             'databases/test-database', 'state: READY'))
 
+  def testCreateDatabaseWithProtoDescriptor(self):
+    r = runfiles.Create()
+    proto_descriptors_file = r.Rlocation('com_google_cloud_spanner_emulator/tests/common/test_proto_descriptors.pb')
+    # Create an instance.
+    self.RunGCloud('spanner', 'instances', 'create', 'test-instance',
+                   '--config=emulator-config', '--description=Test Instance',
+                   '--nodes', '3')
+    # Create the database.
+    proto_file = '='.join(['--proto-descriptors-file', proto_descriptors_file])
+    self.assertEqual(
+        self.RunGCloud('spanner', 'databases', 'create', 'test-database',
+                       '--instance=test-instance', proto_file),
+        self.JoinLines(''))
+    # Describe the database.
+    self.assertEqual(
+        self.RunGCloud('spanner', 'databases', 'describe', 'test-database',
+                       '--instance=test-instance'),
+        self.JoinLines(
+            'name: projects/test-project/instances/test-instance/'
+            'databases/test-database', 'state: READY'))
+
   def testListsEmptyDatabases(self):
     # Create an instance.
     self.RunGCloud('spanner', 'instances', 'create', 'test-instance',

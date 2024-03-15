@@ -218,6 +218,70 @@ TEST_F(ForeignKeyActionsTest, ReferencedNonPK_ReferencingNonPK) {
               IsOkAndHoldsRows({{20}}));
 }
 
+TEST_F(ForeignKeyActionsTest, ReferencedPK_ReferencingPK_DESC_OutOfOrder) {
+  ZETASQL_EXPECT_OK(SetSchema({
+      R"(CREATE TABLE ReferencedPK1 (
+          referenced_pk1 INT64 NOT NULL,
+          referenced_pk2 INT64 NOT NULL,
+        ) PRIMARY KEY (referenced_pk1, referenced_pk2)
+      )",
+      R"(CREATE TABLE ReferencingPK_DESC_ReferencedPK_OutOfOrder (
+          referenced_pk1 INT64 NOT NULL,
+          referenced_pk2 INT64 NOT NULL,
+          FOREIGN KEY (referenced_pk1, referenced_pk2)
+            REFERENCES ReferencedPK1 (referenced_pk2, referenced_pk1)
+              ON DELETE CASCADE
+        ) PRIMARY KEY (referenced_pk1 DESC, referenced_pk2)
+      )"}));
+  ZETASQL_ASSERT_OK(
+      Insert("ReferencedPK1", {"referenced_pk1", "referenced_pk2"}, {1, 3}));
+  ZETASQL_ASSERT_OK(
+      Insert("ReferencedPK1", {"referenced_pk1", "referenced_pk2"}, {2, 1}));
+  ZETASQL_ASSERT_OK(Insert("ReferencingPK_DESC_ReferencedPK_OutOfOrder",
+                   {"referenced_pk1", "referenced_pk2"}, {1, 2}));
+
+  ZETASQL_EXPECT_OK(Commit({
+      MakeDelete("ReferencedPK1", OpenClosed(Key(0), Key(2))),
+  }));
+
+  EXPECT_THAT(ReadAll("ReferencedPK1", {"referenced_pk1", "referenced_pk2"}),
+              IsOkAndHoldsRows({}));
+  EXPECT_THAT(ReadAll("ReferencingPK_DESC_ReferencedPK_OutOfOrder",
+                      {"referenced_pk1", "referenced_pk2"}),
+              IsOkAndHoldsRows({}));
+}
+
+TEST_F(ForeignKeyActionsTest, ReferencingPK_DESC_ReferencedNonPK) {
+  ZETASQL_EXPECT_OK(SetSchema({
+      R"(
+        CREATE TABLE ReferencedNonPK1 (
+          referenced_pk INT64 NOT NULL,
+          referenced_col INT64,
+        ) PRIMARY KEY (referenced_pk)
+      )",
+      R"(CREATE TABLE ReferencingPK_DESC_ReferencedNonPK (
+          referenced_pk INT64 NOT NULL,
+          FOREIGN KEY (referenced_pk)
+            REFERENCES ReferencedNonPK1 (referenced_col) ON DELETE CASCADE
+        ) PRIMARY KEY (referenced_pk DESC)
+      )"}));
+  ZETASQL_ASSERT_OK(
+      Insert("ReferencedNonPK1", {"referenced_pk", "referenced_col"}, {1, 3}));
+  ZETASQL_ASSERT_OK(
+      Insert("ReferencedNonPK1", {"referenced_pk", "referenced_col"}, {2, 1}));
+  ZETASQL_ASSERT_OK(
+      Insert("ReferencingPK_DESC_ReferencedNonPK", {"referenced_pk"}, {1}));
+
+  ZETASQL_EXPECT_OK(Commit({
+      MakeDelete("ReferencedNonPK1", OpenClosed(Key(0), Key(2))),
+  }));
+
+  EXPECT_THAT(ReadAll("ReferencedNonPK1", {"referenced_pk"}),
+              IsOkAndHoldsRows({}));
+  EXPECT_THAT(ReadAll("ReferencingPK_DESC_ReferencedNonPK", {"referenced_pk"}),
+              IsOkAndHoldsRows({}));
+}
+
 TEST_F(ForeignKeyActionsTest, ReferencedNonPK_ReferencingNonPK_Restriction) {
   // Referenced key: [1, "A"], [2, "B"].
   ZETASQL_ASSERT_OK(

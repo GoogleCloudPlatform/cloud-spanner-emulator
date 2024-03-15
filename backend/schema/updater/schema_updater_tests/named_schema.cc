@@ -47,6 +47,7 @@ TEST_P(SchemaUpdaterTest, CreateNamedSchema_Basic) {
                          CreateSchema({R"(
            CREATE SCHEMA mynamedschema
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -67,6 +68,7 @@ TEST_P(SchemaUpdaterTest, DropNamedSchema_Success) {
                          CreateSchema({R"(
            CREATE SCHEMA mynamedschema
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/true));
   } else {
@@ -84,6 +86,7 @@ TEST_P(SchemaUpdaterTest, DropNamedSchema_Success) {
                          UpdateSchema(schema.get(), {R"(
            DROP SCHEMA mynamedschema
         )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/true));
   } else {
@@ -101,6 +104,7 @@ TEST_P(SchemaUpdaterTest, DropNamedSchema_Failed) {
     EXPECT_THAT(CreateSchema({R"(
            DROP SCHEMA mynamedschema
         )"},
+                             /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/true),
                 StatusIs(error::NamedSchemaNotFound("mynamedschema")));

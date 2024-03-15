@@ -31,13 +31,18 @@
 
 #include "third_party/spanner_pg/shims/parser_output_serialization.h"
 
-#include "absl/cleanup/cleanup.h"
+#include <string>
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/log/log.h"
+#include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "zetasql/base/status_macros.h"
 
-namespace postgres_translator {
-namespace spangres {
+namespace postgres_translator::spangres {
+
+using interfaces::ParserOutputMetadata;
 
 absl::flat_hash_map<int, int> TokenLocationsFromProto(
     const ParserOutputProto& proto) {
@@ -51,6 +56,17 @@ absl::flat_hash_map<int, int> TokenLocationsFromProto(
     }
   }
   return token_locations;
+}
+
+ParserOutputMetadata MetadataFromProto(const ParserOutputProto& proto) {
+  ParserOutputMetadata metadata;
+
+  metadata.token_locations = TokenLocationsFromProto(proto);
+  if (proto.has_serialized_parse_tree()) {
+    metadata.serialized_parse_tree_size = proto.serialized_parse_tree().size();
+  }
+
+  return metadata;
 }
 
 absl::StatusOr<void*> DeserializeParseTree(
@@ -113,8 +129,7 @@ absl::StatusOr<interfaces::ParserOutput> ParserOutputFromProto(
   List* parse_tree;
   ZETASQL_ASSIGN_OR_RETURN(parse_tree,
                    DeserializeParseQuery(proto.serialized_parse_tree()));
-  return interfaces::ParserOutput(parse_tree, TokenLocationsFromProto(proto));
+  return interfaces::ParserOutput(parse_tree, MetadataFromProto(proto));
 }
 
-}  // namespace spangres
-}  // namespace postgres_translator
+}  // namespace postgres_translator::spangres

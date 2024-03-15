@@ -55,6 +55,23 @@ class DatabaseApiTest : public test::ServerTest {
   void SetUp() override { ZETASQL_EXPECT_OK(CreateTestInstance()); }
   void TearDown() override { ZETASQL_EXPECT_OK(CleanupTestInstance()); }
 
+  // Generate proto descriptor bytes as string
+  std::string GenerateProtoDescriptorBytesAsString() {
+    const google::protobuf::FileDescriptorProto file_descriptor = PARSE_TEXT_PROTO(R"pb(
+      syntax: "proto2"
+      name: "0"
+      package: "customer.app"
+      message_type { name: "User" }
+      enum_type {
+        name: "State"
+        value { name: "UNSPECIFIED" number: 0 }
+      }
+    )pb");
+    google::protobuf::FileDescriptorSet file_descriptor_set;
+    *file_descriptor_set.add_file() = file_descriptor;
+    return file_descriptor_set.SerializeAsString();
+  }
+
   absl::Status ListDatabases(const std::string& instance_uri, int32_t page_size,
                              const std::string& page_token,
                              database_api::ListDatabasesResponse* response) {
@@ -84,6 +101,7 @@ class DatabaseApiTest : public test::ServerTest {
     for (auto extra_statement : extra_statements) {
       request.add_extra_statements(extra_statement);
     }
+    request.set_proto_descriptors(GenerateProtoDescriptorBytesAsString());
     request.set_database_dialect(dialect);
     operations_api::Operation operation;
     ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->CreateDatabase(
@@ -465,6 +483,17 @@ TEST_F(DatabaseApiTest, UpdateAndGetDatabaseDDL) {
       {
           R"(CREATE TABLE test_table (
 ) PRIMARY KEY())"},
+      {
+          R"sql(CREATE PROTO BUNDLE (
+  customer.app.State,
+  customer.app.User,
+))sql",
+          R"sql(CREATE TABLE test_table (
+  int64_col INT64 NOT NULL,
+  string_col STRING(MAX),
+  user_col `customer.app.User`,
+  state_col `customer.app.State`,
+) PRIMARY KEY(int64_col))sql"},
   };
 
   for (auto schema : test_schemas) {

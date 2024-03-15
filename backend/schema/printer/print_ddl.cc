@@ -38,6 +38,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
@@ -466,6 +467,15 @@ std::string PrintNamedSchema(const NamedSchema* named_schema) {
   return absl::Substitute("CREATE SCHEMA $0", PrintName(named_schema->Name()));
 }
 
+std::string PrintProtoBundle(std::shared_ptr<const ProtoBundle> proto_bundle) {
+  std::string proto_bundle_statement = "CREATE PROTO BUNDLE (\n";
+  for (const auto& type : proto_bundle->types()) {
+    absl::StrAppend(&proto_bundle_statement, "  ", type, ",\n");
+  }
+  absl::StrAppend(&proto_bundle_statement, ")");
+  return proto_bundle_statement;
+}
+
 absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
     const Schema* schema) {
   std::vector<std::string> statements;
@@ -482,6 +492,11 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
                         (*printed_statements).end());
     }
     return statements;
+  }
+  // Print proto bundle.
+  std::shared_ptr<const ProtoBundle> proto_bundle = schema->proto_bundle();
+  if (proto_bundle != nullptr && !proto_bundle->types().empty()) {
+    statements.push_back(PrintProtoBundle(proto_bundle));
   }
 
   // Print sequences

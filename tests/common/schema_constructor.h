@@ -42,6 +42,8 @@ absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
     absl::Span<const std::string> statements,
     zetasql::TypeFactory* type_factory
     ,
+    std::string proto_descriptor_bytes = ""
+    ,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
@@ -71,6 +73,16 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneModel(
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
     zetasql::TypeFactory* type_factory);
 
+std::unique_ptr<const backend::Schema> CreateSimpleDefaultKeySchema(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+
+std::unique_ptr<const backend::Schema> CreateSimpleTimestampKeySchema(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+
 std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableWithSynonym(
     zetasql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
@@ -78,10 +90,12 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableWithSynonym(
 
 // Creates a schema with a single table and generated primary key column.
 inline absl::StatusOr<std::unique_ptr<const backend::Schema>>
-CreateGpkSchemaWithOneTable(zetasql::TypeFactory* type_factory) {
-  return CreateSchemaFromDDL(
-      {
-          R"(
+CreateGpkSchemaWithOneTable(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  std::string test_table =
+      R"(
               CREATE TABLE test_table (
                 k1_pk INT64 NOT NULL,
                 k2 INT64 NOT NULL,
@@ -89,10 +103,37 @@ CreateGpkSchemaWithOneTable(zetasql::TypeFactory* type_factory) {
                 k4 INT64,
                 k5 INT64 AS (k4+1) STORED,
               ) PRIMARY KEY (k1_pk,k3gen_storedpk)
-            )",
+            )";
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    test_table =
+        R"(
+              CREATE TABLE test_table (
+                k1_pk bigint NOT NULL,
+                k2 bigint NOT NULL,
+                k3gen_storedpk bigint NOT NULL GENERATED ALWAYS AS (k2) STORED,
+                k4 bigint,
+                k5 bigint GENERATED ALWAYS AS (k4+1) STORED,
+                PRIMARY KEY (k1_pk, k3gen_storedpk)
+              );
+            )";
+  }
+  return CreateSchemaFromDDL(
+      {
+          test_table,
       },
-      type_factory);
+      type_factory
+      // copybara:protos_strip_begin
+      ,
+      "" /*proto_descriptor_bytes*/
+      // copybara:protos_strip_end
+      ,
+      dialect);
 }
+
+// Creates a schema having protos and enum columns ( including proto arrays and
+// enum arrays)
+std::unique_ptr<const backend::Schema> CreateSchemaWithProtoEnumColumn(
+    zetasql::TypeFactory* type_factory, std::string proto_descriptors);
 
 // Creates a schema with two child tables interleaved in a parent table.
 std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(

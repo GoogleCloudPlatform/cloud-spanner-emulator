@@ -38,6 +38,7 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "frontend/common/protos.h"
+#include "frontend/common/validations.h"
 #include "frontend/converters/partition.h"
 #include "frontend/converters/query.h"
 #include "frontend/converters/reads.h"
@@ -228,6 +229,8 @@ absl::Status ExecuteSql(RequestContext* ctx,
                                                       is_dml_query));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
+  ZETASQL_RETURN_IF_ERROR(
+      ValidateDirectedReadsOption(request->directed_read_options(), txn));
 
   // Wrap all operations on this transaction so they are atomic.
   return txn->GuardedCall(
@@ -378,6 +381,8 @@ absl::Status ExecuteStreamingSql(
                                                       is_dml_query));
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
+  ZETASQL_RETURN_IF_ERROR(
+      ValidateDirectedReadsOption(request->directed_read_options(), txn));
 
   // Wrap all operations on this transaction so they are atomic.
   absl::Status status = txn->GuardedCall(

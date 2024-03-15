@@ -39,17 +39,17 @@
 
 namespace postgres_translator::function_evaluators {
 
-absl::StatusOr<zetasql::Value> JsonBArrayElement(
+absl::StatusOr<zetasql::Value> JsonbArrayElement(
     absl::string_view jsonb_string, int64_t element) {
-  return absl::UnimplementedError("invoked stub JsonBArrayElement");
+  return absl::UnimplementedError("invoked stub JsonbArrayElement");
 }
 
-absl::StatusOr<zetasql::Value> JsonBObjectField(
+absl::StatusOr<zetasql::Value> JsonbObjectField(
     absl::string_view jsonb_string, absl::string_view key) {
-  return absl::UnimplementedError("invoked stub JsonBObjectField");
+  return absl::UnimplementedError("invoked stub JsonbObjectField");
 }
 
-absl::StatusOr<zetasql::Value> JsonBTypeof(absl::string_view jsonb_string) {
-  return absl::UnimplementedError("invoked stub JsonBTypeof");
+absl::StatusOr<zetasql::Value> JsonbTypeof(absl::string_view jsonb_string) {
+  return absl::UnimplementedError("invoked stub JsonbTypeof");
 }
 }  // namespace postgres_translator::function_evaluators

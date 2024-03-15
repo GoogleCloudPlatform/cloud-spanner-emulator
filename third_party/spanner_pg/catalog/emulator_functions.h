@@ -103,20 +103,20 @@ inline constexpr char kPGRegexpSplitToArrayFunctionName[] =
     "pg.regexp_split_to_array";
 
 // PG JSONB functions.
-inline constexpr char kPGToJsonBFunctionName[] = "pg.to_jsonb";
-inline constexpr char kPGCastFromJsonBFunctionName[] = "pg.cast_from_jsonb";
-inline constexpr char kPGJsonBSubscriptTextFunctionName[] =
+inline constexpr char kPGToJsonbFunctionName[] = "pg.to_jsonb";
+inline constexpr char kPGCastFromJsonbFunctionName[] = "pg.cast_from_jsonb";
+inline constexpr char kPGJsonbSubscriptTextFunctionName[] =
     "pg.jsonb_subscript_text";
-inline constexpr char kPGJsonBArrayElementFunctionName[] =
+inline constexpr char kPGJsonbArrayElementFunctionName[] =
     "pg.jsonb_array_element";
-inline constexpr char kPGJsonBObjectFieldFunctionName[] =
+inline constexpr char kPGJsonbObjectFieldFunctionName[] =
     "pg.jsonb_object_field";
-inline constexpr char kPGJsonBTypeofFunctionName[] = "pg.jsonb_typeof";
-inline constexpr char kPGJsonBArrayElementsFunctionName[] =
+inline constexpr char kPGJsonbTypeofFunctionName[] = "pg.jsonb_typeof";
+inline constexpr char kPGJsonbArrayElementsFunctionName[] =
     "pg.jsonb_array_elements";
-inline constexpr char kPGJsonBQueryArrayFunctionName[] = "pg.jsonb_query_array";
-inline constexpr char kPGJsonBBuildArrayFunctionName[] = "pg.jsonb_build_array";
-inline constexpr char kPGJsonBBuildObjectFunctionName[] =
+inline constexpr char kPGJsonbQueryArrayFunctionName[] = "pg.jsonb_query_array";
+inline constexpr char kPGJsonbBuildArrayFunctionName[] = "pg.jsonb_build_array";
+inline constexpr char kPGJsonbBuildObjectFunctionName[] =
     "pg.jsonb_build_object";
 
 // PG NUMERIC functions.
@@ -166,7 +166,7 @@ absl::StatusOr<zetasql::Value> EvalNumericCastToString(
 absl::StatusOr<zetasql::Value> EvalCastToNumeric(
     absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalToJsonB(
+absl::StatusOr<zetasql::Value> EvalToJsonb(
     absl::Span<const zetasql::Value> args);
 
 }  // namespace postgres_translator

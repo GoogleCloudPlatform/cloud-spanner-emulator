@@ -29,9 +29,11 @@
 #include "zetasql/public/types/struct_type.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "common/errors.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
@@ -43,10 +45,13 @@ namespace frontend {
 
 using postgres_translator::spangres::datatypes::GetPgJsonbType;
 using postgres_translator::spangres::datatypes::GetPgNumericType;
+using postgres_translator::spangres::datatypes::GetPgOidType;
 
 absl::Status TypeFromProto(
     const google::spanner::v1::Type& type_pb, zetasql::TypeFactory* factory,
     const zetasql::Type** type
+    ,
+    std::shared_ptr<const backend::ProtoBundle> proto_bundle
 ) {
   switch (type_pb.code()) {
     case google::spanner::v1::TypeCode::BOOL: {
@@ -55,7 +60,11 @@ absl::Status TypeFromProto(
     }
 
     case google::spanner::v1::TypeCode::INT64: {
-      *type = factory->get_int64();
+      if (type_pb.type_annotation() == v1::TypeAnnotationCode::PG_OID) {
+        *type = GetPgOidType();
+      } else {
+        *type = factory->get_int64();
+      }
       return absl::OkStatus();
     }
 
@@ -109,6 +118,8 @@ absl::Status TypeFromProto(
       }
       ZETASQL_RETURN_IF_ERROR(TypeFromProto(type_pb.array_element_type(), factory,
                                     &element_type
+                                    ,
+                                    proto_bundle
                                     ))
           << "\nWhen parsing array element type of " << type_pb.DebugString();
       ZETASQL_RETURN_IF_ERROR(factory->MakeArrayType(element_type, type))
@@ -123,6 +134,8 @@ absl::Status TypeFromProto(
         ZETASQL_RETURN_IF_ERROR(TypeFromProto(type_pb.struct_type().fields(i).type(),
                                       factory,
                                       &type
+                                      ,
+                                      proto_bundle
                                       ))
             << "\nWhen parsing field #" << i << " of " << type_pb.DebugString();
         zetasql::StructField field(type_pb.struct_type().fields(i).name(),
@@ -131,6 +144,23 @@ absl::Status TypeFromProto(
       }
       ZETASQL_RETURN_IF_ERROR(factory->MakeStructTypeFromVector(fields, type))
           << "\nWhen parsing " << type_pb.DebugString();
+      return absl::OkStatus();
+    }
+    case google::spanner::v1::TypeCode::PROTO: {
+      ZETASQL_RET_CHECK_NE(proto_bundle, nullptr);
+      std::string proto_type_fqn = type_pb.proto_type_fqn();
+      ZETASQL_ASSIGN_OR_RETURN(auto descriptor,
+                       proto_bundle->GetTypeDescriptor(proto_type_fqn));
+      ZETASQL_RETURN_IF_ERROR(factory->MakeProtoType(descriptor, type));
+      return absl::OkStatus();
+    }
+
+    case google::spanner::v1::TypeCode::ENUM: {
+      ZETASQL_RET_CHECK_NE(proto_bundle, nullptr);
+      std::string proto_type_fqn = type_pb.proto_type_fqn();
+      ZETASQL_ASSIGN_OR_RETURN(auto descriptor,
+                       proto_bundle->GetEnumTypeDescriptor(proto_type_fqn));
+      ZETASQL_RETURN_IF_ERROR(factory->MakeEnumType(descriptor, type));
       return absl::OkStatus();
     }
 
@@ -169,6 +199,10 @@ absl::Status TypeToProto(const zetasql::Type* type,
         case v1::TypeAnnotationCode::PG_NUMERIC:
           type_pb->set_code(google::spanner::v1::TypeCode::NUMERIC);
           type_pb->set_type_annotation(v1::TypeAnnotationCode::PG_NUMERIC);
+          return absl::OkStatus();
+        case v1::TypeAnnotationCode::PG_OID:
+          type_pb->set_code(google::spanner::v1::TypeCode::INT64);
+          type_pb->set_type_annotation(v1::TypeAnnotationCode::PG_OID);
           return absl::OkStatus();
         default:
           return error::Internal(
@@ -228,6 +262,20 @@ absl::Status TypeToProto(const zetasql::Type* type,
             << "\nWhen converting field #" << i << " of " << type->DebugString()
             << " to proto";
       }
+      return absl::OkStatus();
+    }
+
+    case zetasql::TYPE_PROTO: {
+      const zetasql::ProtoType* proto_type = type->AsProto();
+      type_pb->set_code(google::spanner::v1::TypeCode::PROTO);
+      type_pb->set_proto_type_fqn(proto_type->descriptor()->full_name());
+      return absl::OkStatus();
+    }
+
+    case zetasql::TYPE_ENUM: {
+      const zetasql::EnumType* enum_type = type->AsEnum();
+      type_pb->set_code(google::spanner::v1::TypeCode::ENUM);
+      type_pb->set_proto_type_fqn(enum_type->enum_descriptor()->full_name());
       return absl::OkStatus();
     }
 

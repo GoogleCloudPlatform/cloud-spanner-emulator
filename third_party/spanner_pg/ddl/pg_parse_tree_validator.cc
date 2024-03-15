@@ -38,6 +38,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
@@ -591,6 +592,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter) {
                          FieldTypeChecker<List*>(node.old_conpfeqop),
                          FieldTypeChecker<Oid>(node.old_pktable_oid),
                          FieldTypeChecker<bool>(node.skip_validation),
+                         FieldTypeChecker<int>(node.vector_length),
                          FieldTypeChecker<bool>(node.initially_valid),
                          FieldTypeChecker<char*>(node.constraint_expr_string));
 
@@ -619,6 +621,12 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter) {
       case CONSTR_ATTR_NOT_DEFERRABLE:
       case CONSTR_GENERATED:
       case CONSTR_DEFAULT:
+        break;
+      case CONSTR_VECTOR_LENGTH:
+        if (node.vector_length < 0) {
+          return absl::InvalidArgumentError(absl::Substitute(
+          "Vector length cannot be negative: $0.", node.vector_length));
+        }
         break;
 
       case CONSTR_UNIQUE:
@@ -778,8 +786,16 @@ absl::Status ValidateParseTreeNode(const RangeVar& node,
   if (node.schemaname != nullptr) {
     ZETASQL_RET_CHECK(*node.schemaname != '\0');
   }
+  if (absl::StrContains(node.schemaname, ".")) {
+    return UnsupportedTranslationError(absl::Substitute(
+        "Dot(.) is not supported in schema name: $0.", node.schemaname));
+  }
 
   ZETASQL_RET_CHECK(node.relname && *node.relname != '\0');
+  if (absl::StrContains(node.relname, ".")) {
+    return UnsupportedTranslationError(absl::Substitute(
+        "Dot(.) is not supported in object name: $0.", node.relname));
+  }
 
   // `inh` (inheritance) defines if the relation only for the table or should
   // also include its parent. Setting this is not supported. `true` is the

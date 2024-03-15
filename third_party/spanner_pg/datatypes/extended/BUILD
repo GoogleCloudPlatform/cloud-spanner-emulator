@@ -290,3 +290,45 @@ cc_test(
         "@com_google_zetasql//zetasql/public:value",
     ],
 )
+
+cc_library(
+    name = "pg_oid_type",
+    srcs = ["pg_oid_type.cc"],
+    hdrs = ["pg_oid_type.h"],
+    deps = [
+        ":spanner_extended_type",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/hash",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/public:language_options",
+        "@com_google_zetasql//zetasql/public:options_cc_proto",
+        "@com_google_zetasql//zetasql/public:strings",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+        "@com_google_zetasql//zetasql/public:value_content",
+    ],
+)
+
+cc_test(
+    name = "pg_oid_type_test",
+    srcs = ["pg_oid_type_test.cc"],
+    tags = [
+        "spanner.spangres",
+    ],
+    deps = [
+        ":pg_oid_type",
+        ":spanner_extended_type",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "@com_google_absl//absl/strings",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:language_options",
+        "@com_google_zetasql//zetasql/public:options_cc_proto",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)

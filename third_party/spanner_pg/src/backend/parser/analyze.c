@@ -88,7 +88,7 @@ static Query *transformExplainStmt(ParseState *pstate,
 								   ExplainStmt *stmt);
 static Query *transformCreateTableAsStmt(ParseState *pstate,
 										 CreateTableAsStmt *stmt);
-static Query *transformCallStmt(ParseState *pstate,
+Query *transformCallStmt(ParseState *pstate,
 								CallStmt *stmt);
 static void transformLockingClause(ParseState *pstate, Query *qry,
 								   LockingClause *lc, bool pushedDown);
@@ -3006,7 +3006,7 @@ transformCreateTableAsStmt(ParseState *pstate, CreateTableAsStmt *stmt)
  * transform a CallStmt
  */
 static Query *
-transformCallStmt(ParseState *pstate, CallStmt *stmt)
+transformCallStmt_UNUSED_SPANGRES(ParseState *pstate, CallStmt *stmt)
 {
 	List	   *targs;
 	ListCell   *lc;

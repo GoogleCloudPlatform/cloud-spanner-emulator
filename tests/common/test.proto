@@ -1,0 +1,57 @@
+//
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+syntax = "proto2";
+
+package emulator.tests.common;
+
+message Simple {
+  optional string field = 1;
+  repeated int64 int64_arr = 2 [packed = true];
+}
+
+message Parent {
+  optional string field = 1;
+  optional Simple child = 2;
+}
+
+enum TestEnum {
+  TEST_ENUM_UNSPECIFIED = 0;
+  TEST_ENUM_ONE = 1;
+  TEST_ENUM_TWO = 2;
+  TEST_ENUM_THREE = 3;
+  TEST_ENUM_FOUR = 4;
+}
+
+enum SampleEnum {
+  SAMPLE_ENUM_UNSPECIFIED = 0;
+  SAMPLE_ENUM_ONE = 1;
+  SAMPLE_ENUM_TWO = 2;
+}
+
+message EnumContainer {
+  enum TestEnum {
+    TEST_ENUM_UNSPECIFIED = 0;
+    TEST_ENUM_ONE = 1;
+    TEST_ENUM_TWO = 2;
+    TEST_ENUM_THREE = 3;
+    TEST_ENUM_FIVE = 5;
+  }
+  optional TestEnum test_enum = 1;
+  optional .emulator.tests.common.TestEnum fully_qualified_global_enum = 2;
+  optional .emulator.tests.common.EnumContainer.TestEnum
+      fully_qualified_namespaced_enum = 3;
+}

@@ -74,6 +74,33 @@ absl::StatusOr<zetasql::Value> RewriteColumnValue(
     return zetasql::Value::String(value.bytes_value());
   }
 
+  if (old_column_type->IsProto() && new_column_type->IsBytes()) {
+    return zetasql::Value::Bytes(value.proto_value());
+  }
+
+  if (old_column_type->IsProto() && new_column_type->IsProto()) {
+    return zetasql::Value::Proto(new_column_type->AsProto(),
+                                   value.proto_value());
+  }
+
+  if (old_column_type->IsBytes() && new_column_type->IsProto()) {
+    return zetasql::Value::Proto(new_column_type->AsProto(),
+                                   absl::Cord(value.bytes_value()));
+  }
+
+  if (old_column_type->IsEnum() && new_column_type->IsInt64()) {
+    return zetasql::Value::Int64(value.enum_value());
+  }
+
+  if (old_column_type->IsInt64() && new_column_type->IsEnum()) {
+    return zetasql::Value::Enum(new_column_type->AsEnum(),
+                                  value.int64_value());
+  }
+
+  if (old_column_type->IsEnum() && new_column_type->IsEnum()) {
+    return zetasql::Value::Enum(new_column_type->AsEnum(), value.enum_value(),
+                                  true /*allow_unknown_enum_values=*/);
+  }
   return absl::InternalError("Invalid type conversion");
 }
 

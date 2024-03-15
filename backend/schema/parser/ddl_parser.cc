@@ -469,6 +469,16 @@ void SetColumnLength(const SimpleNode* length_node, ColumnDefinition* column) {
   }
 }
 
+std::string JoinDottedPath(const SimpleNode* dotted_path) {
+  CheckNode(dotted_path, JJTDOTTED_PATH);
+  std::string rv;
+  for (int i = 0; i < dotted_path->jjtGetNumChildren(); ++i) {
+    absl::StrAppend(&rv, i != 0 ? "." : "",
+                    GetChildNode(dotted_path, i, JJTPART)->image());
+  }
+  return rv;
+}
+
 void SetTypeDefinitionLength(const SimpleNode* length_node,
                              TypeDefinition* type_definition) {
   if (length_node != nullptr &&
@@ -559,6 +569,15 @@ void VisitColumnTypeNode(const SimpleNode* column_type,
     errors->push_back(
         absl::StrCat("DDL parser exceeded complex type nesting limit of ",
                      limits::kMaxComplexTypeNestingDepth));
+    return;
+  }
+
+  // Proto/enum type names don't have an entry in type registry so we handle
+  // them first.
+  if (GetFirstChildNode(column_type, JJTDOTTED_PATH) != nullptr) {
+    column->set_type(ColumnDefinition::NONE);
+    column->set_proto_type_name(
+        JoinDottedPath(GetChildNode(column_type, 0, JJTDOTTED_PATH)));
     return;
   }
 
@@ -1502,6 +1521,40 @@ void VisitAlterChangeStreamNode(const SimpleNode* node,
   }
 }
 
+void VisitAlterProtoBundleNode(const SimpleNode* node,
+                               AlterProtoBundle* alter_proto_bundle,
+                               std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_PROTO_BUNDLE_STATEMENT);
+  google::protobuf::RepeatedPtrField<ProtoType>* type_source_names = nullptr;
+  bool delete_type = false;
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTINSERT:
+        type_source_names = alter_proto_bundle->mutable_insert_type();
+        break;
+      case JJTUPDATE:
+        type_source_names = alter_proto_bundle->mutable_update_type();
+        break;
+      case JJTDELETE:
+        delete_type = true;
+        break;
+      case JJTDOTTED_PATH: {
+        const std::string type = JoinDottedPath(child);
+        if (!delete_type) {
+          type_source_names->Add()->set_source_name(type);
+        } else {
+          alter_proto_bundle->add_delete_type(type);
+        }
+        break;
+      }
+      default:
+        ABSL_LOG(FATAL) << "Unexpected alter proto bundle type: "
+                   << child->toString();
+    }
+  }
+}
+
 void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
                          DDLStatement* statement,
                          std::vector<std::string>* errors) {
@@ -1890,6 +1943,16 @@ void VisitRenameTableNode(const SimpleNode* node, RenameTable* rename_table,
   }
 }
 
+void VisitCreateProtoBundleNode(const SimpleNode* node,
+                                CreateProtoBundle* proto_bundle,
+                                std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_PROTO_BUNDLE_STATEMENT);
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    proto_bundle->add_insert_type()->set_source_name(
+        JoinDottedPath(GetChildNode(node, i, JJTDOTTED_PATH)));
+  }
+}
+
 // End Visit functions
 //////////////////////////////////////////////////////////////////////////
 
@@ -1905,6 +1968,12 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       VisitCreateDatabaseNode(stmt, statement->mutable_create_database(),
                               errors);
       break;
+    case JJTCREATE_PROTO_BUNDLE_STATEMENT: {
+      CreateProtoBundle* create_proto_bundle =
+          statement->mutable_create_proto_bundle();
+      VisitCreateProtoBundleNode(stmt, create_proto_bundle, errors);
+      break;
+    }
     case JJTCREATE_TABLE_STATEMENT:
       VisitCreateTableNode(stmt, statement->mutable_create_table(), ddl_text,
                            errors);
@@ -1995,6 +2064,9 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
           statement->mutable_drop_model()->set_model_name(name);
           break;
         }
+        case JJTPROTO_BUNDLE:
+          statement->mutable_drop_proto_bundle();  // No fields.
+          break;
         case JJTSEQUENCE:
           if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
             statement->mutable_drop_sequence()->set_existence_modifier(
@@ -2013,6 +2085,12 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
                      << GetChildNode(stmt, 0)->toString();
       }
     } break;
+    case JJTALTER_PROTO_BUNDLE_STATEMENT: {
+      AlterProtoBundle* alter_proto_bundle =
+          statement->mutable_alter_proto_bundle();
+      VisitAlterProtoBundleNode(stmt, alter_proto_bundle, errors);
+      break;
+    }
     case JJTALTER_DATABASE_STATEMENT:
       VisitAlterDatabaseNode(stmt, statement->mutable_alter_database(), errors);
       break;

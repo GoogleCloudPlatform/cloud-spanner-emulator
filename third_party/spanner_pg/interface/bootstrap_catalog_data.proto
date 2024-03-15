@@ -50,6 +50,21 @@ message PgNamespaceData {
   optional string nspname = 2;
 }
 
+message PgProcData {
+  optional uint32 oid = 1;
+  optional string proname = 2;
+  optional uint32 pronamespace = 3;
+  optional int32 prorows = 4;
+  optional uint32 provariadic = 5;
+  optional string prokind = 6;
+  optional bool proretset = 7;
+  optional string provolatile = 8;
+  optional int32 pronargs = 9;
+  optional uint32 prorettype = 10;
+  repeated uint32 proargtypes = 11 [packed = true];
+  optional string prosqlbody = 12;
+}
+
 message PgTypeData {
   optional uint32 oid = 1;
   optional string typname = 2;

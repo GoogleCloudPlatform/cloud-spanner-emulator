@@ -93,6 +93,54 @@ absl::Status VerifyStringColumnValue(absl::string_view table_name,
   return absl::OkStatus();
 }
 
+absl::Status VerifyProtoColumnValue(absl::string_view table_name,
+                                    absl::string_view column_name,
+                                    const zetasql::Value& value,
+                                    const Key& key,
+                                    const zetasql::Type* new_column_type,
+                                    int64_t new_max_length) {
+  ZETASQL_RET_CHECK(value.type()->IsProto());
+  absl::Status error;
+  int64_t value_length = 0;
+  if (new_column_type->IsBytes()) {
+    // Proto value length when converting into bytes should be less than the max
+    // bytes length of the bytes column. Hence, to verify the length, we're
+    // converting it into string first (similar to what happens during a
+    // backfill)
+    value_length = std::string(value.proto_value()).length();
+  }
+  if (value_length > new_max_length) {
+    return error::InvalidColumnSizeReduction(column_name, new_max_length,
+                                             value_length, key.DebugString());
+  }
+  return absl::OkStatus();
+}
+
+absl::Status VerifyInt64ColumnValue(absl::string_view table_name,
+                                    absl::string_view column_name,
+                                    const zetasql::Value& value,
+                                    const Key& key,
+                                    const zetasql::Type* new_column_type) {
+  ZETASQL_RET_CHECK(value.type()->IsInt64());
+  absl::Status error;
+  if (new_column_type->IsEnum()) {
+    // When converting int64_t column to enum column, int64_t should lie within the
+    // enum range or the conversion should fail
+    int32_t int_value = value.int64_value();
+    const std::string* name;
+    // enum name corresponding to the integer value is not found
+    if (int_value != value.int64_value() ||
+        (!new_column_type->AsEnum()->EnumAllowsUnnamedValues() &&
+         !new_column_type->AsEnum()->FindName(int_value, &name))) {
+      return error::InvalidEnumValue(
+          column_name, int_value,
+          new_column_type->TypeName(zetasql::PRODUCT_INTERNAL),
+          key.DebugString());
+    }
+  }
+  return absl::OkStatus();
+}
+
 absl::Status VerifyBytesColumnValue(absl::string_view table_name,
                                     absl::string_view column_name,
                                     const zetasql::Value& value,
@@ -109,6 +157,7 @@ absl::Status VerifyBytesColumnValue(absl::string_view table_name,
   }
 
   ZETASQL_RET_CHECK(new_column_type->IsString()
+            || new_column_type->IsProto()
   );
 
   // Check that it is valid UTF-8 encoding.
@@ -157,6 +206,15 @@ absl::Status VerifyColumnValueOnTypeChange(
     // potentially be up to 4 bytes.
     ZETASQL_RETURN_IF_ERROR(VerifyStringColumnValue(table_name, column_name, value, key,
                                             new_column_type, new_max_length));
+  }
+
+  if (old_column_type->IsProto()) {
+    ZETASQL_RETURN_IF_ERROR(VerifyProtoColumnValue(table_name, column_name, value, key,
+                                           new_column_type, new_max_length));
+  }
+  if (old_column_type->IsInt64()) {
+    ZETASQL_RETURN_IF_ERROR(VerifyInt64ColumnValue(table_name, column_name, value, key,
+                                           new_column_type));
   }
 
   if (old_column_type->IsBytes()) {

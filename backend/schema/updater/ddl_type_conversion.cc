@@ -24,8 +24,10 @@
 #include "zetasql/public/types/type_factory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
+#include "google/protobuf/message.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -37,6 +39,8 @@ namespace backend {
 absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     const ddl::TypeDefinition& ddl_type_def,
     zetasql::TypeFactory* type_factory
+    ,
+    const ProtoBundle* proto_bundle
 ) {
   ZETASQL_RET_CHECK(ddl_type_def.has_type())
       << "No type field specification in "
@@ -82,6 +86,8 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
           auto array_element_type,
           DDLColumnTypeToGoogleSqlType(ddl_type_def.array_subtype(),
                                        type_factory
+                                       ,
+                                       proto_bundle
                                        ));
       ZETASQL_RET_CHECK_NE(array_element_type, nullptr);
       const zetasql::Type* array_type;
@@ -97,6 +103,8 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
             const zetasql::Type* type,
             DDLColumnTypeToGoogleSqlType(field.type(),
                                          type_factory
+                                         ,
+                                         proto_bundle
                                          ));
         struct_fields.push_back({field.name(), type});
       }
@@ -106,6 +114,28 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       return struct_type;
     }
     default:
+      if (ddl_type_def.type() == ddl::TypeDefinition::NONE &&
+          ddl_type_def.has_proto_type_name()) {
+        ZETASQL_RET_CHECK_NE(proto_bundle, nullptr);
+        auto proto_descriptor =
+            proto_bundle->GetTypeDescriptor(ddl_type_def.proto_type_name());
+        if (proto_descriptor.ok()) {
+          // PROTO
+          const zetasql::Type* proto_type;
+          ZETASQL_RETURN_IF_ERROR(type_factory->MakeProtoType(proto_descriptor.value(),
+                                                      &proto_type));
+          return proto_type;
+        }
+        auto enum_descriptor =
+            proto_bundle->GetEnumTypeDescriptor(ddl_type_def.proto_type_name());
+        if (enum_descriptor.ok()) {
+          // ENUM
+          const zetasql::Type* enum_type;
+          ZETASQL_RETURN_IF_ERROR(
+              type_factory->MakeEnumType(enum_descriptor.value(), &enum_type));
+          return enum_type;
+        }
+      }
       ZETASQL_RET_CHECK_FAIL() << "Unrecognized ddl::TypeDefinition: "
                        << ddl_type_def.ShortDebugString();
   }
@@ -114,6 +144,8 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
 absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     const ddl::ColumnDefinition& ddl_column_def,
     zetasql::TypeFactory* type_factory
+    ,
+    const ProtoBundle* proto_bundle
 ) {
   ZETASQL_RET_CHECK(ddl_column_def.has_type())
       << "No type field specification in "
@@ -160,6 +192,8 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
           auto array_element_type,
           DDLColumnTypeToGoogleSqlType(ddl_column_def.array_subtype(),
                                        type_factory
+                                       ,
+                                       proto_bundle
                                        ));
       ZETASQL_RET_CHECK_NE(array_element_type, nullptr);
       const zetasql::Type* array_type;
@@ -170,11 +204,36 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     case ddl::ColumnDefinition::STRUCT: {
       return DDLColumnTypeToGoogleSqlType(ddl_column_def.type_definition(),
                                           type_factory
+                                          ,
+                                          proto_bundle
       );
     }
     default:
-      ZETASQL_RET_CHECK_FAIL() << "Unrecognized ddl::ColumnDefinition: "
-                       << ddl_column_def.ShortDebugString();
+      if (ddl_column_def.type() == ddl::ColumnDefinition::NONE &&
+          ddl_column_def.has_proto_type_name()) {
+        ZETASQL_RET_CHECK_NE(proto_bundle, nullptr);
+        auto proto_descriptor =
+            proto_bundle->GetTypeDescriptor(ddl_column_def.proto_type_name());
+        if (proto_descriptor.ok()) {
+          // PROTO
+          const zetasql::Type* proto_type;
+          ZETASQL_RETURN_IF_ERROR(type_factory->MakeProtoType(proto_descriptor.value(),
+                                                      &proto_type));
+          return proto_type;
+        }
+        auto enum_descriptor = proto_bundle->GetEnumTypeDescriptor(
+            ddl_column_def.proto_type_name());
+        if (enum_descriptor.ok()) {
+          // ENUM
+          const zetasql::Type* enum_type;
+          ZETASQL_RETURN_IF_ERROR(
+              type_factory->MakeEnumType(enum_descriptor.value(), &enum_type));
+          return enum_type;
+        }
+      }
+      ZETASQL_RET_CHECK(false).SetErrorCode(absl::StatusCode::kInternal)
+          << "Unrecognized ddl::ColumnDefinition: "
+          << (ddl_column_def).ShortDebugString();
   }
 }
 
@@ -208,6 +267,15 @@ ddl::TypeDefinition GoogleSqlTypeToDDLType(const zetasql::Type* type) {
   if (type->IsDate()) type_def.set_type(ddl::TypeDefinition::DATE);
   if (type->IsNumericType()) type_def.set_type(ddl::TypeDefinition::NUMERIC);
   if (type->IsJson()) type_def.set_type(ddl::TypeDefinition::JSON);
+  if (type->IsProto()) {
+    type_def.set_type(ddl::TypeDefinition::NONE);
+    type_def.set_proto_type_name(type->AsProto()->descriptor()->full_name());
+  }
+  if (type->IsEnum()) {
+    type_def.set_type(ddl::TypeDefinition::NONE);
+    type_def.set_proto_type_name(
+        type->AsEnum()->enum_descriptor()->full_name());
+  }
   if (type->IsExtendedType()) {
     if (type->Equals(postgres_translator::spangres::types::PgNumericMapping()
                          ->mapped_type())) {
@@ -249,6 +317,16 @@ ddl::ColumnDefinition GoogleSqlTypeToDDLColumnType(
   if (type->IsNumericType())
     ddl_column_def.set_type(ddl::ColumnDefinition::NUMERIC);
   if (type->IsJson()) ddl_column_def.set_type(ddl::ColumnDefinition::JSON);
+  if (type->IsProto()) {
+    ddl_column_def.set_type(ddl::ColumnDefinition::NONE);
+    ddl_column_def.set_proto_type_name(
+        type->AsProto()->descriptor()->full_name());
+  }
+  if (type->IsEnum()) {
+    ddl_column_def.set_type(ddl::ColumnDefinition::NONE);
+    ddl_column_def.set_proto_type_name(
+        type->AsEnum()->enum_descriptor()->full_name());
+  }
   if (type->IsExtendedType()) {
     if (type->Equals(postgres_translator::spangres::types::PgNumericMapping()
                          ->mapped_type())) {

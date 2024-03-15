@@ -904,6 +904,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestColumnExpressions) {
               test_table,
           },
           type_factory_.get(),
+          /*proto_descriptor_bytes=*/"",
           database_api::DatabaseDialect::POSTGRESQL);
   ZETASQL_ASSERT_OK(schema);
   absl::StatusOr<std::vector<std::string>> statements =
@@ -954,6 +955,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestAllowCommitTimestamp) {
     ))",
                            },
                            type_factory_.get(),
+                           /*proto_descriptor_bytes=*/"",
                            database_api::DatabaseDialect::POSTGRESQL));
 
   EXPECT_THAT(PrintDDLStatements(schema.get()),
@@ -996,6 +998,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestCheckConstraints) {
            ))",
            R"(ALTER TABLE "T" ADD CONSTRAINT "C2" CHECK("K" + "V" > 0))"},
           type_factory_.get(),
+          /*proto_descriptor_bytes=*/"",
           database_api::DatabaseDialect::POSTGRESQL));
   EXPECT_THAT(PrintDDLStatements(schema.get()),
               IsOkAndHolds(ElementsAre(R"(CREATE TABLE "T" (
@@ -1034,6 +1037,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestNoNameCheckConstraints) {
              CHECK("K" > 0)
            ))"},
                                 type_factory_.get(),
+                                /*proto_descriptor_bytes=*/"",
                                 database_api::DatabaseDialect::POSTGRESQL));
   EXPECT_THAT(PrintDDLStatements(schema.get()),
               IsOkAndHolds(ElementsAre(R"(CREATE TABLE "T" (
@@ -1059,6 +1063,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestCheckConstraintsOrdering) {
   )
            )"},
                                 type_factory_.get(),
+                                /*proto_descriptor_bytes=*/"",
                                 database_api::DatabaseDialect::POSTGRESQL));
   EXPECT_THAT(PrintDDLStatements(schema.get()),
               IsOkAndHolds(ElementsAre(R"(CREATE TABLE users (
@@ -1112,6 +1117,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestViews) {
     CREATE OR REPLACE VIEW "MyView" SQL SECURITY INVOKER AS SELECT T.col1, T.col2 FROM T
   )"},
                                 type_factory_.get(),
+                                /*proto_descriptor_bytes=*/"",
                                 database_api::DatabaseDialect::POSTGRESQL));
 
   EXPECT_THAT(
@@ -1165,6 +1171,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestStoredIndex) {
   )",
            "CREATE INDEX col2_idx ON t(col2) INCLUDE (col3, col4)"},
           type_factory_.get(),
+          /*proto_descriptor_bytes=*/"",
           database_api::DatabaseDialect::POSTGRESQL));
 
   EXPECT_THAT(PrintDDLStatements(schema.get()),
@@ -1477,6 +1484,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestChangeStreams) {
     CREATE CHANGE STREAM change_stream FOR t
   )"},
                                 type_factory_.get(),
+                                /*proto_descriptor_bytes=*/"",
                                 database_api::DatabaseDialect::POSTGRESQL));
 
   EXPECT_THAT(PrintDDLStatements(schema.get()),
@@ -1540,6 +1548,7 @@ CREATE TABLE base (
 );
   )"},
                                 type_factory_.get(),
+                                /*proto_descriptor_bytes=*/"",
                                 database_api::DatabaseDialect::POSTGRESQL));
 
   EXPECT_THAT(PrintDDLStatements(schema.get()),
@@ -1569,6 +1578,7 @@ CREATE TABLE vanishing_data (
 ALTER TABLE vanishing_data ALTER TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date
                             )"},
                                 type_factory_.get(),
+                                /*proto_descriptor_bytes=*/"",
                                 database_api::DatabaseDialect::POSTGRESQL));
 
   EXPECT_THAT(PrintDDLStatements(schema.get()),

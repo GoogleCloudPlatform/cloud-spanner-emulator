@@ -32,10 +32,16 @@
 #ifndef INTERFACE_PARSER_OUTPUT_H_
 #define INTERFACE_PARSER_OUTPUT_H_
 
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
-#include "absl/types/span.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 
 // Defined in PostgreSQL
@@ -52,12 +58,15 @@ struct ParserOutputMetadata {
   // A map with all token start locations and keys and the corresponding token
   // (exclusive) end locations as values
   absl::flat_hash_map<int, int> token_locations;
+
+  // The size of the serialized parse tree received from the parser.
+  size_t serialized_parse_tree_size = 0;
 };
 
 // The results returned by the parser for each SQL expression.
 class ParserOutput {
  public:
-  ParserOutput(List* parse_tree, absl::flat_hash_map<int, int> token_locations);
+  ParserOutput(List* parse_tree, ParserOutputMetadata metadata);
 
   // Not copyable
   ParserOutput(const ParserOutput&) = delete;
@@ -77,6 +86,10 @@ class ParserOutput {
   // not known.
   const absl::flat_hash_map<int, int>& token_locations() const {
     return metadata().token_locations;
+  }
+
+  size_t serialized_parse_tree_size() const {
+    return metadata().serialized_parse_tree_size;
   }
 
  private:
@@ -108,6 +121,13 @@ class ParserBatchOutput {
     // Wall time spent parsing a statement. Zero if for some reason we can't
     // reasonably fetch the wall time.
     absl::Duration parse_wall_time = absl::ZeroDuration();
+
+    // The size in bytes of the input query to the parser.
+    size_t sql_expressions_size = 0;
+
+    // The size in bytes of the serialized parse tree to be sent as a response
+    // from the parser.
+    size_t serialized_parse_tree_size = 0;
   };
 
   // Constructs an empty object with OK global status.

@@ -38,6 +38,7 @@
 #include "zetasql/parser/parser.h"
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_output.h"
+#include "zetasql/public/language_options.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_ast_visitor.h"
@@ -123,7 +124,10 @@ SpangresTranslator::GetParserQueryOutput(
         arena, MemoryContextPGArena::Init(GetMemoryReservationManager(params)));
     List* parse_tree;
     ZETASQL_ASSIGN_OR_RETURN(parse_tree, DeserializeParseQuery(*serialized_parse_tree));
-    return interfaces::ParserOutput(parse_tree, /*token_locations=*/{});
+    return interfaces::ParserOutput(
+        parse_tree,
+        {.token_locations = {},
+         .serialized_parse_tree_size = serialized_parse_tree->size()});
   }
   return absl::InternalError(
       "TranslateParsedQueryParams did not contain serialized or deserialized "
@@ -237,11 +241,9 @@ SpangresTranslator::TranslateParsedTree(
 
   gsql_param_types = transformer->query_parameter_types();
 
-  if (params.validate_ast()) {
     zetasql::Validator validator(
         params.googlesql_analyzer_options().language());
     ZETASQL_RETURN_IF_ERROR(validator.ValidateResolvedStatement(stmt.get()));
-  }
 
   int max_column_id = transformer->catalog_adapter().max_column_id();
 
@@ -372,7 +374,11 @@ SpangresTranslator::TranslateParsedTableLevelExpression(
       analyzer_output->resolved_statement();
   // Default SQLBuilder will print the ColumnRef by using a random generated
   // column name
-  class : public SQLBuilder {
+  class ColumnRefSQLBuilder: public SQLBuilder {
+   public:
+    ColumnRefSQLBuilder(SQLBuilder::SQLBuilderOptions options)
+        : SQLBuilder(options) {}
+
     absl::Status VisitResolvedColumnRef(
         const zetasql::ResolvedColumnRef* node) {
       PushQueryFragment(node,
@@ -380,7 +386,8 @@ SpangresTranslator::TranslateParsedTableLevelExpression(
                         zetasql::ToIdentifierLiteral(node->column().name()));
       return absl::OkStatus();
     }
-  } builder;
+  };
+  ColumnRefSQLBuilder builder{SQLBuilder::SQLBuilderOptions()};
 
   const zetasql::ResolvedQueryStmt* query =
       stmt->GetAs<zetasql::ResolvedQueryStmt>();
@@ -431,7 +438,10 @@ SpangresTranslator::GetParserExpressionOutput(
 
   ZETASQL_ASSIGN_OR_RETURN(List * parse_tree,
                    WrapExpressionInSelect(expression, table_name));
-  return interfaces::ParserOutput(parse_tree, /*token_locations=*/{});
+  return interfaces::ParserOutput(
+      parse_tree,
+      {.token_locations = {},
+       .serialized_parse_tree_size = params.serialized_parse_tree()->size()});
 }
 
 absl::StatusOr<std::string> SpangresTranslator::WrapExpressionInSelect(

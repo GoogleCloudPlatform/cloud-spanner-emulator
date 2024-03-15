@@ -46,49 +46,49 @@ using spangres::datatypes::CreatePgJsonbValue;
 using ::zetasql_base::testing::IsOkAndHolds;
 using ::zetasql_base::testing::StatusIs;
 
-static zetasql::Value CreatePgJsonBNullValue() {
+static zetasql::Value CreatePgJsonbNullValue() {
   static const zetasql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
   return zetasql::values::Null(gsql_pg_jsonb);
 }
 
-class JsonBArrayElementTest : public PgEvaluatorTest {};
+class JsonbArrayElementTest : public PgEvaluatorTest {};
 
-TEST_F(JsonBArrayElementTest, ReturnsJsonbValue) {
+TEST_F(JsonbArrayElementTest, ReturnsJsonbValue) {
   static const zetasql::Value null_jsonb = zetasql::values::Null(
       spangres::types::PgJsonbArrayMapping()->mapped_type());
-  EXPECT_THAT(JsonBArrayElement(R"([null, "string val"])", 0),
+  EXPECT_THAT(JsonbArrayElement(R"([null, "string val"])", 0),
               IsOkAndHolds(*CreatePgJsonbValue("null")));
-  EXPECT_THAT(JsonBArrayElement(R"([1.00, "string val"])", 1),
+  EXPECT_THAT(JsonbArrayElement(R"([1.00, "string val"])", 1),
               IsOkAndHolds(*CreatePgJsonbValue(R"("string val")")));
-  EXPECT_THAT(JsonBArrayElement(R"([null, "string val"])", 2),
-              IsOkAndHolds(CreatePgJsonBNullValue()));
+  EXPECT_THAT(JsonbArrayElement(R"([null, "string val"])", 2),
+              IsOkAndHolds(CreatePgJsonbNullValue()));
 
-  zetasql::Value result = CreatePgJsonBNullValue();
-  EXPECT_THAT(JsonBArrayElement(R"([null, "string val"])", -1),
+  zetasql::Value result = CreatePgJsonbNullValue();
+  EXPECT_THAT(JsonbArrayElement(R"([null, "string val"])", -1),
               IsOkAndHolds(result));
 
-  EXPECT_THAT(JsonBArrayElement(R"({"a": "string val"})", 0),
-              IsOkAndHolds(CreatePgJsonBNullValue()));
+  EXPECT_THAT(JsonbArrayElement(R"({"a": "string val"})", 0),
+              IsOkAndHolds(CreatePgJsonbNullValue()));
 
-  EXPECT_THAT(JsonBArrayElement("1", 0),
+  EXPECT_THAT(JsonbArrayElement("1", 0),
               IsOkAndHolds(*CreatePgJsonbValue("1")));
-  EXPECT_THAT(JsonBArrayElement("1.500", 0),
+  EXPECT_THAT(JsonbArrayElement("1.500", 0),
               IsOkAndHolds(*CreatePgJsonbValue("1.500")));
-  EXPECT_THAT(JsonBArrayElement("null", 0),
+  EXPECT_THAT(JsonbArrayElement("null", 0),
               IsOkAndHolds(*CreatePgJsonbValue("null")));
-  EXPECT_THAT(JsonBArrayElement(R"("a string")", 0),
+  EXPECT_THAT(JsonbArrayElement(R"("a string")", 0),
               IsOkAndHolds(*CreatePgJsonbValue(R"("a string")")));
-  EXPECT_THAT(JsonBArrayElement("true", 0),
+  EXPECT_THAT(JsonbArrayElement("true", 0),
               IsOkAndHolds(*CreatePgJsonbValue("true")));
-  EXPECT_THAT(JsonBArrayElement("false", 0),
+  EXPECT_THAT(JsonbArrayElement("false", 0),
               IsOkAndHolds(*CreatePgJsonbValue("false")));
 }
 
-TEST_F(JsonBArrayElementTest, ReturnsErrorWhenInvalidArgumentIsGiven) {
-  EXPECT_THAT(JsonBArrayElement("a", 0),
+TEST_F(JsonbArrayElementTest, ReturnsErrorWhenInvalidArgumentIsGiven) {
+  EXPECT_THAT(JsonbArrayElement("a", 0),
               StatusIs(absl::StatusCode::kInvalidArgument));
-  EXPECT_THAT(JsonBArrayElement("", 0),
+  EXPECT_THAT(JsonbArrayElement("", 0),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 

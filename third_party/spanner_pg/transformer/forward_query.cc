@@ -654,7 +654,7 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
                      BuildGsqlResolvedScanForTableExpression(
                          *(join_expr.rarg), rtable, &scope_for_rhs,
                          &scope_for_rhs, &scope_for_rhs));
-    zetasql::ResolvedArrayScan* array_scan =
+    zetasql::ResolvedArrayScan* right_array_scan =
         right_scan->GetAs<zetasql::ResolvedArrayScan>();
     std::vector<zetasql::ResolvedColumn> output_columns =
         left_scan->column_list();
@@ -680,12 +680,15 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
       ZETASQL_RET_CHECK(gsql_join_expr != nullptr);
     }
 
+    // Extract UNNEST WITH ORDINALITY column in the right scan if it exists.
+    std::unique_ptr<const zetasql::ResolvedColumnHolder>
+        right_scan_array_offset_col_holder = nullptr;
     result = zetasql::MakeResolvedArrayScan(
         /*column_list=*/output_columns,
         /*input_scan=*/std::move(left_scan),
-        /*array_expr=*/array_scan->release_array_expr(),
-        /*element_column=*/array_scan->element_column(),
-        /*array_offset_column=*/nullptr,
+        /*array_expr=*/right_array_scan->release_array_expr(),
+        /*element_column=*/right_array_scan->element_column(),
+        /*array_offset_column=*/std::move(right_scan_array_offset_col_holder),
         /*join_expr=*/std::move(gsql_join_expr),
         /*is_outer=*/is_left_outer);
   } else {
@@ -1131,9 +1134,6 @@ ForwardTransformer::BuildGsqlResolvedArrayScan(
     return absl::InvalidArgumentError(
         "UNNEST of multiple arrays is not supported");
   }
-  if (rte.funcordinality) {
-    return absl::InvalidArgumentError("WITH ORDINALITY is not supported");
-  }
   ZETASQL_RET_CHECK_GE(list_length(func_expr->args), 1);
   Expr* array_input_expr =
       internal::PostgresCastToExpr(linitial(func_expr->args));
@@ -1188,9 +1188,11 @@ ForwardTransformer::BuildGsqlResolvedArrayScan(
   }
   output_column_list.emplace_back(array_element_column);
 
-  // Placeholder for "WITH ORDINALITY" a.k.a. "WITH OFFSET"
-  // TODO: Support WITH ORDINALITY mapping to GSQL WITH OFFSET.
-  std::unique_ptr<zetasql::ResolvedColumnHolder> array_position_column;
+  // Handle WITH ORDINALITY mapping to GSQL WITH OFFSET.
+  std::unique_ptr<zetasql::ResolvedColumnHolder> array_offset_column;
+  if (rte.funcordinality) {
+      return absl::InvalidArgumentError("WITH ORDINALITY is not supported");
+  }
 
   // Placeholder for join condition expressions. No plans to support this today.
   std::unique_ptr<const zetasql::ResolvedExpr> resolved_condition;
@@ -1201,7 +1203,7 @@ ForwardTransformer::BuildGsqlResolvedArrayScan(
   return MakeResolvedArrayScan(
       output_column_list, std::move(resolved_input_scan),
       std::move(resolved_array_expr_argument), array_element_column,
-      std::move(array_position_column), std::move(resolved_condition),
+      std::move(array_offset_column), std::move(resolved_condition),
       is_outer_scan);
 }
 
@@ -2908,8 +2910,10 @@ absl::Status ForwardTransformer::PruneColumnLists(
     if (scan_node->node_kind() == zetasql::RESOLVED_TABLE_SCAN) {
       column_index_list =
           &scan->GetAs<zetasql::ResolvedTableScan>()->column_index_list();
+    } else if (scan_node->node_kind() == zetasql::RESOLVED_TVFSCAN) {
+      column_index_list =
+          &scan->GetAs<zetasql::ResolvedTVFScan>()->column_index_list();
     }
-    // The ZetaSQL analyzer gets the column_index_list for TVFScans here.
 
     pruned_column_list.clear();
     pruned_column_index_list.clear();
@@ -2938,8 +2942,10 @@ absl::Status ForwardTransformer::PruneColumnLists(
         if (scan_node->node_kind() == zetasql::RESOLVED_TABLE_SCAN) {
           mutable_scan->GetAs<zetasql::ResolvedTableScan>()
               ->set_column_index_list(pruned_column_index_list);
+        } else if (scan_node->node_kind() == zetasql::RESOLVED_TVFSCAN) {
+          mutable_scan->GetAs<zetasql::ResolvedTVFScan>()
+              ->set_column_index_list(pruned_column_index_list);
         }
-        // The ZetaSQL analyzer sets the column_index_list for TVFScans here.
       }
     }
   }
@@ -3083,16 +3089,6 @@ absl::Status ForwardTransformer::CheckForUnsupportedFeatures(
   }
 
   if (query.onConflict != nullptr) {
-      if (query.onConflict->action == ONCONFLICT_NOTHING) {
-      return CheckForUnsupportedFields(query.onConflict, feature_name,
-                                       "ON CONFLICT DO NOTHING clauses");
-    }
-
-      if (query.onConflict->action == ONCONFLICT_UPDATE) {
-      return CheckForUnsupportedFields(query.onConflict, feature_name,
-                                       "ON CONFLICT DO UPDATE clauses");
-    }
-
     if (query.onConflict->action == ONCONFLICT_NONE) {
       return CheckForUnsupportedFields(query.onConflict, feature_name,
                                        "ON CONFLICT clauses");

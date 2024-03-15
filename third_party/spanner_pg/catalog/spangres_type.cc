@@ -49,6 +49,7 @@
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/util/postgres.h"
@@ -168,6 +169,58 @@ class PostgresJsonbMapping : public PostgresTypeMapping {
   }
 };
 
+class PostgresOidMapping : public PostgresTypeMapping {
+ public:
+  PostgresOidMapping(const zetasql::TypeFactory* factory)
+      : PostgresTypeMapping(factory, OIDOID) {}
+
+  const zetasql::Type* mapped_type() const override {
+    return postgres_translator::spangres::datatypes::GetPgOidType();
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValue(
+      const Const* pg_const) const override {
+    if (pg_const->constisnull) {
+      return zetasql::Value::Null(
+          postgres_translator::spangres::datatypes::GetPgOidType());
+    }
+    // oidout simply calls sprintf. Skipping in favor of accessing the const
+    // value directly.
+    return postgres_translator::spangres::datatypes::CreatePgOidValue(
+        DatumGetObjectId(pg_const->constvalue));
+  }
+
+  absl::StatusOr<Const*> MakePgConst(
+      const zetasql::Value& val) const override {
+    Datum const_value = 0;
+    if (!val.is_null()) {
+      ZETASQL_ASSIGN_OR_RETURN(
+          uint64_t oid,
+              postgres_translator::spangres::datatypes::GetPgOidValue(val));
+      // PostgreSQL oid values are uint32_t.
+      if (oid < std::numeric_limits<uint32_t>::min() ||
+          oid > std::numeric_limits<uint32_t>::max()) {
+        return absl::OutOfRangeError("oid value out of range");
+      }
+      std::string oid_str = absl::StrCat(oid);
+      Datum conval = CStringGetDatum(oid_str.c_str());
+      ZETASQL_ASSIGN_OR_RETURN(const Oid oidin_oid,
+                       PgBootstrapCatalog::Default()->GetProcOid(
+                           "pg_catalog", "oidin", {CSTRINGOID}));
+      ZETASQL_ASSIGN_OR_RETURN(const_value, CheckedOidFunctionCall1(oidin_oid, conval));
+    }
+
+    return CheckedPgMakeConst(
+        /*consttype=*/PostgresTypeOid(),
+        /*consttypmod=*/-1,
+        /*constcollid=*/InvalidOid,
+        /*constlen=*/4,
+        /*constvalue=*/const_value,
+        /*constisnull=*/val.is_null(),
+        /*constbyval=*/true);
+  }
+};
+
 const PostgresTypeMapping* PgNumericMapping() {
   static const zetasql_base::NoDestructor<PostgresNumericMapping> s_pg_numeric_mapping(
       GetTypeFactory());
@@ -198,6 +251,22 @@ const PostgresTypeMapping* PgJsonbArrayMapping() {
           postgres_translator::spangres::datatypes::GetPgJsonbArrayType(),
           /*requires_nan_handling=*/false);
   return s_pg_jsonb_array_mapping.get();
+}
+
+const PostgresTypeMapping* PgOidMapping() {
+  static const zetasql_base::NoDestructor<PostgresOidMapping> s_pg_oid_mapping(
+      GetTypeFactory());
+  return s_pg_oid_mapping.get();
+}
+
+const PostgresTypeMapping* PgOidArrayMapping() {
+  static const zetasql_base::NoDestructor<PostgresExtendedArrayMapping>
+      s_pg_oid_array_mapping(
+          /*type_factory=*/GetTypeFactory(), /*array_type_oid=*/OIDARRAYOID,
+          /*element_type=*/types::PgOidMapping(), /*mapped_type=*/
+          postgres_translator::spangres::datatypes::GetPgOidArrayType(),
+          /*requires_nan_handling=*/false);
+  return s_pg_oid_array_mapping.get();
 }
 
 }  // namespace types

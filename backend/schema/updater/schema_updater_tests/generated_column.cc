@@ -55,6 +55,7 @@ TEST_P(SchemaUpdaterTest, GeneratedColumnBasic) {
         "G1" bigint not null generated always as ("K" + LENGTH("V")) stored
       )
     )"},
+                                      /*proto_descriptor_bytes=*/"",
                                       database_api::DatabaseDialect::POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -119,6 +120,7 @@ TEST_P(SchemaUpdaterTest, AlterTableReferenceAnotherGeneratedColumn) {
                               R"(
       alter table "T" add column "G2" bigint generated always as ("G1" + "G1") STORED
     )"},
+                             /*proto_descriptor_bytes=*/"",
                              database_api::DatabaseDialect::POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 StatusIs(absl::StatusCode::kInvalidArgument,
@@ -178,6 +180,7 @@ TEST_P(SchemaUpdaterTest, CreateTableReferenceAnotherGeneratedColumn) {
         H bigint generated always as (G + 1) stored
       )
     )"},
+                             /*proto_descriptor_bytes=*/"",
                              database_api::DatabaseDialect::POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 StatusIs(absl::StatusCode::kInvalidArgument,
@@ -204,22 +207,18 @@ TEST_P(SchemaUpdaterTest, CannotCreateTableAddNonStoredGeneratedColumn) {
         G bigint generated always as (K + V)
       )
     )"},
+                             /*proto_descriptor_bytes=*/"",
                              database_api::DatabaseDialect::POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   } else {
-    EXPECT_THAT(
-        CreateSchema({R"(
+    ZETASQL_EXPECT_OK(CreateSchema({R"(
         CREATE TABLE T (
           K INT64 NOT NULL,
           V INT64,
           G INT64 AS (K + V),
         ) PRIMARY KEY (K)
-      )"}),
-        StatusIs(absl::StatusCode::kUnimplemented,
-                 HasSubstr(
-                     "Generated column `G` without the STORED attribute is not "
-                     "supported.")));
+      )"}));
   }
 }
 
@@ -234,24 +233,20 @@ TEST_P(SchemaUpdaterTest, CannotAlterTableAddNonStoredGeneratedColumn) {
                               R"(
         ALTER TABLE T ADD COLUMN G bigint generated always as (K + V)
       )"},
+                             /*proto_descriptor_bytes=*/"",
                              database_api::DatabaseDialect::POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   } else {
-    EXPECT_THAT(
-        CreateSchema({R"(
+    ZETASQL_EXPECT_OK(CreateSchema({R"(
         CREATE TABLE T (
           K INT64 NOT NULL,
           V INT64,
         ) PRIMARY KEY (K)
       )",
-                      R"(
+                            R"(
         ALTER TABLE T ADD COLUMN G INT64 AS (K + V)
-      )"}),
-        StatusIs(absl::StatusCode::kUnimplemented,
-                 HasSubstr(
-                     "Generated column `G` without the STORED attribute is not "
-                     "supported.")));
+      )"}));
   }
 }
 
@@ -267,6 +262,7 @@ TEST_P(SchemaUpdaterTest, CannotAlterTableAlterColumnToNonStoredGenerated) {
                               R"(
         ALTER TABLE T ALTER COLUMN G bigint generated always as (K + V)
       )"},
+                             /*proto_descriptor_bytes=*/"",
                              database_api::DatabaseDialect::POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
                 zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
@@ -282,10 +278,9 @@ TEST_P(SchemaUpdaterTest, CannotAlterTableAlterColumnToNonStoredGenerated) {
                       R"(
         ALTER TABLE T ALTER COLUMN G INT64 AS (K + V)
       )"}),
-        StatusIs(absl::StatusCode::kUnimplemented,
-                 HasSubstr(
-                     "Generated column `G` without the STORED attribute is not "
-                     "supported.")));
+        StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Cannot convert column `T.G` to a generated column.")));
   }
 }
 
@@ -315,12 +310,14 @@ TEST_P(SchemaUpdaterTest, StoredColumnExpressionIsCaseInsensitive) {
   if (GetParam() == POSTGRESQL) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                          CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
+                                      /*proto_descriptor_bytes=*/"",
                                       POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
 
     ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         ALTER TABLE T ADD COLUMN G bigint generated always as (k + v) STORED
       )"},
+                           /*proto_descriptor_bytes=*/"",
                            POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false));
   } else {
@@ -338,11 +335,13 @@ TEST_P(SchemaUpdaterTest, StoredColumnNameIsCaseSensitive) {
   if (GetParam() == POSTGRESQL) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                          CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
+                                      /*proto_descriptor_bytes=*/"",
                                       POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
     ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         ALTER TABLE T ADD COLUMN G bigint generated always as (k + v) STORED
       )"},
+                           /*proto_descriptor_bytes=*/"",
                            POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false));
     // TODO: find out why using T gets the "Table not found: T"

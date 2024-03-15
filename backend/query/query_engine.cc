@@ -16,10 +16,12 @@
 
 #include "backend/query/query_engine.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -49,6 +51,7 @@
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/common/case.h"
+#include "backend/datamodel/key.h"
 #include "backend/datamodel/value.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
@@ -248,39 +251,83 @@ absl::StatusOr<std::unique_ptr<RowCursor>> BuildReturningRowResult(
 }
 
 // Builds a INSERT mutation and returns it along with a count of inserted rows.
-std::pair<Mutation, int64_t> BuildInsert(
+absl::StatusOr<std::pair<Mutation, int64_t>> BuildInsert(
     std::unique_ptr<zetasql::EvaluatorTableModifyIterator> iterator,
-    MutationOpType op_type,
-    const CaseInsensitiveStringSet& pending_ts_columns) {
+    MutationOpType op_type, const CaseInsensitiveStringSet& pending_ts_columns,
+    bool is_upsert_query, DatabaseDialect database_dialect) {
   const zetasql::Table* table = iterator->table();
   absl::flat_hash_set<int> generated_columns;
   std::vector<std::string> column_names;
+  std::optional<std::vector<int>> key_offsets = table->PrimaryKey();
   for (int i = 0; i < table->NumColumns(); ++i) {
     if (IsGenerated(table->GetColumn(i))) {
+      if (key_offsets.has_value() &&
+          std::find(key_offsets->begin(), key_offsets->end(), i) !=
+              key_offsets->end()) {
+        // TODO: b/310194797 - GSQL reference implementation returns NULL for
+        // generated keys or columns in POSTGRES dialect. GSQL AST constructed
+        // from Spangres transformer does not contain nodes to compute the
+        // generated columns unlike when ZetaSQL Analyzer is used for
+        // ZetaSQL queries.
+        if (database_dialect == DatabaseDialect::POSTGRESQL &&
+            is_upsert_query) {
+          return error::UnsupportedGeneratedKeyWithUpsertQueries();
+        }
+      }
       generated_columns.insert(i);
       continue;
     }
     column_names.push_back(table->GetColumn(i)->Name());
   }
 
+  // Keys of insert rows
+  std::set<Key> seen_keys;
   std::vector<ValueList> values;
   while (iterator->NextRow()) {
     values.emplace_back();
+    Key row_key;
     for (int i = 0; i < table->NumColumns(); ++i) {
+      zetasql::Value column_value = iterator->GetColumnValue(i);
+      if (pending_ts_columns.find(table->GetColumn(i)->Name()) !=
+          pending_ts_columns.end()) {
+        column_value =
+            zetasql::Value::StringValue(kCommitTimestampIdentifier);
+      }
+      // Build the primary key (including generated keys) for each insert row
+      // for INSERT OR UPDATE statement to check for unsupported scenarios
+      // below. For instance, multiple insert rows with same primary key in
+      // INSERT OR UPDATE query is not supported. `row_key` is used to identify
+      // this and return appropriate error.
+      if (op_type == MutationOpType::kInsertOrUpdate &&
+          key_offsets.has_value() &&
+          std::find(key_offsets->begin(), key_offsets->end(), i) !=
+              key_offsets->end()) {
+        row_key.AddColumn(column_value);
+      }
       if (generated_columns.contains(i)) {
         continue;
       }
-      if (pending_ts_columns.find(table->GetColumn(i)->Name()) !=
-          pending_ts_columns.end()) {
-        values.back().push_back(
-            zetasql::Value::StringValue(kCommitTimestampIdentifier));
+      values.back().push_back(column_value);
+    }
+    if (op_type == MutationOpType::kInsertOrUpdate) {
+      // Spanner returns error when multiple insert rows have same key in
+      // INSERT OR UPDATE statement.
+      if (seen_keys.find(row_key) != seen_keys.end()) {
+        return error::CannotInsertDuplicateKeyInsertOrUpdateDml(
+            row_key.DebugString());
       } else {
-        values.back().push_back(iterator->GetColumnValue(i));
+        seen_keys.insert(row_key);
       }
     }
   }
 
   Mutation mutation;
+  // `values` can be empty if INSERT OR IGNORE query contains insert rows that
+  // already existed. In this case, return empty mutation with rows modified
+  // count as 0.
+  if (values.empty()) {
+    return std::make_pair(mutation, 0);
+  }
   mutation.AddWriteOp(op_type, table->Name(), column_names, values);
   return std::make_pair(mutation, values.size());
 }
@@ -410,18 +457,34 @@ absl::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsInUpdate(
 absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedInsert(
     const zetasql::ResolvedInsertStmt* insert_statement,
     const zetasql::ParameterValueMap& parameters,
-    zetasql::TypeFactory* type_factory) {
+    zetasql::TypeFactory* type_factory, DatabaseDialect database_dialect) {
+  if (insert_statement->insert_mode() ==
+      zetasql::ResolvedInsertStmt::OR_REPLACE) {
+    return error::UnsupportedUpsertQueries("Insert or replace");
+  }
   bool is_upsert_query = insert_statement->insert_mode() ==
                              zetasql::ResolvedInsertStmt::OR_IGNORE ||
                          insert_statement->insert_mode() ==
                              zetasql::ResolvedInsertStmt::OR_UPDATE;
-  if (is_upsert_query &&
-      !EmulatorFeatureFlags::instance().flags().enable_upsert_queries) {
+  MutationOpType op_type = MutationOpType::kInsert;
+  if (is_upsert_query) {
     std::string insert_mode_name = (insert_statement->insert_mode() ==
                                     zetasql::ResolvedInsertStmt::OR_IGNORE)
                                        ? "Insert or ignore"
                                        : "Insert or update";
-    return error::UnsupportedUpsertQueries(insert_mode_name);
+    if (!EmulatorFeatureFlags::instance().flags().enable_upsert_queries) {
+      return error::UnsupportedUpsertQueries(insert_mode_name);
+    }
+    if (!EmulatorFeatureFlags::instance()
+             .flags()
+             .enable_upsert_queries_with_returning &&
+        insert_statement->returning() != nullptr) {
+      return error::UnsupportedReturningWithUpsertQueries(insert_mode_name);
+    }
+    if (insert_statement->insert_mode() ==
+        zetasql::ResolvedInsertStmt::OR_UPDATE) {
+      op_type = MutationOpType::kInsertOrUpdate;
+    }
   }
 
   ZETASQL_ASSIGN_OR_RETURN(auto pending_ts_columns,
@@ -445,8 +508,20 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedInsert(
   ZETASQL_ASSIGN_OR_RETURN(auto cursor,
                    BuildReturningRowResult(std::move(returning_iter)));
 
-  const auto& mutation_and_count = BuildInsert(
-      std::move(iterator), MutationOpType::kInsert, pending_ts_columns);
+  ZETASQL_ASSIGN_OR_RETURN(const auto& mutation_and_count,
+                   BuildInsert(std::move(iterator), op_type, pending_ts_columns,
+                               is_upsert_query, database_dialect));
+  // Resulting mutation count can be 0 only if all insert rows already
+  // existed and none were inserted due to OR_IGNORE insert mode.
+  // Validate the invariants if either the count is zero or result mutations are
+  // empty.
+  if (mutation_and_count.second == 0 ||
+      mutation_and_count.first.ops().empty()) {
+    ZETASQL_RET_CHECK(insert_statement->insert_mode() ==
+              zetasql::ResolvedInsertStmt::OR_IGNORE);
+    ZETASQL_RET_CHECK(mutation_and_count.first.ops().empty());
+    ZETASQL_RET_CHECK_EQ(mutation_and_count.second, 0);
+  }
   return ExecuteUpdateResult{mutation_and_count.first,
                              mutation_and_count.second, std::move(cursor)};
 }
@@ -505,12 +580,12 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedDelete(
 absl::StatusOr<ExecuteUpdateResult> EvaluateUpdate(
     const zetasql::ResolvedStatement* resolved_statement,
     zetasql::Catalog* catalog, const zetasql::ParameterValueMap& parameters,
-    zetasql::TypeFactory* type_factory) {
+    zetasql::TypeFactory* type_factory, DatabaseDialect database_dialect) {
   switch (resolved_statement->node_kind()) {
     case zetasql::RESOLVED_INSERT_STMT:
       return EvaluateResolvedInsert(
           resolved_statement->GetAs<zetasql::ResolvedInsertStmt>(),
-          parameters, type_factory);
+          parameters, type_factory, database_dialect);
     case zetasql::RESOLVED_UPDATE_STMT:
       return EvaluateResolvedUpdate(
           resolved_statement->GetAs<zetasql::ResolvedUpdateStmt>(),
@@ -848,9 +923,10 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
 
     // Only execute the SQL statement if the user did not request PLAN mode.
     if (query_mode != v1::ExecuteSqlRequest::PLAN) {
-      ZETASQL_ASSIGN_OR_RETURN(auto execute_update_result,
-                       EvaluateUpdate(resolved_statement.get(), &catalog,
-                                      params, type_factory_));
+      ZETASQL_ASSIGN_OR_RETURN(
+          auto execute_update_result,
+          EvaluateUpdate(resolved_statement.get(), &catalog, params,
+                         type_factory_, context.schema->dialect()));
       ZETASQL_RETURN_IF_ERROR(context.writer->Write(execute_update_result.mutation));
       result.modified_row_count = execute_update_result.modify_row_count;
       result.rows = std::move(execute_update_result.returning_row_cursor);

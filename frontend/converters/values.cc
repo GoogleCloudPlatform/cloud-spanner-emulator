@@ -27,7 +27,9 @@
 #include "zetasql/public/functions/date_time_util.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/value.h"
+#include "absl/base/optimization.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
@@ -38,6 +40,7 @@
 #include "common/errors.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"
@@ -53,8 +56,10 @@ namespace {
 using google::spanner::v1::TypeAnnotationCode;
 using postgres_translator::spangres::datatypes::CreatePgJsonbValue;
 using postgres_translator::spangres::datatypes::CreatePgNumericValue;
+using postgres_translator::spangres::datatypes::CreatePgOidValue;
 using postgres_translator::spangres::datatypes::GetPgJsonbNormalizedValue;
 using postgres_translator::spangres::datatypes::GetPgNumericNormalizedValue;
+using postgres_translator::spangres::datatypes::GetPgOidValue;
 using postgres_translator::spangres::datatypes::SpannerExtendedType;
 
 // Time format used by Cloud Spanner to encode timestamps.
@@ -81,6 +86,7 @@ static absl::StatusOr<zetasql::Value> CreatePgNumericValueWithMemoryContext(
   return postgres_translator::spangres::datatypes::CreatePgNumericValue(
       numeric_string);
 }
+
 }  // namespace
 
 absl::StatusOr<zetasql::Value> ValueFromProto(
@@ -159,6 +165,17 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
                 value_pb.string_value());
           }
           return *pg_numeric;
+        }
+        case TypeAnnotationCode::PG_OID: {
+          int64_t oid = 0;
+          if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
+            return error::ValueProtoTypeMismatch(value_pb.DebugString(),
+                                                 type->DebugString());
+          }
+          if (!absl::SimpleAtoi(value_pb.string_value(), &oid)) {
+            return error::CouldNotParseStringAsPgOid(value_pb.string_value());
+          }
+          return CreatePgOidValue(oid);
         }
         default:
           return error::Internal(absl::StrCat(
@@ -293,6 +310,30 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
       return zetasql::values::Struct(type->AsStruct(), values);
     }
 
+    case zetasql::TypeKind::TYPE_PROTO: {
+      if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
+        return error::ValueProtoTypeMismatch(value_pb.DebugString(),
+                                             type->DebugString());
+      }
+      std::string bytes;
+      if (!absl::Base64Unescape(value_pb.string_value(), &bytes)) {
+        return error::CouldNotParseStringAsBytes(value_pb.string_value());
+      }
+      return zetasql::values::Proto(type->AsProto(), absl::Cord(bytes));
+    }
+    case zetasql::TypeKind::TYPE_ENUM: {
+      if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
+        return error::ValueProtoTypeMismatch(value_pb.DebugString(),
+                                             type->DebugString());
+      }
+      int num = 0;
+      if (!absl::SimpleAtoi(value_pb.string_value(), &num)) {
+        return error::CouldNotParseStringAsInteger(value_pb.string_value());
+      }
+
+      return zetasql::values::Enum(type->AsEnum(), num);
+    }
+
     default: {
       return error::Internal(absl::StrCat(
           "Cloud Spanner unsupported type ", type->DebugString(),
@@ -357,6 +398,10 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
               std::string(*GetPgNumericNormalizedValue(value)));
           break;
         }
+        case TypeAnnotationCode::PG_OID: {
+          value_pb.set_string_value(absl::StrCat(*GetPgOidValue(value)));
+          break;
+        }
         default:
           return error::Internal(
               absl::StrCat("Cloud Spanner unsupported ZetaSQL value ",
@@ -404,6 +449,18 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
 
     case zetasql::TypeKind::TYPE_BYTES: {
       absl::Base64Escape(value.bytes_value(), value_pb.mutable_string_value());
+      break;
+    }
+
+    case zetasql::TypeKind::TYPE_ENUM: {
+      value_pb.set_string_value(std::to_string(value.enum_value()));
+      break;
+    }
+
+    case zetasql::TypeKind::TYPE_PROTO: {
+      std::string strvalue;
+      absl::CopyCordToString(value.ToCord(), &strvalue);
+      absl::Base64Escape(strvalue, value_pb.mutable_string_value());
       break;
     }
 

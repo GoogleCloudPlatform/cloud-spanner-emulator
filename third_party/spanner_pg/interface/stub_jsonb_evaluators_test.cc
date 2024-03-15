@@ -41,22 +41,22 @@ namespace {
 using ::testing::HasSubstr;
 using ::zetasql_base::testing::StatusIs;
 
-TEST(StubEvaluatorTest, JsonBArrayElement) {
-  EXPECT_THAT(JsonBArrayElement("[1, 2]", 0),
+TEST(StubEvaluatorTest, JsonbArrayElement) {
+  EXPECT_THAT(JsonbArrayElement("[1, 2]", 0),
               StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("JsonBArrayElement")));
+                       HasSubstr("JsonbArrayElement")));
 }
 
-TEST(StubEvaluatorTest, JsonBObjectField) {
-  EXPECT_THAT(JsonBObjectField(R"({"a": 1})", "a"),
+TEST(StubEvaluatorTest, JsonbObjectField) {
+  EXPECT_THAT(JsonbObjectField(R"({"a": 1})", "a"),
               StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("JsonBObjectField")));
+                       HasSubstr("JsonbObjectField")));
 }
 
-TEST(StubEvaluatorTest, JsonBTypeof) {
+TEST(StubEvaluatorTest, JsonbTypeof) {
   EXPECT_THAT(
-      JsonBTypeof(R"({"a": 1})"),
-      StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("JsonBTypeof")));
+      JsonbTypeof(R"({"a": 1})"),
+      StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("JsonbTypeof")));
 }
 
 }  // namespace

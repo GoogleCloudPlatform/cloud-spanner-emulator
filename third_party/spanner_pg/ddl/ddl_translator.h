@@ -92,6 +92,12 @@ struct TranslationOptions {
   bool enable_if_not_exists = false;
   // enable_change_streams allows creating/updating/deleting change streams.
   bool enable_change_streams = false;
+  // enable_change_streams_mod_type_filter_options allows
+  // exclude_insert/exclude_update/exclude_delete change stream options.
+  bool enable_change_streams_mod_type_filter_options = false;
+  // enable_change_streams_ttl_deletes_filter_option allows
+  // exclude_ttl_deletes change stream option.
+  bool enable_change_streams_ttl_deletes_filter_option = false;
   // enable_alter_index allows translation of <ALTER INDEX>.
   bool enable_alter_index = true;
   // enable_role_based_access allows role-based access control, e.g.
@@ -105,6 +111,8 @@ struct TranslationOptions {
   // enable_virtual_generated_column allows translation of <VIRTUAL>,
   // which is a non-stored generated column.
   bool enable_virtual_generated_column = false;
+  // enable_vector_length allows translation of <VECTOR LENGTH> clause.
+  bool enable_vector_length = false;
 };
 
 // Interface for translating PostgreSQL DDL parse tree (AST) to Spanner schema

@@ -55,6 +55,10 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
     case zetasql::TypeKind::TYPE_NUMERIC:
     case zetasql::TypeKind::TYPE_JSON:
       return true;
+    case zetasql::TypeKind::TYPE_PROTO:
+    case zetasql::TypeKind::TYPE_ENUM: {
+      return EmulatorFeatureFlags::instance().flags().enable_protos;
+    }
     case zetasql::TypeKind::TYPE_EXTENDED: {
       auto type_code = static_cast<const SpannerExtendedType*>(type)->code();
       switch (type_code) {

@@ -57,6 +57,7 @@ cc_test(
     srcs = ["ddl_parser_test.cc"],
     deps = [
         ":ddl_parser",
+        "//backend/schema/catalog:proto_bundle",
         "//common:feature_flags",
         "//tests/common:proto_matchers",
         "//tests/common:scoped_feature_flags_setter",

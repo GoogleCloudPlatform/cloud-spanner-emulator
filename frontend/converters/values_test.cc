@@ -28,13 +28,17 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "absl/strings/escaping.h"
+#include "backend/schema/catalog/proto_bundle.h"
+#include "tests/common/proto_matchers.h"
+#include "tests/common/test.pb.h"
 #include "third_party/spanner_pg/datatypes/common/numeric_core.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"
 #include "zetasql/base/status_macros.h"
@@ -73,13 +77,19 @@ using zetasql::values::NumericArray;
 using zetasql::values::String;
 using zetasql::values::Struct;
 using zetasql::values::Timestamp;
+using zetasql::values::Array;
+using zetasql::values::Enum;
+using zetasql::values::Proto;
 
 using postgres_translator::spangres::datatypes::CreatePgJsonbValue;
 using postgres_translator::spangres::datatypes::CreatePgNumericValue;
+using postgres_translator::spangres::datatypes::CreatePgOidValue;
 using postgres_translator::spangres::datatypes::GetPgJsonbArrayType;
 using postgres_translator::spangres::datatypes::GetPgJsonbType;
 using postgres_translator::spangres::datatypes::GetPgNumericArrayType;
 using postgres_translator::spangres::datatypes::GetPgNumericType;
+using postgres_translator::spangres::datatypes::GetPgOidArrayType;
+using postgres_translator::spangres::datatypes::GetPgOidType;
 using ::postgres_translator::spangres::datatypes::common::MaxNumericString;
 
 using zetasql_base::testing::StatusIs;
@@ -121,6 +131,26 @@ MATCHER_P(EqPG, result,
 class ValueProtos : public ::testing::Test {
  public:
   ValueProtos() = default;
+
+  std::string read_descriptors() {
+    google::protobuf::FileDescriptorSet proto_files;
+    ::emulator::tests::common::Simple::descriptor()->file()->CopyTo(
+        proto_files.add_file());
+    return proto_files.SerializeAsString();
+  }
+
+  // Sets up the proto bundle and populates FileDescriptor bytes.
+  absl::StatusOr<std::shared_ptr<const backend::ProtoBundle>>
+  SetUpProtoBundle() {
+    auto insert_proto_types = std::vector<std::string>{};
+    insert_proto_types.push_back("emulator.tests.common.Simple");
+    insert_proto_types.push_back("emulator.tests.common.TestEnum");
+    ZETASQL_ASSIGN_OR_RETURN(auto builder,
+                     backend::ProtoBundle::Builder::New(read_descriptors()));
+    ZETASQL_RETURN_IF_ERROR(builder->InsertTypes(insert_proto_types));
+    ZETASQL_ASSIGN_OR_RETURN(auto proto_bundle, builder->Build());
+    return proto_bundle;
+  }
 };
 
 TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
@@ -131,11 +161,39 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
        StructType::StructField("int", factory.get_int64())},
       &str_int_pair));
 
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, SetUpProtoBundle());
+
+  std::string proto_type_fqn = "emulator.tests.common.Simple";
+  const zetasql::Type* proto_type;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto descriptor,
+                       proto_bundle->GetTypeDescriptor(proto_type_fqn));
+  ZETASQL_ASSERT_OK(factory.MakeProtoType(descriptor, &proto_type));
+
+  std::string proto_enum_type_fqn = "emulator.tests.common.TestEnum";
+  const zetasql::Type* enum_type;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto enum_descriptor,
+      proto_bundle->GetEnumTypeDescriptor(proto_enum_type_fqn));
+  ZETASQL_ASSERT_OK(factory.MakeEnumType(enum_descriptor, &enum_type));
+
+  const zetasql::Type* array_proto_type;
+  ZETASQL_ASSERT_OK(factory.MakeArrayType(proto_type, &array_proto_type));
+
+  const zetasql::Type* array_enum_type;
+  ZETASQL_ASSERT_OK(factory.MakeArrayType(enum_type, &array_enum_type));
+
+  ::emulator::tests::common::Simple simple_proto;
+  simple_proto.set_field("ProtoValue");
+  std::string encoded_field;
+  absl::Base64Escape(simple_proto.SerializeAsString(), &encoded_field);
+
   std::vector<std::pair<zetasql::Value, std::string>> test_cases{
       {Null(StringType()), "null_value: NULL_VALUE"},
       {Bool(true), "bool_value: true"},
       {Int64(101), "string_value: '101'"},
       {Int64(4147483647), "string_value: '4147483647'"},
+      {CreatePgOidValue(12345).value(), "string_value: '12345'"},
+      {CreatePgOidValue(4147483647).value(), "string_value: '4147483647'"},
       {Double(-1), "number_value: -1"},
       {Double(std::numeric_limits<double>::infinity()),
        "string_value: 'Infinity'"},
@@ -159,6 +217,15 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
        "string_value: '{\"key\": 123}'"},
       {Int64Array({}), "list_value: { values [] }"},
       {Int64Array({1, 2, 3}),
+       "list_value: { values [{string_value: '1'}, {string_value: '2'}, "
+       "{string_value: '3'}] }"},
+      {zetasql::Value::MakeArray(GetPgOidArrayType(), {}).value(),
+       "list_value: { values [] }"},
+      {zetasql::Value::MakeArray(
+           GetPgOidArrayType(),
+           {CreatePgOidValue(1).value(), CreatePgOidValue(2).value(),
+            CreatePgOidValue(3).value()})
+           .value(),
        "list_value: { values [{string_value: '1'}, {string_value: '2'}, "
        "{string_value: '3'}] }"},
       {NumericArray(
@@ -199,8 +266,18 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
       {Struct(EmptyStructType(), {}), "list_value: { values: [] }"},
       {Struct(str_int_pair, {String("One"), Int64(2)}),
        "list_value: { values[{string_value: 'One'}, {string_value: '2'}] }"},
+      {Proto(proto_type->AsProto(), simple_proto),
+       "string_value: \"" + encoded_field + "\""},
+      {Enum(enum_type->AsEnum(), ::emulator::tests::common::TEST_ENUM_ONE),
+       "string_value: '1'"},
+      {Array(array_proto_type->AsArray(),
+             {Proto(proto_type->AsProto(), simple_proto)}),
+       "list_value: { values [{string_value: \"" + encoded_field + "\"}] }"},
+      {Array(array_enum_type->AsArray(),
+             {Enum(enum_type->AsEnum(),
+                   ::emulator::tests::common::TEST_ENUM_ONE)}),
+       "list_value: { values [{string_value: '1'}] }"},
   };
-
 
   for (const auto& entry : test_cases) {
     const zetasql::Value& expected_value = entry.first;
@@ -231,6 +308,7 @@ TEST_F(ValueProtos, DoesNotConvertUnknownValueTypesToProtos) {
 TEST_F(ValueProtos, DoesNotParseProtosWithMismatchingTypes) {
   std::vector<std::pair<const zetasql::Type*, std::string>> test_cases{
       {Int64Type(), "string_value: 'not a number'"},
+      {GetPgOidType(), "string_value: 'not a number'"},
       {TimestampType(), "number_value: -1"},
       {StringType(), "number_value: 1.0"},
       {BytesType(), "number_value: -1"},
@@ -239,6 +317,7 @@ TEST_F(ValueProtos, DoesNotParseProtosWithMismatchingTypes) {
       {JsonType(), "number_value: 1"},
       {GetPgJsonbType(), "number_value: 1"},
       {Int64ArrayType(), "string_value: '1'"},
+      {GetPgOidArrayType(), "string_value: '1'"},
       {NumericArrayType(), "string_value: '1'"},
       {GetPgNumericArrayType(), "string_value: '1'"},
       {JsonArrayType(), "string_value: '1'"},
@@ -355,6 +434,43 @@ TEST_F(ValueProtos, DoesNotParseInvalidPgJsonB) {
       ValueFromProto(PARSE_TEXT_PROTO("string_value: '{\"key\":invalid}'"),
                      GetPgJsonbType()),
       StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(ValueProtos, DoesNotParseInvalidProtoAndEnum) {
+  zetasql::TypeFactory factory;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, SetUpProtoBundle());
+
+  std::string proto_type_fqn = "emulator.tests.common.Simple";
+  const zetasql::Type* proto_type;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto descriptor,
+                       proto_bundle->GetTypeDescriptor(proto_type_fqn));
+  ZETASQL_ASSERT_OK(factory.MakeProtoType(descriptor, &proto_type));
+
+  std::string proto_enum_type_fqn = "emulator.tests.common.TestEnum";
+  const zetasql::Type* enum_type;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto enum_descriptor,
+      proto_bundle->GetEnumTypeDescriptor(proto_enum_type_fqn));
+  ZETASQL_ASSERT_OK(factory.MakeEnumType(enum_descriptor, &enum_type));
+
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: 'invalid string'"),
+                             proto_type),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+
+  std::string encoded_field;
+  absl::Base64Escape("invalid_field : random bytes", &encoded_field);
+  EXPECT_EQ("Proto<emulator.tests.common.Simple>{<unparseable>}",
+            ValueFromProto(
+                PARSE_TEXT_PROTO("string_value: \"" + encoded_field + "\""),
+                proto_type)
+                ->FullDebugString());
+
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: 'TEST_ENUM_ONE'"),
+                             enum_type),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: '10'"), enum_type),
+              zetasql::Value::Invalid());
 }
 
 }  // namespace

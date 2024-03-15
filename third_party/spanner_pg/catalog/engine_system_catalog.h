@@ -240,6 +240,11 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   absl::Status GetFunctions(
       absl::flat_hash_set<const zetasql::Function*>* output) const override;
 
+  // GetTableValuedFunctions is used to surface the registered system TVFs and
+  // their associated OIDs. Output should be populated with the mapped TVFs.
+  absl::Status GetTableValuedFunctions(absl::flat_hash_map<
+      Oid, const zetasql::TableValuedFunction*>* output) const;
+
   // GetConversions is used by the ZetaSQL random query generator to determine
   // which type casts between the builtin types (ZetaSQL and Postgres
   // extended) are supported.
@@ -331,6 +336,14 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
       absl::flat_hash_set<const zetasql::Function*>* output) const {
     return builtin_function_catalog_->GetFunctions(output);
   }
+
+  // Returns true if the function is implemented as a SQL rewrite. Otherwise, it
+  // returns false, including in the case when the function is not found.
+  bool IsBuiltinSqlRewriteFunction(
+      const std::string& function_name,
+      const zetasql::LanguageOptions& language_options,
+      zetasql::TypeFactory* type_factory);
+
 
   // Like GetTypes(), but return PostgresTypeMapping objects
   // rather than the GSQL types that they map to.

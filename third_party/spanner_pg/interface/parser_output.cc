@@ -31,15 +31,22 @@
 
 #include "third_party/spanner_pg/interface/parser_output.h"
 
+#include <cstddef>
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/time/time.h"
+#include "third_party/spanner_pg/interface/pg_arena.h"
 
 namespace postgres_translator {
 namespace interfaces {
 
-ParserOutput::ParserOutput(List* parse_tree,
-                           absl::flat_hash_map<int, int> token_locations)
-    : parse_tree_(parse_tree),
-      metadata_(ParserOutputMetadata{std::move(token_locations)}) {}
+ParserOutput::ParserOutput(List* parse_tree, ParserOutputMetadata metadata)
+    : parse_tree_(parse_tree), metadata_(metadata) {}
 
 ParserBatchOutput::ParserBatchOutput(std::unique_ptr<PGArena> arena,
                                      absl::Duration extra_time)

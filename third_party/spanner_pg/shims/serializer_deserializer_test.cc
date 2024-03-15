@@ -384,6 +384,7 @@ TEST_F(SerializationDeserializationTest, Constraint) {
   constraint->raw_expr = PlaceHolderNode();
   constraint->skip_validation = true;
   constraint->stored_kind = GENERATED_COL_NON_STORED;
+  constraint->vector_length = 321;
   constraint->where_clause = PlaceHolderNode();
 
   EXPECT_THAT(constraint, CanSerializeAndDeserialize());
@@ -1070,6 +1071,14 @@ TEST_F(SerializationDeserializationTest, FunctionHints) {
   WindowFunc* window_func = makeNode(WindowFunc);
   window_func->functionHints = list_make2(PlaceHolderNode(), PlaceHolderNode());
   EXPECT_THAT(window_func, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, CallStmt) {
+  CallStmt* call_stmt = makeNode(CallStmt);
+  call_stmt->funccall = makeNode(FuncCall);
+  call_stmt->funcexpr = makeNode(FuncExpr);
+  call_stmt->outargs = list_make1(PlaceHolderNode());
+  EXPECT_THAT(call_stmt, CanSerializeAndDeserialize());
 }
 
 }  // namespace

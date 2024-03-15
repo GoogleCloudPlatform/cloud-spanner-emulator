@@ -2765,6 +2765,7 @@ _equalConstraint(const Constraint *a, const Constraint *b)
 	COMPARE_SCALAR_FIELD(old_pktable_oid);
 	COMPARE_SCALAR_FIELD(skip_validation);
 	COMPARE_SCALAR_FIELD(initially_valid);
+	COMPARE_SCALAR_FIELD(vector_length);
   COMPARE_STRING_FIELD(constraint_expr_string);
 
 	return true;

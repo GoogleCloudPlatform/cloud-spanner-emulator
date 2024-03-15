@@ -140,6 +140,8 @@ absl::Status CreateDatabase(RequestContext* ctx,
                    ctx->env()->database_manager()->CreateDatabase(
                        database_uri, backend::SchemaChangeOperation{
                                          .statements = create_statements,
+                                         .proto_descriptor_bytes =
+                                             request->proto_descriptors(),
                                          .database_dialect = dialect,
                                      }));
 
@@ -209,6 +211,7 @@ absl::Status UpdateDatabaseDdl(
   ZETASQL_RETURN_IF_ERROR(backend_database->UpdateSchema(
       backend::SchemaChangeOperation{
           .statements = statements,
+          .proto_descriptor_bytes = request->proto_descriptors(),
           .database_dialect = backend_database->dialect()},
       &num_succesful_statements, &commit_timestamp, &backfill_status));
 

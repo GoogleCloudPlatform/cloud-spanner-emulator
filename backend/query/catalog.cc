@@ -328,6 +328,20 @@ absl::Status Catalog::GetType(const std::string& name,
     *type = it->second;
     return absl::OkStatus();
   }
+  absl::StatusOr<const google::protobuf::Descriptor*> descriptor =
+      schema_->proto_bundle()->GetTypeDescriptor(name);
+  if (descriptor.ok()) {
+    ZETASQL_RETURN_IF_ERROR(type_factory_->MakeProtoType(descriptor.value(), type));
+    return absl::OkStatus();
+  } else {
+    auto enum_descriptor = schema_->proto_bundle()->GetEnumTypeDescriptor(name);
+    if (enum_descriptor.ok()) {
+      ZETASQL_RETURN_IF_ERROR(
+          type_factory_->MakeEnumType(enum_descriptor.value(), type));
+      return absl::OkStatus();
+    }
+    return descriptor.status();
+  }
   return error::TypeNotFound(name);
 }
 

@@ -82,16 +82,16 @@ inline absl::string_view MinNumericString() {
   return min_numeric;
 }
 
-inline absl::string_view MaxJsonBNumericString() {
+inline absl::string_view MaxJsonbNumericString() {
   static const std::string max_numeric =
       absl::StrCat(std::string(kMaxPGJSONBNumericWholeDigits, '9'), ".",
                    std::string(kMaxPGJSONBNumericFractionalDigits, '9'));
   return max_numeric;
 }
 
-inline absl::string_view MinJsonBNumericString() {
+inline absl::string_view MinJsonbNumericString() {
   static const std::string min_numeric =
-      absl::StrCat("-", MaxJsonBNumericString());
+      absl::StrCat("-", MaxJsonbNumericString());
   return min_numeric;
 }
 }  // namespace postgres_translator::spangres::datatypes::common

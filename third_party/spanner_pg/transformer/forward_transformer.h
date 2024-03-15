@@ -584,8 +584,11 @@ class ForwardTransformer {
   // Expr objects
   absl::StatusOr<
       std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>>>
-  BuildGsqlResolvedDMLValueList(List* expr_list,
-                                const VarIndexScope* var_index_scope);
+  BuildGsqlResolvedDMLValueList(
+      List* expr_list,
+      const absl::flat_hash_map<int, const zetasql::Column*>&
+          unwritable_insert_list_columns,
+      const VarIndexScope* var_index_scope);
 
   // Builds a ZetaSQL ResolvedDMLValue from a PostgreSQL Expr object.
   absl::StatusOr<std::unique_ptr<const zetasql::ResolvedDMLValue>>

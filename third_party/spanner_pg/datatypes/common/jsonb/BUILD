@@ -65,7 +65,7 @@ cc_test(
     data = ["//third_party/spanner_pg/ddl:exported_jsondata"],
     shard_count = 4,
     tags = [
-        "spanner.programmability",
+        "spanner.datatypes",
     ],
     deps = [
         ":jsonb_parse",

@@ -426,6 +426,60 @@ TEST_F(QueryApiTest, AcceptsPlanMode) {
   }
 }
 
+TEST_F(QueryApiTest, DirectedReadsWithROTxnSucceeds) {
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"pb(
+        transaction { single_use { read_only { strong: true } } }
+        sql: "SELECT int64_col, string_col FROM test_table "
+             "ORDER BY int64_col ASC, string_col DESC"
+        directed_read_options {
+          include_replicas { replica_selections { type: READ_ONLY } }
+        }
+      )pb");
+  request.set_session(test_session_uri_);
+
+  // Directed Reads accepted in non-streaming case.
+  {
+    spanner_api::ResultSet unused_response;
+    EXPECT_THAT(ExecuteSql(request, &unused_response),
+                StatusIs(absl::StatusCode::kOk));
+  }
+
+  // Directed Reads accepted in streaming case.
+  {
+    std::vector<spanner_api::PartialResultSet> unused_response;
+    EXPECT_THAT(ExecuteStreamingSql(request, &unused_response),
+                StatusIs(absl::StatusCode::kOk));
+  }
+}
+
+TEST_F(QueryApiTest, DirectedReadsWithRWTxnFails) {
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"pb(
+        transaction { begin { read_write {} } }
+        sql: "SELECT int64_col, string_col FROM test_table "
+             "ORDER BY int64_col ASC, string_col DESC"
+        directed_read_options {
+          include_replicas { replica_selections { type: READ_ONLY } }
+        }
+      )pb");
+  request.set_session(test_session_uri_);
+
+  // Directed Reads rejected in non-streaming case.
+  {
+    spanner_api::ResultSet unused_response;
+    EXPECT_THAT(ExecuteSql(request, &unused_response),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+
+  // Directed Reads rejected in streaming case.
+  {
+    std::vector<spanner_api::PartialResultSet> unused_response;
+    EXPECT_THAT(ExecuteStreamingSql(request, &unused_response),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+}
+
 }  // namespace
 
 }  // namespace frontend

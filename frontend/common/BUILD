@@ -100,6 +100,17 @@ cc_test(
 )
 
 cc_library(
+    name = "validations",
+    srcs = ["validations.cc"],
+    hdrs = ["validations.h"],
+    deps = [
+        "//common:errors",
+        "//frontend/entities:transaction",
+        "@com_google_absl//absl/status",
+    ],
+)
+
+cc_library(
     name = "status",
     srcs = [
         "status.cc",

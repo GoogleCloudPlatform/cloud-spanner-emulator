@@ -188,8 +188,6 @@ ForwardTransformer::BuildGsqlSubstrFunctionCall(
   // Get the PostgreSQL oid for substr.
   constexpr absl::string_view pg_catalog_name = "pg_catalog";
   constexpr absl::string_view function_name = "substr";
-  // TODO: change the input types back to INT4OID when INT32
-  // support  is added.
   std::vector<Oid> function_input_types = {TEXTOID, INT8OID, INT8OID};
   ZETASQL_ASSIGN_OR_RETURN(Oid substring_oid,
                    PgBootstrapCatalog::Default()->GetProcOid(
@@ -755,6 +753,15 @@ ForwardTransformer::BuildGsqlInFunctionCall(
                    AppendGsqlInFunctionCallArrayArg(
                        array_argument, expr_transformer_info, argument_list));
   ZETASQL_RET_CHECK(argument_list.size() > 1);
+
+  // TODO: b/322384712 - Remove the following two if statements after
+  // implementing PG NaN comparison for double precision[] and float4[] columns.
+  if (array_op_arg_is_array &&
+      argument_list.at(1)->type()->AsArray()->element_type()->IsFloat()) {
+    return absl::InvalidArgumentError(
+        "ANY/SOME expressions with float4[] column references are "
+        "not supported.");
+  }
   if (array_op_arg_is_array &&
       argument_list.at(1)->type()->AsArray()->element_type()->IsDouble()) {
     return absl::InvalidArgumentError(

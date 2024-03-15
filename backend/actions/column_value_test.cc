@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "zetasql/public/functions/string.h"
@@ -31,7 +32,9 @@
 #include "absl/random/distributions.h"
 #include "absl/random/random.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/substitute.h"
 #include "absl/time/clock.h"
 #include "absl/types/variant.h"
 #include "backend/actions/context.h"
@@ -74,7 +77,7 @@ struct Values {
   zetasql::Value int64_col = Int64(1);
   zetasql::Value bool_col = Bool(true);
   zetasql::Value date_col = Date(2);
-  zetasql::Value float_col = Double(2.0);
+  zetasql::Value double_col = Double(2.0);
   zetasql::Value string_col = String("test");
   zetasql::Value bytes_col = Bytes("01234");
   zetasql::Value timestamp_col = Timestamp(absl::Now());
@@ -92,27 +95,28 @@ class ColumnValueTest : public test::ActionsTest {
   ColumnValueTest() {
     EmulatorFeatureFlags::Flags flags;
     emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+    std::string_view column_def_joiner = ",\n";
+    const std::string columns = absl::StrJoin(
+        {
+            "int64_col INT64 NOT NULL",
+            "bool_col BOOL NOT NULL",
+            "date_col DATE NOT NULL",
+            "double_col FLOAT64 NOT NULL",
+            "string_col STRING(MAX) NOT NULL",
+            "bytes_col BYTES(MAX) NOT NULL",
+            "timestamp_col TIMESTAMP NOT NULL",
+            "array_string_col ARRAY<STRING(MAX)>",
+            "array_bytes_col ARRAY<BYTES(MAX)>",
+            "numeric_col NUMERIC NOT NULL",
+            "json_col JSON NOT NULL",
+        },
+        column_def_joiner);
 
-    schema_ = emulator::test::CreateSchemaFromDDL(
-                  {
-                      R"(
-                            CREATE TABLE TestTable (
-                              int64_col INT64 NOT NULL,
-                              bool_col BOOL NOT NULL,
-                              date_col DATE NOT NULL,
-                              float_col FLOAT64 NOT NULL,
-                              string_col STRING(MAX) NOT NULL,
-                              bytes_col BYTES(MAX) NOT NULL,
-                              timestamp_col TIMESTAMP NOT NULL,
-                              array_string_col ARRAY<STRING(MAX)>,
-                              array_bytes_col ARRAY<BYTES(MAX)>,
-                              numeric_col NUMERIC NOT NULL,
-                              json_col JSON NOT NULL,
-                            ) PRIMARY KEY (int64_col)
-                          )",
-                  },
-                  &type_factory_)
-                  .value();
+    const std::string table = absl::Substitute(
+        "CREATE TABLE TestTable ($0) PRIMARY KEY (int64_col)", columns);
+
+    schema_ =
+        emulator::test::CreateSchemaFromDDL({table}, &type_factory_).value();
 
     validator_ = std::make_unique<ColumnValueValidator>();
     table_ = schema_->FindTable("TestTable");
@@ -124,7 +128,7 @@ class ColumnValueTest : public test::ActionsTest {
         ctx(),
         Insert(table_, Key({Int64(1)}), base_columns_,
                {values.int64_col, values.bool_col, values.date_col,
-                values.float_col, values.string_col, values.bytes_col,
+                values.double_col, values.string_col, values.bytes_col,
                 values.timestamp_col, values.array_string_col,
                 values.array_bytes_col, values.numeric_col, values.json_col}));
   }
@@ -134,7 +138,7 @@ class ColumnValueTest : public test::ActionsTest {
         ctx(),
         Update(table_, Key({Int64(1)}), base_columns_,
                {values.int64_col, values.bool_col, values.date_col,
-                values.float_col, values.string_col, values.bytes_col,
+                values.double_col, values.string_col, values.bytes_col,
                 values.timestamp_col, values.array_string_col,
                 values.array_bytes_col, values.numeric_col, values.json_col}));
   }
@@ -179,7 +183,7 @@ TEST_F(ColumnValueTest, ValidateNotNullColumns) {
   }
   {
     Values values;
-    values.float_col = NullDouble();
+    values.double_col = NullDouble();
     EXPECT_THAT(ValidateInsert(values),
                 StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
@@ -256,7 +260,7 @@ TEST_F(ColumnValueTest, ValidateColumnsAreCorrectTypes) {
   }
   {
     Values values;
-    values.float_col = String("");
+    values.double_col = String("");
     EXPECT_THAT(ValidateInsert(values),
                 StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),

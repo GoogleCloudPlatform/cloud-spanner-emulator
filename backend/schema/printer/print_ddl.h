@@ -28,6 +28,7 @@
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
@@ -76,6 +77,9 @@ std::string RowDeletionPolicyToString(const ddl::RowDeletionPolicy& policy);
 // Converts a Cloud Spanner column type to its string representation.
 std::string ColumnTypeToString(const zetasql::Type* type,
                                std::optional<int64_t> max_length);
+
+// Converts proto_bundle types to its string representation.
+std::string PrintProtoBundle(std::shared_ptr<const ProtoBundle> proto_bundle);
 
 // Prints the DDL statements for all tables and indexes within the given schema.
 absl::StatusOr<std::vector<std::string>> PrintDDLStatements(

@@ -471,7 +471,7 @@ absl::Status SpangresSystemCatalog::AddTypes(
   return absl::OkStatus();
 }
 
-bool IsSqlRewriteFunction(const PostgresFunctionArguments& function) {
+bool IsSpangresSqlRewriteFunction(const PostgresFunctionArguments& function) {
   for (const auto& signature : function.signature_arguments()) {
     if (!signature.signature().options().rewrite_options() ||
         signature.signature().options().rewrite_options()->sql().empty()) {
@@ -528,9 +528,13 @@ absl::Status SpangresSystemCatalog::AddFunctions(
 
   // Add each function to the catalog if it is supported in Spanner.
   for (const PostgresFunctionArguments& function : functions) {
+    bool is_builtin_sql_rewrite_function =
+        IsBuiltinSqlRewriteFunction(function.mapped_function_name(),
+                                    language_options, type_factory());
     if (FunctionNameSupportedInSpanner(function.mapped_function_name(),
                                        language_options, type_factory()) ||
-        IsSqlRewriteFunction(function)) {
+        IsSpangresSqlRewriteFunction(function) ||
+        is_builtin_sql_rewrite_function) {
       ZETASQL_RETURN_IF_ERROR(AddFunction(function, language_options));
     } else if (GetBuiltinFunction(function.mapped_function_name()).ok()) {
       // Checked that the function is registered directly in the emulator

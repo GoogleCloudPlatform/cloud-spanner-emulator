@@ -51,6 +51,7 @@ cc_library(
         "view.h",
     ],
     deps = [
+        ":proto_bundle",
         "//backend/common:case",
         "//backend/common:ids",
         "//backend/datamodel:types",
@@ -161,6 +162,48 @@ cc_test(
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
+    name = "proto_bundle",
+    srcs = ["proto_bundle.cc"],
+    hdrs = ["proto_bundle.h"],
+    deps = [
+        "//common:errors",
+        "@com_google_absl//absl/container:btree",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@com_google_protobuf//:protobuf",
+        "@com_google_protobuf//:protobuf_headers",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/public:type",
+    ],
+)
+
+cc_test(
+    name = "proto_bundle_test",
+    srcs = [
+        "proto_bundle_test.cc",
+    ],
+    deps = [
+        ":proto_bundle",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_2_cc_proto",
+        "//tests/common:test_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/container:btree",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
+        "@com_google_protobuf//:protobuf_headers",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

@@ -56,6 +56,9 @@ class SpangresUserCatalog : public EngineUserCatalog {
   const std::vector<std::string> GetCatalogPathForTable(
       const zetasql::Table* table) const override;
 
+  absl::StatusOr<std::vector<absl::string_view>> GetPrimaryKeyColumns(
+      const zetasql::Table& table) const override;
+
  protected:
   // Protected constructor is for the test-only subclass version,
   // spangres_test_user_catalog.

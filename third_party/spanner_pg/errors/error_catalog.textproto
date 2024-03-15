@@ -197,6 +197,11 @@ group {
     name: "UnknownFunction"
     pg_message_id: "Unknown function or function is not a built-in: %u"
   }
+
+  message {
+    name: "ProcedureNotExist"
+    pg_message_id: "procedure %s does not exist"
+  }
 }
 
 group {
@@ -306,6 +311,11 @@ group {
     name: "TimestamptzUnitsNotSupported"
     pg_message_id: "timestamp with time zone units \"%s\" not supported"
   }
+
+  message {
+    name: "ProcedureWithOutArgNotSupported"
+    pg_message_id: "Procedures with output arguments are not supported"
+  }
 }
 
 group {
@@ -387,6 +397,11 @@ group {
   message {
     name: "TooManyExpressionsInInsert"
     pg_message_id: "INSERT has more expressions than target columns"
+  }
+
+  message {
+    name: "TooManyTargetColumnsInInsert"
+    pg_message_id: "INSERT has more target columns than expressions"
   }
 
   message {
@@ -623,6 +638,11 @@ group {
     name: "BigIntOutOfRange"
     pg_message_id: "bigint out of range"
   }
+
+  message {
+    name: "Float4OutOfRange"
+    pg_message_id: "\"%s\" is out of range for type real"
+  }
 }
 
 group {
@@ -760,6 +780,15 @@ group {
   message {
     name: "StackDepthLimitExceeded"
     pg_message_id: "stack depth limit exceeded"
+  }
+}
+
+group {
+  code: "TOO_MANY_ARGUMENTS"
+
+  message {
+    name: "TooManyArguments"
+    pg_message_id: "cannot pass more than %d argument to a function"
   }
 }
 
@@ -981,6 +1010,15 @@ group {
   message {
     name: "TestErrorMessage"
     pg_message_id: "Test error message."
+  }
+}
+
+group {
+  code: "INDETERMINATE_DATATYPE"
+
+  message {
+    name: "EmptyArray"
+    pg_message_id: "cannot determine type of empty array"
   }
 }
 

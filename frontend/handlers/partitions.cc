@@ -196,6 +196,8 @@ absl::Status PartitionQuery(RequestContext* ctx,
       backend::Query query,
       QueryFromProto(request->sql(), request->params(), request->param_types(),
                      txn->query_engine()->type_factory()
+                     ,
+                     txn->schema()->proto_bundle()
                      ));
   ZETASQL_RETURN_IF_ERROR(txn->query_engine()->IsPartitionable(
       query,

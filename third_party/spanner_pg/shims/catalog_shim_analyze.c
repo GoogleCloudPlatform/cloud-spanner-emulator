@@ -242,3 +242,56 @@ OnConflictExpr* transformOnConflictClause(
 
 	return result;
 }
+
+/*
+ * transform a CallStmt
+ */
+Query *
+transformCallStmt(ParseState *pstate, CallStmt *stmt)
+{
+	List	   *targs;
+	ListCell   *lc;
+	Node	   *node;
+	FuncExpr   *fexpr;
+	List	   *outargs = NIL;
+	Query	   *result;
+
+	/*
+	 * First, do standard parse analysis on the procedure call and its
+	 * arguments, allowing us to identify the called procedure.
+	 */
+	targs = NIL;
+	foreach(lc, stmt->funccall->args)
+	{
+		targs = lappend(targs, transformExpr(pstate,
+											 (Node *) lfirst(lc),
+											 EXPR_KIND_CALL_ARGUMENT));
+	}
+
+	node = ParseFuncOrColumn(pstate,
+							 stmt->funccall->funcname,
+							 targs,
+							 pstate->p_last_srf,
+							 stmt->funccall,
+							 true,
+							 stmt->funccall->location);
+
+	assign_expr_collations(pstate, node);
+
+	fexpr = castNode(FuncExpr, node);
+
+	/*
+	 * SPANGRES does not support output arguments and skips looking them up in
+	 * the catalog.
+	 * TODO: b/329162323 - add back support for OUT arguments
+	 */
+	stmt->funcexpr = fexpr;
+	stmt->outargs = outargs;
+
+	/* represent the command as a utility Query */
+	result = makeNode(Query);
+	result->commandType = CMD_UTILITY;
+	result->utilityStmt = (Node *) stmt;
+
+	return result;
+}

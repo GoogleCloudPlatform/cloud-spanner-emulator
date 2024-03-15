@@ -104,6 +104,7 @@ void create_statement() #void :
 {
   <CREATE>
   (   create_database_statement()
+    | create_proto_bundle_statement()
     | create_table_statement()
     | create_index_statement()
 
@@ -112,6 +113,39 @@ void create_statement() #void :
     | create_sequence_statement()
     | create_role_statement()
   )
+}
+
+void dotted_path() :
+{}
+{
+  ((identifier() #part) (("." identifier() #part)*))
+}
+
+void create_proto_bundle_statement() :
+{}
+{
+  <PROTO> <BUNDLE> "(" ( dotted_path() )
+                   ( LOOKAHEAD(2) "," dotted_path() )*
+                   [","]  // ending comma tolerated, python style
+                   ")"
+}
+
+void alter_proto_bundle_statement() :
+{}
+{
+  <PROTO> <BUNDLE>
+    [ <INSERT> #insert "(" ( dotted_path() )
+                       ( LOOKAHEAD(2) "," dotted_path() )*
+                       [","]  // ending comma tolerated, python style
+                       ")" ]
+    [ <UPDATE> #update "(" ( dotted_path() )
+                       ( LOOKAHEAD(2) "," dotted_path() )*
+                       [","]  // ending comma tolerated, python style
+                       ")" ]
+    [ <DELETE> #delete "(" ( dotted_path() )
+                       ( LOOKAHEAD(2) "," dotted_path() )*
+                       [","]  // ending comma tolerated, python style
+                       ")" ]
 }
 
 void create_or_replace_statement() :
@@ -218,6 +252,7 @@ void column_type() :
   | <ARRAY> "<" column_type() ">"
 
   | <STRUCT> ( "<" struct_fields() ">" | "<>" )
+  | dotted_path()
 }
 
 void struct_fields() :
@@ -341,6 +376,13 @@ void create_index_statement() :
 }
 
 
+void create_index_where_clause() :
+{}
+{
+  path() <IS> <NOT> <NULLL>
+   (<AND> path() <IS> <NOT> <NULLL>)*
+}
+
 void index_interleave_clause() :
 {}
 {
@@ -410,18 +452,6 @@ void target_type():
   | <CHANGE> <STREAM> #change_stream
   | <VIEW> #view
   | <SEQUENCE> #sequence
-}
-
-void rename_op() :
-{}
-{
-  qualified_identifier() #from_name <TO> qualified_identifier() #to_name
-}
-
-void rename_statement() :
-{}
-{
-  <RENAME> <TABLE> rename_op() ( "," rename_op() )*
 }
 
 void privilege_target():
@@ -590,6 +620,7 @@ void drop_statement() :
 {}
 {
   <DROP>
+  (
     ( <TABLE> #table [ if_exists() ]
       | <INDEX> #index [ if_exists() ]
 
@@ -600,6 +631,8 @@ void drop_statement() :
       | <MODEL> #model [ if_exists() ]
       | <SCHEMA> #schema [ if_exists() ]
     ) qualified_identifier() #name
+    | <PROTO> #proto_bundle <BUNDLE> #name
+  )
 }
 
 void alter_statement() #void :
@@ -611,6 +644,7 @@ void alter_statement() #void :
     | alter_table_statement()
     | alter_change_stream_statement()
     | alter_index_statement()
+    | alter_proto_bundle_statement()
     | alter_sequence_statement()
     | alter_model_statement()
     | alter_schema_statement()
@@ -647,6 +681,18 @@ void alter_table_statement() :
       ] column_def()
     | <REPLACE> row_deletion_policy_clause() #replace_row_deletion_policy
   )
+}
+
+void rename_op() :
+{}
+{
+  qualified_identifier() #from_name <TO> qualified_identifier() #to_name
+}
+
+void rename_statement() :
+{}
+{
+  <RENAME> <TABLE> rename_op() ( "," rename_op() )*
 }
 
 void alter_change_stream_statement() :
@@ -694,4 +740,3 @@ TOKEN:  /* catch unexpected characters; must be last in file */
   | <ILLEGAL_STRING_ESCAPE: "\\" ~[]> : DEFAULT
   | <ILLEGAL_BYTES_ESCAPE: "\\" ~[]> : DEFAULT
 }
-

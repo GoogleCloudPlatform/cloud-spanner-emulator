@@ -38,6 +38,9 @@ constexpr char kGetInternalSequenceStateFunctionName[] =
 
 constexpr char kGetNextSequenceValueFunctionName[] = "get_next_sequence_value";
 
+// Name of the ml_predict_row function.
+constexpr char kMlPredictRowFunctionName[] = "ml_predict_row";
+
 // String used to tell cloud spanner to insert the commit timestamp into a
 // TIMESTAMP column with allow_commit_timestamp option set to true upon
 // transaction commit.

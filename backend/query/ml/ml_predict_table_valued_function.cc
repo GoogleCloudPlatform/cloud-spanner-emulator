@@ -16,6 +16,7 @@
 
 #include "backend/query/ml/ml_predict_table_valued_function.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -23,19 +24,27 @@
 
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
+#include "zetasql/public/evaluator_table_iterator.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/table_valued_function.h"
+#include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
+#include "zetasql/public/value.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/string_view.h"
+#include "backend/common/case.h"
+#include "backend/query/ml/model_evaluator.h"
+#include "backend/query/queryable_model.h"
+#include "common/errors.h"
 #include "zetasql/base/ret_check.h"
+#include "zetasql/base/status_macros.h"
 
-namespace google {
-namespace spanner {
-namespace emulator {
-namespace backend {
+namespace google::spanner::emulator::backend {
 namespace {
 
 constexpr static absl::string_view kSafe = "SAFE";
@@ -118,7 +127,4 @@ absl::Status MlPredictTableValuedFunction::Resolve(
   return absl::OkStatus();
 }
 
-}  // namespace backend
-}  // namespace emulator
-}  // namespace spanner
-}  // namespace google
+}  // namespace google::spanner::emulator::backend

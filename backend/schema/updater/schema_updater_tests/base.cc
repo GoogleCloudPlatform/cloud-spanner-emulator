@@ -37,10 +37,14 @@ namespace test {
 absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::CreateSchema(
     absl::Span<const std::string> statements
     ,
+    absl::string_view proto_descriptor_bytes
+    ,
     const database_api::DatabaseDialect& dialect,
     bool use_gsql_to_pg_translation) {
   return UpdateSchema(/*base_schema=*/nullptr,
                       statements
+                      ,
+                      proto_descriptor_bytes
                       ,
                       dialect, use_gsql_to_pg_translation);
 }
@@ -48,6 +52,8 @@ absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::CreateSchema(
 absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::UpdateSchema(
     const Schema* base_schema,
     absl::Span<const std::string> statements
+    ,
+    absl::string_view proto_descriptor_bytes
     ,
     const database_api::DatabaseDialect& dialect,
     bool use_gsql_to_pg_translation) {
@@ -77,6 +83,7 @@ absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::UpdateSchema(
   return updater.ValidateSchemaFromDDL(
       SchemaChangeOperation{
           .statements = statements,
+          .proto_descriptor_bytes = proto_descriptor_bytes,
           .database_dialect = dialect,
       },
       context, base_schema);

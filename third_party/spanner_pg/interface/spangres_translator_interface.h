@@ -149,9 +149,6 @@ class TranslatorCommonParams {
     return std::move(memory_reservation_manager_);
   }
 
-  // If true, the resolved AST from the transformer will be validated.
-  bool validate_ast() const { return validate_ast_; }
-
  private:
   absl::string_view sql_expression_;
   const zetasql::AnalyzerOptions* analyzer_options_ = nullptr;
@@ -163,7 +160,6 @@ class TranslatorCommonParams {
   TranslationProgress* translation_progress_output_ = nullptr;
   std::unique_ptr<MemoryReservationManager> memory_reservation_manager_ =
       nullptr;
-  bool validate_ast_ = false;
 
   friend class TranslateQueryParamsBuilder;
   friend class TranslateParsedQueryParamsBuilder;
@@ -266,8 +262,6 @@ class TranslateParsedQueryParams {
     return common_params_.TransferMemoryReservationManager();
   }
 
-  bool validate_ast() const { return common_params_.validate_ast(); }
-
  private:
   TranslatorCommonParams common_params_;
   absl::variant<ParserOutput, const std::string*> parser_output_;
@@ -359,13 +353,6 @@ class TranslateParsedQueryParamsBuilder {
   TranslateParsedQueryParamsBuilder& SetTranslationProgressOutput(
       TranslationProgress* output) {
     params_.common_params_.translation_progress_output_ = output;
-    return *this;
-  }
-
-  // If true, will run the ZetaSQL resolved AST validator on the output
-  // of the Transformer.
-  TranslateParsedQueryParamsBuilder& SetValidateAst(bool validate_ast) {
-    params_.common_params_.validate_ast_ = validate_ast;
     return *this;
   }
 
@@ -570,13 +557,6 @@ class TranslateQueryParamsBuilder {
   TranslateQueryParamsBuilder& SetTranslationProgressOutput(
       TranslationProgress* output) {
     params_.common_params_.translation_progress_output_ = output;
-    return *this;
-  }
-
-  // If true, will run the ZetaSQL resolved AST validator on the output
-  // of the Transformer.
-  TranslateQueryParamsBuilder& SetValidateAst(bool validate_ast) {
-    params_.common_params_.validate_ast_ = validate_ast;
     return *this;
   }
 

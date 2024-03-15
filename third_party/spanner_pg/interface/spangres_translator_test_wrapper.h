@@ -106,7 +106,6 @@ class SpangresTranslatorTestWrapper {
         interfaces::TranslateQueryParamsBuilder(
             sql, Parser(), engine_provided_catalog, std::move(function_catalog))
             .SetAnalyzerOptions(options)
-            .SetValidateAst(true)
             .SetMemoryReservationManager(
                 std::make_unique<StubMemoryReservationManager>())
             .SetPGQueryCallback(std::move(pg_query_callback))
@@ -127,7 +126,6 @@ class SpangresTranslatorTestWrapper {
             /*engine_builtin_function_catalog=*/
             test::GetSpangresTestBuiltinFunctionCatalog(options.language()))
             .SetAnalyzerOptions(options)
-            .SetValidateAst(true)
             .Build());
   }
 
@@ -145,7 +143,6 @@ class SpangresTranslatorTestWrapper {
             /*engine_builtin_function_catalog=*/
             test::GetSpangresTestBuiltinFunctionCatalog(options.language()))
             .SetAnalyzerOptions(options)
-            .SetValidateAst(true)
             .Build(),
         table_name);
   }
@@ -163,7 +160,6 @@ class SpangresTranslatorTestWrapper {
             /*engine_builtin_function_catalog=*/
             test::GetSpangresTestBuiltinFunctionCatalog(options.language()))
             .SetAnalyzerOptions(options)
-            .SetValidateAst(true)
             .Build(),
         table_name);
   }
@@ -184,7 +180,6 @@ class SpangresTranslatorTestWrapper {
         interfaces::TranslateQueryParamsBuilder(
             sql, Parser(), engine_provided_catalog, std::move(function_catalog))
             .SetAnalyzerOptions(options)
-            .SetValidateAst(true)
             .SetMemoryReservationManager(
                 std::make_unique<StubMemoryReservationManager>())
             .SetParserStatisticsCallback(std::move(parser_statistics_callback))
@@ -204,7 +199,6 @@ class SpangresTranslatorTestWrapper {
             /*engine_builtin_function_catalog=*/
             test::GetSpangresTestBuiltinFunctionCatalog(options.language()))
             .SetAnalyzerOptions(options)
-            .SetValidateAst(true)
             .SetMemoryReservationManager(
                 std::make_unique<StubMemoryReservationManager>())
             .Build());

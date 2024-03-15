@@ -28,6 +28,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "tests/common/proto_matchers.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
@@ -51,6 +52,41 @@ class DDLColumnTypeToGoogleSqlTypeTest : public ::testing::Test {
       ddl::ColumnDefinition::Type column_type) {
     ddl::ColumnDefinition ddl_type;
     ddl_type.set_type(column_type);
+    return ddl_type;
+  }
+
+
+  std::string GenerateProtoDescriptorBytesAsString() {
+    const google::protobuf::FileDescriptorProto file_descriptor = PARSE_TEXT_PROTO(R"pb(
+      syntax: "proto2"
+      name: "0"
+      package: "customer.app"
+      message_type { name: "User" }
+      enum_type {
+        name: "State"
+        value { name: "UNSPECIFIED" number: 0 }
+      }
+    )pb");
+    google::protobuf::FileDescriptorSet file_descriptor_set;
+    *file_descriptor_set.add_file() = file_descriptor;
+    return file_descriptor_set.SerializeAsString();
+  }
+
+  // Sets up the proto bundle and populates descriptor bytes
+  absl::StatusOr<std::shared_ptr<const ProtoBundle> > SetUpProtoBundle() {
+    auto insert_proto_types =
+        std::vector<std::string>{"customer.app.User", "customer.app.State"};
+    ZETASQL_ASSIGN_OR_RETURN(auto builder, ProtoBundle::Builder::New(
+                                       GenerateProtoDescriptorBytesAsString()));
+    ZETASQL_RETURN_IF_ERROR(builder->InsertTypes(insert_proto_types));
+    ZETASQL_ASSIGN_OR_RETURN(auto proto_bundle, builder->Build());
+    return proto_bundle;
+  }
+
+  ddl::ColumnDefinition MakeColumnType(ddl::ColumnDefinition::Type column_type,
+                                       std::string proto_type_fqn) {
+    auto ddl_type = MakeColumnDefinitionForType(column_type);
+    ddl_type.set_proto_type_name(proto_type_fqn);
     return ddl_type;
   }
 
@@ -165,6 +201,86 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, TestUnrecognizedColumnType) {
   EXPECT_THAT(DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_),
               StatusIs(absl::StatusCode::kInternal,
                        HasSubstr("Unrecognized ddl::ColumnDefinition:")));
+}
+
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Proto) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, SetUpProtoBundle());
+  std::string proto_type_fqn = "customer.app.User";
+  auto ddl_type = MakeColumnType(ddl::ColumnDefinition::NONE, proto_type_fqn);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
+                       DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_,
+                                                    proto_bundle.get()));
+  const zetasql::Type* googlesql_proto_type;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto descriptor,
+                       proto_bundle->GetTypeDescriptor(proto_type_fqn));
+  ZETASQL_ASSERT_OK(type_factory_.MakeProtoType(descriptor, &googlesql_proto_type));
+
+  EXPECT_TRUE(converted_type->Equals(googlesql_proto_type));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(ddl_type));
+}
+
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Enum) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, SetUpProtoBundle());
+  std::string proto_type_fqn = "customer.app.State";
+  auto ddl_type = MakeColumnType(ddl::ColumnDefinition::NONE, proto_type_fqn);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
+                       DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_,
+                                                    proto_bundle.get()));
+  const zetasql::Type* googlesql_enum_type;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto descriptor,
+                       proto_bundle->GetEnumTypeDescriptor(proto_type_fqn));
+  ZETASQL_ASSERT_OK(type_factory_.MakeEnumType(descriptor, &googlesql_enum_type));
+
+  EXPECT_TRUE(converted_type->Equals(googlesql_enum_type));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(ddl_type));
+}
+
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, ArrayOfProto) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, SetUpProtoBundle());
+  std::string proto_type_fqn = "customer.app.User";
+  auto array_element_type =
+      MakeColumnType(ddl::ColumnDefinition::NONE, proto_type_fqn);
+  auto array_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::ARRAY);
+  *(array_type.mutable_array_subtype()) = array_element_type;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
+                       DDLColumnTypeToGoogleSqlType(array_type, &type_factory_,
+                                                    proto_bundle.get()));
+  const zetasql::Type* proto_type;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto descriptor,
+                       proto_bundle->GetTypeDescriptor(proto_type_fqn));
+  ZETASQL_ASSERT_OK(type_factory_.MakeProtoType(descriptor, &proto_type));
+
+  const zetasql::Type* googlesql_array_type;
+  ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(proto_type, &googlesql_array_type));
+
+  EXPECT_TRUE(converted_type->Equals(googlesql_array_type));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(array_type));
+}
+
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, ArrayOfEnum) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, SetUpProtoBundle());
+  std::string proto_type_fqn = "customer.app.State";
+  auto array_element_type =
+      MakeColumnType(ddl::ColumnDefinition::NONE, proto_type_fqn);
+  auto array_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::ARRAY);
+  *(array_type.mutable_array_subtype()) = array_element_type;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
+                       DDLColumnTypeToGoogleSqlType(array_type, &type_factory_,
+                                                    proto_bundle.get()));
+  const zetasql::Type* enum_type;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto descriptor,
+                       proto_bundle->GetEnumTypeDescriptor(proto_type_fqn));
+  ZETASQL_ASSERT_OK(type_factory_.MakeEnumType(descriptor, &enum_type));
+
+  const zetasql::Type* googlesql_array_type;
+  ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(enum_type, &googlesql_array_type));
+
+  EXPECT_TRUE(converted_type->Equals(googlesql_array_type));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(array_type));
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Array) {

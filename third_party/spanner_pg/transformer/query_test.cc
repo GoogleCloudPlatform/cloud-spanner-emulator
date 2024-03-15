@@ -522,7 +522,7 @@ TEST_P(QueryTransformationTest, TestTransform) {
   // Build the analyzer options.
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
-  analyzer_options.set_allow_undeclared_parameters(true);
+  analyzer_options.set_record_parse_locations(false);
   for (const auto& [parameter_name, parameter_type] :
        test_case.parameter_types()) {
     ZETASQL_ASSERT_OK(
@@ -564,7 +564,7 @@ TEST_P(QueryTransformationTest, TestTransform) {
     ZETASQL_ASSERT_OK(validator.ValidateResolvedStatement(transformed_statement.get()));
 
     // Check that the ASTs match.
-    ASSERT_EQ(transformed_statement->DebugString(),
+    ASSERT_EQ(StripParseLocations(transformed_statement->DebugString()),
               StripParseLocations(gsql_statement->DebugString()));
   }
 }
@@ -1050,7 +1050,8 @@ TEST_F(QueryTransformerTest, BuildResolvedFilterScanTest) {
           *(pg_query->jointree->quals), &empty_from_scan_scope,
           std::move(new_table_scan)));
 
-  EXPECT_EQ(new_filter_scan->DebugString(), gsql_filter_scan->DebugString());
+  EXPECT_EQ(new_filter_scan->DebugString(),
+            StripParseLocations(gsql_filter_scan->DebugString()));
 }
 
 // Build a list of Value nodes containing palloc'd strings from the provided
@@ -1355,6 +1356,74 @@ TEST(TransformerTest, PruneUnusedPrunesInsert) {
   }
 }
 
+TEST(TransformerTest, InsertOnConflictDoNothing) {
+  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  ASSERT_TRUE(options.prune_unused_columns());
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output,
+      ParseAnalyzeAndTransformStatement(
+          "INSERT INTO keyvalue VALUES (1, 'abc') ON CONFLICT(key) DO NOTHING",
+          options));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::ResolvedTableScan* table_scan,
+                       GetTableScan(gsql_output.get()));
+  const std::vector<std::string> column_names{"key", "value"};
+  EXPECT_EQ(table_scan->column_list_size(), column_names.size());
+  for (int i = 0; i < table_scan->column_list_size(); ++i) {
+    EXPECT_EQ(table_scan->column_list(i).name(), column_names[i]);
+    EXPECT_EQ(table_scan->column_list(i).table_name(), "keyvalue");
+  }
+
+  const zetasql::ResolvedInsertStmt* stmt =
+      gsql_output->resolved_statement()->GetAs<zetasql::ResolvedInsertStmt>();
+  EXPECT_EQ(stmt->insert_mode(), zetasql::ResolvedInsertStmt::OR_IGNORE);
+  EXPECT_EQ(stmt->row_list_size(), 1);
+}
+
+TEST(TransformerTest, InsertOnConflictDoUpdate) {
+  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  ASSERT_TRUE(options.prune_unused_columns());
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output,
+      ParseAnalyzeAndTransformStatement(
+          "INSERT INTO keyvalue VALUES (1, 'abc') ON CONFLICT(key) "
+          "DO UPDATE SET key = excluded.key, value = excluded.value",
+          options));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::ResolvedTableScan* table_scan,
+                       GetTableScan(gsql_output.get()));
+  const std::vector<std::string> column_names{"key", "value"};
+  EXPECT_EQ(table_scan->column_list_size(), column_names.size());
+  for (int i = 0; i < table_scan->column_list_size(); ++i) {
+    EXPECT_EQ(table_scan->column_list(i).name(), column_names[i]);
+    EXPECT_EQ(table_scan->column_list(i).table_name(), "keyvalue");
+  }
+
+  const zetasql::ResolvedInsertStmt* stmt =
+      gsql_output->resolved_statement()->GetAs<zetasql::ResolvedInsertStmt>();
+  EXPECT_EQ(stmt->insert_mode(), zetasql::ResolvedInsertStmt::OR_UPDATE);
+  EXPECT_EQ(stmt->row_list_size(), 1);
+}
+
+TEST(TransformerTest, InsertOnConflictWithReturning) {
+  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  ASSERT_TRUE(options.prune_unused_columns());
+
+  absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> gsql_output =
+      ParseAnalyzeAndTransformStatement(
+          "INSERT INTO keyvalue VALUES (1, 'abc') ON CONFLICT(key) "
+          "DO UPDATE SET key = excluded.key, value = excluded.value "
+          "RETURNING key",
+          options);
+  EXPECT_THAT(
+      gsql_output.status(),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("RETURNING with ON CONFLICT clause is "
+                                  "not supported")));
+}
+
 TEST(TransformerTest, PruneUnusedPrunesDelete) {
   zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   ASSERT_TRUE(options.prune_unused_columns());
@@ -1583,28 +1652,6 @@ TEST_F(QueryTransformerTest, UnsupportedQueryFields) {
       StatusIs(absl::StatusCode::kUnimplemented,
                HasSubstr("WITH CHECK options are not supported")));
   query->withCheckOptions = nullptr;
-}
-
-TEST_F(QueryTransformerTest, UnsupportedOnConflictClause) {
-  {
-    const std::string sql =
-        "INSERT INTO keyvalue VALUES (1, 'abc') "
-        "ON CONFLICT (key) DO UPDATE SET value = 1";
-    EXPECT_THAT(
-        ForwardTransformQuery(sql, analyzer_options_),
-        StatusIs(absl::StatusCode::kUnimplemented,
-                 HasSubstr("ON CONFLICT DO UPDATE clauses are not supported")));
-  }
-
-  {
-    const std::string sql =
-        "INSERT INTO keyvalue VALUES (1, 'abc') ON CONFLICT DO NOTHING";
-    EXPECT_THAT(
-        ForwardTransformQuery(sql, analyzer_options_),
-        StatusIs(absl::StatusCode::kUnimplemented,
-                 HasSubstr("ON CONFLICT DO NOTHING clauses are not "
-                                    "supported")));
-  }
 }
 }  // namespace
 }  // namespace postgres_translator::spangres::test

@@ -71,7 +71,7 @@ zetasql::FunctionEvaluator PGFunctionEvaluator(
   };
 }
 
-absl::StatusOr<zetasql::Value> EmulatorJsonBArrayElementText(
+absl::StatusOr<zetasql::Value> EmulatorJsonbArrayElementText(
     absl::string_view jsonb, int32_t element) {
   if (element < 0) {
     return zetasql::Value::NullString();
@@ -95,7 +95,7 @@ absl::StatusOr<zetasql::Value> EmulatorJsonBArrayElementText(
   return zetasql::Value::String(result);
 }
 
-absl::StatusOr<zetasql::Value> EmulatorJsonBObjectFieldText(
+absl::StatusOr<zetasql::Value> EmulatorJsonbObjectFieldText(
     absl::string_view jsonb, absl::string_view key) {
   ZETASQL_ASSIGN_OR_RETURN(
       Datum jsonb_in_datum,

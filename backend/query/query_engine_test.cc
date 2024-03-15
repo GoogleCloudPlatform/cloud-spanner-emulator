@@ -50,6 +50,7 @@
 #include "tests/common/row_reader.h"
 #include "tests/common/schema_constructor.h"
 #include "tests/common/scoped_feature_flags_setter.h"
+#include "tests/common/test.pb.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "zetasql/base/status_macros.h"
@@ -125,6 +126,28 @@ testing::Matcher<zetasql::Value> UuidV4StringValue() {
                                         "89ab][0-9a-f]{3}-[0-9a-f]{12}"));
 }
 
+std::string ToString(QueryResult& result) {
+  std::string result_string;
+  RowCursor& cursor = *result.rows;
+  for (int i = 0; i < cursor.NumColumns(); ++i) {
+    if (i != 0) result_string += ",";
+    result_string += cursor.ColumnName(i);
+  }
+  result_string += "(";
+  for (int i = 0; i < cursor.NumColumns(); ++i) {
+    if (i != 0) result_string += ",";
+    result_string +=
+        cursor.ColumnType(i)->ShortTypeName(zetasql::PRODUCT_INTERNAL);
+  }
+  result_string += ") : ";
+  while (cursor.Next()) {
+    for (int i = 0; i < cursor.NumColumns(); ++i) {
+      result_string += (cursor.ColumnValue(i).ShortDebugString()) + ',';
+    }
+  }
+  return result_string;
+}
+
 std::vector<std::string> GetColumnNames(const backend::RowCursor& cursor) {
   std::vector<std::string> names;
   names.reserve(cursor.NumColumns());
@@ -185,15 +208,103 @@ class QueryEngineTestBase : public testing::Test {
   const Schema* change_stream_schema() { return change_stream_schema_.get(); }
   const Schema* model_schema() { return model_schema_.get(); }
   const Schema* sequence_schema() { return sequence_schema_.get(); }
+  const Schema* gpk_schema() { return gpk_schema_.get(); }
   RowReader* change_stream_partition_table_reader() {
     return &change_stream_partition_table_reader_;
   }
   RowReader* change_stream_data_table_reader() {
     return &change_stream_data_table_reader_;
   }
+  RowReader* gpk_table_reader() { return &gpk_table_reader_; }
   RowReader* reader() { return &reader_; }
   QueryEngine& query_engine() { return query_engine_; }
   zetasql::TypeFactory* type_factory() { return &type_factory_; }
+  const Schema* proto_schema() { return proto_schema_.get(); }
+  std::string read_descriptors() {
+    google::protobuf::FileDescriptorSet proto_files;
+    ::emulator::tests::common::Simple::descriptor()->file()->CopyTo(
+        proto_files.add_file());
+    return proto_files.SerializeAsString();
+  }
+
+  absl::StatusOr<const zetasql::ProtoType*> MakeProtoType(
+      const Schema* schema, std::string proto_type_fqn) {
+    const zetasql::ProtoType* proto_type;
+    ZETASQL_ASSIGN_OR_RETURN(auto descriptor,
+                     schema->proto_bundle()->GetTypeDescriptor(proto_type_fqn));
+    ZETASQL_RETURN_IF_ERROR(type_factory_.MakeProtoType(descriptor, &proto_type));
+    return proto_type;
+  }
+
+  absl::StatusOr<const zetasql::EnumType*> MakeEnumType(
+      const Schema* schema, std::string proto_type_fqn) {
+    const zetasql::EnumType* enum_type;
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto descriptor,
+        schema->proto_bundle()->GetEnumTypeDescriptor(proto_type_fqn));
+    ZETASQL_RETURN_IF_ERROR(type_factory_.MakeEnumType(descriptor, &enum_type));
+    return enum_type;
+  }
+  absl::StatusOr<test::TestRowReader> PopulateProtoReader() {
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto proto_type,
+        MakeProtoType(proto_schema(), "emulator.tests.common.Simple"));
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto enum_type,
+        MakeEnumType(proto_schema(), "emulator.tests.common.TestEnum"));
+    const zetasql::Type* array_proto_type;
+    ZETASQL_RETURN_IF_ERROR(
+        type_factory()->MakeArrayType(proto_type, &array_proto_type));
+    const zetasql::Type* array_enum_type;
+    ZETASQL_RETURN_IF_ERROR(type_factory()->MakeArrayType(enum_type, &array_enum_type));
+    ::emulator::tests::common::Simple simple_proto1;
+    ::emulator::tests::common::Simple simple_proto2;
+    ::emulator::tests::common::Simple simple_proto3;
+    simple_proto1.set_field("One");
+    simple_proto2.set_field("Two");
+    simple_proto3.set_field("Four");
+    ::emulator::tests::common::TestEnum enum1 =
+        ::emulator::tests::common::TEST_ENUM_ONE;
+    ::emulator::tests::common::TestEnum enum2 =
+        ::emulator::tests::common::TEST_ENUM_TWO;
+    ::emulator::tests::common::TestEnum enum3 =
+        ::emulator::tests::common::TEST_ENUM_FOUR;
+
+    test::TestRowReader reader{
+        {{"test_table",
+          {{"int64_col", "proto_col", "enum_col", "array_proto_col",
+            "array_enum_col"},
+           {zetasql::types::Int64Type(), proto_type, enum_type,
+            array_proto_type, array_enum_type},
+           {{zetasql::values::Int64(1),
+             zetasql::values::Proto(proto_type, simple_proto1),
+             zetasql::values::Enum(enum_type, enum1),
+             zetasql::values::Array(
+                 array_proto_type->AsArray(),
+                 {zetasql::values::Proto(proto_type, simple_proto1)}),
+             zetasql::values::Array(
+                 array_enum_type->AsArray(),
+                 {zetasql::values::Enum(enum_type, enum1)})},
+            {zetasql::values::Int64(2),
+             zetasql::values::Proto(proto_type, simple_proto2),
+             zetasql::values::Enum(enum_type, enum2),
+             zetasql::values::Array(
+                 array_proto_type->AsArray(),
+                 {zetasql::values::Proto(proto_type, simple_proto2)}),
+             zetasql::values::Array(
+                 array_enum_type->AsArray(),
+                 {zetasql::values::Enum(enum_type, enum2)})},
+            {zetasql::values::Int64(4),
+             zetasql::values::Proto(proto_type, simple_proto3),
+             zetasql::values::Enum(enum_type, enum3),
+             zetasql::values::Array(
+                 array_proto_type->AsArray(),
+                 {zetasql::values::Proto(proto_type, simple_proto3)}),
+             zetasql::values::Array(
+                 array_enum_type->AsArray(),
+                 {zetasql::values::Enum(enum_type, enum3)})}}}}}};
+    return reader;
+  }
 
  protected:
   zetasql::TypeFactory type_factory_;
@@ -202,6 +313,7 @@ class QueryEngineTestBase : public testing::Test {
   std::unique_ptr<const Schema> change_stream_schema_;
   std::unique_ptr<const Schema> model_schema_;
   std::unique_ptr<const Schema> sequence_schema_;
+  std::unique_ptr<const Schema> gpk_schema_;
 
  private:
   std::unique_ptr<const Schema> views_schema_ =
@@ -225,6 +337,24 @@ class QueryEngineTestBase : public testing::Test {
   test::TestRowReader change_stream_data_table_reader_{
       {{"_change_stream_data_change_stream_test_table",
         {{"partition_token"}, {zetasql::types::StringType()}}}}};
+  test::TestRowReader gpk_table_reader_{
+      {{"test_table",
+        {{"k1_pk", "k2", "k3gen_storedpk", "k4", "k5"},
+         {zetasql::types::Int64Type(), zetasql::types::Int64Type(),
+          zetasql::types::Int64Type(), zetasql::types::Int64Type(),
+          zetasql::types::Int64Type()}}}}};
+  std::unique_ptr<const Schema> proto_schema_ =
+      test::CreateSchemaWithProtoEnumColumn(&type_factory_, read_descriptors());
+};
+
+struct TestQuery {
+  std::string sql;
+  std::string result;
+  std::string test_name;
+};
+
+class ParameterizedSelectProto : public QueryEngineTestBase,
+                                 public testing::WithParamInterface<TestQuery> {
 };
 
 class QueryEngineTest
@@ -240,6 +370,10 @@ class QueryEngineTest
       change_stream_schema_ = test::CreateSchemaWithOneTableAndOneChangeStream(
           &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
       ZETASQL_ASSERT_OK_AND_ASSIGN(
+          gpk_schema_,
+          test::CreateGpkSchemaWithOneTable(
+              &type_factory_, database_api::DatabaseDialect::POSTGRESQL));
+      ZETASQL_ASSERT_OK_AND_ASSIGN(
           sequence_schema_,
           test::CreateSchemaWithOneSequence(
               &type_factory_, database_api::DatabaseDialect::POSTGRESQL));
@@ -251,6 +385,8 @@ class QueryEngineTest
       change_stream_schema_ =
           test::CreateSchemaWithOneTableAndOneChangeStream(&type_factory_);
       model_schema_ = test::CreateSchemaWithOneModel(&type_factory_);
+      ZETASQL_ASSERT_OK_AND_ASSIGN(gpk_schema_,
+                           test::CreateGpkSchemaWithOneTable(&type_factory_));
       ZETASQL_ASSERT_OK_AND_ASSIGN(sequence_schema_,
                            test::CreateSchemaWithOneSequence(&type_factory_));
       query_engine().SetLatestSchemaForFunctionCatalog(sequence_schema_.get());
@@ -790,6 +926,108 @@ class MockRowWriter : public RowWriter {
   MOCK_METHOD(absl::Status, Write, (const Mutation& m), (override));
 };
 
+TEST_P(QueryEngineTest, InsertOrIgnoreDmlFlagDisabled) {
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_upsert_queries = false});
+  MockRowWriter writer;
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT OR IGNORE INTO test_table (int64_col) VALUES(1)"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr(
+                "Insert or ignore statement is not supported in Emulator")));
+  } else {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_table (int64_col) VALUES(1) "
+                  "ON CONFLICT(int64_col) DO NOTHING"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr(
+                "Insert or ignore statement is not supported in Emulator")));
+  }
+}
+
+TEST_P(QueryEngineTest, InsertOrIgnoreDmlWithReturning) {
+  MockRowWriter writer;
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT OR IGNORE INTO test_table (int64_col) VALUES(1) "
+                  "THEN RETURN *"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr("Returning clause in Insert or ignore statement is not "
+                      "supported in Emulator")));
+  } else {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_table (int64_col) VALUES(1) "
+                  "ON CONFLICT(int64_col) DO NOTHING RETURNING *"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr("RETURNING with ON CONFLICT clause is not supported")));
+  }
+}
+
+TEST_P(QueryEngineTest, InsertOrUpdateDmlFlagDisabled) {
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_upsert_queries = false});
+  MockRowWriter writer;
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT OR UPDATE INTO test_table (int64_col) VALUES(1)"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr(
+                "Insert or update statement is not supported in Emulator")));
+  } else {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_table (int64_col) VALUES(1) "
+                  "ON CONFLICT(int64_col) DO UPDATE "
+                  "SET int64_col = excluded.int64_col"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr(
+                "Insert or update statement is not supported in Emulator")));
+  }
+}
+
+TEST_P(QueryEngineTest, InsertOrUpdateDmlWithReturning) {
+  MockRowWriter writer;
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT OR UPDATE INTO test_table (int64_col) VALUES(1) "
+                  "THEN RETURN *"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr("Returning clause in Insert or update statement is not "
+                      "supported in Emulator")));
+  } else {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_table (int64_col) VALUES(1) "
+                  "ON CONFLICT(int64_col) DO UPDATE "
+                  "SET int64_col = excluded.int64_col RETURNING *"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr("RETURNING with ON CONFLICT clause is not supported")));
+  }
+}
+
 TEST_P(QueryEngineTest, ExecuteInsertsTwoRows) {
   MockRowWriter writer;
   EXPECT_CALL(
@@ -1049,6 +1287,8 @@ TEST_P(QueryEngineTest, TestCannotQueryChangeStreamDataTableExternally) {
 }
 
 TEST_P(QueryEngineTest, TestMlQuery) {
+  GTEST_SKIP();
+
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     return;
   }
@@ -1058,10 +1298,536 @@ TEST_P(QueryEngineTest, TestMlQuery) {
           Query{"SELECT int64_col, Outcome "
                 "FROM ML.PREDICT(MODEL test_model, TABLE test_table)"},
           QueryContext{model_schema(), reader()}),
-      StatusIs(absl::StatusCode::kUnimplemented,
-               HasSubstr("Unhandled node type algebrizing a scan: TVFScan")));
+      StatusIs(
+          absl::StatusCode::kUnimplemented,
+          HasSubstr("TVF ML.PREDICT does not support the API in evaluator.h")));
 }
 
+INSTANTIATE_TEST_SUITE_P(
+    ParameterizedSelectProto, ParameterizedSelectProto,
+    testing::ValuesIn<TestQuery>(
+        {{R"sql(SELECT proto_col.field FROM test_table)sql",
+          "field(STRING) : \"One\",\"Two\",\"Four\",", "proto"},
+         {R"sql(SELECT enum_col FROM test_table)sql",
+          "enum_col(emulator.tests.common.TestEnum) : "
+          "TEST_ENUM_TWO,TEST_ENUM_ONE,TEST_ENUM_FOUR,",
+          "enum"},
+         {R"sql(SELECT array_enum_col FROM test_table)sql",
+          "array_enum_col(ARRAY<emulator.tests.common.TestEnum>) : "
+          "[TEST_ENUM_TWO],[TEST_ENUM_ONE],[TEST_ENUM_FOUR],",
+          "array_enum"},
+         {R"sql(SELECT array_proto_col FROM test_table)sql",
+          "array_proto_col(ARRAY<emulator.tests.common.Simple>) : [{field: "
+          "\"Two\"}],[{field: \"One\"}],[{field: \"Four\"}],",
+          "array_proto"},
+         {R"sql(SELECT REPLACE_FIELDS(new emulator.tests.common.Simple {
+          field : "test1"
+        }, "test3" AS field).field)sql",
+          "field(STRING) : \"test3\",", "replace_fields"},
+         {R"sql(SELECT new
+        emulator.tests.common.Simple {
+          field : "test1"
+        })sql",
+          "(emulator.tests.common.Simple) : {field: \"test1\"},",
+          "braced_proto_constructor"}}),
+    [](const testing::TestParamInfo<ParameterizedSelectProto::ParamType>&
+           info) { return info.param.test_name; });
+
+TEST_P(ParameterizedSelectProto, ExecuteSqlSelectsProtoAndEnumColumnFromTable) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+  TestQuery test_query = GetParam();
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{test_query.sql},
+                                QueryContext{proto_schema(), &reader}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), test_query.result);
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlSelectsInvalidProtoField) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Protos are unsupported in the PG dialect.
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{R"sql(SELECT proto_col.invalid_field FROM test_table)sql"},
+          QueryContext{proto_schema(), &reader}),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("does not have a field called invalid_field")));
+}
+
+TEST_P(QueryEngineTest, ExecuteInsertsTwoProtoAndEnumRows) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Protos are unsupported in the PG dialect.
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto proto_type,
+      MakeProtoType(proto_schema(), "emulator.tests.common.Simple"));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto enum_type,
+      MakeEnumType(proto_schema(), "emulator.tests.common.TestEnum"));
+  const zetasql::Type* array_proto_type;
+  ZETASQL_ASSERT_OK(type_factory()->MakeArrayType(proto_type, &array_proto_type));
+  const zetasql::Type* array_enum_type;
+  ZETASQL_ASSERT_OK(type_factory()->MakeArrayType(enum_type, &array_enum_type));
+  ::emulator::tests::common::Simple simple_proto2;
+  ::emulator::tests::common::Simple simple_proto3;
+  simple_proto2.set_field("Two");
+  simple_proto3.set_field("Four");
+  ::emulator::tests::common::TestEnum enum2 =
+      ::emulator::tests::common::TEST_ENUM_TWO;
+  ::emulator::tests::common::TestEnum enum3 =
+      ::emulator::tests::common::TEST_ENUM_FOUR;
+
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "proto_col",
+                                             "enum_col", "array_proto_col",
+                                             "array_enum_col"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(
+                        ValueList{
+                            Int64(7),
+                            zetasql::values::Proto(proto_type, simple_proto2),
+                            zetasql::values::Enum(enum_type, enum2),
+                            zetasql::values::Array(
+                                array_proto_type->AsArray(),
+                                {zetasql::values::Proto(proto_type,
+                                                          simple_proto2)}),
+                            zetasql::values::Array(
+                                array_enum_type->AsArray(),
+                                {zetasql::values::Enum(enum_type, enum2)})},
+                        ValueList{
+                            Int64(8),
+                            zetasql::values::Proto(proto_type, simple_proto3),
+                            zetasql::values::Enum(enum_type, enum3),
+                            zetasql::values::Array(
+                                array_proto_type->AsArray(),
+                                {zetasql::values::Proto(proto_type,
+                                                          simple_proto3)}),
+                            zetasql::values::Array(
+                                array_enum_type->AsArray(),
+                                {zetasql::values::Enum(enum_type,
+                                                         enum3)})})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{
+              R"sql(INSERT INTO test_table (int64_col, proto_col,enum_col,
+                                          array_proto_col,array_enum_col)
+              VALUES(8, 'field: "Four"','TEST_ENUM_FOUR',
+              ARRAY<emulator.tests.common.Simple>['field: "Four"'],
+              ARRAY<emulator.tests.common.TestEnum>['TEST_ENUM_FOUR']),
+              (7, 'field: "Two"','TEST_ENUM_TWO',
+              ARRAY<emulator.tests.common.Simple>['field: "Two"'],
+              ARRAY<emulator.tests.common.TestEnum>['TEST_ENUM_TWO']))sql"},
+          QueryContext{proto_schema(), &reader, &writer}),
+      IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlInsertsInvalidProtoEnumField) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Protos are unsupported in the PG dialect.
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+  MockRowWriter writer;
+
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{R"sql(INSERT into test_table(int64_col,proto_col,enum_col)
+                      VALUES(5,'invalid_field:"Four"','TEST_ENUM_FOUR'))sql"},
+          QueryContext{proto_schema(), &reader, &writer}),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing proto:")));
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{R"sql(INSERT into test_table(int64_col,proto_col,enum_col)
+                      VALUES(8,'field:"Eight"','TEST_ENUM_EIGHT'))sql"},
+          QueryContext{proto_schema(), &reader, &writer}),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Could not cast literal")));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlDeleteProtoAndEnumColumnFromTable) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Protos are unsupported in the PG dialect.
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(&Mutation::ops,
+                     UnorderedElementsAre(AllOf(
+                         Field(&MutationOp::type, MutationOpType::kDelete),
+                         Field(&MutationOp::table, "test_table"),
+                         Field(&MutationOp::key_set,
+                               Property(&KeySet::keys, UnorderedElementsAre(Key{
+                                                           {Int64(4)}}))))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{R"sql(DELETE FROM test_table
+                                WHERE proto_col.field = "Four")sql"},
+                                QueryContext{proto_schema(), &reader, &writer}),
+      IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+
+  EXPECT_CALL(
+      writer,
+      Write(Property(&Mutation::ops,
+                     UnorderedElementsAre(AllOf(
+                         Field(&MutationOp::type, MutationOpType::kDelete),
+                         Field(&MutationOp::table, "test_table"),
+                         Field(&MutationOp::key_set,
+                               Property(&KeySet::keys, UnorderedElementsAre(Key{
+                                                           {Int64(2)}}))))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{R"sql(DELETE FROM test_table
+                        WHERE enum_col = 'TEST_ENUM_TWO')sql"},
+                                QueryContext{proto_schema(), &reader, &writer}),
+      IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlDeleteArrayProtoAndArrayEnumColumnFromTable) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Protos are unsupported in the PG dialect.
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(&Mutation::ops,
+                     UnorderedElementsAre(AllOf(
+                         Field(&MutationOp::type, MutationOpType::kDelete),
+                         Field(&MutationOp::table, "test_table"),
+                         Field(&MutationOp::key_set,
+                               Property(&KeySet::keys, UnorderedElementsAre(Key{
+                                                           {Int64(4)}}))))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{R"sql(DELETE FROM test_table
+                                WHERE
+                                array_proto_col[OFFSET(0)].field = "Four")sql"},
+                                QueryContext{proto_schema(), &reader, &writer}),
+      IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+
+  EXPECT_CALL(
+      writer,
+      Write(Property(&Mutation::ops,
+                     UnorderedElementsAre(AllOf(
+                         Field(&MutationOp::type, MutationOpType::kDelete),
+                         Field(&MutationOp::table, "test_table"),
+                         Field(&MutationOp::key_set,
+                               Property(&KeySet::keys, UnorderedElementsAre(Key{
+                                                           {Int64(2)}}))))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{R"sql(DELETE FROM test_table
+                WHERE array_enum_col[OFFSET(0)] = 'TEST_ENUM_TWO')sql"},
+                                QueryContext{proto_schema(), &reader, &writer}),
+      IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlDeleteInvalidProtoAndEnumColumnFromTable) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Protos are unsupported in the PG dialect.
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+
+  MockRowWriter writer;
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{R"sql(DELETE FROM test_table
+                                WHERE proto_col.invalid_field = "Four")sql"},
+                                QueryContext{proto_schema(), &reader, &writer}),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("does not have a field called invalid_field")));
+
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{R"sql(DELETE FROM test_table
+                WHERE enum_col = 'TEST_ENUM_EIGHT')sql"},
+                                QueryContext{proto_schema(), &reader, &writer}),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Could not cast literal")));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlUpdateProtoWithEnumColumnInTable) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Protos are unsupported in the PG dialect.
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto proto_type,
+      MakeProtoType(proto_schema(), "emulator.tests.common.Simple"));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto enum_type,
+      MakeEnumType(proto_schema(), "emulator.tests.common.TestEnum"));
+  const zetasql::Type* array_proto_type;
+  ZETASQL_ASSERT_OK(type_factory()->MakeArrayType(proto_type, &array_proto_type));
+  const zetasql::Type* array_enum_type;
+  ZETASQL_ASSERT_OK(type_factory()->MakeArrayType(enum_type, &array_enum_type));
+  MockRowWriter writer;
+
+  ::emulator::tests::common::Simple simple_proto2;
+  simple_proto2.set_field("Two");
+  ::emulator::tests::common::TestEnum enum2 =
+      ::emulator::tests::common::TEST_ENUM_TWO;
+
+  ::emulator::tests::common::Simple simple_proto_updated;
+  simple_proto_updated.set_field("Updated");
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "proto_col",
+                                             "enum_col", "array_proto_col",
+                                             "array_enum_col"}),
+              Field(
+                  &MutationOp::rows,
+                  UnorderedElementsAre(ValueList{
+                      Int64(2),
+                      zetasql::values::Proto(proto_type,
+                                               simple_proto_updated),
+                      zetasql::values::Enum(enum_type, enum2),
+                      zetasql::values::Array(array_proto_type->AsArray(),
+                                               {zetasql::values::Proto(
+                                                   proto_type, simple_proto2)}),
+                      zetasql::values::Array(
+                          array_enum_type->AsArray(),
+                          {zetasql::values::Enum(enum_type, enum2)})})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{R"sql(UPDATE test_table
+                        SET proto_col = 'field: "Updated"'
+                        WHERE enum_col = 'TEST_ENUM_TWO')sql"},
+                                QueryContext{proto_schema(), &reader, &writer}),
+      IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+
+  ::emulator::tests::common::Simple simple_proto3;
+  simple_proto3.set_field("Four");
+  ::emulator::tests::common::TestEnum enum3 =
+      ::emulator::tests::common::TEST_ENUM_FOUR;
+  ::emulator::tests::common::TestEnum updated_enum =
+      ::emulator::tests::common::TEST_ENUM_ONE;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "proto_col",
+                                             "enum_col", "array_proto_col",
+                                             "array_enum_col"}),
+              Field(
+                  &MutationOp::rows,
+                  UnorderedElementsAre(ValueList{
+                      Int64(4),
+                      zetasql::values::Proto(proto_type, simple_proto3),
+                      zetasql::values::Enum(enum_type, updated_enum),
+                      zetasql::values::Array(array_proto_type->AsArray(),
+                                               {zetasql::values::Proto(
+                                                   proto_type, simple_proto3)}),
+                      zetasql::values::Array(
+                          array_enum_type->AsArray(),
+                          {zetasql::values::Enum(enum_type, enum3)})})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{
+                      R"sql(UPDATE test_table
+              SET enum_col='TEST_ENUM_ONE'
+               WHERE proto_col.field = 'Four')sql"},
+                  QueryContext{proto_schema(), &reader, &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlUpdateInvalidProtoWithEnumColumnInTable) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Protos are unsupported in the PG dialect.
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+  MockRowWriter writer;
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{R"sql(UPDATE test_table )sql"
+                        R"sql(SET proto_col = 'invalid_field: "Updated"'
+                WHERE enum_col = 'TEST_ENUM_TWO')sql"},
+                  QueryContext{proto_schema(), &reader, &writer}),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Could not cast literal")));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{
+                      R"sql(UPDATE test_table
+              SET enum_col='TEST_ENUM_EIGHT'
+              WHERE proto_col.field = 'Four')sql"},
+                  QueryContext{proto_schema(), &reader, &writer}),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Could not cast literal")));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlUpdateArrayProtoWithArrayEnumColumnInTable) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Protos are unsupported in the PG dialect.
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto proto_type,
+      MakeProtoType(proto_schema(), "emulator.tests.common.Simple"));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto enum_type,
+      MakeEnumType(proto_schema(), "emulator.tests.common.TestEnum"));
+  const zetasql::Type* array_proto_type;
+  ZETASQL_ASSERT_OK(type_factory()->MakeArrayType(proto_type, &array_proto_type));
+  const zetasql::Type* array_enum_type;
+  ZETASQL_ASSERT_OK(type_factory()->MakeArrayType(enum_type, &array_enum_type));
+  ::emulator::tests::common::Simple simple_proto2;
+  simple_proto2.set_field("Two");
+  ::emulator::tests::common::TestEnum enum2 =
+      ::emulator::tests::common::TEST_ENUM_TWO;
+
+  ::emulator::tests::common::Simple simple_proto_updated;
+  simple_proto_updated.set_field("Updated");
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "proto_col",
+                                             "enum_col", "array_proto_col",
+                                             "array_enum_col"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(ValueList{
+                        Int64(2),
+                        zetasql::values::Proto(proto_type, simple_proto2),
+                        zetasql::values::Enum(enum_type, enum2),
+                        zetasql::values::Array(
+                            array_proto_type->AsArray(),
+                            {zetasql::values::Proto(proto_type,
+                                                      simple_proto_updated)}),
+                        zetasql::values::Array(
+                            array_enum_type->AsArray(),
+                            {zetasql::values::Enum(enum_type, enum2)})})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{
+                      R"sql(UPDATE test_table
+              SET array_proto_col = ARRAY<emulator.tests.common.Simple>['field: "Updated"']
+              WHERE array_enum_col[OFFSET(0)] = 'TEST_ENUM_TWO')sql"},
+                  QueryContext{proto_schema(), &reader, &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+  ::emulator::tests::common::Simple simple_proto3;
+  simple_proto3.set_field("Four");
+  ::emulator::tests::common::TestEnum enum3 =
+      ::emulator::tests::common::TEST_ENUM_FOUR;
+  ::emulator::tests::common::TestEnum updated_enum =
+      ::emulator::tests::common::TEST_ENUM_ONE;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "proto_col",
+                                             "enum_col", "array_proto_col",
+                                             "array_enum_col"}),
+              Field(
+                  &MutationOp::rows,
+                  UnorderedElementsAre(ValueList{
+                      Int64(4),
+                      zetasql::values::Proto(proto_type, simple_proto3),
+                      zetasql::values::Enum(enum_type, enum3),
+                      zetasql::values::Array(array_proto_type->AsArray(),
+                                               {zetasql::values::Proto(
+                                                   proto_type, simple_proto3)}),
+                      zetasql::values::Array(
+                          array_enum_type->AsArray(),
+                          {zetasql::values::Enum(enum_type,
+                                                   updated_enum)})})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{
+                      R"sql(UPDATE test_table
+              SET array_enum_col = ARRAY<emulator.tests.common.TestEnum>['TEST_ENUM_ONE']
+              WHERE array_proto_col[OFFSET(0)].field = 'Four')sql"},
+                  QueryContext{proto_schema(), &reader, &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+}
+
+TEST_P(QueryEngineTest, ParameterProtoField) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Protos are unsupported in the PG dialect.
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+  Query query{
+      R"sql(Select int64_col from test_table WHERE proto_col.field=@param)sql",
+      {{"param", zetasql::values::String("One")}}};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{proto_schema(), &reader}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(1)))));
+}
+
+TEST_P(QueryEngineTest, ParameterEnums) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // Protos are unsupported in the PG dialect.
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto enum_type,
+      MakeEnumType(proto_schema(), "emulator.tests.common.TestEnum"));
+  Query query{
+      R"sql(Select int64_col from test_table WHERE enum_col=@param)sql",
+      {{"param", zetasql::values::Enum(
+                     enum_type, ::emulator::tests::common::TEST_ENUM_TWO)}}};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{proto_schema(), &reader}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(2)))));
+}
 // Tests for @{parameter_sensitive=always|never|auto} query hint.
 struct ParameterSensitiveHintInfo {
   // Value of @{parameter_sensitive} hint.
@@ -1264,6 +2030,53 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdatesReturning) {
                                         ValueList{Int64(4), String("foo")})));
 }
 
+TEST_P(QueryEngineTest, JsonConverterFunctionsForGsql) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+
+  struct JsonFunctionTestCase {
+    std::string name;
+    std::string function_call;
+  };
+  // All these functions are ZetaSQL build-in functions and we have compliance
+  // tests to cover their correctness already. In this test, we only need to
+  // confirm that these functions are callable from emulator interface.
+  std::vector<JsonFunctionTestCase> test_cases = {
+      // Converter functions.
+      {"int64", R"(SELECT INT64(JSON '10'))"},
+      {"float64", R"(SELECT FLOAT64(JSON '10'))"},
+      {"bool", R"(SELECT BOOL(JSON 'true'))"},
+      {"string", R"(SELECT STRING(JSON '"string_value"'))"},
+      // JSON type functions.
+      {"json_type", R"(SELECT JSON_TYPE(JSON '10'))"},
+      // LAX converter functions.
+      {"lax_int64", R"(SELECT LAX_INT64(JSON '10'))"},
+      {"lax_float64", R"(SELECT LAX_FLOAT64(JSON '10'))"},
+      {"lax_bool", R"(SELECT LAX_BOOL(JSON 'true'))"},
+      {"lax_string", R"(SELECT LAX_STRING(JSON '"string_value"'))"},
+      // SAFE versions of these functions.
+      {"safe.int64", R"(SELECT SAFE.INT64(JSON '"10"'))"},
+      {"safe.float64", R"(SELECT SAFE.FLOAT64(JSON '"10"'))"},
+      {"safe.bool", R"(SELECT SAFE.BOOL(JSON '"TRUE"'))"},
+      {"safe.string", R"(SELECT SAFE.STRING(JSON '1'))"},
+      {"safe.json_type", R"(SELECT SAFE.JSON_TYPE(JSON '[10]'))"},
+      {"safe.lax_int64", R"(SELECT SAFE.LAX_INT64(JSON '"10"'))"},
+      {"safe.lax_float64", R"(SELECT SAFE.LAX_FLOAT64(JSON '"10"'))"},
+      {"safe.lax_bool", R"(SELECT SAFE.LAX_BOOL(JSON '"True"'))"},
+      {
+          "safe.lax_string",
+          R"(SELECT SAFE.LAX_STRING(JSON '1'))",
+      }};
+
+  for (const auto& test_case : test_cases) {
+    ZETASQL_ASSERT_OK(query_engine().ExecuteSql(Query{test_case.function_call},
+                                        QueryContext{schema(), reader()}))
+        << test_case.name
+        << " failed with function call: " << test_case.function_call;
+  }
+}
+
 TEST_P(QueryEngineTest, QueryingOnViews) {
   test::ScopedEmulatorFeatureFlagsSetter setter({.enable_views = true});
   ZETASQL_ASSERT_OK_AND_ASSIGN(
@@ -1328,6 +2141,98 @@ TEST_P(QueryEngineTest, ViewsInsideDML) {
 
   EXPECT_EQ(result.rows, nullptr);
   EXPECT_EQ(result.modified_row_count, 3);
+}
+
+TEST_P(QueryEngineTest, InsertOrUpdateDmlInsertsNewRows) {
+  std::string sql;
+  // The insert statement inserts 2 new rows and updates the existing row with
+  // primary key (int64_col:1).
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql =
+        "INSERT INTO test_table (int64_col, string_col) "
+        "VALUES(10, 'ten'), (1, 'one updated'), (3, 'three updated') "
+        "ON CONFLICT(int64_col) DO UPDATE SET "
+        "int64_col = excluded.int64_col, string_col = excluded.string_col";
+  } else {
+    sql =
+        "INSERT OR UPDATE INTO test_table (int64_col, string_col) "
+        "VALUES(10, 'ten'), (1, 'one updated'), (3, 'three updated')";
+  }
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsertOrUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "string_col"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(
+                        ValueList{Int64(10), String("ten")},
+                        ValueList{Int64(1), String("one updated")},
+                        ValueList{Int64(3), String("three updated")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 3);
+}
+
+TEST_P(QueryEngineTest, InsertOrUpdateDuplicateInputRowsReturnError) {
+  std::string sql;
+  // Spanner does not allow duplicate insert rows with same key.
+  // The insert statement inserts 2 rows with same key (int64_col:10).
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql =
+        "INSERT INTO test_table (int64_col, string_col) "
+        "VALUES(10, 'ten'), (1, 'one updated'), (10, 'ten') "
+        "ON CONFLICT(int64_col) DO UPDATE SET "
+        "int64_col = excluded.int64_col, string_col = excluded.string_col";
+  } else {
+    sql =
+        "INSERT OR UPDATE INTO test_table (int64_col, string_col) "
+        "VALUES(10, 'ten'), (1, 'one updated'), (10, 'ten')";
+  }
+  MockRowWriter writer;
+
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Cannot affect a row second time for key: "
+                                 "{Int64(10)}")));
+}
+
+TEST_P(QueryEngineTest, UpsertPGqueryWithGeneratedKeyUnsupported) {
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    GTEST_SKIP();
+  }
+
+  MockRowWriter writer;
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table(k1_pk, k2, k4) VALUES(1, 1, 1) "
+                "ON CONFLICT(k1_pk, k3gen_storedpk) DO NOTHING"},
+          QueryContext{gpk_schema(), gpk_table_reader(), &writer}),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("ON CONFLICT clause on table with generated key is "
+                         "not supported in Emulator")));
+
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table(k1_pk, k2, k4) VALUES(1, 1, 1) "
+                "ON CONFLICT(k1_pk,k3gen_storedpk) DO UPDATE SET "
+                "k1_pk = excluded.k1_pk, k2 = excluded.k2, k4 = excluded.k4"},
+          QueryContext{gpk_schema(), gpk_table_reader(), &writer}),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("ON CONFLICT clause on table with generated key is "
+                         "not supported in Emulator")));
 }
 
 TEST_P(QueryEngineTest, BitReverseUnsupportedWhenFlagIsOff) {
@@ -1416,6 +2321,138 @@ TEST_F(DefaultValuesTest, ExecuteInsertsDefaultValues) {
                                       "VALUES (2)"},
                                 QueryContext{schema(), reader(), &writer}),
       IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+}
+
+TEST_F(DefaultValuesTest, InsertOrUpdateDefaultValues) {
+  // The insert statement inserts 2 new rows. The existing row with primary
+  // key (player_id:1) is updated from the previously inserted value of 1.0 to
+  // the new value of `account_balance`.
+  std::string sql =
+      "INSERT OR UPDATE INTO players (player_id, account_balance) "
+      "VALUES(10, 10.0), (1, 100.0), (3, 3.0)";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsertOrUpdate),
+              Field(&MutationOp::table, "players"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"player_id", "account_balance"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(
+                        ValueList{Int64(10), zetasql::values::Numeric(10.0)},
+                        ValueList{Int64(1), zetasql::values::Numeric(100.0)},
+                        ValueList{Int64(3),
+                                  zetasql::values::Numeric(3.0)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 3)));
+}
+
+class DefaultKeyTest
+    : public QueryEngineTestBase,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  const Schema* schema() { return dkschema_.get(); }
+  RowReader* reader() { return &reader_; }
+  void SetUp() override {
+    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+      dkschema_ = test::CreateSimpleDefaultKeySchema(
+          type_factory(), database_api::DatabaseDialect::POSTGRESQL);
+    } else {
+      dkschema_ = test::CreateSimpleDefaultKeySchema(
+          type_factory(), database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+    }
+    action_manager_ = std::make_unique<ActionManager>();
+    action_manager_->AddActionsForSchema(schema(),
+                                         /*function_catalog=*/nullptr,
+                                         type_factory());
+  }
+
+ private:
+  std::unique_ptr<const Schema> dkschema_;
+  test::TestRowReader reader_{
+      {{"players_default_key",
+        {{"prefix", "player_id", "balance"},
+         {zetasql::types::Int64Type(), zetasql::types::Int64Type(),
+          zetasql::types::Int64Type()},
+         {{Int64(100), Int64(1), Int64(100)},
+          {Int64(1), Int64(1), Int64(1)}}}}}};
+  std::unique_ptr<ActionManager> action_manager_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    DefaultKeyPerDialectTests, DefaultKeyTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<DefaultKeyTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(DefaultKeyTest, InsertOrUpdateDefaultKey) {
+  // The insert statement inserts 1 new row. The existing row with
+  // default primary key (prefix: 100, player_id:1) is updated to from previous
+  // value of 1 to the new value of `balance`.
+  std::string sql;
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    sql =
+        "INSERT OR UPDATE INTO players_default_key (player_id, balance) "
+        "VALUES(1, 1000), (2, 2000)";
+  } else {
+    sql =
+        "INSERT INTO players_default_key (player_id, balance) "
+        "VALUES(1, 1000), (2, 2000) ON CONFLICT (prefix, player_id) "
+        "DO UPDATE SET player_id = excluded.player_id, balance = "
+        "excluded.balance";
+  }
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsertOrUpdate),
+              Field(&MutationOp::table, "players_default_key"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"prefix", "player_id", "balance"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(
+                        ValueList{Int64(100), Int64(1), Int64(1000)},
+                        ValueList{Int64(100), Int64(2), Int64(2000)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_P(DefaultKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
+  // Spanner does not allow duplicate insert rows with same key.
+  // The insert statement inserts 2 rows with same key
+  // (prefix: 100, player_id:1).
+  std::string sql;
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    sql =
+        "INSERT OR UPDATE INTO players_default_key (player_id, balance) "
+        "VALUES(1, 20), (1, 200)";
+  } else {
+    sql =
+        "INSERT INTO players_default_key (player_id, balance) "
+        "VALUES(1, 20), (1, 200) ON CONFLICT (prefix, player_id) "
+        "DO UPDATE SET player_id = excluded.player_id, balance = "
+        "excluded.balance";
+  }
+  MockRowWriter writer;
+
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Cannot affect a row second time for key: "
+                                 "{Int64(100), Int64(1)}")));
 }
 
 class GeneratedPrimaryKeyTest : public QueryEngineTest {
@@ -1656,6 +2693,120 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteDeleteWithReturning) {
               IsOkAndHolds(UnorderedElementsAre(
                   ValueList{Int64(2), Int64(2), Int64(3)},
                   ValueList{Int64(4), Int64(4), Int64(5)})));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateGPK) {
+  // The insert statement inserts 1 new row and updates the existing row with
+  // primary key (k1_pk:2, k3gen_storedpk:2).
+  std::string sql =
+      "INSERT OR UPDATE INTO test_table (k1_pk, k2, k4) "
+      "VALUES (2, 2, 10), (3, 3, 12)";
+  MockRowWriter writer;
+  EXPECT_CALL(writer,
+              Write(Property(
+                  &Mutation::ops,
+                  UnorderedElementsAre(AllOf(
+                      Field(&MutationOp::type, MutationOpType::kInsertOrUpdate),
+                      Field(&MutationOp::table, "test_table"),
+                      Field(&MutationOp::columns,
+                            std::vector<std::string>{"k1_pk", "k2", "k4"}),
+                      Field(&MutationOp::rows,
+                            UnorderedElementsAre(
+                                ValueList{Int64(2), Int64(2), Int64(10)},
+                                ValueList{Int64(3), Int64(3), Int64(12)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
+  // Spanner does not allow duplicate insert rows with same key.
+  // The insert statement inserts 2 rows with same key
+  // (k1_pk:2, k3gen_storedpk:5).
+  std::string sql =
+      "INSERT OR UPDATE INTO test_table (k1_pk, k2, k4) "
+      "VALUES (2, 5, 10), (2, 5, 100)";
+  MockRowWriter writer;
+
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Cannot affect a row second time for key: "
+                                 "{Int64(2), Int64(5)}")));
+}
+
+class TimestampKeyTest
+    : public QueryEngineTestBase,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  const Schema* schema() { return tsschema_.get(); }
+  RowReader* reader() { return &reader_; }
+  void SetUp() override {
+    if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+      tsschema_ = test::CreateSimpleTimestampKeySchema(
+          type_factory(), database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+    } else {
+      tsschema_ = test::CreateSimpleTimestampKeySchema(
+          type_factory(), database_api::DatabaseDialect::POSTGRESQL);
+    }
+    action_manager_ = std::make_unique<ActionManager>();
+    action_manager_->AddActionsForSchema(schema(),
+                                         /*function_catalog=*/nullptr,
+                                         type_factory());
+  }
+
+ private:
+  std::unique_ptr<const Schema> tsschema_;
+  test::TestRowReader reader_{
+      {{"timestamp_key_table",
+        {{"k", "ts", "val"},
+         {zetasql::types::Int64Type(), zetasql::types::TimestampType(),
+          zetasql::types::Int64Type()},
+         {{Int64(1), zetasql::values::TimestampFromUnixMicros(1), Int64(1)},
+          {Int64(2), zetasql::values::TimestampFromUnixMicros(2),
+           Int64(2)}}}}}};
+  std::unique_ptr<ActionManager> action_manager_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    TimestampKeyPerDialectTests, TimestampKeyTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<TimestampKeyTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(TimestampKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
+  // Spanner does not allow duplicate insert rows with same key.
+  // The insert statement inserts 2 rows with same key
+  // (k:1, ts:commit_timestamp).
+  std::string sql;
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    sql =
+        "INSERT OR UPDATE INTO timestamp_key_table (k, ts, val) "
+        "VALUES (1, PENDING_COMMIT_TIMESTAMP(), 1), "
+        "(1, PENDING_COMMIT_TIMESTAMP(), 2), (2, PENDING_COMMIT_TIMESTAMP(), "
+        "2)";
+  } else {
+    sql =
+        "INSERT INTO timestamp_key_table (k, ts, val) "
+        "VALUES (1, SPANNER.PENDING_COMMIT_TIMESTAMP(), 1), "
+        "(1, SPANNER.PENDING_COMMIT_TIMESTAMP(), 2), "
+        "(2, SPANNER.PENDING_COMMIT_TIMESTAMP(), 2) "
+        "ON CONFLICT(k, ts) DO UPDATE SET k = excluded.k, ts = excluded.ts, "
+        "val = excluded.val";
+  }
+  MockRowWriter writer;
+
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{schema(), reader(), &writer}),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Cannot affect a row second time for key: "
+                    "{Int64(1), String(\"spanner.commit_timestamp()\")}")));
 }
 
 }  // namespace

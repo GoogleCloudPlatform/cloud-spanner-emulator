@@ -107,6 +107,7 @@ class ChangeStreamTest : public test::ActionsTest {
                     R"(CREATE CHANGE STREAM pg_stream FOR ALL WITH ( value_capture_type = 'NEW_VALUES' ))",
                 },
                 &type_factory_,
+                "", /*proto_descriptor_bytes*/
                 database_api::DatabaseDialect::POSTGRESQL)
                 .value()),
         table_(schema_->FindTable("TestTable")),

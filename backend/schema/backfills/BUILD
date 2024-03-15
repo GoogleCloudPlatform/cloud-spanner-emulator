@@ -128,6 +128,7 @@ cc_test(
         "//common:errors",
         "//tests/common:proto_matchers",
         "//tests/common:scoped_feature_flags_setter",
+        "//tests/common:test_cc_proto",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",

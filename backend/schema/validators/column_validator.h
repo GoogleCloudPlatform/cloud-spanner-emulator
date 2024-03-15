@@ -35,6 +35,11 @@ class ColumnValidator {
   static absl::Status ValidateUpdate(const Column* column,
                                      const Column* old_column,
                                      SchemaValidationContext* context);
+  static absl::Status ValidateTypeExistsInProtoBundle(
+      const zetasql::Type* type, const ProtoBundle* proto_bundle,
+      const std::string& column_name);
+  static bool TypeExistsInProtoBundle(const zetasql::Type* type,
+                                      const ProtoBundle* proto_bundle);
 };
 
 class KeyColumnValidator {

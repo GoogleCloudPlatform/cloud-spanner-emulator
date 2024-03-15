@@ -114,7 +114,6 @@ cc_library(
     testonly = 1,
     srcs = ["emulator_catalog.cc"],
     hdrs = ["emulator_catalog.h"],
-    visibility = ["//:__subpackages__"],
     deps = [
         "//backend/query:catalog",
         "//backend/query:function_catalog",

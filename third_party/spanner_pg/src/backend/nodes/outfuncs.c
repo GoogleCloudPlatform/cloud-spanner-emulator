@@ -3086,6 +3086,7 @@ _outQuery(StringInfo str, const Query *node)
 									// statements.
 			case T_CreatedbStmt: // SPANGRES: Added support for Create Database
 									// statements.
+			case T_CallStmt: // SPANGRES: Added support for Call statements.
 				WRITE_NODE_FIELD(utilityStmt);
 				break;
 			default:
@@ -3725,6 +3726,7 @@ _outConstraint(StringInfo str, const Constraint *node)
 	WRITE_NODE_FIELD(raw_expr);
 	WRITE_BOOL_FIELD(skip_validation);
 	WRITE_ENUM_FIELD(stored_kind, GeneratedColStoreOpt);
+	WRITE_INT_FIELD(vector_length);
 	WRITE_NODE_FIELD(where_clause);
   WRITE_STRING_FIELD(constraint_expr_string);
 }
@@ -4204,6 +4206,14 @@ static void _outSynonymClause(StringInfo str, const SynonymClause *node)
 {
 	WRITE_NODE_TYPE("SYNONYMCLAUSE");
 	WRITE_STRING_FIELD(name);
+}
+
+static void _outCallStmt(StringInfo str, const CallStmt *node)
+{
+	WRITE_NODE_TYPE("CALLSTMT");
+	WRITE_NODE_FIELD(funccall);
+	WRITE_NODE_FIELD(funcexpr);
+	WRITE_NODE_FIELD(outargs);
 }
 
 /* SPANGRES END */
@@ -5027,6 +5037,9 @@ outNode(StringInfo str, const void *obj)
 				break;
 			case T_SynonymClause:
 				_outSynonymClause(str, obj);
+				break;
+			case T_CallStmt:
+				_outCallStmt(str, obj);
 				break;
 			/* SPANGRES END */
 			default:

@@ -82,12 +82,8 @@ zetasql::AnalyzerOptions GetSpangresTestAnalyzerOptions() {
   MutateLanguageOptionsForSpangres(options.mutable_language());
 
   options.CreateDefaultArenasIfNotSet();
-  // By default, parse locations are recorded to provide better error messages
-  // in the algebrizer. A number of spangres tests were authored before we
-  // started recording parse locations, and a number of those tests rely on
-  // the DebugStrings of ResolvedASTs matching. To keep these tests passing,
-  // we disable the recording of parse locations here.
-  options.set_parse_location_record_type(zetasql::PARSE_LOCATION_RECORD_NONE);
+  options.set_record_parse_locations(true);
+  options.set_allow_undeclared_parameters(true);
   return options;
 }
 

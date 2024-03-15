@@ -30,6 +30,7 @@
 #include "backend/database/database.h"
 #include "common/clock.h"
 #include "common/errors.h"
+#include "tests/common/test.pb.h"
 
 namespace google {
 namespace spanner {
@@ -43,6 +44,9 @@ using zetasql::values::NullString;
 using zetasql::values::String;
 using zetasql::values::StringArray;
 using zetasql::values::Timestamp;
+using zetasql::values::Array;
+using zetasql::values::Bytes;
+using zetasql::values::Proto;
 
 class ColumnValueVerifiersTest : public ::testing::Test {
  public:
@@ -168,6 +172,106 @@ TEST_F(ColumnValueVerifiersTest, VerifyColumnTypeChange) {
     ALTER TABLE TestTable ALTER COLUMN string_col BYTES(10)
   )"}),
       error::InvalidColumnSizeReduction("string_col", 10, 15, "{Int64(2)}"));
+}
+
+class ProtoColumnValueVerifierTest : public ColumnValueVerifiersTest {
+ protected:
+  std::string read_descriptors() {
+    google::protobuf::FileDescriptorSet proto_files;
+    ::emulator::tests::common::Simple::descriptor()->file()->CopyTo(
+        proto_files.add_file());
+    return proto_files.SerializeAsString();
+  }
+  void SetUp() override {
+    // Serialized value of `emulator.tests.common.Simple{field: "TestValue"}`
+    // has the byte length of 11. Since byte columns have to be at least this
+    // wide to be able to store this test value, we use 11 to define the length
+    // of the byte columns below.
+    std::vector<std::string> statements = {
+        R"sql(
+                            CREATE PROTO BUNDLE (
+                              emulator.tests.common.Simple,
+                              emulator.tests.common.TestEnum,
+                            )
+
+                          )sql",
+        R"sql(
+                            CREATE TABLE TestTable (
+                              int64_col INT64,
+                              proto_col emulator.tests.common.Simple,
+                              proto_array_col ARRAY<emulator.tests.common.Simple>,
+                              bytes_col BYTES(11),
+                              bytes_array_col ARRAY<BYTES(11)>,
+                            ) PRIMARY KEY (int64_col)
+                          )sql"};
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        database_, Database::Create(
+                       &clock_, SchemaChangeOperation{.statements = statements,
+                                                      .proto_descriptor_bytes =
+                                                          read_descriptors()}));
+
+    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+                         database_->CreateReadWriteTransaction(
+                             ReadWriteOptions(), RetryState()));
+    const auto* test_table = txn->schema()->FindTable("TestTable");
+    ASSERT_NE(test_table, nullptr);
+
+    proto_type_ = test_table->FindColumn("proto_col")->GetType()->AsProto();
+    array_proto_type_ =
+        test_table->FindColumn("proto_array_col")->GetType()->AsArray();
+
+    ::emulator::tests::common::Simple simple_proto;
+    simple_proto.set_field("TestValue");
+    Mutation m;
+    m.AddWriteOp(MutationOpType::kInsert, "TestTable",
+                 {"int64_col", "proto_col", "proto_array_col", "bytes_col",
+                  "bytes_array_col"},
+                 {{Int64(1), Proto(proto_type_, simple_proto),
+                   Array(array_proto_type_, {Proto(proto_type_, simple_proto)}),
+                   Bytes(simple_proto.SerializeAsString()),
+                   BytesArray({simple_proto.SerializeAsString()})}});
+    ZETASQL_ASSERT_OK(txn->Write(m));
+    ZETASQL_ASSERT_OK(txn->Commit());
+  }
+  const zetasql::ProtoType* proto_type_ = nullptr;
+  const zetasql::ArrayType* array_proto_type_ = nullptr;
+};
+
+TEST_F(ProtoColumnValueVerifierTest, VerifyProtoToBytesArrayChange) {
+  EXPECT_EQ(UpdateSchema({R"sql(
+    ALTER TABLE TestTable ALTER COLUMN proto_array_col ARRAY<BYTES(5)>
+  )sql"}),
+            error::InvalidColumnSizeReduction("proto_array_col", 5, 11,
+                                              "{Int64(1)}"));
+}
+
+TEST_F(ProtoColumnValueVerifierTest, VerifyBytesToProtoChange) {
+  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+    ALTER TABLE TestTable ALTER COLUMN bytes_col emulator.tests.common.Simple
+  )sql"}));
+}
+
+TEST_F(ProtoColumnValueVerifierTest, VerifyBytesArrayToProtoChange) {
+  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+    ALTER TABLE TestTable ALTER COLUMN bytes_array_col ARRAY<emulator.tests.common.Simple>
+  )sql"}));
+}
+
+TEST_F(ProtoColumnValueVerifierTest, VerifyOutOfEnumRangeIntValue) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<ReadWriteTransaction> txn,
+      database_->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "TestTable", {"int64_col"},
+               {{Int64(8)}});
+  ZETASQL_ASSERT_OK(txn->Write(m));
+  ZETASQL_ASSERT_OK(txn->Commit());
+  EXPECT_EQ(
+      UpdateSchema({R"sql(
+          ALTER TABLE TestTable ALTER COLUMN int64_col emulator.tests.common.TestEnum
+        )sql"}),
+      error::InvalidEnumValue(
+          "int64_col", 8, "`emulator.tests.common.TestEnum`", "{Int64(8)}"));
 }
 
 }  // namespace

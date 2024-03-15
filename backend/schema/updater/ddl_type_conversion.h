@@ -21,6 +21,7 @@
 
 #include "zetasql/public/type.h"
 #include "absl/status/statusor.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/ddl/operations.pb.h"
 
 namespace google {
@@ -32,6 +33,8 @@ namespace backend {
 absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     const ddl::ColumnDefinition& ddl_column_def,
     zetasql::TypeFactory* type_factory
+    ,
+    const ProtoBundle* proto_bundle = nullptr
 );
 
 // Converts zetasql::Type to its equivalent DDL ColumnDefinition.

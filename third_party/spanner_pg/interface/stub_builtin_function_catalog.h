@@ -75,9 +75,27 @@ class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
     }
   }
 
+  absl::StatusOr<const zetasql::Procedure*> GetProcedure(
+      const std::string& name) const override {
+    return absl::UnimplementedError("GetProcedure is not supported");
+  }
+
   absl::StatusOr<const zetasql::TableValuedFunction*> GetTableValuedFunction(
       const std::string& name) const override {
     return absl::UnimplementedError("GetTableValuedFunction is not supported");
+  }
+
+  absl::Status GetFunctions(
+      absl::flat_hash_set<const zetasql::Function*>* output) const override {
+    for (const auto& function_mapping : googlesql_builtin_functions_) {
+      output->insert(function_mapping.second.get());
+    }
+    return absl::OkStatus();
+  }
+
+  absl::Status GetProcedures(
+      absl::flat_hash_set<const zetasql::Procedure*>* output) const override {
+    return absl::OkStatus();
   }
 
  private:

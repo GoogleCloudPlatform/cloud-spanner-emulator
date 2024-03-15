@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "google/protobuf/descriptor.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -28,6 +29,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "common/feature_flags.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -48,6 +50,8 @@ using ::zetasql_base::testing::StatusIs;
 
 absl::StatusOr<DDLStatement> ParseDDLStatement(
     absl::string_view ddl
+    ,
+    std::shared_ptr<const ProtoBundle> proto_bundle = nullptr
 ) {
   DDLStatement statement;
   absl::Status s = ParseDDLStatement(ddl, &statement);
@@ -2508,6 +2512,694 @@ TEST_F(CheckConstraint, ParseSyntaxErrorsInCheckConstraint) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
+
+TEST(ParseCreateProtoBundle, CanParseSingleProtoType) {
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
+                                "  a.b.C"
+                                ")"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_proto_bundle { insert_type { source_name: "a.b.C" } }
+              )pb")));
+}
+
+TEST(ParseCreateProtoBundle, CanParseMultipleProtoTypes) {
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
+                                "  a.b.C,"
+                                "  package.name.User,"
+                                "  package.name.Device,"
+                                ")"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_proto_bundle {
+                  insert_type { source_name: "a.b.C" }
+                  insert_type { source_name: "package.name.User" }
+                  insert_type { source_name: "package.name.Device" }
+                }
+              )pb")));
+}
+
+TEST(ParseCreateProtoBundle, CanParseProtoTypesConflictingWithInbuiltTypes) {
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
+                                "  BOOL,"
+                                "  BYTES,"
+                                "  DATE,"
+                                "  FLOAT64,"
+                                "  INT64,"
+                                "  JSON,"
+                                "  NUMERIC,"
+                                "  STRING,"
+                                "  TIMESTAMP,"
+                                ")"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_proto_bundle {
+                  insert_type { source_name: "BOOL" }
+                  insert_type { source_name: "BYTES" }
+                  insert_type { source_name: "DATE" }
+                  insert_type { source_name: "FLOAT64" }
+                  insert_type { source_name: "INT64" }
+                  insert_type { source_name: "JSON" }
+                  insert_type { source_name: "NUMERIC" }
+                  insert_type { source_name: "STRING" }
+                  insert_type { source_name: "TIMESTAMP" }
+                }
+              )pb")));
+}
+
+TEST(ParseDropProtoBundle, CanParseDDLStatement) {
+  EXPECT_THAT(ParseDDLStatement("DROP PROTO BUNDLE"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_proto_bundle {}
+              )pb")));
+}
+
+TEST(ParseAlterProtoBundle, CanParseInserts) {
+  EXPECT_THAT(ParseDDLStatement("ALTER PROTO BUNDLE INSERT ("
+                                "  a.b.C,"
+                                "  package.name.User,"
+                                "  package.name.Device,"
+                                ")"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_proto_bundle {
+                  insert_type { source_name: "a.b.C" }
+                  insert_type { source_name: "package.name.User" }
+                  insert_type { source_name: "package.name.Device" }
+                }
+              )pb")));
+}
+
+TEST(ParseAlterProtoBundle, CanParseUpdates) {
+  EXPECT_THAT(ParseDDLStatement("ALTER PROTO BUNDLE UPDATE ("
+                                "  a.b.C,"
+                                "  package.name.User,"
+                                "  package.name.Device,"
+                                ")"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_proto_bundle {
+                  update_type { source_name: "a.b.C" }
+                  update_type { source_name: "package.name.User" }
+                  update_type { source_name: "package.name.Device" }
+                }
+              )pb")));
+}
+
+TEST(ParseAlterProtoBundle, CanParseDeletes) {
+  EXPECT_THAT(ParseDDLStatement("ALTER PROTO BUNDLE DELETE ("
+                                "  a.b.C,"
+                                "  package.name.User,"
+                                "  package.name.Device,"
+                                ")"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_proto_bundle {
+                  delete_type: "a.b.C"
+                  delete_type: "package.name.User"
+                  delete_type: "package.name.Device"
+                }
+              )pb")));
+}
+
+TEST(ParseAlterProtoBundle, CanParseMultipleOperations) {
+  EXPECT_THAT(ParseDDLStatement("ALTER PROTO BUNDLE INSERT ("
+                                "  a.b.C,"
+                                ") UPDATE ("
+                                "  package.name.User,"
+                                ") DELETE ("
+                                "  package.name.Device,"
+                                ")"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_proto_bundle {
+                  insert_type { source_name: "a.b.C" }
+                  update_type { source_name: "package.name.User" }
+                  delete_type: "package.name.Device"
+                }
+              )pb")));
+}
+
+TEST(ParseProtoBundleStatements, FailsParsingInvalidIdentifiers) {
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
+                                "  create.foo"
+                                ")"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
+                                "  'create'.foo"
+                                ")"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
+                                "  ''create'''.foo"
+                                ")"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
+                                "  foo-.bar"
+                                ")"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
+                                "  .foo.bar"
+                                ")"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
+                                "  foo,.bar"
+                                ")"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(ParseProtoBundleStatements, CanParseEscapedIdentifiers) {
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
+                                "  `create`.foo,"
+                                "  `create.foo`,"
+                                "  foo.`create`,"
+                                "  foo.`create`.bar,"
+                                "  foo.`create`.`table`,"
+                                "  foo.`create`.`create`,"
+                                "  foo.`create.create`,"
+                                ")"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_proto_bundle {
+                  insert_type { source_name: "create.foo" }
+                  insert_type { source_name: "create.foo" }
+                  insert_type { source_name: "foo.create" }
+                  insert_type { source_name: "foo.create.bar" }
+                  insert_type { source_name: "foo.create.table" }
+                  insert_type { source_name: "foo.create.create" }
+                  insert_type { source_name: "foo.create.create" }
+                }
+              )pb")));
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
+                                "  foo_.bar,"
+                                "  `foo-`.bar,"
+                                "  `foo,`.bar,"
+                                ")"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_proto_bundle {
+                  insert_type { source_name: "foo_.bar" }
+                  insert_type { source_name: "foo-.bar" }
+                  insert_type { source_name: "foo,.bar" }
+                }
+              )pb")));
+}
+
+class ProtoAndEnumColumns : public ::testing::Test {
+ public:
+  ProtoAndEnumColumns() = default;
+
+  // Creates FileDescriptorProto for provided proto types.
+  google::protobuf::FileDescriptorProto GenerateProtoDescriptor(std::string package,
+                                                      std::string type_name) {
+    return PARSE_TEXT_PROTO(absl::Substitute(R"pb(
+                                               syntax: "proto2"
+                                               name: "proto.$0.$1"
+                                               package: "$0"
+                                               message_type { name: "$1" }
+                                             )pb",
+                                             package, type_name));
+  }
+
+  // Creates FileDescriptorProto for provided enum types.
+  google::protobuf::FileDescriptorProto GenerateEnumDescriptor(std::string package,
+                                                     std::string type_name) {
+    return PARSE_TEXT_PROTO(
+        absl::Substitute(R"pb(
+                           syntax: "proto2"
+                           name: "enum.$0.$1"
+                           package: "$0"
+                           enum_type {
+                             name: "$1"
+                             value: { name: "UNSPECIFIED" number: 0 }
+                           }
+                         )pb",
+                         package, type_name));
+  }
+
+  // Creates proto descriptors set as string for given proto and enum types.
+  std::string GenerateDescriptorBytesAsString(
+      std::string package, std::vector<std::string> &proto_types,
+      std::vector<std::string> &enum_types) {
+    google::protobuf::FileDescriptorSet file_descriptor_set;
+    for (auto &type : proto_types) {
+      *file_descriptor_set.add_file() = GenerateProtoDescriptor(package, type);
+    }
+    for (auto &type : enum_types) {
+      *file_descriptor_set.add_file() = GenerateEnumDescriptor(package, type);
+    }
+    return file_descriptor_set.SerializeAsString();
+  }
+
+  // Populates the proto bundle for provided proto/enum types.
+  absl::StatusOr<std::shared_ptr<const ProtoBundle>> SetUpBundle(
+      std::string package, std::vector<std::string> &proto_types,
+      std::vector<std::string> &enum_types) {
+    auto insert_proto_types = std::vector<std::string>{};
+    for (auto &type : proto_types) {
+      std::string fullname = (!package.empty()) ? package + "." + type : type;
+      insert_proto_types.push_back(fullname);
+    }
+    for (auto &type : enum_types) {
+      std::string fullname = (!package.empty()) ? package + "." + type : type;
+      insert_proto_types.push_back(fullname);
+    }
+    ZETASQL_ASSIGN_OR_RETURN(auto builder,
+                     ProtoBundle::Builder::New(GenerateDescriptorBytesAsString(
+                         package, proto_types, enum_types)));
+    ZETASQL_RETURN_IF_ERROR(builder->InsertTypes(insert_proto_types));
+    ZETASQL_ASSIGN_OR_RETURN(auto proto_bundle, builder->Build());
+    return proto_bundle;
+  }
+};
+
+TEST_F(ProtoAndEnumColumns, CanParseBasicCreateTable) {
+  std::vector<std::string> proto_types{"UserInfo"};
+  std::vector<std::string> enum_types{"UserState"};
+  std::string package = "customer.app";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+                       SetUpBundle(package, proto_types, enum_types));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE Users(
+      Id    INT64 NOT NULL,
+      User customer.app.UserInfo,
+      State customer.app.UserState
+    ) PRIMARY KEY (Id)
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "Users"
+                  column { column_name: "Id" type: INT64 not_null: true }
+                  column {
+                    column_name: "User"
+                    type: NONE
+                    proto_type_name: "customer.app.UserInfo"
+                  }
+                  column {
+                    column_name: "State"
+                    type: NONE
+                    proto_type_name: "customer.app.UserState"
+                  }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(ProtoAndEnumColumns, CanParseCreateTableWithNoPackageProtoPath) {
+  std::vector<std::string> proto_types{"UserInfo"};
+  std::vector<std::string> enum_types{"UserState"};
+  std::string package = "";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+                       SetUpBundle(package, proto_types, enum_types));
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE TABLE Users(
+      Id    INT64 NOT NULL,
+      User  UserInfo,
+      State UserState
+    ) PRIMARY KEY (Id)
+  )sql",
+                        proto_bundle),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_table {
+          table_name: "Users"
+          column { column_name: "Id" type: INT64 not_null: true }
+          column { column_name: "User" type: NONE proto_type_name: "UserInfo" }
+          column {
+            column_name: "State"
+            type: NONE
+            proto_type_name: "UserState"
+          }
+          primary_key { key_name: "Id" }
+        }
+      )pb")));
+}
+
+TEST_F(ProtoAndEnumColumns, CanParseCreateTableWithArrayColumns) {
+  std::vector<std::string> proto_types{"UserInfo"};
+  std::vector<std::string> enum_types{"UserState"};
+  std::string package = "customer.app";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+                       SetUpBundle(package, proto_types, enum_types));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE Users(
+      Id    INT64 NOT NULL,
+      Users  ARRAY<customer.app.UserInfo>,
+      States ARRAY<customer.app.UserState>
+    ) PRIMARY KEY (Id)
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "Users"
+                  column { column_name: "Id" type: INT64 not_null: true }
+                  column {
+                    column_name: "Users"
+                    type: ARRAY
+                    array_subtype {
+                      type: NONE
+                      proto_type_name: "customer.app.UserInfo"
+                    }
+                  }
+                  column {
+                    column_name: "States"
+                    type: ARRAY
+                    array_subtype {
+                      type: NONE
+                      proto_type_name: "customer.app.UserState"
+                    }
+                  }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(ProtoAndEnumColumns, FailsParsingInvalidCreateTableSyntax) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE Users(
+      Id    INT64 NOT NULL,
+      User  PROTO<customer.app.UserInfo>(MAX),
+      State PROTO<customer.app.UserState>(MAX)
+    ) PRIMARY KEY (Id)
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE Users(
+      Id    INT64 NOT NULL,
+      User  PROTO<customer.app.UserInfo>(MAX),
+      State PROTO<customer.app.UserState>(MAX)
+    ) PRIMARY KEY (Id)
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST_F(ProtoAndEnumColumns, CanParseBasicAlterTableAddColumn) {
+  std::vector<std::string> proto_types{};
+  std::vector<std::string> enum_types{"UserState"};
+  std::string package = "customer.app";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+                       SetUpBundle(package, proto_types, enum_types));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ADD COLUMN State customer.app.UserState
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "Users"
+                  add_column {
+                    column {
+                      column_name: "State"
+                      type: NONE
+                      proto_type_name: "customer.app.UserState"
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(ProtoAndEnumColumns, CanParseAlterTableAddColumnWithoutColumn) {
+  std::vector<std::string> proto_types{};
+  std::vector<std::string> enum_types{"UserState"};
+  std::string package = "customer.app";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+                       SetUpBundle(package, proto_types, enum_types));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ADD State customer.app.UserState
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "Users"
+                  add_column {
+                    column {
+                      column_name: "State"
+                      type: NONE
+                      proto_type_name: "customer.app.UserState"
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(ProtoAndEnumColumns,
+       FailsParsingAlterTableAddColumnWithAmbiguousColumnName) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ADD COLUMN customer.app.UserState
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST_F(ProtoAndEnumColumns,
+       CanParseAlterTableAddColumnWithAmbiguousColumnName) {
+  std::vector<std::string> enum_types{"UserState"};
+  std::vector<std::string> proto_types{"UserInfo"};
+  std::string package = "customer.app";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+                       SetUpBundle(package, proto_types, enum_types));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ADD `COLUMN` customer.app.UserState
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "Users"
+                  add_column {
+                    column {
+                      column_name: "COLUMN"
+                      type: NONE
+                      proto_type_name: "customer.app.UserState"
+                    }
+                  }
+                }
+              )pb")));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ADD COLUMN COLUMN customer.app.UserInfo
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "Users"
+                  add_column {
+                    column {
+                      column_name: "COLUMN"
+                      type: NONE
+                      proto_type_name: "customer.app.UserInfo"
+                    }
+                  }
+                }
+              )pb")));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ADD COLUMN `COLUMN` customer.app.UserState
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "Users"
+                  add_column {
+                    column {
+                      column_name: "COLUMN"
+                      type: NONE
+                      proto_type_name: "customer.app.UserState"
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(ProtoAndEnumColumns, CanParseBasicAlterColumn) {
+  std::vector<std::string> proto_types{};
+  std::vector<std::string> enum_types{"UserState"};
+  std::string package = "customer.app";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+                       SetUpBundle(package, proto_types, enum_types));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ALTER COLUMN State customer.app.UserState
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "Users"
+                  alter_column {
+                    column {
+                      column_name: "State"
+                      type: NONE
+                      proto_type_name: "customer.app.UserState"
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(ProtoAndEnumColumns, FailsToParseAlterColumnWithAmbiguousColumn) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ALTER COLUMN customer.app.UserState
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+
+  // A column called COLUMN with the type COLUMN.
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ALTER COLUMN COLUMN
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST_F(ProtoAndEnumColumns, CanParseAlterColumnWithAmbiguousColumn) {
+  std::vector<std::string> proto_types{"UserInfo"};
+  std::vector<std::string> enum_types{"UserState"};
+  std::string package = "customer.app";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+                       SetUpBundle(package, proto_types, enum_types));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ALTER `COLUMN` customer.app.UserInfo
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "Users"
+                  alter_column {
+                    column {
+                      column_name: "COLUMN"
+                      type: NONE
+                      proto_type_name: "customer.app.UserInfo"
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(ProtoAndEnumColumns, CanParseAlterColumnWithAmbiguousColumnNamedColumn) {
+  // A column with the name COLUMN with type COLUMN.
+  std::vector<std::string> proto_types{"COLUMN"};
+  std::vector<std::string> enum_types{};
+  std::string package = "";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+                       SetUpBundle(package, proto_types, enum_types));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ALTER `COLUMN` `COLUMN`
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "Users"
+                  alter_column {
+                    column {
+                      column_name: "COLUMN"
+                      type: NONE
+                      proto_type_name: "COLUMN"
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(ProtoAndEnumColumns, FailsToParseAlterColumnWithSetType) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ALTER COLUMN SET
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST_F(ProtoAndEnumColumns, FailsToParseAlterColumnWithSetNotNull) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ALTER COLUMN State SET NOT NULL
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST_F(ProtoAndEnumColumns, FailsToParseAlterColumnWithDropNotNull) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ALTER COLUMN State DROP NOT NULL
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST_F(ProtoAndEnumColumns, CanParseAlterTableWithKeywordsAsTypes) {
+  // Tests for wierd but legal proto columns due to pseudo reserved words.
+  std::vector<std::string> proto_types{"DELETION", "FOREIGN", "KEY", "CHECK",
+                                       "DROP"};
+  std::vector<std::string> enum_types{};
+  std::string package = "";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+                       SetUpBundle(package, proto_types, enum_types));
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    ALTER TABLE Users ADD ROW DELETION
+  )sql",
+                        proto_bundle),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_table {
+          table_name: "Users"
+          add_column {
+            column { column_name: "ROW" type: NONE proto_type_name: "DELETION" }
+          }
+        }
+      )pb")));
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    ALTER TABLE Users ADD FOREIGN KEY
+  )sql",
+                        proto_bundle),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_table {
+          table_name: "Users"
+          add_column {
+            column { column_name: "FOREIGN" type: NONE proto_type_name: "KEY" }
+          }
+        }
+      )pb")));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ADD CONSTRAINT FOREIGN
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "Users"
+                  add_column {
+                    column {
+                      column_name: "CONSTRAINT"
+                      type: NONE
+                      proto_type_name: "FOREIGN"
+                    }
+                  }
+                }
+              )pb")));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE Users ADD CONSTRAINT CHECK
+  )sql",
+                                proto_bundle),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "Users"
+                  add_column {
+                    column {
+                      column_name: "CONSTRAINT"
+                      type: NONE
+                      proto_type_name: "CHECK"
+                    }
+                  }
+                }
+              )pb")));
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    ALTER TABLE Users ALTER State DROP
+  )sql",
+                        proto_bundle),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_table {
+          table_name: "Users"
+          alter_column {
+            column { column_name: "State" type: NONE proto_type_name: "DROP" }
+          }
+        }
+      )pb")));
+}
+
 
 TEST(CreateChangeStream, CanParseCreateChangeStreamForAll) {
   EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
