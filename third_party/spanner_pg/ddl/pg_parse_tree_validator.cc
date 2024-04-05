@@ -1037,7 +1037,8 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
     // if not enabled, or not a table or index, then an error.
     if (!options.enable_if_not_exists ||
         !(node.removeType == OBJECT_TABLE || node.removeType == OBJECT_INDEX ||
-          node.removeType == OBJECT_SEQUENCE || node.removeType == OBJECT_VIEW)) {
+          node.removeType == OBJECT_SEQUENCE || node.removeType == OBJECT_VIEW
+         || node.removeType == OBJECT_SCHEMA)) {
       return UnsupportedTranslationError(
           "<IF EXISTS> is not supported by <DROP> statement.");
     }
@@ -1429,11 +1430,6 @@ absl::Status ValidateParseTreeNode(const CreateStmt& node,
 }
 
 absl::Status ValidateParseTreeNode(const CreateSchemaStmt& node) {
-  if (node.if_not_exists) {
-    return UnsupportedTranslationError(
-        "<IF NOT EXISTS> clause is not supported in "
-        "<CREATE SCHEMA> statement.");
-  }
   if (node.schemaElts != nullptr) {
     return UnsupportedTranslationError(
         "Schema elements are not supported in <CREATE SCHEMA> statement.");
@@ -1744,11 +1740,10 @@ absl::Status ValidateParseTreeNode(const GrantStmt& node) {
       case ACL_TARGET_OBJECT:
         return absl::OkStatus();
       case ACL_TARGET_ALL_IN_SCHEMA:
-        return UnsupportedTranslationError(absl::Substitute(
-            "<ALL $0 IN SCHEMA> clause is not supported in <$1> statement.",
-            object_type, grant_type));
+        return absl::OkStatus();
       case ACL_TARGET_DEFAULTS:
-        break;
+        return UnsupportedTranslationError(
+            "DEFAULT PRIVILEGES is not supported.");
     }
     ZETASQL_RET_CHECK_FAIL() << "Unknown value of GrantTargetType " << node.targtype
                      << ".";

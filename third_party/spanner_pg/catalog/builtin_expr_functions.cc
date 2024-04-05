@@ -60,10 +60,14 @@ void AddExprFunctions(
        "$case_with_value"});
   functions.insert({PostgresExprIdentifier::Expr(T_NullIfExpr), "nullif"});
   functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
-                        /*array_op_arg_is_array=*/false),
+                        /*array_op_arg_is_array=*/false,
+                        /*use_or=*/true,
+                        /*comparator_type=*/"="),
                     "$in"});
   functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
-                        /*array_op_arg_is_array=*/true),
+                        /*array_op_arg_is_array=*/true,
+                        /*use_or=*/true,
+                        /*comparator_type=*/"="),
                     "$in_array"});
 }
 
@@ -108,8 +112,16 @@ void AddArrayAtFunctions(
   // We use safe_array_at_ordinal to match two PostgreSQL behaviors: 1-based
   // indexing (ordinal), and NULL return values for out-of-bounds accesses
   // (safe).
-  functions.insert({PostgresExprIdentifier::Expr(T_SubscriptingRef),
-                    "$safe_array_at_ordinal"});
+  functions.insert(
+      {PostgresExprIdentifier::SubscriptingRef(/*is_array_slice=*/false),
+       "$safe_array_at_ordinal"});
+}
+
+void AddArraySliceFunctions(
+    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions) {
+  functions.insert(
+      {PostgresExprIdentifier::SubscriptingRef(/*is_array_slice=*/true),
+       "pg.array_slice"});
 }
 
 void AddMakeArrayFunctions(

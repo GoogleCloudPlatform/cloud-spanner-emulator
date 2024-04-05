@@ -97,6 +97,18 @@ class ChangeStreamTest : public DatabaseTest {
           ) PRIMARY KEY(intVal)
         )",
         R"(
+          CREATE TABLE ScalarTypesAllKeysTable (
+            intVal INT64 NOT NULL,
+            boolVal BOOL,
+            bytesVal BYTES(MAX),
+            dateVal DATE,
+            floatVal FLOAT64,
+            stringVal STRING(MAX),
+            numericVal NUMERIC,
+            timestampVal TIMESTAMP,
+          ) PRIMARY KEY(intVal,boolVal,bytesVal,dateVal,floatVal,stringVal,numericVal,timestampVal)
+        )",
+        R"(
           CREATE CHANGE STREAM StreamAll FOR ALL
         )",
         R"(
@@ -104,7 +116,7 @@ class ChangeStreamTest : public DatabaseTest {
           value_capture_type = 'NEW_VALUES' )
         )",
         R"(
-          CREATE CHANGE STREAM StreamScalarTypes FOR ScalarTypesTable
+          CREATE CHANGE STREAM StreamScalarTypes FOR ScalarTypesTable, ScalarTypesAllKeysTable
         )",
         R"(
           CREATE CHANGE STREAM StreamRelation FOR Relation
@@ -958,6 +970,116 @@ TEST_F(ChangeStreamTest, DeleteRowNotExisting) {
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 0);
+}
+
+// Check column_types and mods for different data types are correct.
+TEST_F(ChangeStreamTest, DiffDataTypesInKey) {
+  auto mutation_builder_insert_friends = InsertMutationBuilder(
+      "ScalarTypesAllKeysTable",
+      {"intVal", "boolVal", "bytesVal", "dateVal", "floatVal", "stringVal",
+       "numericVal", "timestampVal"});
+  std::vector<ValueRow> rows = {
+      {1, true,
+       cloud::spanner::Bytes(
+           cloud::spanner_internal::BytesFromBase64("blue").value()),
+       "2014-09-27", (float)1.1, "stringVal",
+       cloud::spanner::MakeNumeric("1").value(),
+       cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value()}};
+  for (const auto& row : rows) {
+    mutation_builder_insert_friends.AddRow(row);
+  }
+  // 1 transaction
+  absl::StatusOr<CommitResult> commit_result =
+      Commit({mutation_builder_insert_friends.Build()});
+  ZETASQL_EXPECT_OK(commit_result.status());
+  Timestamp commit_timestamp = commit_result->commit_timestamp;
+  absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(query_start_time, "StreamScalarTypes"));
+  EXPECT_EQ(data_change_records[0].table_name.string_value(),
+            "ScalarTypesAllKeysTable");
+  ASSERT_EQ(data_change_records.size(), 1);
+  // column_types
+  EXPECT_THAT(data_change_records[0].column_types, test::EqualsProto(R"pb(
+                values {
+                  list_value {
+                    values { string_value: "intVal" }
+                    values { string_value: "{\"code\":\"INT64\"}" }
+                    values { bool_value: true }
+                    values { string_value: "1" }
+                  }
+                }
+                values {
+                  list_value {
+                    values { string_value: "boolVal" }
+                    values { string_value: "{\"code\":\"BOOL\"}" }
+                    values { bool_value: true }
+                    values { string_value: "2" }
+                  }
+                }
+                values {
+                  list_value {
+                    values { string_value: "bytesVal" }
+                    values { string_value: "{\"code\":\"BYTES\"}" }
+                    values { bool_value: true }
+                    values { string_value: "3" }
+                  }
+                }
+                values {
+                  list_value {
+                    values { string_value: "dateVal" }
+                    values { string_value: "{\"code\":\"DATE\"}" }
+                    values { bool_value: true }
+                    values { string_value: "4" }
+                  }
+                }
+                values {
+                  list_value {
+                    values { string_value: "floatVal" }
+                    values { string_value: "{\"code\":\"FLOAT64\"}" }
+                    values { bool_value: true }
+                    values { string_value: "5" }
+                  }
+                }
+                values {
+                  list_value {
+                    values { string_value: "stringVal" }
+                    values { string_value: "{\"code\":\"STRING\"}" }
+                    values { bool_value: true }
+                    values { string_value: "6" }
+                  }
+                }
+                values {
+                  list_value {
+                    values { string_value: "numericVal" }
+                    values { string_value: "{\"code\":\"NUMERIC\"}" }
+                    values { bool_value: true }
+                    values { string_value: "7" }
+                  }
+                }
+                values {
+                  list_value {
+                    values { string_value: "timestampVal" }
+                    values { string_value: "{\"code\":\"TIMESTAMP\"}" }
+                    values { bool_value: true }
+                    values { string_value: "8" }
+                  }
+                }
+              )pb"));
+  // mods
+  EXPECT_THAT(
+      data_change_records[0].mods,
+      test::EqualsProto(
+          R"pb(values {
+                 list_value {
+                   values {
+                     string_value: "{\"boolVal\":true,\"bytesVal\":\"blue\",\"dateVal\":\"2014-09-27\",\"floatVal\":1.100000023841858,\"intVal\":\"1\",\"numericVal\":\"1\",\"stringVal\":\"stringVal\",\"timestampVal\":\"1970-01-01T00:00:00Z\"}"
+                   }
+                   values { string_value: "{}" }
+                   values { string_value: "{}" }
+                 }
+               })pb"));
 }
 
 // DML inserts all columns including those not explicitly mentioned in the

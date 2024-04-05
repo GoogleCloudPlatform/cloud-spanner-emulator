@@ -626,6 +626,127 @@ TEST_P(DmlTest, InsertGPK) {
       IsOkAndHoldsRow({1, 3, 11}));
 }
 
+TEST_P(DmlTest, UpsertDmlSimpleTable) {
+  PopulateDatabase();
+
+  // INSERT OR IGNORE DML.
+  std::string sql =
+      "INSERT $0 INTO users(id, name, age) "
+      "VALUES (3, 'John', 30), (1, 'Bob', 31), (5, 'Susan', 28) $1";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(sql, "", "ON CONFLICT(id) DO NOTHING");
+  } else {
+    sql = absl::Substitute(sql, "OR IGNORE", "");
+  }
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  EXPECT_THAT(
+      Query("SELECT id, name, age FROM users WHERE id < 10 ORDER BY id"),
+      IsOkAndHoldsRows({{1, "Levin", 27},
+                        {2, "Mark", 32},
+                        {3, "John", 30},
+                        {5, "Susan", 28}}));
+
+  // INSERT OR UPDATE DML.
+  sql =
+      "INSERT $0 INTO users(id, name, age) "
+      "VALUES (3, 'John', 35), (1, 'Bob', 31), (5, 'Susan', 25) $1";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(sql, "",
+                           "ON CONFLICT(id) DO UPDATE SET id = excluded.id, "
+                           "name = excluded.name, age = excluded.age");
+  } else {
+    sql = absl::Substitute(sql, "OR UPDATE", "");
+  }
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  EXPECT_THAT(
+      Query("SELECT id, name, age FROM users WHERE id < 10 ORDER BY id"),
+      IsOkAndHoldsRows({{1, "Bob", 31},
+                        {2, "Mark", 32},
+                        {3, "John", 35},
+                        {5, "Susan", 25}}));
+}
+
+TEST_P(DmlTest, UpsertDmlGeneratedColumnTable) {
+  // Populate `tablegen` table
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("INSERT INTO tablegen(k, v1, v2) VALUES (1, 1, 1);")}));
+
+  // INSERT OR IGNORE DML.
+  std::string sql =
+      "INSERT $0 INTO tablegen(k, v1, v2) "
+      "VALUES (2, 2, 2), (1, 2, 2), (5, 5, 5) $1";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(sql, "", "ON CONFLICT(k) DO NOTHING");
+  } else {
+    sql = absl::Substitute(sql, "OR IGNORE", "");
+  }
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  EXPECT_THAT(Query("SELECT k, g2, v3 FROM tablegen WHERE TRUE ORDER BY k"),
+              IsOkAndHoldsRows({{1, 2, 2}, {2, 4, 2}, {5, 10, 2}}));
+
+  // INSERT OR UPDATE DML.
+  sql =
+      "INSERT $0 INTO tablegen(k, v1, v2, v3) "
+      "VALUES (2, 20, 20, 2), (1, 10, 10, 1), (5, 50, 50, 5) $1";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(sql, "",
+                           "ON CONFLICT(k) DO UPDATE SET k = excluded.k, "
+                           "v1 = excluded.v1, v2 = excluded.v2, "
+                           "v3 = excluded.v3");
+  } else {
+    sql = absl::Substitute(sql, "OR UPDATE", "");
+  }
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(
+        Query("SELECT k, g1, g2, v3 FROM tablegen WHERE TRUE ORDER BY k"),
+        IsOkAndHoldsRows({{1, 11, 20, 1}, {2, 21, 40, 2}, {5, 51, 100, 5}}));
+  } else {
+    EXPECT_THAT(
+        Query("SELECT k, g1, g2, v3 FROM tablegen WHERE TRUE ORDER BY k"),
+        IsOkAndHoldsRows({{1, 21, 20, 1}, {2, 41, 40, 2}, {5, 101, 100, 5}}));
+  }
+}
+
+TEST_P(DmlTest, UpsertDmlGeneratedPrimaryKeyTable) {
+  // TODO: b/310194797 - Generated keys are NULL in POSTGRES dialect.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  // Populate `gpktable2` table
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("INSERT INTO gpktable2(k1, v1) VALUES (1, 1);")}));
+
+  // INSERT OR IGNORE DML.
+  std::string sql =
+      "INSERT $0 INTO gpktable2(k1, v1) VALUES (2, 2), (1, 2), (5, 5) $1";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(sql, "", "ON CONFLICT(k2_stored) DO NOTHING");
+  } else {
+    sql = absl::Substitute(sql, "OR IGNORE", "");
+  }
+
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  EXPECT_THAT(Query("SELECT k1, k2_stored, v1, v2_stored FROM gpktable2 "
+                    "WHERE TRUE ORDER BY k1"),
+              IsOkAndHoldsRows({{1, 3, 1, 6}, {2, 6, 2, 7}, {5, 15, 5, 10}}));
+
+  // INSERT OR UPDATE DML.
+  sql = "INSERT $0 INTO gpktable2(k1, v1) VALUES (2, 20), (1, 10), (5, 50) $1";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(sql, "",
+                           "ON CONFLICT(k2_stored) DO UPDATE "
+                           "SET k1 = excluded.k1, v1 = excluded.v1");
+  } else {
+    sql = absl::Substitute(sql, "OR UPDATE", "");
+  }
+  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  EXPECT_THAT(
+      Query("SELECT k1, k2_stored, v1, v2_stored FROM gpktable2 "
+            "WHERE TRUE ORDER BY k1"),
+      IsOkAndHoldsRows({{1, 3, 10, 15}, {2, 6, 20, 25}, {5, 15, 50, 55}}));
+}
+
 TEST_P(DmlTest, DISABLED_ReturningGPK) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_dml_returning = true;

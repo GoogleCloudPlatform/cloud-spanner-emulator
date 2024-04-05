@@ -52,6 +52,11 @@ absl::StatusOr<PgNamespaceData> GetPgNamespaceDataFromBootstrap(
       "invoked stub GetPgNamespaceDataFromBootstrap");
 }
 
+absl::StatusOr<PgProcData> GetPgProcDataFromBootstrap(
+    const PgBootstrapCatalog* catalog, int64_t proc_oid) {
+  return absl::UnimplementedError("invoked stub GetPgProcDataFromBootstrap");
+}
+
 absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
     const PgBootstrapCatalog* catalog, absl::string_view type_name) {
   return absl::UnimplementedError("invoked stub GetPgTypeDataFromBootstrap");

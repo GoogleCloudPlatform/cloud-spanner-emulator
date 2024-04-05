@@ -2067,7 +2067,8 @@ TEST_P(QueryEngineTest, JsonConverterFunctionsForGsql) {
       {
           "safe.lax_string",
           R"(SELECT SAFE.LAX_STRING(JSON '1'))",
-      }};
+      },
+  };
 
   for (const auto& test_case : test_cases) {
     ZETASQL_ASSERT_OK(query_engine().ExecuteSql(Query{test_case.function_call},
@@ -2141,6 +2142,46 @@ TEST_P(QueryEngineTest, ViewsInsideDML) {
 
   EXPECT_EQ(result.rows, nullptr);
   EXPECT_EQ(result.modified_row_count, 3);
+}
+
+TEST_P(QueryEngineTest, InsertOrIgnoreDmlInsertsNewRows) {
+  std::string sql;
+  // The insert statement inserts 2 new rows and ignores the existing row with
+  // primary key (int64_col:1)
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql =
+        "INSERT INTO test_table (int64_col, string_col) "
+        "VALUES(10, 'ten'), (1, 'one'), (10, 'ten'), (3, 'three') "
+        "ON CONFLICT(int64_col) DO NOTHING";
+  } else {
+    sql =
+        "INSERT OR IGNORE INTO test_table (int64_col, string_col) "
+        "VALUES(10, 'ten'), (1, 'one'), (10, 'ten'), (3, 'three')";
+  }
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(
+              AllOf(Field(&MutationOp::type, MutationOpType::kInsert),
+                    Field(&MutationOp::table, "test_table"),
+                    Field(&MutationOp::columns,
+                          std::vector<std::string>{"int64_col", "string_col"}),
+                    Field(&MutationOp::rows,
+                          UnorderedElementsAre(
+                              ValueList{Int64(10), String("ten")},
+                              ValueList{Int64(3), String("three")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
 }
 
 TEST_P(QueryEngineTest, InsertOrUpdateDmlInsertsNewRows) {
@@ -2353,6 +2394,35 @@ TEST_F(DefaultValuesTest, InsertOrUpdateDefaultValues) {
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 3)));
 }
 
+TEST_F(DefaultValuesTest, InsertOrIgnoreDefaultValues) {
+  // The insert statement inserts 2 new rows and the existing row with primary
+  // key (player_id:1) is ignored. The default column gets the default value
+  // 0.0.
+  std::string sql =
+      "INSERT OR IGNORE INTO players (player_id) "
+      "VALUES(10), (1), (3)";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "players"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"player_id", "account_balance"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(
+                        ValueList{Int64(10), zetasql::values::Numeric(0.0)},
+                        ValueList{Int64(3),
+                                  zetasql::values::Numeric(0.0)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
 class DefaultKeyTest
     : public QueryEngineTestBase,
       public testing::WithParamInterface<database_api::DatabaseDialect> {
@@ -2423,6 +2493,41 @@ TEST_P(DefaultKeyTest, InsertOrUpdateDefaultKey) {
                     UnorderedElementsAre(
                         ValueList{Int64(100), Int64(1), Int64(1000)},
                         ValueList{Int64(100), Int64(2), Int64(2000)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_P(DefaultKeyTest, InsertOrIgnoreDmlDefaultKey) {
+  // The insert statement inserts 2 new rows and the existing row with primary
+  // key (prefix: 100, player_id:1) is ignored.
+  std::string sql;
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    sql =
+        "INSERT OR IGNORE INTO players_default_key (player_id, balance) "
+        "VALUES (3, 30), (1, 10), (2, 20)";
+  } else {
+    sql =
+        "INSERT INTO players_default_key (player_id, balance) "
+        "VALUES (3, 30), (1, 10), (2, 20) "
+        "ON CONFLICT (prefix, player_id) DO NOTHING";
+  }
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "players_default_key"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"prefix", "player_id", "balance"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(
+                        ValueList{Int64(100), Int64(3), Int64(30)},
+                        ValueList{Int64(100), Int64(2), Int64(20)})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(query_engine().ExecuteSql(
@@ -2695,6 +2800,31 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteDeleteWithReturning) {
                   ValueList{Int64(4), Int64(4), Int64(5)})));
 }
 
+TEST_F(GeneratedPrimaryKeyTest, InsertOrIgnoreGPK) {
+  // The insert statement inserts 1 new row and ignored the existing row with
+  // primary key (k1_pk: 2, k3gen_storedpk:2).
+  std::string sql =
+      "INSERT OR IGNORE INTO test_table (k1_pk, k2, k4) "
+      "VALUES (2, 2, 8), (3, 3, 12)";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"k1_pk", "k2", "k4"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(3), Int64(3), Int64(12)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+}
+
 TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateGPK) {
   // The insert statement inserts 1 new row and updates the existing row with
   // primary key (k1_pk:2, k3gen_storedpk:2).
@@ -2777,6 +2907,48 @@ INSTANTIATE_TEST_SUITE_P(
     [](const testing::TestParamInfo<TimestampKeyTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
     });
+
+TEST_P(TimestampKeyTest, InsertOrIgnoreTimestampKey) {
+  // The insert statement inserts the 2 new row with one key column k:1 and
+  // pending_commit_timestamp in the `ts` in key column.
+  std::string sql;
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    sql =
+        "INSERT OR IGNORE INTO timestamp_key_table (k, ts, val) "
+        "VALUES (1, PENDING_COMMIT_TIMESTAMP(), 1), "
+        "(1, PENDING_COMMIT_TIMESTAMP(), 2), (2, PENDING_COMMIT_TIMESTAMP(), "
+        "2)";
+  } else {
+    sql =
+        "INSERT INTO timestamp_key_table (k, ts, val) "
+        "VALUES (1, SPANNER.PENDING_COMMIT_TIMESTAMP(), 1), "
+        "(1, SPANNER.PENDING_COMMIT_TIMESTAMP(), 2), "
+        "(2, SPANNER.PENDING_COMMIT_TIMESTAMP(), 2) "
+        "ON CONFLICT(k, ts) DO NOTHING";
+  }
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "timestamp_key_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"k", "ts", "val"}),
+              Field(
+                  &MutationOp::rows,
+                  UnorderedElementsAre(
+                      ValueList{Int64(1), String("spanner.commit_timestamp()"),
+                                Int64(1)},
+                      ValueList{Int64(2), String("spanner.commit_timestamp()"),
+                                Int64(2)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
 
 TEST_P(TimestampKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
   // Spanner does not allow duplicate insert rows with same key.

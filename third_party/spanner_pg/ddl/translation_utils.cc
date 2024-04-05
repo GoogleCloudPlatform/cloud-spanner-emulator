@@ -127,6 +127,11 @@ static std::vector<PGAlterOption> GetOptionList() {
           T_String,
           PostgreSQLConstants::kInternalDatabaseDefaultLeaderOptionName,
           T_String),
+      PGAlterOption(
+          PostgreSQLConstants::kSpangresDatabaseWitnessLocationOptionName,
+          T_String,
+          PostgreSQLConstants::kInternalDatabaseWitnessLocationOptionName,
+          T_String),
   };
 
   return options;

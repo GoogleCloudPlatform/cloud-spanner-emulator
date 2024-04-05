@@ -2044,7 +2044,7 @@ TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
     {"", "", "base", "timestamp_array", 15, Ns(), Ns(), "YES", "ARRAY<TIMESTAMP>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "date_array", 16, Ns(), Ns(), "YES", "ARRAY<DATE>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "gen_value", 17, Ns(), Ns(), "YES", "INT64", "ALWAYS", "key1 + 1", "YES", "COMMITTED"},  // NOLINT
-    {"", "", "base", "gen_function_value", 18, Ns(), Ns(), "YES", "INT64", "ALWAYS", "LENGTH(key2)", "YES", "COMMITTED"},  // NOLINT
+    {"", "", "base", "gen_function_value", 18, Ns(), Ns(), "YES", "INT64", "ALWAYS", "LENGTH(key2)", "NO", "COMMITTED"},  // NOLINT
     {"", "", "base", "default_col_value", 19, "100", Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "default_timestamp_col_value", 20, "CURRENT_TIMESTAMP()", Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base_view", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
@@ -2119,7 +2119,7 @@ TEST_P(InformationSchemaTest, PGDefaultColumns) {
     {"public", "base", "timestamp_array", 15, Ns(), "ARRAY", "YES", "timestamp with time zone[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base", "date_array", 16, Ns(), "ARRAY", "YES", "date[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base", "gen_value", 17, Ns(), "bigint", "YES", "bigint", "ALWAYS", "(key1 + '1'::bigint)", "YES", "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
-    {"public", "base", "gen_function_value", 18, Ns(), "bigint", "YES", "bigint", "ALWAYS", "length(key2)", "YES", "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
+    {"public", "base", "gen_function_value", 18, Ns(), "bigint", "YES", "bigint", "ALWAYS", "length(key2)", "NO", "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
     {"public", "base", "default_col_value", 19, "'100'::bigint", "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
     {"public", "base", "default_timestamp_col_value", 20, "CURRENT_TIMESTAMP", "timestamp with time zone", "YES", "timestamp with time zone", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base_view", "key1", 1, Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
@@ -2756,7 +2756,7 @@ class ColumnColumnUsageInformationSchemaTest : public InformationSchemaTest {
           first_name varchar(100),
           last_name varchar(100),
           full_name varchar(200) GENERATED ALWAYS AS (CONCAT(first_name, ', '::text, last_name)) STORED,
-          uppercase_name varchar GENERATED ALWAYS AS (UPPER(first_name)) STORED,
+          uppercase_name varchar GENERATED ALWAYS AS (UPPER(first_name)) VIRTUAL,
           PRIMARY KEY(user_id)
         )
       )"});
@@ -2767,7 +2767,7 @@ class ColumnColumnUsageInformationSchemaTest : public InformationSchemaTest {
           first_name STRING(100),
           last_name STRING(100),
           full_name STRING(200) AS (CONCAT(first_name, ", ", last_name)) STORED,
-          uppercase_name STRING(MAX) AS (UPPER(first_name)) STORED,
+          uppercase_name STRING(MAX) AS (UPPER(first_name)),
         ) PRIMARY KEY(user_id)
       )"});
     }

@@ -675,7 +675,13 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropIndex(
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropSchema(
     const google::spanner::emulator::backend::ddl::DropSchema& statement) const {
-  return Substitute("DROP SCHEMA $0", QuoteIdentifier(statement.schema_name()));
+  std::vector<std::string> drop_schema_clauses;
+  drop_schema_clauses.push_back("DROP SCHEMA");
+  if (statement.has_if_exists() && statement.if_exists()) {
+    drop_schema_clauses.push_back("IF EXISTS");
+  }
+  drop_schema_clauses.push_back(QuoteIdentifier(statement.schema_name()));
+  return absl::StrJoin(drop_schema_clauses, " ");
 }
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropFunction(
@@ -808,15 +814,22 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSchema(
     const google::spanner::emulator::backend::ddl::CreateSchema& statement) const {
+  std::vector<std::string> create_schema_clauses;
+  create_schema_clauses.push_back("CREATE SCHEMA");
   switch (statement.existence_modifier()) {
     case google::spanner::emulator::backend::ddl::CreateSchema::NONE:
-      return Substitute("CREATE SCHEMA $0",
-                        QuoteIdentifier(statement.schema_name()));
+      break;
+    case google::spanner::emulator::backend::ddl::CreateSchema::IF_NOT_EXISTS:
+      create_schema_clauses.push_back("IF NOT EXISTS");
+      break;
     default:
       return absl::UnimplementedError(
           StrCat("CREATE SCHEMA existence modifier ",
                  statement.existence_modifier(), " not supported."));
   }
+  create_schema_clauses.push_back(
+      QuoteIdentifier(statement.schema_name()));
+  return absl::StrJoin(create_schema_clauses, " ");
 }
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSequence(

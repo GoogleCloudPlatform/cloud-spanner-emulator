@@ -35,8 +35,8 @@
 # Libraries shared by all spangres code.
 #
 
-load("//third_party/spanner_pg/errors:error_generator.bzl", "spangres_error_catalog")
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("//third_party/spanner_pg/errors:error_generator.bzl", "spangres_error_catalog")
 
 package(
     default_visibility = ["//:__subpackages__"],

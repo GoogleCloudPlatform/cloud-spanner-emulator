@@ -733,7 +733,7 @@ ForwardTransformer::BuildGsqlResolvedExpr(
                                    expr_transformer_info);
     }
     case T_SubscriptingRef: {
-      return BuildGsqlResolvedSafeArrayAtOrdinalFunctionCall(
+      return BuildGsqlArrayAccess(
           *PostgresConstCastNode(SubscriptingRef, &expr),
           expr_transformer_info);
     }

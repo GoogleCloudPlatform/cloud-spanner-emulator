@@ -251,8 +251,6 @@ SpangresTranslator::TranslateParsedTree(
     *progress = interfaces::TranslationProgress::COMPLETE;
   }
 
-  // TODO: Fill in the remaining fields of AnalyzerOutput with
-  // actual values.
   auto analyzer_output = std::make_unique<zetasql::AnalyzerOutput>(
       params.googlesql_analyzer_options().id_string_pool(),
       params.googlesql_analyzer_options().arena(), std::move(stmt),
