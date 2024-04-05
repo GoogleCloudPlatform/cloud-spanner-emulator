@@ -2043,7 +2043,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSchema(
     return absl::InvalidArgumentError(
         "'spanner_' is not supported as a prefix for a schema name.");
   }
-
+  if (create_statement.if_not_exists) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::CreateSchema::IF_NOT_EXISTS);
+  }
   out.set_schema_name(create_statement.schemaname);
   return absl::OkStatus();
 }

@@ -229,6 +229,7 @@ cc_library(
     hdrs = ["unittest_utils.h"],
     deps = [
         "//third_party/spanner_pg/catalog:catalog_adapter_holder",
+        "//third_party/spanner_pg/catalog:engine_system_catalog",
         "//third_party/spanner_pg/catalog:spangres_type",
         "//third_party/spanner_pg/interface/test:postgres_transformer",
         "//third_party/spanner_pg/postgres_includes",
@@ -242,6 +243,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/public:analyzer",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:type",
     ],

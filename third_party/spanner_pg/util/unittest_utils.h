@@ -35,8 +35,10 @@
 #include <string>
 
 #include "zetasql/public/analyzer.h"
+#include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
 #include "absl/status/status.h"
+#include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
 namespace postgres_translator::spangres::test {

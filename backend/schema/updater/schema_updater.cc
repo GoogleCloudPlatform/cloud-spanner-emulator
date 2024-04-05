@@ -4180,6 +4180,7 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_if_not_exists = true,
         .enable_change_streams = true,
         .enable_sequence = true,
+        .enable_virtual_generated_column = true,
     };
     ZETASQL_ASSIGN_OR_RETURN(ddl::DDLStatementList ddl_statement_list,
                      translator->TranslateForEmulator(parser_output, options));

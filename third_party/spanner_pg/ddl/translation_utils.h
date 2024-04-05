@@ -101,6 +101,8 @@ struct PostgreSQLConstants {
       "spanner.enable_key_visualizer";
   static constexpr absl::string_view kSpangresDatabaseDefaultLeaderOptionName =
       "spanner.default_leader";
+  static constexpr absl::string_view
+      kSpangresDatabaseWitnessLocationOptionName = "spanner.witness_location";
 
   // TODO: use kDatabaseOptimizerVersionName,
   // kInternalDatabaseVersionRetentionPeriodName,
@@ -133,6 +135,9 @@ struct PostgreSQLConstants {
       "exclude_ttl_deletes";
   static constexpr absl::string_view kInternalDatabaseDefaultLeaderOptionName =
     "spanner.internal.cloud_default_leader";
+  static constexpr absl::string_view
+      kInternalDatabaseWitnessLocationOptionName =
+          "spanner.internal.cloud_witness_location";
 
   // Options for Spanner Bit-reversed Sequences.
   // Copied from google3/spanner/common/schema_util.h

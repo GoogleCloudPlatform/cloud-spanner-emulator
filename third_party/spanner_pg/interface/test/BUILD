@@ -37,6 +37,21 @@ package(
 
 licenses(["notice"])
 
+# Tests that should be disabled when using a google3 (non emulator) catalog.
+# Disables the multi-threaded transformer_executor_test, single threaded golden
+# tests, and the single thread recapture tests.
+disabled_non_emulator_golden_tests = [
+    # TODO: Disable jdbc_driver test until new goldens roll out and they don't break when column ids shift.
+    "testdata/spanner_jdbc_driver_m1.test",
+    # TODO: Update and re-enable information_schema goldens after integrating dev_branch changes.
+    "testdata/information_schema.test",
+    # TODO: emulator and spanner have different resolved ast for generated
+    # columns after gpk support.
+    "testdata/gencol_emulator_insertdml.test",
+    # TODO: reenable once Spangres is on the Spanner dev branch.
+    "testdata/fts_functions.test",
+]
+
 cc_library(
     name = "postgres_transformer",
     testonly = 1,

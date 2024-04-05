@@ -799,8 +799,12 @@ void InformationSchemaCatalog::FillColumnsTable() {
       specific_kvs[kIsNullable] = String(column->is_nullable() ? kYes : kNo);
       specific_kvs[kIsGenerated] =
           String(column->is_generated() ? kAlways : kNever);
-      specific_kvs[kIsStored] =
-          column->is_generated() ? String(kYes) : NullString();
+      if (column->is_generated()) {
+        specific_kvs[kIsStored] =
+            column->is_stored() ? String(kYes) : String(kNo);
+      } else {
+        specific_kvs[kIsStored] = NullString();
+      }
       specific_kvs[kSpannerState] = String(kCommitted);
 
       rows.push_back(GetRowFromRowKVs(columns, specific_kvs));

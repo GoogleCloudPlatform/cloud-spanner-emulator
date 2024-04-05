@@ -56,17 +56,14 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
   options.set_name_resolution_mode(zetasql::NAME_RESOLUTION_DEFAULT);
   options.set_product_mode(zetasql::PRODUCT_EXTERNAL);
   options.SetEnabledLanguageFeatures({
-      zetasql::FEATURE_EXTENDED_TYPES,
-      zetasql::FEATURE_NAMED_ARGUMENTS,
-      zetasql::FEATURE_NUMERIC_TYPE,
-      zetasql::FEATURE_TABLESAMPLE,
+      zetasql::FEATURE_EXTENDED_TYPES, zetasql::FEATURE_NAMED_ARGUMENTS,
+      zetasql::FEATURE_NUMERIC_TYPE, zetasql::FEATURE_TABLESAMPLE,
       zetasql::FEATURE_TIMESTAMP_NANOS,
       zetasql::FEATURE_V_1_1_HAVING_IN_AGGREGATE,
       zetasql::FEATURE_V_1_1_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
       zetasql::FEATURE_V_1_1_ORDER_BY_COLLATE,
       zetasql::FEATURE_V_1_1_SELECT_STAR_EXCEPT_REPLACE,
-      zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL,
-      zetasql::FEATURE_JSON_TYPE,
+      zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL, zetasql::FEATURE_JSON_TYPE,
       zetasql::FEATURE_JSON_ARRAY_FUNCTIONS,
       zetasql::FEATURE_JSON_STRICT_NUMBER_PARSING,
       zetasql::FEATURE_JSON_VALUE_EXTRACTION_FUNCTIONS,

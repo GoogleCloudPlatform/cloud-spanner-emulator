@@ -818,6 +818,13 @@ class ForwardTransformer {
   BuildGsqlResolvedSQLValueFunctionCall(const SQLValueFunction& function);
 
   // Transform a SubscriptingRef into a function call for array element
+  // accesses (e.g., array_value[4]) and array slicing (e.g., array_value[1:4]).
+  // Supports only read-only accesses (SELECT), not writable accesses (UPDATE).
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>> BuildGsqlArrayAccess(
+      const SubscriptingRef& subscripting_ref,
+      ExprTransformerInfo* expr_transformer_info);
+
+  // Transform a SubscriptingRef into a function call for array element
   // accesses: array_value[4]. Supports only read-only accesses (SELECT), not
   // writable accesses (UPDATE).
   //
@@ -838,8 +845,8 @@ class ForwardTransformer {
   BuildGsqlResolvedMakeArrayFunctionCall(
       const ArrayExpr& array_expr, ExprTransformerInfo* expr_transformer_info);
 
-  // Transform the postgres NOT IN operation into two GoogleSWL functions (NOT
-  // function and IN fucntion). The NOT function wraps around the IN function.
+  // Transform the postgres NOT IN operation into two ZetaSQL functions (NOT
+  // function and IN function). The NOT function wraps around the IN function.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
   BuildGsqlInFunctionCall(const ScalarArrayOpExpr& scalar_array,
                           ExprTransformerInfo* expr_transformer_info);

@@ -234,10 +234,6 @@ Notable limitations:
   hints. However, index names generated in the emulator cannot be used in the
   emulator or in production.
 
-- `DELETE CASCADE` referential action is not supported. A DDL statement
-  specifying this action will succeed, however, the action will be set as the
-  default `NO ACTION` action.
-
 ## Frequently Asked Questions (FAQ)
 
 

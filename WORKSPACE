@@ -278,9 +278,9 @@ http_archive(
     patches = ["//build/bazel:zetasql.patch"],
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
-    sha256 = "56bc9f8c76ce75e8953af43bd09b9ae836de8e07ed38457c295e8a9f99377884",
-    strip_prefix = "zetasql-589026c410c42de9aa8ee92ad16f745977140041",
-    url = "https://github.com/google/zetasql/archive/589026c410c42de9aa8ee92ad16f745977140041.tar.gz",
+    sha256 = "c9519f5b71f6e23b6eb4939456fe56ba1831afc2cd6a863b21d0563db0655dda",
+    strip_prefix = "zetasql-b7b67f55f8792dc418959f3b60de2d1d00b33c7a",
+    url = "https://github.com/google/zetasql/archive/b7b67f55f8792dc418959f3b60de2d1d00b33c7a.tar.gz",
 )
 
 http_archive(

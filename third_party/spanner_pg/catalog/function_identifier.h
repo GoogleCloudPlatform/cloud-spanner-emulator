@@ -32,6 +32,8 @@
 #ifndef CATALOG_FUNCTION_IDENTIFIERS_H_
 #define CATALOG_FUNCTION_IDENTIFIERS_H_
 
+#include <stdbool.h>
+
 #include <string>
 
 #include "zetasql/base/logging.h"
@@ -52,6 +54,7 @@ class PostgresExprIdentifier {
     ABSL_CHECK_NE(node_tag, T_CaseExpr);
     ABSL_CHECK_NE(node_tag, T_SQLValueFunction);
     ABSL_CHECK_NE(node_tag, T_ScalarArrayOpExpr);
+    ABSL_CHECK_NE(node_tag, T_SubscriptingRef);
     return PostgresExprIdentifier(node_tag);
   }
 
@@ -62,15 +65,20 @@ class PostgresExprIdentifier {
 
   // Special constructor for ScalarArrayOpExpr.
   // ScalarArrayOpExpr represents ANY/SOME/ALL(<array>) and also IN(values).
-  // PG query tree does not distinguish between both types of queries.
+  // `ANY/SOME` has the same query tree as `IN` and can be disguished from `ALL`
+  // by the value of `useOr` which is `true` for `ANY` and `false` for `ALL`.
   //
-  // However, GSQL distinguishes between both cases. In GSQL, `$in_array`
-  // gets invoked for `<value> IN <array>`, which is the GSQL equivalent of
-  // PG's ANY/SOME(<array>) while `$in` gets invoked for
-  // `<value> IN (<comma separated list>)`.
-  static PostgresExprIdentifier ScalarArrayOpExpr(bool array_op_arg_is_array) {
+  // In GSQL, `$in_array`gets invoked for `<value> IN UNNEST(<array>)` which is
+  // equivalent to PG's `<value>=ANY/SOME(<array>) while `$in` gets invoked for
+  // `<value> IN (<comma separated list>)` which has a similar syntax in PG. PG
+  // query tree does not distinguish between these two types of queries.
+  static PostgresExprIdentifier ScalarArrayOpExpr(bool array_op_arg_is_array,
+                                                  bool use_or,
+                                                  std::string comparator_type) {
     return PostgresExprIdentifier(T_ScalarArrayOpExpr)
-        .SetArrayOpArgIsArray(array_op_arg_is_array);
+        .SetArrayOpArgIsArray(array_op_arg_is_array)
+        .SetArrayOpUseOr(use_or)
+        .SetArrayOpComparatorType(comparator_type);
   }
 
   // Special constructor for NullTest.
@@ -100,6 +108,11 @@ class PostgresExprIdentifier {
         .SetSQLValueFunctionOp(function_op);
   }
 
+  static PostgresExprIdentifier SubscriptingRef(bool is_array_slice) {
+    return PostgresExprIdentifier(T_SubscriptingRef)
+        .SetSubscriptingRefIsArraySlice(is_array_slice);
+  }
+
   bool operator==(const PostgresExprIdentifier& other) const {
     return node_tag_ == other.node_tag() &&
            bool_expr_type_ == other.bool_expr_type() &&
@@ -108,7 +121,11 @@ class PostgresExprIdentifier {
            boolean_test_type_ == other.bool_test_type() &&
            case_has_testexpr_ == other.case_has_testexpr() &&
            sql_value_function_op_ == other.sql_value_function_op() &&
-           array_op_arg_is_array_ == other.array_op_arg_is_array();
+           array_op_arg_is_array_ == other.array_op_arg_is_array() &&
+           array_op_use_or_ == other.array_op_use_or() &&
+           array_op_comparator_type_ == other.array_op_comparator_type() &&
+           subscripting_ref_is_array_slice_ ==
+               other.subscripting_ref_is_array_slice();
   }
 
   template <typename H>
@@ -117,7 +134,9 @@ class PostgresExprIdentifier {
         std::move(state), expr_id.node_tag(), expr_id.bool_expr_type(),
         expr_id.null_test_type(), expr_id.min_max_op(),
         expr_id.bool_test_type(), expr_id.case_has_testexpr(),
-        expr_id.sql_value_function_op(), expr_id.array_op_arg_is_array());
+        expr_id.sql_value_function_op(), expr_id.array_op_arg_is_array(),
+        expr_id.array_op_use_or(), expr_id.array_op_comparator_type(),
+        expr_id.subscripting_ref_is_array_slice());
   }
 
   NodeTag node_tag() const { return node_tag_; }
@@ -134,8 +153,18 @@ class PostgresExprIdentifier {
 
   bool array_op_arg_is_array() const { return array_op_arg_is_array_; }
 
+  bool array_op_use_or() const { return array_op_use_or_; }
+
+  std::string array_op_comparator_type() const {
+    return array_op_comparator_type_;
+  }
+
   SQLValueFunctionOp sql_value_function_op() const {
     return sql_value_function_op_;
+  }
+
+  bool subscripting_ref_is_array_slice() const {
+    return subscripting_ref_is_array_slice_;
   }
 
  private:
@@ -147,7 +176,10 @@ class PostgresExprIdentifier {
         boolean_test_type_(IS_FALSE),
         case_has_testexpr_(false),
         sql_value_function_op_(SVFOP_CURRENT_DATE),
-        array_op_arg_is_array_(false) {}
+        array_op_arg_is_array_(false),
+        array_op_use_or_(false),
+        array_op_comparator_type_("="),
+        subscripting_ref_is_array_slice_(false) {}
 
   PostgresExprIdentifier& SetBoolExprType(BoolExprType bool_expr_type) {
     bool_expr_type_ = bool_expr_type;
@@ -169,6 +201,17 @@ class PostgresExprIdentifier {
     return *this;
   }
 
+  PostgresExprIdentifier& SetArrayOpUseOr(bool use_or) {
+    array_op_use_or_ = use_or;
+    return *this;
+  }
+
+  PostgresExprIdentifier& SetArrayOpComparatorType(
+      std::string array_op_comparator_type) {
+    array_op_comparator_type_ = array_op_comparator_type;
+    return *this;
+  }
+
   PostgresExprIdentifier& SetBooleanTestType(BoolTestType boolean_test_type) {
     boolean_test_type_ = boolean_test_type;
     return *this;
@@ -185,6 +228,11 @@ class PostgresExprIdentifier {
     return *this;
   }
 
+  PostgresExprIdentifier& SetSubscriptingRefIsArraySlice(bool is_array_slice) {
+    subscripting_ref_is_array_slice_ = is_array_slice;
+    return *this;
+  }
+
   // All Exprs have a NodeTag.
   NodeTag node_tag_;
 
@@ -196,6 +244,9 @@ class PostgresExprIdentifier {
   bool case_has_testexpr_;
   SQLValueFunctionOp sql_value_function_op_;
   bool array_op_arg_is_array_;
+  bool array_op_use_or_;
+  std::string array_op_comparator_type_;
+  bool subscripting_ref_is_array_slice_;
 };
 
 }  // namespace postgres_translator

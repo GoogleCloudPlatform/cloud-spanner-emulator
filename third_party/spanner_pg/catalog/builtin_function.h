@@ -310,6 +310,11 @@ void AddArrayAtFunctions(
     absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
 
 // Expr.
+// Add mapping between PG SubscriptingRef and pg.array_slice function call.
+void AddArraySliceFunctions(
+    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
+
+// Expr.
 // Add mapping between PG ArrayExpr and make_array function call.
 // IMPORTANT NOTE: This mapping only applies when the array contains non-Const
 // element expressions (matches ZetaSQL behavior). Arrays of all Const

@@ -75,14 +75,13 @@ index 235a1ce..3e5b70a 100644
 -package(default_visibility = ["//zetasql/base:zetasql_implementation"])
 +package(default_visibility = ["//visibility:public"])
 diff --git a/zetasql/public/types/type.h b/zetasql/public/types/type.h
-index 235a1ce..3e5b70a 100644
+index ad8c28d..6277712 100644
 --- a/zetasql/public/types/type.h
 +++ b/zetasql/public/types/type.h
-@@ -555,46 +555,7 @@ class Type {
-     // error.
+@@ -621,45 +621,6 @@ class Type {
      std::optional<int64_t> file_descriptor_sets_max_size_bytes = std::nullopt;
    };
--
+
 - protected:
 -  // Types can only be created and destroyed by TypeFactory.
 -  Type(const TypeFactory* factory, TypeKind kind);
@@ -122,14 +121,13 @@ index 235a1ce..3e5b70a 100644
 -  // (such as element types of arrays or field types of structs).
 -  virtual int64_t GetEstimatedOwnedMemoryBytesSize() const = 0;
 -
-+  
    // Formatting options that can be provided to FormatValueContent.
    struct FormatValueContentOptions {
      enum class Mode {
-@@ -637,6 +598,45 @@ class Type {
+@@ -711,6 +672,45 @@ class Type {
      static const int kIndentStep = 2;
    };
- 
+
 + protected:
 +  // Types can only be created and destroyed by TypeFactory.
 +  Type(const TypeFactory* factory, TypeKind kind);
@@ -169,9 +167,9 @@ index 235a1ce..3e5b70a 100644
 +  // (such as element types of arrays or field types of structs).
 +  virtual int64_t GetEstimatedOwnedMemoryBytesSize() const = 0;
 +
-   // List of DebugStringImpl outputs. Used to serve as a stack in
-   // DebugStringImpl to protect from stack overflows.
-   // Note: SWIG will fail to process this file if we remove a white space
+   std::string FormatValueContentContainerElement(
+       const internal::ValueContentContainerElement element, const Type* type,
+       const FormatValueContentOptions& options) const {
 diff --git a/zetasql/public/value.cc b/zetasql/public/value.cc
 index 50deb34..2070935 100644
 --- a/zetasql/public/value.cc
@@ -258,3 +256,54 @@ index f124ed8..ac859d0 100644
 
    ZETASQL_ASSIGN_OR_RETURN(*output_name_list,
                     NameList::AddRangeVariableInWrappingNameList(
+diff --git a/zetasql/reference_impl/algebrizer.cc b/zetasql/reference_impl/algebrizer.cc
+index a3dd2da..2c249d9 100644
+--- a/zetasql/reference_impl/algebrizer.cc
++++ b/zetasql/reference_impl/algebrizer.cc
+@@ -6677,7 +6677,8 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
+       ZETASQL_RET_CHECK(tvf_scan->signature()->argument(i).is_scalar());
+       ZETASQL_ASSIGN_OR_RETURN(auto expr_argument,
+                        AlgebrizeExpression(argument->expr()));
+-      arguments.push_back({.value = std::move(expr_argument)});
++      arguments.push_back(TVFOp::TVFOpArgument
++                          {.value = std::move(expr_argument)});
+       continue;
+     }
+
+@@ -6706,14 +6707,16 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
+         columns.push_back({relation_signature_column.name,
+                            argument_column.type(), input_variable});
+       }
+-      arguments.push_back({.relation = TVFOp::TvfInputRelation{
++      arguments.push_back(TVFOp::TVFOpArgument
++                          {.relation = TVFOp::TvfInputRelation{
+                                std::move(relation), std::move(columns)}});
+       continue;
+     }
+
+     if (argument->model() != nullptr) {
+       ZETASQL_RET_CHECK(tvf_scan->signature()->argument(i).is_model());
+-      arguments.push_back({.model = argument->model()->model()});
++      arguments.push_back(TVFOp::TVFOpArgument
++                          {.model = argument->model()->model()});
+       continue;
+     }
+
+diff --git a/zetasql/reference_impl/relational_op.cc b/zetasql/reference_impl/relational_op.cc
+index 58e5abc..ec1bfd7 100644
+--- a/zetasql/reference_impl/relational_op.cc
++++ b/zetasql/reference_impl/relational_op.cc
+@@ -834,11 +834,11 @@ absl::StatusOr<std::unique_ptr<TupleIterator>> TVFOp::CreateIterator(
+       }
+       ZETASQL_RET_CHECK_EQ(columns.size(), tuple_indexes.size());
+       input_arguments.push_back(
+-          {.relation = {std::make_unique<InputRelationIterator>(
++          TableValuedFunction::TvfEvaluatorArg{.relation = {std::make_unique<InputRelationIterator>(
+                std::move(columns), std::move(tuple_indexes), context,
+                std::move(tuple_iterator))}});
+     } else if (argument.model) {
+-      input_arguments.push_back({.model = argument.model});
++      input_arguments.push_back(TableValuedFunction::TvfEvaluatorArg{.model = argument.model});
+     } else {
+       ZETASQL_RET_CHECK_FAIL() << "Unexpected TVFOpArgument";
+     }

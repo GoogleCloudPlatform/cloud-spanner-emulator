@@ -393,10 +393,11 @@ TEST_F(SpangresSystemCatalogTest, ArrayAtFunction) {
       zetasql::InputArgumentType(zetasql::types::TimestampArrayType()),
       zetasql::InputArgumentType(gsql_int64)};
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(FunctionAndSignature function_and_signature,
-                       catalog->GetFunctionAndSignature(
-                           PostgresExprIdentifier::Expr(T_SubscriptingRef),
-                           input_types, language_options));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      FunctionAndSignature function_and_signature,
+      catalog->GetFunctionAndSignature(PostgresExprIdentifier::SubscriptingRef(
+                                           /*is_array_slice=*/false),
+                                       input_types, language_options));
 
   ASSERT_NE(function_and_signature.function(), nullptr);
   EXPECT_EQ(function_and_signature.function()->Name(),

@@ -507,7 +507,6 @@ void CloudValueToJSONValue(const zetasql::Value value, JSONValueRef& ref) {
       break;
     }
     case zetasql::TYPE_BYTES: {
-      std::string bytes_value = value.bytes_value();
       ref.SetString(google::cloud::spanner_internal::BytesToBase64(
           google::cloud::spanner::Bytes(value.bytes_value())));
       break;
@@ -599,22 +598,22 @@ absl::StatusOr<WriteOp> ConvertDataChangeRecordToWriteOp(
   std::vector<zetasql::Value> mods_keys;
   std::vector<zetasql::Value> mods_new_values;
   std::vector<zetasql::Value> mods_old_values;
+  zetasql::JSONValue keys_json;
+  JSONValueRef ref = keys_json.GetRef();
   for (const Mod& mod : record.mods) {
-    JSON keys_json;
     for (int i = 0; i < mod.key_columns.size(); ++i) {
+      JSONValueRef key_col_ref =
+          ref.GetMember(mod.key_columns[i]->column()->Name());
       // In theory, key values can't be null but double check to avoid any
       // potential crash
       if (mod.keys[i].is_null()) {
-        keys_json[mod.key_columns[i]->column()->Name()] = JSON::value_t::null;
+        key_col_ref.SetNull();
       } else {
-        keys_json[mod.key_columns[i]->column()->Name()] =
-            mod.keys[i].type_kind() == zetasql::TYPE_STRING
-                ? mod.keys[i].string_value()
-                : mod.keys[i].GetSQLLiteral();
+        CloudValueToJSONValue(mod.keys[i], key_col_ref);
       }
     }
+    mods_keys.push_back(zetasql::Value::String(ref.ToString()));
 
-    mods_keys.push_back(zetasql::Value::String(keys_json.dump()));
     if (mod.new_values.empty()) {
       mods_new_values.push_back(zetasql::Value::String(kMinimumValidJson));
     } else {

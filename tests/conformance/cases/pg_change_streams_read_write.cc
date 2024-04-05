@@ -101,6 +101,18 @@ class PGChangeStreamTest : public DatabaseTest {
   absl::Status SetUpDatabase() override {
     ZETASQL_RETURN_IF_ERROR(SetSchema({
         R"(
+          CREATE TABLE scalar_types_all_keys_table (
+          int_val bigint NOT NULL,
+          bool_val bool NOT NULL,
+          bytes_val bytea NOT NULL,
+          date_val date NOT NULL,
+          float_val float8 NOT NULL,
+          string_val varchar NOT NULL,
+          timestamp_val timestamptz NOT NULL,
+          PRIMARY KEY (int_val,bool_val,bytes_val,date_val,float_val,string_val,timestamp_val)
+          );
+        )",
+        R"(
           CREATE TABLE scalar_types_table (
           int_val bigint NOT NULL PRIMARY KEY,
           bool_val bool,
@@ -449,6 +461,73 @@ TEST_F(PGChangeStreamTest, SingleDeleteVerifyDataChangeRecordContent) {
       1);
   EXPECT_EQ(data_change_records[0].transaction_tag.string_value(), "");
   EXPECT_FALSE(data_change_records[0].is_system_transaction.bool_value());
+}
+
+TEST_F(PGChangeStreamTest, DiffDataTypesInKey) {
+  auto mutation_builder =
+      InsertMutationBuilder("scalar_types_all_keys_table",
+                            {"int_val", "bool_val", "bytes_val", "date_val",
+                             "float_val", "string_val", "timestamp_val"});
+  mutation_builder.AddRow(
+      ValueRow{1, true,
+               cloud::spanner::Bytes(
+                   cloud::spanner_internal::BytesFromBase64("blue").value()),
+               "2014-09-27", (float)1.1, "test_str",
+               cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value()});
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result, Commit({mutation_builder.Build()}));
+  absl::Time commit_ts = GetCommitTimestampOrDie(commit_result);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto data_change_records,
+                       GetDataRecordsFromStartToNow(commit_ts));
+  ASSERT_EQ(data_change_records.size(), 1);
+  EXPECT_EQ(data_change_records[0].commit_timestamp.string_value(),
+            test::EncodeTimestampString(commit_ts, /*is_pg=*/true));
+  EXPECT_EQ(data_change_records[0].record_sequence.string_value(), "00000000");
+  ASSERT_TRUE(data_change_records[0]
+                  .is_last_record_in_transaction_in_partition.bool_value());
+  EXPECT_EQ(data_change_records[0].table_name.string_value(),
+            "scalar_types_all_keys_table");
+  const std::string expected_col_types =
+      R"json([
+      {"is_primary_key":true,"name":"int_val","ordinal_position":1,"type":{"code":"INT64"}},
+      {"is_primary_key":true,"name":"bool_val","ordinal_position":2,"type":{"code":"BOOL"}},
+      {"is_primary_key":true,"name":"bytes_val","ordinal_position":3,"type":{"code":"BYTES"}},
+      {"is_primary_key":true,"name":"date_val","ordinal_position":4,"type":{"code":"DATE"}},
+      {"is_primary_key":true,"name":"float_val","ordinal_position":5,"type":{"code":"FLOAT64"}},
+      {"is_primary_key":true,"name":"string_val","ordinal_position":6,"type":{"code":"STRING"}},
+      {"is_primary_key":true,"name":"timestamp_val","ordinal_position":7,"type":{"code":"TIMESTAMP"}}
+      ])json";
+  EXPECT_THAT(data_change_records[0].column_types,
+              JsonContentEquals(expected_col_types));
+
+  const std::string expected_mods =
+      R"json([
+      {
+      "new_values":{},
+      "keys":{
+      "int_val":"1",
+      "bool_val":true,
+      "bytes_val":"blue",
+      "date_val":"2014-09-27",
+      "float_val":1.1000000238418579,
+      "string_val":"test_str",
+      "timestamp_val":"1970-01-01T00:00:00Z"
+      },
+      "old_values":{}}
+      ])json";
+
+  EXPECT_THAT(data_change_records[0].mods, JsonContentEquals(expected_mods));
+  EXPECT_EQ(data_change_records[0].mod_type.string_value(), "INSERT");
+  EXPECT_EQ(data_change_records[0].value_capture_type.string_value(),
+            "NEW_VALUES");
+  EXPECT_EQ(
+      data_change_records[0].number_of_records_in_transaction.number_value(),
+      1);
+  EXPECT_EQ(
+      data_change_records[0].number_of_partitions_in_transaction.number_value(),
+      1);
+  EXPECT_EQ(data_change_records[0].transaction_tag.string_value(), "");
+  ASSERT_FALSE(data_change_records[0].is_system_transaction.bool_value());
 }
 
 }  // namespace
