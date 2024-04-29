@@ -94,7 +94,8 @@ bool IsSupportedKeyColumnType(const zetasql::Type* type) {
 }
 
 std::string ToString(const zetasql::Type* type) {
-  return type->ShortTypeName(zetasql::PRODUCT_EXTERNAL);
+  return type->ShortTypeName(zetasql::PRODUCT_EXTERNAL,
+                             /*use_external_float32=*/true);
 }
 
 const zetasql::Type* BaseType(const zetasql::Type* type) {

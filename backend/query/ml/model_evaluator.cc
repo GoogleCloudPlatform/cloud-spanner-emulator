@@ -83,7 +83,8 @@ absl::StatusOr<uint64_t> Fingerprint(const zetasql::Value& value) {
     default:
       return absl::UnimplementedError(
           absl::StrCat("ML.PREDICT function does not support inputs of type: ",
-                       value.type()->TypeName(zetasql::PRODUCT_EXTERNAL)));
+                       value.type()->TypeName(zetasql::PRODUCT_EXTERNAL,
+                                              /*use_external_float32=*/true)));
   }
 }
 
@@ -150,7 +151,8 @@ absl::StatusOr<zetasql::Value> ToValue(uint64_t fingerprint,
     default:
       return absl::UnimplementedError(
           absl::StrCat("ML.PREDICT function does not support outputs of type: ",
-                       type->TypeName(zetasql::PRODUCT_EXTERNAL)));
+                       type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                                      /*use_external_float32=*/true)));
   }
 }
 

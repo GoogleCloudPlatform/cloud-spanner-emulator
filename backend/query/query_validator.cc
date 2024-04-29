@@ -28,10 +28,12 @@
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/query/feature_filter/gsql_supported_functions.h"
 #include "backend/query/feature_filter/sql_feature_filter.h"
 #include "backend/query/query_context.h"
 #include "backend/query/query_engine_options.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/sequence.h"
 #include "common/constants.h"
@@ -542,6 +544,72 @@ absl::Status QueryValidator::VisitResolvedSampleScan(
 
   if (absl::EqualsIgnoreCase(node->method(), "system")) {
     return error::UnsupportedTablesampleSystem();
+  }
+  return DefaultVisit(node);
+}
+
+absl::Status QueryValidator::CheckPendingCommitTimestampReads(
+    const zetasql::ResolvedTableScan* table_scan,
+    absl::Span<const zetasql::ResolvedStatement::ObjectAccess> access_list) {
+  ZETASQL_RET_CHECK(access_list.empty() ||
+            access_list.size() == table_scan->column_index_list_size());
+  // A commit timestamp tracker is not always present (e.g. read-only txns).
+  if (context_.commit_timestamp_tracker == nullptr) {
+    return absl::OkStatus();
+  }
+
+  std::string table_name = table_scan->table()->Name();
+  const Table* table = schema()->FindTable(table_name);
+  ZETASQL_RET_CHECK(table != nullptr);
+  std::vector<const Column*> columns;
+  for (int i = 0; i < table_scan->column_index_list_size(); ++i) {
+    // Ignore scan columns which are not read
+    if (i < access_list.size() &&
+        !(access_list[i] & zetasql::ResolvedStatement::READ)) {
+      continue;
+    }
+    int idx = table_scan->column_index_list(i);
+    std::string column_name = table_scan->table()->GetColumn(idx)->Name();
+    const Column* column = table->FindColumn(column_name);
+    ZETASQL_RET_CHECK(column != nullptr);
+    columns.push_back(column);
+  }
+  return context_.commit_timestamp_tracker->CheckRead(table, columns);
+}
+
+absl::Status QueryValidator::VisitResolvedInsertStmt(
+    const zetasql::ResolvedInsertStmt* node) {
+  if (node->table_scan() != nullptr) {
+    dml_table_scans_.insert(node->table_scan());
+  }
+  return DefaultVisit(node);
+}
+
+absl::Status QueryValidator::VisitResolvedUpdateStmt(
+    const zetasql::ResolvedUpdateStmt* node) {
+  if (node->table_scan() != nullptr) {
+    ZETASQL_RETURN_IF_ERROR(CheckPendingCommitTimestampReads(
+        node->table_scan(), node->column_access_list()));
+    dml_table_scans_.insert(node->table_scan());
+  }
+  return DefaultVisit(node);
+}
+
+absl::Status QueryValidator::VisitResolvedDeleteStmt(
+    const zetasql::ResolvedDeleteStmt* node) {
+  if (node->table_scan() != nullptr) {
+    ZETASQL_RETURN_IF_ERROR(CheckPendingCommitTimestampReads(
+        node->table_scan(), node->column_access_list()));
+    dml_table_scans_.insert(node->table_scan());
+  }
+  return DefaultVisit(node);
+}
+
+absl::Status QueryValidator::VisitResolvedTableScan(
+    const zetasql::ResolvedTableScan* node) {
+  // Skip table scans owned by DML statements. These have already been handled.
+  if (!dml_table_scans_.contains(node)) {
+    ZETASQL_RETURN_IF_ERROR(CheckPendingCommitTimestampReads(node));
   }
 
   return DefaultVisit(node);

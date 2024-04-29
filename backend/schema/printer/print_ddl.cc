@@ -79,7 +79,8 @@ std::string PrintColumnNameList(absl::Span<const Column* const> columns) {
 // DDL type string.
 std::string TypeToString(const zetasql::Type* type,
                          std::optional<int64_t> max_length) {
-  std::string type_name = type->TypeName(zetasql::PRODUCT_EXTERNAL);
+  std::string type_name = type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                                         /*use_external_float32=*/true);
   if (type->IsString() || type->IsBytes()) {
     absl::StrAppend(
         &type_name, "(",

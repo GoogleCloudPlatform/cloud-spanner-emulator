@@ -126,13 +126,12 @@ inline constexpr char kPGNumericDivTruncFunctionName[] = "pg.numeric_div_trunc";
 inline constexpr char kPGNumericMultiplyFunctionName[] = "pg.numeric_multiply";
 inline constexpr char kPGNumericSubtractFunctionName[] = "pg.numeric_subtract";
 inline constexpr char kPGNumericUminusFunctionName[] = "pg.numeric_uminus";
-inline constexpr char kPGCastToNumericFunctionName[] =
-    "pg.cast_to_numeric";
-inline constexpr char kPGNumericCastToDoubleFunctionName[] =
+inline constexpr char kPGCastToNumericFunctionName[] = "pg.cast_to_numeric";
+inline constexpr char kPGCastNumericToDoubleFunctionName[] =
     "pg.cast_to_double";
-inline constexpr char kPGNumericCastToStringFunctionName[] =
+inline constexpr char kPGCastNumericToStringFunctionName[] =
     "pg.cast_to_string";
-inline constexpr char kPGNumericCastToInt64FunctionName[] = "pg.cast_to_int64";
+inline constexpr char kPGCastNumericToInt64FunctionName[] = "pg.cast_to_int64";
 
 // PG NUMERIC operators.
 inline constexpr char kPGNumericEqualsFunctionName[] = "pg.numeric_eq";
@@ -142,6 +141,18 @@ inline constexpr char kPGNumericLessThanEqualsFunctionName[] = "pg.numeric_le";
 inline constexpr char kPGNumericGreaterThanFunctionName[] = "pg.numeric_gt";
 inline constexpr char kPGNumericGreaterThanEqualsFunctionName[] =
     "pg.numeric_ge";
+
+// PG OID functions.
+inline constexpr char kPGCastToOidFunctionName[] = "pg.cast_to_oid";
+inline constexpr char kPGCastFromOidFunctionName[] = "pg.cast_from_oid";
+
+// PG OID operators.
+inline constexpr char kPGOidEqualsFunctionName[] = "pg.oideq";
+inline constexpr char kPGOidNotEqualsFunctionName[] = "pg.oidne";
+inline constexpr char kPGOidLessThanFunctionName[] = "pg.oidlt";
+inline constexpr char kPGOidLessThanEqualsFunctionName[] = "pg.oidle";
+inline constexpr char kPGOidGreaterThanFunctionName[] = "pg.oidgt";
+inline constexpr char kPGOidGreaterThanEqualsFunctionName[] = "pg.oidge";
 
 using SpannerPGFunctions = std::vector<std::unique_ptr<zetasql::Function>>;
 using SpannerPGTVFs =
@@ -154,13 +165,13 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name);
 SpannerPGTVFs GetSpannerPGTVFs(const std::string& catalog_name);
 
 // Evaluators exported for supporting type coercion.
-absl::StatusOr<zetasql::Value> EvalNumericCastToInt64(
+absl::StatusOr<zetasql::Value> EvalCastNumericToInt64(
     absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalNumericCastToDouble(
+absl::StatusOr<zetasql::Value> EvalCastNumericToDouble(
     absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalNumericCastToString(
+absl::StatusOr<zetasql::Value> EvalCastNumericToString(
     absl::Span<const zetasql::Value> args);
 
 absl::StatusOr<zetasql::Value> EvalCastToNumeric(
@@ -169,6 +180,14 @@ absl::StatusOr<zetasql::Value> EvalCastToNumeric(
 absl::StatusOr<zetasql::Value> EvalToJsonb(
     absl::Span<const zetasql::Value> args);
 
+absl::StatusOr<zetasql::Value> EvalCastToOid(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalCastOidToInt64(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalCastOidToString(
+    absl::Span<const zetasql::Value> args);
 }  // namespace postgres_translator
 
 #endif  // CATALOG_EMULATOR_FUNCTIONS_H_

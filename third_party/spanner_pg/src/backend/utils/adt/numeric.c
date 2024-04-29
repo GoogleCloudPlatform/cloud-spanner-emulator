@@ -7649,7 +7649,25 @@ int64_to_numericvar(int64 val, NumericVar *var)
 	if (val < 0)
 	{
 		var->sign = NUMERIC_NEG;
-		uval = -val;
+		/* SPANGRES BEGIN*/
+		/* Negating PG_INT64_MIN results in an intermediate int64 value
+		 * that's an overflow since -PG_INT64_MIN = PG_INT64_MAX + 1. To
+		 * avoid it, we do the following computation based on how
+		 * PG_INT64_MIN/MAX are defined in src/include/c.h:
+		 *
+		 * uval = -1 * PG_INT64_MIN
+		 * uval = -1 * (-INT64CONST(0x7FFFFFFFFFFFFFFF) - 1)
+		 * uval = INT64CONST(0x7FFFFFFFFFFFFFFF) + 1
+		 * uval = PG_INT64_MAX + 1
+		 *
+		 * Note that we're explicitly avoiding doing this calculation
+		 * with bit manipulation to not make assumptions about the
+		 * platform it's running in. */
+		if (unlikely(val == PG_INT64_MIN))
+			uval = (uint64)PG_INT64_MAX + 1;
+		else
+		/* SPANGRES END*/
+			uval = -val;
 	}
 	else
 	{

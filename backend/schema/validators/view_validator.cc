@@ -113,8 +113,10 @@ absl::Status ValidateViewSignatureChange(absl::string_view modify_action,
     if (original_columns[i].type != new_columns[i].type) {
       return error::DependentViewColumnRetype(
           modify_action, dependency_name, dependent_view->Name(),
-          original_columns[i].type->TypeName(zetasql::PRODUCT_EXTERNAL),
-          new_columns[i].type->TypeName(zetasql::PRODUCT_EXTERNAL));
+          original_columns[i].type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                                             /*use_external_float32=*/true),
+          new_columns[i].type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                                        /*use_external_float32=*/true));
     }
   }
   return absl::OkStatus();

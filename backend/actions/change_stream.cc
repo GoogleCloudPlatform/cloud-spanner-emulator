@@ -457,7 +457,8 @@ std::string GsqlTypeToSpannerType(const zetasql::Type* type) {
                           element_annotation_code
                     : type_json["type_annotation"] = element_annotation_code;
   } else {
-    element_type_code = element_type->TypeName(zetasql::PRODUCT_EXTERNAL);
+    element_type_code = element_type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                                               /*use_external_float32=*/true);
   }
   type->IsArray() ? type_json["array_element_type"]["code"] = element_type_code
                   : type_json["code"] = element_type_code;

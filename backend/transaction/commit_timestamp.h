@@ -18,7 +18,12 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_COMMIT_TIMESTAMP_H_
 
 #include "zetasql/public/type.h"
+#include "absl/base/thread_annotations.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/synchronization/mutex.h"
+#include "backend/actions/ops.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
 #include "backend/schema/catalog/column.h"
@@ -65,6 +70,44 @@ zetasql::Value MaybeSetCommitTimestamp(const Column* column,
 // commit timestamp for the given key column values.
 Key MaybeSetCommitTimestamp(absl::Span<const KeyColumn* const> primary_key,
                             Key key, absl::Time commit_timestamp);
+
+class CommitTimestampTracker {
+ public:
+  // Returns an error if the given table and/or columns can not be read due to
+  // pending commit timestamps therein. Returns OK otherwise.
+  absl::Status CheckRead(const Table* table,
+                         absl::Span<const Column* const> columns) const
+      ABSL_LOCKS_EXCLUDED(mu_);
+
+  // Informs the commit timestamp tracker of recent write operations which may
+  // include writing pending commit timestamps. If such writes are found then
+  // subsequent reads may be restricted as defined by `CheckRead`. This
+  // operation is cumulative with all previously calls to `Track`.
+  void Track(absl::Span<const WriteOp> write_ops) ABSL_LOCKS_EXCLUDED(mu_);
+
+ private:
+  // Mark a given column non-readable if one or more values being written to it
+  // in the mutation contains a pending commit timestamp. The columns and values
+  // must be 1:1.
+  void TrackColumns(absl::Span<const Column* const> columns,
+                    const ValueList& values) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Mark table and it's associated indices as non-readable if key in the
+  // mutation contains a pending commit timestamp.
+  void TrackTable(const Table* table, const Key& key)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Set of non-key columns which have mutations with pending commit timestamps
+  // and are thus marked as non-readable in read-your-writes transactions.
+  absl::flat_hash_set<const Column*> commit_ts_columns_ ABSL_GUARDED_BY(mu_);
+
+  // Set of tables which have mutations with pending commit timestamps and are
+  // thus marked as non-readable in read-your-writes transactions. This also
+  // includes backing tables for indices of all such tables.
+  absl::flat_hash_set<const Table*> commit_ts_tables_ ABSL_GUARDED_BY(mu_);
+
+  mutable absl::Mutex mu_;
+};
 
 }  // namespace backend
 }  // namespace emulator

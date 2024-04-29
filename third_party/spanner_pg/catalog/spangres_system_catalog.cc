@@ -44,6 +44,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/builtin_rewrite_functions.h"
 #include "third_party/spanner_pg/catalog/builtin_spanner_functions.h"
@@ -54,6 +55,7 @@
 #include "third_party/spanner_pg/datatypes/extended/conversion_finder.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/interface/emulator_builtin_function_catalog.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include <map>
@@ -467,6 +469,11 @@ absl::Status SpangresSystemCatalog::AddTypes(
         AddType(spangres_types::PgJsonbMapping(), language_options));
     ZETASQL_RETURN_IF_ERROR(
         AddType(spangres_types::PgJsonbArrayMapping(), language_options));
+
+    ZETASQL_RETURN_IF_ERROR(
+        AddType(spangres_types::PgOidMapping(), language_options));
+    ZETASQL_RETURN_IF_ERROR(
+        AddType(spangres_types::PgOidArrayMapping(), language_options));
 
   return absl::OkStatus();
 }

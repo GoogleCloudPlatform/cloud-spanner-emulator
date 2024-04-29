@@ -1131,6 +1131,33 @@ TEST_P(QueryEngineTest, CannotInsertDuplicateValuesForPrimaryKey) {
               StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
+TEST_P(QueryEngineTest, CanInsertZeroRowsWithSelectStatement) {
+  std::string select = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+                           ? "SELECT 2::bigint, 'another_two'::varchar\n"
+                             "FROM (SELECT 1::bigint) t\n"
+                             "WHERE NOT EXISTS (\n"
+                             "  SELECT int64_col\n"
+                             "  FROM test_table\n"
+                             "  WHERE int64_col=2::bigint\n"
+                             ")"
+                           : "SELECT 2, 'another_two'\n"
+                             "FROM UNNEST([1])\n"
+                             "WHERE NOT EXISTS (\n"
+                             "  SELECT int64_col\n"
+                             "  FROM test_table\n"
+                             "  WHERE int64_col=2\n"
+                             ")";
+
+  MockRowWriter writer;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) " + select},
+          QueryContext{schema(), reader(), &writer}));
+  EXPECT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 0);
+}
+
 TEST_P(QueryEngineTest, ConnotUpdatePrimaryKey) {
   MockRowWriter writer;
   EXPECT_THAT(query_engine().ExecuteSql(

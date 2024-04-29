@@ -2174,7 +2174,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterChangeStream(
                                       kChangeStreamExcludeDeleteOptionName ||
                  option_string ==
                      internal::PostgreSQLConstants::
-                         kChangeStreamExcludeTtlDeletesOptionName) {
+                         kChangeStreamExcludeTtlDeletesOptionName ||
+                 option_string ==
+                     internal::PostgreSQLConstants::
+                         kChangeStreamAllowTxnExclusionOptionName) {
         google::spanner::emulator::backend::ddl::SetOption* option_out =
             out.mutable_set_options()->mutable_options()->Add();
         option_out->set_option_name(option_string);
@@ -2270,12 +2273,21 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamOptions(
                                         kChangeStreamExcludeDeleteOptionName ||
                def_elem->defname ==
                    internal::PostgreSQLConstants::
-                       kChangeStreamExcludeTtlDeletesOptionName) {
+                       kChangeStreamExcludeTtlDeletesOptionName ||
+               def_elem->defname ==
+                   internal::PostgreSQLConstants::
+                       kChangeStreamAllowTxnExclusionOptionName) {
       if (def_elem->defname == internal::PostgreSQLConstants::
                                    kChangeStreamExcludeTtlDeletesOptionName &&
           !options.enable_change_streams_ttl_deletes_filter_option) {
         return UnsupportedTranslationError(
             "Option exclude_ttl_deletes is not supported yet.");
+      } else if (def_elem->defname ==
+                     internal::PostgreSQLConstants::
+                         kChangeStreamAllowTxnExclusionOptionName &&
+                 !options.enable_change_streams_allow_txn_exclusion_option) {
+        return UnsupportedTranslationError(
+            "Option allow_txn_exclusion is not supported yet.");
       } else if (!options.enable_change_streams_mod_type_filter_options) {
         return UnsupportedTranslationError(
             "Options exclude_insert, exclude_update, and exclude_delete are "

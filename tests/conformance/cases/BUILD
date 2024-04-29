@@ -113,7 +113,7 @@ cc_library(
         "@com_google_googletest//:gtest",
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_protobuf//:protobuf",
-        "@com_google_zetasql//zetasql/base:no_destructor",  # buildcleaner: keep
+        "@com_google_zetasql//zetasql/base:no_destructor",
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_googlesource_code_re2//:re2",
         "@nlohmann_json//:json",

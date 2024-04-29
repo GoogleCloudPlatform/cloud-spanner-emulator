@@ -40,6 +40,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"
 
@@ -144,6 +145,26 @@ std::vector<ConversionFoundTestCase> GetConversionFoundTestCases() {
                              ConversionSourceExpressionKind::kOther),
        CreatePgJsonbValueWithMemoryContext("\"abc\"").value(),
        zetasql::Value::String("\"abc\"")},
+      {GetPgOidType(), StringType(),
+       FindConversionOptions(/*is_explicit=*/true,
+                             ConversionSourceExpressionKind::kOther),
+       *CreatePgOidValue(42),
+       zetasql::Value::String("42")},
+      {StringType(), GetPgOidType(),
+       FindConversionOptions(/*is_explicit=*/true,
+                             ConversionSourceExpressionKind::kOther),
+       zetasql::Value::String("42"),
+       *CreatePgOidValue(42)},
+      {GetPgOidType(), Int64Type(),
+       FindConversionOptions(/*is_explicit=*/true,
+                             ConversionSourceExpressionKind::kOther),
+       *CreatePgOidValue(42),
+       zetasql::Value::Int64(42)},
+      {Int64Type(), GetPgOidType(),
+       FindConversionOptions(/*is_explicit=*/true,
+                             ConversionSourceExpressionKind::kOther),
+       zetasql::Value::Int64(42),
+       *CreatePgOidValue(42)},
   };
 }
 
@@ -208,6 +229,12 @@ std::vector<ConversionNotFoundTestCase> GetConversionNotFoundTestCases() {
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther)},
       {GetPgJsonbType(), BytesType(),
+       FindConversionOptions(/*is_explicit=*/true,
+                             ConversionSourceExpressionKind::kOther)},
+      {GetPgOidType(), DoubleType(),
+       FindConversionOptions(/*is_explicit=*/true,
+                             ConversionSourceExpressionKind::kOther)},
+      {GetPgNumericType(), GetPgOidType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther)},
   };

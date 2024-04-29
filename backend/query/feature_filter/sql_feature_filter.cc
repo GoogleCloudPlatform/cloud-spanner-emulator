@@ -192,7 +192,7 @@ absl::Status FilterResolvedFunction(
       !function_call.argument_list(0)->type()->IsJsonType()) {
     return error::ToJsonStringNonJsonTypeNotSupported(
         function_call.argument_list(0)->type()->TypeName(
-            zetasql::PRODUCT_EXTERNAL));
+            zetasql::PRODUCT_EXTERNAL, /*use_external_float32=*/true));
   }
 
   return absl::OkStatus();

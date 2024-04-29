@@ -69,18 +69,21 @@ absl::Status ValidateModelColumnTypeSupported(const Model* model,
       CaseInsensitiveStringSet unique_field_names;
       for (const zetasql::StructField& field : fields) {
         if (field.name.empty()) {
-          return error::MissingStructFieldName(
-              type->TypeName(zetasql::PRODUCT_EXTERNAL));
+          return error::MissingStructFieldName(type->TypeName(
+              zetasql::PRODUCT_EXTERNAL, /*use_external_float32=*/true));
         }
 
         if (auto i = unique_field_names.insert(field.name); !i.second) {
           if (field.name != *i.first) {
             return error::CaseInsensitiveDuplicateStructName(
-                type->TypeName(zetasql::PRODUCT_EXTERNAL), field.name,
-                *i.first);
+                type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                               /*use_external_float32=*/true),
+                field.name, *i.first);
           }
           return error::DuplicateStructName(
-              type->TypeName(zetasql::PRODUCT_EXTERNAL), field.name);
+              type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                             /*use_external_float32=*/true),
+              field.name);
         }
 
         ZETASQL_RETURN_IF_ERROR(
@@ -95,7 +98,8 @@ absl::Status ValidateModelColumnTypeSupported(const Model* model,
 
   return error::ModelColumnTypeUnsupported(
       model->Name(), column.name,
-      column.type->TypeName(zetasql::PRODUCT_EXTERNAL));
+      column.type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                            /*use_external_float32=*/true));
 }
 
 absl::Status ValidateModelColumn(const Model* model,

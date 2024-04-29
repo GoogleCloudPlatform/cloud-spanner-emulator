@@ -200,8 +200,8 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
   for (const auto& tablepair : tables_) {
     const QueryableTable* table = tablepair.second.get();
     for (int i = 0; i < table->NumColumns(); ++i) {
-      std::string type_name =
-          table->GetColumn(i)->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL);
+      std::string type_name = table->GetColumn(i)->GetType()->TypeName(
+          zetasql::PRODUCT_EXTERNAL, /*use_external_float32=*/true);
       types_[type_name] = table->GetColumn(i)->GetType();
     }
   }

@@ -215,6 +215,16 @@ absl::StatusOr<Oid> EngineSystemCatalog::GetOidForTVF(
                       tvf->FullName()));
 }
 
+const zetasql::Procedure* EngineSystemCatalog::GetProcedure(
+    Oid proc_oid) const {
+  auto it = proc_oid_to_procedure_.find(proc_oid);
+  if (it != proc_oid_to_procedure_.end()) {
+    return it->second;
+  } else {
+    return nullptr;
+  }
+}
+
 bool EngineSystemCatalog::HasCastOverrideFunction(
     const zetasql::Type* source_type, const zetasql::Type* target_type) {
   std::pair<const zetasql::Type*, const zetasql::Type*> cast_pair(
@@ -280,37 +290,37 @@ EngineSystemCatalog::GetFunctionAndSignature(
       if (SignatureMatches(input_argument_types, *signature, &result_signature,
                            language_options)) {
          if (!signature->mapped_function()) {
-          if (signature->options().rewrite_options() &&
-            !signature->options().rewrite_options()->sql().empty()) {
-            return FunctionAndSignature(function, *result_signature);
-          }
-          // If there isn't a mapped function and the signature has not defined
-          // a rewrite in the engine system catalog, the signature is
-          // unsupported and requires an explicit cast on the output.
-          // TODO : support explicit casting on function output.
-          return absl::UnimplementedError(absl::StrCat(
-              "Postgres Function requires an explicit cast: ", "Name: ",
-              proc_name, ", ", "Oid: ", proc_oid, ", ", "Arguments: ", "(",
-              postgres_input_args_string, ")"));
-        }
+           if (signature->options().rewrite_options() &&
+               !signature->options().rewrite_options()->sql().empty()) {
+             return FunctionAndSignature(function, *result_signature);
+           }
+           // If there isn't a mapped function and the signature has not defined
+           // a rewrite in the engine system catalog, the signature is
+           // unsupported and requires an explicit cast on the output.
+           // TODO : support explicit casting on function output.
+           return absl::UnimplementedError(absl::StrCat(
+               "Postgres Function requires an explicit cast: ", "Name: ",
+               proc_name, ", ", "Oid: ", proc_oid, ", ", "Arguments: ", "(",
+               postgres_input_args_string, ")"));
+         }
 
-        // Each PostgresExtendedFunctionSignature has a copy of the mapped
-        // function with exactly one mapped signature since the relationship
-        // from PostgresExtendedFunctionSignature : mapped signature is N:1. Get
-        // the first (only) signature out of the mapped function.
-        const zetasql::FunctionSignature* mapped_signature =
-            signature->mapped_function()->GetSignature(0);
-        // Run the function signature matcher again to be sure that the mapped
-        // builtin signature matches the input argument types.
-        if (SignatureMatches(input_argument_types, *mapped_signature,
-                             &result_signature, language_options)) {
-          // We return the result signature instead of the mapped signature
-          // because the the Function Signature Matcher fills in the actual
-          // types if the original signature had ARG_TYPE_ANY_1 input or output
-          // types.
-          return FunctionAndSignature(signature->mapped_function(),
-                                      *result_signature);
-        }
+         // Each PostgresExtendedFunctionSignature has a copy of the mapped
+         // function with exactly one mapped signature since the relationship
+         // from PostgresExtendedFunctionSignature : mapped signature is N:1.
+         // Get the first (only) signature out of the mapped function.
+         const zetasql::FunctionSignature* mapped_signature =
+             signature->mapped_function()->GetSignature(0);
+         // Run the function signature matcher again to be sure that the mapped
+         // builtin signature matches the input argument types.
+         if (SignatureMatches(input_argument_types, *mapped_signature,
+                              &result_signature, language_options)) {
+           // We return the result signature instead of the mapped signature
+           // because the the Function Signature Matcher fills in the actual
+           // types if the original signature had ARG_TYPE_ANY_1 input or output
+           // types.
+           return FunctionAndSignature(signature->mapped_function(),
+                                       *result_signature);
+         }
       }
     }
   }
@@ -363,6 +373,55 @@ EngineSystemCatalog::GetFunctionAndSignature(
       absl::StrCat("Unsupported Postgres expression. Expression type: ",
                    NodeTagToNodeString(expr_id.node_tag()), ", Arguments: (",
                    postgres_input_args_string, ")"));
+}
+
+absl::StatusOr<ProcedureAndSignature>
+EngineSystemCatalog::GetProcedureAndSignature(
+    Oid proc_oid,
+    const std::vector<zetasql::InputArgumentType>& input_argument_types,
+    const zetasql::LanguageOptions& language_options) {
+  ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_proc* proc,
+                   PgBootstrapCatalog::Default()->GetProc(proc_oid));
+  std::string full_proc_name = NameStr(proc->proname);
+  if (proc->pronamespace != PG_CATALOG_NAMESPACE) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        const char* namespace_name,
+        PgBootstrapCatalog::Default()->GetNamespaceName(proc->pronamespace));
+    full_proc_name = absl::StrCat(namespace_name, ".", full_proc_name);
+  }
+
+  // This builds a string representation of the postgres input types
+  // to be used in error messages.
+  std::vector<absl::string_view> postgres_input_type_names;
+  for (const zetasql::InputArgumentType& input_arg : input_argument_types) {
+    const PostgresTypeMapping* pg_type =
+        GetTypeFromReverseMapping(input_arg.type());
+
+    // If we cannot reverse the input type, a null pointer is returned
+    // and we skip adding input types in the error message.
+    if (pg_type == nullptr) {
+      postgres_input_type_names.clear();
+      break;
+    } else {
+      ZETASQL_ASSIGN_OR_RETURN(const char* pg_type_name,
+                       pg_type->PostgresExternalTypeName());
+      postgres_input_type_names.push_back(pg_type_name);
+    }
+  }
+
+  std::string postgres_input_args_string = absl::StrJoin(
+      postgres_input_type_names.begin(), postgres_input_type_names.end(), ", ");
+
+  const zetasql::Procedure* procedure = GetProcedure(proc_oid);
+  if (procedure != nullptr) {
+    std::unique_ptr<zetasql::FunctionSignature> result_signature;
+    if (SignatureMatches(input_argument_types, procedure->signature(),
+                         &result_signature, language_options)) {
+      return ProcedureAndSignature(procedure, *result_signature);
+    }
+  }
+  return PostgresExtendedFunction::UnsupportedProcedureError(
+      full_proc_name, postgres_input_args_string);
 }
 
 absl::StatusOr<Oid> EngineSystemCatalog::GetPgProcOidFromReverseMapping(
@@ -472,6 +531,14 @@ absl::Status EngineSystemCatalog::GetTableValuedFunctions(
     const {
   for (const auto& [tvf_oid, tvf] : proc_oid_to_tvf_) {
     output->insert({tvf_oid, tvf});
+  }
+  return absl::OkStatus();
+}
+
+absl::Status EngineSystemCatalog::GetProcedures(
+    absl::flat_hash_map<Oid, const zetasql::Procedure*>* output) const {
+  for (const auto& [proc_oid, procedure] : proc_oid_to_procedure_) {
+    output->insert({proc_oid, procedure});
   }
   return absl::OkStatus();
 }
@@ -711,11 +778,27 @@ void EngineSystemCatalog::AddFunctionToReverseMappings(
 
 absl::Status EngineSystemCatalog::AddTVF(Oid proc_oid,
                                          const std::string& engine_tvf_name) {
+  ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_proc* pg_proc,
+                   PgBootstrapCatalog::Default()->GetProc(proc_oid));
+  ZETASQL_RET_CHECK_EQ(pg_proc->proretset, true);
   ZETASQL_ASSIGN_OR_RETURN(
       const zetasql::TableValuedFunction* tvf,
       builtin_function_catalog_->GetTableValuedFunction(engine_tvf_name));
   proc_oid_to_tvf_[proc_oid] = tvf;
   tvf_to_proc_oid_[tvf] = proc_oid;
+  return absl::OkStatus();
+}
+
+absl::Status EngineSystemCatalog::AddProcedure(
+    Oid proc_oid, const std::string& engine_procedure_name) {
+  ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_proc* pg_proc,
+                   PgBootstrapCatalog::Default()->GetProc(proc_oid));
+  ZETASQL_RET_CHECK_EQ(pg_proc->prokind, 'p');
+  ZETASQL_RET_CHECK_EQ(pg_proc->prorettype, VOIDOID);
+  ZETASQL_ASSIGN_OR_RETURN(
+      const zetasql::Procedure* procedure,
+      builtin_function_catalog_->GetProcedure(engine_procedure_name));
+  proc_oid_to_procedure_[proc_oid] = procedure;
   return absl::OkStatus();
 }
 

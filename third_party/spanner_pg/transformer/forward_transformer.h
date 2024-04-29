@@ -67,6 +67,7 @@
 ABSL_DECLARE_FLAG(bool, spangres_include_invalid_statement_parse_locations);
 ABSL_DECLARE_FLAG(int64_t, spangres_expression_recursion_limit);
 ABSL_DECLARE_FLAG(int64_t, spangres_set_operation_recursion_limit);
+ABSL_DECLARE_FLAG(bool, spangres_use_emulator_ordinality_transformer);
 
 namespace postgres_translator {
 
@@ -182,8 +183,8 @@ class ForwardTransformer {
       const Query& query, bool is_top_level_query, const VarIndexScope* scope,
       absl::string_view alias, std::vector<NamedColumn>* output_name_list);
 
-  // Builds a `ResolvedArray` scan for UNNEST.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  // Builds a `ResolvedArrayScan` for UNNEST.
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedArrayScan>>
   BuildGsqlResolvedArrayScan(const RangeTblEntry& rte, Index rtindex,
                              const VarIndexScope* external_scope,
                              VarIndexScope* output_scope);
@@ -302,6 +303,14 @@ class ForwardTransformer {
                                        const Index rtindex,
                                        const VarIndexScope* external_scope,
                                        VarIndexScope* output_scope);
+
+  // This function converts a zero-based "offset" column to a one-based
+  // "ordinality" column by wrapping the ResolvedArrayScan in a ProjectScan that
+  // adds one to the offset column.
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedProjectScan>>
+  ConvertZeroBasedOffsetToOneBasedOrdinal(
+      std::unique_ptr<zetasql::ResolvedArrayScan> array_scan,
+      const Index& rtindex, VarIndexScope* output_scope);
 
   // Simplified version of the ZetaSQL analyzer function of the same name.
   // This version only supports scalar arguments, which eliminates the need for
@@ -579,6 +588,10 @@ class ForwardTransformer {
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedDeleteStmt>>
   BuildPartialGsqlResolvedDeleteStmt(const Query& query);
 
+  // CALL ======================================================================
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedCallStmt>>
+  BuildPartialGsqlResolvedCallStmt(const FuncExpr& func);
+
  private:
   // Builds a list of ZetaSQL ResolvedDMLValue from a PostgreSQL list of
   // Expr objects
@@ -802,6 +815,10 @@ class ForwardTransformer {
   absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
   BuildGsqlFunctionArgumentList(List* args,
                                 ExprTransformerInfo* expr_transformer_info);
+
+  std::vector<zetasql::InputArgumentType> GetInputArgumentTypes(
+      const std::vector<std::unique_ptr<zetasql::ResolvedExpr>>&
+          argument_list) const;
 
   // Transform a ScalarOpExpr into a built in function. Currently only supports
   // the IN  and NOT IN function. Postgres uses ScalarOpExpr for IN, NOT IN,

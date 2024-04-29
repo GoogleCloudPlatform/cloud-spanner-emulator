@@ -438,6 +438,28 @@ TEST_F(DdlTest, DisableChangeStreamTtlDeletesFilter) {
                   "Option exclude_ttl_deletes is not supported yet."));
 }
 
+TEST_F(DdlTest, DisableChangeStreamAllowTxnExclusion) {
+  const std::string input =
+      "CREATE CHANGE STREAM change_stream_txn_exclusion9 FOR table1 WITH ( "
+      "allow_txn_exclusion = true)";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements,
+          {.enable_change_streams = true,
+           .enable_change_streams_allow_txn_exclusion_option = false});
+  EXPECT_THAT(statements,
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kFailedPrecondition,
+                  "Option allow_txn_exclusion is not supported yet."));
+}
+
 TEST_F(DdlTest, CreateDatabaseForEmulator) {
   const std::string input = "CREATE DATABASE test_db";
 

@@ -40,6 +40,7 @@
 #include "backend/schema/catalog/versioned_catalog.h"
 #include "backend/storage/storage.h"
 #include "backend/transaction/actions.h"
+#include "backend/transaction/commit_timestamp.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/resolve.h"
 #include "backend/transaction/transaction_store.h"
@@ -117,6 +118,11 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
     return retry_state_;
   }
 
+  // Returns the commit timestamp tracker for this transaction.
+  const CommitTimestampTracker* commit_timestamp_tracker() const {
+    return commit_timestamp_tracker_.get();
+  }
+
  private:
   friend class TransactionOpsProcessor;
 
@@ -139,6 +145,9 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
   absl::Status ApplyValidators(const WriteOp& op);
   absl::Status ApplyEffectors(const WriteOp& op);
   absl::Status ApplyStatementVerifiers();
+
+  // Updates commit timestamp tracking to reflect currently buffered ops.
+  void UpdateTrackedCommitTimestamps();
 
   // Converts input non-delete MutationOp into ResolvedMutationOp after
   // validating that input table, columns and rows are valid schema objects.
@@ -171,6 +180,9 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
 
   // Transaction lock management.
   std::unique_ptr<LockHandle> lock_handle_;
+
+  // Tracks tables/columns containing pending commit timestamp.
+  std::unique_ptr<CommitTimestampTracker> commit_timestamp_tracker_;
 
   // The overlay storage layer that handles mutations and read-your-write
   // semantics.

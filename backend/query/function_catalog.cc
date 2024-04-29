@@ -229,7 +229,15 @@ void FunctionCatalog::AddSpannerPGFunctions(
       GetSpannerPGFunctions(catalog_name_);
 
   for (auto& function : spanner_pg_functions) {
-    functions_[function->Name()] = std::move(function);
+    // If function exists, add extra signatures instead of overwriting.
+    // Needed for JSONB.
+    if (auto f = functions_.find(function->Name()); f != functions_.end()) {
+      for (auto& sig : function->signatures()) {
+        f->second->AddSignature(sig);
+      }
+    } else {
+      functions_[function->Name()] = std::move(function);
+    }
   }
 
   SpannerPGTVFs spanner_pg_tvfs = GetSpannerPGTVFs(catalog_name_);

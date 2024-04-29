@@ -17,8 +17,17 @@
 #include "backend/transaction/commit_timestamp.h"
 
 #include <queue>
+#include <variant>
 
+#include "absl/log/check.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/synchronization/mutex.h"
+#include "absl/types/span.h"
+#include "backend/actions/ops.h"
+#include "backend/datamodel/key.h"
+#include "backend/datamodel/value.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "common/constants.h"
@@ -225,6 +234,62 @@ Key MaybeSetCommitTimestamp(absl::Span<const KeyColumn* const> primary_key,
   return key;
 }
 
+absl::Status CommitTimestampTracker::CheckRead(
+    const Table* table, absl::Span<const Column* const> columns) const {
+  absl::MutexLock lock(&mu_);
+  if (commit_ts_tables_.contains(table)) {
+    return error::CannotReadPendingCommitTimestamp(
+        absl::StrCat("Table ", table->Name()));
+  }
+  for (const auto column : columns) {
+    if (commit_ts_columns_.contains(column) ||
+        (column->source_column() != nullptr &&
+         commit_ts_columns_.contains(column->source_column()))) {
+      return error::CannotReadPendingCommitTimestamp(
+          absl::StrCat("Column ", column->Name()));
+    }
+  }
+  return absl::OkStatus();
+}
+
+void CommitTimestampTracker::TrackColumns(
+    absl::Span<const Column* const> columns, const ValueList& values) {
+  ABSL_DCHECK_EQ(columns.size(), values.size());
+  for (int i = 0; i < columns.size(); ++i) {
+    if (IsPendingCommitTimestamp(columns[i], values[i])) {
+      commit_ts_columns_.insert(columns[i]);
+    }
+  }
+}
+
+void CommitTimestampTracker::TrackTable(const Table* table, const Key& key) {
+  if (HasPendingCommitTimestampInKey(table, key)) {
+    commit_ts_tables_.insert(table);
+
+    // Any time a table has a pending commit-ts in key, include all its indexes.
+    for (const Index* index : table->indexes()) {
+      commit_ts_tables_.insert(index->index_data_table());
+    }
+  }
+}
+
+void CommitTimestampTracker::Track(absl::Span<const WriteOp> write_ops) {
+  absl::MutexLock lock(&mu_);
+  for (auto& op : write_ops) {
+    if (std::holds_alternative<InsertOp>(op)) {
+      const InsertOp& insert = std::get<InsertOp>(op);
+      TrackColumns(insert.columns, insert.values);
+      TrackTable(insert.table, insert.key);
+    } else if (std::holds_alternative<UpdateOp>(op)) {
+      const UpdateOp& update = std::get<UpdateOp>(op);
+      TrackColumns(update.columns, update.values);
+      TrackTable(update.table, update.key);
+    } else {
+      const DeleteOp& delete_op = std::get<DeleteOp>(op);
+      TrackTable(delete_op.table, delete_op.key);
+    }
+  }
+}
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

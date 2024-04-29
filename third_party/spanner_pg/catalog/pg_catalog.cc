@@ -36,6 +36,7 @@
 
 #include "zetasql/public/simple_catalog.h"
 #include "zetasql/public/value.h"
+#include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_cat.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
@@ -43,7 +44,6 @@
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/view.h"
-#include "zetasql/base/no_destructor.h"
 
 namespace postgres_translator {
 

@@ -29,6 +29,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/feature_filter/sql_features_view.h"
 #include "backend/query/query_context.h"
@@ -84,6 +85,18 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
   absl::Status VisitResolvedSampleScan(
       const zetasql::ResolvedSampleScan* node) override;
 
+  absl::Status VisitResolvedInsertStmt(
+      const zetasql::ResolvedInsertStmt* node) override;
+
+  absl::Status VisitResolvedUpdateStmt(
+      const zetasql::ResolvedUpdateStmt* node) override;
+
+  absl::Status VisitResolvedDeleteStmt(
+      const zetasql::ResolvedDeleteStmt* node) override;
+
+  absl::Status VisitResolvedTableScan(
+      const zetasql::ResolvedTableScan* node) override;
+
   const Schema* schema() const { return context_.schema; }
 
   bool IsSequenceFunction(const zetasql::ResolvedFunctionCall* node) const;
@@ -122,6 +135,14 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
       const absl::flat_hash_map<absl::string_view, zetasql::Value>&
           node_hint_map) const;
 
+  // Enforces restrictions on reading tables/columns containing pending commit
+  // timestamps. If `access_list` is non-empty it will be used to ignore columns
+  // which are not read.
+  absl::Status CheckPendingCommitTimestampReads(
+      const zetasql::ResolvedTableScan* table_scan,
+      absl::Span<const zetasql::ResolvedStatement::ObjectAccess> access_list =
+          {});
+
   // Returns true if the function is allowed in read-write transactions
   // only. E.g. GET_NEXT_SEQUENCE_VALUE().
   bool IsReadWriteOnlyFunction(absl::string_view name) const;
@@ -137,6 +158,11 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
 
   // List of sequences used by the query being validated.
   absl::flat_hash_set<const SchemaNode*> dependent_sequences_;
+
+  // Table scans from DML statements. Depending on context, the column list
+  // on these scans may include columns which are written, but not read. This
+  // becomes relevant when we enforce pending commit timestamp restrictions.
+  absl::flat_hash_set<const zetasql::ResolvedTableScan*> dml_table_scans_;
 
   // Options for the query engine that are extracted through user-specified
   // hints.

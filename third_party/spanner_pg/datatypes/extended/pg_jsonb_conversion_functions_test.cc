@@ -39,12 +39,12 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "zetasql/base/no_destructor.h"
 #include "third_party/spanner_pg/datatypes/common/numeric_core.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"
-#include "zetasql/base/no_destructor.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
@@ -88,8 +88,6 @@ static const ConversionMap& GetConversionMap() {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
 
-  // Not using absl::NoDestructor yet as that was only released externally in
-  // absl recently and the emulator hasn't picked up the latest version yet.
   static const zetasql_base::NoDestructor<ConversionMap> kConversionMap({
       // PG.JSONB -> <TYPE>
       {{gsql_pg_jsonb, gsql_bool}, PgJsonbToBoolConversion},

@@ -53,6 +53,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
 #include "absl/random/random.h"
@@ -67,14 +68,14 @@
 #include "third_party/spanner_pg/datatypes/common/numeric_core.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
-#include "third_party/spanner_pg/interface/pg_arena.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"
-#include "zetasql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace {
 using spangres::datatypes::CreatePgJsonbValueWithMemoryContext;
 using spangres::datatypes::CreatePgNumericValueWithMemoryContext;
+using spangres::datatypes::CreatePgOidValue;
 using spangres::datatypes::common::kMaxPGNumericFractionalDigits;
 using spangres::datatypes::common::kMaxPGNumericWholeDigits;
 using spangres::datatypes::common::MaxNumericString;
@@ -145,9 +146,18 @@ TEST_P(PGScalarFunctionsTest, ExecutesFunctionsSuccessfully) {
   }
   const PGScalarFunctionTestCase& param = GetParam();
   const zetasql::Function* function = functions[param.function_name].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::FunctionEvaluator evaluator,
-                       (function->GetFunctionEvaluatorFactory())(
-                           function->signatures().front()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      zetasql::FunctionEvaluator evaluator,
+      (function->GetFunctionEvaluatorFactory())(
+          // This test case ExecutesFunctionsSuccessfully assumes that a
+          // function can be found, so we do not check if c_find_if cannot find
+          // any function.
+          *absl::c_find_if(
+              function->signatures(),
+              [&param](const zetasql::FunctionSignature& signature) {
+                return signature.result_type().type() ==
+                       param.expected_result.type();
+              })));
 
   EXPECT_THAT(evaluator(absl::MakeConstSpan(param.function_arguments)),
               IsOkAndHolds(EqPG(param.expected_result)));
@@ -194,6 +204,14 @@ const zetasql::Value kPGNumericLowestDoubleValueRetainingFirst15Digits =
 const zetasql::Value kPGNumericMinDoubleValueRetainingLast15Digits =
     *CreatePgNumericValueWithMemoryContext(
         absl::StrCat("0.", std::string(307, '0'), "22250738585072"));
+
+const zetasql::Value kNullPGOidValue =
+    zetasql::values::Null(spangres::datatypes::GetPgOidType());
+const zetasql::Value kPGOidValue = *CreatePgOidValue(1);
+const zetasql::Value kPGOidMaxValue =
+    *CreatePgOidValue(std::numeric_limits<uint32_t>::max());
+const zetasql::Value kPGOidMinValue =
+    *CreatePgOidValue(std::numeric_limits<uint32_t>::min());
 
 const zetasql::Value kNullStringValue = zetasql::values::NullString();
 absl::TimeZone default_timezone() {
@@ -713,101 +731,101 @@ INSTANTIATE_TEST_SUITE_P(
                                  {CreatePgNumericNullValue()},
                                  CreatePgNumericNullValue()},
 
-        PGScalarFunctionTestCase{kPGNumericCastToInt64FunctionName,
+        PGScalarFunctionTestCase{kPGCastNumericToInt64FunctionName,
                                  {*CreatePgNumericValueWithMemoryContext("0")},
                                  zetasql::Value::Int64(0)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToInt64FunctionName,
+            kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.00000001")},
             zetasql::Value::Int64(0)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToInt64FunctionName,
+            kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.49999999")},
             zetasql::Value::Int64(0)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToInt64FunctionName,
+            kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.5")},
             zetasql::Value::Int64(1)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToInt64FunctionName,
+            kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext("-1.49999999")},
             zetasql::Value::Int64(-1)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToInt64FunctionName,
+            kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext("-1.5")},
             zetasql::Value::Int64(-2)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToInt64FunctionName,
+            kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext(
                 absl::StrCat(std::numeric_limits<int64_t>::max()))},
             zetasql::Value::Int64(std::numeric_limits<int64_t>::max())},
         PGScalarFunctionTestCase{
-            kPGNumericCastToInt64FunctionName,
+            kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext(
                 absl::StrCat(std::numeric_limits<int64_t>::lowest()))},
             zetasql::Value::Int64(std::numeric_limits<int64_t>::lowest())},
-        PGScalarFunctionTestCase{kPGNumericCastToInt64FunctionName,
+        PGScalarFunctionTestCase{kPGCastNumericToInt64FunctionName,
                                  {CreatePgNumericNullValue()},
                                  kNullInt64Value},
 
         PGScalarFunctionTestCase{
-            kPGNumericCastToDoubleFunctionName,
+            kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("1.000001")},
             zetasql::Value::Double(1.000001)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToDoubleFunctionName,
+            kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.299999999999997")},
             zetasql::Value::Double(0.299999999999997)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToDoubleFunctionName,
+            kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.2999999999999997")},
             zetasql::Value::Double(0.2999999999999997)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToDoubleFunctionName,
+            kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("299999999999997")},
             zetasql::Value::Double(299999999999997)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToDoubleFunctionName,
+            kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("2999999999999997")},
             zetasql::Value::Double(2999999999999997)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToDoubleFunctionName,
+            kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-0.299999999999997")},
             zetasql::Value::Double(-0.299999999999997)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToDoubleFunctionName,
+            kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-0.2999999999999997")},
             zetasql::Value::Double(-0.2999999999999997)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToDoubleFunctionName,
+            kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-299999999999997")},
             zetasql::Value::Double(-299999999999997)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToDoubleFunctionName,
+            kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-2999999999999997")},
             zetasql::Value::Double(-2999999999999997)},
         PGScalarFunctionTestCase{
-            kPGNumericCastToDoubleFunctionName,
+            kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN")},
             kDoubleNaNValue},
-        PGScalarFunctionTestCase{kPGNumericCastToDoubleFunctionName,
+        PGScalarFunctionTestCase{kPGCastNumericToDoubleFunctionName,
                                  {CreatePgNumericNullValue()},
                                  kNullDoubleValue},
 
-        PGScalarFunctionTestCase{kPGNumericCastToStringFunctionName,
+        PGScalarFunctionTestCase{kPGCastNumericToStringFunctionName,
                                  {kPGNumericNaNValue},
                                  zetasql::Value::String("NaN")},
-        PGScalarFunctionTestCase{kPGNumericCastToStringFunctionName,
+        PGScalarFunctionTestCase{kPGCastNumericToStringFunctionName,
                                  {CreatePgNumericNullValue()},
                                  kNullStringValue},
-        PGScalarFunctionTestCase{kPGNumericCastToStringFunctionName,
+        PGScalarFunctionTestCase{kPGCastNumericToStringFunctionName,
                                  {kPGNumericMinValue},
                                  zetasql::Value::String(MinNumericString())},
-        PGScalarFunctionTestCase{kPGNumericCastToStringFunctionName,
+        PGScalarFunctionTestCase{kPGCastNumericToStringFunctionName,
                                  {kPGNumericMaxValue},
                                  zetasql::Value::String(MaxNumericString())},
         PGScalarFunctionTestCase{
-            kPGNumericCastToStringFunctionName,
+            kPGCastNumericToStringFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.1")},
             zetasql::Value::String("0.1")},
 
@@ -1470,7 +1488,171 @@ INSTANTIATE_TEST_SUITE_P(
             kPGRegexpSplitToArrayFunctionName,
             {zetasql::values::String("1A2b3C4"),
              zetasql::values::String("[a-z]"), kNullStringValue},
-            zetasql::values::Null(zetasql::types::StringArrayType())}));
+            zetasql::values::Null(zetasql::types::StringArrayType())},
+
+        // Cast to PG.OID
+        PGScalarFunctionTestCase{
+            kPGCastToOidFunctionName, {kInt64Value}, kPGOidValue},
+        PGScalarFunctionTestCase{
+            kPGCastToOidFunctionName,
+            {zetasql::Value::Int64(std::numeric_limits<uint32_t>::min())},
+            kPGOidMinValue},
+        PGScalarFunctionTestCase{
+            kPGCastToOidFunctionName,
+            {zetasql::Value::Int64(std::numeric_limits<uint32_t>::max())},
+            kPGOidMaxValue},
+        PGScalarFunctionTestCase{
+            kPGCastToOidFunctionName, {kNullInt64Value}, kNullPGOidValue},
+
+        PGScalarFunctionTestCase{kPGCastToOidFunctionName,
+                                 {zetasql::Value::String("1")},
+                                 kPGOidValue},
+        PGScalarFunctionTestCase{kPGCastToOidFunctionName,
+                                 {zetasql::Value::String(absl::StrCat(
+                                     std::numeric_limits<uint32_t>::min()))},
+                                 kPGOidMinValue},
+        PGScalarFunctionTestCase{kPGCastToOidFunctionName,
+                                 {zetasql::Value::String(absl::StrCat(
+                                     std::numeric_limits<uint32_t>::max()))},
+                                 kPGOidMaxValue},
+        PGScalarFunctionTestCase{
+            kPGCastToOidFunctionName, {kNullStringValue}, kNullPGOidValue},
+
+        // Cast from PG.OID
+        PGScalarFunctionTestCase{
+            kPGCastFromOidFunctionName, {kPGOidValue}, kInt64Value},
+        PGScalarFunctionTestCase{
+            kPGCastFromOidFunctionName,
+            {kPGOidMinValue},
+            zetasql::Value::Int64(std::numeric_limits<uint32_t>::min())},
+        PGScalarFunctionTestCase{
+            kPGCastFromOidFunctionName,
+            {kPGOidMaxValue},
+            zetasql::Value::Int64(std::numeric_limits<uint32_t>::max())},
+        PGScalarFunctionTestCase{
+            kPGCastFromOidFunctionName, {kNullPGOidValue}, kNullInt64Value},
+
+        PGScalarFunctionTestCase{kPGCastFromOidFunctionName,
+                                 {kPGOidValue},
+                                 zetasql::Value::String("1")},
+        PGScalarFunctionTestCase{kPGCastFromOidFunctionName,
+                                 {kPGOidMinValue},
+                                 zetasql::Value::String(absl::StrCat(
+                                     std::numeric_limits<uint32_t>::min()))},
+        PGScalarFunctionTestCase{kPGCastFromOidFunctionName,
+                                 {kPGOidMaxValue},
+                                 zetasql::Value::String(absl::StrCat(
+                                     std::numeric_limits<uint32_t>::max()))},
+        PGScalarFunctionTestCase{
+            kPGCastFromOidFunctionName, {kNullPGOidValue}, kNullStringValue},
+
+        // PG.OID equals
+        PGScalarFunctionTestCase{kPGOidEqualsFunctionName,
+                                 {kNullPGOidValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidEqualsFunctionName,
+                                 {kPGOidValue, kPGOidValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGOidEqualsFunctionName,
+                                 {kNullPGOidValue, kPGOidValue},
+                                 zetasql::values::NullBool()},
+
+        // PG.OID not equals
+        PGScalarFunctionTestCase{kPGOidNotEqualsFunctionName,
+                                 {kNullPGOidValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidNotEqualsFunctionName,
+                                 {kPGOidValue, kPGOidValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGOidNotEqualsFunctionName,
+                                 {kNullPGOidValue, kPGOidValue},
+                                 zetasql::values::NullBool()},
+
+        // PG.OID less than
+        PGScalarFunctionTestCase{kPGOidLessThanFunctionName,
+                                 {kNullPGOidValue, kPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidLessThanFunctionName,
+                                 {kNullPGOidValue, kPGOidMinValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidLessThanFunctionName,
+                                 {kNullPGOidValue, kPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidLessThanFunctionName,
+                                 {kPGOidValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidLessThanFunctionName,
+                                 {kPGOidValue, kPGOidValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGOidLessThanFunctionName,
+                                 {kPGOidMinValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+
+        // PG.OID less than equals
+        PGScalarFunctionTestCase{kPGOidLessThanEqualsFunctionName,
+                                 {kNullPGOidValue, kPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidLessThanEqualsFunctionName,
+                                 {kNullPGOidValue, kPGOidMinValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidLessThanEqualsFunctionName,
+                                 {kNullPGOidValue, kPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidLessThanEqualsFunctionName,
+                                 {kPGOidValue, kPGOidValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGOidLessThanEqualsFunctionName,
+                                 {kNullPGOidValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidLessThanEqualsFunctionName,
+                                 {kPGOidValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidLessThanEqualsFunctionName,
+                                 {kPGOidMinValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+
+        // PG.OID greater than
+        PGScalarFunctionTestCase{kPGOidGreaterThanFunctionName,
+                                 {kPGOidValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidGreaterThanFunctionName,
+                                 {kPGOidMinValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidGreaterThanFunctionName,
+                                 {kPGOidValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidGreaterThanFunctionName,
+                                 {kNullPGOidValue, kPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidGreaterThanFunctionName,
+                                 {kPGOidValue, kPGOidValue},
+                                 zetasql::values::False()},
+        PGScalarFunctionTestCase{kPGOidGreaterThanFunctionName,
+                                 {kNullPGOidValue, kPGOidMinValue},
+                                 zetasql::values::NullBool()},
+
+        // PG.OID greater than equals
+        PGScalarFunctionTestCase{kPGOidGreaterThanEqualsFunctionName,
+                                 {kPGOidValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidGreaterThanEqualsFunctionName,
+                                 {kPGOidMinValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidGreaterThanEqualsFunctionName,
+                                 {kPGOidValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidGreaterThanEqualsFunctionName,
+                                 {kPGOidValue, kPGOidValue},
+                                 zetasql::values::True()},
+        PGScalarFunctionTestCase{kPGOidGreaterThanEqualsFunctionName,
+                                 {kNullPGOidValue, kNullPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidGreaterThanEqualsFunctionName,
+                                 {kNullPGOidValue, kPGOidValue},
+                                 zetasql::values::NullBool()},
+        PGScalarFunctionTestCase{kPGOidGreaterThanEqualsFunctionName,
+                                 {kNullPGOidValue, kPGOidMinValue},
+                                 zetasql::values::NullBool()}));
 
 TEST_F(EmulatorFunctionsTest,
        RegexpMatchReturnsNullElementForUnmatchedOptionalCapturingGroups) {
@@ -1758,9 +1940,77 @@ TEST_F(EmulatorFunctionsTest, UminusReturnsErrorWhenArgumentsAreInvalid) {
 }
 
 TEST_F(EmulatorFunctionsTest,
+       CastOidToInt64ReturnsErrorWhenArgumentsAreInvalid) {
+  const zetasql::Function* function =
+      functions_[kPGCastFromOidFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+  // Insufficient arguments.
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(std::vector<zetasql::Value>())),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+  // Too many arguments.
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPGOidMinValue, kPGOidMaxValue})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+  // Invalid argument.
+  std::vector<zetasql::Value> args_invalid = {zetasql::Value::Int64(0)};
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(args_invalid)),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+}
+
+TEST_F(EmulatorFunctionsTest,
+       CastOidToStringReturnsErrorWhenArgumentsAreInvalid) {
+  const zetasql::Function* function =
+      functions_[kPGCastFromOidFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+  // Insufficient arguments.
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(std::vector<zetasql::Value>())),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+  // Too many arguments.
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPGOidMinValue, kPGOidMaxValue})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+  // Invalid argument.
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::Int64(0)})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+}
+
+TEST_F(EmulatorFunctionsTest, CastToOidReturnsErrorWhenArgumentAreInvalid) {
+  const zetasql::Function* function =
+      functions_[kPGCastToOidFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+  // Insufficient arguments.
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(std::vector<zetasql::Value>())),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+  // Too many arguments.
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kInt64Value, kNullStringValue})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+  // Invalid argument.
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kDoubleValue})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan({zetasql::Value::String("invalid")})),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+  // Argument too small.
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::Int64(-1)})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("-1")})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+  // Argument too large.
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan({zetasql::Value::Int64(
+          static_cast<int64_t>(std::numeric_limits<uint32_t>::max()) + 1)})),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan({zetasql::Value::String(absl::StrCat(
+          static_cast<int64_t>(std::numeric_limits<uint32_t>::max()) + 1))})),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+}
+
+TEST_F(EmulatorFunctionsTest,
        CastNumericToDoubleReturnsErrorWhenArgumentsAreInvalid) {
   const zetasql::Function* function =
-      functions_[kPGNumericCastToDoubleFunctionName].get();
+      functions_[kPGCastNumericToDoubleFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
   // Insufficient arguments.
@@ -1778,7 +2028,7 @@ TEST_F(EmulatorFunctionsTest,
 TEST_F(EmulatorFunctionsTest,
        CastNumericToStringReturnsErrorWhenArgumentsAreInvalid) {
   const zetasql::Function* function =
-      functions_[kPGNumericCastToStringFunctionName].get();
+      functions_[kPGCastNumericToStringFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
   // Insufficient arguments.
@@ -2504,7 +2754,7 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithTooLargeStringValueError) {
 
 TEST_F(EmulatorFunctionsTest, CastNumericToInt64ReturnsErrorForNaN) {
   const zetasql::Function* function =
-      functions_[kPGNumericCastToInt64FunctionName].get();
+      functions_[kPGCastNumericToInt64FunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2517,7 +2767,7 @@ TEST_F(EmulatorFunctionsTest, CastNumericToInt64ReturnsErrorForNaN) {
 TEST_F(EmulatorFunctionsTest,
        CastNumericToInt64ReturnsErrorForOverflowAndUnderflow) {
   const zetasql::Function* function =
-      functions_[kPGNumericCastToInt64FunctionName].get();
+      functions_[kPGCastNumericToInt64FunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 

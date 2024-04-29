@@ -34,6 +34,7 @@
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/in_memory_iterator.h"
 #include "backend/storage/storage.h"
+#include "backend/transaction/commit_timestamp.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -64,8 +65,11 @@ namespace backend {
 // This class is not thread safe.
 class TransactionStore {
  public:
-  explicit TransactionStore(Storage* base_storage, LockHandle* lock_handle)
-      : base_storage_(base_storage), lock_handle_(lock_handle) {}
+  explicit TransactionStore(Storage* base_storage, LockHandle* lock_handle,
+                            CommitTimestampTracker* commit_timestamp_tracker)
+      : base_storage_(base_storage),
+        lock_handle_(lock_handle),
+        commit_timestamp_tracker_(commit_timestamp_tracker) {}
 
   // Buffers a write operation. Acquires write locks.
   absl::Status BufferWriteOp(const WriteOp& op);
@@ -136,15 +140,6 @@ class TransactionStore {
   // Returns true if a mutation has been buffered for 'key' and fills 'row'.
   bool RowExistsInBuffer(const Table* table, const Key& key, RowOp* row) const;
 
-  // Mark a given column non-readable if one or more values being written to it
-  // in the mutation contain pending commit timestamp.
-  void TrackColumnsForCommitTimestamp(absl::Span<const Column* const> columns,
-                                      const ValueList& values);
-
-  // Mark table and it's associated indices as non-readable if key in the
-  // mutation contains pending commit timestamp.
-  void TrackTableForCommitTimestamp(const Table* table, const Key& key);
-
   // Underlying storage for the database.
   const Storage* base_storage_;
 
@@ -154,14 +149,8 @@ class TransactionStore {
   // Map that stores the buffered mutations.
   absl::flat_hash_map<const Table*, std::map<Key, RowOp>> buffered_ops_;
 
-  // Set of non-key columns which have mutation with pending commit timestamp
-  // and are thus marked as non-readable in read-your-writes transactions.
-  absl::flat_hash_set<const Column*> commit_ts_columns_;
-
-  // Set of tables which have mutation with pending commit timestamp and are
-  // thus marked as non-readable in read-your-writes transactions. This also
-  // includes backing tables for indices of all such tables.
-  absl::flat_hash_set<const Table*> commit_ts_tables_;
+  // Tracks tables/columns containing pending commit timestamps.
+  const CommitTimestampTracker* commit_timestamp_tracker_;
 };
 
 }  // namespace backend

@@ -38,13 +38,15 @@
 #include "zetasql/public/function.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
+#include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "third_party/spanner_pg/datatypes/extended/conversion_functions.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_conversion_functions.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_conversion_functions.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
-#include "zetasql/base/no_destructor.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_conversion_functions.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
@@ -107,6 +109,8 @@ static const ConversionMap& GetConversionMap() {
       spangres::datatypes::GetPgNumericType();
   static const zetasql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
+  static const zetasql::Type* gsql_pg_oid =
+      spangres::datatypes::GetPgOidType();
 
   static const zetasql_base::NoDestructor<ConversionMap> kConversionMap(
       {// PG.NUMERIC -> PG.NUMERIC conversion (fixed-precision cast)
@@ -152,7 +156,23 @@ static const ConversionMap& GetConversionMap() {
          GetPgJsonbToPgNumericConversion()}},
        {{gsql_pg_jsonb, gsql_string},
         {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
-         GetPgJsonbToStringConversion()}}});
+         GetPgJsonbToStringConversion()}},
+       // <TYPE> -> PG.OID
+       {{gsql_int64, gsql_pg_oid},
+        {CastFunctionProperty(CastFunctionType::IMPLICIT, /*coercion_cost=*/0),
+         GetInt64ToPgOidConversion()}},
+       {{gsql_string, gsql_pg_oid},
+        {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
+         GetStringToPgOidConversion()}},
+       // PG.OID -> <TYPE>
+       {{gsql_pg_oid, gsql_int64},
+        {CastFunctionProperty(
+             CastFunctionType::EXPLICIT_OR_LITERAL_OR_PARAMETER,
+             /*coercion_cost=*/0),
+         GetPgOidToInt64Conversion()}},
+       {{gsql_pg_oid, gsql_string},
+        {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
+         GetPgOidToStringConversion()}}});
   return *kConversionMap;
 }
 

@@ -19,10 +19,10 @@
 
 #include "zetasql/public/simple_catalog.h"
 #include "zetasql/public/types/type_factory.h"
+#include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
-#include "zetasql/base/no_destructor.h"
 
 namespace google {
 namespace spanner {

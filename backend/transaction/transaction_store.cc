@@ -110,8 +110,6 @@ absl::Status TransactionStore::BufferInsert(
     row_values[columns[i]] = values[i];
   }
   buffered_ops_[table][key] = std::make_pair(OpType::kInsert, row_values);
-  TrackColumnsForCommitTimestamp(columns, values);
-  TrackTableForCommitTimestamp(table, key);
   return absl::OkStatus();
 }
 
@@ -142,8 +140,6 @@ absl::Status TransactionStore::BufferUpdate(
     row_values[columns[i]] = values[i];
   }
   buffered_ops_[table][key] = std::make_pair(op_type, row_values);
-  TrackColumnsForCommitTimestamp(columns, values);
-  TrackTableForCommitTimestamp(table, key);
   return absl::OkStatus();
 }
 
@@ -170,7 +166,6 @@ absl::Status TransactionStore::BufferDelete(const Table* table,
     }
     buffered_ops_[table][key] = std::make_pair(OpType::kDelete, row_values);
   }
-  TrackTableForCommitTimestamp(table, key);
   return absl::OkStatus();
 }
 
@@ -301,18 +296,7 @@ absl::Status TransactionStore::Read(
   // Pending commit timestamp values in buffer cannot be returned to
   // clients.
   if (!allow_pending_commit_timestamps_in_read) {
-    if (commit_ts_tables_.contains(table)) {
-      return error::CannotReadPendingCommitTimestamp(
-          absl::StrCat("Table ", table->Name()));
-    }
-    for (const auto column : columns) {
-      if (commit_ts_columns_.contains(column) ||
-          (column->source_column() != nullptr &&
-           commit_ts_columns_.contains(column->source_column()))) {
-        return error::CannotReadPendingCommitTimestamp(
-            absl::StrCat("Column ", column->Name()));
-      }
-    }
+    ZETASQL_RETURN_IF_ERROR(commit_timestamp_tracker_->CheckRead(table, columns));
   }
 
   // The keys need to be sorted to provide iterating in order. The rows added
@@ -347,28 +331,6 @@ bool TransactionStore::RowExistsInBuffer(const Table* table, const Key& key,
   }
   *row_op = row_op_itr->second;
   return true;
-}
-
-void TransactionStore::TrackColumnsForCommitTimestamp(
-    absl::Span<const Column* const> columns, const ValueList& values) {
-  ABSL_DCHECK_EQ(columns.size(), values.size());
-  for (int i = 0; i < columns.size(); ++i) {
-    if (IsPendingCommitTimestamp(columns[i], values[i])) {
-      commit_ts_columns_.insert(columns[i]);
-    }
-  }
-}
-
-void TransactionStore::TrackTableForCommitTimestamp(const Table* table,
-                                                    const Key& key) {
-  if (HasPendingCommitTimestampInKey(table, key)) {
-    commit_ts_tables_.insert(table);
-
-    // Any time a table has a pending commit-ts in key, include all its indexes.
-    for (const Index* index : table->indexes()) {
-      commit_ts_tables_.insert(index->index_data_table());
-    }
-  }
 }
 
 absl::StatusOr<ValueList> TransactionStore::Lookup(
