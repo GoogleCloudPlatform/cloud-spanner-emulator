@@ -65,7 +65,8 @@ class InformationSchemaTest
   const std::pair<std::string, Value> kUnsupportedTables{
       "unsupported_tables",
       std::vector<std::string>(
-          {GetNameForDialect("CHANGE_STREAM_PRIVILEGES"),
+          {GetNameForDialect("AAC_APPROVAL_CONFIGS"),
+           GetNameForDialect("CHANGE_STREAM_PRIVILEGES"),
            GetNameForDialect("MODEL_PRIVILEGES"), GetNameForDialect("VIEWS"),
            GetNameForDialect("ROLES"), GetNameForDialect("ROLE_GRANTEES"),
            GetNameForDialect("TABLE_PRIVILEGES"),
@@ -87,7 +88,8 @@ class InformationSchemaTest
 
   // Information schema columns not yet supported.
   const std::pair<std::string, Value> kUnsupportedColumns{
-      "unsupported_columns", std::vector<std::string>({"IS_HIDDEN"})};
+      "unsupported_columns",
+      std::vector<std::string>({"IS_HIDDEN", "IS_STORED_VOLATILE"})};
 
   // Information schema constraints not yet supported.
   const std::pair<std::string, Value> kUnsupportedConstraints{
@@ -1097,6 +1099,7 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_PRIVILEGES%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_TABLE_SYNONYMS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_INDEX_OPTIONS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_AAC_APPROVAL_CONFIGS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_COLUMN_PARAMETERS%')";
   }
 

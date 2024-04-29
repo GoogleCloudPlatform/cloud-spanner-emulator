@@ -23,6 +23,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "zetasql/base/no_destructor.h"
 
 namespace google::spanner::emulator::backend {
 

@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "zetasql/public/function.h"
+#include "zetasql/public/procedure.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
@@ -60,6 +61,23 @@ struct FunctionAndSignature {
 
  private:
   const zetasql::Function* function_;
+  const zetasql::FunctionSignature signature_;
+};
+
+// Group a procedure and signature together for the EngineSystemCatalog to
+// return when asked how to execute a PostgreSQL procedure call in this storage
+// engine.
+struct ProcedureAndSignature {
+ public:
+  ProcedureAndSignature(const zetasql::Procedure* procedure,
+                        const zetasql::FunctionSignature signature)
+      : procedure_(procedure), signature_(signature) {}
+
+  const zetasql::Procedure* procedure() const { return procedure_; }
+  const zetasql::FunctionSignature& signature() const { return signature_; }
+
+ private:
+  const zetasql::Procedure* procedure_;
   const zetasql::FunctionSignature signature_;
 };
 
@@ -131,6 +149,13 @@ class PostgresExtendedFunction : public zetasql::Function {
                                                absl::string_view arg_types) {
     return absl::UnimplementedError(absl::StrCat("Postgres function ",
                                                  function_name, "(", arg_types,
+                                                 ") is not supported"));
+  }
+
+  static absl::Status UnsupportedProcedureError(
+      absl::string_view procedure_name, absl::string_view arg_types) {
+    return absl::UnimplementedError(absl::StrCat("Postgres procedure ",
+                                                 procedure_name, "(", arg_types,
                                                  ") is not supported"));
   }
 

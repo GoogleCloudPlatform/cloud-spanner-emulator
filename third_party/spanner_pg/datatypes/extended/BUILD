@@ -198,16 +198,19 @@ cc_library(
         "conversion_functions.cc",
         "pg_jsonb_conversion_functions.cc",
         "pg_numeric_conversion_functions.cc",
+        "pg_oid_conversion_functions.cc",
     ],
     hdrs = [
         "conversion_finder.h",
         "conversion_functions.h",
         "pg_jsonb_conversion_functions.h",
         "pg_numeric_conversion_functions.h",
+        "pg_oid_conversion_functions.h",
     ],
     deps = [
         ":pg_jsonb_type",
         ":pg_numeric_type",
+        ":pg_oid_type",
         "//third_party/spanner_pg/catalog:emulator_function_evaluators",
         "//third_party/spanner_pg/catalog:emulator_functions",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -219,6 +222,7 @@ cc_library(
         "@com_google_zetasql//zetasql/public:coercer",
         "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:type_cc_proto",
     ],
 )
 
@@ -229,6 +233,7 @@ cc_test(
         ":conversion_finder",
         ":pg_jsonb_type",
         ":pg_numeric_type",
+        ":pg_oid_type",
         "//third_party/spanner_pg/interface:pg_arena_factory",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
@@ -249,6 +254,23 @@ cc_test(
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "pg_oid_conversion_functions_test",
+    srcs = ["pg_oid_conversion_functions_test.cc"],
+    deps = [
+        ":conversion_finder",
+        ":pg_oid_type",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:coercer",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
     ],

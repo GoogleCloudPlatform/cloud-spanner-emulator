@@ -160,7 +160,9 @@ absl::Status ColumnValidator::ValidateTypeExistsInProtoBundle(
   return TypeExistsInProtoBundle(type, proto_bundle)
              ? absl::OkStatus()
              : error::DeletedTypeStillInUse(
-                   type->TypeName(zetasql::PRODUCT_EXTERNAL), column_name);
+                   type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                                  /*use_external_float32=*/true),
+                   column_name);
 }
 
 absl::Status ColumnValidator::Validate(const Column* column,
@@ -360,7 +362,7 @@ absl::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
       key_column->column_->GetType()->IsArray()
           ? "ARRAY"
           : key_column->column_->GetType()->ShortTypeName(
-                zetasql::PRODUCT_EXTERNAL);
+                zetasql::PRODUCT_EXTERNAL, /*use_external_float32=*/true);
   if (!IsSupportedKeyColumnType(key_column->column_->GetType())) {
     auto owner_index = key_column->column()->table()->owner_index();
 

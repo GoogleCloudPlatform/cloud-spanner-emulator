@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "gmock/gmock.h"
+#include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -25,7 +26,6 @@
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 #include "re2/re2.h"
-#include "zetasql/base/no_destructor.h"
 
 namespace google {
 namespace spanner {

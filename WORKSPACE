@@ -374,3 +374,31 @@ http_archive(
         "https://files.pythonhosted.org/packages/4d/d0/cda2fc582f09510c84cd6b7d7b9e22a02d4e45dbad2b2ef1c6edd7847e00/portpicker-1.6.0.tar.gz",
     ],
 )
+
+################################################################################
+# Libraries for PostgreSQL interface                                           #
+################################################################################
+
+http_archive(
+    name = "lz4",
+    build_file = "//build/bazel:lz4.BUILD",
+    sha256 = "0b8bf249fd54a0b974de1a50f0a13ba809a78fd48f90c465c240ee28a9e4784d",
+    strip_prefix = "lz4-1.9.2/lib",
+    urls = ["https://github.com/lz4/lz4/archive/refs/tags/v1.9.2.zip"],
+)
+
+http_archive(
+    name = "net_zstd",
+    build_file = "//build/bazel:net_zstd.BUILD",
+    sha256 = "3b1c3b46e416d36931efd34663122d7f51b550c87f74de2d38249516fe7d8be5",
+    strip_prefix = "zstd-1.5.6/lib",
+    urls = ["https://github.com/facebook/zstd/archive/v1.5.6.zip"],
+)
+
+http_archive(
+    name = "zlib",
+    build_file = "//build/bazel:zlib.BUILD",
+    sha256 = "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
+    strip_prefix = "zlib-1.3.1",
+    urls = ["http://zlib.net/fossils/zlib-1.3.1.tar.gz"],
+)

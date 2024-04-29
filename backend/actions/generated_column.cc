@@ -91,7 +91,8 @@ PrepareExpression(const Column* generated_column,
   constexpr char kExpression[] = "CAST (($0) AS $1)";
   std::string sql = absl::Substitute(
       kExpression, generated_column->expression().value(),
-      generated_column->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL));
+      generated_column->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL,
+                                            /*use_external_float32=*/true));
   auto expr = std::make_unique<zetasql::PreparedExpression>(sql);
   zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
   for (const Column* dep : generated_column->dependent_columns()) {

@@ -210,7 +210,8 @@ absl::StatusOr<zetasql::Value> EvalMlPredictRow(
     ZETASQL_ASSIGN_OR_RETURN(model_endpoint, ModelEndpoint::FromJsonb(cord.Flatten()));
   } else {
     ZETASQL_RET_CHECK_FAIL() << "Unexpected model_endpoint argument type "
-                     << args[0].type()->TypeName(zetasql::PRODUCT_EXTERNAL);
+                     << args[0].type()->TypeName(zetasql::PRODUCT_EXTERNAL,
+                                                 /*use_external_float32=*/true);
   }
   ZETASQL_RETURN_IF_ERROR(model_endpoint.Validate());
   absl::string_view first_endpoint = model_endpoint.Endpoint();
@@ -225,7 +226,8 @@ absl::StatusOr<zetasql::Value> EvalMlPredictRow(
     ZETASQL_RETURN_IF_ERROR(ParseArgsJsonb(cord.Flatten(), &instances, &parameters));
   } else {
     ZETASQL_RET_CHECK_FAIL() << "Unexpected args var type "
-                     << args[1].type()->TypeName(zetasql::PRODUCT_EXTERNAL);
+                     << args[1].type()->TypeName(zetasql::PRODUCT_EXTERNAL,
+                                                 /*use_external_float32=*/true);
   }
   if (instances.empty()) {
     return error::MlPredictRow_Args_NoInstances();

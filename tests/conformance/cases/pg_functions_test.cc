@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"

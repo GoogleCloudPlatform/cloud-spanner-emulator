@@ -20,6 +20,7 @@
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/transaction/commit_timestamp.h"
 
 namespace google {
 namespace spanner {
@@ -36,6 +37,9 @@ struct QueryContext {
 
   // A writer for writing data for DML requests. Can be null for SELECT queries.
   RowWriter* writer = nullptr;
+
+  // Tracks tables/columns containing pending commit timestamps.
+  const CommitTimestampTracker* commit_timestamp_tracker = nullptr;
 
   // True if the context of this query allows functions that need read-write
   // transactions. E.g. when analyzing a column expression, in partitioned DML,

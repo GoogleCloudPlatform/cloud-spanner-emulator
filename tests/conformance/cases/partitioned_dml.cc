@@ -41,7 +41,7 @@ class PartitionedDmlTest : public DatabaseTest {
             ID       INT64 NOT NULL,
             Name     STRING(MAX),
             Age      INT64,
-            Updated  TIMESTAMP,
+            Updated  TIMESTAMP OPTIONS (allow_commit_timestamp = true),
           ) PRIMARY KEY (ID)
         )",
         R"(
@@ -236,6 +236,19 @@ TEST_F(PartitionedDmlTest,
   EXPECT_THAT(
       raw_client()->ExecuteBatchDml(&context, batch_dml_request, &response),
       StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(PartitionedDmlTest, UpdateRowsWithCommitTimestampSucceed) {
+  PopulateDatabase();
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(PartitionedDmlResult result,
+                       ExecutePartitionedDml(SqlStatement(
+                           "UPDATE Users SET Updated = "
+                           "PENDING_COMMIT_TIMESTAMP() WHERE ID > 1")));
+  EXPECT_EQ(result.row_count_lower_bound, 2);
+  EXPECT_THAT(Query("SELECT COUNT(1) FROM Users WHERE Updated BETWEEN "
+                    "'2000-01-01' AND '3000-01-01'"),
+              IsOkAndHoldsRows({{2}}));
 }
 
 }  // namespace

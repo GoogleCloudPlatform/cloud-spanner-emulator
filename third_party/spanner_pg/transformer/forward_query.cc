@@ -95,6 +95,11 @@ ABSL_FLAG(
     "transformer will return an error if it sees a tree depth higher "
     "than the limit.");
 
+ABSL_FLAG(bool, spangres_use_emulator_ordinality_transformer, false,
+         "When true, array scans with array_offset_column will be wrapped in "
+         "a ProjectScan that adds one to the offset column to convert "
+         "zero-based offset to one-based ordinal values");
+
 namespace postgres_translator {
 
 using ::postgres_translator::internal::PostgresCastNodeTemplate;
@@ -407,8 +412,17 @@ ForwardTransformer::BuildGsqlResolvedScanForFunctionCall(
   // the other variants (for record or range). UNNEST becomes an ArrayScan in
   // ZetaSQL.
   if (func_expr->funcid == array_unnest_proc_oid) {
-    return BuildGsqlResolvedArrayScan(*rte, rtindex, external_scope,
-                                        output_scope);
+    absl::StatusOr<std::unique_ptr<zetasql::ResolvedArrayScan>> array_scan =
+        BuildGsqlResolvedArrayScan(*rte, rtindex, external_scope, output_scope);
+
+    if (array_scan.ok() &&
+        array_scan.value()->array_offset_column() != nullptr) {
+      // For `unnest with ordinality`, convert ZetaSQL's zero-based
+      //  offset to a one-based ordinal column as expected by postgres.
+      return ConvertZeroBasedOffsetToOneBasedOrdinal(
+          std::move(array_scan.value()), rtindex, output_scope);
+    }
+    return array_scan;
   } else {
     // Anything else had better be a TVF. For now that's Change Streams, which
     // is user defined and assigned a temporary oid in CatalogAdapter, or
@@ -421,6 +435,70 @@ ForwardTransformer::BuildGsqlResolvedScanForFunctionCall(
     return absl::InvalidArgumentError(
         "Unsupported function call in FROM clause");
   }
+}
+
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedProjectScan>>
+ForwardTransformer::ConvertZeroBasedOffsetToOneBasedOrdinal(
+    std::unique_ptr<zetasql::ResolvedArrayScan> array_scan,
+    const Index& rtindex, VarIndexScope* output_scope) {
+  ZETASQL_RET_CHECK(array_scan->array_offset_column() != nullptr);
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<zetasql::ResolvedColumnRef> ordinality_column_ref,
+      BuildGsqlResolvedColumnRef(array_scan->array_offset_column()->column()));
+
+  // Create a function call that adds one to the ordinality column.
+  std::unique_ptr<zetasql::ResolvedExpr> one_literal =
+      zetasql::MakeResolvedLiteral(zetasql::types::Int64Type(),
+                                     zetasql::Value::Int64(1));
+
+  std::vector<zetasql::InputArgumentType> input_argument_types;
+  input_argument_types.emplace_back(ordinality_column_ref->type());
+  input_argument_types.emplace_back(one_literal->type());
+
+  std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
+  argument_list.push_back(std::move(ordinality_column_ref));
+  argument_list.push_back(std::move(one_literal));
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      FunctionAndSignature function_and_signature,
+      catalog_adapter_->GetEngineSystemCatalog()->GetFunctionAndSignature(
+          F_INT8PL, input_argument_types,
+          catalog_adapter_->analyzer_options().language()));
+
+  std::unique_ptr<zetasql::ResolvedFunctionCall> function_call =
+      zetasql::MakeResolvedFunctionCall(
+          function_and_signature.signature().result_type().type(),
+          function_and_signature.function(), function_and_signature.signature(),
+          std::move(argument_list),
+          zetasql::ResolvedFunctionCallBase::DEFAULT_ERROR_MODE);
+
+  // Create a new ordinality column as a computed column with the function call
+  // that adds one to the original ordinality column.
+  ZETASQL_ASSIGN_OR_RETURN(
+      zetasql::ResolvedColumn ordinality_column,
+      BuildNewGsqlResolvedColumn(array_scan->column_list().at(1).table_name(),
+                                 array_scan->column_list().at(1).name(),
+                                 function_call->type()));
+  std::unique_ptr<const zetasql::ResolvedComputedColumn>
+      computed_ordinality_column = zetasql::MakeResolvedComputedColumn(
+          ordinality_column, std::move(function_call));
+
+  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+      computed_columns;
+  computed_columns.push_back(std::move(computed_ordinality_column));
+
+  // Create a project scan with the original unnest column and the
+  // computed ordinality column.
+  std::vector<zetasql::ResolvedColumn> project_scan_columns;
+  project_scan_columns.reserve(array_scan->column_list().size());
+  project_scan_columns.push_back(array_scan->column_list().at(0));
+  project_scan_columns.push_back(computed_columns.at(0)->column());
+  output_scope->MapVarIndexToColumn({.varno = rtindex, .varattno = 2},
+                                    computed_columns.at(0)->column(),
+                                    /*allow_override=*/true);
+  return zetasql::MakeResolvedProjectScan(
+      project_scan_columns, std::move(computed_columns), std::move(array_scan));
 }
 
 absl::Status ForwardTransformer::PrepareTVFInputArguments(
@@ -654,8 +732,6 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
                      BuildGsqlResolvedScanForTableExpression(
                          *(join_expr.rarg), rtable, &scope_for_rhs,
                          &scope_for_rhs, &scope_for_rhs));
-    zetasql::ResolvedArrayScan* right_array_scan =
-        right_scan->GetAs<zetasql::ResolvedArrayScan>();
     std::vector<zetasql::ResolvedColumn> output_columns =
         left_scan->column_list();
     output_columns.insert(output_columns.end(),
@@ -680,17 +756,28 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
       ZETASQL_RET_CHECK(gsql_join_expr != nullptr);
     }
 
-    // Extract UNNEST WITH ORDINALITY column in the right scan if it exists.
-    std::unique_ptr<const zetasql::ResolvedColumnHolder>
-        right_scan_array_offset_col_holder = nullptr;
-    result = zetasql::MakeResolvedArrayScan(
-        /*column_list=*/output_columns,
-        /*input_scan=*/std::move(left_scan),
-        /*array_expr=*/right_array_scan->release_array_expr(),
-        /*element_column=*/right_array_scan->element_column(),
-        /*array_offset_column=*/std::move(right_scan_array_offset_col_holder),
-        /*join_expr=*/std::move(gsql_join_expr),
-        /*is_outer=*/is_left_outer);
+    if (right_scan->Is<zetasql::ResolvedArrayScan>()) {
+      zetasql::ResolvedArrayScan* right_array_scan =
+          right_scan->GetAs<zetasql::ResolvedArrayScan>();
+      // Extract UNNEST WITH ORDINALITY column in the right scan if it exists.
+      std::unique_ptr<const zetasql::ResolvedColumnHolder>
+          right_scan_array_offset_col_holder = nullptr;
+      result = zetasql::MakeResolvedArrayScan(
+          /*column_list=*/output_columns,
+          /*input_scan=*/std::move(left_scan),
+          /*array_expr=*/right_array_scan->release_array_expr(),
+          /*element_column=*/right_array_scan->element_column(),
+          /*array_offset_column=*/std::move(right_scan_array_offset_col_holder),
+          /*join_expr=*/std::move(gsql_join_expr),
+          /*is_outer=*/is_left_outer);
+    } else {
+      // Although the RHS is an unnest expr, it may not be a ResolvedArrayScan
+      // if it represents `unnest with ordinality` and was wrapped in a
+      // ProjectScan. See `ConvertZeroBasedOffsetToOneBasedOrdinal()` for
+      // details.
+      result = MakeResolvedJoinScan(output_columns, gsql_join_type,
+      std::move(left_scan), std::move(right_scan), std::move(gsql_join_expr));
+    }
   } else {
     /// Now we're in the normal table-scan case.
     ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedScan> right_scan,
@@ -1110,7 +1197,7 @@ ForwardTransformer::BuildGsqlResolvedScanForQueryExpression(
 
 // ArrayScan is used by ZetaSQL to also handle joins where an input looks like
 // an array (including repeated proto values).
-absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedArrayScan>>
 ForwardTransformer::BuildGsqlResolvedArrayScan(
     const RangeTblEntry& rte, Index rtindex,
     const VarIndexScope* external_scope, VarIndexScope* output_scope) {
@@ -3004,6 +3091,30 @@ absl::Status ForwardTransformer::SetColumnAccessList(
   return absl::OkStatus();
 }
 
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedCallStmt>>
+ForwardTransformer::BuildPartialGsqlResolvedCallStmt(const FuncExpr& func) {
+  // Resolve the Procedure arguments.
+  ExprTransformerInfo expr_transformer_info =
+      ExprTransformerInfo::ForScalarFunctions(&empty_var_index_scope_,
+                                              "standalone expression");
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list,
+      BuildGsqlFunctionArgumentList(func.args, &expr_transformer_info));
+
+  // Look up the procedure and signature.
+  std::vector<zetasql::InputArgumentType> input_argument_types =
+      GetInputArgumentTypes(argument_list);
+  ZETASQL_ASSIGN_OR_RETURN(
+      ProcedureAndSignature procedure_and_signature,
+      catalog_adapter_->GetEngineSystemCatalog()->GetProcedureAndSignature(
+          func.funcid, input_argument_types,
+          catalog_adapter_->analyzer_options().language()));
+
+  return zetasql::MakeResolvedCallStmt(procedure_and_signature.procedure(),
+                                         procedure_and_signature.signature(),
+                                         std::move(argument_list));
+}
+
 absl::Status ForwardTransformer::CheckForUnsupportedFields(
     const void* field, absl::string_view feature_name,
     absl::string_view field_name) const {
@@ -3136,9 +3247,16 @@ ForwardTransformer::BuildGsqlResolvedStatement(const Query& query) {
       break;
     }
 
-    case CMD_UTILITY:
+    case CMD_UTILITY: {
       ZETASQL_RET_CHECK(query.utilityStmt != NULL);
       switch (query.utilityStmt->type) {
+        case T_CallStmt: {
+          ZETASQL_ASSIGN_OR_RETURN(
+              statement, BuildPartialGsqlResolvedCallStmt(
+                             *PostgresConstCastNode(CallStmt, query.utilityStmt)
+                                  ->funcexpr));
+          break;
+        }
         case T_CreatedbStmt:
         case T_CreateStmt:
         case T_CreateSeqStmt:
@@ -3156,6 +3274,8 @@ ForwardTransformer::BuildGsqlResolvedStatement(const Query& query) {
           return absl::UnimplementedError(
               "Utility SQL statements are not supported");
       }
+      break;
+    }
 
     // Command types that are not queries
     case CMD_UNKNOWN:

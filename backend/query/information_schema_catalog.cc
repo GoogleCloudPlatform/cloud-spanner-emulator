@@ -28,7 +28,9 @@
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/value.h"
+#include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
@@ -51,7 +53,6 @@
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
-#include "zetasql/base/no_destructor.h"
 
 namespace google {
 namespace spanner {

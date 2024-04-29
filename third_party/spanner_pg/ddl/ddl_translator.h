@@ -98,6 +98,9 @@ struct TranslationOptions {
   // enable_change_streams_ttl_deletes_filter_option allows
   // exclude_ttl_deletes change stream option.
   bool enable_change_streams_ttl_deletes_filter_option = false;
+  // enable_change_streams_allow_txn_exclusion_option allows
+  // allow_txn_exclusion change stream option.
+  bool enable_change_streams_allow_txn_exclusion_option = false;
   // enable_alter_index allows translation of <ALTER INDEX>.
   bool enable_alter_index = true;
   // enable_role_based_access allows role-based access control, e.g.

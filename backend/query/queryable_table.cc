@@ -202,6 +202,12 @@ QueryableTable::CreateEvaluatorTableIterator(
   read_arg.table = Name();
   read_arg.key_set = KeySet::All();
   read_arg.columns = column_names;
+  // Pending commit timestamp restrictions for queries are implemented in
+  // QueryValidator so we do not need enforcement during the read here.
+  // Furthermore, without enabling this certain internal reads issued by the
+  // ZetaSQL reference implementation will be rejected.
+  read_arg.allow_pending_commit_timestamps = true;
+
   // If current table is a change stream internal data/partition table, change
   // the read arg to access internal tables directly.
   if (wrapped_table_->owner_change_stream() != nullptr) {

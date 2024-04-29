@@ -522,6 +522,15 @@ group {
 }
 
 group {
+  code: "INVALID_ESCAPE_SEQUENCE"
+
+  message {
+    name: "InvalidUnicodeEscape"
+    pg_message_id: "invalid Unicode escape"
+  }
+}
+
+group {
   code: "INVALID_PARAMETER_VALUE"
 
   message {

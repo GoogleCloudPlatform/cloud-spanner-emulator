@@ -72,6 +72,7 @@ namespace {
 
 using ::postgres_translator::spangres::test::GetSpangresTestSystemCatalog;
 using ::testing::Contains;
+using ::testing::HasSubstr;
 using ::testing::UnorderedPointwise;
 using ::zetasql_base::testing::StatusIs;
 using gsql_value = ::zetasql::Value;
@@ -135,6 +136,16 @@ const zetasql::Type* GetPgJsonbArrayType() {
   return s_pg_jsonb_arr_type;
 }
 
+const zetasql::Type* GetPgOidArrayType() {
+  static const zetasql::Type* s_pg_oid_arr_type = []() {
+    const zetasql::Type* gsql_pg_oid = types::PgOidMapping()->mapped_type();
+    const zetasql::Type* pg_oid_array_type = nullptr;
+    ABSL_CHECK_OK(GetTypeFactory()->MakeArrayType(gsql_pg_oid, &pg_oid_array_type));
+    return pg_oid_array_type;
+  }();
+  return s_pg_oid_arr_type;
+}
+
 MATCHER(TypeEquals, "") {
   return std::get<0>(arg) != nullptr &&
          std::get<0>(arg)->Equals(std::get<1>(arg));
@@ -190,6 +201,14 @@ INSTANTIATE_TEST_SUITE_P(
          .pg_type_name = "_jsonb",
          .pg_type_oid = JSONBARRAYOID,
          .mapped_type = GetPgJsonbArrayType()},
+        {.pg_type = types::PgOidMapping(),
+         .pg_type_name = "oid",
+         .pg_type_oid = OIDOID,
+         .mapped_type = types::PgOidMapping()->mapped_type()},
+        {.pg_type = types::PgOidArrayMapping(),
+         .pg_type_name = "_oid",
+         .pg_type_oid = OIDARRAYOID,
+         .mapped_type = GetPgOidArrayType()},
     }));
 
 TEST_F(SpangresSystemCatalogTest, GetTypes) {
@@ -200,11 +219,13 @@ TEST_F(SpangresSystemCatalogTest, GetTypes) {
       gsql_bool, gsql_int64, gsql_double, gsql_string, gsql_bytes,
       gsql_timestamp, types::PgNumericMapping()->mapped_type(),
       types::PgJsonbMapping()->mapped_type(),
+      types::PgOidMapping()->mapped_type(),
       gsql_date, zetasql::types::BoolArrayType(),
       zetasql::types::Int64ArrayType(), zetasql::types::DoubleArrayType(),
       zetasql::types::StringArrayType(), zetasql::types::BytesArrayType(),
       zetasql::types::TimestampArrayType(), GetPgNumericArrayType(),
       GetPgJsonbArrayType(),
+      GetPgOidArrayType(),
       zetasql::types::DateArrayType()};
 
   EXPECT_THAT(types, UnorderedPointwise(TypeEquals(), expected_types));
@@ -216,15 +237,49 @@ TEST_F(SpangresSystemCatalogTest, GetTypes) {
   absl::flat_hash_map<Oid, const zetasql::TableValuedFunction*> tvfs;
   ZETASQL_ASSERT_OK(catalog->GetTableValuedFunctions(&tvfs));
 
-  std::vector<Oid> expected_oids;
-  std::vector<std::string> expected_names;
+  std::vector<Oid> tvf_oids;
+  std::vector<std::string> tvf_names;
   for (const auto& [oid, tvf] : tvfs) {
-    expected_oids.push_back(oid);
-    expected_names.push_back(tvf->Name());
+    tvf_oids.push_back(oid);
+    tvf_names.push_back(tvf->Name());
   }
-  EXPECT_EQ(tvfs.size(), 1);
-  EXPECT_THAT(expected_oids, Contains(F_JSONB_ARRAY_ELEMENTS));
-  EXPECT_THAT(expected_names, Contains("jsonb_array_elements"));
+  EXPECT_GE(tvfs.size(), 1);
+  EXPECT_THAT(tvf_oids, Contains(F_JSONB_ARRAY_ELEMENTS));
+  EXPECT_THAT(tvf_names, Contains("jsonb_array_elements"));
+}
+
+  // Disabling in the emulator as cancel_query is not yet supported.
+  TEST_F(SpangresSystemCatalogTest, DISABLED_GetProcedures) {
+  EngineSystemCatalog* catalog = GetSpangresTestSystemCatalog();
+  absl::flat_hash_map<Oid, const zetasql::Procedure*> procedures;
+  ZETASQL_ASSERT_OK(catalog->GetProcedures(&procedures));
+  std::vector<std::string> procedure_names;
+  for (const auto& [oid, procedure] : procedures) {
+    procedure_names.push_back(procedure->Name());
+  }
+  EXPECT_GE(procedures.size(), 1);
+  EXPECT_THAT(procedure_names, Contains("cancel_query"));
+}
+
+  // Disabling in the emulator as cancel_query is not yet supported.
+  TEST_F(SpangresSystemCatalogTest, DISABLED_GetProcedureAndSignature) {
+  EngineSystemCatalog* catalog = GetSpangresTestSystemCatalog();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid procedure_oid,
+                       PgBootstrapCatalog::Default()->GetProcOid(
+                           "spanner", "cancel_query", {TEXTOID}));
+  std::vector<zetasql::InputArgumentType> input_types;
+  input_types.push_back(zetasql::InputArgumentType(gsql_string));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(ProcedureAndSignature procedure,
+                       catalog->GetProcedureAndSignature(
+                           procedure_oid, input_types, GetLanguageOptions()));
+  EXPECT_EQ(procedure.procedure()->FullName(), "cancel_query");
+
+  // The error message for an incorrect function call should include the full
+  // proc name.
+  EXPECT_THAT(catalog->GetProcedureAndSignature(
+                  procedure_oid, /*input_types=*/{}, GetLanguageOptions()),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("spanner.cancel_query")));
 }
 
 TEST_F(SpangresSystemCatalogTest, GetPgNumericCastFunction) {

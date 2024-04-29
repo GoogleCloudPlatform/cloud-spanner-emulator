@@ -260,6 +260,26 @@
   prorettype => '_jsonb', proargtypes => 'jsonb',
   prosrc => 'jsonb_query_array' },
 
+{ oid => '50049', proname => 'int64_array', pronamespace => 'spanner',
+  prorettype => '_int8', proargtypes => 'jsonb',
+  prosrc => 'int64_array' },
+
+{ oid => '50050', proname => 'float32_array', pronamespace => 'spanner',
+  prorettype => '_float4', proargtypes => 'jsonb',
+  prosrc => 'float32_array' },
+
+{ oid => '50051', proname => 'float64_array', pronamespace => 'spanner',
+  prorettype => '_float8', proargtypes => 'jsonb',
+  prosrc => 'float64_array' },
+
+{ oid => '50052', proname => 'bool_array', pronamespace => 'spanner',
+  prorettype => '_bool', proargtypes => 'jsonb',
+  prosrc => 'bool_array' },
+
+{ oid => '50053', proname => 'string_array', pronamespace => 'spanner',
+  prorettype => '_text', proargtypes => 'jsonb',
+  prosrc => 'string_array' },
+
 #############################
 # QUERY CANCELLATION PROCEDURES
 #############################

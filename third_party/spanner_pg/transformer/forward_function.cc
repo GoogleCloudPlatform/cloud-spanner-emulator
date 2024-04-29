@@ -85,9 +85,10 @@ ForwardTransformer::BuildGsqlFunctionArgumentList(
   return argument_list;
 }
 
-static std::vector<zetasql::InputArgumentType> GetInputArgumentTypes(
-    const std::vector<std::unique_ptr<zetasql::ResolvedExpr>>&
-        argument_list) {
+std::vector<zetasql::InputArgumentType>
+ForwardTransformer::GetInputArgumentTypes(
+    const std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& argument_list)
+    const {
   std::vector<zetasql::InputArgumentType> input_argument_types;
   input_argument_types.reserve(argument_list.size());
   for (const std::unique_ptr<zetasql::ResolvedExpr>& argument :

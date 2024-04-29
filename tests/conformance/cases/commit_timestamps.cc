@@ -15,6 +15,7 @@
 //
 
 #include <string>
+#include <utility>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -24,6 +25,7 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "tests/conformance/common/database_test_base.h"
+#include "tests/conformance/common/environment.h"
 
 namespace google {
 namespace spanner {
@@ -65,6 +67,24 @@ class CommitTimestamps : public DatabaseTest {
             CommitTS     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
             Name         STRING(MAX),
           ) PRIMARY KEY (ID, CommitTS DESC)
+        )",
+        R"(
+          CREATE TABLE CommitTimestampTable(
+            ID           INT64,
+            CommitTS     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+            Name         STRING(MAX),
+          ) PRIMARY KEY (ID)
+        )",
+        R"(
+          CREATE TABLE CommitTimestampIndexTable(
+            ID           INT64,
+            CommitTS     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+            Name         STRING(MAX),
+          ) PRIMARY KEY (ID)
+        )",
+        R"(
+          CREATE INDEX CommitTimestampIndex ON
+            CommitTimestampIndexTable(Name, CommitTS)
         )"}));
     return absl::OkStatus();
   }
@@ -136,6 +156,21 @@ TEST_F(CommitTimestamps, CanWriteCommitTimestampToCommitTimestampKeyColumn) {
 
   EXPECT_THAT(ReadAll("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}),
               IsOkAndHoldsRows({{6, result.commit_timestamp, "Mark"}}));
+}
+
+TEST_F(CommitTimestamps, CanRepeatedlyInsertCommitTimestampKeyColumn) {
+  // Test that identical back-to-back inserts with PCT placeholder succeed and
+  // are assigned distinct values.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(CommitResult result0,
+                       Insert("CommitTimestampKeyTable", {"ID", "CommitTS"},
+                              {0, kCommitTimestampSentinel}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(CommitResult result1,
+                       Insert("CommitTimestampKeyTable", {"ID", "CommitTS"},
+                              {0, kCommitTimestampSentinel}));
+
+  EXPECT_THAT(ReadAll("CommitTimestampKeyTable", {"ID", "CommitTS"}),
+              IsOkAndHoldsRows({{0, result0.commit_timestamp},
+                                {0, result1.commit_timestamp}}));
 }
 
 TEST_F(CommitTimestamps, CanUpdateCommitTimestampForCommitTimestampColumn) {
@@ -505,6 +540,123 @@ TEST_F(CommitTimestamps, CanUpdateAndCommitPendingCommitTimestampInDml) {
               IsOkAndHoldsRows({{1, "Levin", result.commit_timestamp}}));
 }
 
+TEST_F(CommitTimestamps, CanInsertMultipleRowsInDml) {
+  ZETASQL_EXPECT_OK(CommitDml({
+      SqlStatement("INSERT INTO CommitTimestampTable (ID, CommitTS) "
+                   "VALUES (0, PENDING_COMMIT_TIMESTAMP())"),
+      SqlStatement("INSERT INTO CommitTimestampTable (ID, CommitTS) "
+                   "VALUES (1, PENDING_COMMIT_TIMESTAMP())"),
+  }));
+}
+
+TEST_F(CommitTimestamps, CanInsertMultipleRowsWithIndexedTimestamp) {
+  ZETASQL_EXPECT_OK(Commit({
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 0,
+                 kCommitTimestampSentinel),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 1,
+                 kCommitTimestampSentinel),
+  }));
+}
+
+TEST_F(CommitTimestamps, CanInsertMultipleRowsWithIndexedTimestampInDml) {
+  ZETASQL_EXPECT_OK(CommitDml({
+      SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS) "
+                   "VALUES (0, PENDING_COMMIT_TIMESTAMP())"),
+      SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS) "
+                   "VALUES (1, PENDING_COMMIT_TIMESTAMP())"),
+  }));
+}
+
+TEST_F(CommitTimestamps, CannotUpdateMultipleRowsWithIndexedTimestampInDml) {
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 0,
+                 kCommitTimestampSentinel),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 1,
+                 kCommitTimestampSentinel),
+  }));
+
+  EXPECT_THAT(
+      CommitDml({
+          SqlStatement("UPDATE CommitTimestampIndexTable SET CommitTS = "
+                       "PENDING_COMMIT_TIMESTAMP() WHERE ID = 0"),
+          SqlStatement("UPDATE CommitTimestampIndexTable SET CommitTS = "
+                       "PENDING_COMMIT_TIMESTAMP() WHERE ID = 1"),
+      }),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(CommitTimestamps, CanUpdateMultipleRowsWithIndexedTimestampInSingleDml) {
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 0,
+                 kCommitTimestampSentinel),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 1,
+                 kCommitTimestampSentinel),
+  }));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      DmlResult result,
+      ExecuteDml("UPDATE CommitTimestampIndexTable SET CommitTS = "
+                 "PENDING_COMMIT_TIMESTAMP() WHERE ID = 0 OR ID = 1"));
+  EXPECT_EQ(result.RowsModified(), 2);
+}
+
+TEST_F(CommitTimestamps, CanUpdateMultipleRowsInDml) {
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("CommitTimestampTable", {"ID", "CommitTS"}, 0,
+                 kCommitTimestampSentinel),
+      MakeInsert("CommitTimestampTable", {"ID", "CommitTS"}, 1,
+                 kCommitTimestampSentinel),
+  }));
+
+  ZETASQL_EXPECT_OK(CommitDml({
+      SqlStatement("UPDATE CommitTimestampTable SET CommitTS = "
+                   "PENDING_COMMIT_TIMESTAMP() WHERE ID = 0"),
+      SqlStatement("UPDATE CommitTimestampTable SET CommitTS = "
+                   "PENDING_COMMIT_TIMESTAMP() WHERE ID = 1"),
+  }));
+}
+
+TEST_F(CommitTimestamps, CanUpdateMultipleRowsWithIndexedTimestamp) {
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 0,
+                 kCommitTimestampSentinel),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 1,
+                 kCommitTimestampSentinel),
+  }));
+
+  ZETASQL_EXPECT_OK(Commit({
+      MakeUpdate("CommitTimestampIndexTable", {"ID", "CommitTS"}, 0,
+                 kCommitTimestampSentinel),
+      MakeUpdate("CommitTimestampIndexTable", {"ID", "CommitTS"}, 1,
+                 kCommitTimestampSentinel),
+  }));
+}
+
+// This test covers a known inconsistency between Spanner and the Emulator
+TEST_F(CommitTimestamps, IndexReadsIncorrectlyAllowedInQueries) {
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn,
+      SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS, Name) "
+                   "VALUES (0, PENDING_COMMIT_TIMESTAMP(), 'name 1')")));
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn,
+      SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS, Name) "
+                   "VALUES (1, PENDING_COMMIT_TIMESTAMP(), 'name 2')")));
+  // On Spanner this query should fail due to the index key containing CommitTS,
+  // but since the emulator does not actually use indexes in query execution
+  // it succeeds here.
+  auto result = QueryTransaction(
+      std::move(txn),
+      "SELECT ID FROM CommitTimestampIndexTable "
+      "@{FORCE_INDEX=CommitTimestampIndex} WHERE Name = 'name 1'");
+  if (in_prod_env()) {
+    EXPECT_THAT(result, StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    EXPECT_THAT(result, IsOkAndHoldsRows({{0}}));
+  }
+}
+
 TEST_F(CommitTimestamps, InconsistentCommitTimestampInParent) {
   ZETASQL_EXPECT_OK(SetSchema({
       R"(
@@ -686,9 +838,7 @@ TEST_F(CommitTimestamps, CanInsertExplicitTimestampWithInconsistentSchema) {
   }
 }
 
-// TODO: This is a bug. This actually should pass on the emulator.
-// It passes when run against spanner test env.
-TEST_F(CommitTimestamps, BatchDmlFailsWithMultipleRowsWithCommitTimestamp) {
+TEST_F(CommitTimestamps, BatchDmlWithMultipleRowsWithCommitTimestamp) {
   auto txn = Transaction(Transaction::ReadWriteOptions());
 
   auto result = BatchDmlTransaction(
@@ -696,13 +846,10 @@ TEST_F(CommitTimestamps, BatchDmlFailsWithMultipleRowsWithCommitTimestamp) {
                          "VALUES (1, 'Pete', PENDING_COMMIT_TIMESTAMP())"),
             SqlStatement("INSERT INTO Users(ID, Name, CommitTS) "
                          "VALUES (2, 'Zeke', PENDING_COMMIT_TIMESTAMP())")});
-  EXPECT_THAT(ToUtilStatus(result.value().status),
-              in_prod_env() ? StatusIs(absl::StatusCode::kOk)
-                            : StatusIs(absl::StatusCode::kInvalidArgument));
+  ZETASQL_EXPECT_OK(ToUtilStatus(result.value().status));
 }
 
-// TODO: This is a bug. Same as above.
-TEST_F(CommitTimestamps, BatchDmlFailsWithUpdateWithCommitTimestamp) {
+TEST_F(CommitTimestamps, BatchDmlWithUpdateWithCommitTimestamp) {
   auto txn = Transaction(Transaction::ReadWriteOptions());
 
   auto result = BatchDmlTransaction(
@@ -711,9 +858,7 @@ TEST_F(CommitTimestamps, BatchDmlFailsWithUpdateWithCommitTimestamp) {
             SqlStatement("UPDATE Users SET Name = 'Zeke' WHERE ID = 1"),
             SqlStatement("UPDATE Users SET CommitTS = "
                          "PENDING_COMMIT_TIMESTAMP() WHERE ID = 1")});
-  EXPECT_THAT(ToUtilStatus(result.value().status),
-              in_prod_env() ? StatusIs(absl::StatusCode::kOk)
-                            : StatusIs(absl::StatusCode::kInvalidArgument));
+  ZETASQL_EXPECT_OK(ToUtilStatus(result.value().status));
 }
 
 // Test to verify that commit timestamps are propagated to index columns.

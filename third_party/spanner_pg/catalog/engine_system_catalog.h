@@ -161,6 +161,10 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   absl::StatusOr<Oid> GetOidForTVF(
       const zetasql::TableValuedFunction* tvf) const;
 
+  // Get the builtin Procedure by oid.
+  // Returns nullptr if the procedure is not found.
+  const zetasql::Procedure* GetProcedure(Oid proc_oid) const;
+
   // Get the matching function and signature for this oid and set of input
   // argument types.
   // Returns an error if the function call is not supported.
@@ -174,6 +178,14 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // Returns an error if the function call is not supported.
   virtual absl::StatusOr<FunctionAndSignature> GetFunctionAndSignature(
       const PostgresExprIdentifier& expr_id,
+      const std::vector<zetasql::InputArgumentType>& input_argument_types,
+      const zetasql::LanguageOptions& language_options);
+
+  // Get the matching procedure and signature for this oid and set of input
+  // argument types.
+  // Returns an error if the procedure call is not supported.
+  absl::StatusOr<ProcedureAndSignature> GetProcedureAndSignature(
+      Oid proc_oid,
       const std::vector<zetasql::InputArgumentType>& input_argument_types,
       const zetasql::LanguageOptions& language_options);
 
@@ -244,6 +256,12 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // their associated OIDs. Output should be populated with the mapped TVFs.
   absl::Status GetTableValuedFunctions(absl::flat_hash_map<
       Oid, const zetasql::TableValuedFunction*>* output) const;
+
+  // GetProcedures is used to surface the registered system procedures and
+  // their associated OIDs. Output should be populated with the mapped
+  // procedures.
+  absl::Status GetProcedures(
+      absl::flat_hash_map<Oid, const zetasql::Procedure*>* output) const;
 
   // GetConversions is used by the ZetaSQL random query generator to determine
   // which type casts between the builtin types (ZetaSQL and Postgres
@@ -457,6 +475,12 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // required to match the PostgreSQL proc name.
   absl::Status AddTVF(Oid proc_oid, const std::string& engine_tvf_name);
 
+  // Creates a mapping between a PostgreSQL proc oid and a ZetaSQL Procedure
+  // by name. Note that the engine_procedure_name is not required to match the
+  // PostgreSQL proc name.
+  absl::Status AddProcedure(Oid proc_oid,
+                            const std::string& engine_procedure_name);
+
   // Add a mapping between the PG Expr Identifier and a builtin function.
   absl::Status AddExprFunction(const PostgresExprIdentifier& expr_id,
                                const std::string& builtin_function_name);
@@ -579,6 +603,11 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
       proc_oid_to_tvf_;
   absl::flat_hash_map<const zetasql::TableValuedFunction*, Oid>
       tvf_to_proc_oid_;
+
+  // Store mapping from PostgreSQL proc oid to Procedure. There is no reverse
+  // mapping because procedures are only used in CALL statements, CALL
+  // statements are not used in RQG, and do not have reverse transformer logic.
+  absl::flat_hash_map<Oid, const zetasql::Procedure*> proc_oid_to_procedure_;
 
   // Stores the reverse mapping for operator functions.
   // Only used by the reverse transformer.

@@ -170,6 +170,14 @@ TEST_F(Int8ToCharTest, FormatNumberEdgeCases) {
   // Ordinal number suffixes are not applied to values < 0
   EXPECT_THAT(Int8ToChar(-123, "000TH"), IsOkAndHolds(StrEq("-123")));
   EXPECT_THAT(Int8ToChar(-123, "000th"), IsOkAndHolds(StrEq("-123")));
+
+  // Int8 limits
+  EXPECT_THAT(Int8ToChar(std::numeric_limits<int64_t>::min(),
+                         "9999999999999999999EEEE"),
+              IsOkAndHolds(StrEq("-9e+18")));
+  EXPECT_THAT(Int8ToChar(std::numeric_limits<int64_t>::max(),
+                         "9999999999999999999EEEE"),
+              IsOkAndHolds(StrEq(" 9e+18")));
 }
 
 TEST_F(Int8ToCharTest,

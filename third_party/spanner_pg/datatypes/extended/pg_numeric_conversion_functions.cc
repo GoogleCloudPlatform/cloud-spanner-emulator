@@ -77,7 +77,7 @@ const zetasql::Function* GetPgNumericToInt64Conversion() {
                               zetasql::Function::SCALAR,
                               /*function_signatures=*/{},
                               zetasql::FunctionOptions().set_evaluator(
-                                  postgres_translator::EvalNumericCastToInt64));
+                                  postgres_translator::EvalCastNumericToInt64));
   return kPgNumericToInt64Conv;
 }
 
@@ -87,7 +87,7 @@ const zetasql::Function* GetPgNumericToDoubleConversion() {
           "pg_numeric_to_double_conv", "spanner", zetasql::Function::SCALAR,
           /*function_signatures=*/{},
           zetasql::FunctionOptions().set_evaluator(
-              postgres_translator::EvalNumericCastToDouble));
+              postgres_translator::EvalCastNumericToDouble));
   return kPgNumericToDoubleConv;
 }
 
@@ -97,7 +97,7 @@ const zetasql::Function* GetPgNumericToStringConversion() {
           "pg_numeric_to_string_conv", "spanner", zetasql::Function::SCALAR,
           /*function_signatures=*/{},
           zetasql::FunctionOptions().set_evaluator(
-              postgres_translator::EvalNumericCastToString));
+              postgres_translator::EvalCastNumericToString));
   return kPgNumericToStringConv;
 }
 

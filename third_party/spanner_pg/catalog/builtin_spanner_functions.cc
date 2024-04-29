@@ -68,6 +68,7 @@ const zetasql::Type* gsql_date = zetasql::types::DateType();
 const zetasql::Type* gsql_int64_array = zetasql::types::Int64ArrayType();
 const zetasql::Type* gsql_string_array = zetasql::types::StringArrayType();
 const zetasql::Type* gsql_bool_array = zetasql::types::BoolArrayType();
+const zetasql::Type* gsql_float_array = zetasql::types::FloatArrayType();
 const zetasql::Type* gsql_double_array = zetasql::types::DoubleArrayType();
 const zetasql::Type* gsql_bytes_array = zetasql::types::BytesArrayType();
 const zetasql::Type* gsql_date_array = zetasql::types::DateArrayType();
@@ -793,18 +794,47 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
 
     const zetasql::Type* gsql_pg_jsonb =
         types::PgJsonbMapping()->mapped_type();
-    functions.push_back({"ml_predict_row",
-                         "ml_predict_row",
-                         {
-                             {{gsql_pg_jsonb,
-                               {gsql_string, gsql_pg_jsonb},
-                               /*context_ptr=*/nullptr}},
-                             {{gsql_pg_jsonb,
-                               {gsql_pg_jsonb, gsql_pg_jsonb},
-                               /*context_ptr=*/nullptr}},
-                         },
-                         /*mode=*/zetasql::Function::SCALAR,
-                         /*postgres_namespace=*/"spanner"});
+      functions.push_back({"ml_predict_row",
+                           "ml_predict_row",
+                           {
+                               {{gsql_pg_jsonb,
+                                 {gsql_string, gsql_pg_jsonb},
+                                 /*context_ptr=*/nullptr}},
+                               {{gsql_pg_jsonb,
+                                 {gsql_pg_jsonb, gsql_pg_jsonb},
+                                 /*context_ptr=*/nullptr}},
+                           },
+                           /*mode=*/zetasql::Function::SCALAR,
+                           /*postgres_namespace=*/"spanner"});
+
+      functions.push_back({"int64_array",
+                           "int64_array",
+                           {{{gsql_int64_array,
+                              {gsql_pg_jsonb},
+                              /*context_ptr=*/nullptr}}},
+                           /*mode=*/zetasql::Function::SCALAR,
+                           /*postgres_namespace=*/"spanner"});
+      functions.push_back({"float64_array",
+                           "float64_array",
+                           {{{gsql_double_array,
+                              {gsql_pg_jsonb},
+                              /*context_ptr=*/nullptr}}},
+                           /*mode=*/zetasql::Function::SCALAR,
+                           /*postgres_namespace=*/"spanner"});
+      functions.push_back({"bool_array",
+                           "bool_array",
+                           {{{gsql_bool_array,
+                              {gsql_pg_jsonb},
+                              /*context_ptr=*/nullptr}}},
+                           /*mode=*/zetasql::Function::SCALAR,
+                           /*postgres_namespace=*/"spanner"});
+      functions.push_back({"string_array",
+                           "string_array",
+                           {{{gsql_string_array,
+                              {gsql_pg_jsonb},
+                              /*context_ptr=*/nullptr}}},
+                           /*mode=*/zetasql::Function::SCALAR,
+                           /*postgres_namespace=*/"spanner"});
 }
 
 void AddPgLeastGreatestFunctions(

@@ -39,6 +39,7 @@
 #include "zetasql/public/types/extended_type.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
+#include "zetasql/base/no_destructor.h"
 #include "absl/hash/hash.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -52,7 +53,6 @@
 #include "third_party/spanner_pg/util/datetime_conversion.h"
 #include "third_party/spanner_pg/util/oid_to_string.h"
 #include "third_party/spanner_pg/util/postgres.h"
-#include "zetasql/base/no_destructor.h"
 #include "zetasql/base/status_macros.h"
 
 namespace postgres_translator {

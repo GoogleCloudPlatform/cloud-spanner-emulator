@@ -56,6 +56,11 @@ struct ReadArg {
 
   // Set of columns to read.
   std::vector<std::string> columns;
+
+  // Whether to allow reading pending commit timestamps. This should only be
+  // enabled when enforcement is implemented elsewhere (e.g. queries have this
+  // enforced in QueryValidator).
+  bool allow_pending_commit_timestamps = false;
 };
 
 // Streams a debug string representation of ReadArg to out.

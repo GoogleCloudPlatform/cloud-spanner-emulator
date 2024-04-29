@@ -31,6 +31,7 @@
 #include "backend/datamodel/value.h"
 #include "backend/locking/manager.h"
 #include "backend/storage/in_memory_storage.h"
+#include "backend/transaction/commit_timestamp.h"
 #include "common/clock.h"
 #include "tests/common/schema_constructor.h"
 
@@ -53,7 +54,9 @@ class TransactionStoreTest : public testing::Test {
         lock_handle_(lock_manager_.CreateHandle(TransactionID(1),
                                                 TransactionPriority(1))),
         base_storage_(std::make_unique<InMemoryStorage>()),
-        transaction_store_(base_storage_.get(), lock_handle_.get()),
+        commit_timestamp_tracker_(std::make_unique<CommitTimestampTracker>()),
+        transaction_store_(base_storage_.get(), lock_handle_.get(),
+                           commit_timestamp_tracker_.get()),
         type_factory_(std::make_unique<zetasql::TypeFactory>()),
         schema_(test::CreateSchemaFromDDL(
                     {
@@ -75,6 +78,7 @@ class TransactionStoreTest : public testing::Test {
   LockManager lock_manager_;
   std::unique_ptr<LockHandle> lock_handle_;
   std::unique_ptr<InMemoryStorage> base_storage_;
+  std::unique_ptr<CommitTimestampTracker> commit_timestamp_tracker_;
   TransactionStore transaction_store_;
 
   // The type factory must outlive the type objects that it has made.

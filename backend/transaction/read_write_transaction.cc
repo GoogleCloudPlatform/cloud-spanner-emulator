@@ -219,8 +219,9 @@ ReadWriteTransaction::ReadWriteTransaction(
       versioned_catalog_(versioned_catalog),
       lock_handle_(
           lock_manager->CreateHandle(transaction_id, retry_state_.priority)),
+      commit_timestamp_tracker_(std::make_unique<CommitTimestampTracker>()),
       transaction_store_(std::make_unique<TransactionStore>(
-          base_storage_, lock_handle_.get())),
+          base_storage_, lock_handle_.get(), commit_timestamp_tracker_.get())),
       action_manager_(action_manager),
       action_context_(std::make_unique<ActionContext>(
           std::make_unique<TransactionReadOnlyStore>(transaction_store_.get()),
@@ -252,7 +253,7 @@ absl::Status ReadWriteTransaction::Read(const ReadArg& read_arg,
       std::unique_ptr<StorageIterator> itr;
       ZETASQL_RETURN_IF_ERROR(transaction_store_->Read(
           resolved_read_arg.table, key_range, resolved_read_arg.columns, &itr,
-          false /*allow_pending_commit_timestamps_in_read*/));
+          read_arg.allow_pending_commit_timestamps));
       iterators.push_back(std::move(itr));
     }
     *cursor = std::make_unique<StorageIteratorRowCursor>(
@@ -275,6 +276,10 @@ absl::Status ReadWriteTransaction::ApplyStatementVerifiers() {
         action_registry_->ExecuteVerifiers(action_context_.get(), write_op));
   }
   return absl::OkStatus();
+}
+
+void ReadWriteTransaction::UpdateTrackedCommitTimestamps() {
+  commit_timestamp_tracker_->Track(transaction_store_->GetBufferedOps());
 }
 
 const Schema* ReadWriteTransaction::schema() const {
@@ -548,7 +553,15 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
         }
       }
     }
-    return ApplyStatementVerifiers();
+    ZETASQL_RETURN_IF_ERROR(ApplyStatementVerifiers());
+    // We defer all commit timestamp tracking to the end of the write to avoid
+    // effector reads being rejected because of a previously written op in the
+    // same call to ReadWriteTransaction::Write (e.g. updates to two rows in the
+    // same table with an indexed commit timestamp column can be rejected due
+    // to effector reads if the updates are split into separate Write calls, but
+    // should succeed if written together).
+    UpdateTrackedCommitTimestamps();
+    return absl::OkStatus();
   });
 }
 

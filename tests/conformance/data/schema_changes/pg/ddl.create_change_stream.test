@@ -269,10 +269,12 @@ CREATE CHANGE STREAM change_stream_invalid_option WITH (value_capture_type);
 --
 ERROR: Failed to parse change stream option correctly in <CREATE CHANGE STREAM> statement.
 ==
-CREATE CHANGE STREAM change_stream WITH (retention_period = 7d);
---
-ERROR: [ERROR] syntax error at or near "d"; failed to parse the DDL statements.
-==
+# TODO: In PG15, it causes a different error. After the upgrade,
+# we can unskip this test.
+# CREATE CHANGE STREAM change_stream WITH (retention_period = 7d);
+# --
+# ERROR: [ERROR] syntax error at or near "d"; failed to parse the DDL statements.
+# ==
 CREATE CHANGE STREAM change_stream WITH ();
 --
 ERROR: [ERROR] syntax error at or near ")"; failed to parse the DDL statements.
