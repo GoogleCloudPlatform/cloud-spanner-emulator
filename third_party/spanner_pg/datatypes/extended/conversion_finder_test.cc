@@ -44,8 +44,22 @@
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"
 
-namespace postgres_translator::spangres {
-namespace datatypes {
+namespace postgres_translator::spangres::datatypes {
+namespace {
+// Performs equality with the memory arena initialized. This is necessary for pg
+// types that call internal functions in order to convert values into a
+// comparable representation (e.g. pg numeric, which uses `numeric_in`).
+MATCHER_P(EqPG, result,
+          absl::StrCat("EqualPostgreSQLValue(", result.DebugString(), ")")) {
+  auto pg_arena = postgres_translator::interfaces::CreatePGArena(nullptr);
+  if (!pg_arena.ok()) {
+    *result_listener << "pg memory arena could not be initialized "
+                     << pg_arena.status();
+    return false;
+  }
+  return arg == result;
+}
+}  // namespace
 
 using ::zetasql::types::BoolType;
 using ::zetasql::types::BytesType;
@@ -72,16 +86,8 @@ TEST_P(ConversionFoundTest, ConversionFound) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       zetasql::Conversion conversion,
       FindExtendedTypeConversion(test.from, test.to, test.options));
-
-  // Create the pg arena to create and compare PG.NUMERIC.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      absl::StatusOr<std::unique_ptr<postgres_translator::interfaces::PGArena>>
-          pg_arena,
-      postgres_translator::interfaces::CreatePGArena(nullptr));
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto converted_value,
-                       conversion.evaluator().Eval(test.input));
-  EXPECT_EQ(converted_value, test.expected_output);
+  EXPECT_THAT(conversion.evaluator().Eval(test.input),
+              zetasql_base::testing::IsOkAndHolds(EqPG(test.expected_output)));
 }
 
 std::vector<ConversionFoundTestCase> GetConversionFoundTestCases() {
@@ -243,8 +249,7 @@ std::vector<ConversionNotFoundTestCase> GetConversionNotFoundTestCases() {
 INSTANTIATE_TEST_SUITE_P(ConversionsTestSuite, ConversionNotFoundTest,
                          testing::ValuesIn(GetConversionNotFoundTestCases()));
 
-}  // namespace datatypes
-}  // namespace postgres_translator::spangres
+}  // namespace postgres_translator::spangres::datatypes
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);

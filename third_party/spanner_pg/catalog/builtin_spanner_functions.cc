@@ -575,6 +575,99 @@ void AddPgArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
           /*has_mapped_function=*/true,
           /*explicit_mapped_function_name=*/"pg.array_length"});
   functions.push_back(array_length_function);
+
+    PostgresFunctionArguments arraycontained_function(
+        {"arraycontained",
+        "pg.array_contained",
+        {{{gsql_bool,
+            {gsql_int64_array, gsql_int64_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_string_array, gsql_string_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_bool_array, gsql_bool_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_bytes_array, gsql_bytes_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_date_array, gsql_date_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_timestamp_array, gsql_timestamp_array},
+            /*context_ptr=*/nullptr}}}});
+      arraycontained_function.add_signature(
+          {{gsql_bool,
+            {gsql_pg_numeric_arr, gsql_pg_numeric_arr},
+            /*context_ptr=*/nullptr},
+          /*has_mapped_function=*/true,
+          /*explicit_mapped_function_name=*/"pg.array_contained"});
+    // Intentionally omitted jsonb because spanner does not support json
+    // equality.
+    functions.push_back(arraycontained_function);
+
+    PostgresFunctionArguments arraycontains_function(
+        {"arraycontains",
+        "pg.array_contains",
+        {{{gsql_bool,
+            {gsql_int64_array, gsql_int64_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_string_array, gsql_string_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_bool_array, gsql_bool_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_bytes_array, gsql_bytes_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_date_array, gsql_date_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_timestamp_array, gsql_timestamp_array},
+            /*context_ptr=*/nullptr}}}});
+      arraycontains_function.add_signature(
+          {{gsql_bool,
+            {gsql_pg_numeric_arr, gsql_pg_numeric_arr},
+            /*context_ptr=*/nullptr},
+          /*has_mapped_function=*/true,
+          /*explicit_mapped_function_name=*/"pg.array_contains"});
+    // Intentionally omitted jsonb because spanner does not support json
+    // equality.
+    functions.push_back(arraycontains_function);
+
+    PostgresFunctionArguments arrayoverlap_function(
+        {"arrayoverlap",
+        "pg.array_overlap",
+        {{{gsql_bool,
+            {gsql_int64_array, gsql_int64_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_string_array, gsql_string_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_bool_array, gsql_bool_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_bytes_array, gsql_bytes_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_date_array, gsql_date_array},
+            /*context_ptr=*/nullptr}},
+          {{gsql_bool,
+            {gsql_timestamp_array, gsql_timestamp_array},
+            /*context_ptr=*/nullptr}}}});
+      arrayoverlap_function.add_signature(
+          {{gsql_bool,
+            {gsql_pg_numeric_arr, gsql_pg_numeric_arr},
+            /*context_ptr=*/nullptr},
+          /*has_mapped_function=*/true,
+          /*explicit_mapped_function_name=*/"pg.array_overlap"});
+    // Intentionally omitted jsonb because spanner does not support json
+    // equality.
+    functions.push_back(arrayoverlap_function);
 }
 
 void AddPgComparisonFunctions(
@@ -821,6 +914,13 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
                               /*context_ptr=*/nullptr}}},
                            /*mode=*/zetasql::Function::SCALAR,
                            /*postgres_namespace=*/"spanner"});
+        functions.push_back({"float32_array",
+                             "float32_array",
+                             {{{gsql_float_array,
+                                {gsql_pg_jsonb},
+                                /*context_ptr=*/nullptr}}},
+                             /*mode=*/zetasql::Function::SCALAR,
+                             /*postgres_namespace=*/"spanner"});
       functions.push_back({"bool_array",
                            "bool_array",
                            {{{gsql_bool_array,

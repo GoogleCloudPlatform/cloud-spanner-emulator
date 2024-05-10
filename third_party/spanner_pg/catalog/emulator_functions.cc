@@ -67,6 +67,7 @@
 #include "absl/strings/substitute.h"
 #include "absl/time/time.h"
 #include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
+#include "third_party/spanner_pg/catalog/jsonb_array_elements_table_valued_function.h"
 #include "third_party/spanner_pg/datatypes/common/jsonb/jsonb_parse.h"
 #include "third_party/spanner_pg/datatypes/common/pg_numeric_parse.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_conversion_functions.h"
@@ -1146,6 +1147,182 @@ std::unique_ptr<zetasql::Function> CastToDateFunction(
                                        {zetasql::types::StringType()},
                                        nullptr}},
       function_options);
+}
+
+std::unique_ptr<zetasql::Function> ArrayOverlapFunction(
+    const std::string& catalog_name) {
+  constexpr absl::string_view kArrayOverlapSql = R"sql(
+                  CASE
+                    WHEN array_to_search IS NULL OR search_values is NULL
+                    THEN NULL
+                  ELSE
+                    EXISTS(
+                      SELECT 1 FROM UNNEST(array_to_search) AS element WHERE
+                      element IN UNNEST (search_values))
+                  END
+                )sql";
+  FunctionArgumentType array_to_search_arg(
+      zetasql::ARG_ARRAY_TYPE_ANY_1,
+      FunctionArgumentTypeOptions()
+          .set_array_element_must_support_equality()
+          .set_argument_name("array_to_search", zetasql::kPositionalOnly));
+
+  FunctionArgumentType search_values_arg(
+      zetasql::ARG_ARRAY_TYPE_ANY_1,
+      FunctionArgumentTypeOptions().set_argument_name(
+          "search_values", zetasql::kPositionalOnly));
+
+  FunctionSignature signature{
+      gsql_bool,
+      {array_to_search_arg, search_values_arg},
+      /*context_id=*/-1,
+      FunctionSignatureOptions().set_rewrite_options(
+          FunctionSignatureRewriteOptions()
+              .set_enabled(true)
+              .set_rewriter(zetasql::REWRITE_BUILTIN_FUNCTION_INLINER)
+              .set_sql(kArrayOverlapSql))};
+
+  return std::make_unique<zetasql::Function>(
+      "pg.array_overlap", catalog_name, zetasql::Function::SCALAR,
+      std::vector<FunctionSignature>{signature}, FunctionOptions());
+}
+
+std::unique_ptr<zetasql::Function> ArrayContainsOrContainedFunction(
+    const std::string& catalog_name, bool is_array_contains) {
+  constexpr absl::string_view kArrayContainsSql = R"sql(
+                  CASE
+                    WHEN array_to_search IS NULL OR search_values is NULL THEN NULL
+                    WHEN pg.array_length(search_values, 1) IS NULL THEN TRUE
+                  ELSE
+                    (SELECT LOGICAL_AND(
+                      COALESCE(element IN UNNEST (array_to_search), FALSE))
+                    FROM UNNEST(search_values) AS element)
+                  END
+                )sql";
+
+  FunctionArgumentType array_to_search(
+      zetasql::ARG_ARRAY_TYPE_ANY_1,
+      FunctionArgumentTypeOptions()
+          .set_array_element_must_support_equality()
+          .set_argument_name("array_to_search", zetasql::kPositionalOnly));
+
+  FunctionArgumentType search_values(
+      zetasql::ARG_ARRAY_TYPE_ANY_1,
+      FunctionArgumentTypeOptions()
+          .set_array_element_must_support_equality()
+          .set_argument_name("search_values", zetasql::kPositionalOnly));
+
+  zetasql::FunctionArgumentTypeList argument_type_list;
+  if (is_array_contains) {
+    argument_type_list = {array_to_search, search_values};
+  } else {
+    argument_type_list = {search_values, array_to_search};
+  }
+
+  FunctionSignature signature{
+      gsql_bool, argument_type_list,
+      /*context_id=*/-1,
+      FunctionSignatureOptions().set_rewrite_options(
+          FunctionSignatureRewriteOptions()
+              .set_enabled(true)
+              .set_rewriter(zetasql::REWRITE_BUILTIN_FUNCTION_INLINER)
+              .set_sql(kArrayContainsSql))};
+
+  return std::make_unique<zetasql::Function>(
+      is_array_contains ? "pg.array_contains" : "pg.array_contained",
+      catalog_name, zetasql::Function::SCALAR,
+      std::vector<FunctionSignature>{signature}, FunctionOptions());
+}
+
+std::unique_ptr<zetasql::Function> ArrayAllFunction(
+    const std::string& catalog_name, const std::string& operator_str,
+    const std::string& function_name) {
+  constexpr absl::string_view kArrayAllTemplateSql = R"sql(
+        CASE
+          WHEN PG.ARRAY_LENGTH(array_to_search, 1) IS NULL THEN TRUE
+          WHEN array_to_search IS NULL OR search_value is NULL THEN NULL
+          WHEN
+            (SELECT LOGICAL_or(element IS NULL) FROM UNNEST(array_to_search) as element) THEN NULL
+        ELSE
+          (SELECT LOGICAL_AND(search_value %s element) FROM UNNEST(array_to_search) AS element)
+        END
+      )sql";
+
+  FunctionArgumentType array_to_search(
+      zetasql::ARG_ARRAY_TYPE_ANY_1,
+      FunctionArgumentTypeOptions()
+          .set_array_element_must_support_equality()
+          .set_argument_name("array_to_search", zetasql::kPositionalOnly));
+
+  FunctionArgumentType search_value(
+      zetasql::ARG_TYPE_ANY_1,
+      FunctionArgumentTypeOptions().set_argument_name(
+          "search_value", zetasql::kPositionalOnly));
+
+  FunctionSignature signature{
+      gsql_bool,
+      {search_value, array_to_search},
+      /*context_id=*/-1,
+      FunctionSignatureOptions().set_rewrite_options(
+          FunctionSignatureRewriteOptions()
+              .set_enabled(true)
+              .set_rewriter(zetasql::REWRITE_BUILTIN_FUNCTION_INLINER)
+              .set_sql(absl::StrFormat(kArrayAllTemplateSql, operator_str)))};
+
+  return std::make_unique<zetasql::Function>(
+      function_name, catalog_name, zetasql::Function::SCALAR,
+      std::vector<FunctionSignature>{signature}, FunctionOptions());
+}
+
+std::unique_ptr<zetasql::Function> ArraySliceFunction(
+    const std::string& catalog_name) {
+  // We add 1 to the offset (i.e., idx) because ZetaSQL returns zero-based
+  // offset while Postgres array slicing expects one-based offset.
+  constexpr absl::string_view kArraySliceSql =
+      R"sql(
+        CASE
+          WHEN
+            array_to_slice IS NULL
+            OR start_offset IS NULL
+            OR end_offset IS NULL
+            THEN NULL
+          WHEN PG.ARRAY_LENGTH(array_to_slice, 1) IS NULL
+            THEN []
+          ELSE
+            ARRAY(
+              SELECT e
+              FROM UNNEST(array_to_slice) AS e WITH OFFSET AS idx
+              WHERE start_offset <= (idx + 1) AND (idx + 1) <= end_offset
+              ORDER BY idx nulls last)
+        END
+      )sql";
+  FunctionArgumentType array_to_slice_arg(
+      zetasql::ARG_ARRAY_TYPE_ANY_1,
+      FunctionArgumentTypeOptions()
+          .set_array_element_must_support_equality()
+          .set_argument_name("array_to_slice", zetasql::kPositionalOnly));
+
+  FunctionArgumentType start_offset_arg(
+      gsql_int64, FunctionArgumentTypeOptions().set_argument_name(
+                      "start_offset", zetasql::kPositionalOnly));
+
+  FunctionArgumentType end_offset_arg(
+      gsql_int64, FunctionArgumentTypeOptions().set_argument_name(
+                      "end_offset", zetasql::kPositionalOnly));
+
+  FunctionSignature signature{
+      zetasql::ARG_ARRAY_TYPE_ANY_1,
+      {array_to_slice_arg, start_offset_arg, end_offset_arg},
+      /*context_id=*/-1,
+      FunctionSignatureOptions().set_rewrite_options(
+          FunctionSignatureRewriteOptions()
+              .set_enabled(true)
+              .set_rewriter(zetasql::REWRITE_BUILTIN_FUNCTION_INLINER)
+              .set_sql(kArraySliceSql))};
+
+  return std::make_unique<zetasql::Function>(
+      "pg.array_slice", catalog_name, zetasql::Function::SCALAR,
+      std::vector<FunctionSignature>{signature}, FunctionOptions());
 }
 
 absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
@@ -3012,20 +3189,6 @@ std::unique_ptr<zetasql::Function> OidGreaterThanEqualsFunction(
       function_options);
 }
 
-std::unique_ptr<zetasql::TableValuedFunction> JsonbArrayElementsTVF(
-    absl::string_view catalog_name) {
-  const zetasql::Type* pg_jsonb_type = spangres::datatypes::GetPgJsonbType();
-  zetasql::TVFRelation jsonb_result_schema({{"", pg_jsonb_type}});
-  return std::make_unique<zetasql::FixedOutputSchemaTVF>(
-      std::vector<std::string>{kPGJsonbArrayElementsFunctionName},
-      zetasql::FunctionSignature(
-          zetasql::FunctionArgumentType::RelationWithSchema(
-              jsonb_result_schema,
-              /*extra_relation_input_columns_allowed=*/false),
-          {pg_jsonb_type}, nullptr),
-      jsonb_result_schema);
-}
-
 }  // namespace
 
 absl::StatusOr<zetasql::Value> EvalCastNumericToInt64(
@@ -3366,12 +3529,41 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(JsonbArrayExtractionFunction<bool>(catalog_name));
   functions.push_back(JsonbArrayExtractionFunction<std::string>(catalog_name));
 
+  auto array_overlap_function = ArrayOverlapFunction(catalog_name);
+  functions.push_back(std::move(array_overlap_function));
+  auto array_contains_function = ArrayContainsOrContainedFunction(
+      catalog_name, /*is_array_contains=*/true);
+  functions.push_back(std::move(array_contains_function));
+  auto array_contained_function = ArrayContainsOrContainedFunction(
+      catalog_name, /*is_array_contains=*/false);
+  functions.push_back(std::move(array_contained_function));
+  auto array_all_equal =
+      ArrayAllFunction(catalog_name, "=", "pg.array_all_equal");
+  functions.push_back(std::move(array_all_equal));
+  auto array_all_greater =
+      ArrayAllFunction(catalog_name, ">", "pg.array_all_greater");
+  functions.push_back(std::move(array_all_greater));
+  auto array_all_greater_equal =
+      ArrayAllFunction(catalog_name, ">=", "pg.array_all_greater_equal");
+  functions.push_back(std::move(array_all_greater_equal));
+  auto array_all_less =
+      ArrayAllFunction(catalog_name, "<", "pg.array_all_less");
+  functions.push_back(std::move(array_all_less));
+  auto array_all_less_equal =
+      ArrayAllFunction(catalog_name, "<=", "pg.array_all_less_equal");
+  functions.push_back(std::move(array_all_less_equal));
+  // `<> all` is intentionally ommitted because it is equivalent to `NOT IN` and
+  // the transformer handles it as such.
+  auto array_slice_function = ArraySliceFunction(catalog_name);
+  functions.push_back(std::move(array_slice_function));
+
   return functions;
 }
 
 SpannerPGTVFs GetSpannerPGTVFs(const std::string& catalog_name) {
   SpannerPGTVFs tvfs;
-  auto jsonb_array_elements_tvf = JsonbArrayElementsTVF(catalog_name);
+  auto jsonb_array_elements_tvf =
+      std::make_unique<JsonbArrayElementsTableValuedFunction>();
   tvfs.push_back(std::move(jsonb_array_elements_tvf));
   return tvfs;
 }

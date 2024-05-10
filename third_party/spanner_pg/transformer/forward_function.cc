@@ -660,7 +660,7 @@ ForwardTransformer::BuildGsqlResolvedScalarArrayFunctionCall(
                      comparator_type, " operator."));
   }
   if (useOr == false && comparator_type != "<>") {
-    return absl::UnimplementedError("ALL expression is not supported.");
+      return BuildGsqlAllFunctionCall(scalar_array, expr_transformer_info);
   }
 
   // IN functions always have a useOr value of true, while NOT IN always has a
@@ -791,6 +791,139 @@ ForwardTransformer::BuildGsqlInFunctionCall(
                                   std::move(argument_list));
 }
 
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+ForwardTransformer::BuildGsqlAllFunctionCall(
+    const ScalarArrayOpExpr& scalar_array,
+    ExprTransformerInfo* expr_transformer_info) {
+  // ALL always have a useOr value of false.
+  ZETASQL_RET_CHECK(scalar_array.useOr == false);
+  void* array_argument = lsecond(scalar_array.args);
+
+  if (IsA(array_argument, ArrayCoerceExpr)) {
+    // In some cases, PostgreSQL may supply an ArrayCoerceExpr as the array
+    // argument to request runtime casting of the array elements to match the
+    // first argument. This is not supported, but we special case it for a good
+    // error message.
+    return absl::InvalidArgumentError(
+        "ALL expressions requiring array casting are not supported. Consider "
+        "rewriting as an explicit JOIN");
+  } else if (IsA(array_argument, Const)) {
+    return absl::InvalidArgumentError(
+        "ALL expressions with array literal arguments are not supported. "
+        "Try using an array constructor (ARRAY[])");
+  } else if (IsA(array_argument, SubLink)) {
+    // UnimplementedError to match the equivalent error in
+    // BuildGsqlResolvedSubqueryExpr
+    return absl::UnimplementedError(
+        "ALL expressions with a subquery on the right hand side are not "
+        "supported");
+  } else if (IsA(array_argument, FuncExpr) || IsA(array_argument, OpExpr)) {
+    // OpExpr and FuncExpr are semantically equivalent, so we'll handle both of
+    // them together.
+    return absl::InvalidArgumentError(
+        "ALL expressions with function or operator arguments are not "
+        "supported");
+  }
+
+  // Build the argument list for the googlesql function. The argument list is
+  // a vector that consists of the scalar expression and each expression from
+  // the array.
+  std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
+
+  // Get the scalar expression and add it to the argument list.
+  Expr* scalar_node = PostgresCastToExpr(linitial(scalar_array.args));
+  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedExpr> scalar_arg,
+                   BuildGsqlResolvedExpr(*scalar_node, expr_transformer_info));
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<zetasql::ResolvedExpr> mapped_scalar_arg,
+      catalog_adapter_->GetEngineSystemCatalog()->GetResolvedExprForComparison(
+          std::move(scalar_arg),
+          catalog_adapter_->analyzer_options().language()));
+  argument_list.push_back(std::move(mapped_scalar_arg));
+
+  ZETASQL_RETURN_IF_ERROR(AppendGsqlAllFunctionCallArrayArg(
+      array_argument, expr_transformer_info, argument_list));
+  ZETASQL_RET_CHECK(argument_list.size() == 2);
+
+  if (argument_list.at(1)->type()->AsArray()->element_type()->IsFloat()) {
+    return absl::InvalidArgumentError(
+        "ALL expressions with float4[] column references are not supported.");
+  }
+  if (argument_list.at(1)->type()->AsArray()->element_type()->IsDouble()) {
+    return absl::InvalidArgumentError(
+        "ALL expressions with double precision[] column references are "
+        "not supported.");
+  }
+  std::vector<zetasql::InputArgumentType> input_argument_types =
+      GetInputArgumentTypes(argument_list);
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      const FormData_pg_operator* opno_data,
+      PgBootstrapCatalog::Default()->GetOperator(scalar_array.opno));
+  std::string comparator_type = (NameStr(opno_data->oprname));
+  ZETASQL_ASSIGN_OR_RETURN(
+      FunctionAndSignature function_and_signature,
+      catalog_adapter_->GetEngineSystemCatalog()->GetFunctionAndSignature(
+          PostgresExprIdentifier::ScalarArrayOpExpr(
+              /*array_op_arg_is_array=*/true, scalar_array.useOr,
+              comparator_type),
+          input_argument_types,
+          catalog_adapter_->analyzer_options().language()));
+
+  return MakeResolvedFunctionCall(function_and_signature,
+                                  std::move(argument_list));
+}
+
+absl::Status ForwardTransformer::AppendGsqlAllFunctionCallArrayArg(
+    void* array_argument, ExprTransformerInfo* expr_transformer_info,
+    std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& argument_list) {
+  ZETASQL_RET_CHECK_EQ(argument_list.size(), 1)
+      << "The scalar argument should be added to argument_list before the "
+         "array arguments";
+  if (IsA(array_argument, Var)) {
+    // ALL expressions with column arguments.
+    ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedExpr> column_ref,
+                     BuildGsqlResolvedColumnRef(
+                         *internal::PostgresConstCastNode(Var, array_argument),
+                         *expr_transformer_info->var_index_scope));
+    ZETASQL_RET_CHECK(column_ref->type()->IsArray());
+    argument_list.push_back(std::move(column_ref));
+  } else if (IsA(array_argument, Param)) {
+    // ALL expressions with parameter arguments.
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<zetasql::ResolvedParameter> param_ref,
+        BuildGsqlResolvedParameter(
+            *internal::PostgresConstCastNode(Param, array_argument)));
+    ZETASQL_RET_CHECK(param_ref->type()->IsArray());
+    argument_list.push_back(std::move(param_ref));
+  } else {
+    ZETASQL_RET_CHECK(IsA(array_argument, ArrayExpr));
+    ArrayExpr* array_node =
+        internal::PostgresCastNode(ArrayExpr, array_argument);
+    if (array_node->multidims) {
+      return absl::InvalidArgumentError(
+          "Multi-dimensional arrays are not supported.");
+    }
+    std::vector<std::unique_ptr<zetasql::ResolvedExpr>> array_elements;
+    for (Expr* array_element : StructList<Expr*>(array_node->elements)) {
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::unique_ptr<zetasql::ResolvedExpr> expr_arg,
+          BuildGsqlResolvedExpr(*array_element, expr_transformer_info));
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::unique_ptr<zetasql::ResolvedExpr> mapped_expr_arg,
+          catalog_adapter_->GetEngineSystemCatalog()
+              ->GetResolvedExprForComparison(
+                  std::move(expr_arg),
+                  catalog_adapter_->analyzer_options().language()));
+      array_elements.push_back(std::move(mapped_expr_arg));
+    }
+    ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedExpr> array_arg,
+                     BuildGsqlResolvedExpr(*array_node, expr_transformer_info));
+    argument_list.push_back(std::move(array_arg));
+  }
+  return absl::OkStatus();
+}
+
 absl::StatusOr<bool> ForwardTransformer::AppendGsqlInFunctionCallArrayArg(
     void* array_argument, ExprTransformerInfo* expr_transformer_info,
     std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& argument_list) {
@@ -800,11 +933,21 @@ absl::StatusOr<bool> ForwardTransformer::AppendGsqlInFunctionCallArrayArg(
   bool appended_arg_is_array =
       IsA(array_argument, Var) || IsA(array_argument, Param);
   if (IsA(array_argument, Var)) {
-      return absl::InvalidArgumentError(
-          "ANY/SOME expressions with column arguments are not supported");
+    // ANY/SOME expressions with column arguments.
+    ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedExpr> column_ref,
+                     BuildGsqlResolvedColumnRef(
+                         *internal::PostgresConstCastNode(Var, array_argument),
+                         *expr_transformer_info->var_index_scope));
+    ZETASQL_RET_CHECK(column_ref->type()->IsArray());
+    argument_list.push_back(std::move(column_ref));
   } else if (IsA(array_argument, Param)) {
-      return absl::InvalidArgumentError(
-          "ANY/SOME expressions with parameter arguments are not supported");
+    // ANY/SOME expressions with parameter arguments.
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<zetasql::ResolvedParameter> param_ref,
+        BuildGsqlResolvedParameter(
+            *internal::PostgresConstCastNode(Param, array_argument)));
+    ZETASQL_RET_CHECK(param_ref->type()->IsArray());
+    argument_list.push_back(std::move(param_ref));
   } else {
     ZETASQL_RET_CHECK(IsA(array_argument, ArrayExpr));
     // Get each expression from the array and add them to the argument list.
@@ -859,9 +1002,6 @@ ForwardTransformer::BuildGsqlArrayAccess(
     ExprTransformerInfo* expr_transformer_info) {
   // Input validation--no slices, no assignment, 1-dimensional
 
-  if (subscripting_ref.reflowerindexpr != nullptr) {
-      return absl::InvalidArgumentError("Array slices are not supported");
-  }
   if (subscripting_ref.refassgnexpr != nullptr) {
     return absl::InvalidArgumentError(
         "Assignment to array elements is not supported");
@@ -872,6 +1012,15 @@ ForwardTransformer::BuildGsqlArrayAccess(
         "Multi-dimensional arrays are not supported");
   }
 
+  if (subscripting_ref.reflowerindexpr != nullptr &&
+      list_length(subscripting_ref.reflowerindexpr) > 0) {
+    if (list_length(subscripting_ref.reflowerindexpr) != 1) {
+      return absl::InvalidArgumentError(
+          "Multi-dimensional arrays are not supported");
+    }
+    return BuildGsqlResolvedArraySliceFunctionCall(subscripting_ref,
+                                                   expr_transformer_info);
+  }
   return BuildGsqlResolvedSafeArrayAtOrdinalFunctionCall(subscripting_ref,
                                                          expr_transformer_info);
 }
@@ -922,6 +1071,95 @@ ForwardTransformer::BuildGsqlResolvedSafeArrayAtOrdinalFunctionCall(
 
   return MakeResolvedFunctionCall(function_and_signature,
                                   std::move(argument_list));
+}
+
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+ForwardTransformer::BuildGsqlResolvedArraySliceFunctionCall(
+    const SubscriptingRef& subscripting_ref,
+    ExprTransformerInfo* expr_transformer_info) {
+  // Should have verified the presence of lower and upperbound (which imply
+  // slicing) before calling this function.
+  ZETASQL_RET_CHECK_NE(subscripting_ref.reflowerindexpr, nullptr);
+  ZETASQL_RET_CHECK_NE(subscripting_ref.refupperindexpr, nullptr);
+  // Should have verified it's not a multi-dimensional array before calling this
+  // function.
+  ZETASQL_RET_CHECK_EQ(list_length(subscripting_ref.reflowerindexpr), 1);
+  ZETASQL_RET_CHECK_EQ(list_length(subscripting_ref.refupperindexpr), 1);
+  // There should be an expression that evaluates to an array.
+  ZETASQL_RET_CHECK_NE(subscripting_ref.refexpr, nullptr);
+
+  std::unique_ptr<zetasql::ResolvedExpr> lower_index;
+  // If this List element is a nullptr it means no lowerbound was specified for
+  // slicing. Set the lowerbound as 1 i.e.,the first array index. For example,
+  // array_value[:3] would get transformed as array_value[1:3]
+  if (linitial(subscripting_ref.reflowerindexpr) == nullptr) {
+    lower_index = zetasql::MakeResolvedLiteral(zetasql::types::Int64Type(),
+                                                 zetasql::Value::Int64(1));
+  } else {
+    ZETASQL_ASSIGN_OR_RETURN(
+        lower_index,
+        BuildGsqlResolvedExpr(*internal::PostgresConstCastToExpr(
+                                  linitial(subscripting_ref.reflowerindexpr)),
+                              expr_transformer_info));
+  }
+
+  // If this List element is a nullptr it means no upperbound was specified for
+  // slicing. Set the upperbound as the return value of array_upper() i.e., the
+  // last array index. For example, array_value[2:] would get transformed as
+  // array_value[2: array_upper(array_value, 1)]
+  std::unique_ptr<zetasql::ResolvedExpr> upper_index;
+  if (linitial(subscripting_ref.refupperindexpr) == nullptr) {
+    ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedExpr> upper_bound_array,
+                     BuildGsqlResolvedExpr(*subscripting_ref.refexpr,
+                                           expr_transformer_info));
+
+    std::unique_ptr<zetasql::ResolvedExpr> one_literal =
+        zetasql::MakeResolvedLiteral(zetasql::types::Int64Type(),
+                                       zetasql::Value::Int64(1));
+
+    std::vector<std::unique_ptr<zetasql::ResolvedExpr>> upper_bound_arg_list;
+    upper_bound_arg_list.push_back(std::move(upper_bound_array));
+    upper_bound_arg_list.push_back(std::move(one_literal));
+
+    std::vector<zetasql::InputArgumentType> upper_bound_arg_types =
+        GetInputArgumentTypes(upper_bound_arg_list);
+
+    ZETASQL_ASSIGN_OR_RETURN(
+        FunctionAndSignature array_upper_function_and_signature,
+        catalog_adapter_->GetEngineSystemCatalog()->GetFunctionAndSignature(
+            F_ARRAY_UPPER, upper_bound_arg_types,
+            catalog_adapter_->analyzer_options().language()));
+    upper_index = MakeResolvedFunctionCall(array_upper_function_and_signature,
+                                           std::move(upper_bound_arg_list));
+  } else {
+    ZETASQL_ASSIGN_OR_RETURN(
+        upper_index,
+        BuildGsqlResolvedExpr(*internal::PostgresConstCastToExpr(
+                                  linitial(subscripting_ref.refupperindexpr)),
+                              expr_transformer_info));
+  }
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<zetasql::ResolvedExpr> array_source,
+      BuildGsqlResolvedExpr(*subscripting_ref.refexpr, expr_transformer_info));
+
+  std::vector<std::unique_ptr<zetasql::ResolvedExpr>> slicing_arg_list;
+  slicing_arg_list.push_back(std::move(array_source));
+  slicing_arg_list.push_back(std::move(lower_index));
+  slicing_arg_list.push_back(std::move(upper_index));
+
+  // Look up the function and signature.
+  std::vector<zetasql::InputArgumentType> slicing_arg_types =
+      GetInputArgumentTypes(slicing_arg_list);
+  ZETASQL_ASSIGN_OR_RETURN(
+      FunctionAndSignature function_and_signature,
+      catalog_adapter_->GetEngineSystemCatalog()->GetFunctionAndSignature(
+          PostgresExprIdentifier::SubscriptingRef(
+              /*is_array_slice=*/true),
+          slicing_arg_types, catalog_adapter_->analyzer_options().language()));
+
+  return MakeResolvedFunctionCall(function_and_signature,
+                                  std::move(slicing_arg_list));
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>

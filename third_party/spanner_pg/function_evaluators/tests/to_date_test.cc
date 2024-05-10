@@ -85,6 +85,12 @@ TEST_F(ToDateTest, ReturnsErrorWhenDateIsOutOfBounds) {
                        HasSubstr("Date is out of supported range")));
 }
 
+TEST_F(ToDateTest, ReturnsErrorWhenWeekIsOutOfBounds) {
+  EXPECT_THAT(PgToDate("999999999", "W"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Date is out of supported range")));
+}
+
 TEST_F(ToDateTest, RegressionMultipleSpaces) {
   // postgres=> select to_date('2011-12-18', 'YYYY-MM-DD') - '1970-01-01'::date;
   DateADT expected_date = 15326;

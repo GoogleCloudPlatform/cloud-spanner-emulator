@@ -69,6 +69,34 @@ void AddExprFunctions(
                         /*use_or=*/true,
                         /*comparator_type=*/"="),
                     "$in_array"});
+
+    // We do not have a mapping for pg.array_all_not_equal because this is
+    // equivalent to `NOT IN` and implemented as such.
+    functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
+                          /*array_op_arg_is_array=*/true,
+                          /*use_or=*/false,
+                          /*comparator_type=*/"="),
+                      "pg.array_all_equal"});
+    functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
+                          /*array_op_arg_is_array=*/true,
+                          /*use_or=*/false,
+                          /*comparator_type=*/">"),
+                      "pg.array_all_greater"});
+    functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
+                          /*array_op_arg_is_array=*/true,
+                          /*use_or=*/false,
+                          /*comparator_type=*/">="),
+                      "pg.array_all_greater_equal"});
+    functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
+                          /*array_op_arg_is_array=*/true,
+                          /*use_or=*/false,
+                          /*comparator_type=*/"<"),
+                      "pg.array_all_less"});
+    functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
+                          /*array_op_arg_is_array=*/true,
+                          /*use_or=*/false,
+                          /*comparator_type=*/"<="),
+                      "pg.array_all_less_equal"});
 }
 
 void AddBoolExprFunctions(

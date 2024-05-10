@@ -482,7 +482,8 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
 
   if (insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE ||
       insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE) {
-    if (query.returningList != nullptr) {
+    if (
+        query.returningList != nullptr) {
       return absl::UnimplementedError(
           "RETURNING with ON CONFLICT clause is not supported");
     }

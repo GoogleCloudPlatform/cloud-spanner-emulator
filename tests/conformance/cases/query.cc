@@ -811,6 +811,116 @@ TEST_P(QueryTest, BitReverseFunction) {
   }
 }
 
+TEST_P(QueryTest, MlPredictFunction) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(
+        Query(R"(
+     SELECT spanner.ml_predict_row(
+      'projects/tp/locations/tl/endpoints/te'::text,
+      '{"instances": [
+         {"Age": "49", "Name": "Douglas Adams"},
+         {"Age": "61", "Name": "Suzanne Collins"},
+         {"Age": "81", "Name": "J.R.R. Tolkien"}
+       ]}'::jsonb))"),
+        IsOkAndHoldsRows({{JsonB(
+            R"({"predictions": [{"Outcome": true}, {"Outcome": false}, {"Outcome": false}]})")}}));
+  } else {
+    PopulateDatabase();
+    EXPECT_THAT(Query(R"(
+     SELECT user_id, name, age, outcome
+     FROM ML.PREDICT(MODEL users_model, TABLE users))"),
+                IsOkAndHoldsRows({{1, "Douglas Adams", 49, true},
+                                  {2, "Suzanne Collins", 61, false},
+                                  {3, "J.R.R. Tolkien", 81, false}}));
+  }
+}
+
+TEST_P(QueryTest, UnnestWithOrdinalityOrOffset) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(
+        Query(
+            "select * from unnest(array[10,20]) with ordinality "
+            "result_table(unnest_col, ordinality_col) order by ordinality_col"),
+        IsOkAndHoldsRows({{10, 1}, {20, 2}}));
+  } else {
+    EXPECT_THAT(Query("select * from unnest(array[10,20]) as unnest_col with "
+                      "offset as offset_col order by offset_col"),
+                IsOkAndHoldsRows({{10, 0}, {20, 1}}));
+  }
+}
+
+TEST_P(QueryTest, UnnestWithOrdinality) {
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    GTEST_SKIP();
+  }
+  // Simple unnest with ordinality
+  EXPECT_THAT(Query("select unnest, ordinality from unnest(array[10, 20]) with "
+                    "ordinality order by ordinality"),
+              IsOkAndHoldsRows({{10, 1}, {20, 2}}));
+
+  // Unnest with ordinality in a subquery.
+  EXPECT_THAT(Query(R"(select unnest_col, ordinality_col from (
+          select * from unnest(array[10, 20]) with ordinality as
+          my_table(unnest_col, ordinality_col)
+        ) as sub_query order by ordinality_col)"),
+              IsOkAndHoldsRows({{10, 1}, {20, 2}}));
+
+  // Unnest with ordinality and alias
+  EXPECT_THAT(
+      Query("select result_table.unnest_col, result_table.ordinality_col from "
+            "unnest(array[10,20]) with ordinality as "
+            "result_table(unnest_col, ordinality_col) order by ordinality_col"),
+      IsOkAndHoldsRows({{10, 1}, {20, 2}}));
+
+  // Select ordinality column without unnest column
+  EXPECT_THAT(
+      Query(
+          R"(select ordinality_col from unnest(array[10, 20]) with ordinality as
+           "$array"(unnest_col, ordinality_col) order by ordinality_col)"),
+      IsOkAndHoldsRows({{1}, {2}}));
+
+  // Select ordinality and unnest columns in reverse order
+  EXPECT_THAT(
+      Query(
+          R"(select ordinality_col, unnest_col from unnest(array[10, 20])
+           with ordinality as "$array"(unnest_col, ordinality_col)
+          order by ordinality_col)"),
+      IsOkAndHoldsRows({{1, 10}, {2, 20}}));
+
+  // Unnest with ordinality and full join on the ordinality column
+  EXPECT_THAT(Query(
+                  R"(select index1, index2, element1, element2 from
+           unnest(array[2, 4, 6]) with ordinality  as "$array"(element1, index1)
+           full join unnest(array[20, 40, 60]) with ordinality as
+           "$array2"(element2, index2)
+           on index1 = index2
+           order by index1, index2, element1, element2)"),
+              IsOkAndHoldsRows({{1, 1, 2, 20}, {2, 2, 4, 40}, {3, 3, 6, 60}}));
+
+  // Unnest with ordinality and comma join
+  EXPECT_THAT(Query(
+                  R"(select index1, index2, element1, element2 from
+           unnest(array[2, 4]) with ordinality  as "$array"(element1, index1),
+           unnest(array[20, 40]) with ordinality as "$array2"(element2, index2)
+           order by index1, index2, element1, element2)"),
+              IsOkAndHoldsRows({
+                  {1, 1, 2, 20},
+                  {1, 2, 2, 40},
+                  {2, 1, 4, 20},
+                  {2, 2, 4, 40},
+              }));
+
+  // Select ordinality column without selecting the unnest column from unnest
+  // with ordinality and join.
+  EXPECT_THAT(Query(
+                  R"(select index1, index2 from unnest(array[10, 20, 30])
+           with ordinality  as "$array"(element1, index1)
+           join unnest(array[20, 40, 60])
+           with ordinality as "$array2"(element2, index2)
+           on index1 = index2 order by index1, index2)"),
+              IsOkAndHoldsRows({{1, 1}, {2, 2}, {3, 3}}));
+}
+
 }  // namespace
 
 }  // namespace test

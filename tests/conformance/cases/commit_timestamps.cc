@@ -85,6 +85,11 @@ class CommitTimestamps : public DatabaseTest {
         R"(
           CREATE INDEX CommitTimestampIndex ON
             CommitTimestampIndexTable(Name, CommitTS)
+        )",
+        R"(
+          CREATE VIEW CommitTimestampView
+            SQL SECURITY INVOKER AS
+            SELECT t.ID, t.CommitTS AS TS FROM CommitTimestampTable t
         )"}));
     return absl::OkStatus();
   }
@@ -655,6 +660,20 @@ TEST_F(CommitTimestamps, IndexReadsIncorrectlyAllowedInQueries) {
   } else {
     EXPECT_THAT(result, IsOkAndHoldsRows({{0}}));
   }
+}
+
+TEST_F(CommitTimestamps, QueryValidatorHandlesSystemTables) {
+  ZETASQL_EXPECT_OK(Query("select table_name from information_schema.tables"));
+}
+
+TEST_F(CommitTimestamps, CanNotReadThroughView) {
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("INSERT INTO CommitTimestampTable (ID, CommitTS, Name) "
+                        "VALUES (0, PENDING_COMMIT_TIMESTAMP(), 'name 1')")));
+  EXPECT_THAT(QueryTransaction(std::move(txn),
+                               "SELECT ID, TS FROM CommitTimestampView"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(CommitTimestamps, InconsistentCommitTimestampInParent) {

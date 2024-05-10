@@ -71,8 +71,9 @@ class InformationSchemaTest
            GetNameForDialect("ROLES"), GetNameForDialect("ROLE_GRANTEES"),
            GetNameForDialect("TABLE_PRIVILEGES"),
            GetNameForDialect("COLUMN_PRIVILEGES"),
-           GetNameForDialect("PARAMETERS"), GetNameForDialect("ROUTINES"),
-           GetNameForDialect("ROUTINE_OPTIONS"),
+           GetNameForDialect("PARAMETERS"), GetNameForDialect("PLACEMENTS"),
+           GetNameForDialect("PLACEMENT_OPTIONS"),
+           GetNameForDialect("ROUTINES"), GetNameForDialect("ROUTINE_OPTIONS"),
            GetNameForDialect("ROUTINE_PRIVILEGES"),
            GetNameForDialect("ROLE_TABLE_GRANTS"),
            GetNameForDialect("ROLE_COLUMN_GRANTS"),
@@ -1093,6 +1094,8 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMNS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMN_OPTIONS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_PRIVILEGES%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PLACEMENTS%'
+        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PLACEMENT_OPTIONS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PARAMETERS%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINES%'
         and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_OPTIONS%'

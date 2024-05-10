@@ -604,6 +604,22 @@ cc_test(
 )
 
 cc_library(
+    name = "jsonb_array_elements_table_valued_function",
+    srcs = ["jsonb_array_elements_table_valued_function.cc"],
+    hdrs = ["jsonb_array_elements_table_valued_function.h"],
+    deps = [
+        "//third_party/spanner_pg/datatypes/common/jsonb:jsonb_parse",
+        "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
+        "//third_party/spanner_pg/interface:pg_arena_factory",
+        "//third_party/spanner_pg/interface:pg_evaluators",
+        "//third_party/spanner_pg/shims:error_shim",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_zetasql//zetasql/public:evaluator_table_iterator",
+        "@com_google_zetasql//zetasql/public:function",
+    ],
+)
+
+cc_library(
     name = "emulator_functions",
     srcs = ["emulator_functions.cc"],
     hdrs = ["emulator_functions.h"],
@@ -613,6 +629,7 @@ cc_library(
     ],
     deps = [
         ":emulator_function_evaluators",
+        ":jsonb_array_elements_table_valued_function",
         "//third_party/spanner_pg/datatypes/common:pg_numeric_parse",
         "//third_party/spanner_pg/datatypes/common/jsonb:jsonb_parse",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_conversion_functions",

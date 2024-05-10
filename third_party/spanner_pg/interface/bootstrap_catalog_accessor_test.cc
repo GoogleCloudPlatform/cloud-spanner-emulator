@@ -66,8 +66,6 @@ INSTANTIATE_TEST_SUITE_P(
       collprovider: 'd'
       collisdeterministic: true
       collencoding: -1
-      collcollate: ""
-      collctype: ""
     )pb",
     R"pb(
       oid: 950
@@ -75,8 +73,6 @@ INSTANTIATE_TEST_SUITE_P(
       collprovider: 'c'
       collisdeterministic: true
       collencoding: -1
-      collcollate: "C"
-      collctype: "C"
     )pb"));
 
 TEST_F(PgCollationDataTest, GetPgCollationDataFromBootstrapFailure) {
