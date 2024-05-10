@@ -42,6 +42,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
 #include "absl/strings/string_view.h"
+#include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 
@@ -245,7 +246,8 @@ const zetasql::Function* GetStringToPgJsonbConversion() {
               [](const absl::Span<const zetasql::Value> args)
                   -> absl::StatusOr<zetasql::Value> {
                 ZETASQL_RET_CHECK_EQ(args.size(), 1);
-                return datatypes::CreatePgJsonbValue(args[0].string_value());
+                return datatypes::CreatePgJsonbValueWithMemoryContext(
+                    args[0].string_value());
               }));
 
   return kStringToPgJsonbConv;
@@ -256,7 +258,8 @@ const zetasql::Function* GetPgJsonbToBoolConversion() {
       new zetasql::Function(
           "pg_jsonb_to_bool_conv", "spanner", zetasql::Function::SCALAR,
           /*function_signatures=*/{},
-          zetasql::FunctionOptions().set_evaluator(PgJsonbToBoolConversion));
+          zetasql::FunctionOptions().set_evaluator(
+              PGFunctionEvaluator(PgJsonbToBoolConversion)));
   return kPgJsonbToBoolConv;
 }
 
@@ -265,37 +268,38 @@ const zetasql::Function* GetPgJsonbToInt64Conversion() {
       new zetasql::Function(
           "pg_jsonb_to_int64_conv", "spanner", zetasql::Function::SCALAR,
           /*function_signatures=*/{},
-          zetasql::FunctionOptions().set_evaluator(PgJsonbToInt64Conversion));
+          zetasql::FunctionOptions().set_evaluator(
+              PGFunctionEvaluator(PgJsonbToInt64Conversion)));
   return kPgJsonbToInt64Conv;
 }
 
 const zetasql::Function* GetPgJsonbToDoubleConversion() {
   static const zetasql::Function* kPgJsonbToDoubleConv =
-      new zetasql::Function("pg_jsonb_to_double_conv", "spanner",
-                              zetasql::Function::SCALAR,
-                              /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
-                                  PgJsonbToDoubleConversion));
+      new zetasql::Function(
+          "pg_jsonb_to_double_conv", "spanner", zetasql::Function::SCALAR,
+          /*function_signatures=*/{},
+          zetasql::FunctionOptions().set_evaluator(
+              PGFunctionEvaluator(PgJsonbToDoubleConversion)));
   return kPgJsonbToDoubleConv;
 }
 
 const zetasql::Function* GetPgJsonbToPgNumericConversion() {
   static const zetasql::Function* kPgJsonbToPgNumericConv =
-      new zetasql::Function("pg_jsonb_to_pg_numeric_conv", "spanner",
-                              zetasql::Function::SCALAR,
-                              /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
-                                  PgJsonbToPgNumericConversion));
+      new zetasql::Function(
+          "pg_jsonb_to_pg_numeric_conv", "spanner", zetasql::Function::SCALAR,
+          /*function_signatures=*/{},
+          zetasql::FunctionOptions().set_evaluator(
+              PGFunctionEvaluator(PgJsonbToPgNumericConversion)));
   return kPgJsonbToPgNumericConv;
 }
 
 const zetasql::Function* GetPgJsonbToStringConversion() {
   static const zetasql::Function* kPgJsonbToStringConv =
-      new zetasql::Function("pg_jsonb_to_string_conv", "spanner",
-                              zetasql::Function::SCALAR,
-                              /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
-                                  PgJsonbToStringConversion));
+      new zetasql::Function(
+          "pg_jsonb_to_string_conv", "spanner", zetasql::Function::SCALAR,
+          /*function_signatures=*/{},
+          zetasql::FunctionOptions().set_evaluator(
+              PGFunctionEvaluator(PgJsonbToStringConversion)));
   return kPgJsonbToStringConv;
 }
 

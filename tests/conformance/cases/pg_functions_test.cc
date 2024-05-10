@@ -1232,6 +1232,233 @@ TEST_F(PGFunctionsTest, ArrayUpper) {
                HasSubstr("multi-dimensional arrays are not supported")));
 }
 
+TEST_F(PGFunctionsTest, ArrayOverlap) {
+  EXPECT_THAT(Query("SELECT arrayoverlap(ARRAY[1,2], ARRAY[2,3])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[1, 2] && array[1]"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[true, false] && array[true]"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array['a', 'b'] && array['a']"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(
+      Query("select array['a'::bytea, 'b'::bytea] && array['a'::bytea]"),
+      IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[to_timestamp(10), "
+                    "to_timestamp(20)] && array[to_timestamp(10)]"),
+              IsOkAndHoldsRows({{true}}));
+
+  // More test cases
+  EXPECT_THAT(Query("select array[1,2] && array[1,3]"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[1,2] && array[3,4]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select array[1,2]::bigint[] && array[]::bigint[]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select array[]::bigint[] && array[]::bigint[]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select array[1,2]::bigint[] && null"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select null && array[1,2]::bigint[]"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select array[1,2]::bigint[] && array[null]::bigint[]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(
+      Query("select array[1,2,null]::bigint[] && array[null]::bigint[]"),
+      IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(
+      Query("select array[1,2,null]::bigint[] && array[1,2,null]::bigint[]"),
+      IsOkAndHoldsRows({{true}}));
+
+  // Function call instead of operator
+  EXPECT_THAT(Query("select arrayoverlap(array[1,2], array[1,3])"),
+              IsOkAndHoldsRows({{true}}));
+}
+
+TEST_F(PGFunctionsTest, ArrayContains) {
+  // Supported array types
+  EXPECT_THAT(Query("select array[1, 2] @> array[1]"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[true, false] @> array[true]"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array['a', 'b'] @> array['a']"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(
+      Query("select array['a'::bytea, 'b'::bytea] @> array['a'::bytea]"),
+      IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[to_timestamp(10), to_timestamp(20)] @> "
+                    "array[to_timestamp(10)]"),
+              IsOkAndHoldsRows({{true}}));
+
+  // More test cases
+  EXPECT_THAT(Query("select array[1] @> array[1]"), IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[1] @> array[1,2]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select array[1,2] @> array[1,3]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select array[1,2]::bigint[] @> array[]::bigint[]"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[]::bigint[] @> array[1,2]::bigint[]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select array[1,2]::bigint[] @> null"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select null @> array[1,2]::bigint[]"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select array[1,2]::bigint[] @> array[null]::bigint[]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(
+      Query("select array[1,2,null]::bigint[] @> array[null]::bigint[]"),
+      IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(
+      Query("select array[1,2,null]::bigint[] @> array[1,2,null]::bigint[]"),
+      IsOkAndHoldsRows({{false}}));
+
+  // Function call instead of operator
+  EXPECT_THAT(Query("select arraycontains(array[1,2], array[1])"),
+              IsOkAndHoldsRows({{true}}));
+}
+
+TEST_F(PGFunctionsTest, ArrayContained) {
+  // Supported array types
+  EXPECT_THAT(Query("select array[1] <@ array[1, 2]"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[true] <@ array[true, false]"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array['a'] <@ array['a', 'b']"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(
+      Query("select array['a'::bytea] <@ array['a'::bytea, 'b'::bytea]"),
+      IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[to_timestamp(10)] <@ array[to_timestamp(10), "
+                    "to_timestamp(20)]"),
+              IsOkAndHoldsRows({{true}}));
+
+  // More test cases
+  EXPECT_THAT(Query("select array[1] <@ array[1]"), IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[1,2] <@ array[1]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select array[1,3] <@ array[1,2]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select array[]::bigint[] <@ array[1,2]::bigint[]"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select array[1,2]::bigint[] <@ array[]::bigint[]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select array[1,2]::bigint[] <@ null"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select null <@ array[1,2]::bigint[]"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select array[null]::bigint[] <@ array[1,2]::bigint[]"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(
+      Query("select array[null]::bigint[] <@ array[1,2,null]::bigint[]"),
+      IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(
+      Query("select array[1,2,null]::bigint[] <@ array[1,2,null]::bigint[]"),
+      IsOkAndHoldsRows({{false}}));
+
+  // Function call instead of operator
+  EXPECT_THAT(Query("select arraycontained(array[1], array[1, 2])"),
+              IsOkAndHoldsRows({{true}}));
+}
+
+TEST_F(PGFunctionsTest, ArrayAll) {
+  // Supported array types
+  EXPECT_THAT(Query("select 1 = all(array[1])"), IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select true = all(array[true])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select 'a'= all(array['a'])"), IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select 'a'::bytea = all(array['a'::bytea])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select to_timestamp(10) = all(array[to_timestamp(10)])"),
+              IsOkAndHoldsRows({{true}}));
+
+  // Operators
+  EXPECT_THAT(Query("select 3 = all(array[3, 3])"), IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select 3 = all(array[1, 2, 3])"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select 3 >= all(array[1, 2, 3])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select 3 > all(array[1, 2, 3])"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select 1 <= all(array[1, 2, 3])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select 1 < all(array[1, 2, 3])"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select 1 <> all(array[1, 2, 3])"),
+              IsOkAndHoldsRows({{false}}));
+  EXPECT_THAT(Query("select 4 <> all(array[1, 2, 3])"),
+              IsOkAndHoldsRows({{true}}));
+
+  // Empty array
+  EXPECT_THAT(Query("select 1 = all(array[]::bigint[])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select 1 > all(array[]::bigint[])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select 1 >= all(array[]::bigint[])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select 1 < all(array[]::bigint[])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select 1 <= all(array[]::bigint[])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select 1 < all(array[]::bigint[])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select 1 <> all(array[]::bigint[])"),
+              IsOkAndHoldsRows({{true}}));
+
+  // Null
+  EXPECT_THAT(Query("select null = all(array[]::bigint[])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select null <> all(array[]::bigint[])"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select null = all(array[1, 2]::bigint[])"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select null <> all(array[1, 2]::bigint[])"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select null = all(array[1, 2, null]::bigint[])"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select null <> all(array[1, 2, null]::bigint[])"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select null = all(array[null]::bigint[])"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select null <> all(array[null]::bigint[])"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select 3 = all(array[3, 3, null]::bigint[])"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("select 3 <> all(array[3, 3, null]::bigint[])"),
+              IsOkAndHoldsRows({{false}}));
+}
+
+TEST_F(PGFunctionsTest, ArraySlice) {
+  EXPECT_THAT(Query("select (array[10,20,30,40])[2:3]"),
+              IsOkAndHoldsRows({{std::vector<int64_t>{20, 30}}}));
+  // Indices outside the array bounds
+  EXPECT_THAT(Query("select (array[10,20,30,40])[-5:2]"),
+              IsOkAndHoldsRows({{std::vector<int64_t>{10, 20}}}));
+  EXPECT_THAT(Query("select (array[10,20,30,40])[3:10]"),
+              IsOkAndHoldsRows({{std::vector<int64_t>{30, 40}}}));
+  EXPECT_THAT(Query("select (array[10,20,30,40])[0:1]"),
+              IsOkAndHoldsRows({{std::vector<int64_t>{10}}}));
+  // Without lower or upper bound
+  EXPECT_THAT(Query("select (array[10,20,30,40])[:2]"),
+              IsOkAndHoldsRows({{std::vector<int64_t>{10, 20}}}));
+  EXPECT_THAT(Query("select (array[10,20,30,40])[3:]"),
+              IsOkAndHoldsRows({{std::vector<int64_t>{30, 40}}}));
+  EXPECT_THAT(Query("select (array[10,20,30,40])[:]"),
+              IsOkAndHoldsRows({{std::vector<int64_t>{10, 20, 30, 40}}}));
+  // Subquery
+  EXPECT_THAT(Query("select a[:] from (select array[2,4,6] as a)sub"),
+              IsOkAndHoldsRows({{std::vector<int64_t>{2, 4, 6}}}));
+  // Null
+  EXPECT_THAT(Query("select (array[2,4,6])[null:2] is null"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select (array[2,4,6])[1:null] is null"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select (null::bigint[])[1:3] is null"),
+              IsOkAndHoldsRows({{true}}));
+  EXPECT_THAT(Query("select (null::bigint[])[null:null] is null"),
+              IsOkAndHoldsRows({{true}}));
+}
+
 TEST_F(PGFunctionsTest, Textregexne) {
   EXPECT_THAT(Query("SELECT textregexne('abcdefg', 'bb.*')"),
               IsOkAndHoldsRows({{true}}));
@@ -1514,6 +1741,8 @@ TEST_F(PGFunctionsTest, ExtendedTypeCastTest) {
   // Cast <TYPE> to PG.JSONB.
   EXPECT_THAT(Query(R"(SELECT CAST('{"b":[1e0],"a":[20e-1]}' AS jsonb))"),
               IsOkAndHoldsRows({{JsonB(R"({"a": [2.0], "b": [1]})")}}));
+  EXPECT_THAT(Query(R"(SELECT CAST('{"b":[1e0],"a":[20e-1]}'::text AS jsonb))"),
+              IsOkAndHoldsRows({{JsonB(R"({"a": [2.0], "b": [1]})")}}));
 
   // Cast PG.JSONB to <TYPE>.
   EXPECT_THAT(Query(R"(SELECT CAST('true'::jsonb AS boolean))"),
@@ -1524,6 +1753,17 @@ TEST_F(PGFunctionsTest, ExtendedTypeCastTest) {
               IsOkAndHoldsRows({{1}}));
   EXPECT_THAT(Query(R"(SELECT CAST('"hello"'::jsonb AS text))"),
               IsOkAndHoldsRows({{"\"hello\""}}));
+
+  // Cast <TYPE> to PG.OID.
+  EXPECT_THAT(Query(R"(SELECT CAST(1 AS oid))"), IsOkAndHoldsRows({{1}}));
+  EXPECT_THAT(Query(R"(SELECT CAST('1'::text AS oid))"),
+              IsOkAndHoldsRows({{1}}));
+
+  // Cast PG.OID to <TYPE>.
+  EXPECT_THAT(Query(R"(SELECT CAST('1'::oid AS bigint))"),
+              IsOkAndHoldsRows({{1}}));
+  EXPECT_THAT(Query(R"(SELECT CAST(1::oid AS text))"),
+              IsOkAndHoldsRows({{"1"}}));
 }
 
 }  // namespace

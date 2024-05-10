@@ -216,19 +216,18 @@ std::vector<const Column*> GetColumnsForDataChangeRecord(
 
 absl::StatusOr<
     std::tuple<std::vector<zetasql::Value>, std::vector<zetasql::Value>>>
-GetValuesForDataChangeRecord(std::string value_capture_type,
-                             absl::string_view mod_type,
-                             const Table* tracked_table,
-                             std::vector<const Column*> populated_columns,
-                             std::vector<zetasql::Value> values,
-                             const Key& key, ReadOnlyStore* store,
-                             std::vector<const Column*> tracked_columns) {
+GetValuesForDataChangeRecord(
+    absl::string_view value_capture_type, absl::string_view mod_type,
+    const Table* tracked_table,
+    const std::vector<const Column*>& populated_columns,
+    const std::vector<zetasql::Value>& values, const Key& key,
+    ReadOnlyStore* store, std::vector<const Column*> tracked_columns) {
   // Get old_values
   std::tuple<std::vector<zetasql::Value>, std::vector<zetasql::Value>>
       new_values_and_old_values;
   std::vector<std::string> tracked_columns_str;
   for (const Column* col : tracked_columns) {
-    if (!IsPrimaryKey(tracked_table, col)) {
+    if (!IsPrimaryKey(tracked_table, col) && !col->is_generated()) {
       tracked_columns_str.push_back(col->Name());
     }
   }
@@ -298,7 +297,7 @@ GetValuesForDataChangeRecord(std::string value_capture_type,
 // Accumulate tracked column types and values for same DataChangeRecord
 absl::Status LogTableMod(
     const Key& key, std::vector<const Column*> columns,
-    std::vector<zetasql::Value> values, const Table* tracked_table,
+    const std::vector<zetasql::Value>& values, const Table* tracked_table,
     const ChangeStream* change_stream, absl::string_view mod_type,
     zetasql::Value partition_token,
     absl::flat_hash_map<const ChangeStream*, std::vector<DataChangeRecord>>*
@@ -717,7 +716,7 @@ absl::StatusOr<std::vector<WriteOp>> BuildChangeStreamWriteOps(
   // Map for change streams and their DataChangeRecords
   absl::flat_hash_map<const ChangeStream*, std::vector<DataChangeRecord>>
       data_change_records_in_transaction_by_change_stream;
-  // Map for chagne streams and their ModGroups
+  // Map for change streams and their ModGroups
   absl::flat_hash_map<const ChangeStream*, ModGroup>
       last_mod_group_by_change_stream;
   for (const auto& write_op : buffered_write_ops) {

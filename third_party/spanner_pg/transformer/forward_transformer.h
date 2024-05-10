@@ -853,6 +853,14 @@ class ForwardTransformer {
       const SubscriptingRef& subscripting_ref,
       ExprTransformerInfo* expr_transformer_info);
 
+  // Transform a SubscriptingRef into a function call for array slicing:
+  // array_value[1:4]. Supports only read-only accesses (SELECT), not writable
+  // accesses (UPDATE).
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  BuildGsqlResolvedArraySliceFunctionCall(
+      const SubscriptingRef& subscripting_ref,
+      ExprTransformerInfo* expr_transformer_info);
+
   // Transform an ArrayExpr into a $make_array function call after recursively
   // transforming the element expressions. This supports any kind of
   // otherwise-supported element expression. To match ZetaSQL's analyzer, this
@@ -873,6 +881,18 @@ class ForwardTransformer {
   // $in_array function instead of $in i.e., if this function appends an array
   // argument instead of appending the array values individually.
   absl::StatusOr<bool> AppendGsqlInFunctionCallArrayArg(
+      void* array_argument, ExprTransformerInfo* expr_transformer_info,
+      std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& argument_list);
+
+  // Transform postgres ScalarArrayOpExpr that represent ALL into an
+  // appropriate ZetaSQL function call.
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  BuildGsqlAllFunctionCall(const ScalarArrayOpExpr& scalar_array,
+                           ExprTransformerInfo* expr_transformer_info);
+
+  // Append the array expressions for the googlesql function call to the
+  // argument list.
+  absl::Status AppendGsqlAllFunctionCallArrayArg(
       void* array_argument, ExprTransformerInfo* expr_transformer_info,
       std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& argument_list);
 

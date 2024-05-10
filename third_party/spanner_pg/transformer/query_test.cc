@@ -1407,7 +1407,7 @@ TEST(TransformerTest, InsertOnConflictDoUpdate) {
   EXPECT_EQ(stmt->row_list_size(), 1);
 }
 
-TEST(TransformerTest, InsertOnConflictWithReturning) {
+TEST(TransformerTest, InsertOnConflictWithReturningDisabled) {
   zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   ASSERT_TRUE(options.prune_unused_columns());
 

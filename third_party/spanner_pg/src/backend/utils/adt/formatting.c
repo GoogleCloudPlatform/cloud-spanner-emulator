@@ -97,7 +97,10 @@
 #include "utils/numeric.h"
 #include "utils/pg_locale.h"
 
+// SPANGRES BEGIN
+#include "common/int.h"
 #include "third_party/spanner_pg/shims/pg_locale_shim.h"
+// SPANGRES END
 
 /* ----------
  * Convenience macros for error handling
@@ -4687,8 +4690,18 @@ do_to_timestamp(text *date_txt, text *fmt, Oid collid, bool std,
 			tmfc.ddd = (tmfc.ww - 1) * 7 + 1;
 	}
 
-	if (tmfc.w)
-		tmfc.dd = (tmfc.w - 1) * 7 + 1;
+	if (tmfc.w) {
+		// SPANGRES BEGIN
+		// Updated calculation of the formula below, to protect against overflow.
+		// If an overflow occurs, setting `tmfc.dd` to -1, will cause a failed
+		// validation before returning the result (see ValidateDate below).
+		// Original formula: `tmfc.dd = (tmfc.w - 1) * 7 + 1;`
+		if (pg_mul_s32_overflow((tmfc.w - 1), 7, &tmfc.dd) ||
+			  pg_add_s32_overflow(tmfc.dd, 1, &tmfc.dd)) {
+			tmfc.dd = -1;
+		}
+		// SPANGRES END
+	}
 	if (tmfc.dd)
 	{
 		tm->tm_mday = tmfc.dd;

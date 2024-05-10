@@ -35,8 +35,8 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/cast.h"
 #include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/cast.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/id_string.h"
 #include "zetasql/public/input_argument_type.h"
@@ -66,6 +66,7 @@
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/transformer/expr_transformer_helper.h"
@@ -419,8 +420,12 @@ ForwardTransformer::BuildGsqlCastExpression(
       zetasql::MakeResolvedCast(resolved_type, std::move(resolved_input),
                                   /*return_null_on_error=*/false);
 
-  if (source_type_oid == JSONBOID
-  ) {
+  bool is_jsonb_source_or_result_in_emulator =
+      (source_type_oid == JSONBOID || result_type == JSONBOID);
+  bool is_oid_source_or_result_in_emulator =
+      (source_type_oid == OIDOID || result_type == OIDOID);
+  if (is_jsonb_source_or_result_in_emulator ||
+      is_oid_source_or_result_in_emulator) {
     zetasql::ExtendedCompositeCastEvaluator extended_conversion_evaluator =
         zetasql::ExtendedCompositeCastEvaluator::Invalid();
     zetasql::SignatureMatchResult result;

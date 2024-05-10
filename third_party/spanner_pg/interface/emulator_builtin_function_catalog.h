@@ -72,7 +72,13 @@ class EmulatorBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
   // TODO: b/313936285 - Add builtin TVF support to the Emulator.
   absl::StatusOr<const zetasql::TableValuedFunction*> GetTableValuedFunction(
       const std::string& name) const override {
-    return absl::UnimplementedError("GetTableValuedFunction is not supported");
+    const zetasql::TableValuedFunction* tvf;
+    function_catalog_->GetTableValuedFunction(name, &tvf);
+    if (tvf == nullptr) {
+      return absl::NotFoundError(
+          absl::StrCat(name, " table valued function not found"));
+    }
+    return tvf;
   }
 
   absl::Status GetFunctions(

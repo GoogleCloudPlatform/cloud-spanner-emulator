@@ -1278,7 +1278,23 @@ ForwardTransformer::BuildGsqlResolvedArrayScan(
   // Handle WITH ORDINALITY mapping to GSQL WITH OFFSET.
   std::unique_ptr<zetasql::ResolvedColumnHolder> array_offset_column;
   if (rte.funcordinality) {
-      return absl::InvalidArgumentError("WITH ORDINALITY is not supported");
+    ZETASQL_RET_CHECK_NE(rte.eref, nullptr);
+    ZETASQL_RET_CHECK_GE(list_length(rte.eref->colnames), 2);
+    Node* ordinality_column_name =
+        internal::PostgresCastToNode(list_nth(rte.eref->colnames, 1));
+    ZETASQL_RET_CHECK(IsA(ordinality_column_name, String));
+    std::string ordinality_column_name_str(strVal(ordinality_column_name));
+
+    ZETASQL_ASSIGN_OR_RETURN(const zetasql::ResolvedColumn ordinality_column,
+                     BuildNewGsqlResolvedColumn(rte.eref->aliasname,
+                                                ordinality_column_name_str,
+                                                zetasql::types::Int64Type()));
+    output_scope->MapVarIndexToColumn({.varno = rtindex, .varattno = 2},
+                                      ordinality_column,
+                                      /*allow_override=*/true);
+    output_column_list.emplace_back(ordinality_column);
+    array_offset_column =
+        zetasql::MakeResolvedColumnHolder(ordinality_column);
   }
 
   // Placeholder for join condition expressions. No plans to support this today.

@@ -121,6 +121,7 @@ TEST(TestCatalogTest, TableColumns) {
   const zetasql::Column* float_column =
       spangres_table->FindColumnByName("float_value");
   ASSERT_NE(float_column, nullptr);
+  EXPECT_TRUE(float_column->GetType()->IsFloat());
 }
 
 // Basic test of ArrayTypes table--verify it exists and has a couple of the

@@ -251,6 +251,8 @@ cc_test(
         ":conversion_finder",
         ":pg_numeric_type",
         "//third_party/spanner_pg/interface:pg_arena_factory",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:catalog",
@@ -287,6 +289,7 @@ cc_library(
     deps = [
         ":pg_jsonb_type",
         ":pg_numeric_type",
+        "//third_party/spanner_pg/catalog:emulator_function_evaluators",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",

@@ -216,17 +216,28 @@ TEST_F(SpangresSystemCatalogTest, GetTypes) {
   absl::flat_hash_set<const zetasql::Type*> types;
   ZETASQL_ASSERT_OK(catalog->GetTypes(&types));
   std::vector<const zetasql::Type*> expected_types{
-      gsql_bool, gsql_int64, gsql_double, gsql_string, gsql_bytes,
-      gsql_timestamp, types::PgNumericMapping()->mapped_type(),
+      gsql_bool,
+      gsql_int64,
+      gsql_float,
+      gsql_double,
+      gsql_string,
+      gsql_bytes,
+      gsql_date,
+      gsql_timestamp,
+      types::PgNumericMapping()->mapped_type(),
       types::PgJsonbMapping()->mapped_type(),
       types::PgOidMapping()->mapped_type(),
-      gsql_date, zetasql::types::BoolArrayType(),
-      zetasql::types::Int64ArrayType(), zetasql::types::DoubleArrayType(),
-      zetasql::types::StringArrayType(), zetasql::types::BytesArrayType(),
-      zetasql::types::TimestampArrayType(), GetPgNumericArrayType(),
+      gsql_bool_array,
+      gsql_int64_array,
+      gsql_float_array,
+      gsql_double_array,
+      gsql_string_array,
+      gsql_bytes_array,
+      gsql_date_array,
+      gsql_timestamp_array,
+      GetPgNumericArrayType(),
       GetPgJsonbArrayType(),
-      GetPgOidArrayType(),
-      zetasql::types::DateArrayType()};
+      GetPgOidArrayType()};
 
   EXPECT_THAT(types, UnorderedPointwise(TypeEquals(), expected_types));
 }
@@ -457,6 +468,26 @@ TEST_F(SpangresSystemCatalogTest, ArrayAtFunction) {
   ASSERT_NE(function_and_signature.function(), nullptr);
   EXPECT_EQ(function_and_signature.function()->Name(),
             "$safe_array_at_ordinal");
+}
+
+TEST_F(SpangresSystemCatalogTest, ArraySliceFunction) {
+  zetasql::LanguageOptions language_options = GetLanguageOptions();
+  EngineSystemCatalog* catalog = GetSpangresTestSystemCatalog();
+  std::vector<zetasql::InputArgumentType> input_types{
+      zetasql::InputArgumentType(zetasql::types::TimestampArrayType()),
+      zetasql::InputArgumentType(gsql_int64),
+      zetasql::InputArgumentType(gsql_int64)};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      FunctionAndSignature function_and_signature,
+      catalog->GetFunctionAndSignature(PostgresExprIdentifier::SubscriptingRef(
+                                           /*is_array_slice=*/true),
+                                       input_types, language_options));
+
+  ASSERT_NE(function_and_signature.function(), nullptr);
+  EXPECT_EQ(
+      function_and_signature.function()->FullName(/*include_group=*/false),
+      "pg.array_slice");
 }
 
 TEST_F(SpangresSystemCatalogTest, MakeArrayFunction) {
@@ -741,6 +772,93 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
       "array_upper", "pg.array_upper", {ANYARRAYOID, INT8OID},
       {zetasql::InputArgumentType(gsql_pg_jsonb_array),
        zetasql::InputArgumentType(gsql_int64)});
+
+  AssertPGFunctionIsRegistered(
+      "arraycontained", "pg.array_contained", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_int64_array),
+       zetasql::InputArgumentType(gsql_int64_array)});
+  AssertPGFunctionIsRegistered(
+      "arraycontained", "pg.array_contained", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_string_array),
+       zetasql::InputArgumentType(gsql_string_array)});
+  AssertPGFunctionIsRegistered(
+      "arraycontained", "pg.array_contained", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_bytes_array),
+       zetasql::InputArgumentType(gsql_bytes_array)});
+  AssertPGFunctionIsRegistered("arraycontained", "pg.array_contained",
+                               {ANYARRAYOID, ANYARRAYOID},
+                               {zetasql::InputArgumentType(gsql_bool_array),
+                                zetasql::InputArgumentType(gsql_bool_array)});
+  AssertPGFunctionIsRegistered("arraycontained", "pg.array_contained",
+                               {ANYARRAYOID, ANYARRAYOID},
+                               {zetasql::InputArgumentType(gsql_date_array),
+                                zetasql::InputArgumentType(gsql_date_array)});
+  AssertPGFunctionIsRegistered(
+      "arraycontained", "pg.array_contained", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_timestamp_array),
+       zetasql::InputArgumentType(gsql_timestamp_array)});
+  AssertPGFunctionIsRegistered(
+      "arraycontained", "pg.array_contained", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_pg_numeric_array),
+       zetasql::InputArgumentType(gsql_pg_numeric_array)});
+
+  AssertPGFunctionIsRegistered(
+      "arraycontains", "pg.array_contains", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_int64_array),
+       zetasql::InputArgumentType(gsql_int64_array)});
+  AssertPGFunctionIsRegistered(
+      "arraycontains", "pg.array_contains", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_string_array),
+       zetasql::InputArgumentType(gsql_string_array)});
+  AssertPGFunctionIsRegistered(
+      "arraycontains", "pg.array_contains", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_bytes_array),
+       zetasql::InputArgumentType(gsql_bytes_array)});
+  AssertPGFunctionIsRegistered("arraycontains", "pg.array_contains",
+                               {ANYARRAYOID, ANYARRAYOID},
+                               {zetasql::InputArgumentType(gsql_bool_array),
+                                zetasql::InputArgumentType(gsql_bool_array)});
+  AssertPGFunctionIsRegistered("arraycontains", "pg.array_contains",
+                               {ANYARRAYOID, ANYARRAYOID},
+                               {zetasql::InputArgumentType(gsql_date_array),
+                                zetasql::InputArgumentType(gsql_date_array)});
+  AssertPGFunctionIsRegistered(
+      "arraycontains", "pg.array_contains", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_timestamp_array),
+       zetasql::InputArgumentType(gsql_timestamp_array)});
+  AssertPGFunctionIsRegistered(
+      "arraycontains", "pg.array_contains", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_pg_numeric_array),
+       zetasql::InputArgumentType(gsql_pg_numeric_array)});
+
+  AssertPGFunctionIsRegistered(
+      "arrayoverlap", "pg.array_overlap", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_int64_array),
+       zetasql::InputArgumentType(gsql_int64_array)});
+  AssertPGFunctionIsRegistered(
+      "arrayoverlap", "pg.array_overlap", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_string_array),
+       zetasql::InputArgumentType(gsql_string_array)});
+  AssertPGFunctionIsRegistered(
+      "arrayoverlap", "pg.array_overlap", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_bytes_array),
+       zetasql::InputArgumentType(gsql_bytes_array)});
+  AssertPGFunctionIsRegistered("arrayoverlap", "pg.array_overlap",
+                               {ANYARRAYOID, ANYARRAYOID},
+                               {zetasql::InputArgumentType(gsql_bool_array),
+                                zetasql::InputArgumentType(gsql_bool_array)});
+  AssertPGFunctionIsRegistered("arrayoverlap", "pg.array_overlap",
+                               {ANYARRAYOID, ANYARRAYOID},
+                               {zetasql::InputArgumentType(gsql_date_array),
+                                zetasql::InputArgumentType(gsql_date_array)});
+  AssertPGFunctionIsRegistered(
+      "arrayoverlap", "pg.array_overlap", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_timestamp_array),
+       zetasql::InputArgumentType(gsql_timestamp_array)});
+  AssertPGFunctionIsRegistered(
+      "arrayoverlap", "pg.array_overlap", {ANYARRAYOID, ANYARRAYOID},
+      {zetasql::InputArgumentType(gsql_pg_numeric_array),
+       zetasql::InputArgumentType(gsql_pg_numeric_array)});
 
   // Comparison functions
   AssertPGFunctionIsRegistered("textregexne", "pg.textregexne",

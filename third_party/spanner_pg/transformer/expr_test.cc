@@ -136,6 +136,22 @@ absl::StatusOr<ValuePairVector> ConstValuePairs() {
       zetasql::MakeResolvedLiteral(zetasql::types::DoubleType(),
                                      zetasql::Value::NullDouble()));
 
+  // float4 <-> float32
+  ZETASQL_ASSIGN_OR_RETURN(auto float4_const,
+                   internal::makeScalarConst(FLOAT4OID, Float4GetDatum(3.14159),
+                                             /*constisnull=*/false));
+  value_pairs.emplace_back(
+      PostgresCastToExpr(float4_const),
+      zetasql::MakeResolvedLiteral(zetasql::types::FloatType(),
+                                     zetasql::Value::Float(3.14159)));
+  ZETASQL_ASSIGN_OR_RETURN(float4_const,
+                   internal::makeScalarConst(FLOAT4OID, Float4GetDatum(0),
+                                             /*constisnull=*/true));
+  value_pairs.emplace_back(
+      PostgresCastToExpr(float4_const),
+      zetasql::MakeResolvedLiteral(zetasql::types::FloatType(),
+                                     zetasql::Value::NullFloat()));
+
   // text <-> string
   ZETASQL_ASSIGN_OR_RETURN(auto string_const,
                    internal::makeStringConst(TEXTOID, "hello world",

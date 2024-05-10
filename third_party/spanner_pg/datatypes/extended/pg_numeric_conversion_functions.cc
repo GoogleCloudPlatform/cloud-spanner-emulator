@@ -31,12 +31,9 @@
 
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_conversion_functions.h"
 
-#include <cmath>
-#include <string>
-
+#include "zetasql/public/function.h"
 #include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
 #include "third_party/spanner_pg/catalog/emulator_functions.h"
-#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
@@ -47,7 +44,7 @@ const zetasql::Function* GetInt64ToPgNumericConversion() {
                               zetasql::Function::SCALAR,
                               /*function_signatures=*/{},
                               zetasql::FunctionOptions().set_evaluator(
-                                  postgres_translator::EvalCastToNumeric));
+                                  PGFunctionEvaluator(EvalCastToNumeric)));
   return kInt64ToPgNumericConv;
 }
 
@@ -57,7 +54,7 @@ const zetasql::Function* GetDoubleToPgNumericConversion() {
                               zetasql::Function::SCALAR,
                               /*function_signatures=*/{},
                               zetasql::FunctionOptions().set_evaluator(
-                                  postgres_translator::EvalCastToNumeric));
+                                  PGFunctionEvaluator(EvalCastToNumeric)));
   return kDoubleToPgNumericConv;
 }
 
@@ -67,7 +64,7 @@ const zetasql::Function* GetStringToPgNumericConversion() {
                               zetasql::Function::SCALAR,
                               /*function_signatures=*/{},
                               zetasql::FunctionOptions().set_evaluator(
-                                  postgres_translator::EvalCastToNumeric));
+                                  PGFunctionEvaluator(EvalCastToNumeric)));
   return kStringToPgNumericConv;
 }
 
@@ -77,7 +74,7 @@ const zetasql::Function* GetPgNumericToInt64Conversion() {
                               zetasql::Function::SCALAR,
                               /*function_signatures=*/{},
                               zetasql::FunctionOptions().set_evaluator(
-                                  postgres_translator::EvalCastNumericToInt64));
+                                  PGFunctionEvaluator(EvalCastNumericToInt64)));
   return kPgNumericToInt64Conv;
 }
 
@@ -87,7 +84,7 @@ const zetasql::Function* GetPgNumericToDoubleConversion() {
           "pg_numeric_to_double_conv", "spanner", zetasql::Function::SCALAR,
           /*function_signatures=*/{},
           zetasql::FunctionOptions().set_evaluator(
-              postgres_translator::EvalCastNumericToDouble));
+              PGFunctionEvaluator(EvalCastNumericToDouble)));
   return kPgNumericToDoubleConv;
 }
 
@@ -97,7 +94,7 @@ const zetasql::Function* GetPgNumericToStringConversion() {
           "pg_numeric_to_string_conv", "spanner", zetasql::Function::SCALAR,
           /*function_signatures=*/{},
           zetasql::FunctionOptions().set_evaluator(
-              postgres_translator::EvalCastNumericToString));
+              PGFunctionEvaluator(EvalCastNumericToString)));
   return kPgNumericToStringConv;
 }
 

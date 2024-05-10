@@ -33,6 +33,7 @@
 #include "backend/query/feature_filter/sql_feature_filter.h"
 #include "backend/query/query_context.h"
 #include "backend/query/query_engine_options.h"
+#include "backend/query/queryable_table.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/sequence.h"
@@ -558,8 +559,18 @@ absl::Status QueryValidator::CheckPendingCommitTimestampReads(
     return absl::OkStatus();
   }
 
-  std::string table_name = table_scan->table()->Name();
-  const Table* table = schema()->FindTable(table_name);
+  // Any table in the user schema will be a QueryableTable. We use this property
+  // to skip table scans against system tables (e.g. information_schema.tables)
+  // since these tables do not have corresponding backend schema nodes.
+  //
+  // Skipping these tables is safe because they are not writable and do not
+  // contain commit timestamps (pending or otherwise).
+  if (!table_scan->table()->Is<QueryableTable>()) {
+    return absl::OkStatus();
+  }
+
+  const Table* table =
+      table_scan->table()->GetAs<QueryableTable>()->wrapped_table();
   ZETASQL_RET_CHECK(table != nullptr);
   std::vector<const Column*> columns;
   for (int i = 0; i < table_scan->column_index_list_size(); ++i) {

@@ -259,6 +259,7 @@ SpangresTranslator::TranslateParsedTree(
       /*deprecation_warnings=*/std::vector<absl::Status>(), gsql_param_types,
       /*undeclared_position_parameters=*/std::vector<const zetasql::Type*>(),
       max_column_id);
+    ZETASQL_RETURN_IF_ERROR(RewriteTranslatedTree(analyzer_output.get(), params));
   return analyzer_output;
 }
 

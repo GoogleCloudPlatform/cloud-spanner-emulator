@@ -165,6 +165,7 @@ cc_library(
         ":analyzer_options",
         ":query_context",
         ":query_engine_options",
+        ":queryable_table",
         "//backend/query/feature_filter:gsql_supported_functions",
         "//backend/query/feature_filter:sql_feature_filter",
         "//backend/query/feature_filter:sql_features_view",

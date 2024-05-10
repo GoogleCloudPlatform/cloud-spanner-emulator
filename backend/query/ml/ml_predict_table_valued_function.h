@@ -47,6 +47,13 @@ class MlPredictTableValuedFunction : public zetasql::TableValuedFunction {
       std::shared_ptr<zetasql::TVFSignature>* output_tvf_signature)
       const override;
 
+  // Creates evaluator for this function.
+  absl::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
+  CreateEvaluator(std::vector<TvfEvaluatorArg> input_arguments,
+                  const std::vector<zetasql::TVFSchemaColumn>& output_columns,
+                  const zetasql::FunctionSignature* function_call_signature)
+      const override;
+
  private:
   const bool safe_ = false;
 };

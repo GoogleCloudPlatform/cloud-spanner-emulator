@@ -1361,7 +1361,10 @@ gmtsub(pg_time_t const *timep, int32 offset,
 	struct pg_tm *result;
 
 	/* GMT timezone state data is kept here */
-	static struct state *gmtptr = NULL;
+	/* SPANGRES BEGIN */
+	// Make this thread-local so each thread has its own copy.
+	static __thread struct state *gmtptr = NULL;
+	/* SPANGRES END */
 
 	if (gmtptr == NULL)
 	{

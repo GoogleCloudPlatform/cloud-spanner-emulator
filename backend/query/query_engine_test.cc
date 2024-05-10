@@ -1314,20 +1314,29 @@ TEST_P(QueryEngineTest, TestCannotQueryChangeStreamDataTableExternally) {
 }
 
 TEST_P(QueryEngineTest, TestMlQuery) {
-  GTEST_SKIP();
-
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    return;
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult result,
+        query_engine().ExecuteSql(Query{R"sql(
+                  SELECT spanner.ml_predict_row(
+                    'test'::text,
+                    '{"instances" : [{"string_col":"foo"}]}'::jsonb))sql"},
+                                  QueryContext{schema(), reader()}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_EQ(
+        ToString(result),
+        R"(ml_predict_row(PG.JSONB) : {"predictions": [{"Outcome": false}]},)");
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult result,
+        query_engine().ExecuteSql(Query{R"sql(
+                SELECT int64_col, Outcome
+                FROM ML.PREDICT(MODEL test_model, TABLE test_table))sql"},
+                                  QueryContext{model_schema(), reader()}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_EQ(ToString(result),
+              R"(int64_col,Outcome(INT64,BOOL) : 1,false,2,false,4,true,)");
   }
-
-  EXPECT_THAT(
-      query_engine().ExecuteSql(
-          Query{"SELECT int64_col, Outcome "
-                "FROM ML.PREDICT(MODEL test_model, TABLE test_table)"},
-          QueryContext{model_schema(), reader()}),
-      StatusIs(
-          absl::StatusCode::kUnimplemented,
-          HasSubstr("TVF ML.PREDICT does not support the API in evaluator.h")));
 }
 
 INSTANTIATE_TEST_SUITE_P(
