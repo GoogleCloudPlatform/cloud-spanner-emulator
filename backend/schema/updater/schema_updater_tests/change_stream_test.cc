@@ -17,6 +17,7 @@
 #include "backend/schema/catalog/change_stream.h"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
 #include "absl/time/clock.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
@@ -38,6 +40,7 @@ namespace test {
 namespace {
 
 using database_api::DatabaseDialect::POSTGRESQL;
+using testing::HasSubstr;
 using zetasql_base::testing::IsOk;
 TEST_P(SchemaUpdaterTest, CreateChangeStreamBasic) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
@@ -706,6 +709,56 @@ TEST_P(SchemaUpdaterTest, SetOptions_ValueCaptureType) {
           schema.get(),
           {R"(ALTER CHANGE STREAM C SET OPTIONS ( value_capture_type = 'OLD_VALUES'))"}),
       StatusIs(error::InvalidValueCaptureType("OLD_VALUES")));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      CREATE CHANGE STREAM C2 FOR ALL
+      OPTIONS ( value_capture_type = 'NEW_ROW_AND_OLD_VALUES' ))"}));
+  EXPECT_EQ(new_schema->FindChangeStream("C2")->value_capture_type(),
+            "NEW_ROW_AND_OLD_VALUES");
+}
+
+TEST_P(SchemaUpdaterTest, SetOptions_ExclusionOptions) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+                                        {
+                                            R"(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 STRING(100),
+      ) PRIMARY KEY (k1)
+    )",
+                                            R"(
+      CREATE CHANGE STREAM C FOR ALL OPTIONS ( exclude_insert = false, exclude_update = true, exclude_delete = false, exclude_ttl_deletes = true ))"},
+                                        "", GetParam(), true));
+  EXPECT_EQ(schema->FindChangeStream("C")->exclude_insert(), false);
+  EXPECT_EQ(schema->FindChangeStream("C")->exclude_update(), true);
+  EXPECT_EQ(schema->FindChangeStream("C")->exclude_delete(), false);
+  EXPECT_EQ(schema->FindChangeStream("C")->exclude_ttl_deletes(), true);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto new_schema,
+      UpdateSchema(
+          schema.get(),
+          {R"(CREATE CHANGE STREAM C2 OPTIONS( exclude_insert = NULL))"}));
+  EXPECT_EQ(new_schema->FindChangeStream("C2")->exclude_insert(), std::nullopt);
+  EXPECT_EQ(new_schema->FindChangeStream("C2")->exclude_update(), std::nullopt);
+  EXPECT_EQ(new_schema->FindChangeStream("C2")->exclude_delete(), std::nullopt);
+  EXPECT_EQ(new_schema->FindChangeStream("C2")->exclude_ttl_deletes(),
+            std::nullopt);
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    ZETASQL_EXPECT_OK(UpdateSchema(
+        schema.get(),
+        {R"(ALTER CHANGE STREAM C SET ( exclude_insert = 'true'))"}, "",
+        GetParam(), false));
+  } else {
+    EXPECT_THAT(
+        UpdateSchema(
+            schema.get(),
+            {R"(ALTER CHANGE STREAM C SET OPTIONS ( exclude_insert = 'true'))"},
+            "", GetParam(), true),
+        ::zetasql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Supported option values are booleans and NULL.")));
+  }
 }
 
 TEST_P(SchemaUpdaterTest, DropChangeStream) {

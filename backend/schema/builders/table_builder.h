@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_TABLE_BUILDER_H_
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -115,6 +116,30 @@ class Table::Builder {
 
   Builder& set_synonym(const std::string& synonym) {
     instance_->synonym_ = synonym;
+    return *this;
+  }
+
+  Builder& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_postgresql_oid(postgresql_oid.value());
+    }
+    return *this;
+  }
+
+  Builder& set_interleave_in_parent_postgresql_oid(
+      std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_interleave_in_parent_postgresql_oid(
+          postgresql_oid.value());
+    }
+    return *this;
+  }
+
+  Builder& set_primary_key_index_postgresql_oid(
+      std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_primary_key_index_postgresql_oid(postgresql_oid.value());
+    }
     return *this;
   }
 

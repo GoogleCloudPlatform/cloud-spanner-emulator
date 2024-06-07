@@ -661,12 +661,6 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
     const JoinExpr& join_expr, const List& rtable,
     const VarIndexScope* external_scope, const VarIndexScope* local_scope,
     VarIndexScope* output_scope, bool has_using) {
-  if (join_expr.jointype == JOIN_FULL &&
-      list_length(join_expr.usingClause) != 0
-     ) {
-    return absl::UnimplementedError(
-        "FULL JOIN clauses with USING are not supported, use ON instead");
-  }
   ZETASQL_ASSIGN_OR_RETURN(GsqlJoinType gsql_join_type,
                    BuildGsqlJoinType(join_expr.jointype));
   VarIndexScope output_scope_lhs;
@@ -3284,6 +3278,9 @@ ForwardTransformer::BuildGsqlResolvedStatement(const Query& query) {
         case T_CreateSchemaStmt:
         case T_AlterSpangresStatsStmt:
         case T_ViewStmt:
+        case T_AlterOwnerStmt:
+        case T_AlterStatsStmt:
+        case T_AlterObjectSchemaStmt:
           return absl::UnimplementedError(
               "DDL statements cannot be issued as SELECT/DML statements");
         default:

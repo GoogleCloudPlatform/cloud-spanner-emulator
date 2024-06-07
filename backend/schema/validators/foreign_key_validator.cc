@@ -78,6 +78,11 @@ absl::Status ForeignKeyValidator::Validate(const ForeignKey* foreign_key,
                                            SchemaValidationContext* context) {
   ZETASQL_RET_CHECK_NE(foreign_key->referencing_table_, nullptr);
   ZETASQL_RET_CHECK_NE(foreign_key->referenced_table_, nullptr);
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(foreign_key->postgresql_oid().has_value());
+  } else {
+    ZETASQL_RET_CHECK(!foreign_key->postgresql_oid().has_value());
+  }
   ZETASQL_RET_CHECK_EQ(
       foreign_key->referencing_table_->FindForeignKey(foreign_key->Name()),
       foreign_key);
@@ -158,6 +163,16 @@ absl::Status ForeignKeyValidator::ValidateUpdate(
                old_foreign_key->referencing_table_->Name());
   ZETASQL_RET_CHECK_EQ(foreign_key->referenced_table_->Name(),
                old_foreign_key->referenced_table_->Name());
+
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(foreign_key->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(old_foreign_key->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK_EQ(foreign_key->postgresql_oid().value(),
+                 old_foreign_key->postgresql_oid().value());
+  } else {
+    ZETASQL_RET_CHECK(!foreign_key->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(!old_foreign_key->postgresql_oid().has_value());
+  }
 
   // Foreign keys must be dropped before their referenced tables.
   if (foreign_key->referenced_table_->is_deleted()) {

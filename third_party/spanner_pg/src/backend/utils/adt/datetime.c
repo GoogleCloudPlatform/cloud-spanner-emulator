@@ -31,7 +31,10 @@
 #include "utils/memutils.h"
 #include "utils/tzparser.h"
 
+// SPANGRES BEGIN
+#include "common/int.h"
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+// SPANGRES END
 
 // SPANGRES BEGIN
 // We've made these functions non-static to call them from catalog_shim.
@@ -293,9 +296,21 @@ date2j(int y, int m, int d)
 	}
 
 	century = y / 100;
-	julian = y * 365 - 32167;
-	julian += y / 4 - century + century / 4;
-	julian += 7834 * m / 256 + d;
+	// SPANGRES BEGIN
+	// By using the pg_*_s32_overflow functions, if there is an overflow the 
+	// result becomes negative, which indicates to PostgreSQL that the date is 
+	// out-of-range.
+
+	// Could not find a test case that overflows these yet, so leaving the
+	// calculation as is for now.
+	int century_tmp = y / 4 - century + century / 4;
+	int month_tmp = 7834 * m / 256 + d;
+
+	PG_MUL_S32_RETURN_IF_OVERFLOW(y, 365, julian);
+	PG_SUB_S32_RETURN_IF_OVERFLOW(julian, 32167, julian);
+	PG_ADD_S32_RETURN_IF_OVERFLOW(julian, century_tmp, julian);
+	PG_ADD_S32_RETURN_IF_OVERFLOW(julian, month_tmp, julian);
+	// SPANGRES END
 
 	return julian;
 }								/* date2j() */

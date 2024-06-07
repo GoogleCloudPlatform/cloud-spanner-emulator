@@ -32,6 +32,7 @@ cc_library(
         "//backend/actions:manager",
         "//backend/common:ids",
         "//backend/database/change_stream:change_stream_partition_churner",
+        "//backend/database/pg_oid_assigner",
         "//backend/locking:manager",
         "//backend/query:query_engine",
         "//backend/schema/catalog:schema",

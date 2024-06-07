@@ -43,6 +43,10 @@ inline constexpr absl::string_view kChangeStreamValueCaptureTypeDefault =
     "OLD_AND_NEW_VALUES";
 inline constexpr absl::string_view kChangeStreamValueCaptureTypeNewRow =
     "NEW_ROW";
+inline constexpr absl::string_view kChangeStreamValueCaptureTypeNewValues =
+    "NEW_VALUES";
+inline constexpr absl::string_view
+    kChangeStreamValueCaptureTypeNewRowOldValues = "NEW_ROW_AND_OLD_VALUES";
 
 class Table;
 class Column;
@@ -88,8 +92,29 @@ class ChangeStream : public SchemaNode {
     return for_clause_.has_value() ? &for_clause_.value() : nullptr;
   }
 
+  std::optional<bool> exclude_insert() const { return exclude_insert_; }
+  std::optional<bool> exclude_update() const { return exclude_update_; }
+  std::optional<bool> exclude_delete() const { return exclude_delete_; }
+  std::optional<bool> exclude_ttl_deletes() const {
+    return exclude_ttl_deletes_;
+  }
+
+  bool HasExplicitValidOptions() const {
+    return value_capture_type().has_value() || retention_period().has_value() ||
+           exclude_insert().has_value() || exclude_update().has_value() ||
+           exclude_delete().has_value() || exclude_ttl_deletes().has_value();
+  }
+
   const ::google::protobuf::RepeatedPtrField<ddl::SetOption> options() const {
     return options_;
+  }
+
+  std::optional<uint32_t> tvf_postgresql_oid() const {
+    return tvf_postgresql_oid_;
+  }
+
+  void set_tvf_postgresql_oid(uint32_t tvf_postgresql_oid) {
+    tvf_postgresql_oid_ = tvf_postgresql_oid;
   }
 
   // SchemaNode interface implementation.
@@ -177,6 +202,19 @@ class ChangeStream : public SchemaNode {
 
   // The table that stores the partition data.
   const Table* change_stream_partition_table_;
+
+  // The OID of the change stream's TVF. Only assigned a value for the
+  // POSTGRESQL dialect. std::nullopt indicates that no OID has been assigned.
+  std::optional<uint32_t> tvf_postgresql_oid_ = std::nullopt;
+
+  // If true, exclude recording corresponding mofication type from current
+  // change stream. Default is false if not set.
+  std::optional<bool> exclude_insert_ = std::nullopt;
+  std::optional<bool> exclude_update_ = std::nullopt;
+  std::optional<bool> exclude_delete_ = std::nullopt;
+  // If true, exclude recording ttl delete from current change stream. Default
+  // is false if not set.
+  std::optional<bool> exclude_ttl_deletes_ = std::nullopt;
 };
 }  // namespace backend
 }  // namespace emulator

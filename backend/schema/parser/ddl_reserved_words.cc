@@ -149,6 +149,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "DROP",
     "EXECUTE",
     "FIRST",
+    "FLOAT32",
     "FLOAT64",
     "FOREIGN",
     "FUNCTION",
@@ -198,6 +199,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "UPDATE",
     "USAGE",
     "VIEW",
+    "VECTOR_LENGTH",
 };
 
 }  // namespace

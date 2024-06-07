@@ -47,6 +47,7 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
   switch (type->kind()) {
     case zetasql::TypeKind::TYPE_INT64:
     case zetasql::TypeKind::TYPE_BOOL:
+    case zetasql::TypeKind::TYPE_FLOAT:
     case zetasql::TypeKind::TYPE_DOUBLE:
     case zetasql::TypeKind::TYPE_STRING:
     case zetasql::TypeKind::TYPE_BYTES:

@@ -154,6 +154,24 @@ pg_mul_s32_overflow(int32 a, int32 b, int32 *result)
 #endif
 }
 
+// SPANGRES BEGIN
+// Macros for short-circuiting overflow issues.
+#define PG_ADD_S32_RETURN_IF_OVERFLOW(a, b, result) \
+  if (pg_add_s32_overflow(a, b, &result)) {         \
+    return result;                                  \
+  }
+
+#define PG_SUB_S32_RETURN_IF_OVERFLOW(a, b, result) \
+  if (pg_sub_s32_overflow(a, b, &result)) {         \
+    return result;                                  \
+  }
+
+#define PG_MUL_S32_RETURN_IF_OVERFLOW(a, b, result) \
+  if (pg_mul_s32_overflow(a, b, &result)) {         \
+    return result;                                  \
+  }
+// SPANGRES END
+
 /*
  * INT64
  */

@@ -29,6 +29,7 @@
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "backend/common/ids.h"
+#include "backend/database/pg_oid_assigner/pg_oid_assigner.h"
 #include "backend/schema/catalog/schema.h"
 
 // If true, disable to limit on change stream retention period between 1h and
@@ -40,11 +41,6 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 static constexpr char kIndexDataTablePrefix[] = "_index_data_table_";
-static constexpr const char kValueCaptureTypeOldAndNewValues[] =
-    "OLD_AND_NEW_VALUES";
-static constexpr const char kValueCaptureTypeNewRow[] = "NEW_ROW";
-static constexpr const char kValueCaptureTypeNewValues[] = "NEW_VALUES";
-
 // Container holding all the required inputs for processing a schema change.
 struct SchemaChangeOperation {
   absl::Span<const std::string> statements;
@@ -70,6 +66,10 @@ struct SchemaChangeContext {
   // The timestamp at which the schema changes/validations/backfills
   // should be done.
   absl::Time schema_change_timestamp;
+
+  // Assigns OIDs to database objects when dialect is POSTGRESQL. The assigner
+  // is owned by the database and is shared across all schema changes.
+  PgOidAssigner* pg_oid_assigner;
 };
 
 // The result of processing a set of DDL statements for a schema change request.

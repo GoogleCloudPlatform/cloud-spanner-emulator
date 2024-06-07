@@ -146,6 +146,50 @@ TEST_P(SchemaUpdaterTest, FunctionAsDefault) {
   EXPECT_EQ(col->expression().value(), "CURRENT_TIMESTAMP()");
 }
 
+TEST_P(SchemaUpdaterTest, SQLInlinedFunctionAsDefault) {
+  // A SQL-inlined function is a function whose implementation is a SQL string
+  // instead of an evaluator.
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+        CREATE TABLE "T" (
+          "K" bigint primary key,
+          "V" bool DEFAULT (arrayoverlap(array[1,2], array[2]))
+        )
+      )"},
+                                      /*proto_descriptor_bytes=*/"",
+                                      database_api::DatabaseDialect::POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+          CREATE TABLE T (
+            K INT64 NOT NULL,
+            V BOOL DEFAULT (ARRAY_INCLUDES(ARRAY[1, 2], 2))
+          ) PRIMARY KEY(K)
+        )"}));
+  }
+
+  const Table* table = schema->FindTable("T");
+  ASSERT_NE(table, nullptr);
+  const Column* col = table->FindColumn("V");
+  ASSERT_NE(col, nullptr);
+  EXPECT_EQ(col->Name(), "V");
+  EXPECT_FALSE(col->is_generated());
+  EXPECT_TRUE(col->has_default_value());
+  EXPECT_TRUE(col->expression().has_value());
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(
+        col->original_expression(),
+        "arrayoverlap(ARRAY['1'::bigint, '2'::bigint], ARRAY['2'::bigint])");
+    EXPECT_EQ(col->expression().value(),
+              "PG.ARRAY_OVERLAP(ARRAY<INT64>[1, 2], ARRAY<INT64>[2])");
+  } else {
+    EXPECT_FALSE(col->original_expression().has_value());
+    EXPECT_EQ(col->expression().value(), "ARRAY_INCLUDES(ARRAY[1, 2], 2)");
+  }
+}
+
 TEST_P(SchemaUpdaterTest, KeyColumn) {
   std::unique_ptr<const Schema> schema;
   // The DDL translation from GSQL to PG does not support expressions. Skip it

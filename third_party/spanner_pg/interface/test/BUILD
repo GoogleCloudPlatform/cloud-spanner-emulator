@@ -48,6 +48,8 @@ disabled_non_emulator_golden_tests = [
     # TODO: emulator and spanner have different resolved ast for generated
     # columns after gpk support.
     "testdata/gencol_emulator_insertdml.test",
+    # The emulator and spanner have different resolved ASTs for the distance functions
+    "testdata/float4_functions_emulator.test",
     # TODO: reenable once Spangres is on the Spanner dev branch.
     "testdata/fts_functions.test",
 ]

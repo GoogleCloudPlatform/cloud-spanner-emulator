@@ -88,6 +88,9 @@ class Catalog : public zetasql::EnumerableCatalog {
   absl::Status GetFunction(const std::string& name,
                            const zetasql::Function** function,
                            const FindOptions& options) final;
+  absl::Status GetProcedure(const std::string& full_name,
+                            const zetasql::Procedure** procedure,
+                            const FindOptions& options) final;
   absl::Status FindTableValuedFunction(
       const absl::Span<const std::string>& path,
       const zetasql::TableValuedFunction** function,
@@ -108,6 +111,8 @@ class Catalog : public zetasql::EnumerableCatalog {
 
   absl::Status GetType(const std::string& name, const zetasql::Type** type,
                        const FindOptions& options) final;
+
+  absl::Status PopulateSystemProcedureMap();
 
   // Returns the information schema catalog (creating one if needed).
   zetasql::Catalog* GetInformationSchemaCatalog() const
@@ -183,6 +188,9 @@ class Catalog : public zetasql::EnumerableCatalog {
 
   // Sub-catalog for resolving pg_catalog lookup.
   mutable std::unique_ptr<zetasql::Catalog> pg_catalog_ ABSL_GUARDED_BY(mu_);
+
+  // System Procedures available.
+  CaseInsensitiveStringMap<std::unique_ptr<zetasql::Procedure>> procedures_;
 };
 
 }  // namespace backend

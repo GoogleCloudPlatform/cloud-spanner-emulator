@@ -272,6 +272,7 @@ cc_test(
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],

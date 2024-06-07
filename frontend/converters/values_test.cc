@@ -60,12 +60,14 @@ using zetasql::types::JsonArrayType;
 using zetasql::types::JsonType;
 using zetasql::types::NumericArrayType;
 using zetasql::types::NumericType;
+using zetasql::types::FloatType;
 using zetasql::types::StringType;
 using zetasql::types::TimestampType;
 
 using zetasql::values::Bool;
 using zetasql::values::Bytes;
 using zetasql::values::Date;
+using zetasql::values::Float;
 using zetasql::values::Double;
 using zetasql::values::Int64;
 using zetasql::values::Int64Array;
@@ -194,6 +196,12 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
       {Int64(4147483647), "string_value: '4147483647'"},
       {CreatePgOidValue(12345).value(), "string_value: '12345'"},
       {CreatePgOidValue(4147483647).value(), "string_value: '4147483647'"},
+      {Float(-1), "number_value: -1"},
+      {Float(std::numeric_limits<float>::infinity()),
+       "string_value: 'Infinity'"},
+      {Float(-std::numeric_limits<float>::infinity()),
+       "string_value: '-Infinity'"},
+      {Float(std::numeric_limits<float>::quiet_NaN()), "string_value: 'NaN'"},
       {Double(-1), "number_value: -1"},
       {Double(std::numeric_limits<double>::infinity()),
        "string_value: 'Infinity'"},
@@ -471,6 +479,26 @@ TEST_F(ValueProtos, DoesNotParseInvalidProtoAndEnum) {
 
   EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO("string_value: '10'"), enum_type),
               zetasql::Value::Invalid());
+}
+
+TEST_F(ValueProtos, DoesNotParseInvalidFloat32) {
+  // Invalid string value.
+  EXPECT_THAT(
+      ValueFromProto(PARSE_TEXT_PROTO("string_value: '9252.a53'"), FloatType()),
+      StatusIs(absl::StatusCode::kFailedPrecondition));
+
+  // Value lower than float's lower limit.
+  double value_lower_float_min = -4e+38;
+  std::string raw_proto_string =
+      absl::StrCat("number_value: ", value_lower_float_min);
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO(raw_proto_string), FloatType()),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+
+  // Value higher than float's upper limit.
+  double value_lower_float_max = 4e+38;
+  raw_proto_string = absl::StrCat("number_value: ", value_lower_float_max);
+  EXPECT_THAT(ValueFromProto(PARSE_TEXT_PROTO(raw_proto_string), FloatType()),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 }  // namespace

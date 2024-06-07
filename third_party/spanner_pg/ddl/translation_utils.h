@@ -35,6 +35,7 @@
 #include <string>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
@@ -217,6 +218,9 @@ absl::optional<PGAlterOption> GetOptionByInternalName(
 bool IsReservedName(absl::string_view name);
 
 bool IsPostgresReservedName(absl::string_view name);
+
+// Converts ObjectType enum directly to a string: OBJECT_FOO_BAR -> "FOO BAR".
+absl::StatusOr<std::string> ObjectTypeToString(ObjectType object_type);
 
 }  // namespace internal
 }  // namespace spangres

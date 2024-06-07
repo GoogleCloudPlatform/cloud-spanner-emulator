@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_TABLE_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_TABLE_H_
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -150,6 +151,22 @@ class Table : public SchemaNode {
   // directly by a user request.
   bool is_public() const {
     return owner_change_stream_ == nullptr && owner_index_ == nullptr;
+  }
+
+  std::optional<uint32_t> interleave_in_parent_postgresql_oid() const {
+    return interleave_in_parent_postgresql_oid_;
+  }
+
+  void set_interleave_in_parent_postgresql_oid(uint32_t oid) {
+    interleave_in_parent_postgresql_oid_ = oid;
+  }
+
+  std::optional<uint32_t> primary_key_index_postgresql_oid() const {
+    return primary_key_index_postgresql_oid_;
+  }
+
+  void set_primary_key_index_postgresql_oid(uint32_t oid) {
+    primary_key_index_postgresql_oid_ = oid;
   }
 
   // Returns the synonym of this table.
@@ -307,6 +324,10 @@ class Table : public SchemaNode {
 
   // Synonym.
   std::string synonym_;
+
+  // Additional PG oids.
+  std::optional<uint32_t> interleave_in_parent_postgresql_oid_ = std::nullopt;
+  std::optional<uint32_t> primary_key_index_postgresql_oid_ = std::nullopt;
 };
 
 // Returns the name of the schema declared owning object (index or table) of

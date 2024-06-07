@@ -17,7 +17,9 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_NODE_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_GRAPH_SCHEMA_NODE_H_
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 
 #include "absl/status/status.h"
 #include "absl/status/status.h"
@@ -111,6 +113,12 @@ class SchemaNode {
   // will always return true.
   bool is_deleted() const { return is_deleted_; }
 
+  std::optional<uint32_t> postgresql_oid() const { return postgresql_oid_; };
+
+  void set_postgresql_oid(uint32_t postgresql_oid) {
+    postgresql_oid_ = postgresql_oid;
+  }
+
  protected:
   // Marks a node as deleted. Only valid to call from `SchemaNode::DeepClone`.
   void MarkDeleted() { is_deleted_ = true; }
@@ -141,6 +149,11 @@ class SchemaNode {
 
   // Indicates if this node is deleted.
   bool is_deleted_ = false;
+
+  // The OID of the object represented by this node. Only assigned a value for
+  // the POSTGRESQL dialect. std::nullopt indicates that no OID has been
+  // assigned.
+  std::optional<uint32_t> postgresql_oid_ = std::nullopt;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const SchemaNode* node) {

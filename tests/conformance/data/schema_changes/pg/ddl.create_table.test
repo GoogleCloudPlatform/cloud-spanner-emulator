@@ -85,7 +85,7 @@ ERROR: <TABLESPACE> clause is not supported in <CREATE TABLE> statement.
 
 CREATE TABLE Users(id bigint);
 --
-ERROR: Primary key must be defined for a table.
+ERROR: Primary key must be defined for table "users".
 ==
 
 CREATE TABLE deferrable_not_supported_on_col(id bigint PRIMARY KEY DEFERRABLE);

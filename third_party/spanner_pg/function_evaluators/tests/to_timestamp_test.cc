@@ -29,6 +29,8 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
+#include <string>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -381,6 +383,65 @@ TEST_F(RegressionTest, ReturnsUnimplementedForTZPattern) {
       StatusIs(
           absl::StatusCode::kUnimplemented,
           HasSubstr("formatting field \"TZ\" is only supported in to_char")));
+}
+
+// --config=asan
+TEST_F(RegressionTest, ASANViolation) {
+  EXPECT_THAT(ToTimestamp("\013 \010\25411111111\010",
+                          std::string("\232\361UC--------tym---.\000----", 24)),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+  EXPECT_THAT(
+      ToTimestamp(
+          "\274p\034\03488883888888\034\034h8\364",
+          "%\036\036\223!\014\tG\024\213\213^cc\227\227cs\335\355\217c+"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("timestamp out of range")));
+  EXPECT_THAT(
+      ToTimestamp(
+          "\32677DDDD777577777\3207777\3247877777HH7777777777\022\02277777\327"
+          "\370777nnnnnnnn\302nnnnnnlllllllnnnnnnnn7777\3648777w7",
+          "\202W\202\337_\230\024WW\024\024\322\337"),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("cannot calculate day of year without year information")));
+  EXPECT_THAT(
+      ToTimestamp(
+          "\255]]]]]]]\\]]]]]]555555558?5555558555555]]]]]\316\\230Yb4]]]]]]]]]"
+          "]]]]]]]]]]]]]]]]Z]]]]"
+          "\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213"
+          "\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213"
+          "\213\213\213\213\213\213\213\213\213\213\213\213\213\213]"
+          "\213\213\213\213\213\213\2132\213\213\213\213\213\213\213\213\213"
+          "\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213"
+          "\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213"
+          "\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213\213"
+          "\213\213\213\213\213\213\213\213\213\213\213\213\213\214\236\213\213"
+          "\213\213\243\213\213\213\213\213\213\213\213\213\213\213\213\213\213"
+          "\213\030\030\030\030\030\030\030\030\213\213]]gk\017",
+          "\257a\327#\257\257\257\257\351\257\254\360\261\221\331msnn"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Timestamp is out of supported range")));
+  EXPECT_THAT(ToTimestamp("\336V\036\232\250\030{"
+                          "Ulqu\3613333333333\370\005\265K\347\373\357\37395",
+                          "\237A\237\254\233X`\023\315\315\315\315\n\006IW"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("timestamp out of range")));
+  EXPECT_THAT(
+      ToTimestamp(
+          "\007\3411111\021111111\34211111111111-1111111111\251-"
+          "5Q\024\3101111U1111111\251\311\255A%%%%\351%\234",
+          "\346R\360\366\362\362:\034Qr\303CCC\324r\252\037\275<\365Y,>"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("timestamp out of range")));
+
+  EXPECT_THAT(
+      ToTimestamp(
+          "0000000400000000000,004-\031R400 "
+          "0000000000000010000000000000000000000000000000000000 "
+          "\213284D12R\214000000000000000000000000",
+          "\271y,yyyTHyy_WW\347dx\204\264\324yth\373A\271&TMMONHZZZONT"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("invalid value \"R4\" for \"yy\"")));
 }
 }  // namespace
 }  // namespace postgres_translator::function_evaluators

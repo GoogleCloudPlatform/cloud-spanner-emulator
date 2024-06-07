@@ -94,6 +94,58 @@ class DDLColumnTypeToGoogleSqlTypeTest : public ::testing::Test {
   zetasql::TypeFactory type_factory_;
 };
 
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Float32) {
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::FLOAT);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
+                       DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
+  EXPECT_TRUE(converted_type->Equals(type_factory_.get_float()));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(ddl_type));
+}
+
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, ArrayOfFloat32) {
+  auto array_element_type =
+      MakeColumnDefinitionForType(ddl::ColumnDefinition::FLOAT);
+  auto array_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::ARRAY);
+  *(array_type.mutable_array_subtype()) = array_element_type;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      const zetasql::Type* converted_type,
+      DDLColumnTypeToGoogleSqlType(array_type, &type_factory_));
+
+  const zetasql::Type* googlesql_array_type;
+  ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(type_factory_.get_float(),
+                                        &googlesql_array_type));
+
+  EXPECT_TRUE(converted_type->Equals(googlesql_array_type));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(array_type));
+}
+
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, StructOfFloat32) {
+  ddl::ColumnDefinition struct_type = PARSE_TEXT_PROTO(R"pb(
+    type: STRUCT
+    type_definition {
+      type: STRUCT
+      struct_descriptor {
+        field {
+          name: "foo"
+          type { type: FLOAT }
+        }
+      }
+    }
+  )pb");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      const zetasql::Type* converted_type,
+      DDLColumnTypeToGoogleSqlType(struct_type, &type_factory_));
+
+  const zetasql::Type* googlesql_struct_type;
+  ZETASQL_ASSERT_OK(type_factory_.MakeStructType(
+      {{"foo", zetasql::types::FloatType()}}, &googlesql_struct_type));
+  EXPECT_TRUE(converted_type->Equals(googlesql_struct_type));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(struct_type));
+}
+
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Float64) {
   auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::DOUBLE);
   ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,

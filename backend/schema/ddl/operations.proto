@@ -116,6 +116,7 @@ message TypeDefinition {
   enum Type {
     NONE = 0;
     DOUBLE = 1;
+    FLOAT = 2;
     INT64 = 3;
     BOOL = 7;
     STRING = 8;
@@ -130,7 +131,6 @@ message TypeDefinition {
     BIGBYTES = 23;
     PG_JSONB = 24;
     STRUCT = 26;
-    FLOAT = 27;
   }
 
   optional Type type = 1;
@@ -156,6 +156,7 @@ message ColumnDefinition {
     NONE = 0;
 
     DOUBLE = 1;
+    FLOAT = 2;
     INT64 = 3;
     BOOL = 7;
     STRING = 8;
@@ -169,7 +170,6 @@ message ColumnDefinition {
 
     PG_JSONB = 24;
     STRUCT = 26;
-    FLOAT = 27;
   }
 
   optional Type type = 2;
@@ -182,6 +182,10 @@ message ColumnDefinition {
   // This field will only be set if the user defines a specific column length;
   // if 'MAX' is specified, it will be unset.
   optional int64 length = 7;
+
+  // Enforce the size of a search vector. Currently it can only apply on ARRAY
+  // column "Embeddings ARRAY<FLOAT32>(vector_length=>128)".
+  optional int32 vector_length = 16;
 
   repeated SetOption set_options = 8;
 

@@ -282,6 +282,11 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::Status TranslateColumnDefault(
       const Constraint& column_default, const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
+
+  absl::Status TranslateVectorLength(
+      const Constraint& vector_length, const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
+
   // Translates PostgreSQL <column_definition> used with <CREATE TABLE> and
   // <ALTER TABLE> statements. Updates table translation state stored in
   // <context> with information about processed columns.
@@ -761,6 +766,20 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
       return absl::OkStatus();
     }
 
+    case CONSTR_VECTOR_LENGTH: {
+      if (!options.enable_vector_length) {
+        return UnsupportedTranslationError(
+            "<VECTOR LENGTH> constraint type is not supported.");
+      }
+      // VECTOR LENGTH can be defined only as column constraint.
+      ZETASQL_RET_CHECK_NE(target_column, nullptr);
+      ZETASQL_RET_CHECK(target_column->has_column_name());
+      ZETASQL_RETURN_IF_ERROR(
+          TranslateVectorLength(constraint, options, *target_column));
+      return absl::OkStatus();
+    }
+
+
     case CONSTR_ATTR_IMMEDIATE:
     case CONSTR_ATTR_NOT_DEFERRABLE: {
       // This means NOT DEFERRABLE and/or INITIALLY IMMEDIATE is set on
@@ -1011,6 +1030,15 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateGeneratedColumn(
   }
   return absl::OkStatus();
 }
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateVectorLength(
+    const Constraint& length, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
+  ZETASQL_RET_CHECK_EQ(length.contype, CONSTR_VECTOR_LENGTH);
+  out.set_vector_length(length.vector_length);
+  return absl::OkStatus();
+}
+
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateForeignKey(
     const Constraint& constraint,
     const google::spanner::emulator::backend::ddl::ColumnDefinition* target_column,
@@ -1554,8 +1582,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
   }
 
   if (out.primary_key_size() == 0) {
-    return UnsupportedTranslationError(
-        "Primary key must be defined for a table.");
+      return UnsupportedTranslationError(absl::StrCat(
+          "Primary key must be defined for table \"", table_name, "\"."));
   }
 
   return absl::OkStatus();
@@ -2580,6 +2608,32 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
       ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateTableChainedRenameStatement(
           *statement, options_, *result_statement.mutable_rename_table()));
 
+      break;
+    }
+    case T_AlterOwnerStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const AlterOwnerStmt* statement,
+          (DowncastNode<AlterOwnerStmt, T_AlterOwnerStmt>(raw_statement.stmt)));
+      ZETASQL_ASSIGN_OR_RETURN(std::string object_name,
+                       internal::ObjectTypeToString(statement->objectType));
+      return ddl_translator_.UnsupportedTranslationError(
+          absl::StrCat("<ALTER ", object_name, " OWNER> is not supported"));
+      break;
+    }
+    case T_AlterStatsStmt: {
+      return ddl_translator_.UnsupportedTranslationError(
+          "<ALTER STATISTICS SET STATISTICS> is not supported");
+      break;
+    }
+    case T_AlterObjectSchemaStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const AlterObjectSchemaStmt* statement,
+          (DowncastNode<AlterObjectSchemaStmt, T_AlterObjectSchemaStmt>(
+              raw_statement.stmt)));
+      ZETASQL_ASSIGN_OR_RETURN(std::string object_name,
+                       internal::ObjectTypeToString(statement->objectType));
+      return ddl_translator_.UnsupportedTranslationError(absl::StrCat(
+          "<ALTER ", object_name, " SET SCHEMA> is not supported"));
       break;
     }
     default:

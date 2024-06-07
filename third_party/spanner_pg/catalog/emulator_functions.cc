@@ -2259,6 +2259,7 @@ LeastGreatestFunctions(const std::string& catalog_name) {
       });
   zetasql::FunctionOptions least_function_options;
   least_function_options.set_evaluator_factory(least_evaluator_factory);
+  least_function_options.set_arguments_are_coercible(false);
 
   zetasql::FunctionEvaluatorFactory greatest_evaluator_factory(
       [&](const zetasql::FunctionSignature& signature)
@@ -2276,6 +2277,7 @@ LeastGreatestFunctions(const std::string& catalog_name) {
       });
   zetasql::FunctionOptions greatest_function_options;
   greatest_function_options.set_evaluator_factory(greatest_evaluator_factory);
+  greatest_function_options.set_arguments_are_coercible(false);
 
   std::vector<const zetasql::Type*> supported_types{
       zetasql::types::DoubleType(),
@@ -3316,23 +3318,29 @@ absl::StatusOr<zetasql::Value> EvalCastToOid(
   }
   switch (args[0].type_kind()) {
     case zetasql::TYPE_INT64: {
+      // Casting bigint to PG.OID accepts inputs in the range [0, 4294967295]
+      // and casts it to OID of the same value.
       int64_t val = args[0].int64_value();
       // PostgreSQL oid values are uint32_t.
       if (val < std::numeric_limits<uint32_t>::min() ||
           val > std::numeric_limits<uint32_t>::max()) {
-        return absl::OutOfRangeError("bigint out of range [0, 4294967295]");
+        return absl::OutOfRangeError("bigint out of range");
       }
       return spangres::datatypes::CreatePgOidValue(val);
     }
     case zetasql::TYPE_STRING: {
+      // Casting varchar to PG.OID accepts inputs in the range [-2147483648,
+      // 4294967295] and casts it to OID with value as follows:
+      // - [-2147483648, -1] is cast to range [2147483648, 4294967295].
+      // - [0, 4294967295] is cast to range [0, 4294967295].
       int64_t oid_val;
       if (!absl::SimpleAtoi(args[0].string_value(), &oid_val)) {
         return absl::InvalidArgumentError("invalid varchar");
       }
-      // PostgreSQL oid values are uint32_t.
-      if (oid_val < std::numeric_limits<uint32_t>::min() ||
+      // PostgreSQL oid values are in [int32_t::min(), uint32_t::max()]
+      if (oid_val < std::numeric_limits<int32_t>::min() ||
           oid_val > std::numeric_limits<uint32_t>::max()) {
-        return absl::OutOfRangeError("varchar out of range [0, 4294967295]");
+        return absl::OutOfRangeError("varchar out of range");
       }
       return spangres::datatypes::CreatePgOidValue(oid_val);
     }

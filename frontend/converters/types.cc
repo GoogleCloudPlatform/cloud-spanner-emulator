@@ -72,6 +72,10 @@ absl::Status TypeFromProto(
       *type = factory->get_timestamp();
       return absl::OkStatus();
     }
+    case google::spanner::v1::TypeCode::FLOAT32: {
+      *type = factory->get_float();
+      return absl::OkStatus();
+    }
 
     case google::spanner::v1::TypeCode::FLOAT64: {
       *type = factory->get_double();
@@ -179,6 +183,11 @@ absl::Status TypeToProto(const zetasql::Type* type,
 
     case zetasql::TYPE_INT64: {
       type_pb->set_code(google::spanner::v1::TypeCode::INT64);
+      return absl::OkStatus();
+    }
+
+    case zetasql::TYPE_FLOAT: {
+      type_pb->set_code(google::spanner::v1::TypeCode::FLOAT32);
       return absl::OkStatus();
     }
 

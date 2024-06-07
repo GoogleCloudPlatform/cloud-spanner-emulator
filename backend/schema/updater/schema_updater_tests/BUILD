@@ -29,6 +29,7 @@ cc_library(
     hdrs = ["base.h"],
     deps = [
         "//backend/common:ids",
+        "//backend/database/pg_oid_assigner",
         "//backend/schema/catalog:schema",
         "//backend/schema/graph:schema_graph",
         "//backend/schema/graph:schema_graph_editor",
@@ -67,6 +68,7 @@ cc_library(
         "index.cc",
         "model_test.cc",
         "named_schema.cc",
+        "oid_assignment.cc",
         "sequence.cc",
         "table.cc",
         "views.cc",
@@ -84,6 +86,7 @@ cc_library(
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
         "//third_party/spanner_pg/datatypes/extended:spanner_extended_type",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",

@@ -26,6 +26,7 @@
 
 #include "google/protobuf/descriptor.h"
 #include "absl/algorithm/container.h"
+#include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
 #include "absl/memory/memory.h"
@@ -62,6 +63,18 @@ const char kCommitTimestampOptionName[] = "allow_commit_timestamp";
 const char kPGCommitTimestampOptionName[] = "commit_timestamp";
 const char kChangeStreamValueCaptureTypeOptionName[] = "value_capture_type";
 const char kChangeStreamRetentionPeriodOptionName[] = "retention_period";
+const char kChangeStreamExcludeInsertOptionName[] = "exclude_insert";
+const char kChangeStreamExcludeDeleteOptionName[] = "exclude_delete";
+const char kChangeStreamExcludeUpdateOptionName[] = "exclude_update";
+const char kChangeStreamExcludeTtlDeletesOptionName[] = "exclude_ttl_deletes";
+const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+    kChangeStreamBooleanOptions{{kChangeStreamExcludeInsertOptionName,
+                                 kChangeStreamExcludeDeleteOptionName,
+                                 kChangeStreamExcludeUpdateOptionName,
+                                 kChangeStreamExcludeTtlDeletesOptionName}};
+const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+    kChangeStreamStringOptions{{kChangeStreamValueCaptureTypeOptionName,
+                                kChangeStreamRetentionPeriodOptionName}};
 const char kSearchIndexOptionSortOrderShardingName[] = "sort_order_sharding";
 const char kSearchIndexOptionsDisableAutomaticUidName[] =
     "disable_automatic_uid_column";
@@ -516,6 +529,9 @@ void VisitTypeDefinitionNode(const SimpleNode* type_node,
           absl::StrCat(type_name, ".", pg_type)));
       return;
     }
+  } else if (type_name == "FLOAT32") {
+    // FLOAT32 => FLOAT.
+    type = TypeDefinition::FLOAT;
   } else if (type_name == "FLOAT64") {
     // FLOAT64 => DOUBLE.
     type = TypeDefinition::DOUBLE;
@@ -552,6 +568,12 @@ void VisitTypeDefinitionNode(const SimpleNode* type_node,
             std::move(field));
       }
     }
+  }
+
+  SimpleNode* vector_length = GetFirstChildNode(type_node, JJTVECTOR_LENGTH);
+  if (vector_length != nullptr) {
+    errors->push_back(
+        absl::StrCat("'vector_length' is not supported in STRUCT of ARRAY."));
   }
 
   const SimpleNode* length_node = GetFirstChildNode(type_node, JJTLENGTH);
@@ -602,6 +624,9 @@ void VisitColumnTypeNode(const SimpleNode* column_type,
   } else {
     if (type_name == "FLOAT64") {
       type = ColumnDefinition::DOUBLE;
+    } else if (type_name == "FLOAT32") {
+      // FLOAT32 => FLOAT.
+      type = ColumnDefinition::FLOAT;
     } else if (!ColumnDefinition::Type_Parse(type_name, &type)) {
       ABSL_LOG(FATAL) << "Unrecognized type: " << type_name;
     }
@@ -613,6 +638,16 @@ void VisitColumnTypeNode(const SimpleNode* column_type,
     SimpleNode* column_subtype = GetChildNode(column_type, 0, JJTCOLUMN_TYPE);
     VisitColumnTypeNode(column_subtype, column->mutable_array_subtype(),
                         recursion_depth + 1, errors);
+    SimpleNode* vector_length =
+        GetFirstChildNode(column_type, JJTVECTOR_LENGTH);
+    if (vector_length != nullptr) {
+      if (vector_length->image_as_int64() < 0) {
+        errors->push_back(
+            absl::StrCat("Invalid length for column: ", column->column_name(),
+                         ", found: ", vector_length->image()));
+      }
+      column->set_vector_length(vector_length->image_as_int64());
+    }
   } else if (type == ColumnDefinition::STRUCT) {
     VisitTypeDefinitionNode(column_type, column->mutable_type_definition(),
                             recursion_depth, errors);
@@ -1293,6 +1328,23 @@ void VisitInt64OrNullOptionValNode(const SimpleNode* value_node,
   }
 }
 
+void VisitBoolOrNullOptionValNode(const SimpleNode* value_node,
+                                  SetOption* option,
+                                  std::vector<std::string>* errors) {
+  if (value_node->getId() == JJTBOOL_TRUE_VAL) {
+    option->set_bool_value(true);
+  } else if (value_node->getId() == JJTBOOL_FALSE_VAL) {
+    option->set_bool_value(false);
+  } else if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+  } else {
+    errors->push_back(
+        absl::StrCat("Unexpected value for option: ", option->option_name(),
+                     ". Supported option values are booleans and NULL."));
+    return;
+  }
+}
+
 void VisitChangeStreamOptionKeyValNode(const SimpleNode* node,
                                        OptionList* options,
                                        std::vector<std::string>* errors) {
@@ -1306,11 +1358,14 @@ void VisitChangeStreamOptionKeyValNode(const SimpleNode* node,
 
   const SimpleNode* value_node = GetChildNode(node, 1);
 
-  if (name == kChangeStreamRetentionPeriodOptionName ||
-      name == kChangeStreamValueCaptureTypeOptionName) {
+  if (kChangeStreamStringOptions->contains(name)) {
     SetOption* option = options->Add();
     option->set_option_name(name);
     VisitStringOrNullOptionValNode(value_node, option, errors);
+  } else if (kChangeStreamBooleanOptions->contains(name)) {
+    SetOption* option = options->Add();
+    option->set_option_name(name);
+    VisitBoolOrNullOptionValNode(value_node, option, errors);
   } else {
     errors->push_back(absl::StrCat("Option: ", name, " is unknown."));
   }

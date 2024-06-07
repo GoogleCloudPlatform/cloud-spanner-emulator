@@ -55,6 +55,7 @@ using zetasql::types::BytesType;
 using zetasql::types::DatetimeType;
 using zetasql::types::DateType;
 using zetasql::types::DoubleType;
+using zetasql::types::FloatType;
 using zetasql::types::GeographyType;
 using zetasql::types::Int64ArrayType;
 using zetasql::types::Int64Type;
@@ -63,6 +64,7 @@ using zetasql::types::TimestampType;
 using zetasql::values::Bool;
 using zetasql::values::Datetime;
 using zetasql::values::Double;
+using zetasql::values::Float;
 using zetasql::values::Int64;
 using zetasql::values::NullString;
 using zetasql::values::String;
@@ -372,6 +374,146 @@ TEST_F(AccessProtosTest, CanConvertEmptyRowCursorToResultSet) {
                                             }
                                           }
                                         }
+                                      }
+                                    }
+                                  }
+                             )pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertFloat32RowCursorToResultSet) {
+  TestRowCursor cursor({"int64", "float"}, {Int64Type(), FloatType()},
+                       {{Int64(1), Float(1.0f)},
+                        {Int64(2), Float(0.0f)},
+                        {Int64(3), Float(-1.0f)}});
+  ResultSet result_pb;
+  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+
+  EXPECT_THAT(result_pb, test::EqualsProto(
+                             R"pb(metadata {
+                                    row_type {
+                                      fields {
+                                        name: "int64"
+                                        type { code: INT64 }
+                                      }
+                                      fields {
+                                        name: "float"
+                                        type { code: FLOAT32 }
+                                      }
+                                    }
+                                  }
+                                  rows {
+                                    values { string_value: "1" }
+                                    values { number_value: 1.0 }
+                                  }
+                                  rows {
+                                    values { string_value: "2" }
+                                    values { number_value: 0 }
+                                  }
+                                  rows {
+                                    values { string_value: "3" }
+                                    values { number_value: -1.0 }
+                                  })pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertFloat32RowCursorToResultSetWithLimit) {
+  TestRowCursor cursor({"int64", "float"}, {Int64Type(), FloatType()},
+                       {{Int64(1), Float(1.0f)},
+                        {Int64(2), Float(0.0f)},
+                        {Int64(3), Float(-1.0f)}});
+  ResultSet result_pb;
+  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 1, &result_pb));
+
+  EXPECT_THAT(result_pb, test::EqualsProto(
+                             R"pb(metadata {
+                                    row_type {
+                                      fields {
+                                        name: "int64"
+                                        type { code: INT64 }
+                                      }
+                                      fields {
+                                        name: "float"
+                                        type { code: FLOAT32 }
+                                      }
+                                    }
+                                  }
+                                  rows {
+                                    values { string_value: "1" }
+                                    values { number_value: 1.0 }
+                                  })pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertFloat32RowCursorToPartialResultSet) {
+  TestRowCursor cursor({"int64", "float"}, {Int64Type(), FloatType()},
+                       {{Int64(1), Float(1.0f)},
+                        {Int64(2), Float(0.0f)},
+                        {Int64(3), Float(-1.0f)}});
+  std::vector<PartialResultSet> results;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
+
+  EXPECT_THAT(results[0], test::EqualsProto(
+                              R"pb(metadata {
+                                     row_type {
+                                       fields {
+                                         name: "int64"
+                                         type { code: INT64 }
+                                       }
+                                       fields {
+                                         name: "float"
+                                         type { code: FLOAT32 }
+                                       }
+                                     }
+                                   }
+                                   values { string_value: "1" }
+                                   values { number_value: 1.0 }
+                                   values { string_value: "2" }
+                                   values { number_value: -0.0 }
+                                   values { string_value: "3" }
+                                   values { number_value: -1.0 }
+                              )pb"));
+}
+
+TEST_F(AccessProtosTest,
+       CanConvertFloat32RowCursorToPartialResultSetWithLimit) {
+  TestRowCursor cursor({"int64", "float"}, {Int64Type(), FloatType()},
+                       {{Int64(1), Float(1.0f)},
+                        {Int64(2), Float(0.0)},
+                        {Int64(3), Float(-1.0f)}});
+  std::vector<PartialResultSet> results;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
+
+  EXPECT_THAT(results[0], test::EqualsProto(
+                              R"pb(metadata {
+                                     row_type {
+                                       fields {
+                                         name: "int64"
+                                         type { code: INT64 }
+                                       }
+                                       fields {
+                                         name: "float"
+                                         type { code: FLOAT32 }
+                                       }
+                                     }
+                                   }
+                                   values { string_value: "1" }
+                                   values { number_value: 1.0 }
+                              )pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertEmptyFloat32RowCursorToResultSet) {
+  TestRowCursor cursor({"int64", "float"}, {Int64Type(), FloatType()}, {});
+  ResultSet result_pb;
+  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+
+  EXPECT_THAT(result_pb, test::EqualsProto(
+                             R"pb(metadata {
+                                    row_type {
+                                      fields {
+                                        name: "int64"
+                                        type { code: INT64 }
+                                      }
+                                      fields {
+                                        name: "float"
+                                        type { code: FLOAT32 }
                                       }
                                     }
                                   }

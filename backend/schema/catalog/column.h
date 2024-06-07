@@ -17,11 +17,13 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_COLUMN_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_COLUMN_H_
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 
 #include "zetasql/public/type.h"
+#include "absl/log/check.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -79,6 +81,12 @@ class Column : public SchemaNode {
   std::optional<int64_t> declared_max_length() const {
     return declared_max_length_;
   }
+  // Return true if vector length was set explicitly on the column.
+  bool has_vector_length() const { return vector_length_.has_value(); }
+
+  // Return the vector length of the array column.
+  // A nullopt value means the vector length is not explicitly set.
+  std::optional<uint32_t> vector_length() const { return vector_length_; }
 
   // Returns the effective maximum length of values allowed in this
   // column, based on the type. Applicable only to STRING and BYTES types.
@@ -233,6 +241,10 @@ class Column : public SchemaNode {
 
   // Expression for generated column or default value.
   std::optional<std::string> expression_ = std::nullopt;
+
+  // Enforce the size of a search vector. Currently it can only apply on ARRAY
+  // column "Embeddings ARRAY<FLOAT64>(vector_length=>128)".
+  std::optional<uint32_t> vector_length_ = std::nullopt;
 
   // Original dialect expression for generated column or default value.
   std::optional<std::string> original_expression_ = std::nullopt;

@@ -14,7 +14,9 @@
 // limitations under the License.
 //
 
+#include <optional>
 #include <string>
+#include <utility>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -30,7 +32,8 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using ::testing::HasSubstr;
+using ::zetasql_base::testing::StatusIs;
 
 class ArraysTest : public DatabaseTest {
  public:
@@ -48,6 +51,20 @@ class ArraysTest : public DatabaseTest {
         DateArray      ARRAY<DATE>,
       ) PRIMARY KEY (ID)
     )"});
+  }
+};
+
+class ArraysWithVectorLengthTest : public DatabaseTest {
+ public:
+  absl::Status SetUpDatabase() override {
+    // TODO: b/326591008 - Add an array column of FLOAT32 with vector length
+    // after FLOAT32 is supported in the emulator.
+    return SetSchema({R"sql(
+      CREATE TABLE VectorLengthLimitsTable (
+        pk INT64 NOT NULL,
+        arr_double ARRAY<FLOAT64>(vector_length=>2),
+      ) PRIMARY KEY (pk)
+    )sql"});
   }
 };
 
@@ -186,6 +203,42 @@ TEST_F(ArraysTest, InsertEmptyArraysSucceed) {
   EXPECT_THAT(ReadAll("TestTable", {"ID", "StringArray", "BytesArray"}),
               IsOkAndHoldsRows({{1, string_arr, Null<Array<Bytes>>()},
                                 {2, Null<Array<std::string>>(), bytes_arr}}));
+}
+
+TEST_F(ArraysWithVectorLengthTest, InsertArraysSucceed) {
+  Array<double> double_arr{1.1, 1.2};
+  ZETASQL_EXPECT_OK(Insert("VectorLengthLimitsTable", {"pk", "arr_double"},
+                   {2, std::move(double_arr)}));
+}
+
+TEST_F(ArraysWithVectorLengthTest, InsertArraysWithNullFail) {
+  Array<double> double_arr{1.1, std::nullopt};
+  EXPECT_THAT(
+      Insert("VectorLengthLimitsTable", {"pk", "arr_double"},
+             {2, std::move(double_arr)}),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr(" has `vector_length`, and Null is not allowed")));
+}
+
+TEST_F(ArraysWithVectorLengthTest, InsertArraysLessThanVectorLengthFail) {
+  Array<double> double_arr{1.1};
+  EXPECT_THAT(
+      Insert("VectorLengthLimitsTable", {"pk", "arr_double"},
+             {2, std::move(double_arr)}),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr(
+              "has 1 elements and is less than the `vector_length` limit: 2")));
+}
+
+TEST_F(ArraysWithVectorLengthTest, InsertArraysExceedsVectorLengthFail) {
+  Array<double> double_arr{1.1, 1.2, 1.3};
+  EXPECT_THAT(
+      Insert("VectorLengthLimitsTable", {"pk", "arr_double"},
+             {2, std::move(double_arr)}),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr(
+                   "has 3 elements and exceeds the `vector_length` limit: 2")));
 }
 
 TEST_F(ArraysTest, InsertInvalidUTFStringArrayFails) {

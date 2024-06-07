@@ -1081,5 +1081,33 @@ TEST_F(SerializationDeserializationTest, CallStmt) {
   EXPECT_THAT(call_stmt, CanSerializeAndDeserialize());
 }
 
+TEST_F(SerializationDeserializationTest, AlterOwnerStmt) {
+  AlterOwnerStmt* alter_owner_stmt = makeNode(AlterOwnerStmt);
+  alter_owner_stmt->objectType = OBJECT_STATISTIC_EXT;
+  alter_owner_stmt->relation = makeNode(RangeVar);
+  alter_owner_stmt->object = PlaceHolderNode();
+  alter_owner_stmt->newowner = makeNode(RoleSpec);
+  EXPECT_THAT(alter_owner_stmt, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, AlterStatsStmt) {
+  AlterStatsStmt* alter_stats_stmt = makeNode(AlterStatsStmt);
+  alter_stats_stmt->defnames = list_make1(PlaceHolderNode());
+  alter_stats_stmt->stxstattarget = 37;
+  alter_stats_stmt->missing_ok = true;
+  EXPECT_THAT(alter_stats_stmt, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, AlterObjectSchemaStmt) {
+  AlterObjectSchemaStmt* alter_object_schema_stmt =
+      makeNode(AlterObjectSchemaStmt);
+  alter_object_schema_stmt->objectType = OBJECT_STATISTIC_EXT;
+  alter_object_schema_stmt->relation = makeNode(RangeVar);
+  alter_object_schema_stmt->object = PlaceHolderNode();
+  alter_object_schema_stmt->newschema = pstrdup("new_schema");
+  alter_object_schema_stmt->missing_ok = true;
+  EXPECT_THAT(alter_object_schema_stmt, CanSerializeAndDeserialize());
+}
+
 }  // namespace
 }  // namespace postgres_translator::test

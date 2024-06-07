@@ -22,11 +22,12 @@
 
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/type.h"
+#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
-#include "absl/log/check.h"
 #include "absl/types/span.h"
 #include "backend/common/ids.h"
+#include "backend/database/pg_oid_assigner/pg_oid_assigner.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -47,10 +48,13 @@ absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
     database_api::DatabaseDialect dialect) {
   backend::TableIDGenerator table_id_gen;
   backend::ColumnIDGenerator column_id_gen;
+  backend::PgOidAssigner pg_oid_assigner(
+      dialect == database_api::DatabaseDialect::POSTGRESQL);
   backend::SchemaChangeContext context{
       .type_factory = type_factory,
       .table_id_generator = &table_id_gen,
       .column_id_generator = &column_id_gen,
+      .pg_oid_assigner = &pg_oid_assigner,
   };
   backend::SchemaUpdater updater;
   return updater.ValidateSchemaFromDDL(

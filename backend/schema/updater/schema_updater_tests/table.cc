@@ -1595,6 +1595,83 @@ TEST_P(SchemaUpdaterTest, CreateTableIfNotExists) {
   // null.
   ASSERT_NE(t->FindColumn("col2"), nullptr);
 }
+
+TEST_P(SchemaUpdaterTest, CreateTableWithVectorLength) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_EXPECT_OK(CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+        a1 ARRAY<FLOAT64>(vector_length=>123),
+      ) PRIMARY KEY (k1)
+    )"}));
+}
+
+TEST_P(SchemaUpdaterTest, CreateTableWithVectorLengthOnInvalidType) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({R"sql(
+      CREATE TABLE T (
+        k1 INT64,
+        a1 ARRAY<INT64>(vector_length=>123),
+      ) PRIMARY KEY (k1)
+    )sql"}),
+              StatusIs(error::InvalidTypeForVectorLength("T.a1")));
+}
+
+TEST_P(SchemaUpdaterTest, AlterTableAlterColumnAddVectorLength) {
+  // ALTER TABLE ALTER COLUMN to add vector length param is not supported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+      CREATE TABLE T (
+        k1 INT64,
+        a1 ARRAY<FLOAT64>(vector_length=>123),
+        a2 ARRAY<FLOAT64>,
+      ) PRIMARY KEY (k1)
+    )sql"}));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
+        ALTER TABLE T ALTER COLUMN a2 ARRAY<FLOAT64>(vector_length=>10)
+      )sql"}),
+              StatusIs(error::CannotAlterColumnToAddVectorLength("a2")));
+}
+
+TEST_P(SchemaUpdaterTest, AlterTableAlterColumnRemoveVectorLength) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+      CREATE TABLE T (
+        k1 INT64,
+        a1 ARRAY<FLOAT64>(vector_length=>2),
+        a2 ARRAY<FLOAT64>,
+      ) PRIMARY KEY (k1)
+    )sql"}));
+
+  EXPECT_THAT(
+      UpdateSchema(schema.get(),
+                   {R"sql( ALTER TABLE T ALTER COLUMN a1 ARRAY<FLOAT64>)sql"}),
+      StatusIs(error::CannotAlterColumnToRemoveVectorLength("a1")));
+}
+
+TEST_P(SchemaUpdaterTest,
+       CreateTableWithVectorLengthOnGeneratedOrDefaultColumn) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(
+      CreateSchema({R"sql(
+      CREATE TABLE T (
+        k1 INT64,
+        Arr1 ARRAY<FLOAT64>(vector_length=>3) DEFAULT ([1.1,2.2,3.3,4.4])
+      ) PRIMARY KEY (k1)
+    )sql"}),
+      StatusIs(error::VectorLengthOnGeneratedOrDefaultColumn("T.Arr1")));
+
+  EXPECT_THAT(
+      CreateSchema({R"sql(
+      CREATE TABLE T (
+        k1 INT64,
+        Arr1 ARRAY<FLOAT64> DEFAULT ([1.0]),
+        Arr2 ARRAY<FLOAT64>(vector_length=>3) AS (Arr1)
+      ) PRIMARY KEY (k1)
+    )sql"}),
+      StatusIs(error::VectorLengthOnGeneratedOrDefaultColumn("T.Arr2")));
+}
 }  // namespace
 
 }  // namespace test

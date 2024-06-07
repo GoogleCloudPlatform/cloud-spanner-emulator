@@ -113,21 +113,21 @@ class PgOidConversionErrorTest : public testing::TestWithParam<int64_t> {};
 TEST_P(PgOidConversionErrorTest, ConvertInt64ToPgOidError) {
   TestConversion(zetasql::types::Int64Type(), GetPgOidType(),
                  zetasql::Value::Int64(GetParam()), std::nullopt,
-                 /* is_error= */ true, "bigint out of range [0, 4294967295]");
+                 /* is_error= */ true, "bigint out of range");
 }
 
 TEST_P(PgOidConversionErrorTest, ConvertStringToPgOidError) {
   TestConversion(zetasql::types::StringType(), GetPgOidType(),
                  zetasql::Value::String(std::to_string(GetParam())),
                  std::nullopt, /* is_error= */ true,
-                 "varchar out of range [0, 4294967295]");
+                 "varchar out of range");
 }
 
 INSTANTIATE_TEST_SUITE_P(
     PgOidInt64Error, PgOidConversionErrorTest,
     testing::Values(std::numeric_limits<int64_t>::min(),
                     std::numeric_limits<int64_t>::max(),
-                    (int64_t)std::numeric_limits<uint32_t>::min() - 1,
+                    (int64_t)std::numeric_limits<int32_t>::min() - 1,
                     (int64_t)std::numeric_limits<uint32_t>::max() + 1));
 
 TEST(PGOidConversionErrorTest, CoverStringToPgOidInvalidString) {

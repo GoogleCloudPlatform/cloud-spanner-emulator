@@ -3935,6 +3935,44 @@ _readCallStmt(void)
 	READ_DONE();
 }
 
+static AlterOwnerStmt*
+_readAlterOwnerStmt(void)
+{
+	READ_LOCALS(AlterOwnerStmt);
+
+	READ_ENUM_FIELD(objectType, ObjectType);
+	READ_NODE_FIELD(relation);
+	READ_NODE_FIELD(object);
+	READ_NODE_FIELD(newowner);
+
+	READ_DONE();
+}
+
+static AlterStatsStmt*
+_readAlterStatsStmt(void)
+{
+	READ_LOCALS(AlterStatsStmt);
+
+	READ_NODE_FIELD(defnames);
+	READ_INT_FIELD(stxstattarget);
+	READ_BOOL_FIELD(missing_ok);
+
+	READ_DONE();
+}
+
+static AlterObjectSchemaStmt*
+_readAlterObjectSchemaStmt(void)
+{
+	READ_LOCALS(AlterObjectSchemaStmt);
+
+	READ_ENUM_FIELD(objectType, ObjectType);
+	READ_NODE_FIELD(relation);
+	READ_NODE_FIELD(object);
+	READ_STRING_FIELD(newschema);
+	READ_BOOL_FIELD(missing_ok);
+
+	READ_DONE();
+}
 /*
  * parseNodeString
  *
@@ -4347,6 +4385,12 @@ parseNodeString(void)
 		return_value = _readSynonymClause();
 	else if (MATCH("CALLSTMT", 8))
 		return_value = _readCallStmt();
+	else if (MATCH("ALTEROWNERSTMT", 14))
+		return_value = _readAlterOwnerStmt();
+	else if (MATCH("ALTERSTATSSTMT", 14))
+		return_value = _readAlterStatsStmt();
+	else if (MATCH("ALTEROBJECTSCHEMASTMT", 21))
+		return_value = _readAlterObjectSchemaStmt();
 	/* SPANGRES END */
 	else
 	{

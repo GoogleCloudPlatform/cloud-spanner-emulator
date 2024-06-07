@@ -34,6 +34,11 @@ namespace backend {
 absl::Status SequenceValidator::Validate(const Sequence* sequence,
                                          SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!sequence->name_.empty());
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(sequence->postgresql_oid().has_value());
+  } else {
+    ZETASQL_RET_CHECK(!sequence->postgresql_oid().has_value());
+  }
   ZETASQL_RETURN_IF_ERROR(
       GlobalSchemaNames::ValidateSchemaName("Sequence", sequence->name_));
   return absl::OkStatus();
@@ -49,6 +54,16 @@ absl::Status SequenceValidator::ValidateUpdate(
   ZETASQL_RET_CHECK_EQ(sequence->Name(), old_sequence->Name());
   ZETASQL_RET_CHECK_EQ(sequence->sequence_kind(), old_sequence->sequence_kind());
   ZETASQL_RET_CHECK_EQ(sequence->id(), old_sequence->id());
+
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(sequence->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(old_sequence->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK_EQ(sequence->postgresql_oid().value(),
+                 old_sequence->postgresql_oid().value());
+  } else {
+    ZETASQL_RET_CHECK(!sequence->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(!old_sequence->postgresql_oid().has_value());
+  }
 
   return absl::OkStatus();
 }

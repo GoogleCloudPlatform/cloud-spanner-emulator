@@ -36,6 +36,8 @@
 #include <sstream>
 #include <string>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
@@ -206,6 +208,114 @@ bool IsReservedName(absl::string_view name) {
 
 bool IsPostgresReservedName(absl::string_view name) {
   return absl::EqualsIgnoreCase(name, "postgres");
+}
+
+absl::StatusOr<std::string> ObjectTypeToString(ObjectType object_type) {
+  switch (object_type) {
+    case OBJECT_TABLE:
+      return "TABLE";
+    case OBJECT_ACCESS_METHOD:
+      return "ACCESS METHOD";
+    case OBJECT_AGGREGATE:
+      return "AGGREGATE";
+    case OBJECT_AMOP:
+      return "AMOP";
+    case OBJECT_AMPROC:
+      return "AMPROC";
+    case OBJECT_ATTRIBUTE:
+      return "ATTRIBUTE";
+    case OBJECT_CAST:
+      return "CAST";
+    case OBJECT_CHANGE_STREAM:
+      return "CHANGE STREAM";
+    case OBJECT_COLUMN:
+      return "COLUMN";
+    case OBJECT_COLLATION:
+      return "COLLATION";
+    case OBJECT_CONVERSION:
+      return "CONVERSION";
+    case OBJECT_DATABASE:
+      return "DATABASE";
+    case OBJECT_DEFAULT:
+      return "DEFAULT";
+    case OBJECT_DEFACL:
+      return "DEFACL";
+    case OBJECT_DOMAIN:
+      return "DOMAIN";
+    case OBJECT_DOMCONSTRAINT:
+      return "DOMAIN CONSTRAINT";
+    case OBJECT_EVENT_TRIGGER:
+      return "EVENT TRIGGER";
+    case OBJECT_EXTENSION:
+      return "EXTENSION";
+    case OBJECT_FDW:
+      return "FOREIGN DATA WRAPPER";
+    case OBJECT_FOREIGN_SERVER:
+      return "FOREIGN SERVER";
+    case OBJECT_FOREIGN_TABLE:
+      return "FOREIGN TABLE";
+    case OBJECT_FUNCTION:
+      return "FUNCTION";
+    case OBJECT_INDEX:
+      return "INDEX";
+    case OBJECT_LANGUAGE:
+      return "LANGUAGE";
+    case OBJECT_LARGEOBJECT:
+      return "LARGE OBJECT";
+    case OBJECT_MATVIEW:
+      return "MATERIALIZED VIEW";
+    case OBJECT_OPCLASS:
+      return "OPERATOR CLASS";
+    case OBJECT_OPERATOR:
+      return "OPERATOR";
+    case OBJECT_OPFAMILY:
+      return "OPERATOR FAMILY";
+    case OBJECT_POLICY:
+      return "POLICY";
+    case OBJECT_PROCEDURE:
+      return "PROCEDURE";
+    case OBJECT_PUBLICATION:
+      return "PUBLICATION";
+    case OBJECT_PUBLICATION_REL:
+      return "PUBLICATION REL";
+    case OBJECT_ROLE:
+      return "ROLE";
+    case OBJECT_ROUTINE:
+      return "ROUTINE";
+    case OBJECT_RULE:
+      return "RULE";
+    case OBJECT_SCHEMA:
+      return "SCHEMA";
+    case OBJECT_SEQUENCE:
+      return "SEQUENCE";
+    case OBJECT_SUBSCRIPTION:
+      return "SUBSCRIPTION";
+    case OBJECT_STATISTIC_EXT:
+      return "STATISTICS";
+    case OBJECT_TABCONSTRAINT:
+      return "TABLE CONSTRAINT";
+    case OBJECT_TABLESPACE:
+      return "TABLESPACE";
+    case OBJECT_TRANSFORM:
+      return "TRANSFORM";
+    case OBJECT_TRIGGER:
+      return "TRIGGER";
+    case OBJECT_TSCONFIGURATION:
+      return "TEXT SEARCH CONFIGURATION";
+    case OBJECT_TSDICTIONARY:
+      return "TEXT SEARCH DICTIONARY";
+    case OBJECT_TSPARSER:
+      return "TEXT SEARCH PARSER";
+    case OBJECT_TSTEMPLATE:
+      return "TEXT SEARCH TEMPLATE";
+    case OBJECT_TYPE:
+      return "TYPE";
+    case OBJECT_USER_MAPPING:
+      return "USER MAPPING";
+    case OBJECT_VIEW:
+      return "VIEW";
+  }
+  return absl::FailedPreconditionError("Unknown object type");
 }
 
 }  // namespace internal

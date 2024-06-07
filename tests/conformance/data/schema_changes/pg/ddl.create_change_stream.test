@@ -160,35 +160,20 @@ CREATE CHANGE STREAM change_stream_retention
 WITH (retention_period = '7d')
 
 ==
-# TODO: The emulator returns the following error:
-# ERROR: Option retention_period can only take string_value.
-# CREATE CHANGE STREAM change_stream_null_retention WITH (retention_period = null);
-# --
-# CREATE CHANGE STREAM change_stream_null_retention;
-# ==
 CREATE CHANGE STREAM change_stream_value_capture_type WITH (value_capture_type = 'OLD_AND_NEW_VALUES');
 --
 CREATE CHANGE STREAM change_stream_value_capture_type
 WITH (value_capture_type = 'OLD_AND_NEW_VALUES')
-
 ==
-# TODO: The emulator returns the following error:
-# ERROR: Change Streams only support value capture types in OLD_AND_NEW_VALUES, NEW_ROW, and NEW_VALUES.
-# CREATE CHANGE STREAM change_stream_null_option WITH (value_capture_type = null);
-# --
-# CREATE CHANGE STREAM change_stream_null_option;
-# ==
+CREATE CHANGE STREAM change_stream_null_option WITH (value_capture_type = null, retention_period = null, exclude_insert = null, exclude_update = null, exclude_delete = null, exclude_ttl_deletes = null);
+--
+CREATE CHANGE STREAM change_stream_null_option;
+==
 CREATE CHANGE STREAM change_stream_quoted_option WITH ("value_capture_type" = 'NEW_ROW');
 --
 CREATE CHANGE STREAM change_stream_quoted_option
 WITH (value_capture_type = 'NEW_ROW')
 ==
-# TODO: The emulator returns the following error:
-# ERROR: Change Streams only support value capture types in OLD_AND_NEW_VALUES, NEW_ROW, and NEW_VALUES.
-# CREATE CHANGE STREAM change_stream_null_option WITH (value_capture_type = NULL);
-# --
-# CREATE CHANGE STREAM change_stream_null_option
-# ==
 CREATE TABLE table1 (
   id bigint NOT NULL,
   PRIMARY KEY(id)
@@ -199,11 +184,12 @@ CREATE TABLE table2 (
   column2 bigint,
   PRIMARY KEY(id)
 );
-CREATE CHANGE STREAM change_stream_explicit_tables_and_options FOR table1, table2(column1, column2) WITH (retention_period = '7d', value_capture_type = 'OLD_AND_NEW_VALUES');
+CREATE CHANGE STREAM change_stream_explicit_tables_and_options FOR table1, table2(column1, column2) WITH (retention_period = '7d', value_capture_type = 'OLD_AND_NEW_VALUES',
+ exclude_insert = true, exclude_update = 'true', exclude_delete = false, exclude_ttl_deletes = 'false');
 --
 CREATE CHANGE STREAM change_stream_explicit_tables_and_options
 FOR table1, table2(column1, column2)
-WITH (value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '7d')
+WITH (value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '7d', exclude_insert = true, exclude_update = true, exclude_delete = false, exclude_ttl_deletes = false)
 ==
 CREATE CHANGE STREAM change_stream_quoted_table FOR 'table1';
 --
@@ -268,6 +254,22 @@ ERROR: Failed to provide valid option value for 'value_capture_type' in <CREATE 
 CREATE CHANGE STREAM change_stream_invalid_option WITH (value_capture_type);
 --
 ERROR: Failed to parse change stream option correctly in <CREATE CHANGE STREAM> statement.
+==
+CREATE CHANGE STREAM change_stream_invalid_boolean_option WITH (exclude_insert = NO);
+--
+ERROR: Failed to provide valid option value for 'exclude_insert' in <CREATE CHANGE STREAM> statement.
+==
+CREATE CHANGE STREAM change_stream_invalid_boolean_option WITH (exclude_update = YES);
+--
+ERROR: Failed to provide valid option value for 'exclude_update' in <CREATE CHANGE STREAM> statement.
+==
+CREATE CHANGE STREAM change_stream_invalid_boolean_option WITH (exclude_delete = 1);
+--
+ERROR: Failed to provide valid option value for 'exclude_delete' in <CREATE CHANGE STREAM> statement.
+==
+CREATE CHANGE STREAM change_stream_invalid_boolean_option WITH (exclude_ttl_deletes = 20.3);
+--
+ERROR: Failed to provide valid option value for 'exclude_ttl_deletes' in <CREATE CHANGE STREAM> statement.
 ==
 # TODO: In PG15, it causes a different error. After the upgrade,
 # we can unskip this test.

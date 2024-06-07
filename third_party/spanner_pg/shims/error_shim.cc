@@ -85,10 +85,10 @@ absl::Status ConvertPostgresError(
   }
 
   if (exc.error_data().message_id != nullptr) {
-    ABSL_LOG(FATAL) << "PG error is not defined in the error catalog, error code: ["
-                << exc.error_data().sqlerrcode << "] error message: ["
-                << exc.error_data().message << "] message id: ["
-                << exc.error_data().message_id << "].";
+    ABSL_LOG(FATAL) << "PG error is not defined in the error catalog, sqlstate: ["
+                << unpack_sql_state(exc.error_data().sqlerrcode)
+                << "] error message: [" << exc.error_data().message
+                << "] message id: [" << exc.error_data().message_id << "].";
   }
 
   // TODO: We should throw a Spangres internal error instead of

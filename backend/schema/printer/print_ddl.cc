@@ -262,8 +262,7 @@ std::string PrintChangeStream(const ChangeStream* change_stream) {
     }
   }
   // Options with null values shouldn't be printed out.
-  if (change_stream->value_capture_type().has_value() ||
-      change_stream->retention_period().has_value()) {
+  if (change_stream->HasExplicitValidOptions()) {
     absl::StrAppend(&change_stream_string, " ", "OPTIONS ( ",
                     PrintOptions(change_stream->options()), " )");
   }

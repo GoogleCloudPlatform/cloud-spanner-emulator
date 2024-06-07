@@ -48,6 +48,8 @@ namespace postgres_translator {
 namespace spangres {
 
 namespace {
+using testing::HasSubstr;
+using zetasql_base::testing::StatusIs;
 
 class ParserWithoutSerializationTest : public ::testing::Test {
  protected:
@@ -65,6 +67,16 @@ TEST_F(ParserWithoutSerializationTest, ExistingMemoryContext) {
   // MemoryContext.
   EXPECT_THAT(output.output().status(),
               zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+}
+
+TEST_F(ParserWithoutSerializationTest,
+       ReturnsErrorOnInvalidUnicodeEscapeValue) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(interfaces::ParserInterface * parser,
+                       parser_.GetParser());
+  interfaces::ParserSingleOutput output(parser->Parse("u&\'\\+8FF2C7\'"));
+  EXPECT_THAT(output.output().status(),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("invalid Unicode escape value")));
 }
 
 }  // namespace

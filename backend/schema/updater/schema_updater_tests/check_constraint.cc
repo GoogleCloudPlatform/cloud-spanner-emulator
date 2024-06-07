@@ -56,8 +56,7 @@ TEST_P(SchemaUpdaterTest, CheckConstraintBasic) {
               CONSTRAINT "C1" CHECK("K" > 0)
             ))",
              R"(ALTER TABLE "T" ADD CONSTRAINT "C2" CHECK("K" + "V" > 0))"},
-            /*proto_descriptor_bytes=*/"",
-            POSTGRESQL,
+            /*proto_descriptor_bytes=*/"", POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
@@ -134,12 +133,10 @@ TEST_P(SchemaUpdaterTest, CheckConstraintColumnNameIsCaseInsensitive) {
   if (GetParam() == POSTGRESQL) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                          CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
-                                      /*proto_descriptor_bytes=*/"",
-                                      POSTGRESQL,
+                                      /*proto_descriptor_bytes=*/"", POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
     ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {add_constraint_ddl},
-                           /*proto_descriptor_bytes=*/"",
-                           POSTGRESQL,
+                           /*proto_descriptor_bytes=*/"", POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false));
   } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
@@ -154,18 +151,39 @@ TEST_P(SchemaUpdaterTest, CheckConstraintConstraintNameIsCaseInsensitive) {
   if (GetParam() == POSTGRESQL) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
                          CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
-                                      /*proto_descriptor_bytes=*/"",
-                                      POSTGRESQL,
+                                      /*proto_descriptor_bytes=*/"", POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
     ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {drop_constraint_ddl},
-                           /*proto_descriptor_bytes=*/"",
-                           POSTGRESQL,
+                           /*proto_descriptor_bytes=*/"", POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false));
   } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         auto schema,
         CreateSchema(SchemaForCaseSensitivityTests(GOOGLE_STANDARD_SQL)));
     ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {drop_constraint_ddl}));
+  }
+}
+
+TEST_P(SchemaUpdaterTest, SqlInlinedFunctionInCheckConstraint) {
+  // A SQL-inlined function is a function whose implementation is a SQL string
+  // instead of an evaluator.
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                         CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
+                                      /*proto_descriptor_bytes=*/"", POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+    ZETASQL_EXPECT_OK(UpdateSchema(
+        schema.get(),
+        {R"(ALTER TABLE T ADD CONSTRAINT C2 CHECK(arrayoverlap(ARRAY[v], ARRAY[1, 2, 3])))"},
+        /*proto_descriptor_bytes=*/"", POSTGRESQL,
+        /*use_gsql_to_pg_translation=*/false));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        auto schema,
+        CreateSchema(SchemaForCaseSensitivityTests(GOOGLE_STANDARD_SQL)));
+    ZETASQL_EXPECT_OK(UpdateSchema(
+        schema.get(),
+        {R"(ALTER TABLE T ADD CONSTRAINT C2 CHECK(ARRAY_INCLUDES(ARRAY[1,2,3], v)))"}));
   }
 }
 

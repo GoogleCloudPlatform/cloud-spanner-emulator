@@ -31,6 +31,7 @@
 #include "backend/actions/manager.h"
 #include "backend/common/ids.h"
 #include "backend/database/change_stream/change_stream_partition_churner.h"
+#include "backend/database/pg_oid_assigner/pg_oid_assigner.h"
 #include "backend/locking/manager.h"
 #include "backend/query/query_engine.h"
 #include "backend/schema/catalog/schema.h"
@@ -118,6 +119,8 @@ class Database {
     return change_stream_partition_churner_.get();
   }
 
+  PgOidAssigner* get_pg_oid_assigner() { return pg_oid_assigner_.get(); }
+
  private:
   Database();
   // Delete copy and assignment operators since database shouldn't be copyable.
@@ -164,6 +167,9 @@ class Database {
 
   std::unique_ptr<ChangeStreamPartitionChurner>
       change_stream_partition_churner_;
+
+  // Assigns OIDs to database objects when dialect is POSTGRESQL.
+  std::unique_ptr<PgOidAssigner> pg_oid_assigner_;
 };
 
 }  // namespace backend

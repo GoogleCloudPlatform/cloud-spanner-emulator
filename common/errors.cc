@@ -771,6 +771,63 @@ absl::Status InvalidColumnLength(absl::string_view column_name,
                        column_name, specified_length, min_length, max_length));
 }
 
+absl::Status VectorLengthExceedsLimit(absl::string_view column_name,
+                                      int element_num, int limit) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Array column $0 has $1 elements and "
+                                       "exceeds the `vector_length` limit: $2.",
+                                       column_name, element_num, limit));
+}
+
+absl::Status VectorLengthLessThanLimit(absl::string_view column_name,
+                                       int element_num, int limit) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Array column $0 has $1 elements and "
+                       "is less than the `vector_length` limit: $2.",
+                       column_name, element_num, limit));
+}
+
+absl::Status DisallowNullsInSearchArray(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The array column $0 has `vector_length`, and Null is "
+                       "not allowed..",
+                       column_name));
+}
+
+absl::Status InvalidTypeForVectorLength(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("`vector_length` can only be applied on ARRAY<FLOAT32>"
+                       "or ARRAY<FLOAT64>, but it is applied on $0.",
+                       column_name));
+}
+
+absl::Status VectorLengthOnGeneratedOrDefaultColumn(
+    absl::string_view column_name) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("`vector_length` cannot be applied on "
+                                       "generated column or default column,"
+                                       "but it is applied on $0.",
+                                       column_name));
+}
+
+absl::Status CannotAlterColumnToAddVectorLength(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot change column $0 to add `vector_length`",
+                       column_name));
+}
+
+absl::Status CannotAlterColumnToRemoveVectorLength(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot change column $0 to remove `vector_length`",
+                       column_name));
+}
+
 absl::Status InvalidColumnSizeReduction(absl::string_view column_name,
                                         int64_t specified_length,
                                         int64_t existing_length,
@@ -937,6 +994,12 @@ absl::Status UnsupportedTrackedObjectOrNonExistentTableInChangeStream(
                        "Streams do not track database objects of this type, or "
                        "this Table does not exist.",
                        change_stream_name, table_name));
+}
+
+absl::Status UnsupportedProcedure(absl::string_view procedure_string) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::Substitute("$0 is not supported.", procedure_string));
 }
 
 absl::Status CreateChangeStreamForClauseTrackedTablesEntryInvalidOneof(

@@ -71,14 +71,22 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
   TranslateParsedQuery(interfaces::TranslateParsedQueryParams params) override;
 
-  // TranslateParsedExpression translates SQL expressions that operate within
-  // the scope of particular table, which means that expression can only
-  // reference columns of some particular table. This table should exist in the
-  // catalog provided with TranslateParsedQueryParams and the name of this table
-  // is given in `table_name`. Currently Spangres supports two types of table
-  // level expressions: generated column expressions and check constraint
-  // expressions. The main use case for this function is to be called during DDL
-  // translation.
+  // Translates SQL expressions that operate within the scope of particular
+  // table, which means expressions that can only reference columns of a
+  // particular table. This table should exist in the catalog provided with
+  // TranslateParsedQueryParams and the name of this table is given in
+  // `table_name`. The main use case for this function is to be called during
+  // the DDL translation of table expressions such as generated columns,
+  // check constraints, and default value expressions.
+  //
+  // This translation does not rewrite functions implemented with ZetaSQL's
+  // SQL-inlined framework. The reason is because the analyzer later runs a
+  // check on the translated AST to verify that column expressions
+  // (i.e., generated columns, default values, and check constraints) do not
+  // contain subqueries or scans. That test will fail if such functions are
+  // inlined earlier because they get inlined as subqueries. The analyzer
+  // does the inlining after completing its validation.
+  //
   // TODO: table_name requirement revisit.
   absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateParsedTableLevelExpression(
@@ -160,11 +168,17 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   // serialized expression, the getter needs to wrap it.
   // 2: query_deparser_callback: a callback to process query, it is used by
   // TranslateParsedExpression to deparse and get the analyzed expression.
+  //
+  // `enable_rewrite` is used to control whether to apply ZetaSQL rewriter to
+  // SQL-inlined functions in the translated AST. The rewriter should not be
+  // applied to generated column, default value, and check constraint
+  // expressions. For details, see b/341765529.
   absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
   TranslateParsedTree(
       interfaces::TranslateParsedQueryParams& params,
       std::function<decltype(GetParserQueryOutput)> parser_output_getter,
-      std::function<absl::Status(Query* query)> query_deparser_callback);
+      std::function<absl::Status(Query* query)> query_deparser_callback,
+      bool enable_rewrite);
 
   static absl::StatusOr<int> FindMaxColumnID(
       const zetasql::ResolvedStatement& stmt);

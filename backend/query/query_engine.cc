@@ -38,6 +38,7 @@
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/parse_helpers.h"
 #include "zetasql/public/type.h"
+#include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_node.h"
@@ -662,6 +663,15 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateUpdate(
   }
 }
 
+absl::StatusOr<std::unique_ptr<RowCursor>> ResolveCallStatement() {
+  std::vector<std::string> names;
+  std::vector<const zetasql::Type*> types;
+  std::vector<std::vector<zetasql::Value>> values;
+  names.push_back("result");
+  types.push_back(zetasql::types::BoolType());
+  return std::make_unique<VectorsRowCursor>(names, types, values);
+}
+
 // Uses googlesql/public/evaluator to evaluate a query statement represented by
 // a resolved AST and returns a row cursor.
 absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
@@ -669,6 +679,12 @@ absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
     const zetasql::ParameterValueMap& params,
     zetasql::TypeFactory* type_factory, int64_t* num_output_rows,
     const v1::ExecuteSqlRequest_QueryMode query_mode) {
+  if (resolved_statement->node_kind() == zetasql::RESOLVED_CALL_STMT) {
+    // Evaluation of a CALL statement is currently a no-op. This is added to
+    // ensure the emulator doesn't error out when the customer tries the CALL
+    // statement.
+    return ResolveCallStatement();
+  }
   ZETASQL_RET_CHECK_EQ(resolved_statement->node_kind(), zetasql::RESOLVED_QUERY_STMT)
       << "input is not a query statement";
 

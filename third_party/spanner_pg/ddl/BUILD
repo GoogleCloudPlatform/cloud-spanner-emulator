@@ -143,9 +143,23 @@ cc_library(
         "//third_party/spanner_pg/src/include:kwlist_include",
         "//third_party/spanner_pg/src/include:pg_config_include",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
         "@com_googlesource_code_re2//:re2",
+    ],
+)
+
+cc_test(
+    name = "translation_utils_test",
+    srcs = ["translation_utils_test.cc"],
+    deps = [
+        ":translation_utils",
+        "//third_party/spanner_pg/postgres_includes",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 

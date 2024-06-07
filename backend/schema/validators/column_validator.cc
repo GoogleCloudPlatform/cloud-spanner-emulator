@@ -34,6 +34,7 @@
 #include "common/errors.h"
 #include "common/feature_flags.h"
 #include "common/limits.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -202,6 +203,16 @@ absl::Status ColumnValidator::Validate(const Column* column,
     }
   }
 
+  if (column->has_vector_length()) {
+    if (!column->type_->IsArray() ||
+        (column->type_->IsArray() && !base_type->IsFloat() &&
+         !base_type->IsDouble())) {
+      return error::InvalidTypeForVectorLength(column->FullName());
+    } else if (column->is_generated() || column->has_default_value()) {
+      return error::VectorLengthOnGeneratedOrDefaultColumn(column->FullName());
+    }
+  }
+
   if (base_type->IsProto() || base_type->IsEnum()) {
     ZETASQL_RETURN_IF_ERROR(ValidateTypeExistsInProtoBundle(
         base_type, context->proto_bundle(), column->FullName()));
@@ -211,12 +222,24 @@ absl::Status ColumnValidator::Validate(const Column* column,
     return error::UnallowedCommitTimestampOption(column->FullName());
   }
 
-  if (column->has_default_value() && column->allows_commit_timestamp()) {
-    return error::CannotUseCommitTimestampWithColumnDefaultValue(
-        column->Name());
+  if (column->has_default_value()) {
+    if (column->allows_commit_timestamp()) {
+      return error::CannotUseCommitTimestampWithColumnDefaultValue(
+          column->Name());
+    }
+    if (context->is_postgresql_dialect()) {
+      ZETASQL_RET_CHECK(column->postgresql_oid().has_value());
+    } else {
+      ZETASQL_RET_CHECK(!column->postgresql_oid().has_value());
+    }
   }
 
   if (column->is_generated()) {
+    if (context->is_postgresql_dialect()) {
+      ZETASQL_RET_CHECK(column->postgresql_oid().has_value());
+    } else {
+      ZETASQL_RET_CHECK(!column->postgresql_oid().has_value());
+    }
     if (
         !EmulatorFeatureFlags::instance().flags().enable_generated_pk &&
         column->table()->FindKeyColumn(column->Name())) {
@@ -352,6 +375,22 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
                                                             column->FullName());
     }
   }
+
+  if (context->is_postgresql_dialect()) {
+    // Default and generated columns must have OIDs.
+    if (old_column->is_generated() || old_column->has_default_value()) {
+      ZETASQL_RET_CHECK(old_column->postgresql_oid().has_value());
+    }
+    if (column->is_generated() || column->has_default_value()) {
+      ZETASQL_RET_CHECK(column->postgresql_oid().has_value());
+    }
+    // Alter statement may change the default value which would be assigned a
+    // new OID so don't assert that the OIDs are the same.
+  } else {
+    ZETASQL_RET_CHECK(!old_column->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(!column->postgresql_oid().has_value());
+  }
+
   return absl::OkStatus();
 }
 
@@ -415,6 +454,18 @@ absl::Status KeyColumnValidator::ValidateUpdate(
 
   ZETASQL_RET_CHECK(!key_column->column_->is_deleted());
   ZETASQL_RET_CHECK_EQ(key_column->is_descending_, old_key_column->is_descending_);
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK_EQ(old_key_column->postgresql_oid().has_value(),
+                 key_column->postgresql_oid().has_value());
+    if (old_key_column->postgresql_oid().has_value() &&
+        key_column->postgresql_oid().has_value()) {
+      ZETASQL_RET_CHECK_EQ(old_key_column->postgresql_oid().value(),
+                   key_column->postgresql_oid().value());
+    }
+  } else {
+    ZETASQL_RET_CHECK(!old_key_column->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(!key_column->postgresql_oid().has_value());
+  }
   return absl::OkStatus();
 }
 

@@ -77,7 +77,8 @@ class GeneratedColumnEffector : public Effector {
   }
 
   absl::Status Effect(const ActionContext* ctx, const Key& key,
-                      zetasql::ParameterValueMap* column_values) const;
+                      zetasql::ParameterValueMap* column_values,
+                      bool skip_default_values) const;
 
   const Table* table_;
 
@@ -86,6 +87,9 @@ class GeneratedColumnEffector : public Effector {
 
   // List of generated and default columns in topological order.
   std::vector<const Column*> generated_columns_;
+
+  // Columns referenced by `generated_columns_`.
+  std::vector<const Column*> dependent_columns_;
 
   // Map of generated and default columns to their corresponding expressions.
   absl::flat_hash_map<const Column*,

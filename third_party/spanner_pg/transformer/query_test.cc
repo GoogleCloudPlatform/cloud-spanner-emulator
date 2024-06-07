@@ -1407,23 +1407,6 @@ TEST(TransformerTest, InsertOnConflictDoUpdate) {
   EXPECT_EQ(stmt->row_list_size(), 1);
 }
 
-TEST(TransformerTest, InsertOnConflictWithReturningDisabled) {
-  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
-  ASSERT_TRUE(options.prune_unused_columns());
-
-  absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> gsql_output =
-      ParseAnalyzeAndTransformStatement(
-          "INSERT INTO keyvalue VALUES (1, 'abc') ON CONFLICT(key) "
-          "DO UPDATE SET key = excluded.key, value = excluded.value "
-          "RETURNING key",
-          options);
-  EXPECT_THAT(
-      gsql_output.status(),
-      StatusIs(absl::StatusCode::kUnimplemented,
-               HasSubstr("RETURNING with ON CONFLICT clause is "
-                                  "not supported")));
-}
-
 TEST(TransformerTest, PruneUnusedPrunesDelete) {
   zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   ASSERT_TRUE(options.prune_unused_columns());

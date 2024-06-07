@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_CHANGE_STREAM_BUILDER_H_
 
 #include <cerrno>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,6 +32,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_node.h"
+#include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "backend/schema/validators/change_stream_validator.h"
 #include "google/protobuf/repeated_ptr_field.h"
@@ -114,6 +116,20 @@ class ChangeStream::Builder {
     return *this;
   }
 
+  Builder& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_postgresql_oid(postgresql_oid.value());
+    }
+    return *this;
+  }
+
+  Builder& set_tvf_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_tvf_postgresql_oid(postgresql_oid.value());
+    }
+    return *this;
+  }
+
  private:
   std::unique_ptr<ChangeStream> instance_;
 };
@@ -169,6 +185,20 @@ class ChangeStream::Editor {
 
   Editor& set_track_all(bool track_all) {
     instance_->track_all_ = track_all;
+    return *this;
+  }
+
+  Editor& set_boolean_option(absl::string_view option_name, bool value) {
+    std::optional<bool> value_opt = value;
+    if (option_name == ddl::kChangeStreamExcludeInsertOptionName) {
+      instance_->exclude_insert_ = value_opt;
+    } else if (option_name == ddl::kChangeStreamExcludeUpdateOptionName) {
+      instance_->exclude_update_ = value_opt;
+    } else if (option_name == ddl::kChangeStreamExcludeDeleteOptionName) {
+      instance_->exclude_delete_ = value_opt;
+    } else if (option_name == ddl::kChangeStreamExcludeTtlDeletesOptionName) {
+      instance_->exclude_ttl_deletes_ = value_opt;
+    }
     return *this;
   }
 

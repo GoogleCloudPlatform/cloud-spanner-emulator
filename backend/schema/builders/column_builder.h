@@ -18,6 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_COLUMN_BUILDER_H
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -103,6 +104,11 @@ class Column::Builder {
     return *this;
   }
 
+  Builder& set_vector_length(std::optional<int32_t> vector_length) {
+    instance_->vector_length_ = vector_length;
+    return *this;
+  }
+
   Builder& set_table(const Table* table) {
     instance_->table_ = table;
     return *this;
@@ -137,6 +143,13 @@ class Column::Builder {
 
   Builder& set_stored(bool stored) {
     instance_->is_stored_ = stored;
+    return *this;
+  }
+
+  Builder& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_postgresql_oid(postgresql_oid.value());
+    }
     return *this;
   }
 
@@ -219,6 +232,11 @@ class Column::Editor {
     return *this;
   }
 
+  Editor& set_vector_length(std::optional<int32_t> vector_length) {
+    instance_->vector_length_ = vector_length;
+    return *this;
+  }
+
   Editor& set_allow_commit_timestamp(std::optional<bool> allow) {
     instance_->allows_commit_timestamp_ = allow;
     return *this;
@@ -236,6 +254,13 @@ class Column::Editor {
 
   Editor& set_stored(bool stored) {
     instance_->is_stored_ = stored;
+    return *this;
+  }
+
+  Editor& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_postgresql_oid(postgresql_oid.value());
+    }
     return *this;
   }
 
@@ -266,6 +291,13 @@ class KeyColumn::Builder {
   }
   Builder& set_nulls_last(bool nulls_last) {
     instance_->is_nulls_last_ = nulls_last;
+    return *this;
+  }
+
+  Builder& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_postgresql_oid(postgresql_oid.value());
+    }
     return *this;
   }
 

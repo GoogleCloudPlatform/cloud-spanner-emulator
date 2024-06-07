@@ -87,6 +87,18 @@ static absl::StatusOr<zetasql::Value> CreatePgNumericValueWithMemoryContext(
       numeric_string);
 }
 
+static bool IsValidFloat(double value) {
+  double float_lower_limit =
+      static_cast<double>(std::numeric_limits<float>::lowest());
+  double float_upper_limit =
+      static_cast<double>(std::numeric_limits<float>::max());
+  bool is_valid_finite_float = std::isfinite(value) &&
+                               float_lower_limit <= value &&
+                               value <= float_upper_limit;
+
+  return is_valid_finite_float || std::isinf(value) || std::isnan(value);
+}
+
 }  // namespace
 
 absl::StatusOr<zetasql::Value> ValueFromProto(
@@ -114,6 +126,27 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
         return error::CouldNotParseStringAsInteger(value_pb.string_value());
       }
       return zetasql::values::Int64(num);
+    }
+
+    case zetasql::TypeKind::TYPE_FLOAT: {
+      double val = 0;
+      if (value_pb.kind_case() == google::protobuf::Value::kStringValue) {
+        if (value_pb.string_value() == "Infinity") {
+          val = std::numeric_limits<float>::infinity();
+        } else if (value_pb.string_value() == "-Infinity") {
+          val = -std::numeric_limits<float>::infinity();
+        } else if (value_pb.string_value() == "NaN") {
+          val = std::numeric_limits<float>::quiet_NaN();
+        } else {
+          return error::CouldNotParseStringAsFloat(value_pb.string_value());
+        }
+      } else if (ABSL_PREDICT_TRUE(IsValidFloat(value_pb.number_value()))) {
+        val = value_pb.number_value();
+      } else {
+        return error::ValueProtoTypeMismatch(value_pb.DebugString(),
+                                             type->DebugString());
+      }
+      return zetasql::values::Float(val);
     }
 
     case zetasql::TypeKind::TYPE_DOUBLE: {
@@ -363,6 +396,24 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
 
     case zetasql::TypeKind::TYPE_INT64: {
       value_pb.set_string_value(absl::StrCat(value.int64_value()));
+      break;
+    }
+
+    case zetasql::TypeKind::TYPE_FLOAT: {
+      float val = value.float_value();
+      if (std::isfinite(val)) {
+        value_pb.set_number_value(static_cast<double>(val));
+      } else if (val == std::numeric_limits<float>::infinity()) {
+        value_pb.set_string_value("Infinity");
+      } else if (val == -std::numeric_limits<float>::infinity()) {
+        value_pb.set_string_value("-Infinity");
+      } else if (std::isnan(val)) {
+        value_pb.set_string_value("NaN");
+      } else {
+        return error::Internal(absl::StrCat("Unsupported float value ",
+                                            value.float_value(),
+                                            " passed to ValueToProto"));
+      }
       break;
     }
 

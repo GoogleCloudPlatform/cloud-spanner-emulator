@@ -47,6 +47,11 @@ namespace {}  // namespace
 absl::Status ChangeStreamValidator::Validate(const ChangeStream* change_stream,
                                              SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!change_stream->name_.empty());
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(change_stream->postgresql_oid().has_value());
+  } else {
+    ZETASQL_RET_CHECK(!change_stream->postgresql_oid().has_value());
+  }
   ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName("Change Stream",
                                                         change_stream->name_));
   // TODO: Validate TVF name.
@@ -67,6 +72,15 @@ absl::Status ChangeStreamValidator::ValidateUpdate(
   ZETASQL_RET_CHECK(!change_stream->change_stream_partition_table()->is_deleted());
   ZETASQL_RET_CHECK_EQ(change_stream->Name(), old_change_stream->Name());
   ZETASQL_RET_CHECK_EQ(change_stream->id(), old_change_stream->id());
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(change_stream->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(old_change_stream->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK_EQ(change_stream->postgresql_oid().value(),
+                 old_change_stream->postgresql_oid().value());
+  } else {
+    ZETASQL_RET_CHECK(!change_stream->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(!old_change_stream->postgresql_oid().has_value());
+  }
   return absl::OkStatus();
 }
 

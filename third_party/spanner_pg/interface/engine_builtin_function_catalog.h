@@ -47,10 +47,6 @@ namespace postgres_translator {
 // GetFunction.
 class EngineBuiltinFunctionCatalog {
  public:
-  // TODO: deprecate constructor with language options.
-  explicit EngineBuiltinFunctionCatalog(
-      const zetasql::LanguageOptions& /*language_options*/) {}
-
   EngineBuiltinFunctionCatalog() = default;
 
   virtual ~EngineBuiltinFunctionCatalog() {}
@@ -60,12 +56,8 @@ class EngineBuiltinFunctionCatalog {
   virtual absl::StatusOr<const zetasql::Function*> GetFunction(
       const std::string& name) const = 0;
 
-  // TODO: switch this to pure virtual when the on-branch
-  // SpangresBuiltinFunctionCatalog overrides it.
   virtual absl::StatusOr<const zetasql::Procedure*> GetProcedure(
-      const std::string& name) const {
-    return absl::UnimplementedError("GetProcedure is not supported");
-  }
+      const std::string& name) const = 0;
 
   virtual absl::StatusOr<const zetasql::TableValuedFunction*>
   GetTableValuedFunction(const std::string& name) const = 0;
@@ -75,12 +67,8 @@ class EngineBuiltinFunctionCatalog {
       absl::flat_hash_set<const zetasql::Function*>* output) const = 0;
 
   // Gets the full list of procedures in the catalog.
-  // TODO: switch this to pure virtual when the on-branch
-  // SpangresBuiltinFunctionCatalog overrides it.
   virtual absl::Status GetProcedures(
-      absl::flat_hash_set<const zetasql::Procedure*>* output) const {
-    return absl::OkStatus();
-  }
+      absl::flat_hash_set<const zetasql::Procedure*>* output) const = 0;
 
   zetasql::TypeFactory* type_factory() { return &type_factory_; }
 

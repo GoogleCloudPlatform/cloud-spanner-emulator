@@ -16,6 +16,7 @@
 
 #include "backend/actions/column_value.h"
 
+#include <cstdint>
 #include <vector>
 
 #include "zetasql/public/functions/string.h"
@@ -109,6 +110,18 @@ absl::Status ValidateColumnBytesValue(const Table* table, const Column* column,
 
 absl::Status ValidateColumnArrayValue(const Table* table, const Column* column,
                                       const zetasql::Value& value) {
+  // Validate the vector search array length.
+  if (column->has_vector_length() && !value.is_null()) {
+    int array_length = value.elements().size();
+    int expected_length = column->vector_length().value();
+    if (array_length > expected_length) {
+      return error::VectorLengthExceedsLimit(column->FullName(), array_length,
+                                             expected_length);
+    } else if (array_length < expected_length) {
+      return error::VectorLengthLessThanLimit(column->FullName(), array_length,
+                                              expected_length);
+    }
+  }
   // Validate that bytes and string array element types do not exceed max
   // length.
   if (!value.is_null()) {
@@ -119,6 +132,16 @@ absl::Status ValidateColumnArrayValue(const Table* table, const Column* column,
     } else if (value.type()->AsArray()->element_type()->IsBytes()) {
       for (const auto& element : value.elements()) {
         ZETASQL_RETURN_IF_ERROR(ValidateColumnBytesValue(table, column, element));
+      }
+    }
+    // Validate no element in vector search array is null.
+    // Currently vector length can only be applied on ARRAY containing FLOAT32
+    // or FLOAT64 elements.
+    if (column->has_vector_length()) {
+      for (const auto& element : value.elements()) {
+        if (element.is_null()) {
+          return error::DisallowNullsInSearchArray(column->FullName());
+        }
       }
     }
   }

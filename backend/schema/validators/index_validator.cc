@@ -30,6 +30,7 @@
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
+#include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
@@ -74,6 +75,11 @@ absl::Status IndexValidator::Validate(const Index* index,
   ZETASQL_RET_CHECK(!index->name_.empty());
   ZETASQL_RET_CHECK_NE(index->indexed_table_, nullptr);
   ZETASQL_RET_CHECK_NE(index->index_data_table_, nullptr);
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(index->postgresql_oid().has_value());
+  } else {
+    ZETASQL_RET_CHECK(!index->postgresql_oid().has_value());
+  }
 
   ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName("Index", index->name_));
   if (absl::EqualsIgnoreCase(index->name_, "PRIMARY_KEY")) {
@@ -156,6 +162,16 @@ absl::Status IndexValidator::ValidateUpdate(const Index* index,
   ZETASQL_RET_CHECK_EQ(index->is_null_filtered_, old_index->is_null_filtered_);
   ZETASQL_RET_CHECK_EQ(index->is_unique_, old_index->is_unique_);
   ZETASQL_RET_CHECK_EQ(index->key_columns_.size(), old_index->key_columns_.size());
+
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(index->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(old_index->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK_EQ(index->postgresql_oid().value(),
+                 old_index->postgresql_oid().value());
+  } else {
+    ZETASQL_RET_CHECK(!index->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(!old_index->postgresql_oid().has_value());
+  }
 
   for (int i = 0; i < index->key_columns_.size(); ++i) {
     const KeyColumn* new_key = index->key_columns_[i];

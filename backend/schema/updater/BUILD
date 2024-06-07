@@ -135,6 +135,7 @@ cc_library(
         ":sql_expression_validators",
         "//backend/common:case",
         "//backend/common:ids",
+        "//backend/database/pg_oid_assigner",
         "//backend/query:analyzer_options",
         "//backend/query:catalog",
         "//backend/query:function_catalog",
@@ -208,6 +209,7 @@ cc_library(
     name = "schema_validation_context",
     hdrs = ["schema_validation_context.h"],
     deps = [
+        "//backend/query:analyzer_options",
         "//backend/schema/catalog:proto_bundle",
         "//backend/schema/graph:schema_graph",
         "//backend/schema/graph:schema_node",

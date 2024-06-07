@@ -33,6 +33,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/common/ids.h"
+#include "backend/database/pg_oid_assigner/pg_oid_assigner.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
@@ -179,6 +180,9 @@ class SchemaUpdaterTest
   void SetUp() override {
     if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
       pg_schema_printer_ = CreateSpangresDirectSchemaPrinter().value();
+      pg_oid_assigner_ = std::make_unique<PgOidAssigner>(/*enabled=*/true);
+    } else {
+      pg_oid_assigner_ = std::make_unique<PgOidAssigner>(/*enabled=*/false);
     }
   }
 
@@ -186,6 +190,7 @@ class SchemaUpdaterTest
   zetasql::TypeFactory type_factory_;
   TableIDGenerator table_id_generator_;
   ColumnIDGenerator column_id_generator_;
+  std::unique_ptr<PgOidAssigner> pg_oid_assigner_;
 };
 
 INSTANTIATE_TEST_SUITE_P(

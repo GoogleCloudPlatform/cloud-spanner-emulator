@@ -53,6 +53,7 @@ using zetasql::types::BytesType;
 using zetasql::types::DateType;
 using zetasql::types::DoubleType;
 using zetasql::types::EmptyStructType;
+using zetasql::types::FloatType;
 using zetasql::types::Int64ArrayType;
 using zetasql::types::Int64Type;
 using zetasql::types::JsonArrayType;
@@ -141,6 +142,7 @@ TEST_F(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
       {BoolType(), "code: BOOL"},
       {Int64Type(), "code: INT64"},
       {GetPgOidType(), "code: INT64 type_annotation: PG_OID"},
+      {FloatType(), "code: FLOAT32"},
       {DoubleType(), "code: FLOAT64"},
       {TimestampType(), "code: TIMESTAMP"},
       {NumericType(), "code: NUMERIC"},

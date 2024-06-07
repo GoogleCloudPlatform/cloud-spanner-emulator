@@ -30,6 +30,7 @@
 #include "backend/actions/manager.h"
 #include "backend/common/ids.h"
 #include "backend/database/change_stream/change_stream_partition_churner.h"
+#include "backend/database/pg_oid_assigner/pg_oid_assigner.h"
 #include "backend/locking/manager.h"
 #include "backend/query/query_engine.h"
 #include "backend/schema/catalog/schema.h"
@@ -61,6 +62,9 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
       std::make_unique<QueryEngine>(database->type_factory_.get());
   database->action_manager_ = std::make_unique<ActionManager>();
   database->dialect_ = schema_change_operation.database_dialect;
+  database->pg_oid_assigner_ = std::make_unique<PgOidAssigner>(
+      schema_change_operation.database_dialect ==
+      database_api::DatabaseDialect::POSTGRESQL);
 
   if (schema_change_operation.statements.empty()) {
     if (database->dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
@@ -102,6 +106,7 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
   // set the latest schema to the function catalog here.
   database->query_engine_->SetLatestSchemaForFunctionCatalog(
       database->versioned_catalog_->GetLatestSchema());
+
   return database;
 }
 absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
@@ -126,6 +131,7 @@ SchemaChangeContext Database::GetSchemaChangeContext() {
       .table_id_generator = &table_id_generator_,
       .column_id_generator = &column_id_generator_,
       .storage = storage_.get(),
+      .pg_oid_assigner = pg_oid_assigner_.get(),
   };
 }
 
