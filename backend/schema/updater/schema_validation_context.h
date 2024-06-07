@@ -24,6 +24,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
+#include "backend/query/analyzer_options.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_node.h"
@@ -66,11 +67,13 @@ class SchemaValidationContext {
 
   SchemaValidationContext(Storage* storage, GlobalSchemaNames* global_names,
                           zetasql::TypeFactory* type_factory,
-                          absl::Time pending_commit_timestamp)
+                          absl::Time pending_commit_timestamp,
+                          DatabaseDialect dialect)
       : storage_(storage),
         global_names_(global_names),
         type_factory_(type_factory),
-        pending_commit_timestamp_(pending_commit_timestamp) {}
+        pending_commit_timestamp_(pending_commit_timestamp),
+        dialect_(dialect) {}
 
   ~SchemaValidationContext() = default;
 
@@ -118,6 +121,10 @@ class SchemaValidationContext {
   // backfill phases. Callers should not hold on to any references to the
   // returned schema or its nodes.
   const Schema* tmp_new_schema() const { return tmp_new_schema_; }
+
+  bool is_postgresql_dialect() const {
+    return dialect_ == DatabaseDialect::POSTGRESQL;
+  }
 
   // Interface accessed by SchemaUpdater to execute queued
   // actions.
@@ -225,6 +232,9 @@ class SchemaValidationContext {
 
   // Planned commit time for the schema change.
   absl::Time pending_commit_timestamp_;
+
+  // The database dialect determines how the OIDs are validated.
+  DatabaseDialect dialect_;
 
   // The list of pending schema change actions (verifications/backfills) to run.
   std::vector<SchemaChangeAction> actions_;

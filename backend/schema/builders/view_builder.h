@@ -18,7 +18,9 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_VIEW_BUILDER_H_
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -71,6 +73,13 @@ class View::Builder {
 
   Builder& add_dependency(const SchemaNode* dependency) {
     instance_->dependencies_.push_back(dependency);
+    return *this;
+  }
+
+  Builder& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_postgresql_oid(postgresql_oid.value());
+    }
     return *this;
   }
 

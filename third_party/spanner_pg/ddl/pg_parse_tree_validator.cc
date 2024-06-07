@@ -59,114 +59,6 @@ using internal::FieldTypeChecker;
 // Returns true if PG list is empty or nullptr
 bool IsListEmpty(const List* list) { return list_length(list) == 0; }
 
-absl::StatusOr<std::string> ObjectTypeToString(ObjectType object_type) {
-  switch (object_type) {
-    case OBJECT_TABLE:
-      return "TABLE";
-    case OBJECT_ACCESS_METHOD:
-      return "ACCESS METHOD";
-    case OBJECT_AGGREGATE:
-      return "AGGREGATE";
-    case OBJECT_AMOP:
-      return "AMOP";
-    case OBJECT_AMPROC:
-      return "AMPROC";
-    case OBJECT_ATTRIBUTE:
-      return "ATTRIBUTE";
-    case OBJECT_CAST:
-      return "CAST";
-    case OBJECT_CHANGE_STREAM:
-      return "CHANGE STREAM";
-    case OBJECT_COLUMN:
-      return "COLUMN";
-    case OBJECT_COLLATION:
-      return "COLLATION";
-    case OBJECT_CONVERSION:
-      return "CONVERSION";
-    case OBJECT_DATABASE:
-      return "DATABASE";
-    case OBJECT_DEFAULT:
-      return "DEFAULT";
-    case OBJECT_DEFACL:
-      return "DEFACL";
-    case OBJECT_DOMAIN:
-      return "DOMAIN";
-    case OBJECT_DOMCONSTRAINT:
-      return "DOMCONSTRAINT";
-    case OBJECT_EVENT_TRIGGER:
-      return "EVENT TRIGGER";
-    case OBJECT_EXTENSION:
-      return "EXTENSION";
-    case OBJECT_FDW:
-      return "FDW";
-    case OBJECT_FOREIGN_SERVER:
-      return "FOREIGN_SERVER";
-    case OBJECT_FOREIGN_TABLE:
-      return "FOREIGN_TABLE";
-    case OBJECT_FUNCTION:
-      return "FUNCTION";
-    case OBJECT_INDEX:
-      return "INDEX";
-    case OBJECT_LANGUAGE:
-      return "LANGUAGE";
-    case OBJECT_LARGEOBJECT:
-      return "LARGEOBJECT";
-    case OBJECT_MATVIEW:
-      return "MATVIEW";
-    case OBJECT_OPCLASS:
-      return "OPCLASS";
-    case OBJECT_OPERATOR:
-      return "OPERATOR";
-    case OBJECT_OPFAMILY:
-      return "OPFAMILY";
-    case OBJECT_POLICY:
-      return "POLICY";
-    case OBJECT_PROCEDURE:
-      return "PROCEDURE";
-    case OBJECT_PUBLICATION:
-      return "PUBLICATION";
-    case OBJECT_PUBLICATION_REL:
-      return "PUBLICATION_REL";
-    case OBJECT_ROLE:
-      return "ROLE";
-    case OBJECT_ROUTINE:
-      return "ROUTINE";
-    case OBJECT_RULE:
-      return "RULE";
-    case OBJECT_SCHEMA:
-      return "SCHEMA";
-    case OBJECT_SEQUENCE:
-      return "SEQUENCE";
-    case OBJECT_SUBSCRIPTION:
-      return "SUBSCRIPTION";
-    case OBJECT_STATISTIC_EXT:
-      return "STATISTIC_EXT";
-    case OBJECT_TABCONSTRAINT:
-      return "TABCONSTRAINT";
-    case OBJECT_TABLESPACE:
-      return "TABLESPACE";
-    case OBJECT_TRANSFORM:
-      return "TRANSFORM";
-    case OBJECT_TRIGGER:
-      return "TRIGGER";
-    case OBJECT_TSCONFIGURATION:
-      return "TSCONFIGURATION";
-    case OBJECT_TSDICTIONARY:
-      return "TSDICTIONARY";
-    case OBJECT_TSPARSER:
-      return "TSPARSER";
-    case OBJECT_TSTEMPLATE:
-      return "TSTEMPLATE";
-    case OBJECT_TYPE:
-      return "TYPE";
-    case OBJECT_USER_MAPPING:
-      return "USER_MAPPING";
-    case OBJECT_VIEW:
-      return "VIEW";
-  }
-  return UnsupportedTranslationError("Unknown object type");
-}
-
 // Returns the first and only element of the single-item list cast to
 // <NodeType*>. Checks that element's type is equal to NodeTypeTag.
 template <typename NodeType, const NodeTag NodeTypeTag>
@@ -961,7 +853,7 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
       node.removeType != OBJECT_SCHEMA && node.removeType != OBJECT_VIEW &&
       node.removeType != OBJECT_CHANGE_STREAM &&
       node.removeType != OBJECT_SEQUENCE) {
-    auto object_type = ObjectTypeToString(node.removeType);
+    auto object_type = internal::ObjectTypeToString(node.removeType);
     if (!object_type.ok()) {
           return UnsupportedTranslationError(
         "Only <DROP TABLE>, <DROP INDEX>, <DROP SCHEMA>, <DROP VIEW>, "

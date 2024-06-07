@@ -220,6 +220,7 @@ absl::Status InvalidTrackedObjectInChangeStream(
     absl::string_view object_name);
 absl::Status UnsupportedTrackedObjectOrNonExistentTableInChangeStream(
     absl::string_view change_stream_name, absl::string_view table_name);
+absl::Status UnsupportedProcedure(absl::string_view procedure_string);
 absl::Status CreateChangeStreamForClauseTrackedTablesEntryInvalidOneof(
     absl::string_view change_stream_name);
 absl::Status ChangeStreamDuplicateColumn(absl::string_view change_stream_name,
@@ -239,6 +240,9 @@ absl::Status TooManyChangeStreamsTrackingSameObject(
 absl::Status UnsupportedChangeStreamOption(absl::string_view option_name);
 absl::Status InvalidChangeStreamRetentionPeriodOptionValue();
 absl::Status InvalidTimeDurationFormat(absl::string_view time_duration);
+absl::Status InvalidTypeForVectorLength(absl::string_view column_name);
+absl::Status VectorLengthOnGeneratedOrDefaultColumn(
+    absl::string_view column_name);
 absl::Status InvalidDataRetentionPeriod(absl::string_view time_duration);
 absl::Status InvalidValueCaptureType(absl::string_view value_capture_type);
 absl::Status AlterChangeStreamDropNonexistentForClause(
@@ -759,6 +763,16 @@ absl::Status ExtensionNotSupported(int tag_number,
                                    absl::string_view field_name);
 absl::Status MessageExtensionsNotSupported(absl::string_view message_name);
 absl::Status MessageTypeNotSupported(absl::string_view message_name);
+
+// Vector length errors
+absl::Status VectorLengthExceedsLimit(absl::string_view column_name,
+                                      int element_num, int limit);
+absl::Status VectorLengthLessThanLimit(absl::string_view column_name,
+                                       int element_num, int limit);
+absl::Status DisallowNullsInSearchArray(absl::string_view column_name);
+absl::Status CannotAlterColumnToAddVectorLength(absl::string_view column_name);
+absl::Status CannotAlterColumnToRemoveVectorLength(
+    absl::string_view column_name);
 
 // Proto / enum type errors.
 absl::Status ProtoTypeNotFound(absl::string_view type);

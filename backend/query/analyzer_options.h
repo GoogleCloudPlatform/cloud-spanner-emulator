@@ -20,6 +20,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/builtin_function_options.h"
 #include "zetasql/public/language_options.h"
 
 namespace google {
@@ -37,6 +38,8 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance();
 
 zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViews(
     DatabaseDialect dialect = DatabaseDialect::GOOGLE_STANDARD_SQL);
+
+zetasql::BuiltinFunctionOptions MakeGoogleSqlBuiltinFunctionOptions();
 
 }  // namespace backend
 }  // namespace emulator

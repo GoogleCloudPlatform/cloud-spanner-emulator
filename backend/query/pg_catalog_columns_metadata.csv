@@ -1,4 +1,35 @@
 table_name,column_name,is_nullable,spanner_type
+pg_am,oid,YES,oid
+pg_am,amname,YES,character varying
+pg_am,amtype,YES,character varying
+pg_attrdef,oid,YES,oid
+pg_attrdef,adrelid,YES,oid
+pg_attrdef,adnum,YES,bigint
+pg_attrdef,adbin,YES,character varying
+pg_attribute,attrelid,YES,oid
+pg_attribute,attname,YES,character varying
+pg_attribute,atttypid,YES,oid
+pg_attribute,attstattarget,YES,bigint
+pg_attribute,attlen,YES,bigint
+pg_attribute,attnum,YES,bigint
+pg_attribute,attndims,YES,bigint
+pg_attribute,attcacheoff,YES,bigint
+pg_attribute,atttypmod,YES,bigint
+pg_attribute,attbyval,YES,boolean
+pg_attribute,attalign,YES,character varying
+pg_attribute,attstorage,YES,character varying
+pg_attribute,attcompression,YES,character varying
+pg_attribute,attnotnull,YES,boolean
+pg_attribute,atthasdef,YES,boolean
+pg_attribute,atthasmissing,YES,boolean
+pg_attribute,attidentity,YES,character varying
+pg_attribute,attgenerated,YES,character varying
+pg_attribute,attisdropped,YES,boolean
+pg_attribute,attislocal,YES,boolean
+pg_attribute,attinhcount,YES,bigint
+pg_attribute,attcollation,YES,oid
+pg_attribute,attoptions,YES,character varying
+pg_attribute,attfdwoptions,YES,character varying
 pg_available_extension_versions,name,YES,character varying
 pg_available_extension_versions,version,YES,character varying
 pg_available_extension_versions,installed,YES,boolean
@@ -21,14 +52,97 @@ pg_backend_memory_contexts,total_nblocks,YES,bigint
 pg_backend_memory_contexts,free_bytes,YES,bigint
 pg_backend_memory_contexts,free_chunks,YES,bigint
 pg_backend_memory_contexts,used_bytes,YES,bigint
+pg_class,oid,YES,oid
+pg_class,relname,YES,character varying
+pg_class,relnamespace,YES,oid
+pg_class,reltype,YES,oid
+pg_class,reloftype,YES,oid
+pg_class,relowner,YES,oid
+pg_class,relam,YES,oid
+pg_class,relfilenode,YES,oid
+pg_class,reltablespace,YES,oid
+pg_class,relpages,YES,bigint
+pg_class,reltuples,YES,double precision
+pg_class,relallvisible,YES,bigint
+pg_class,reltoastrelid,YES,oid
+pg_class,relhasindex,YES,boolean
+pg_class,relisshared,YES,boolean
+pg_class,relpersistence,YES,character varying
+pg_class,relkind,YES,character varying
+pg_class,relnatts,YES,bigint
+pg_class,relchecks,YES,bigint
+pg_class,relhasrules,YES,boolean
+pg_class,relhastriggers,YES,boolean
+pg_class,relhassubclass,YES,boolean
+pg_class,relrowsecurity,YES,boolean
+pg_class,relforcerowsecurity,YES,boolean
+pg_class,relispopulated,YES,boolean
+pg_class,relreplident,YES,character varying
+pg_class,relispartition,YES,boolean
+pg_class,relrewrite,YES,oid
+pg_class,relfrozenxid,YES,bigint
+pg_class,relminmxid,YES,bigint
+pg_class,reloptions,YES,character varying
+pg_class,relpartbound,YES,character varying
+pg_collation,oid,YES,oid
+pg_collation,collname,YES,character varying
+pg_collation,collnamespace,YES,oid
+pg_collation,collowner,YES,oid
+pg_collation,collprovider,YES,character varying
+pg_collation,collisdeterministic,YES,boolean
+pg_collation,collencoding,YES,bigint
+pg_collation,collcollate,YES,character varying
+pg_collation,collctype,YES,character varying
+pg_collation,collversion,YES,character varying
 pg_config,name,YES,character varying
 pg_config,setting,YES,character varying
+pg_constraint,oid,YES,oid
+pg_constraint,conname,YES,character varying
+pg_constraint,connamespace,YES,oid
+pg_constraint,contype,YES,character varying
+pg_constraint,condeferrable,YES,boolean
+pg_constraint,condeferred,YES,boolean
+pg_constraint,convalidated,YES,boolean
+pg_constraint,conrelid,YES,oid
+pg_constraint,contypid,YES,oid
+pg_constraint,conindid,YES,oid
+pg_constraint,conparentid,YES,oid
+pg_constraint,confrelid,YES,oid
+pg_constraint,confupdtype,YES,character varying
+pg_constraint,confdeltype,YES,character varying
+pg_constraint,confmatchtype,YES,character varying
+pg_constraint,conislocal,YES,boolean
+pg_constraint,coninhcount,YES,bigint
+pg_constraint,connoinherit,YES,boolean
+pg_constraint,conkey,YES,bigint[]
+pg_constraint,confkey,YES,bigint[]
+pg_constraint,conpfeqop,YES,oid[]
+pg_constraint,conppeqop,YES,oid[]
+pg_constraint,conffeqop,YES,oid[]
+pg_constraint,conexclop,YES,oid[]
+pg_constraint,conbin,YES,character varying
 pg_cursors,name,YES,character varying
 pg_cursors,statement,YES,character varying
 pg_cursors,is_holdable,YES,boolean
 pg_cursors,is_binary,YES,boolean
 pg_cursors,is_scrollable,YES,boolean
 pg_cursors,creation_time,YES,timestamp with time zone
+pg_description,objoid,YES,oid
+pg_description,classoid,YES,oid
+pg_description,objsubid,YES,bigint
+pg_description,description,YES,character varying
+pg_enum,oid,YES,oid
+pg_enum,enumtypid,YES,oid
+pg_enum,enumsortorder,YES,double precision
+pg_enum,enumlabel,YES,character varying
+pg_extension,oid,YES,oid
+pg_extension,extname,YES,character varying
+pg_extension,extowner,YES,oid
+pg_extension,extnamespace,YES,oid
+pg_extension,extrelocatable,YES,boolean
+pg_extension,extversion,YES,character varying
+pg_extension,extconfig,YES,oid[]
+pg_extension,extcondition,YES,character varying[]
 pg_file_settings,sourcefile,YES,character varying
 pg_file_settings,sourceline,YES,bigint
 pg_file_settings,seqno,YES,bigint
@@ -45,11 +159,40 @@ pg_hba_file_rules,netmask,YES,character varying
 pg_hba_file_rules,auth_method,YES,character varying
 pg_hba_file_rules,options,YES,character varying[]
 pg_hba_file_rules,error,YES,character varying
+pg_index,indexrelid,YES,oid
+pg_index,indrelid,YES,oid
+pg_index,indnatts,YES,bigint
+pg_index,indnkeyatts,YES,bigint
+pg_index,indisunique,YES,boolean
+pg_index,indisprimary,YES,boolean
+pg_index,indisexclusion,YES,boolean
+pg_index,indimmediate,YES,boolean
+pg_index,indisclustered,YES,boolean
+pg_index,indisvalid,YES,boolean
+pg_index,indcheckxmin,YES,boolean
+pg_index,indisready,YES,boolean
+pg_index,indislive,YES,boolean
+pg_index,indisreplident,YES,boolean
+pg_index,indkey,YES,bigint[]
+pg_index,indcollation,YES,bigint[]
+pg_index,indclass,YES,bigint[]
+pg_index,indoption,YES,bigint[]
+pg_index,indexprs,YES,character varying
+pg_index,indpred,YES,character varying
 pg_indexes,schemaname,YES,character varying
 pg_indexes,tablename,YES,character varying
 pg_indexes,indexname,YES,character varying
 pg_indexes,tablespace,YES,character varying
 pg_indexes,indexdef,YES,character varying
+pg_language,oid,YES,oid
+pg_language,lanname,YES,character varying
+pg_language,lanowner,YES,oid
+pg_language,lanispl,YES,boolean
+pg_language,lanpltrusted,YES,boolean
+pg_language,lanplcallfoid,YES,oid
+pg_language,laninline,YES,oid
+pg_language,lanvalidator,YES,oid
+pg_language,lanacl,YES,character varying
 pg_matviews,schemaname,YES,character varying
 pg_matviews,matviewname,YES,character varying
 pg_matviews,matviewowner,YES,character varying
@@ -57,6 +200,9 @@ pg_matviews,tablespace,YES,character varying
 pg_matviews,hasindexes,YES,boolean
 pg_matviews,ispopulated,YES,boolean
 pg_matviews,definition,YES,character varying
+pg_namespace,oid,YES,oid
+pg_namespace,nspname,YES,character varying
+pg_namespace,nspowner,YES,oid
 pg_policies,schemaname,YES,character varying
 pg_policies,tablename,YES,character varying
 pg_policies,policyname,YES,character varying
@@ -70,13 +216,79 @@ pg_prepared_xacts,gid,YES,character varying
 pg_prepared_xacts,prepared,YES,timestamp with time zone
 pg_prepared_xacts,owner,YES,character varying
 pg_prepared_xacts,database,YES,character varying
+pg_proc,oid,YES,oid
+pg_proc,proname,YES,character varying
+pg_proc,pronamespace,YES,oid
+pg_proc,proowner,YES,oid
+pg_proc,prolang,YES,oid
+pg_proc,procost,YES,double precision
+pg_proc,prorows,YES,double precision
+pg_proc,provariadic,YES,oid
+pg_proc,prokind,YES,character varying
+pg_proc,prosecdef,YES,boolean
+pg_proc,proleakproof,YES,boolean
+pg_proc,proisstrict,YES,boolean
+pg_proc,proretset,YES,boolean
+pg_proc,provolatile,YES,character varying
+pg_proc,proparallel,YES,character varying
+pg_proc,pronargs,YES,bigint
+pg_proc,pronargdefaults,YES,bigint
+pg_proc,prorettype,YES,oid
+pg_proc,proargtypes,YES,oid[]
+pg_proc,proallargtypes,YES,oid[]
+pg_proc,proargmodes,YES,character varying[]
+pg_proc,proargnames,YES,character varying[]
+pg_proc,proargdefaults,YES,character varying
+pg_proc,protrftypes,YES,oid[]
+pg_proc,prosrc,YES,character varying
+pg_proc,probin,YES,character varying
+pg_proc,prosqlbody,YES,character varying
+pg_proc,proconfig,YES,character varying[]
 pg_publication_tables,pubname,YES,character varying
 pg_publication_tables,schemaname,YES,character varying
 pg_publication_tables,tablename,YES,character varying
+pg_range,rngtypid,YES,oid
+pg_range,rngsubtype,YES,oid
+pg_range,rngmultitypid,YES,oid
+pg_range,rngcollation,YES,oid
+pg_range,rngsubopc,YES,oid
+pg_range,rngcanonical,YES,bigint
+pg_range,rngsubdiff,YES,bigint
+pg_roles,rolname,YES,character varying
+pg_roles,rolsuper,YES,boolean
+pg_roles,rolinherit,YES,boolean
+pg_roles,rolcreaterole,YES,boolean
+pg_roles,rolcreatedb,YES,boolean
+pg_roles,rolcanlogin,YES,boolean
+pg_roles,rolreplication,YES,boolean
+pg_roles,rolconnlimit,YES,bigint
+pg_roles,rolpassword,YES,character varying
+pg_roles,rolvaliduntil,YES,timestamp with time zone
+pg_roles,rolbypassrls,YES,boolean
+pg_roles,rolconfig,YES,character varying[]
+pg_roles,oid,YES,oid
 pg_rules,schemaname,YES,character varying
 pg_rules,tablename,YES,character varying
 pg_rules,rulename,YES,character varying
 pg_rules,definition,YES,character varying
+pg_sequence,seqrelid,YES,oid
+pg_sequence,seqtypid,YES,oid
+pg_sequence,seqstart,YES,bigint
+pg_sequence,seqincrement,YES,bigint
+pg_sequence,seqmax,YES,bigint
+pg_sequence,seqmin,YES,bigint
+pg_sequence,seqcache,YES,bigint
+pg_sequence,seqcycle,YES,boolean
+pg_sequences,schemaname,YES,character varying
+pg_sequences,sequencename,YES,character varying
+pg_sequences,sequenceowner,YES,character varying
+pg_sequences,start_value,YES,bigint
+pg_sequences,min_value,YES,bigint
+pg_sequences,max_value,YES,bigint
+pg_sequences,increment_by,YES,bigint
+pg_sequences,cycle,YES,boolean
+pg_sequences,cache_size,YES,bigint
+pg_sequences,last_value,YES,bigint
 pg_settings,name,YES,character varying
 pg_settings,setting,YES,character varying
 pg_settings,unit,YES,character varying
@@ -106,6 +318,29 @@ pg_tables,hasindexes,YES,boolean
 pg_tables,hasrules,YES,boolean
 pg_tables,hastriggers,YES,boolean
 pg_tables,rowsecurity,YES,boolean
+pg_type,oid,YES,oid
+pg_type,typname,YES,character varying
+pg_type,typnamespace,YES,oid
+pg_type,typowner,YES,oid
+pg_type,typlen,YES,bigint
+pg_type,typbyval,YES,boolean
+pg_type,typtype,YES,character varying
+pg_type,typcategory,YES,character varying
+pg_type,typispreferred,YES,boolean
+pg_type,typisdefined,YES,boolean
+pg_type,typdelim,YES,character varying
+pg_type,typrelid,YES,oid
+pg_type,typelem,YES,oid
+pg_type,typarray,YES,oid
+pg_type,typalign,YES,character varying
+pg_type,typstorage,YES,character varying
+pg_type,typnotnull,YES,boolean
+pg_type,typbasetype,YES,oid
+pg_type,typtypmod,YES,bigint
+pg_type,typndims,YES,bigint
+pg_type,typcollation,YES,oid
+pg_type,typdefaultbin,YES,character varying
+pg_type,typdefault,YES,character varying
 pg_views,schemaname,YES,character varying
 pg_views,viewname,YES,character varying
 pg_views,viewowner,YES,character varying

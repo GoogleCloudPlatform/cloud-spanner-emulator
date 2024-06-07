@@ -170,8 +170,10 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
       BuildGsqlResolvedFunctionCall(func.funcid, func.args,
                                     expr_transformer_info));
   if (func.functionHints) {
-      return absl::UnimplementedError(
-          "Functions with hints are not supported.");
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::vector<std::unique_ptr<const zetasql::ResolvedOption>> hint_list,
+        BuildGsqlResolvedOptionList(*func.functionHints, /*scope=*/nullptr));
+    function_call->set_hint_list(std::move(hint_list));
   }
   return function_call;
 }
@@ -286,8 +288,11 @@ ForwardTransformer::BuildGsqlResolvedAggregateFunctionCall(
       /*having_modifier=*/nullptr, std::move(order_by_item_list),
       /*limit=*/nullptr);
   if (agg_function.functionHints) {
-      return absl::UnimplementedError(
-          "Functions with hints are not supported.");
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::vector<std::unique_ptr<const zetasql::ResolvedOption>> hint_list,
+        BuildGsqlResolvedOptionList(*agg_function.functionHints,
+                                    /*scope=*/nullptr));
+    resolved_function_call->set_hint_list(std::move(hint_list));
   }
 
   // Track the computed column in TransformerInfo.

@@ -150,7 +150,8 @@ SpangresTranslator::TranslateParsedTree(
     interfaces::TranslateParsedQueryParams& params,
     std::function<decltype(GetParserQueryOutput)> parser_output_getter,
     std::function<absl::Status(Query* query)> query_deparser_callback =
-        nullptr) {
+        nullptr,
+    bool enable_rewrite = true) {
   interfaces::TranslationProgress* progress =
       params.translation_progress_output();
   if (progress != nullptr) {
@@ -259,7 +260,10 @@ SpangresTranslator::TranslateParsedTree(
       /*deprecation_warnings=*/std::vector<absl::Status>(), gsql_param_types,
       /*undeclared_position_parameters=*/std::vector<const zetasql::Type*>(),
       max_column_id);
-    ZETASQL_RETURN_IF_ERROR(RewriteTranslatedTree(analyzer_output.get(), params));
+    // TODO: Gate this check behind a schema flag.
+    if (enable_rewrite) {
+      ZETASQL_RETURN_IF_ERROR(RewriteTranslatedTree(analyzer_output.get(), params));
+    }
   return analyzer_output;
 }
 
@@ -360,13 +364,19 @@ SpangresTranslator::TranslateParsedTableLevelExpression(
                             bind(GetParserExpressionOutput, table_name,
                                  std::placeholders::_1, std::placeholders::_2),
                             bind(expression_deparser, &deparsed_expression,
-                                 std::placeholders::_1)));
+                                 std::placeholders::_1),
+                            // See this function's comment to understand why we
+                            // disable the rewriter.
+                            /*enable_rewrite=*/false));
   } else {
     ZETASQL_ASSIGN_OR_RETURN(
         analyzer_output,
         TranslateParsedTree(params, GetParserQueryOutput,
                             bind(expression_deparser, &deparsed_expression,
-                                 std::placeholders::_1)));
+                                 std::placeholders::_1),
+                            // See this function's comment to understand why we
+                            // disable the rewriter.
+                            /*enable_rewrite=*/false));
   }
 
   const zetasql::ResolvedStatement* stmt =

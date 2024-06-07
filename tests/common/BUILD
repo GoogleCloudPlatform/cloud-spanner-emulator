@@ -106,6 +106,7 @@ cc_library(
     deps = [
         ":scoped_feature_flags_setter",
         "//backend/common:ids",
+        "//backend/database/pg_oid_assigner",
         "//backend/schema/catalog:schema",
         "//backend/schema/updater:schema_updater",
         "@com_google_absl//absl/log",

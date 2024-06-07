@@ -55,6 +55,7 @@
 #include "absl/types/span.h"
 #include "backend/common/case.h"
 #include "backend/common/ids.h"
+#include "backend/database/pg_oid_assigner/pg_oid_assigner.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
@@ -76,8 +77,8 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
-#include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
@@ -172,10 +173,11 @@ class SchemaUpdaterImpl {
       zetasql::TypeFactory* type_factory,
       TableIDGenerator* table_id_generator,
       ColumnIDGenerator* column_id_generator, Storage* storage,
-      absl::Time schema_change_ts, const Schema* existing_schema) {
+      absl::Time schema_change_ts, PgOidAssigner* pg_oid_assigner,
+      const Schema* existing_schema) {
     SchemaUpdaterImpl impl(type_factory, table_id_generator,
                            column_id_generator, storage, schema_change_ts,
-                           existing_schema);
+                           pg_oid_assigner, existing_schema);
     ZETASQL_RETURN_IF_ERROR(impl.Init());
     return impl;
   }
@@ -193,14 +195,16 @@ class SchemaUpdaterImpl {
   SchemaUpdaterImpl(zetasql::TypeFactory* type_factory,
                     TableIDGenerator* table_id_generator,
                     ColumnIDGenerator* column_id_generator, Storage* storage,
-                    absl::Time schema_change_ts, const Schema* existing_schema)
+                    absl::Time schema_change_ts, PgOidAssigner* pg_oid_assigner,
+                    const Schema* existing_schema)
       : type_factory_(type_factory),
         table_id_generator_(table_id_generator),
         column_id_generator_(column_id_generator),
         storage_(storage),
         schema_change_timestamp_(schema_change_ts),
         latest_schema_(existing_schema),
-        editor_(nullptr) {}
+        editor_(nullptr),
+        pg_oid_assigner_(pg_oid_assigner) {}
 
   // Initializes potentially failing components after construction.
   absl::Status Init();
@@ -272,10 +276,12 @@ class SchemaUpdaterImpl {
       const database_api::DatabaseDialect& dialect);
 
   absl::StatusOr<const KeyColumn*> CreatePrimaryKeyColumn(
-      const ddl::KeyPartClause& ddl_key_part, const Table* table);
+      const ddl::KeyPartClause& ddl_key_part, const Table* table,
+      KeyColumn::Builder* builder);
 
   absl::Status CreatePrimaryKeyConstraint(
-      const ddl::KeyPartClause& ddl_key_part, Table::Builder* builder);
+      const ddl::KeyPartClause& ddl_key_part, Table::Builder* builder,
+      bool with_oid = true);
 
   absl::Status CreateInterleaveConstraint(
       const ddl::InterleaveClause& interleave, Table::Builder* builder);
@@ -563,6 +569,10 @@ class SchemaUpdaterImpl {
 
   // Manages global schema names to prevent and generate unique names.
   GlobalSchemaNames global_names_;
+
+  // Assigns OIDs to database objects when dialect is POSTGRESQL. The assigner
+  // is owned by the database and is shared across all schema changes.
+  PgOidAssigner* pg_oid_assigner_;
 };
 
 absl::Status SchemaUpdaterImpl::Init() {
@@ -823,7 +833,8 @@ SchemaUpdaterImpl::ApplyDDLStatements(
     // or SchemaValidationContext cannot take a dependency on Schema.
     std::unique_ptr<const Schema> new_tmp_schema = nullptr;
     SchemaValidationContext statement_context{
-        storage_, &global_names_, type_factory_, schema_change_timestamp_};
+        storage_, &global_names_, type_factory_, schema_change_timestamp_,
+        schema_change_operation.database_dialect};
     statement_context_ = &statement_context;
     statement_context_->SetOldSchemaSnapshot(latest_schema_);
     statement_context_->SetTempNewSchemaSnapshotConstructor(
@@ -857,6 +868,7 @@ SchemaUpdaterImpl::ApplyDDLStatements(
     statement_context_->SetValidatedNewSchemaSnapshot(new_schema.get());
     latest_schema_ = new_schema.get();
     intermediate_schemas_.emplace_back(std::move(new_schema));
+    pg_oid_assigner_->MarkNextPostgresqlOidForIntermediateSchema();
 
     // If everything was OK, make this the new schema snapshot for processing
     // the next statement and save the pending schema snapshot and backfill
@@ -912,6 +924,9 @@ absl::Status SchemaUpdaterImpl::SetChangeStreamOptions(
                ddl::kChangeStreamValueCaptureTypeOptionName) {
       std::optional<std::string> value_capture_type = option.string_value();
       modifier->set_value_capture_type(value_capture_type);
+    } else if (ddl::kChangeStreamBooleanOptions->contains(
+                   option.option_name())) {
+      modifier->set_boolean_option(option.option_name(), option.bool_value());
     }
   }
   return absl::OkStatus();
@@ -919,39 +934,43 @@ absl::Status SchemaUpdaterImpl::SetChangeStreamOptions(
 
 absl::Status SchemaUpdaterImpl::ValidateChangeStreamOptions(
     const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options) {
+  // All options reach this step are already checked by ddl parser to ensure
+  // they have valid option names and correct value types. Thus we can directly
+  // validate the values.
   for (const ddl::SetOption& option : set_options) {
+    // Retention Period Validation
     if (option.option_name() == ddl::kChangeStreamRetentionPeriodOptionName) {
       if (option.has_string_value()) {
         const int64_t retention_seconds =
             ParseSchemaTimeSpec(option.string_value());
-        const int64_t invalid_parse_result = -1;
-        if (retention_seconds == invalid_parse_result) {
+        if (retention_seconds == -1) {
           return error::InvalidTimeDurationFormat(option.string_value());
-        } else if (
-            !absl::GetFlag(
+        }
+        if (!absl::GetFlag(
                 FLAGS_cloud_spanner_emulator_disable_cs_retention_check) &&
             (retention_seconds < limits::kChangeStreamsMinRetention ||
              retention_seconds > limits::kChangeStreamsMaxRetention)) {
           return error::InvalidDataRetentionPeriod(option.string_value());
         }
-      } else if (option.has_null_value()) {
-        continue;
-      } else {
-        return error::InvalidChangeStreamRetentionPeriodOptionValue();
       }
-    } else if (option.option_name() ==
-               ddl::kChangeStreamValueCaptureTypeOptionName) {
-      if (option.has_null_value() ||
-          (option.has_string_value() &&
-           (option.string_value() == kValueCaptureTypeOldAndNewValues ||
-            option.string_value() == kValueCaptureTypeNewRow ||
-            option.string_value() == kValueCaptureTypeNewValues))) {
-        continue;
-      } else {
-        return error::InvalidValueCaptureType(option.string_value());
+      continue;
+    }
+    // Value Capture Type Validation
+    if (option.option_name() == ddl::kChangeStreamValueCaptureTypeOptionName) {
+      if (option.has_string_value()) {
+        const std::string& value_capture_type = option.string_value();
+        const absl::flat_hash_set<absl::string_view> validCaptureTypes = {
+            kChangeStreamValueCaptureTypeDefault,
+            kChangeStreamValueCaptureTypeNewRow,
+            kChangeStreamValueCaptureTypeNewValues,
+            kChangeStreamValueCaptureTypeNewRowOldValues};
+
+        if (validCaptureTypes.contains(value_capture_type)) {
+          continue;
+        } else {
+          return error::InvalidValueCaptureType(value_capture_type);
+        }
       }
-    } else {
-      return error::UnsupportedChangeStreamOption(option.option_name());
     }
   }
   return absl::OkStatus();
@@ -1036,6 +1055,7 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
       return error::ColumnDefaultValueParseError(table->Name(), column->Name(),
                                                  s.message());
     }
+    editor->set_postgresql_oid(pg_oid_assigner_->GetNextPostgresqlOid());
     editor->set_expression(expression);
     editor->set_has_default_value(true);
   } else {
@@ -1045,6 +1065,11 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
     editor->clear_expression();
     editor->clear_original_expression();
     editor->set_has_default_value(false);
+    if (!column->is_generated()) {
+      // Only default and generated columns need an OID. If the default is
+      // dropped and the column is not generated then unassign the OID.
+      editor->set_postgresql_oid(std::nullopt);
+    }
   }
   // Clear all the old sequence dependencies and set the new ones
   editor->set_sequences_used(dependent_sequences);
@@ -1184,6 +1209,15 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
                                    ));
   modifier->set_type(column_type);
 
+  // For the case of removing a vector length param in ALTER TABLE ALTER COLUMN.
+  if (ddl_create_table == nullptr) {
+    const Column* column = table->FindColumn(ddl_column.column_name());
+    if (column != nullptr && column->has_vector_length() &&
+        !ddl_column.has_vector_length()) {
+      return error::CannotAlterColumnToRemoveVectorLength(
+          ddl_column.column_name());
+    }
+  }
   absl::flat_hash_set<const SchemaNode*> dependent_sequences;
   if (ddl_column.has_column_default()) {
     std::string expression = ddl_column.column_default().expression();
@@ -1276,6 +1310,21 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     modifier->set_declared_max_length(ddl_column.array_subtype().length());
   }
   modifier->set_sequences_used(dependent_sequences);
+
+  if (ddl_column.has_vector_length()) {
+    // For the case of adding `vector_length` param in CREATE TABLE and ALTER
+    // TABLE ADD COLUMN.
+    if (ddl_create_table != nullptr ||
+        (ddl_create_table == nullptr &&
+         table->FindColumn(ddl_column.column_name()) == nullptr)) {
+      modifier->set_vector_length(ddl_column.vector_length());
+    } else {
+      // For the case of adding or editing `vector_length` param in ALTER TABLE
+      // ALTER COLUMN.
+      return error::CannotAlterColumnToAddVectorLength(
+          ddl_column.column_name());
+    }
+  }
   if (!ddl_column.set_options().empty()) {
     ZETASQL_RETURN_IF_ERROR(
         SetColumnOptions(ddl_column.set_options(), dialect, modifier));
@@ -1304,6 +1353,12 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
         [column](const SchemaValidationContext* context) {
           return BackfillGeneratedColumnValue(column, context);
         });
+    std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
+    builder.set_postgresql_oid(oid);
+    if (oid.has_value()) {
+      ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to column "
+              << table->Name() << "." << column->Name();
+    }
   }
 
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
@@ -1696,16 +1751,29 @@ Table::OnDeleteAction SchemaUpdaterImpl::GetInterleaveConstraintOnDelete(
 }
 
 absl::Status SchemaUpdaterImpl::CreatePrimaryKeyConstraint(
-    const ddl::KeyPartClause& ddl_key_part, Table::Builder* builder) {
-  ZETASQL_ASSIGN_OR_RETURN(const KeyColumn* key_col,
-                   CreatePrimaryKeyColumn(ddl_key_part, builder->get()));
+    const ddl::KeyPartClause& ddl_key_part, Table::Builder* builder,
+    bool with_oid) {
+  KeyColumn::Builder key_col_builder;
+  if (with_oid) {
+    // Assign OID for PRIMARY KEY constraint.
+    std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
+    key_col_builder.set_postgresql_oid(oid);
+    if (oid.has_value()) {
+      ZETASQL_VLOG(2) << "Assigned oid " << oid.value()
+              << " for PRIMARY KEY constraint on table "
+              << builder->get()->Name();
+    }
+  }
+  ZETASQL_ASSIGN_OR_RETURN(
+      const KeyColumn* key_col,
+      CreatePrimaryKeyColumn(ddl_key_part, builder->get(), &key_col_builder));
   builder->add_key_column(key_col);
   return absl::OkStatus();
 }
 
 absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
-    const ddl::KeyPartClause& ddl_key_part, const Table* table) {
-  KeyColumn::Builder builder;
+    const ddl::KeyPartClause& ddl_key_part, const Table* table,
+    KeyColumn::Builder* builder) {
   const std::string& key_column_name = ddl_key_part.key_name();
 
   // References to columns in primary key clause are case-sensitive.
@@ -1714,23 +1782,23 @@ absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
     return error::NonExistentKeyColumn(
         OwningObjectType(table), OwningObjectName(table), key_column_name);
   }
-  builder.set_column(column);
+  builder->set_column(column);
   // TODO: Specifying NULLS FIRST/LAST is unsupported in the
   // emulator. Currently, users cannot specify ASC_NULLS_LAST and
   // DESC_NULLS_FIRST.
   if (ddl_key_part.order() == ddl::KeyPartClause::ASC_NULLS_LAST) {
-    builder.set_descending(false).set_nulls_last(true);
+    builder->set_descending(false).set_nulls_last(true);
   } else if (ddl_key_part.order() == ddl::KeyPartClause::DESC_NULLS_FIRST) {
-    builder.set_descending(true).set_nulls_last(false);
+    builder->set_descending(true).set_nulls_last(false);
   } else {
     bool is_descending = (ddl_key_part.order() == ddl::KeyPartClause::DESC);
-    builder.set_descending(is_descending);
+    builder->set_descending(is_descending);
     // Ascending direction with NULLs sorted first and descending direction
     // with NULLs sorted last.
-    builder.set_nulls_last(is_descending);
+    builder->set_nulls_last(is_descending);
   }
-  const KeyColumn* key_col = builder.get();
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  const KeyColumn* key_col = builder->get();
+  ZETASQL_RETURN_IF_ERROR(AddNode(builder->build()));
   return key_col;
 }
 
@@ -1815,6 +1883,13 @@ ForeignKey::Action GetForeignKeyOnDeleteAction(const ddl::ForeignKey& fk) {
 absl::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
     const ddl::ForeignKey& ddl_foreign_key, const Table* referencing_table) {
   ForeignKey::Builder builder;
+  std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_postgresql_oid(oid);
+  if (oid.has_value()) {
+    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " for FOREIGN KEY constraint "
+            << ddl_foreign_key.constraint_name() << " on table "
+            << referencing_table->Name();
+  }
 
   ZETASQL_RETURN_IF_ERROR(
       AlterNode<Table>(referencing_table, [&](Table::Editor* editor) {
@@ -2139,6 +2214,12 @@ absl::Status SchemaUpdaterImpl::CreateCheckConstraint(
     const ddl::CheckConstraint& ddl_check_constraint, const Table* table,
     const ddl::CreateTable* ddl_create_table) {
   CheckConstraint::Builder builder;
+  std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_postgresql_oid(oid);
+  if (oid.has_value()) {
+    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " for CHECK CONSTRAINT "
+            << ddl_check_constraint.name() << " on table " << table->Name();
+  }
 
   ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(table, [&](Table::Editor* editor) {
     editor->add_check_constraint(builder.get());
@@ -2226,6 +2307,12 @@ absl::Status SchemaUpdaterImpl::CreateTable(
   ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", ddl_table.table_name()));
 
   Table::Builder builder;
+  std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_postgresql_oid(oid);
+  if (oid.has_value()) {
+    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to table "
+            << ddl_table.table_name();
+  }
   builder.set_id(table_id_generator_->NextId(ddl_table.table_name()))
       .set_name(ddl_table.table_name());
 
@@ -2244,7 +2331,15 @@ absl::Status SchemaUpdaterImpl::CreateTable(
 
   // Some constraints have a dependency on the primary key, so create it first.
   for (const ddl::KeyPartClause& ddl_key_part : ddl_table.primary_key()) {
-    ZETASQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(ddl_key_part, &builder));
+    ZETASQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(ddl_key_part, &builder,
+                                               /*with_oid=*/true));
+  }
+  // Assign OID for PRIMARY KEY index.
+  oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_primary_key_index_postgresql_oid(oid);
+  if (oid.has_value()) {
+    ZETASQL_VLOG(2) << "Assigned oid " << oid.value()
+            << " for PRIMARY KEY index on table " << ddl_table.table_name();
   }
 
   for (const ddl::ForeignKey& ddl_foreign_key : ddl_table.foreign_key()) {
@@ -2253,6 +2348,16 @@ absl::Status SchemaUpdaterImpl::CreateTable(
   if (ddl_table.has_interleave_clause()) {
     ZETASQL_RETURN_IF_ERROR(
         CreateInterleaveConstraint(ddl_table.interleave_clause(), &builder));
+    if (ddl_table.interleave_clause().type() ==
+        ddl::InterleaveClause::IN_PARENT) {
+      oid = pg_oid_assigner_->GetNextPostgresqlOid();
+      builder.set_interleave_in_parent_postgresql_oid(oid);
+      if (oid.has_value()) {
+        ZETASQL_VLOG(2) << "Assigned oid " << oid.value()
+                << " for IN_PARENT interleave on table "
+                << ddl_table.table_name();
+      }
+    }
   }
   for (const ddl::CheckConstraint& ddl_check_constraint :
        ddl_table.check_constraint()) {
@@ -2646,7 +2751,9 @@ SchemaUpdaterImpl::CreateIndexDataTable(
     }
 
     for (const ddl::KeyPartClause& ddl_key_part : data_table_pk) {
-      ZETASQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(ddl_key_part, &builder));
+      // The data table is a hidden table so don't assign oids to to the PKs.
+      ZETASQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(ddl_key_part, &builder,
+                                                 /*with_oid=*/false));
     }
     int num_declared_keys = index_pk.size();
     auto data_table_key_cols = builder.get()->primary_key();
@@ -2717,11 +2824,23 @@ absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
       "Change Stream", ddl_change_stream.change_stream_name()));
 
   ChangeStream::Builder builder;
+  std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_postgresql_oid(oid);
+  if (oid.has_value()) {
+    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " on change stream "
+            << ddl_change_stream.change_stream_name();
+  }
   builder.set_name(ddl_change_stream.change_stream_name());
   const ChangeStream* change_stream = builder.get();
   const std::string tvf_name =
       MakeChangeStreamTvfName(ddl_change_stream.change_stream_name(), dialect);
   builder.set_tvf_name(tvf_name);
+  std::optional<uint32_t> tvf_oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_tvf_postgresql_oid(tvf_oid);
+  if (tvf_oid.has_value()) {
+    ZETASQL_VLOG(2) << "Assigned oid " << tvf_oid.value() << " to TVF " << tvf_name
+            << " on change stream " << ddl_change_stream.change_stream_name();
+  }
   // Validate the change stream tvf name in global_names_
   ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Change Stream", tvf_name));
   // Set up _ChangeStream_Partition_${ChangeStreamName}
@@ -2897,6 +3016,11 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
   ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Index", index_name));
 
   Index::Builder builder;
+  std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_postgresql_oid(oid);
+  if (oid.has_value()) {
+    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to index " << index_name;
+  }
   builder.set_name(index_name);
   builder.set_unique(is_unique);
   builder.set_null_filtered(is_null_filtered);
@@ -2976,6 +3100,12 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
   }
 
   View::Builder builder;
+  std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_postgresql_oid(oid);
+  if (oid.has_value()) {
+    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to view "
+            << ddl_function.function_name();
+  }
   builder.set_name(ddl_function.function_name())
       .set_sql_security([&]() {
         switch (ddl_function.sql_security()) {
@@ -3145,6 +3275,12 @@ absl::StatusOr<const Sequence*> SchemaUpdaterImpl::CreateSequence(
       global_names_.AddName("Sequence", create_sequence.sequence_name()));
 
   Sequence::Builder builder;
+  std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_postgresql_oid(oid);
+  if (oid.has_value()) {
+    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to sequence "
+            << create_sequence.sequence_name();
+  }
   builder.set_name(create_sequence.sequence_name());
   const Sequence* sequence = builder.get();
 
@@ -3176,6 +3312,12 @@ absl::Status SchemaUpdaterImpl::CreateNamedSchema(
 
   NamedSchema::Builder builder;
   builder.set_name(create_schema.schema_name());
+  std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_postgresql_oid(oid);
+  if (oid.has_value()) {
+    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to named schema "
+            << create_schema.schema_name();
+  }
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return absl::OkStatus();
 }
@@ -4081,11 +4223,13 @@ SchemaUpdater::ValidateSchemaFromDDL(
   if (existing_schema == nullptr) {
     existing_schema = EmptySchema(schema_change_operation.database_dialect);
   }
-  ZETASQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
-                   SchemaUpdaterImpl::Build(
-                       context.type_factory, context.table_id_generator,
-                       context.column_id_generator, context.storage,
-                       context.schema_change_timestamp, existing_schema));
+  ZETASQL_ASSIGN_OR_RETURN(
+      SchemaUpdaterImpl updater,
+      SchemaUpdaterImpl::Build(context.type_factory, context.table_id_generator,
+                               context.column_id_generator, context.storage,
+                               context.schema_change_timestamp,
+                               context.pg_oid_assigner, existing_schema));
+  context.pg_oid_assigner->BeginAssignment();
   ZETASQL_ASSIGN_OR_RETURN(pending_work_,
                    updater.ApplyDDLStatements(schema_change_operation));
   intermediate_schemas_ = updater.GetIntermediateSchemas();
@@ -4093,6 +4237,7 @@ SchemaUpdater::ValidateSchemaFromDDL(
   std::unique_ptr<const Schema> new_schema = nullptr;
   if (!intermediate_schemas_.empty()) {
     new_schema = std::move(*intermediate_schemas_.rbegin());
+    ZETASQL_RETURN_IF_ERROR(context.pg_oid_assigner->EndAssignment());
   }
   pending_work_.clear();
   intermediate_schemas_.clear();
@@ -4113,11 +4258,13 @@ absl::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
     const Schema* existing_schema,
     const SchemaChangeOperation& schema_change_operation,
     const SchemaChangeContext& context) {
-  ZETASQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
-                   SchemaUpdaterImpl::Build(
-                       context.type_factory, context.table_id_generator,
-                       context.column_id_generator, context.storage,
-                       context.schema_change_timestamp, existing_schema));
+  ZETASQL_ASSIGN_OR_RETURN(
+      SchemaUpdaterImpl updater,
+      SchemaUpdaterImpl::Build(context.type_factory, context.table_id_generator,
+                               context.column_id_generator, context.storage,
+                               context.schema_change_timestamp,
+                               context.pg_oid_assigner, existing_schema));
+  context.pg_oid_assigner->BeginAssignment();
   ZETASQL_ASSIGN_OR_RETURN(pending_work_,
                    updater.ApplyDDLStatements(schema_change_operation));
   intermediate_schemas_ = updater.GetIntermediateSchemas();
@@ -4129,6 +4276,8 @@ absl::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
   absl::Status backfill_status = RunPendingActions(&num_successful);
   if (num_successful > 0) {
     new_schema = std::move(intermediate_schemas_[num_successful - 1]);
+    ZETASQL_RETURN_IF_ERROR(context.pg_oid_assigner->EndAssignmentAtIntermediateSchema(
+        num_successful - 1));
   }
   ZETASQL_RET_CHECK_LE(num_successful, intermediate_schemas_.size());
   return SchemaChangeResult{
@@ -4179,6 +4328,8 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_expression_string = true,
         .enable_if_not_exists = true,
         .enable_change_streams = true,
+        .enable_change_streams_mod_type_filter_options = true,
+        .enable_change_streams_ttl_deletes_filter_option = true,
         .enable_sequence = true,
         .enable_virtual_generated_column = true,
     };

@@ -27,6 +27,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/schema/builders/change_stream_builder.h"
 #include "backend/schema/builders/column_builder.h"
@@ -61,14 +62,20 @@ using ::zetasql_base::testing::IsOkAndHolds;
 class SchemaTest : public testing::Test {
  public:
   SchemaTest()
-      : context_(/*storage =*/nullptr, /*global_names =*/nullptr,
-                 /*type_factory =*/nullptr,
-                 /*pending_commit_timestamp =*/absl::Now()),
-        type_factory_(std::make_unique<zetasql::TypeFactory>()),
+      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
         base_schema_(test::CreateSchemaWithOneTable(type_factory_.get())),
         flag_setter_({
             .enable_fk_delete_cascade_action = true,
         }) {}
+
+  void SetUp() override {
+    // Use GOOGLE_STANDARD_SQL dialect by default.
+    context_ = SchemaValidationContext(
+        /*storage =*/nullptr, /*global_names =*/nullptr,
+        /*type_factory =*/nullptr,
+        /*pending_commit_timestamp =*/absl::Now(),
+        /*dialect=*/admin::database::v1::GOOGLE_STANDARD_SQL);
+  }
 
  protected:
   Table::Builder table_builder(const std::string& name,
@@ -106,6 +113,14 @@ class SchemaTest : public testing::Test {
     DatabaseOptions::Builder c;
     c.set_db_name(name);
     return c;
+  }
+
+  void SetPostgresqlDialect() {
+    context_ = SchemaValidationContext(
+        /*storage =*/nullptr, /*global_names =*/nullptr,
+        /*type_factory =*/nullptr,
+        /*pending_commit_timestamp =*/absl::Now(),
+        /*dialect=*/admin::database::v1::POSTGRESQL);
   }
 
   // Dummy validation context.
@@ -669,6 +684,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestOneTableDrop) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestOneTable) {
+  SetPostgresqlDialect();
   std::unique_ptr<const Schema> schema = test::CreateSchemaWithOneTable(
       type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL);
   absl::StatusOr<std::vector<std::string>> statements =
@@ -710,6 +726,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestInterleaving) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestInterleaving) {
+  SetPostgresqlDialect();
   std::unique_ptr<const Schema> schema = test::CreateSchemaWithInterleaving(
       type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL);
   absl::StatusOr<std::vector<std::string>> statements =
@@ -757,6 +774,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestForeignKey) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestForeignKey) {
+  SetPostgresqlDialect();
   std::unique_ptr<const Schema> schema = test::CreateSchemaWithForeignKey(
       type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL);
   absl::StatusOr<std::vector<std::string>> statements =
@@ -801,6 +819,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestForeignKeyOnDeleteAction) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestForeignKeyOnDeleteAction) {
+  SetPostgresqlDialect();
   std::unique_ptr<const Schema> schema =
       test::CreateSchemaWithForeignKeyOnDelete(
           type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL);
@@ -888,6 +907,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestColumnExpressions) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestColumnExpressions) {
+  SetPostgresqlDialect();
   std::string test_table =
       R"(
           CREATE TABLE test_table (
@@ -945,6 +965,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestAllowCommitTimestamp) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestAllowCommitTimestamp) {
+  SetPostgresqlDialect();
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL(
                            {
@@ -987,6 +1008,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestCheckConstraints) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestCheckConstraints) {
+  SetPostgresqlDialect();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
@@ -1028,6 +1050,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestNoNameCheckConstraints) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestNoNameCheckConstraints) {
+  SetPostgresqlDialect();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
@@ -1049,6 +1072,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestNoNameCheckConstraints) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestCheckConstraintsOrdering) {
+  SetPostgresqlDialect();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
@@ -1105,6 +1129,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestViews) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestViews) {
+  SetPostgresqlDialect();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
@@ -1158,6 +1183,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestStoredIndex) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestStoredIndex) {
+  SetPostgresqlDialect();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
@@ -1472,6 +1498,7 @@ TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestDropChangeStreams) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestChangeStreams) {
+  SetPostgresqlDialect();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
@@ -1515,6 +1542,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestSequences) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestSequences) {
+  SetPostgresqlDialect();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaWithOneSequence(
@@ -1532,6 +1560,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestSequences) {
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestArrays) {
+  SetPostgresqlDialect();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
@@ -1566,6 +1595,7 @@ CREATE TABLE base (
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestTTL) {
+  SetPostgresqlDialect();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(

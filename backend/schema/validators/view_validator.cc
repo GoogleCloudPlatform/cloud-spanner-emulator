@@ -127,6 +127,11 @@ absl::Status ValidateViewSignatureChange(absl::string_view modify_action,
 absl::Status ViewValidator::Validate(const View* view,
                                      SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!view->name_.empty());
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(view->postgresql_oid().has_value());
+  } else {
+    ZETASQL_RET_CHECK(!view->postgresql_oid().has_value());
+  }
   for (const SchemaNode* dependency : view->dependencies()) {
     ZETASQL_RET_CHECK(!dependency->is_deleted());
   }
@@ -146,6 +151,15 @@ absl::Status ViewValidator::ValidateUpdate(const View* view,
   if (view->is_deleted()) {
     context->global_names()->RemoveName(view->Name());
     return absl::OkStatus();
+  }
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(view->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(old_view->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK_EQ(view->postgresql_oid().value(),
+                 old_view->postgresql_oid().value());
+  } else {
+    ZETASQL_RET_CHECK(!view->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(!old_view->postgresql_oid().has_value());
   }
 
   for (const SchemaNode* dependency : view->dependencies()) {

@@ -43,6 +43,7 @@ class TypesTest : public ::testing::Test {
         type_factory_.get_bytes(), type_factory_.get_date(),
         type_factory_.get_timestamp(), type_factory_.get_numeric(),
         type_factory_.get_json(),
+        type_factory_.get_float()
     };
   }
 
@@ -52,6 +53,8 @@ class TypesTest : public ::testing::Test {
         type_factory_.get_float(),
     };
 
+    // Remove FLOAT32, this hack is needed to support copybara strip tags.
+    unsupported_types.pop_back();
     return unsupported_types;
   }
 

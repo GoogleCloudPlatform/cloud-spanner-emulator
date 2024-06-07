@@ -17,21 +17,36 @@
 #include "backend/actions/generated_column.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/catalog.h"
+#include "zetasql/public/evaluator.h"
+#include "zetasql/public/value.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "backend/access/write.h"
+#include "backend/actions/context.h"
 #include "backend/actions/ops.h"
 #include "backend/common/graph_dependency_helper.h"
+#include "backend/common/ids.h"
+#include "backend/datamodel/key.h"
+#include "backend/datamodel/key_range.h"
 #include "backend/query/analyzer_options.h"
+#include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/table.h"
+#include "backend/storage/iterator.h"
 #include "common/errors.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -42,6 +57,10 @@ namespace backend {
 namespace {
 absl::string_view GetColumnName(const Column* const& column) {
   return column->Name();
+}
+
+bool IsKeyColumn(const Column* column) {
+  return column->table()->FindKeyColumn(column->Name()) != nullptr;
 }
 
 absl::Status GetGeneratedColumnsInTopologicalOrder(
@@ -73,8 +92,7 @@ bool IsAnyDependentColumnPresent(
     std::vector<std::string> user_supplied_columns) {
   ABSL_DCHECK(generated_column->is_generated());
   for (const auto& dep_col : generated_column->dependent_columns()) {
-    if (dep_col->is_generated() &&
-        generated_column->table()->FindKeyColumn(dep_col->Name()) != nullptr) {
+    if (dep_col->is_generated() && IsKeyColumn(dep_col)) {
       return IsAnyDependentColumnPresent(dep_col, user_supplied_columns);
     }
     if (std::find(user_supplied_columns.begin(), user_supplied_columns.end(),
@@ -116,11 +134,17 @@ absl::Status GeneratedColumnEffector::Initialize(
     zetasql::Catalog* function_catalog) {
   ZETASQL_RETURN_IF_ERROR(
       GetGeneratedColumnsInTopologicalOrder(table_, &generated_columns_));
+  absl::flat_hash_set<ColumnID> unique_dependent_column;
   expressions_.reserve(generated_columns_.size());
   for (const Column* generated_column : generated_columns_) {
     ZETASQL_ASSIGN_OR_RETURN(auto expr,
                      PrepareExpression(generated_column, function_catalog));
     expressions_[generated_column] = std::move(expr);
+    for (const Column* dep : generated_column->dependent_columns()) {
+      if (unique_dependent_column.insert(dep->id()).second) {
+        dependent_columns_.push_back(dep);
+      }
+    }
   }
   return absl::OkStatus();
 }
@@ -159,7 +183,7 @@ absl::Status GeneratedColumnEffector::Effect(
   for (int i = 0; i < generated_columns_.size(); ++i) {
     const Column* generated_column = generated_columns_[i];
     if (!generated_column->has_default_value() &&
-        table_->FindKeyColumn(generated_column->Name()) == nullptr) {
+        !IsKeyColumn(generated_column)) {
       // skip non-key columns except default columns since generated key columns
       // may depend on default columns values of which would need to be
       // evaluated.
@@ -242,35 +266,43 @@ absl::Status GeneratedColumnEffector::Effect(const ActionContext* ctx,
     }
   }
 
-  return Effect(ctx, op.key, &column_values);
+  return Effect(ctx, op.key, &column_values, /*skip_default_values=*/false);
 }
 
 absl::Status GeneratedColumnEffector::Effect(const ActionContext* ctx,
                                              const UpdateOp& op) const {
-  if (!op.columns.empty() && op.columns.at(0)->is_generated()) {
-    // This is a generated column effect. Don't process it again.
-    return absl::OkStatus();
+  for (const Column* column : op.columns) {
+    // If any non-key generated columns appear then this is a generated column
+    // effect and we do not need to process it again. The non-key requirement is
+    // needed because user-generated updates are expected to include key values,
+    // including generated ones.
+    if (column->is_generated() && !IsKeyColumn(column)) {
+      return absl::OkStatus();
+    }
   }
 
   zetasql::ParameterValueMap column_values;
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<StorageIterator> itr,
-      ctx->store()->Read(table_, KeyRange::Point(op.key), table_->columns()));
+      ctx->store()->Read(table_, KeyRange::Point(op.key), dependent_columns_));
   ZETASQL_RET_CHECK(itr->Next());
   ZETASQL_RETURN_IF_ERROR(itr->Status());
   ZETASQL_RET_CHECK_EQ(op.columns.size(), op.values.size());
-  for (int i = 0; i < itr->NumColumns(); ++i) {
-    column_values[table_->columns().at(i)->Name()] = itr->ColumnValue(i);
+  ZETASQL_RET_CHECK_EQ(itr->NumColumns(), dependent_columns_.size());
+  for (int i = 0; i < dependent_columns_.size(); ++i) {
+    column_values[dependent_columns_[i]->Name()] = itr->ColumnValue(i);
   }
   for (int i = 0; i < op.columns.size(); ++i) {
     column_values[op.columns[i]->Name()] = op.values[i];
   }
-  return Effect(ctx, op.key, &column_values);
+  return Effect(ctx, op.key, &column_values, /*skip_default_values=*/true);
 }
 
 absl::Status GeneratedColumnEffector::Effect(
     const ActionContext* ctx, const Key& key,
-    zetasql::ParameterValueMap* column_values) const {
+    zetasql::ParameterValueMap* column_values,
+    bool skip_default_values) const {
+  ZETASQL_RET_CHECK(for_keys_ == false);
   std::vector<zetasql::Value> generated_values;
   generated_values.reserve(generated_columns_.size());
 
@@ -280,10 +312,20 @@ absl::Status GeneratedColumnEffector::Effect(
   // Evaluate generated columns in topological order.
   for (int i = 0; i < generated_columns_.size(); ++i) {
     const Column* generated_column = generated_columns_[i];
-    // If this column has a default value and the user is supplying a value
-    // for it, then we don't need to compute its default value.
+    // Default values should only be populated for inserts where no value is
+    // supplied by the user. For updates, skip_default_values is set to true
+    // and all default value computations are skipped (the column will thus
+    // either be set to a new user-provided value or left at its current value).
     if (generated_column->has_default_value() &&
-        column_values->find(generated_column->Name()) != column_values->end()) {
+        (skip_default_values || column_values->find(generated_column->Name()) !=
+                                    column_values->end())) {
+      continue;
+    }
+    // Keys are handled by a separate effector initialized with for_keys_=true.
+    // Skipping these columns here is not simply an optimization; if we include
+    // them then we may find ourselves in an infinite loop repeatedly generating
+    // effects for generated PKs.
+    if (IsKeyColumn(generated_column)) {
       continue;
     }
 

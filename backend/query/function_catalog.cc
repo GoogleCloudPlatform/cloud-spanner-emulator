@@ -166,8 +166,8 @@ void FunctionCatalog::AddZetaSQLBuiltInFunctions(
       function_map;
   absl::flat_hash_map<std::string, const zetasql::Type*> type_map_unused;
   absl::Status status = zetasql::GetBuiltinFunctionsAndTypes(
-      zetasql::BuiltinFunctionOptions(MakeGoogleSqlLanguageOptions()),
-      *type_factory, function_map, type_map_unused);
+      MakeGoogleSqlBuiltinFunctionOptions(), *type_factory, function_map,
+      type_map_unused);
   // `status` can be an error when `BuiltinFunctionOptions` is misconfigured.
   // The call above only supplies a `LangaugeOptions` and is low risk. If that
   // configuration becomes more complex, then this `status` should probably be

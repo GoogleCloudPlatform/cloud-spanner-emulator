@@ -322,6 +322,26 @@ void DumpChangeStream(const ChangeStream* change_stream,
     set_option->set_option_name(ddl::kChangeStreamRetentionPeriodOptionName);
     set_option->set_string_value(*change_stream->retention_period());
   }
+  if (change_stream->exclude_insert().has_value()) {
+    ddl::SetOption* set_option = create_change_stream.add_set_options();
+    set_option->set_option_name(ddl::kChangeStreamExcludeInsertOptionName);
+    set_option->set_bool_value(*change_stream->exclude_insert());
+  }
+  if (change_stream->exclude_update().has_value()) {
+    ddl::SetOption* set_option = create_change_stream.add_set_options();
+    set_option->set_option_name(ddl::kChangeStreamExcludeUpdateOptionName);
+    set_option->set_bool_value(*change_stream->exclude_update());
+  }
+  if (change_stream->exclude_delete().has_value()) {
+    ddl::SetOption* set_option = create_change_stream.add_set_options();
+    set_option->set_option_name(ddl::kChangeStreamExcludeDeleteOptionName);
+    set_option->set_bool_value(*change_stream->exclude_delete());
+  }
+  if (change_stream->exclude_ttl_deletes().has_value()) {
+    ddl::SetOption* set_option = create_change_stream.add_set_options();
+    set_option->set_option_name(ddl::kChangeStreamExcludeTtlDeletesOptionName);
+    set_option->set_bool_value(*change_stream->exclude_ttl_deletes());
+  }
 }
 
 void DumpSequence(const Sequence* sequence,

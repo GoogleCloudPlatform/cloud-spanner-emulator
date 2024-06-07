@@ -174,7 +174,8 @@ absl::StatusOr<backend::QueryResult> ExecuteQuery(
   ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
                    QueryFromProto(statement.sql(), statement.params(),
                                   statement.param_types(),
-                                  txn->query_engine()->type_factory()));
+                                  txn->query_engine()->type_factory(),
+                                  txn->schema()->proto_bundle()));
   return txn->ExecuteSql(query);
 }
 
@@ -282,7 +283,8 @@ absl::Status ExecuteSql(RequestContext* ctx,
         ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
                          QueryFromProto(request->sql(), request->params(),
                                         request->param_types(),
-                                        txn->query_engine()->type_factory()));
+                                        txn->query_engine()->type_factory(),
+                                        txn->schema()->proto_bundle()));
         auto maybe_result = txn->ExecuteSql(query, request->query_mode());
         if (!maybe_result.ok()) {
           absl::Status error = maybe_result.status();
@@ -438,7 +440,8 @@ absl::Status ExecuteStreamingSql(
         ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
                          QueryFromProto(request->sql(), request->params(),
                                         request->param_types(),
-                                        txn->query_engine()->type_factory()));
+                                        txn->query_engine()->type_factory(),
+                                        txn->schema()->proto_bundle()));
         bool in_read_write_txn = txn->IsReadWrite() || txn->IsPartitionedDml();
         ZETASQL_ASSIGN_OR_RETURN(change_stream_metadata,
                          backend::QueryEngine::TryGetChangeStreamMetadata(

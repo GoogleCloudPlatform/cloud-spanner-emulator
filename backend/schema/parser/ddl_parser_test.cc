@@ -815,6 +815,104 @@ TEST(ParseCreateTable, CanParseCreateTableWithNumeric) {
                   )pb")));
 }
 
+TEST(ParseCreateTable, CanParseCreateTableWithFloat32) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE TABLE T (
+                      K INT64 NOT NULL,
+                      FloatVal FLOAT32,
+                      FloatArr ARRAY<FLOAT32>
+                    ) PRIMARY KEY (K)
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "T"
+                      column { column_name: "K" type: INT64 not_null: true }
+                      column { column_name: "FloatVal" type: FLOAT }
+                      column {
+                        column_name: "FloatArr"
+                        type: ARRAY
+                        array_subtype { type: FLOAT }
+                      }
+                      primary_key { key_name: "K" }
+                    }
+                  )pb")));
+}
+
+TEST(ParseCreateTable, CanParseCreateTableWithVectorLength) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE T(
+      K INT64,
+      Arr ARRAY<FLOAT64>(vector_length=>10),
+    ) PRIMARY KEY(K)
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "T"
+                      column { column_name: "K" type: INT64 }
+                      column {
+                        column_name: "Arr"
+                        type: ARRAY
+                        array_subtype { type: DOUBLE }
+                        vector_length: 10
+                      }
+                      primary_key { key_name: "K" }
+                    }
+                  )pb")));
+}
+
+TEST(ParseCreateTable, CannotParseCreateTableWithInvalidColumnParameterName) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE T(
+      K INT64,
+      Arr ARRAY<FLOAT64>(invalid_param=>10),
+    ) PRIMARY KEY(K)
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(ParseCreateTable, CannotParseCreateTableWithNegativeVectorLengthValue) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE T(
+      K INT64,
+      Arr ARRAY<FLOAT64>(vector_length=>-1),
+    ) PRIMARY KEY(K)
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(ParseCreateTable, CannotParseCreateTableWithVectorLengthInNonArray) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE T(
+      K INT64,
+      Arr FLOAT64(vector_length=>10),
+    ) PRIMARY KEY(K)
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(ParseCreateTable, CannotParseCreateTableWithMultipleVectorLength) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE T(
+      K INT64,
+      Arr ARRAY<FLOAT64>(vector_length=>10, vector_length=>20),
+    ) PRIMARY KEY(K)
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(ParseCreateTable, CannotParseCreateTableWithVectorLengthInStructArray) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE T(
+      K INT64,
+      Arr STRUCT<arr ARRAY<INT64>(vector_length=>10)>,
+    ) PRIMARY KEY(K)
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
   EXPECT_THAT(ParseDDLStatement(R"sql(
     CREATE TABLE T(
@@ -2564,6 +2662,14 @@ TEST(ParseCreateProtoBundle, CanParseProtoTypesConflictingWithInbuiltTypes) {
               )pb")));
 }
 
+TEST(ParseCreateProtoBundle,
+     CanParseFloat32ProtoTypesConflictingWithInbuiltFloat32) {
+  EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE (FLOAT32)"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_proto_bundle { insert_type { source_name: "FLOAT32" } }
+              )pb")));
+}
+
 TEST(ParseDropProtoBundle, CanParseDDLStatement) {
   EXPECT_THAT(ParseDDLStatement("DROP PROTO BUNDLE"),
               IsOkAndHolds(test::EqualsProto(R"pb(
@@ -3532,6 +3638,21 @@ TEST(CreateChangeStream,
         })pb")));
 }
 
+TEST(CreateChangeStream, CanParseCreateChangeStreamSetBooleanOptions) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
+      ALL OPTIONS ( exclude_insert = true, exclude_update=false, exclude_delete=true, exclude_ttl_deletes=null ))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_change_stream {
+          change_stream_name: "ChangeStream"
+          for_clause { all: true }
+          set_options { option_name: "exclude_insert" bool_value: true }
+          set_options { option_name: "exclude_update" bool_value: false }
+          set_options { option_name: "exclude_delete" bool_value: true }
+          set_options { option_name: "exclude_ttl_deletes" null_value: true }
+        })pb")));
+}
+
 TEST(CreateChangeStream, ChangeStreamErrorEmptyOptions) {
   EXPECT_THAT(
       ParseDDLStatement(
@@ -3603,6 +3724,30 @@ TEST(CreateChangeStream, ChangeStreamErrorInvalidOptionType) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (value_capture_type = [('key','val')]))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (exclude_insert = "false"))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (exclude_update = ['true']))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (exclude_delete = 1))sql"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Error parsing Spanner DDL statement")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (exclude_ttl_deletes = "null"))sql"),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }

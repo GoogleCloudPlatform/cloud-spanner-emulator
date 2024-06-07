@@ -75,6 +75,13 @@ class Sequence::Builder {
     return *this;
   }
 
+  Builder& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_postgresql_oid(postgresql_oid.value());
+    }
+    return *this;
+  }
+
  private:
   std::unique_ptr<Sequence> instance_;
 };

@@ -1098,6 +1098,12 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
             : "";
     constraint = StrCat(" DEFAULT", expression_output);
   }
+
+  if (column.has_vector_length()) {
+    const int64_t vector_length = column.vector_length();
+      constraint = absl::Substitute(" VECTOR LENGTH $0", vector_length);
+  }
+
   StrAppend(&constraint, column.not_null() ? " NOT NULL" : "");
   ZETASQL_ASSIGN_OR_RETURN(absl::string_view printed_type, PrintType(column));
   return StrCat(QuoteIdentifier(column.column_name()), " ", printed_type,

@@ -1507,10 +1507,12 @@ INSTANTIATE_TEST_SUITE_P(
         PGScalarFunctionTestCase{kPGCastToOidFunctionName,
                                  {zetasql::Value::String("1")},
                                  kPGOidValue},
-        PGScalarFunctionTestCase{kPGCastToOidFunctionName,
-                                 {zetasql::Value::String(absl::StrCat(
-                                     std::numeric_limits<uint32_t>::min()))},
-                                 kPGOidMinValue},
+        PGScalarFunctionTestCase{
+            kPGCastToOidFunctionName,
+            {zetasql::Value::String(
+                absl::StrCat(std::numeric_limits<int32_t>::min()))},
+            *CreatePgOidValue(
+                static_cast<int64_t>(std::numeric_limits<int32_t>::max()) + 1)},
         PGScalarFunctionTestCase{kPGCastToOidFunctionName,
                                  {zetasql::Value::String(absl::StrCat(
                                      std::numeric_limits<uint32_t>::max()))},
@@ -1992,10 +1994,14 @@ TEST_F(EmulatorFunctionsTest, CastToOidReturnsErrorWhenArgumentAreInvalid) {
       evaluator_(absl::MakeConstSpan({zetasql::Value::String("invalid")})),
       zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   // Argument too small.
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::Int64(-1)})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("-1")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan({zetasql::Value::Int64(
+          static_cast<int64_t>(std::numeric_limits<uint32_t>::min()) - 1)})),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan({zetasql::Value::String(absl::StrCat(
+          static_cast<int64_t>(std::numeric_limits<int32_t>::min()) - 1))})),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
   // Argument too large.
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan({zetasql::Value::Int64(

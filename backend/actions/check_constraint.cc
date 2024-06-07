@@ -20,15 +20,25 @@
 #include <utility>
 #include <vector>
 
+#include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/catalog.h"
 #include "zetasql/public/evaluator.h"
+#include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
-#include "absl/strings/substitute.h"
+#include "absl/types/span.h"
+#include "backend/actions/context.h"
 #include "backend/actions/ops.h"
+#include "backend/datamodel/key.h"
+#include "backend/datamodel/key_range.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/schema/catalog/check_constraint.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/storage/iterator.h"
 #include "common/errors.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -77,16 +87,19 @@ absl::Status CheckConstraintVerifier::VerifyInsertUpdateOp(
     const ActionContext* ctx, const Table* table,
     const std::vector<const Column*>& columns,
     const std::vector<zetasql::Value>& values, const Key& key) const {
+  absl::Span<const Column* const> dependent_columns =
+      check_constraint_->dependent_columns();
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<StorageIterator> itr,
-      ctx->store()->Read(table, KeyRange::Point(key), table->columns()));
+      ctx->store()->Read(table, KeyRange::Point(key), dependent_columns));
   ZETASQL_RET_CHECK(itr->Next());
   ZETASQL_RETURN_IF_ERROR(itr->Status());
   ZETASQL_RET_CHECK_EQ(columns.size(), values.size());
+  ZETASQL_RET_CHECK_EQ(dependent_columns.size(), itr->NumColumns());
 
   zetasql::ParameterValueMap column_values;
-  for (int i = 0; i < itr->NumColumns(); ++i) {
-    column_values[table->columns().at(i)->Name()] = itr->ColumnValue(i);
+  for (int i = 0; i < dependent_columns.size(); ++i) {
+    column_values[dependent_columns[i]->Name()] = itr->ColumnValue(i);
   }
   // The generated column values have been updated in
   // GeneratedColumnEffector::Effect before the CheckConstraintVerifier is

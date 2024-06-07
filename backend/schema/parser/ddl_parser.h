@@ -18,7 +18,10 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_PARSER_H_
 
 #include <memory>
+#include <string>
 
+#include "zetasql/base/no_destructor.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "backend/schema/ddl/operations.pb.h"
@@ -39,6 +42,14 @@ extern const char kPGCommitTimestampOptionName[];
 extern const char kChangeStreamValueCaptureTypeOptionName[];
 // The option to set the retention period for a change stream.
 extern const char kChangeStreamRetentionPeriodOptionName[];
+// The option to set exclude based on modification types or ttl deletes for a
+// change stream.
+extern const char kChangeStreamExcludeInsertOptionName[];
+extern const char kChangeStreamExcludeUpdateOptionName[];
+extern const char kChangeStreamExcludeDeleteOptionName[];
+extern const char kChangeStreamExcludeTtlDeletesOptionName[];
+extern const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+    kChangeStreamBooleanOptions;
 
 extern const char kModelColumnRequiredOptionName[];
 extern const char kModelDefaultBatchSizeOptionName[];

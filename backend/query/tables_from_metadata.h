@@ -17,12 +17,18 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_TABLES_FROM_METADATA_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_TABLES_FROM_METADATA_H_
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "zetasql/public/simple_catalog.h"
+#include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 
 namespace google {
 namespace spanner {
@@ -50,9 +56,14 @@ static const zetasql_base::NoDestructor<
     absl::flat_hash_map<std::string, const zetasql::Type*>>
     kSpannerPGTypeToGSQLType{{
         {"bigint", zetasql::types::Int64Type()},
+        {"bigint[]", zetasql::types::Int64ArrayType()},
         {"boolean", zetasql::types::BoolType()},
         {"character varying", zetasql::types::StringType()},
         {"character varying[]", zetasql::types::StringArrayType()},
+        {"double precision", zetasql::types::DoubleType()},
+        {"oid", postgres_translator::spangres::datatypes::GetPgOidType()},
+        {"oid[]",
+         postgres_translator::spangres::datatypes::GetPgOidArrayType()},
         {"timestamp with time zone", zetasql::types::TimestampType()},
     }};
 

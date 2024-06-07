@@ -69,6 +69,11 @@ class EmulatorBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
     return function;
   }
 
+  absl::StatusOr<const zetasql::Procedure*> GetProcedure(
+      const std::string& name) const override {
+    return absl::UnimplementedError("GetProcedure is not supported");
+  }
+
   // TODO: b/313936285 - Add builtin TVF support to the Emulator.
   absl::StatusOr<const zetasql::TableValuedFunction*> GetTableValuedFunction(
       const std::string& name) const override {
@@ -86,6 +91,11 @@ class EmulatorBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
     ZETASQL_RET_CHECK_NE(output, nullptr);
     ZETASQL_RET_CHECK(output->empty());
     function_catalog_->GetFunctions(output);
+    return absl::OkStatus();
+  }
+
+  absl::Status GetProcedures(
+      absl::flat_hash_set<const zetasql::Procedure*>* output) const override {
     return absl::OkStatus();
   }
 

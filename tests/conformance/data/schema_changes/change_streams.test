@@ -7,7 +7,7 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 CREATE CHANGE STREAM change_stream FOR Users;
 --
-CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM change_stream FOR Users;
 ==
 # CREATE CHANGE STREAM for Table(Column)
 CREATE TABLE Users (
@@ -16,7 +16,7 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 CREATE CHANGE STREAM change_stream FOR Users(Name);
 --
-CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM change_stream FOR Users(Name);
 ==
 # CREATE CHANGE STREAM for Table()
 CREATE TABLE Users (
@@ -25,25 +25,21 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 CREATE CHANGE STREAM change_stream FOR Users();
 --
-CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM change_stream FOR Users();
 ==
 # CREATE CHANGE STREAM with valid retention period
 CREATE TABLE Users (
   UserId STRING(20) NOT NULL,
   Name STRING(20),
 ) PRIMARY KEY(UserId);
-CREATE CHANGE STREAM change_stream FOR ALL OPTIONS (retention_period = '7d');
+CREATE CHANGE STREAM change_stream FOR ALL OPTIONS ( retention_period = '7d' );
 --
-CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM change_stream FOR ALL OPTIONS ( retention_period = '7d' );
 ==
 # CREATE CHANGE STREAM with valid value capture type
-CREATE TABLE Users (
-  UserId STRING(20) NOT NULL,
-  Name STRING(20),
-) PRIMARY KEY(UserId);
-CREATE CHANGE STREAM change_stream FOR ALL OPTIONS (value_capture_type = 'NEW_VALUES');
+CREATE CHANGE STREAM change_stream OPTIONS ( value_capture_type = 'NEW_VALUES');
 --
-CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM change_stream OPTIONS ( value_capture_type = 'NEW_VALUES' );
 ==
 # CREATE CHANGE STREAM for explicit columns
 CREATE TABLE Albums (
@@ -54,9 +50,9 @@ CREATE TABLE Users (
   UserId STRING(20) NOT NULL,
   Name STRING(20),
 ) PRIMARY KEY(UserId);
-CREATE CHANGE STREAM change_stream FOR Users(), Albums(Name)
+CREATE CHANGE STREAM change_stream FOR Users(), Albums(Name);
 --
-CREATE TABLE Albums ( AlbumId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(AlbumId); CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId); CREATE CHANGE STREAM change_stream FOR Users(), Albums(Name);
+CREATE CHANGE STREAM change_stream FOR Users(), Albums(Name);
 ==
 # CREATE CHANGE STREAM for table and explicit columns
 CREATE TABLE Albums (
@@ -69,20 +65,12 @@ CREATE TABLE Users (
 ) PRIMARY KEY(UserId);
 CREATE CHANGE STREAM change_stream FOR Users, Albums(Name);
 --
-CREATE TABLE Albums ( AlbumId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(AlbumId); CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId); CREATE CHANGE STREAM change_stream FOR Users, Albums(Name);
+CREATE CHANGE STREAM change_stream FOR Users, Albums(Name);
 ==
-# CREATE CHANGE STREAM for table and explicit columns
-CREATE TABLE Albums (
-  AlbumId STRING(20) NOT NULL,
-  Name STRING(20),
-) PRIMARY KEY(AlbumId);
-CREATE TABLE Users (
-  UserId STRING(20) NOT NULL,
-  Name STRING(20),
-) PRIMARY KEY(UserId);
+# CREATE CHANGE STREAM for all
 CREATE CHANGE STREAM change_stream FOR ALL;
 --
-CREATE TABLE Albums ( AlbumId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(AlbumId); CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId); CREATE CHANGE STREAM change_stream FOR ALL;
+CREATE CHANGE STREAM change_stream FOR ALL;
 ==
 # CREATE CHANGE STREAM for `ALL`
 CREATE TABLE `ALL` (
@@ -100,7 +88,7 @@ CREATE TABLE `ALL` (
 ) PRIMARY KEY(Id);
 CREATE CHANGE STREAM change_stream FOR `ALL`(SomeColumn);
 --
-CREATE TABLE `ALL` ( Id STRING(20) NOT NULL, SomeColumn STRING(20), ) PRIMARY KEY(Id); CREATE CHANGE STREAM change_stream FOR `ALL`(SomeColumn);
+CREATE CHANGE STREAM change_stream FOR `ALL`(SomeColumn);
 ==
 # CREATE CHANGE STREAM for `ALL` tracking `ALL` column
 CREATE TABLE `ALL` (
@@ -109,16 +97,12 @@ CREATE TABLE `ALL` (
 ) PRIMARY KEY(Id);
 CREATE CHANGE STREAM change_stream FOR `ALL`(`All`);
 --
-CREATE TABLE `ALL` ( Id STRING(20) NOT NULL, `All` STRING(20), ) PRIMARY KEY(Id); CREATE CHANGE STREAM change_stream FOR `ALL`(`All`);
+CREATE CHANGE STREAM change_stream FOR `ALL`(`All`);
 ==
 # CREATE CHANGE STREAM change_stream;
-CREATE TABLE Users (
-  UserId STRING(20) NOT NULL,
-  Name STRING(20),
-) PRIMARY KEY(UserId);
 CREATE CHANGE STREAM change_stream;
 --
-CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM change_stream;
 ==
 # CREATE CHANGE STREAM massively quoted;
 CREATE TABLE Albums (
@@ -136,26 +120,18 @@ CREATE TABLE Users (
 CREATE CHANGE STREAM `ChangeStreamQuoted`
   FOR `Users`, `Albums`(`Name`), `Singers`();
 --
-CREATE TABLE Albums ( AlbumId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(AlbumId); CREATE TABLE Singers ( SingerId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(SingerId); CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId); CREATE CHANGE STREAM ChangeStreamQuoted FOR Users, Albums(Name), Singers();
+CREATE CHANGE STREAM ChangeStreamQuoted FOR Users, Albums(Name), Singers();
 ==
 # CREATE CHANGE STREAM with both retention period and value capture type;
-CREATE TABLE Users (
-  UserId STRING(20) NOT NULL,
-  Name STRING(20),
-) PRIMARY KEY(UserId);
-CREATE CHANGE STREAM change_stream OPTIONS (value_capture_type = 'NEW_VALUES', retention_period = '7d');
+CREATE CHANGE STREAM change_stream OPTIONS ( value_capture_type = 'NEW_VALUES', retention_period = '7d' );
 --
-CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM change_stream OPTIONS ( value_capture_type = 'NEW_VALUES', retention_period = '7d' );
 ==
 # ALTER CHANGE STREAM SET FOR ALL;
-CREATE TABLE Users (
-  UserId STRING(20) NOT NULL,
-  Name STRING(20),
-) PRIMARY KEY(UserId);
 CREATE CHANGE STREAM change_stream;
 ALTER CHANGE STREAM change_stream SET FOR ALL;
 --
-CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM change_stream FOR ALL;
 ==
 # ALTER CHANGE STREAM SET FOR Table;
 CREATE TABLE Singers (
@@ -165,57 +141,25 @@ CREATE TABLE Singers (
 CREATE CHANGE STREAM change_stream;
 ALTER CHANGE STREAM change_stream SET FOR Singers;
 --
-CREATE TABLE Singers ( SingerId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(SingerId);
+CREATE TABLE Singers ( SingerId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(SingerId); CREATE CHANGE STREAM change_stream FOR Singers;
 ==
 # ALTER CHANGE STREAM SET OPTIONS;
-CREATE TABLE Singers (
-  SingerId STRING(20) NOT NULL,
-  Name STRING(20),
-) PRIMARY KEY(SingerId);
-CREATE CHANGE STREAM change_stream FOR Singers;
-ALTER CHANGE STREAM change_stream SET OPTIONS (retention_period = '7d');
+CREATE CHANGE STREAM change_stream;
+ALTER CHANGE STREAM change_stream SET OPTIONS (value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '2d', exclude_insert = true, exclude_update = false, exclude_delete = true, exclude_ttl_deletes = false);
 --
-CREATE TABLE Singers ( SingerId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(SingerId); CREATE CHANGE STREAM change_stream FOR Singers OPTIONS ( retention_period = '7d' );
-==
-# ALTER CHANGE STREAM SET OPTIONS;
-CREATE TABLE Singers (
-  SingerId STRING(20) NOT NULL,
-  Name STRING(20),
-) PRIMARY KEY(SingerId);
-CREATE CHANGE STREAM change_stream FOR Singers;
-ALTER CHANGE STREAM change_stream SET OPTIONS (value_capture_type = 'OLD_AND_NEW_VALUES');
---
-CREATE TABLE Singers ( SingerId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(SingerId); CREATE CHANGE STREAM change_stream FOR Singers OPTIONS ( value_capture_type = 'OLD_AND_NEW_VALUES' );
-==
-# ALTER CHANGE STREAM SET OPTIONS;
-CREATE TABLE Singers (
-  SingerId STRING(20) NOT NULL,
-  Name STRING(20),
-) PRIMARY KEY(SingerId);
-CREATE CHANGE STREAM change_stream FOR Singers;
-ALTER CHANGE STREAM change_stream SET OPTIONS (value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '7d');
---
-CREATE TABLE Singers ( SingerId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(SingerId); CREATE CHANGE STREAM change_stream FOR Singers OPTIONS ( value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '7d' );
+CREATE CHANGE STREAM change_stream OPTIONS ( value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '2d', exclude_insert = true, exclude_update = false, exclude_delete = true, exclude_ttl_deletes = false );
 ==
 # ALTER CHANGE STREAM DROP FOR ALL;
-CREATE TABLE Users (
-  UserId STRING(20) NOT NULL,
-  Name STRING(20),
-) PRIMARY KEY(UserId);
-CREATE CHANGE STREAM change_stream FOR Users;
+CREATE CHANGE STREAM change_stream FOR ALL;
 ALTER CHANGE STREAM change_stream DROP FOR ALL;
 --
-CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId);
+CREATE CHANGE STREAM change_stream;
 ==
 # DROP CHANGE STREAM;
-CREATE TABLE Users (
-  UserId STRING(20) NOT NULL,
-  Name STRING(20),
-) PRIMARY KEY(UserId);
 CREATE CHANGE STREAM change_stream;
 DROP CHANGE STREAM change_stream;
 --
-CREATE TABLE Users ( UserId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(UserId);
+
 ==
 # # # # --- Parsing Failure Test Cases --- # # # #
 # CREATE CHANGE STREAM error with nothing following FOR;

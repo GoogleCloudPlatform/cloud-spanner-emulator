@@ -312,9 +312,7 @@ TEST_F(ViewsTest, ErrorReplacingViewBreaksDependentView) {
                   "The new definition causes the definition of VIEW `D` to "
                   "become "
                   "invalid with the following diagnostic message:"),
-              testing::HasSubstr(
-                  "No matching signature for operator = for argument "
-                  "types: INT64, BOOL. Supported signature: ANY = ANY"))));
+              testing::HasSubstr("No matching signature"))));
 }
 
 TEST_F(ViewsTest, ReplacingViewChangesDependentViewSignature) {

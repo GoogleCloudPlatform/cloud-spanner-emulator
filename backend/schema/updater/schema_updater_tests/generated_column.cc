@@ -366,6 +366,64 @@ TEST_P(SchemaUpdaterTest, StoredColumnNameIsCaseSensitive) {
   }
 }
 
+TEST_P(SchemaUpdaterTest, SqlInlinedFunctionInGeneratedColumn) {
+  // A SQL-inlined function is a function whose implementation is a SQL string
+  // instead of an evaluator.
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK(CreateSchema({R"(
+      create table array_table (
+        id bigint primary key,
+        array_col varchar[]
+      )
+    )",
+                            R"(
+        ALTER TABLE array_table ADD COLUMN IF NOT EXISTS array_col_not_applicable bool
+          generated always as (arrayoverlap(array_col, ARRAY['not_applicable'])) stored
+      )"},
+                           /*proto_descriptor_bytes=*/"",
+                           database_api::DatabaseDialect::POSTGRESQL,
+                           /*use_gsql_to_pg_translation=*/false));
+  } else {
+    ZETASQL_ASSERT_OK(CreateSchema({
+        R"(
+        CREATE TABLE array_table (
+          id INT64,
+          int_array ARRAY<INT64>,
+          string_array ARRAY<STRING(MAX)>
+        ) PRIMARY KEY(id)
+      )",
+        R"(
+        ALTER TABLE array_table ADD COLUMN IF NOT EXISTS string_array_not_applicable BOOL
+          AS (ARRAY_INCLUDES(string_array, "not_applicable")) STORED
+      )",
+        R"(
+        ALTER TABLE array_table ADD COLUMN IF NOT EXISTS array_first_col INT64
+          AS (ARRAY_FIRST(int_array)) STORED
+      )",
+        R"(
+        ALTER TABLE array_table ADD COLUMN IF NOT EXISTS array_min_col INT64
+          AS (ARRAY_MIN(int_array)) STORED
+      )",
+        R"(
+        ALTER TABLE array_table ADD COLUMN IF NOT EXISTS array_max_col INT64
+          AS (ARRAY_MAX(int_array)) STORED
+      )",
+        R"(
+        ALTER TABLE array_table ADD COLUMN IF NOT EXISTS array_slice_col ARRAY<INT64>
+          AS (ARRAY_SLICE(int_array, 1, 2)) STORED
+      )",
+        R"(
+        ALTER TABLE array_table ADD COLUMN IF NOT EXISTS array_includes_any_col BOOL
+          AS (ARRAY_INCLUDES_ANY(int_array, [1, 2])) STORED
+      )",
+        R"(
+        ALTER TABLE array_table ADD COLUMN IF NOT EXISTS array_includes_all_col BOOL
+          AS (ARRAY_INCLUDES_ALL(int_array, [1, 2])) STORED
+      )",
+    }));
+  }
+}
+
 }  // namespace test
 }  // namespace backend
 }  // namespace emulator

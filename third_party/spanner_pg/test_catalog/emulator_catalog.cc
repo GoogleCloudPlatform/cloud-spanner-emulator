@@ -552,6 +552,8 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_JSON_ARRAY_FUNCTIONS,
       zetasql::FEATURE_JSON_STRICT_NUMBER_PARSING,
       zetasql::FEATURE_V_1_4_WITH_EXPRESSION,
+      zetasql::FEATURE_V_1_4_ENABLE_FLOAT_DISTANCE_FUNCTIONS,
+      zetasql::FEATURE_V_1_4_DOT_PRODUCT,
   });
   options.EnableLanguageFeature(zetasql::FEATURE_V_1_3_DML_RETURNING);
   options.SetSupportedStatementKinds({

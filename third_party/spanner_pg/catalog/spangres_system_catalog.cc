@@ -582,6 +582,9 @@ absl::Status SpangresSystemCatalog::AddFunctions(
     }
   }
 
+  // Add builtin TVFs.
+    ZETASQL_RETURN_IF_ERROR(AddTVF(F_JSONB_ARRAY_ELEMENTS, "pg.jsonb_array_elements"));
+
   return absl::OkStatus();
 }
 

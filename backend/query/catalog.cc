@@ -20,15 +20,19 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
@@ -205,6 +209,29 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
       types_[type_name] = table->GetColumn(i)->GetType();
     }
   }
+
+  if (absl::Status status = PopulateSystemProcedureMap(); !status.ok()) {
+    // Not an error that requires us to exit the emulator.
+    ABSL_LOG(ERROR) << "Failed to populate system procedure map: ";
+  }
+}
+
+absl::Status Catalog::PopulateSystemProcedureMap() {
+  // Context id is required if we have to hold and pass on some context for
+  // the implementation to map the signature back to an evaluator. Not required
+  // here.
+  auto [_, inserted] = procedures_.emplace(
+      "cancel_query",
+      std::make_unique<zetasql::Procedure>(
+          std::vector<std::string>{"cancel_query"},
+          zetasql::FunctionSignature(
+              zetasql::types::BoolType(),
+              {zetasql::FunctionArgumentType(zetasql::types::StringType())},
+              /*context_id=*/-1)));
+  if (!inserted) {
+    return absl::InternalError("Unable to populate system procedure map.");
+  }
+  return absl::OkStatus();
 }
 
 absl::Status Catalog::GetCatalog(const std::string& name,
@@ -279,6 +306,17 @@ absl::Status Catalog::GetFunction(const std::string& name,
                                   const zetasql::Function** function,
                                   const FindOptions& options) {
   function_catalog_->GetFunction(name, function);
+  return absl::OkStatus();
+}
+
+absl::Status Catalog::GetProcedure(const std::string& full_name,
+                                   const zetasql::Procedure** procedure,
+                                   const FindOptions& options) {
+  auto it = procedures_.find(absl::AsciiStrToLower(full_name));
+  if (it == procedures_.end()) {
+    return error::UnsupportedProcedure(full_name);
+  }
+  *procedure = it->second.get();
   return absl::OkStatus();
 }
 

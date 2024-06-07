@@ -47,6 +47,8 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       << "ddl::TypeDefinition input: " << ddl_type_def.ShortDebugString();
 
   switch (ddl_type_def.type()) {
+    case ddl::TypeDefinition::FLOAT:
+      return type_factory->get_float();
     case ddl::TypeDefinition::DOUBLE:
       return type_factory->get_double();
     case ddl::TypeDefinition::INT64:
@@ -152,6 +154,8 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       << "ddl::ColumnDefinition input: " << ddl_column_def.ShortDebugString();
 
   switch (ddl_column_def.type()) {
+    case ddl::ColumnDefinition::FLOAT:
+      return type_factory->get_float();
     case ddl::ColumnDefinition::DOUBLE:
       return type_factory->get_double();
     case ddl::ColumnDefinition::INT64:
@@ -259,6 +263,7 @@ ddl::TypeDefinition GoogleSqlTypeToDDLType(const zetasql::Type* type) {
 
   type_def.set_type(ddl::TypeDefinition::NONE);
   if (type->IsDouble()) type_def.set_type(ddl::TypeDefinition::DOUBLE);
+  if (type->IsFloat()) type_def.set_type(ddl::TypeDefinition::FLOAT);
   if (type->IsInt64()) type_def.set_type(ddl::TypeDefinition::INT64);
   if (type->IsBool()) type_def.set_type(ddl::TypeDefinition::BOOL);
   if (type->IsString()) type_def.set_type(ddl::TypeDefinition::STRING);

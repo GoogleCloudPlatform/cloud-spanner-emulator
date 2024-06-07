@@ -255,6 +255,7 @@ cc_test(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
+        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
         "@com_google_googletest//:gtest_main",

@@ -183,6 +183,12 @@ TEST_F(ToDateTest, RegressionUncommonDatePatterns) {
   DateADT date3 = 18284;
   EXPECT_THAT(PgToDate("2458872", "J"), IsOkAndHolds(date3));
 }
+
+TEST_F(ToDateTest, AsanViolationTest) {
+  EXPECT_THAT(PgToDate("8888888888", "idddi"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("date out of range: \"8888888888\"")));
+}
 }  // namespace
 }  // namespace postgres_translator::function_evaluators
 

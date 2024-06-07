@@ -32,6 +32,12 @@ CREATE TABLE numeric_table(
   key     NUMERIC,
   val     INT64,
 ) PRIMARY KEY (key);
+CREATE TABLE array_table(
+  key                 INT64 NOT NULL,
+  string_array        ARRAY<STRING(30)>,
+  has_not_applicable  BOOL
+    AS (ARRAY_INCLUDES(string_array, "not_applicable")) STORED
+) PRIMARY KEY (key);
 CREATE MODEL users_model
 INPUT (Age INT64, Name STRING(MAX))
 OUTPUT (Outcome BOOL)
@@ -72,4 +78,9 @@ CREATE TABLE scalar_types_table (
 CREATE TABLE numeric_table (
   key     bigint NOT NULL PRIMARY KEY,
   val     numeric
+);
+CREATE TABLE array_table (
+  key                 bigint NOT NULL PRIMARY KEY,
+  string_array        varchar(30)[],
+  has_not_applicable  bool generated always as (arrayoverlap(string_array, ARRAY['not_applicable'])) stored
 );

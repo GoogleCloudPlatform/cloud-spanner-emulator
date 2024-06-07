@@ -628,6 +628,58 @@ TEST_P(ViewsTest, DropViewIsCaseSensitive) {
   EXPECT_THAT(UpdateSchema(schema.get(), {"DROP VIEW v"}),
               StatusIs(error::ViewNotFound("v")));
 }
+
+TEST_P(ViewsTest, SqlInlinedFunctionsInViews) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+    CREATE TABLE t(
+      col1 bigint primary key,
+      col2 varchar
+    )
+  )",
+                                       R"(
+    CREATE OR REPLACE VIEW "MyView" SQL SECURITY INVOKER AS SELECT arrayoverlap(array[col1], array[1,2,3]) as found_match FROM T
+  )"},
+                                      /*proto_descriptor_bytes=*/"",
+                                      database_api::DatabaseDialect::POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      CREATE TABLE T(
+        col1 INT64,
+        col2 STRING(MAX)
+      ) PRIMARY KEY(col1)
+    )",
+                                               R"(
+      CREATE OR REPLACE VIEW `MyView` SQL SECURITY INVOKER AS
+      SELECT ARRAY_INCLUDES(ARRAY[1,2,3], T.col1) AS found_match FROM T
+    )"}));
+  }
+
+  auto t = schema->FindTable("T");
+  ASSERT_NE(t, nullptr);
+
+  auto v = schema->FindView("Myview");
+  ASSERT_NE(v, nullptr);
+  EXPECT_EQ(schema->FindViewCaseSensitive("MyView"), v);
+  EXPECT_EQ(v->Name(), "MyView");
+  EXPECT_EQ(v->columns().size(), 1);
+  if (GetParam() == POSTGRESQL) {
+    ASSERT_TRUE(v->body_origin().has_value());
+    // For PG, the body_origin contains the original function while the body
+    // contains the rewritten function. We're not checking the body for PG
+    // because it's not important for this test.
+    EXPECT_THAT(absl::StripAsciiWhitespace(*v->body_origin()),
+                StrEq("SELECT arrayoverlap(ARRAY[col1], ARRAY['1'::bigint, "
+                      "'2'::bigint, '3'::bigint]) AS found_match FROM t"));
+  } else {
+    EXPECT_THAT(absl::StripAsciiWhitespace(v->body()),
+                StrEq("SELECT ARRAY_INCLUDES(ARRAY[1,2,3], T.col1) AS "
+                      "found_match FROM T"));
+  }
+}
 }  // namespace
 
 }  // namespace test

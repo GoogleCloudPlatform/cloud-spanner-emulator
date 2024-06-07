@@ -140,6 +140,10 @@ class QueryTest
                        {cloud::spanner::MakeNumeric("-12.3").value(), -1},
                        {cloud::spanner::MakeNumeric("0").value(), 0},
                        {cloud::spanner::MakeNumeric("12.3").value(), 1}}));
+      ZETASQL_ASSERT_OK(MultiInsert("array_table", {"key", "string_array"},
+                            {{1, Array<std::string>{"test1"}},
+                             {2, Array<std::string>{"not_applicable"}},
+                             {3, Array<std::string>{"test2"}}}));
     }
   }
 
@@ -919,6 +923,18 @@ TEST_P(QueryTest, UnnestWithOrdinality) {
            with ordinality as "$array2"(element2, index2)
            on index1 = index2 order by index1, index2)"),
               IsOkAndHoldsRows({{1, 1}, {2, 2}, {3, 3}}));
+}
+
+TEST_P(QueryTest, ArrayIncluesInGeneratedColumn) {
+  // Spanner PG doesn't support array_includes.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  PopulateDatabase();
+
+  EXPECT_THAT(
+      Query("SELECT key, has_not_applicable FROM array_table ORDER BY key"),
+      IsOkAndHoldsRows({{1, false}, {2, true}, {3, false}}));
 }
 
 }  // namespace

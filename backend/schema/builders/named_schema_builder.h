@@ -17,7 +17,9 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_NAMED_SCHEMA_BUILDER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_NAMED_SCHEMA_BUILDER_H_
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -74,6 +76,13 @@ class NamedSchema::Builder {
 
   Builder& add_sequence(const Sequence* sequence) {
     instance_->sequences_.push_back(sequence);
+    return *this;
+  }
+
+  Builder& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_postgresql_oid(postgresql_oid.value());
+    }
     return *this;
   }
 

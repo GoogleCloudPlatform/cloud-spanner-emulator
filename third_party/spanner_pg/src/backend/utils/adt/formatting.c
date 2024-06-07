@@ -3687,7 +3687,15 @@ DCH_from_char(FormatNode *node, const char *in, TmFromChar *out,
 						RETURN_ERROR(ereport(ERROR,
 											 (errcode(ERRCODE_INVALID_DATETIME_FORMAT),
 											  errmsg("invalid input string for \"Y,YYY\""))));
-					years += (millennia * 1000);
+					// SPANGRES BEGIN
+					// Updated calculation of the formula below, to protect against overflow.
+					// `years += (millennia * 1000);`
+					int tmp;
+					if (pg_mul_s32_overflow(millennia, 1000, &tmp) ||
+							pg_add_s32_overflow(tmp, years, &years)) {
+						years = -1;
+					}
+					// SPANGRES END
 					from_char_set_int(&out->year, years, n, have_error);
 					CHECK_ERROR;
 					out->yysz = 4;
@@ -4629,15 +4637,47 @@ do_to_timestamp(text *date_txt, text *fmt, Oid collid, bool std,
 			tm->tm_year = tmfc.year % 100;
 			if (tm->tm_year)
 			{
-				if (tmfc.cc >= 0)
-					tm->tm_year += (tmfc.cc - 1) * 100;
-				else
-					tm->tm_year = (tmfc.cc + 1) * 100 - tm->tm_year + 1;
+				if (tmfc.cc >= 0) {
+					// SPANGRES BEGIN
+					// Updated calculation of the formula below, to protect against overflow.
+					// `tm->tm_year += (tmfc.cc - 1) * 100;`
+					int tmp;
+					if (pg_mul_s32_overflow((tmfc.cc - 1), 100, &tmp) ||
+						 pg_add_s32_overflow(tm->tm_year, tmp, &tm->tm_year)) {
+						RETURN_ERROR(ereport(ERROR,
+												(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+												errmsg("timestamp out of range"))));
+					}
+					// SPANGRES END
+				} else {
+					// SPANGRES BEGIN
+					// Updated calculation of the formula below, to protect against overflow.
+					// `tm->tm_year = (tmfc.cc + 1) * 100 - tm->tm_year + 1;`
+					int tmp;
+					if (pg_mul_s32_overflow((tmfc.cc + 1), 100, &tmp) ||
+						  pg_sub_s32_overflow(tmp, tm->tm_year, &tmp) ||
+						  pg_add_s32_overflow(tmp, 1, &tm->tm_year)) {
+						RETURN_ERROR(ereport(ERROR,
+												(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+												errmsg("timestamp out of range"))));
+					}
+					// SPANGRES END
+				}
 			}
 			else
 			{
 				/* find century year for dates ending in "00" */
-				tm->tm_year = tmfc.cc * 100 + ((tmfc.cc >= 0) ? 0 : 1);
+				// SPANGRES BEGIN
+				// Updated calculation of the formula below, to protect against overflow.
+				// tm->tm_year = tmfc.cc * 100 + ((tmfc.cc >= 0) ? 0 : 1);
+				int tmp;
+				if (pg_mul_s32_overflow(tmfc.cc, 100, &tmp) ||
+					  pg_add_s32_overflow(tmp, ((tmfc.cc >= 0) ? 0 : 1), &tm->tm_year)) {
+						RETURN_ERROR(ereport(ERROR,
+												(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+												errmsg("timestamp out of range"))));
+				}
+				// SPANGRES END
 			}
 		}
 		else
@@ -4657,12 +4697,33 @@ do_to_timestamp(text *date_txt, text *fmt, Oid collid, bool std,
 		/* use first year of century */
 		if (tmfc.bc)
 			tmfc.cc = -tmfc.cc;
-		if (tmfc.cc >= 0)
+		if (tmfc.cc >= 0) {
 			/* +1 because 21st century started in 2001 */
-			tm->tm_year = (tmfc.cc - 1) * 100 + 1;
-		else
+			// SPANGRES BEGIN
+			// Updated calculation of the formula below, to protect against overflow.
+			// `tm->tm_year = (tmfc.cc - 1) * 100 + 1;`
+			int tmp;
+			if (pg_mul_s32_overflow((tmfc.cc - 1), 100, &tmp) ||
+				  pg_add_s32_overflow(tmp, 1, &tm->tm_year)) {
+				RETURN_ERROR(ereport(ERROR,
+										(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+										errmsg("timestamp out of range"))));
+			}
+			// SPANGRES END
+		} else {
 			/* +1 because year == 599 is 600 BC */
-			tm->tm_year = tmfc.cc * 100 + 1;
+			// SPANGRES BEGIN
+			// Updated calculation of the formula below, to protect against overflow.
+			// `tm->tm_year = tmfc.cc * 100 + 1;`
+			int tmp;
+			if (pg_mul_s32_overflow(tmfc.cc, 100, &tmp) ||
+				  pg_add_s32_overflow(tmp, 1, &tm->tm_year)) {
+				RETURN_ERROR(ereport(ERROR,
+										(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+										errmsg("timestamp out of range"))));
+			}
+			// SPANGRES END
+		}
 		fmask |= DTK_M(YEAR);
 	}
 
@@ -4686,8 +4747,17 @@ do_to_timestamp(text *date_txt, text *fmt, Oid collid, bool std,
 				isoweek2date(tmfc.ww, &tm->tm_year, &tm->tm_mon, &tm->tm_mday);
 			fmask |= DTK_DATE_M;
 		}
-		else
-			tmfc.ddd = (tmfc.ww - 1) * 7 + 1;
+		else {
+			// SPANGRES BEGIN
+			// Updated calculation of the formula below, to protect against overflow.
+			// `tmfc.ddd = (tmfc.ww - 1) * 7 + 1;`
+			int tmp;
+			if (pg_mul_s32_overflow((tmfc.ww - 1), 7, &tmp) ||
+					pg_add_s32_overflow(tmp, 1, &tmfc.ddd)) {
+				tmfc.ddd = -1;
+			}
+			// SPANGRES END
+		}
 	}
 
 	if (tmfc.w) {
@@ -4695,9 +4765,10 @@ do_to_timestamp(text *date_txt, text *fmt, Oid collid, bool std,
 		// Updated calculation of the formula below, to protect against overflow.
 		// If an overflow occurs, setting `tmfc.dd` to -1, will cause a failed
 		// validation before returning the result (see ValidateDate below).
-		// Original formula: `tmfc.dd = (tmfc.w - 1) * 7 + 1;`
-		if (pg_mul_s32_overflow((tmfc.w - 1), 7, &tmfc.dd) ||
-			  pg_add_s32_overflow(tmfc.dd, 1, &tmfc.dd)) {
+		// `tmfc.dd = (tmfc.w - 1) * 7 + 1;`
+		int tmp;
+		if (pg_mul_s32_overflow((tmfc.w - 1), 7, &tmp) ||
+			  pg_add_s32_overflow(tmp, 1, &tmfc.dd)) {
 			tmfc.dd = -1;
 		}
 		// SPANGRES END
@@ -4764,8 +4835,17 @@ do_to_timestamp(text *date_txt, text *fmt, Oid collid, bool std,
 		}
 	}
 
-	if (tmfc.ms)
-		*fsec += tmfc.ms * 1000;
+	if (tmfc.ms) {
+		// SPANGRES BEGIN
+		// Updated calculation of the formula below, to protect against overflow.
+		// `*fsec += tmfc.ms * 1000;`
+		int tmp;
+		if (pg_mul_s32_overflow(tmfc.ms, 1000, &tmp) ||
+			  pg_add_s32_overflow(*fsec, tmp, fsec)) {
+			*fsec = -1;
+		}
+		// SPANGRES END
+	}
 	if (tmfc.us)
 		*fsec += tmfc.us;
 	if (fprec)
@@ -6647,7 +6727,7 @@ float8_to_char(PG_FUNCTION_ARGS)
 		// sure to check for boundaries before converting.
 		double rounded_value = rint(value);
 		int int_value = 0;
-		if (rounded_value < INT_MIN || rounded_value > INT_MAX) {
+		if (rounded_value < INT_MIN || rounded_value > INT_MAX || isnan(rounded_value)) {
 			// sets the value to invalid roman numeral.
 			int_value = -1;
 		} else {

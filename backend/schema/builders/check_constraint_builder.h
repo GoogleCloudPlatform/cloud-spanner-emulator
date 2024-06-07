@@ -17,6 +17,9 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_CHECK_CONSTRAINT_BUILDER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_CHECK_CONSTRAINT_BUILDER_H_
 
+#include <cstdint>
+#include <optional>
+
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "backend/schema/catalog/check_constraint.h"
@@ -70,6 +73,13 @@ class CheckConstraint::Builder {
 
   Builder& set_table(const Table* table) {
     instance_->table_ = table;
+    return *this;
+  }
+
+  Builder& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
+    if (postgresql_oid.has_value()) {
+      instance_->set_postgresql_oid(postgresql_oid.value());
+    }
     return *this;
   }
 

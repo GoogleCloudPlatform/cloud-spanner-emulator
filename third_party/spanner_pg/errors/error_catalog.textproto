@@ -25,6 +25,11 @@ group {
     name: "MoreThanOneSubqueryColumn"
     pg_message_id: "subquery must return only one column"
   }
+
+  message {
+    name: "InvalidUnicodeSurrogatePair"
+    pg_message_id: "invalid Unicode surrogate pair"
+  }
 }
 
 group {
@@ -510,14 +515,20 @@ group {
   }
 
   message {
+    name: "InvalidUnicodeEscapeValue"
+    pg_message_id: "invalid Unicode escape value"
+  }
+
+  message {
     name: "NotAllowedMultipleLimitClauses"
     pg_message_id: "multiple LIMIT clauses not allowed"
   }
 
   message {
     name: "OnConflictClauseRequiresConstraintName"
-    pg_message_id: "ON CONFLICT DO UPDATE requires inference specification "
-    "or constraint name"
+    pg_message_id:
+      "ON CONFLICT DO UPDATE requires inference specification "
+      "or constraint name"
   }
 }
 

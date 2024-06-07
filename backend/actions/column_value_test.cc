@@ -56,12 +56,14 @@ using zetasql::values::Bytes;
 using zetasql::values::BytesArray;
 using zetasql::values::Date;
 using zetasql::values::Double;
+using zetasql::values::Float;
 using zetasql::values::Int64;
 using zetasql::values::Json;
 using zetasql::values::NullBool;
 using zetasql::values::NullBytes;
 using zetasql::values::NullDate;
 using zetasql::values::NullDouble;
+using zetasql::values::NullFloat;
 using zetasql::values::NullInt64;
 using zetasql::values::NullJson;
 using zetasql::values::NullNumeric;
@@ -77,6 +79,7 @@ struct Values {
   zetasql::Value int64_col = Int64(1);
   zetasql::Value bool_col = Bool(true);
   zetasql::Value date_col = Date(2);
+  zetasql::Value float_col = Float(2.0);
   zetasql::Value double_col = Double(2.0);
   zetasql::Value string_col = String("test");
   zetasql::Value bytes_col = Bytes("01234");
@@ -101,6 +104,7 @@ class ColumnValueTest : public test::ActionsTest {
             "int64_col INT64 NOT NULL",
             "bool_col BOOL NOT NULL",
             "date_col DATE NOT NULL",
+            "float_col FLOAT32 NOT NULL",
             "double_col FLOAT64 NOT NULL",
             "string_col STRING(MAX) NOT NULL",
             "bytes_col BYTES(MAX) NOT NULL",
@@ -128,6 +132,7 @@ class ColumnValueTest : public test::ActionsTest {
         ctx(),
         Insert(table_, Key({Int64(1)}), base_columns_,
                {values.int64_col, values.bool_col, values.date_col,
+                values.float_col,
                 values.double_col, values.string_col, values.bytes_col,
                 values.timestamp_col, values.array_string_col,
                 values.array_bytes_col, values.numeric_col, values.json_col}));
@@ -138,6 +143,7 @@ class ColumnValueTest : public test::ActionsTest {
         ctx(),
         Update(table_, Key({Int64(1)}), base_columns_,
                {values.int64_col, values.bool_col, values.date_col,
+                values.float_col,
                 values.double_col, values.string_col, values.bytes_col,
                 values.timestamp_col, values.array_string_col,
                 values.array_bytes_col, values.numeric_col, values.json_col}));
@@ -176,6 +182,14 @@ TEST_F(ColumnValueTest, ValidateNotNullColumns) {
   {
     Values values;
     values.date_col = NullDate();
+    EXPECT_THAT(ValidateInsert(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+    EXPECT_THAT(ValidateUpdate(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+  {
+    Values values;
+    values.float_col = NullFloat();
     EXPECT_THAT(ValidateInsert(values),
                 StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),
@@ -253,6 +267,14 @@ TEST_F(ColumnValueTest, ValidateColumnsAreCorrectTypes) {
   {
     Values values;
     values.date_col = String("");
+    EXPECT_THAT(ValidateInsert(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+    EXPECT_THAT(ValidateUpdate(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+  {
+    Values values;
+    values.float_col = String("");
     EXPECT_THAT(ValidateInsert(values),
                 StatusIs(absl::StatusCode::kFailedPrecondition));
     EXPECT_THAT(ValidateUpdate(values),

@@ -174,6 +174,15 @@ absl::Status AnalyzeColumnExpression(
     bool allow_volatile_expression) {
   zetasql::SimpleTable simple_table(table->Name(), name_and_types);
   zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
+
+  // ZetaSQL rewriting could rewrite scalar expressions into subquery.
+  // Disable all default enabled rewriting to check the original shape of
+  // user provided expression and ensure forward compatibility.
+  auto enabled_rewrites = options.enabled_rewrites();
+  for (auto enabled_rewrite : enabled_rewrites) {
+    options.enable_rewrite(enabled_rewrite, false);
+  }
+
   for (const auto& name_and_type : name_and_types) {
     ZETASQL_RETURN_IF_ERROR(
         options.AddExpressionColumn(name_and_type.first, name_and_type.second));
@@ -199,6 +208,7 @@ absl::Status AnalyzeColumnExpression(
       !validator.dependent_sequences().empty()) {
     *dependent_sequences = validator.dependent_sequences();
   }
+
   return absl::OkStatus();
 }
 

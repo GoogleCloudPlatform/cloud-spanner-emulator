@@ -236,6 +236,11 @@ absl::Status TableValidator::Validate(const Table* table,
   if (table->is_public()) {
     ZETASQL_RETURN_IF_ERROR(
         GlobalSchemaNames::ValidateSchemaName("Table", table->name_));
+    if (context->is_postgresql_dialect()) {
+      ZETASQL_RET_CHECK(table->postgresql_oid().has_value());
+    } else {
+      ZETASQL_RET_CHECK(!table->postgresql_oid().has_value());
+    }
     if (!table->synonym_.empty()) {
       ZETASQL_RETURN_IF_ERROR(
           GlobalSchemaNames::ValidateSchemaName("Synonym", table->synonym_));
@@ -431,6 +436,16 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
   // Name and ID should not change during cloning.
   ZETASQL_RET_CHECK_EQ(table->Name(), old_table->Name());
   ZETASQL_RET_CHECK_EQ(table->id(), old_table->id());
+
+  if (table->is_public() && context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(table->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(old_table->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK_EQ(table->postgresql_oid().value(),
+                 old_table->postgresql_oid().value());
+  } else {
+    ZETASQL_RET_CHECK(!table->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(!old_table->postgresql_oid().has_value());
+  }
 
   if (table->owner_change_stream_) {
     ZETASQL_RET_CHECK(!table->owner_change_stream_->is_deleted());

@@ -24,6 +24,7 @@
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
+#include "zetasql/base/ret_check.h"
 
 namespace google {
 namespace spanner {
@@ -78,6 +79,11 @@ const Column* FindDepColumnInCheckConstraintByName(
 absl::Status CheckConstraintValidator::Validate(
     const CheckConstraint* check_constraint, SchemaValidationContext* context) {
   ZETASQL_RET_CHECK_NE(check_constraint->table_, nullptr);
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(check_constraint->postgresql_oid().has_value());
+  } else {
+    ZETASQL_RET_CHECK(!check_constraint->postgresql_oid().has_value());
+  }
   // Validates check constraint name.
   // The constraint type is not present to be consistent with production code.
   ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateConstraintName(
@@ -120,6 +126,15 @@ absl::Status CheckConstraintValidator::ValidateUpdate(
       return error::CannotAlterColumnDataTypeWithDependentCheckConstraint(
           dep->Name(), check_constraint->Name());
     }
+  }
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(check_constraint->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(old_check_constraint->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK_EQ(check_constraint->postgresql_oid().value(),
+                 old_check_constraint->postgresql_oid().value());
+  } else {
+    ZETASQL_RET_CHECK(!check_constraint->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(!old_check_constraint->postgresql_oid().has_value());
   }
 
   return absl::OkStatus();

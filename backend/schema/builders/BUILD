@@ -40,6 +40,7 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//backend/schema/ddl:operations_cc_proto",
         "//backend/schema/graph:schema_node",
+        "//backend/schema/parser:ddl_parser",
         "//backend/schema/updater:schema_validation_context",
         "//backend/schema/validators:schema_validators",
         "@com_google_absl//absl/container:flat_hash_set",

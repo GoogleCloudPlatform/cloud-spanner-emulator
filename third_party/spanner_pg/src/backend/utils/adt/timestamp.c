@@ -1934,7 +1934,19 @@ tm2timestamp(struct pg_tm *tm, fsec_t fsec, int *tzp, Timestamp *result)
 	date = date2j(tm->tm_year, tm->tm_mon, tm->tm_mday) - POSTGRES_EPOCH_JDATE;
 	time = time2t(tm->tm_hour, tm->tm_min, tm->tm_sec, fsec);
 
-	*result = date * USECS_PER_DAY + time;
+	// SPANGRES BEGIN
+	// Executes the following operation with overflow protection
+	// *result = date * USECS_PER_DAY + time;
+	if (pg_mul_s64_overflow(date, USECS_PER_DAY, result)) {
+		*result = 0;
+		return -1;
+	}
+	if (pg_add_s64_overflow(*result, time, result)) {
+		*result = 0;
+		return -1;
+	}
+	// SPANGRES END
+
 	/* check for major overflow */
 	if ((*result - time) / USECS_PER_DAY != date)
 	{
@@ -4393,7 +4405,18 @@ isoweek2j(int year, int week)
 	/* day0 == offset to first day of week (Monday) */
 	day0 = j2day(day4 - 1);
 
-	return ((week - 1) * 7) + (day4 - day0);
+	// SPANGRES BEGIN
+	// Updated calculation of the formula below, to protect against overflow.
+	// `return ((week - 1) * 7) + (day4 - day0);`
+	int tmp;
+	if (pg_mul_s32_overflow((week - 1), 7, &tmp) ||
+		  pg_add_s32_overflow(tmp, (day4 - day0), &tmp)) {
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				errmsg("timestamp out of range")));
+	}
+	return tmp;
+	// SPANGRES END
 }
 
 /* isoweek2date()

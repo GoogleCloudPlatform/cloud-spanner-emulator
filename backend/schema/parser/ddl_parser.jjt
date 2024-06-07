@@ -240,6 +240,7 @@ void column_type() :
 {}
 {
     <FLOAT64>
+  | <FLOAT32>
   | <INT64>
   | <BOOL>
   | <STRING> "(" column_length() #length ")"
@@ -250,6 +251,7 @@ void column_type() :
   | <PG> "." qualified_identifier() #pgtype
   | <JSON>
   | <ARRAY> "<" column_type() ">"
+      [ "(" <VECTOR_LENGTH> "="">" <INTEGER_LITERAL> #vector_length ")"]
 
   | <STRUCT> ( "<" struct_fields() ">" | "<>" )
   | dotted_path()

@@ -29,9 +29,12 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
+#include <cmath>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "absl/status/status.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
 #include "third_party/spanner_pg/interface/formatting_evaluators.h"
 
@@ -250,6 +253,11 @@ TEST_F(Float8ToCharTest, MsanViolationTest) {
               IsOkAndHolds(StrEq("##########.####")));
   EXPECT_THAT(Float8ToChar(12345678901, "FM9999999999D9999900000000000000000"),
               IsOkAndHolds(StrEq("##########.####")));
+}
+
+TEST_F(Float8ToCharTest, AsanViolationTest) {
+  EXPECT_THAT(Float8ToChar(std::nan(""), "rn"),
+              IsOkAndHolds(StrEq("###############")));
 }
 
 TEST_F(Float8ToCharTest, ReturnsErrorWhenFormatIsInvalid) {

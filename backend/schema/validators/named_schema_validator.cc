@@ -51,6 +51,11 @@ std::vector<std::string> GetObjectNames(absl::Span<const T* const> objects) {
 absl::Status NamedSchemaValidator::Validate(const NamedSchema* named_schema,
                                             SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!named_schema->name_.empty());
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(named_schema->postgresql_oid().has_value());
+  } else {
+    ZETASQL_RET_CHECK(!named_schema->postgresql_oid().has_value());
+  }
   ZETASQL_RETURN_IF_ERROR(
       GlobalSchemaNames::ValidateSchemaName("Schema", named_schema->name_));
   return absl::OkStatus();
@@ -75,6 +80,15 @@ absl::Status NamedSchemaValidator::ValidateUpdate(
 
   ZETASQL_RET_CHECK_EQ(named_schema->Name(), old_named_schema->Name());
   ZETASQL_RET_CHECK_EQ(named_schema->id(), old_named_schema->id());
+  if (context->is_postgresql_dialect()) {
+    ZETASQL_RET_CHECK(named_schema->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(old_named_schema->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK_EQ(named_schema->postgresql_oid().value(),
+                 old_named_schema->postgresql_oid().value());
+  } else {
+    ZETASQL_RET_CHECK(!named_schema->postgresql_oid().has_value());
+    ZETASQL_RET_CHECK(!old_named_schema->postgresql_oid().has_value());
+  }
   return absl::OkStatus();
 }
 

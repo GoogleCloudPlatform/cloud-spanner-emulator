@@ -68,11 +68,16 @@ class CommitTimestamps : public DatabaseTest {
             Name         STRING(MAX),
           ) PRIMARY KEY (ID, CommitTS DESC)
         )",
+        // A generated column and check constraint are included to ensure the
+        // associated effectors do not trigger pending commit timestamp
+        // restrictions by unnecessarily reading all columns.
         R"(
           CREATE TABLE CommitTimestampTable(
             ID           INT64,
             CommitTS     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
             Name         STRING(MAX),
+            NameCopy     STRING(MAX) AS (Name) STORED,
+            CONSTRAINT name_non_empty CHECK (Name != '')
           ) PRIMARY KEY (ID)
         )",
         R"(

@@ -50,23 +50,41 @@ namespace postgres_translator {
 namespace {
 
 static constexpr char kDefaultSchema[] = "public";
+static constexpr char kPGAm[] = "pg_am";
+static constexpr char kPGAttrdef[] = "pg_attrdef";
+static constexpr char kPGAttribute[] = "pg_attribute";
 static constexpr char kPGAvailableExtensionVersions[] =
     "pg_available_extension_versions";
 static constexpr char kPGAvailableExtensions[] = "pg_available_extensions";
 static constexpr char kPGBackendMemoryContexts[] = "pg_backend_memory_contexts";
+static constexpr char kPGClass[] = "pg_class";
+static constexpr char kPGCollation[] = "pg_collation";
 static constexpr char kPGConfig[] = "pg_config";
+static constexpr char kPGConstraint[] = "pg_constraint";
 static constexpr char kPGCursors[] = "pg_cursors";
+static constexpr char kPGDescription[] = "pg_description";
+static constexpr char kPGEnum[] = "pg_enum";
+static constexpr char kPGExtension[] = "pg_extension";
 static constexpr char kPGFileSettings[] = "pg_file_settings";
 static constexpr char kPGHbaFileRules[] = "pg_hba_file_rules";
+static constexpr char kPGIndex[] = "pg_index";
 static constexpr char kPGIndexes[] = "pg_indexes";
+static constexpr char kPGLanguage[] = "pg_language";
 static constexpr char kPGMatviews[] = "pg_matviews";
+static constexpr char kPGNamespace[] = "pg_namespace";
 static constexpr char kPGPolicies[] = "pg_policies";
 static constexpr char kPGPreparedXacts[] = "pg_prepared_xacts";
+static constexpr char kPGProc[] = "pg_proc";
 static constexpr char kPGPublicationTables[] = "pg_publication_tables";
+static constexpr char kPGRange[] = "pg_range";
+static constexpr char kPGRoles[] = "pg_roles";
 static constexpr char kPGRules[] = "pg_rules";
+static constexpr char kPGSequence[] = "pg_sequence";
+static constexpr char kPGSequences[] = "pg_sequences";
 static constexpr char kPGSettings[] = "pg_settings";
 static constexpr char kPGShmemAllocations[] = "pg_shmem_allocations";
 static constexpr char kPGTables[] = "pg_tables";
+static constexpr char kPGType[] = "pg_type";
 static constexpr char kPGViews[] = "pg_views";
 
 using google::spanner::emulator::backend::Index;
@@ -84,22 +102,40 @@ using ::zetasql::values::StringArray;
 
 static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
     kSupportedTables{{
+        kPGAm,
+        kPGAttrdef,
+        kPGAttribute,
         kPGAvailableExtensionVersions,
         kPGAvailableExtensions,
         kPGBackendMemoryContexts,
+        kPGClass,
+        kPGCollation,
         kPGConfig,
+        kPGConstraint,
         kPGCursors,
+        kPGDescription,
+        kPGEnum,
+        kPGExtension,
         kPGFileSettings,
         kPGHbaFileRules,
+        kPGIndex,
         kPGIndexes,
+        kPGLanguage,
         kPGMatviews,
+        kPGNamespace,
         kPGPolicies,
         kPGPreparedXacts,
+        kPGProc,
         kPGPublicationTables,
+        kPGRange,
+        kPGRoles,
         kPGRules,
+        kPGSequence,
+        kPGSequences,
         kPGSettings,
         kPGShmemAllocations,
         kPGTables,
+        kPGType,
         kPGViews,
     }};
 
@@ -115,8 +151,6 @@ PGCatalog::PGCatalog(const Schema* default_schema)
   tables_by_name_ = AddTablesFromMetadata(
       PGCatalogColumnsMetadata(), *kSpannerPGTypeToGSQLType, *kSupportedTables);
   for (auto& [name, table] : tables_by_name_) {
-    std::vector<std::vector<zetasql::Value>> empty;
-    table.get()->SetContents(empty);
     AddTable(table.get());
   }
 

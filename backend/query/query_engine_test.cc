@@ -96,6 +96,10 @@ testing::Matcher<const zetasql::Type*> BoolType() {
   return Property(&zetasql::Type::IsBool, IsTrue());
 }
 
+testing::Matcher<const zetasql::Type*> Float32Type() {
+  return Property(&zetasql::Type::IsFloat, IsTrue());
+}
+
 testing::Matcher<const zetasql::Type*> Float64Type() {
   return Property(&zetasql::Type::IsDouble, IsTrue());
 }
@@ -409,6 +413,31 @@ TEST_P(QueryEngineTest, DetectsDMLQueries) {
   EXPECT_FALSE(IsDMLQuery("SELECT * from Users"));
 }
 
+TEST_P(QueryEngineTest, CallCancelQuery) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // TODO: b/314327062 - Enable for PGSQL once support is added.
+    GTEST_SKIP();
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"CALL cancel_query('123')"},
+                                QueryContext{schema(), reader()},
+                                v1::ExecuteSqlRequest::NORMAL));
+  ASSERT_NE(result.rows, nullptr);
+}
+
+TEST_P(QueryEngineTest, CallWrongProcedure) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // This test will be enabled for Psql once the support for
+    // query cancellation is in Psql is completed.
+    GTEST_SKIP();
+  }
+  absl::StatusOr<QueryResult> status_or = query_engine().ExecuteSql(
+      Query{"CALL wrong_procedure('123')"}, QueryContext{schema(), reader()},
+      v1::ExecuteSqlRequest::NORMAL);
+  ASSERT_THAT(status_or.status(), StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 TEST_P(QueryEngineTest, ExecuteSqlSelectsOneFromTable) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,
@@ -711,6 +740,23 @@ TEST_P(QueryEngineTest, PlanSqlRecognizesAllParameterTypes) {
                   TimestampType(), DateType()));
 }
 
+TEST_P(QueryEngineTest, PlanSqlRecognizesFloat32Types) {
+  Query query;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = Query{"SELECT cast($1 as float4) as float32_param;"};
+  } else {
+    query = Query{"SELECT cast(@p1 as float32) as float32_param;"};
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{schema(), reader()},
+                                v1::ExecuteSqlRequest::PLAN));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetParamNames(result), ElementsAre("p1"));
+  EXPECT_THAT(GetParamTypes(result), ElementsAre(Float32Type()));
+}
+
 TEST_P(QueryEngineTest, PlanSqlAcceptsIncompleteParameters) {
   Query query;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
@@ -952,30 +998,6 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlFlagDisabled) {
   }
 }
 
-TEST_P(QueryEngineTest, InsertOrIgnoreDmlWithReturning) {
-  MockRowWriter writer;
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    EXPECT_THAT(
-        query_engine().ExecuteSql(
-            Query{"INSERT OR IGNORE INTO test_table (int64_col) VALUES(1) "
-                  "THEN RETURN *"},
-            QueryContext{schema(), reader(), &writer}),
-        StatusIs(
-            absl::StatusCode::kUnimplemented,
-            HasSubstr("Returning clause in Insert or ignore statement is not "
-                      "supported in Emulator")));
-  } else {
-    EXPECT_THAT(
-        query_engine().ExecuteSql(
-            Query{"INSERT INTO test_table (int64_col) VALUES(1) "
-                  "ON CONFLICT(int64_col) DO NOTHING RETURNING *"},
-            QueryContext{schema(), reader(), &writer}),
-        StatusIs(
-            absl::StatusCode::kUnimplemented,
-            HasSubstr("RETURNING with ON CONFLICT clause is not supported")));
-  }
-}
-
 TEST_P(QueryEngineTest, InsertOrUpdateDmlFlagDisabled) {
   test::ScopedEmulatorFeatureFlagsSetter setter(
       {.enable_upsert_queries = false});
@@ -1000,31 +1022,6 @@ TEST_P(QueryEngineTest, InsertOrUpdateDmlFlagDisabled) {
             absl::StatusCode::kUnimplemented,
             HasSubstr(
                 "Insert or update statement is not supported in Emulator")));
-  }
-}
-
-TEST_P(QueryEngineTest, InsertOrUpdateDmlWithReturning) {
-  MockRowWriter writer;
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    EXPECT_THAT(
-        query_engine().ExecuteSql(
-            Query{"INSERT OR UPDATE INTO test_table (int64_col) VALUES(1) "
-                  "THEN RETURN *"},
-            QueryContext{schema(), reader(), &writer}),
-        StatusIs(
-            absl::StatusCode::kUnimplemented,
-            HasSubstr("Returning clause in Insert or update statement is not "
-                      "supported in Emulator")));
-  } else {
-    EXPECT_THAT(
-        query_engine().ExecuteSql(
-            Query{"INSERT INTO test_table (int64_col) VALUES(1) "
-                  "ON CONFLICT(int64_col) DO UPDATE "
-                  "SET int64_col = excluded.int64_col RETURNING *"},
-            QueryContext{schema(), reader(), &writer}),
-        StatusIs(
-            absl::StatusCode::kUnimplemented,
-            HasSubstr("RETURNING with ON CONFLICT clause is not supported")));
   }
 }
 
