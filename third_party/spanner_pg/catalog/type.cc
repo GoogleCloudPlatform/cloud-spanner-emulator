@@ -35,6 +35,7 @@
 
 #include "zetasql/base/logging.h"
 #include "zetasql/public/functions/date_time_util.h"
+#include "zetasql/public/interval_value.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/types/extended_type.h"
 #include "zetasql/public/types/type.h"
@@ -443,6 +444,51 @@ class PostgresDateMapping : public PostgresTypeMapping {
   }
 };
 
+class PostgresIntervalMapping : public PostgresTypeMapping {
+ public:
+  explicit PostgresIntervalMapping(const zetasql::TypeFactory* factory)
+      : PostgresTypeMapping(factory, INTERVALOID) {}
+
+  const zetasql::Type* mapped_type() const override {
+    return zetasql::types::IntervalType();
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValue(
+      const Const* pg_const) const override {
+    if (pg_const->constisnull) {
+      return zetasql::Value::NullInterval();
+    }
+
+    Interval* interval = DatumGetIntervalP(pg_const->constvalue);
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval_value,
+                     zetasql::IntervalValue::FromMonthsDaysMicros(
+                         interval->month, interval->day, interval->time));
+    return zetasql::Value::Interval(interval_value);
+  }
+
+  absl::StatusOr<Const*> MakePgConst(
+      const zetasql::Value& value) const override {
+    zetasql::IntervalValue interval_value =
+        (!value.is_null() ? value.interval_value()
+                          : zetasql::IntervalValue());
+
+    ZETASQL_ASSIGN_OR_RETURN(void* p, CheckedPgPalloc(sizeof(Interval)));
+    Interval* interval = reinterpret_cast<Interval*>(p);
+    interval->month = static_cast<int>(interval_value.get_months());
+    interval->day = static_cast<int>(interval_value.get_days());
+    interval->time = interval_value.get_micros();
+
+    return CheckedPgMakeConst(
+        /*consttype=*/INTERVALOID,
+        /*consttypmod=*/-1,
+        /*constcollid=*/InvalidOid,
+        /*constlen=*/sizeof(Interval),
+        /*constvalue=*/IntervalPGetDatum(interval),
+        /*constisnull=*/value.is_null(),
+        /*constbyval=*/false);
+  }
+};
+
 absl::StatusOr<zetasql::Value> PostgresExtendedArrayMapping::MakeGsqlValue(
     const Const* pg_const) const {
   // Technically this means we support multi-dimensional NULL arrays, but PG
@@ -654,6 +700,12 @@ const PostgresTypeMapping* PgDateMapping() {
   return s_pg_date_mapping.get();
 }
 
+const PostgresTypeMapping* PgIntervalMapping() {
+  static const zetasql_base::NoDestructor<PostgresIntervalMapping>
+      s_pg_interval_mapping(GetTypeFactory());
+  return s_pg_interval_mapping.get();
+}
+
 // Supported Array Types.
 const PostgresTypeMapping* PgBoolArrayMapping() {
   static const zetasql_base::NoDestructor<PostgresExtendedArrayMapping>
@@ -747,6 +799,16 @@ const PostgresTypeMapping* PgDateArrayMapping() {
   return s_pg_date_array_mapping.get();
 }
 
+const PostgresTypeMapping* PgIntervalArrayMapping() {
+  static const zetasql_base::NoDestructor<PostgresExtendedArrayMapping>
+      s_pg_interval_array_mapping(
+          /*type_factory=*/GetTypeFactory(),
+          /*array_type_oid=*/INTERVALARRAYOID,
+          /*element_type=*/types::PgIntervalMapping(),
+          /*mapped_type=*/zetasql::types::IntervalArrayType(),
+          /*requires_nan_handling=*/false);
+  return s_pg_interval_array_mapping.get();
+}
 }  // namespace types
 
 }  // namespace postgres_translator

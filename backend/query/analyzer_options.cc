@@ -71,6 +71,7 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL,
       zetasql::FEATURE_JSON_TYPE,
       zetasql::FEATURE_JSON_ARRAY_FUNCTIONS,
+      zetasql::FEATURE_JSON_CONSTRUCTOR_FUNCTIONS,
       zetasql::FEATURE_JSON_STRICT_NUMBER_PARSING,
       zetasql::FEATURE_JSON_VALUE_EXTRACTION_FUNCTIONS,
       zetasql::FEATURE_JSON_LAX_VALUE_EXTRACTION_FUNCTIONS,

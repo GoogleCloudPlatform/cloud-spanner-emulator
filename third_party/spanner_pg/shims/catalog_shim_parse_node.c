@@ -94,7 +94,7 @@ void free_parsestate(ParseState* pstate) {
 /*
  * make_const
  *
- *	Convert a Value node (as returned by the grammar) to a Const node
+ *	Convert a A_Const value (as returned by the grammar) to a Const node
  *	of the "natural" type for the constant.  Note that this routine is
  *	only used when there is no explicit cast for the constant, so we
  *	have to guess what type is wanted.
@@ -113,20 +113,35 @@ void free_parsestate(ParseState* pstate) {
  * (never int4) for floats. 
  */
 Const *
-make_const(ParseState *pstate, Value *value, int location)
+make_const(ParseState* pstate, A_Const* aconst)
 {
 	Const	   *con;
 	Datum		val;
 	int64_t		val64;
+	char		*endptr;
 	Oid			typeid;
 	int			typelen;
 	bool		typebyval;
 	ParseCallbackState pcbstate;
 
-	switch (nodeTag(value))
+	if (aconst->isnull)
+	{
+		/* return a null const */
+		con = makeConst(UNKNOWNOID,
+						-1,
+						InvalidOid,
+						-2,
+						(Datum) 0,
+						true,
+						false);
+		con->location = aconst->location;
+		return con;
+	}
+
+	switch (nodeTag(&aconst->val))
 	{
 		case T_Integer:
-			val = Int64GetDatum(intVal(value));
+			val = Int64GetDatum(intVal(&aconst->val));
 
 			typeid = INT8OID;
 			typelen = sizeof(int64_t);
@@ -135,7 +150,9 @@ make_const(ParseState *pstate, Value *value, int location)
 
 		case T_Float:
 			/* could be an oversize integer as well as a float ... */
-			if (scanint8(strVal(value), true, &val64))
+			errno = 0;
+			val64 = strtoi64(aconst->val.fval.fval, &endptr, 10);
+			if (errno == 0 && *endptr == '\0')
 			{
 				/* SPANGRES: skip checking if the value fits in an int32_t. */
 				val = Int64GetDatum(val64);
@@ -147,9 +164,9 @@ make_const(ParseState *pstate, Value *value, int location)
 			else
 			{
 				/* arrange to report location if numeric_in() fails */
-				setup_parser_errposition_callback(&pcbstate, pstate, location);
+				setup_parser_errposition_callback(&pcbstate, pstate, aconst->location);
 				val = DirectFunctionCall3(numeric_in,
-										  CStringGetDatum(strVal(value)),
+										  CStringGetDatum(aconst->val.fval.fval),
 										  ObjectIdGetDatum(InvalidOid),
 										  Int32GetDatum(-1));
 				cancel_parser_errposition_callback(&pcbstate);
@@ -160,13 +177,21 @@ make_const(ParseState *pstate, Value *value, int location)
 			}
 			break;
 
+		case T_Boolean:
+			val = BoolGetDatum(boolVal(&aconst->val));
+
+			typeid = BOOLOID;
+			typelen = 1;
+			typebyval = true;
+			break;
+
 		case T_String:
 
 			/*
 			 * We assume here that UNKNOWN's internal representation is the
 			 * same as CSTRING
 			 */
-			val = CStringGetDatum(strVal(value));
+			val = CStringGetDatum(strVal(&aconst->val));
 
 			typeid = UNKNOWNOID;	/* will be coerced later */
 			typelen = -2;		/* cstring-style varwidth type */
@@ -175,9 +200,9 @@ make_const(ParseState *pstate, Value *value, int location)
 
 		case T_BitString:
 			/* arrange to report location if bit_in() fails */
-			setup_parser_errposition_callback(&pcbstate, pstate, location);
+			setup_parser_errposition_callback(&pcbstate, pstate, aconst->location);
 			val = DirectFunctionCall3(bit_in,
-									  CStringGetDatum(strVal(value)),
+									  CStringGetDatum(aconst->val.bsval.bsval),
 									  ObjectIdGetDatum(InvalidOid),
 									  Int32GetDatum(-1));
 			cancel_parser_errposition_callback(&pcbstate);
@@ -186,20 +211,8 @@ make_const(ParseState *pstate, Value *value, int location)
 			typebyval = false;
 			break;
 
-		case T_Null:
-			/* return a null const */
-			con = makeConst(UNKNOWNOID,
-							-1,
-							InvalidOid,
-							-2,
-							(Datum) 0,
-							true,
-							false);
-			con->location = location;
-			return con;
-
 		default:
-			elog(ERROR, "unrecognized node type: %d", (int) nodeTag(value));
+			elog(ERROR, "unrecognized node type: %d", (int) nodeTag(&aconst->val));
 			return NULL;		/* keep compiler quiet */
 	}
 
@@ -210,7 +223,7 @@ make_const(ParseState *pstate, Value *value, int location)
 					val,
 					false,
 					typebyval);
-	con->location = location;
+	con->location = aconst->location;
 
 	return con;
 }

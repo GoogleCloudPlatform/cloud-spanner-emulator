@@ -15,7 +15,6 @@
 //
 
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -39,10 +38,7 @@
 #include "google/cloud/spanner/timestamp.h"
 #include "common/clock.h"
 #include "tests/common/change_streams.h"
-#include "tests/common/chunking.h"
 #include "tests/conformance/common/database_test_base.h"
-#include "grpcpp/client_context.h"
-#include "grpcpp/support/sync_stream.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -94,7 +90,7 @@ class ChangeStreamTest : public DatabaseTest {
             boolVal BOOL,
             bytesVal BYTES(MAX),
             dateVal DATE,
-            floatVal FLOAT64,
+            float64Val FLOAT64,
             stringVal STRING(MAX),
             numericVal NUMERIC,
             timestampVal TIMESTAMP,
@@ -102,6 +98,7 @@ class ChangeStreamTest : public DatabaseTest {
             arrayInt ARRAY<INT64>,
             arrayStr ARRAY<STRING(MAX)>,
             arrayJson ARRAY<JSON>,
+            float32Val FLOAT32,
           ) PRIMARY KEY(intVal)
         )",
         R"(
@@ -110,11 +107,11 @@ class ChangeStreamTest : public DatabaseTest {
             boolVal BOOL,
             bytesVal BYTES(MAX),
             dateVal DATE,
-            floatVal FLOAT64,
+            float64Val FLOAT64,
             stringVal STRING(MAX),
             numericVal NUMERIC,
             timestampVal TIMESTAMP,
-          ) PRIMARY KEY(intVal,boolVal,bytesVal,dateVal,floatVal,stringVal,numericVal,timestampVal)
+          ) PRIMARY KEY(intVal,boolVal,bytesVal,dateVal,float64Val,stringVal,numericVal,timestampVal)
         )",
         R"(
            CREATE TABLE ASTable (
@@ -140,89 +137,29 @@ class ChangeStreamTest : public DatabaseTest {
           CREATE CHANGE STREAM StreamSpecifiedColumns FOR Users2(Name,Age)
         )",
     }));
-    ZETASQL_ASSIGN_OR_RETURN(test_session_uri_, CreateTestSession());
+    ZETASQL_ASSIGN_OR_RETURN(test_session_uri_,
+                     CreateTestSession(raw_client(), database()));
     return absl::OkStatus();
   }
 
  protected:
   std::string test_session_uri_;
-  // Creates a new session for tests using raw grpc client.
-  absl::StatusOr<std::string> CreateTestSession() {
-    grpc::ClientContext context;
-    spanner_api::CreateSessionRequest request;
-    spanner_api::Session response;
-    request.set_database(database()->FullName());
-    ZETASQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
-    return response.name();
-  }
-
-  absl::Status ReadFromClientReader(
-      std::unique_ptr<grpc::ClientReader<spanner_api::PartialResultSet>> reader,
-      std::vector<spanner_api::PartialResultSet>* response) {
-    response->clear();
-    spanner_api::PartialResultSet result;
-    while (reader->Read(&result)) {
-      response->push_back(result);
-    }
-    return reader->Finish();
-  }
-
-  absl::StatusOr<test::ChangeStreamRecords> ExecuteChangeStreamQuery(
-      std::string sql) {
-    // Build the request that will be executed.
-    spanner_api::ExecuteSqlRequest request;
-    request.mutable_transaction()
-        ->mutable_single_use()
-        ->mutable_read_only()
-        ->set_strong(true);
-    *request.mutable_sql() = sql;
-    request.set_session(test_session_uri_);
-
-    // Execute the tvf query with ExecuteStreamingSql API.
-    std::vector<spanner_api::PartialResultSet> response;
-    grpc::ClientContext context;
-    auto client_reader = raw_client()->ExecuteStreamingSql(&context, request);
-    ZETASQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
-
-    ZETASQL_ASSIGN_OR_RETURN(auto result_set, backend::test::MergePartialResultSets(
-                                          response, /*columns_per_row=*/1));
-    ZETASQL_ASSIGN_OR_RETURN(ChangeStreamRecords change_records,
-                     GetChangeStreamRecordsFromResultSet(result_set));
-    return change_records;
-  }
-
-  absl::StatusOr<std::vector<std::string>> GetActiveTokenFromInitialQuery(
-      absl::Time start, std::string change_stream_name) {
-    std::vector<std::string> active_tokens;
-    std::string sql = absl::Substitute(
-        "SELECT * FROM "
-        "READ_$0 ('$1',NULL, NULL, 300000 )",
-        change_stream_name, start);
-    ZETASQL_ASSIGN_OR_RETURN(test::ChangeStreamRecords change_records,
-                     ExecuteChangeStreamQuery(sql));
-    for (const auto& child_partition_record :
-         change_records.child_partition_records) {
-      for (const auto& child_partition :
-           child_partition_record.child_partitions.values()) {
-        active_tokens.push_back(
-            child_partition.list_value().values(0).string_value());
-      }
-    }
-    return active_tokens;
-  }
 
   absl::StatusOr<std::vector<DataChangeRecord>> GetDataRecordsFromStartToNow(
       absl::Time start, std::string change_stream_name) {
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<std::string> active_tokens,
-                     GetActiveTokenFromInitialQuery(start, change_stream_name));
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::vector<std::string> active_tokens,
+        GetActiveTokenFromInitialQuery(start, change_stream_name,
+                                       test_session_uri_, raw_client()));
     std::vector<DataChangeRecord> merged_data_change_records;
     for (const auto& partition_token : active_tokens) {
       std::string sql = absl::Substitute(
           "SELECT * FROM "
           "READ_$0 ('$1','$2', '$3', 300000 )",
           change_stream_name, start, Clock().Now(), partition_token);
-      ZETASQL_ASSIGN_OR_RETURN(test::ChangeStreamRecords change_records,
-                       ExecuteChangeStreamQuery(sql));
+      ZETASQL_ASSIGN_OR_RETURN(
+          test::ChangeStreamRecords change_records,
+          ExecuteChangeStreamQuery(sql, test_session_uri_, raw_client()));
       merged_data_change_records.insert(
           merged_data_change_records.end(),
           change_records.data_change_records.begin(),
@@ -973,14 +910,13 @@ TEST_F(ChangeStreamTest, DeleteRowNotExisting) {
 TEST_F(ChangeStreamTest, DiffDataTypesInKey) {
   auto mutation_builder_insert_friends = InsertMutationBuilder(
       "ScalarTypesAllKeysTable",
-      {"intVal", "boolVal", "bytesVal", "dateVal", "floatVal", "stringVal",
+      {"intVal", "boolVal", "bytesVal", "dateVal", "float64Val", "stringVal",
        "numericVal", "timestampVal"});
   std::vector<ValueRow> rows = {
       {1, true,
        cloud::spanner::Bytes(
            cloud::spanner_internal::BytesFromBase64("blue").value()),
-       "2014-09-27", (float)1.1, "stringVal",
-       cloud::spanner::MakeNumeric("1").value(),
+       "2014-09-27", 1.1, "stringVal", cloud::spanner::MakeNumeric("1").value(),
        cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value()}};
   for (const auto& row : rows) {
     mutation_builder_insert_friends.AddRow(row);
@@ -1033,7 +969,7 @@ TEST_F(ChangeStreamTest, DiffDataTypesInKey) {
                 }
                 values {
                   list_value {
-                    values { string_value: "floatVal" }
+                    values { string_value: "float64Val" }
                     values { string_value: "{\"code\":\"FLOAT64\"}" }
                     values { bool_value: true }
                     values { string_value: "5" }
@@ -1071,7 +1007,7 @@ TEST_F(ChangeStreamTest, DiffDataTypesInKey) {
           R"pb(values {
                  list_value {
                    values {
-                     string_value: "{\"boolVal\":true,\"bytesVal\":\"blue\",\"dateVal\":\"2014-09-27\",\"floatVal\":1.100000023841858,\"intVal\":\"1\",\"numericVal\":\"1\",\"stringVal\":\"stringVal\",\"timestampVal\":\"1970-01-01T00:00:00Z\"}"
+                     string_value: "{\"boolVal\":true,\"bytesVal\":\"blue\",\"dateVal\":\"2014-09-27\",\"float64Val\":1.1,\"intVal\":\"1\",\"numericVal\":\"1\",\"stringVal\":\"stringVal\",\"timestampVal\":\"1970-01-01T00:00:00Z\"}"
                    }
                    values { string_value: "{}" }
                    values { string_value: "{}" }
@@ -3317,9 +3253,9 @@ TEST_F(ChangeStreamTest, RangeDeleteExistingRows) {
 TEST_F(ChangeStreamTest, DiffDataTypes) {
   auto mutation_builder_insert_friends = InsertMutationBuilder(
       "ScalarTypesTable",
-      {"intVal", "boolVal", "bytesVal", "dateVal", "floatVal", "stringVal",
+      {"intVal", "boolVal", "bytesVal", "dateVal", "float64Val", "stringVal",
        "numericVal", "timestampVal", "jsonVal", "arrayInt", "arrayStr",
-       "arrayJson"});
+       "arrayJson", "float32Val"});
   Array<Numeric> numeric_arr{cloud::spanner::MakeNumeric("1").value(),
                              cloud::spanner::MakeNumeric("2").value(),
                              cloud::spanner::MakeNumeric("3").value()};
@@ -3330,10 +3266,9 @@ TEST_F(ChangeStreamTest, DiffDataTypes) {
       {1, true,
        cloud::spanner::Bytes(
            cloud::spanner_internal::BytesFromBase64("blue").value()),
-       "2014-09-27", (float)1.1, "stringVal",
-       cloud::spanner::MakeNumeric("1").value(),
+       "2014-09-27", 1.1, "stringVal", cloud::spanner::MakeNumeric("1").value(),
        cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value(),
-       Json(R"("Hello world!")"), num_arr, str_arr, json_arr}};
+       Json(R"("Hello world!")"), num_arr, str_arr, json_arr, 3.14f}};
   for (const auto& row : rows) {
     mutation_builder_insert_friends.AddRow(row);
   }
@@ -3386,7 +3321,7 @@ TEST_F(ChangeStreamTest, DiffDataTypes) {
         }
         values {
           list_value {
-            values { string_value: "floatVal" }
+            values { string_value: "float64Val" }
             values { string_value: "{\"code\":\"FLOAT64\"}" }
             values { bool_value: false }
             values { string_value: "5" }
@@ -3453,7 +3388,16 @@ TEST_F(ChangeStreamTest, DiffDataTypes) {
             values { bool_value: false }
             values { string_value: "12" }
           }
-        })pb"));
+        }
+        values {
+          list_value {
+            values { string_value: "float32Val" }
+            values { string_value: "{\"code\":\"FLOAT32\"}" }
+            values { bool_value: false }
+            values { string_value: "13" }
+          }
+        }
+      )pb"));
   // mods
   EXPECT_THAT(
       data_change_records[0].mods,
@@ -3462,7 +3406,7 @@ TEST_F(ChangeStreamTest, DiffDataTypes) {
                  list_value {
                    values { string_value: "{\"intVal\":\"1\"}" }
                    values {
-                     string_value: "{\"arrayInt\":[\"1\",\"2\",\"3\"],\"arrayJson\":[\"\\\"Hello\\\"\",\"\\\"Hi\\\"\"],\"arrayStr\":[\"Hello\",\"Hi\"],\"boolVal\":true,\"bytesVal\":\"blue\",\"dateVal\":\"2014-09-27\",\"floatVal\":1.100000023841858,\"jsonVal\":\"\\\"Hello world!\\\"\",\"numericVal\":\"1\",\"stringVal\":\"stringVal\",\"timestampVal\":\"1970-01-01T00:00:00Z\"}"
+                     string_value: "{\"arrayInt\":[\"1\",\"2\",\"3\"],\"arrayJson\":[\"\\\"Hello\\\"\",\"\\\"Hi\\\"\"],\"arrayStr\":[\"Hello\",\"Hi\"],\"boolVal\":true,\"bytesVal\":\"blue\",\"dateVal\":\"2014-09-27\",\"float32Val\":3.140000104904175,\"float64Val\":1.1,\"jsonVal\":\"\\\"Hello world!\\\"\",\"numericVal\":\"1\",\"stringVal\":\"stringVal\",\"timestampVal\":\"1970-01-01T00:00:00Z\"}"
                    }
                    values { string_value: "{}" }
                  }

@@ -1,13 +1,13 @@
 
-# Copyright (c) 2021, PostgreSQL Global Development Group
+# Copyright (c) 2021-2022, PostgreSQL Global Development Group
 
 use strict;
 use warnings;
 
-use PostgresNode;
-use Test::More tests => 4;
+use PostgreSQL::Test::Cluster;
+use Test::More;
 
-my $node = get_new_node('main');
+my $node = PostgreSQL::Test::Cluster->new('main');
 $node->init;
 $node->start;
 
@@ -26,5 +26,8 @@ $node->command_ok([ 'vacuumdb', '-a' ],
 
 # Doesn't quite belong here, but don't want to waste time by creating an
 # invalid database in 010_vacuumdb.pl as well.
-$node->command_fails([ 'vacuumdb', '-d', 'regression_invalid'],
+$node->command_fails_like([ 'vacuumdb', '-d', 'regression_invalid'],
+  qr/FATAL:  cannot connect to invalid database "regression_invalid"/,
   'vacuumdb cannot target invalid database');
+
+done_testing();

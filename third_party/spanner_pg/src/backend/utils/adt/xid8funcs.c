@@ -15,7 +15,7 @@
  * users.  The txid_XXX variants should eventually be dropped.
  *
  *
- *	Copyright (c) 2003-2021, PostgreSQL Global Development Group
+ *	Copyright (c) 2003-2022, PostgreSQL Global Development Group
  *	Author: Jan Wieck, Afilias USA INC.
  *	64-bit txids: Marko Kreen, Skype Technologies
  *
@@ -114,9 +114,8 @@ TransactionIdInRecentPast(FullTransactionId fxid, TransactionId *extracted_xid)
 	if (!FullTransactionIdPrecedes(fxid, now_fullxid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("transaction ID %s is in the future",
-						psprintf(UINT64_FORMAT,
-								 U64FromFullTransactionId(fxid)))));
+				 errmsg("transaction ID %llu is in the future",
+						(unsigned long long) U64FromFullTransactionId(fxid))));
 
 	/*
 	 * ShmemVariableCache->oldestClogXid is protected by XactTruncationLock,
@@ -296,12 +295,12 @@ parse_snapshot(const char *str)
 	char	   *endp;
 	StringInfo	buf;
 
-	xmin = FullTransactionIdFromU64(pg_strtouint64(str, &endp, 10));
+	xmin = FullTransactionIdFromU64(strtou64(str, &endp, 10));
 	if (*endp != ':')
 		goto bad_format;
 	str = endp + 1;
 
-	xmax = FullTransactionIdFromU64(pg_strtouint64(str, &endp, 10));
+	xmax = FullTransactionIdFromU64(strtou64(str, &endp, 10));
 	if (*endp != ':')
 		goto bad_format;
 	str = endp + 1;
@@ -319,7 +318,7 @@ parse_snapshot(const char *str)
 	while (*str != '\0')
 	{
 		/* read next value */
-		val = FullTransactionIdFromU64(pg_strtouint64(str, &endp, 10));
+		val = FullTransactionIdFromU64(strtou64(str, &endp, 10));
 		str = endp;
 
 		/* require the input to be in order */
@@ -370,7 +369,7 @@ pg_current_xact_id(PG_FUNCTION_ARGS)
 }
 
 /*
- * Same as pg_current_xact_if_assigned() but doesn't assign a new xid if there
+ * Same as pg_current_xact_id() but doesn't assign a new xid if there
  * isn't one yet.
  */
 Datum

@@ -219,14 +219,11 @@ TEST_F(PgNumericTypeTest, ValueComparison) {
 }
 
 TEST_F(PgNumericTypeTest, FixedPrecisionNumericErrorCases) {
+  // store values between -0.099 and 0.099
   EXPECT_THAT(postgres_translator::spangres::datatypes::
                   CreatePgNumericValueWithPrecisionAndScale("0.3", 2, 3),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       testing::HasSubstr("NUMERIC scale")));
-  EXPECT_THAT(postgres_translator::spangres::datatypes::
-                  CreatePgNumericValueWithPrecisionAndScale("0.3", 2, -1),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       testing::HasSubstr("NUMERIC scale")));
+              StatusIs(absl::StatusCode::kOutOfRange,
+                       testing::HasSubstr("numeric field overflow")));
   EXPECT_THAT(postgres_translator::spangres::datatypes::
                   CreatePgNumericValueWithPrecisionAndScale("0.3", 1001, 0),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -297,6 +294,25 @@ INSTANTIATE_TEST_SUITE_P(
             .precision = 10,
             .scale = 0,
             .expected_fixed_precision = "123",
+        },
+        TestCase{
+            .arbitrary_numeric = "0.3",
+            .precision = 2,
+            .scale = -1,
+            .expected_fixed_precision = "0",
+        },
+        TestCase{
+            .arbitrary_numeric = "1234",
+            .precision = 4,
+            .scale = -2,
+            .expected_fixed_precision = "1200",
+        },
+        // store values between -0.00999 and 0.00999
+        TestCase{
+            .arbitrary_numeric = "0.0088999",
+            .precision = 3,
+            .scale = 5,
+            .expected_fixed_precision = "0.00890",
         },
         TestCase{
             .arbitrary_numeric = "123.0000000001",

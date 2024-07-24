@@ -218,6 +218,11 @@ group {
   code: "FEATURE_NOT_SUPPORTED"
 
   message {
+    name: "UnitNotSupportedForType"
+    pg_message_id: "unit \"%s\" not supported for type %s"
+  }
+
+  message {
     name: "CrossDatabaseReferencesNotSupport"
     pg_message_id: "cross-database references are not implemented: %s"
   }
@@ -530,6 +535,11 @@ group {
       "ON CONFLICT DO UPDATE requires inference specification "
       "or constraint name"
   }
+
+  message {
+    name: "NonIntegerConstant"
+    pg_message_id: "non-integer constant in %s"
+  }
 }
 
 group {
@@ -543,6 +553,11 @@ group {
 
 group {
   code: "INVALID_PARAMETER_VALUE"
+
+  message {
+    name: "NumericScaleNotInRange"
+    pg_message_id: "NUMERIC scale %d must be between %d and %d"
+  }
 
   message {
     name: "Float4NotSupport"
@@ -602,6 +617,11 @@ group {
   message {
     name: "DateUnitsNotRecognized"
     pg_message_id: "date units \"%s\" not recognized"
+  }
+
+  message {
+    name: "UnitNotRecognizedForType"
+    pg_message_id: "unit \"%s\" not recognized for type %s"
   }
 }
 
@@ -775,6 +795,11 @@ group {
   }
 
   message {
+    name: "InvalidInputString"
+    pg_message_id: "invalid input string for \"%s\""
+  }
+
+  message {
     name: "InvalidValue"
     pg_message_id: "invalid value \"%s\" for \"%s\""
   }
@@ -830,6 +855,11 @@ group {
   message {
     name: "UnrecognizedToken"
     pg_message_id: "unrecognized token: \"%.*s\""
+  }
+
+  message {
+    name: "NotFoundCurlyBracketAtEndOfInputNode"
+    pg_message_id: "did not find '}' at end of input node"
   }
 
   message {

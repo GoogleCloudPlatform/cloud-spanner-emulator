@@ -63,7 +63,6 @@ func New(opts Options) *Gateway {
 func (gw *Gateway) Run() {
 	// Start the emulator grpc server and redirect its output.
 	emulatorArgs := []string{
-
 		"--host_port", gw.opts.FrontendAddress,
 	}
 	if gw.opts.LogRequests {

@@ -3,7 +3,7 @@
  * pg_amcheck.c
  *		Detects corruption within database relations.
  *
- * Copyright (c) 2017-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2017-2022, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/bin/pg_amcheck/pg_amcheck.c
@@ -12,6 +12,7 @@
  */
 #include "postgres_fe.h"
 
+#include <limits.h>
 #include <time.h>
 
 #include "catalog/pg_am_d.h"
@@ -201,9 +202,9 @@ static void compile_relation_list_one_db(PGconn *conn, SimplePtrList *relations,
 
 #define log_no_match(...) do { \
 		if (opts.strict_names) \
-			pg_log_generic(PG_LOG_ERROR, __VA_ARGS__); \
+			pg_log_error(__VA_ARGS__); \
 		else \
-			pg_log_generic(PG_LOG_WARNING, __VA_ARGS__); \
+			pg_log_warning(__VA_ARGS__); \
 	} while(0)
 
 #define FREE_AND_SET_NULL(x) do { \
@@ -324,12 +325,9 @@ main(int argc, char *argv[])
 				append_btree_pattern(&opts.exclude, optarg, encoding);
 				break;
 			case 'j':
-				opts.jobs = atoi(optarg);
-				if (opts.jobs < 1)
-				{
-					pg_log_error("number of parallel jobs must be at least 1");
+				if (!option_parse_int(optarg, "-j/--jobs", 1, INT_MAX,
+									  &opts.jobs))
 					exit(1);
-				}
 				break;
 			case 'p':
 				port = pg_strdup(optarg);
@@ -398,39 +396,24 @@ main(int argc, char *argv[])
 				else if (pg_strcasecmp(optarg, "none") == 0)
 					opts.skip = "none";
 				else
-				{
-					pg_log_error("invalid argument for option %s", "--skip");
-					exit(1);
-				}
+					pg_fatal("invalid argument for option %s", "--skip");
 				break;
 			case 7:
 				errno = 0;
 				optval = strtoul(optarg, &endptr, 10);
 				if (endptr == optarg || *endptr != '\0' || errno != 0)
-				{
-					pg_log_error("invalid start block");
-					exit(1);
-				}
+					pg_fatal("invalid start block");
 				if (optval > MaxBlockNumber)
-				{
-					pg_log_error("start block out of bounds");
-					exit(1);
-				}
+					pg_fatal("start block out of bounds");
 				opts.startblock = optval;
 				break;
 			case 8:
 				errno = 0;
 				optval = strtoul(optarg, &endptr, 10);
 				if (endptr == optarg || *endptr != '\0' || errno != 0)
-				{
-					pg_log_error("invalid end block");
-					exit(1);
-				}
+					pg_fatal("invalid end block");
 				if (optval > MaxBlockNumber)
-				{
-					pg_log_error("end block out of bounds");
-					exit(1);
-				}
+					pg_fatal("end block out of bounds");
 				opts.endblock = optval;
 				break;
 			case 9:
@@ -452,18 +435,14 @@ main(int argc, char *argv[])
 					opts.install_schema = pg_strdup(optarg);
 				break;
 			default:
-				fprintf(stderr,
-						_("Try \"%s --help\" for more information.\n"),
-						progname);
+				/* getopt_long already emitted a complaint */
+				pg_log_error_hint("Try \"%s --help\" for more information.", progname);
 				exit(1);
 		}
 	}
 
 	if (opts.endblock >= 0 && opts.endblock < opts.startblock)
-	{
-		pg_log_error("end block precedes start block");
-		exit(1);
-	}
+		pg_fatal("end block precedes start block");
 
 	/*
 	 * A single non-option arguments specifies a database name or connection
@@ -479,7 +458,7 @@ main(int argc, char *argv[])
 	{
 		pg_log_error("too many command-line arguments (first is \"%s\")",
 					 argv[optind]);
-		fprintf(stderr, _("Try \"%s --help\" for more information.\n"), progname);
+		pg_log_error_hint("Try \"%s --help\" for more information.", progname);
 		exit(1);
 	}
 
@@ -497,19 +476,13 @@ main(int argc, char *argv[])
 	if (opts.alldb)
 	{
 		if (db != NULL)
-		{
-			pg_log_error("cannot specify a database name with --all");
-			exit(1);
-		}
+			pg_fatal("cannot specify a database name with --all");
 		cparams.dbname = maintenance_db;
 	}
 	else if (db != NULL)
 	{
 		if (opts.dbpattern)
-		{
-			pg_log_error("cannot specify both a database name and database patterns");
-			exit(1);
-		}
+			pg_fatal("cannot specify both a database name and database patterns");
 		cparams.dbname = db;
 	}
 
@@ -537,7 +510,7 @@ main(int argc, char *argv[])
 	{
 		if (conn != NULL)
 			disconnectDatabase(conn);
-		pg_log_error("no databases to check");
+		pg_log_warning("no databases to check");
 		exit(0);
 	}
 
@@ -595,7 +568,7 @@ main(int argc, char *argv[])
 			/* Querying the catalog failed. */
 			pg_log_error("database \"%s\": %s",
 						 PQdb(conn), PQerrorMessage(conn));
-			pg_log_info("query was: %s", amcheck_sql);
+			pg_log_error_detail("Query was: %s", amcheck_sql);
 			PQclear(result);
 			disconnectDatabase(conn);
 			exit(1);
@@ -671,8 +644,7 @@ main(int argc, char *argv[])
 	{
 		if (conn != NULL)
 			disconnectDatabase(conn);
-		pg_log_error("no relations to check");
-		exit(1);
+		pg_fatal("no relations to check");
 	}
 	progress_report(reltotal, relprogress, pagestotal, pageschecked,
 					NULL, true, false);
@@ -921,7 +893,7 @@ run_command(ParallelSlot *slot, const char *sql)
 		pg_log_error("error sending command to database \"%s\": %s",
 					 PQdb(slot->connection),
 					 PQerrorMessage(slot->connection));
-		pg_log_error("command was: %s", sql);
+		pg_log_error_detail("Command was: %s", sql);
 		exit(1);
 	}
 }
@@ -1104,17 +1076,17 @@ verify_btree_slot_handler(PGresult *res, PGconn *conn, void *context)
 
 	if (PQresultStatus(res) == PGRES_TUPLES_OK)
 	{
-		int                     ntups = PQntuples(res);
+		int			ntups = PQntuples(res);
 
 		if (ntups > 1)
 		{
 			/*
 			 * We expect the btree checking functions to return one void row
 			 * each, or zero rows if the check was skipped due to the object
-			 * being in the wrong state to be checked, so we should output some
-			 * sort of warning if we get anything more, not because it
-			 * indicates corruption, but because it suggests a mismatch between
-			 * amcheck and pg_amcheck versions.
+			 * being in the wrong state to be checked, so we should output
+			 * some sort of warning if we get anything more, not because it
+			 * indicates corruption, but because it suggests a mismatch
+			 * between amcheck and pg_amcheck versions.
 			 *
 			 * In conjunction with --progress, anything written to stderr at
 			 * this time would present strangely to the user without an extra
@@ -1127,9 +1099,9 @@ verify_btree_slot_handler(PGresult *res, PGconn *conn, void *context)
 			pg_log_warning("btree index \"%s.%s.%s\": btree checking function returned unexpected number of rows: %d",
 						   rel->datinfo->datname, rel->nspname, rel->relname, ntups);
 			if (opts.verbose)
-				pg_log_info("query was: %s", rel->sql);
-			pg_log_warning("Are %s's and amcheck's versions compatible?",
-						   progname);
+				pg_log_warning_detail("Query was: %s", rel->sql);
+			pg_log_warning_hint("Are %s's and amcheck's versions compatible?",
+								progname);
 			progress_since_last_stderr = false;
 		}
 	}
@@ -1246,15 +1218,10 @@ progress_report(uint64 relations_total, uint64 relations_checked,
 	if (relpages_total)
 		percent_pages = (int) (relpages_checked * 100 / relpages_total);
 
-	/*
-	 * Separate step to keep platform-dependent format code out of fprintf
-	 * calls.  We only test for INT64_FORMAT availability in snprintf, not
-	 * fprintf.
-	 */
-	snprintf(checked_rel, sizeof(checked_rel), INT64_FORMAT, relations_checked);
-	snprintf(total_rel, sizeof(total_rel), INT64_FORMAT, relations_total);
-	snprintf(checked_pages, sizeof(checked_pages), INT64_FORMAT, relpages_checked);
-	snprintf(total_pages, sizeof(total_pages), INT64_FORMAT, relpages_total);
+	snprintf(checked_rel, sizeof(checked_rel), UINT64_FORMAT, relations_checked);
+	snprintf(total_rel, sizeof(total_rel), UINT64_FORMAT, relations_total);
+	snprintf(checked_pages, sizeof(checked_pages), UINT64_FORMAT, relpages_checked);
+	snprintf(total_pages, sizeof(total_pages), UINT64_FORMAT, relpages_total);
 
 #define VERBOSE_DATNAME_LENGTH 35
 	if (opts.verbose)
@@ -1678,7 +1645,7 @@ compile_database_list(PGconn *conn, SimplePtrList *databases,
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
 		pg_log_error("query failed: %s", PQerrorMessage(conn));
-		pg_log_info("query was: %s", sql.data);
+		pg_log_error_detail("Query was: %s", sql.data);
 		disconnectDatabase(conn);
 		exit(1);
 	}
@@ -1703,11 +1670,8 @@ compile_database_list(PGconn *conn, SimplePtrList *databases,
 			 */
 			fatal = opts.strict_names;
 			if (pattern_id >= opts.include.len)
-			{
-				pg_log_error("internal error: received unexpected database pattern_id %d",
-							 pattern_id);
-				exit(1);
-			}
+				pg_fatal("internal error: received unexpected database pattern_id %d",
+						 pattern_id);
 			log_no_match("no connectable databases to check matching \"%s\"",
 						 opts.include.data[pattern_id].pattern);
 		}
@@ -1962,14 +1926,14 @@ compile_relation_list_one_db(PGconn *conn, SimplePtrList *relations,
 	if (opts.allrel)
 		appendPQExpBuffer(&sql,
 						  " AND c.relam = %u "
-						  "AND c.relkind IN ('r', 'm', 't') "
+						  "AND c.relkind IN ('r', 'S', 'm', 't') "
 						  "AND c.relnamespace != %u",
 						  HEAP_TABLE_AM_OID, PG_TOAST_NAMESPACE);
 	else
 		appendPQExpBuffer(&sql,
 						  " AND c.relam IN (%u, %u)"
-						  "AND c.relkind IN ('r', 'm', 't', 'i') "
-						  "AND ((c.relam = %u AND c.relkind IN ('r', 'm', 't')) OR "
+						  "AND c.relkind IN ('r', 'S', 'm', 't', 'i') "
+						  "AND ((c.relam = %u AND c.relkind IN ('r', 'S', 'm', 't')) OR "
 						  "(c.relam = %u AND c.relkind = 'i'))",
 						  HEAP_TABLE_AM_OID, BTREE_AM_OID,
 						  HEAP_TABLE_AM_OID, BTREE_AM_OID);
@@ -2126,7 +2090,7 @@ compile_relation_list_one_db(PGconn *conn, SimplePtrList *relations,
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
 		pg_log_error("query failed: %s", PQerrorMessage(conn));
-		pg_log_info("query was: %s", sql.data);
+		pg_log_error_detail("Query was: %s", sql.data);
 		disconnectDatabase(conn);
 		exit(1);
 	}
@@ -2166,11 +2130,8 @@ compile_relation_list_one_db(PGconn *conn, SimplePtrList *relations,
 			 */
 
 			if (pattern_id >= opts.include.len)
-			{
-				pg_log_error("internal error: received unexpected relation pattern_id %d",
-							 pattern_id);
-				exit(1);
-			}
+				pg_fatal("internal error: received unexpected relation pattern_id %d",
+						 pattern_id);
 
 			opts.include.data[pattern_id].matched = true;
 		}

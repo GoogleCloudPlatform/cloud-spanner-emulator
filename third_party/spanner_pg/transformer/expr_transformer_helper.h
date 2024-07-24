@@ -60,7 +60,7 @@ typedef std::vector<CorrelatedColumnsSet*> CorrelatedColumnsSetList;
 // The index of a Postgres `Var` (i.e. a column).
 struct VarIndex {
   // The index of the scan in Query.rtable. Starting from 1.
-  Index varno;
+  int varno;
   // The index of the var in Query.targetList. Starting from 1.
   int varattno;
   // The number of subqueries up for this Var. Only used by the reverse
@@ -182,6 +182,10 @@ class VarIndexScope {
                                      /*allow_override=*/true);
     }
     for (auto& kv : group_by_map) {
+      // We only override vars at this subquery level.
+      if (kv.first->varlevelsup != 0) {
+        continue;
+      }
       new_scope->MapVarIndexToTarget(
           {.varno = kv.first->varno, .varattno = kv.first->varattno}, kv.second,
           /*allow_override=*/true);

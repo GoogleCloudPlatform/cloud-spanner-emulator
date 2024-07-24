@@ -1,21 +1,21 @@
 
-# Copyright (c) 2021, PostgreSQL Global Development Group
+# Copyright (c) 2021-2022, PostgreSQL Global Development Group
 
 # This tests that more complex datatypes are replicated correctly
 # by logical replication
 use strict;
 use warnings;
-use PostgresNode;
-use TestLib;
-use Test::More tests => 4;
+use PostgreSQL::Test::Cluster;
+use PostgreSQL::Test::Utils;
+use Test::More;
 
 # Initialize publisher node
-my $node_publisher = get_new_node('publisher');
+my $node_publisher = PostgreSQL::Test::Cluster->new('publisher');
 $node_publisher->init(allows_streaming => 'logical');
 $node_publisher->start;
 
 # Create subscriber node
-my $node_subscriber = get_new_node('subscriber');
+my $node_subscriber = PostgreSQL::Test::Cluster->new('subscriber');
 $node_subscriber->init(allows_streaming => 'logical');
 $node_subscriber->start;
 
@@ -114,7 +114,7 @@ $node_subscriber->safe_psql('postgres',
 	"CREATE SUBSCRIPTION tap_sub CONNECTION '$publisher_connstr' PUBLICATION tap_pub WITH (slot_name = tap_sub_slot)"
 );
 
-# Wait for initial sync to finish
+# Wait for initial sync to finish as well
 $node_subscriber->wait_for_subscription_sync($node_publisher, 'tap_sub');
 
 # Insert initial test data
@@ -561,3 +561,5 @@ is($result, '21', 'sql-function constraint on domain');
 
 $node_subscriber->stop('fast');
 $node_publisher->stop('fast');
+
+done_testing();

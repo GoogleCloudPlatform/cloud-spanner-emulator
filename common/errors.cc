@@ -2668,14 +2668,6 @@ absl::Status CannotSetDefaultValueOnGeneratedColumn(
 }
 
 // Query errors.
-absl::Status UnableToInferUndeclaredParameter(absl::string_view parameter_name,
-                                              absl::string_view type) {
-  return absl::Status(
-      absl::StatusCode::kInvalidArgument,
-      absl::Substitute("Unable to infer type for parameter $0. Provide the "
-                       "type binding $1",
-                       parameter_name, type));
-}
 absl::Status InvalidHint(absl::string_view hint_string) {
   return absl::Status(absl::StatusCode::kInvalidArgument,
                       absl::Substitute("Unsupported hint: $0.", hint_string));

@@ -529,10 +529,7 @@ next_restart:					/* loop here after eating a comment */
 				}
 				assert(NOTREACHED);
 			}
-			if (v->cflags & REG_NOSUB)
-				RETV('(', 0);	/* all parens non-capturing */
-			else
-				RETV('(', 1);
+			RETV('(', 1);
 			break;
 		case CHR(')'):
 			if (LASTTYPE('('))

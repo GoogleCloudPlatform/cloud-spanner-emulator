@@ -53,6 +53,7 @@ inline constexpr char kPGCastToTimestampFunctionName[] = "pg.cast_to_timestamp";
 
 // Functions to capture NULL/NaN ordering semantics of PG.
 inline constexpr char kPGMapDoubleToIntFunctionName[] = "pg.map_double_to_int";
+inline constexpr char kPGMapFloatToIntFunctionName[] = "pg.map_float_to_int";
 inline constexpr char kPGLeastFunctionName[] = "pg.least";
 inline constexpr char kPGGreatestFunctionName[] = "pg.greatest";
 
@@ -119,6 +120,12 @@ inline constexpr char kPGJsonbBuildArrayFunctionName[] = "pg.jsonb_build_array";
 inline constexpr char kPGJsonbBuildObjectFunctionName[] =
     "pg.jsonb_build_object";
 
+// PG float functions.
+inline constexpr char kPGFloatAddFunctionName[] = "pg.float_add";
+inline constexpr char kPGFloatSubtractFunctionName[] = "pg.float_subtract";
+inline constexpr char kPGFloatMultiplyFunctionName[] = "pg.float_multiply";
+inline constexpr char kPGFloatDivideFunctionName[] = "pg.float_divide";
+
 // PG NUMERIC functions.
 inline constexpr char kPGNumericAddFunctionName[] = "pg.numeric_add";
 inline constexpr char kPGNumericDivideFunctionName[] = "pg.numeric_divide";
@@ -129,6 +136,7 @@ inline constexpr char kPGNumericUminusFunctionName[] = "pg.numeric_uminus";
 inline constexpr char kPGCastToNumericFunctionName[] = "pg.cast_to_numeric";
 inline constexpr char kPGCastNumericToDoubleFunctionName[] =
     "pg.cast_to_double";
+inline constexpr char kPGCastNumericToFloatFunctionName[] = "pg.cast_to_float";
 inline constexpr char kPGCastNumericToStringFunctionName[] =
     "pg.cast_to_string";
 inline constexpr char kPGCastNumericToInt64FunctionName[] = "pg.cast_to_int64";
@@ -169,6 +177,9 @@ absl::StatusOr<zetasql::Value> EvalCastNumericToInt64(
     absl::Span<const zetasql::Value> args);
 
 absl::StatusOr<zetasql::Value> EvalCastNumericToDouble(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalCastNumericToFloat(
     absl::Span<const zetasql::Value> args);
 
 absl::StatusOr<zetasql::Value> EvalCastNumericToString(

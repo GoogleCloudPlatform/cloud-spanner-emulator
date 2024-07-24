@@ -391,11 +391,11 @@ rollback;
 --
 explain (costs off)
 select aa, bb, unique1, unique1
-  from tenk1 right join b on aa = unique1
+  from tenk1 right join b_star on aa = unique1
   where bb < bb and bb is null;
 
 select aa, bb, unique1, unique1
-  from tenk1 right join b on aa = unique1
+  from tenk1 right join b_star on aa = unique1
   where bb < bb and bb is null;
 
 --
@@ -1977,6 +1977,18 @@ select * from
     lateral (select q1, coalesce(ss1.x,q2) as y from int8_tbl d) ss2
   ) on c.q2 = ss2.q1,
   lateral (select ss2.y offset 0) ss3;
+
+-- another case requiring nested PlaceHolderVars
+explain (verbose, costs off)
+select * from
+  (select 0 as val0) as ss0
+  left join (select 1 as val) as ss1 on true
+  left join lateral (select ss1.val as val_filtered where false) as ss2 on true;
+
+select * from
+  (select 0 as val0) as ss0
+  left join (select 1 as val) as ss1 on true
+  left join lateral (select ss1.val as val_filtered where false) as ss2 on true;
 
 -- case that breaks the old ph_may_need optimization
 explain (verbose, costs off)

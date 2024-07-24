@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <map>
 #include <memory>
 #include <optional>
@@ -759,12 +760,6 @@ absl::StatusOr<std::map<std::string, zetasql::Value>> ExtractParameters(
     if (it != undeclared_params.end()) {
       auto parsed_value = frontend::ValueFromProto(*it->second, type);
 
-      if (parsed_value.ok() && !parsed_value->is_null() &&
-          (type->IsTimestamp() || type->IsDate())) {
-        return error::UnableToInferUndeclaredParameter(name,
-                                                       type->DebugString());
-      }
-
       // If the value does not parse as the given type, the error code is
       // kInvalidArgument, not kFailedPrecondition, for example.
       if (!parsed_value.ok()) {
@@ -1007,6 +1002,19 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
       ZETASQL_RETURN_IF_ERROR(context.writer->Write(execute_update_result.mutation));
       result.modified_row_count = execute_update_result.modify_row_count;
       result.rows = std::move(execute_update_result.returning_row_cursor);
+    } else {
+      // Add the columns and types of the returning clause to the result.
+      auto returning_clause = GetReturningClause(resolved_statement.get());
+      if (returning_clause != nullptr) {
+        std::vector<std::string> names;
+        std::vector<const zetasql::Type*> types;
+        for (auto& column : returning_clause->output_column_list()) {
+          names.push_back(column->column().name());
+          types.push_back(column->column().type());
+        }
+        std::vector<std::vector<zetasql::Value>> values;
+        result.rows = std::make_unique<VectorsRowCursor>(names, types, values);
+      }
     }
   }
   // Add both undeclared and declared parameters to the result.
@@ -1016,6 +1024,31 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
   }
   result.elapsed_time = absl::Now() - start_time;
   return result;
+}
+
+const zetasql::ResolvedReturningClause* GetReturningClause(
+    const zetasql::ResolvedStatement* resolved_statement) {
+  const zetasql::ResolvedReturningClause* returning_clause;
+  switch (resolved_statement->node_kind()) {
+    case zetasql::RESOLVED_INSERT_STMT:
+      returning_clause =
+          resolved_statement->GetAs<zetasql::ResolvedInsertStmt>()
+              ->returning();
+      break;
+    case zetasql::RESOLVED_UPDATE_STMT:
+      returning_clause =
+          resolved_statement->GetAs<zetasql::ResolvedUpdateStmt>()
+              ->returning();
+      break;
+    case zetasql::RESOLVED_DELETE_STMT:
+      returning_clause =
+          resolved_statement->GetAs<zetasql::ResolvedDeleteStmt>()
+              ->returning();
+      break;
+    default:
+      returning_clause = nullptr;
+  }
+  return returning_clause;
 }
 
 absl::Status QueryEngine::IsPartitionable(const Query& query,

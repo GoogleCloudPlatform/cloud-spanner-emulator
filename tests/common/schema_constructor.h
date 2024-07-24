@@ -53,6 +53,12 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
+// Creates a schema with a single table that has a timestamp and date column.
+std::unique_ptr<const backend::Schema> CreateSchemaWithTimestampDateTable(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+
 std::unique_ptr<const backend::Schema>
 CreateSchemaWithOneTableAndOneChangeStream(
     zetasql::TypeFactory* type_factory,

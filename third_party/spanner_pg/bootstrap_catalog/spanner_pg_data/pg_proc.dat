@@ -44,17 +44,6 @@
   prosrc => 'timestamptz_bin' },
 
 #############################
-# FTS SPANNER.TOKENLIST I/O FUNCTIONS
-#############################
- { oid => '50003', proname => 'spanner_tokenlist_in',
-  prorettype => 'tokenlist', proargtypes => 'cstring',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50004', proname => 'spanner_tokenlist_out',
-  prorettype => 'cstring', proargtypes => 'tokenlist',
-  prosrc => 'spangres_fts_func' },
-
-#############################
 # FTS TOKENIZATION FUNCTIONS
 #############################
 # TOKENIZE_FULLTEXT
@@ -131,26 +120,22 @@
 
 { oid => '50030', proname => 'tokenize_substring', pronamespace => 'spanner',
   prorettype => 'tokenlist', proargtypes => 'text int8 int8 bool',
-  proargnames => '{value, ngram_size_max, ngram_size_min,
-  support_relative_search}',
+  proargnames => '{value, ngram_size_max, ngram_size_min, support_relative_search}',
   prosrc => 'spangres_fts_func' },
 
 { oid => '50031', proname => 'tokenize_substring', pronamespace => 'spanner',
   prorettype => 'tokenlist', proargtypes => '_text int8 int8 bool',
-  proargnames => '{value, ngram_size_max, ngram_size_min,
-  support_relative_search}',
+  proargnames => '{value, ngram_size_max, ngram_size_min, support_relative_search}',
   prosrc => 'spangres_fts_func' },
 
 { oid => '50032', proname => 'tokenize_substring', pronamespace => 'spanner',
   prorettype => 'tokenlist', proargtypes => 'text int8 int8 bool text',
-  proargnames => '{value, ngram_size_max, ngram_size_min,
-  support_relative_search, content_type}',
+  proargnames => '{value, ngram_size_max, ngram_size_min, support_relative_search, content_type}',
   prosrc => 'spangres_fts_func' },
 
 { oid => '50033', proname => 'tokenize_substring', pronamespace => 'spanner',
   prorettype => 'tokenlist', proargtypes => '_text int8 int8 bool text',
-  proargnames => '{value, ngram_size_max, ngram_size_min,
-  support_relative_search, content_type}',
+  proargnames => '{value, ngram_size_max, ngram_size_min, support_relative_search, content_type}',
   prosrc => 'spangres_fts_func' },
 
 # TOKEN
@@ -288,5 +273,17 @@
   prokind => 'p', prorettype => 'void',
   proargtypes => 'text',
   prosrc => 'cancel_query' },
+
+#############################
+# HASHING FUNCTIONS
+#############################
+
+{ oid => '50054', proname => 'farm_fingerprint', pronamespace => 'spanner',
+  prorettype => 'int8', proargtypes => 'text',
+  prosrc => 'farm_fingerprint' },
+
+{ oid => '50055', proname => 'farm_fingerprint', pronamespace => 'spanner',
+  prorettype => 'int8', proargtypes => 'bytea',
+  prosrc => 'farm_fingerprint' },
 
 ]

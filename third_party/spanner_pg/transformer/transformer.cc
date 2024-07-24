@@ -61,7 +61,7 @@
 
 namespace postgres_translator {
 
-using ::postgres_translator::internal::PostgresCastToValue;
+using ::postgres_translator::internal::PostgresCastToString;
 
 // Returns true if all alphabetic characters in `qualified_table_name` are
 // lower-case.
@@ -110,10 +110,10 @@ static absl::StatusOr<Alias*> BuildRelationEref(
   // columns.
   for (int colnum = 0; colnum < num_columns; ++colnum) {
     const zetasql::Column* column = gsql_table.GetColumn(colnum);
-    Value* attribute_name;
+    String* attribute_name;
 
     if (alias_list_cell != nullptr) {
-      attribute_name = PostgresCastToValue(lfirst(alias_list_cell));
+      attribute_name = PostgresCastToString(lfirst(alias_list_cell));
       alias_list_cell = lnext(alias->colnames, alias_list_cell);
     } else {
       ZETASQL_ASSIGN_OR_RETURN(

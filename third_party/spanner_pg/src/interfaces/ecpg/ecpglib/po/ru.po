@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ecpglib (PostgreSQL current)\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@lists.postgresql.org\n"
-"POT-Creation-Date: 2022-08-10 11:56+0300\n"
+"POT-Creation-Date: 2022-08-27 14:52+0300\n"
 "PO-Revision-Date: 2019-09-09 13:30+0300\n"
 "Last-Translator: Alexander Lakhin <exclusion@gmail.com>\n"
 "Language-Team: Russian <pgsql-ru-general@postgresql.org>\n"
@@ -21,7 +21,7 @@ msgstr ""
 msgid "empty message text"
 msgstr "пустое сообщение"
 
-#: connect.c:411 connect.c:676
+#: connect.c:410 connect.c:675
 msgid "<DEFAULT>"
 msgstr "<ПО_УМОЛЧАНИЮ>"
 
@@ -196,7 +196,7 @@ msgstr "подключение к серверу потеряно"
 msgid "SQL error: %s\n"
 msgstr "ошибка SQL: %s\n"
 
-#: execute.c:2190 execute.c:2197
+#: execute.c:2189 execute.c:2196
 msgid "<empty>"
 msgstr "<>"
 

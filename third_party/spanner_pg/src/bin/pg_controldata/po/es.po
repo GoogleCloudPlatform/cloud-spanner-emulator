@@ -9,10 +9,10 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: pg_controldata (PostgreSQL) 14\n"
+"Project-Id-Version: pg_controldata (PostgreSQL) 15\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@lists.postgresql.org\n"
-"POT-Creation-Date: 2023-05-07 17:04+0000\n"
-"PO-Revision-Date: 2020-09-12 22:55-0300\n"
+"POT-Creation-Date: 2023-05-07 16:51+0000\n"
+"PO-Revision-Date: 2022-10-20 09:06+0200\n"
 "Last-Translator: Carlos Chapi <carlos.chapi@2ndquadrant.com>\n"
 "Language-Team: PgSQL-es-Ayuda <pgsql-es-ayuda@lists.postgresql.org>\n"
 "Language: es\n"
@@ -27,26 +27,26 @@ msgstr ""
 msgid "could not open file \"%s\" for reading: %m"
 msgstr "no se pudo abrir archivo «%s» para lectura: %m"
 
-#: ../../common/controldata_utils.c:89
+#: ../../common/controldata_utils.c:86
 #, c-format
 msgid "could not read file \"%s\": %m"
 msgstr "no se pudo leer el archivo «%s»: %m"
 
-#: ../../common/controldata_utils.c:101
+#: ../../common/controldata_utils.c:95
 #, c-format
 msgid "could not read file \"%s\": read %d of %zu"
 msgstr "no se pudo leer el archivo «%s»: leídos %d de %zu"
 
-#: ../../common/controldata_utils.c:117 ../../common/controldata_utils.c:259
+#: ../../common/controldata_utils.c:108 ../../common/controldata_utils.c:244
 #, c-format
 msgid "could not close file \"%s\": %m"
 msgstr "no se pudo cerrar el archivo «%s»: %m"
 
-#: ../../common/controldata_utils.c:135
+#: ../../common/controldata_utils.c:124
 msgid "byte ordering mismatch"
 msgstr "discordancia en orden de bytes"
 
-#: ../../common/controldata_utils.c:137
+#: ../../common/controldata_utils.c:126
 #, c-format
 msgid ""
 "possible byte ordering mismatch\n"
@@ -60,17 +60,17 @@ msgstr ""
 "serían erróneos, y la instalación de PostgreSQL sería incompatible con este\n"
 "directorio de datos."
 
-#: ../../common/controldata_utils.c:203
+#: ../../common/controldata_utils.c:194
 #, c-format
 msgid "could not open file \"%s\": %m"
 msgstr "no se pudo abrir el archivo «%s»: %m"
 
-#: ../../common/controldata_utils.c:224
+#: ../../common/controldata_utils.c:213
 #, c-format
 msgid "could not write file \"%s\": %m"
 msgstr "no se pudo escribir el archivo «%s»: %m"
 
-#: ../../common/controldata_utils.c:245
+#: ../../common/controldata_utils.c:232
 #, c-format
 msgid "could not fsync file \"%s\": %m"
 msgstr "no se pudo sincronizar (fsync) archivo «%s»: %m"
@@ -177,12 +177,12 @@ msgstr "código de estado no reconocido"
 msgid "unrecognized wal_level"
 msgstr "wal_level no reconocido"
 
-#: pg_controldata.c:137 pg_controldata.c:155 pg_controldata.c:163
+#: pg_controldata.c:138 pg_controldata.c:156 pg_controldata.c:163
 #, c-format
-msgid "Try \"%s --help\" for more information.\n"
-msgstr "Intente «%s --help» para mayor información.\n"
+msgid "Try \"%s --help\" for more information."
+msgstr "Pruebe «%s --help» para mayor información."
 
-#: pg_controldata.c:153
+#: pg_controldata.c:154
 #, c-format
 msgid "too many command-line arguments (first is \"%s\")"
 msgstr "demasiados argumentos en la línea de órdenes (el primero es «%s»)"

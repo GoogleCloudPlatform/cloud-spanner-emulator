@@ -74,8 +74,8 @@ Node* makeTypeCast(Node* arg, TypeName* type_name, int location) {
 // static helper in gram.y.
 Node* makeBoolAConst(bool state) {
   A_Const* n = makeNode(A_Const);
-  n->val.type = T_String;
-  n->val.val.str = (state ? pstrdup("t") : pstrdup("f"));
+  n->val.node.type = T_String;
+  n->val.sval.sval = (state ? pstrdup("t") : pstrdup("f"));
   n->location = -1;
   return makeTypeCast(internal::PostgresCastToNode(n),
                       SystemTypeName(pstrdup("bool")), -1);
@@ -1003,6 +1003,7 @@ TEST_F(CatalogShimTestWithMemory, FuncnameGetCandidatesNamespace) {
   // Spanner catalog function with an explicit catalog.
   EXPECT_TRUE(FunctionFound("spanner", "pending_commit_timestamp"));
   EXPECT_TRUE(FunctionFound("spanner", "bit_reverse", /*nargs=*/-1));
+  EXPECT_TRUE(FunctionFound("spanner", "farm_fingerprint", /*nargs=*/1));
   EXPECT_TRUE(FunctionFound("spanner", "get_internal_sequence_state",
                             /*nargs=*/-1));
 
@@ -1010,12 +1011,14 @@ TEST_F(CatalogShimTestWithMemory, FuncnameGetCandidatesNamespace) {
   EXPECT_FALSE(
       FunctionFound(/*namespace_name=*/nullptr, "pending_commit_timestamp"));
   EXPECT_FALSE(FunctionFound(/*namespace_name=*/nullptr, "bit_reverse"));
+  EXPECT_FALSE(FunctionFound(/*namespace_name=*/nullptr, "farm_fingerprint"));
   EXPECT_FALSE(
       FunctionFound(/*namespace_name=*/nullptr, "get_internal_sequence_state"));
 
   // Incorrect catalog for Spanner function.
   EXPECT_FALSE(FunctionFound("pg_catalog", "pending_commit_timestamp"));
   EXPECT_FALSE(FunctionFound("pg_catalog", "bit_reverse"));
+  EXPECT_FALSE(FunctionFound("pg_catalog", "farm_fingerprint"));
   EXPECT_FALSE(FunctionFound("pg_catalog", "get_internal_sequence_state"));
 
 }
@@ -1913,8 +1916,8 @@ TEST_F(CatalogShimTestWithMemory, DeparseFunctionHints) {
 // static helper in gram.y.
 Node* makeIntConst(int val) {
   A_Const* n = makeNode(A_Const);
-  n->val.type = T_Integer;
-  n->val.val.ival = val;
+  n->val.node.type = T_Integer;
+  n->val.ival.ival = val;
   n->location = -1;
   return internal::PostgresCastToNode(n);
 }
@@ -1963,8 +1966,8 @@ TEST_F(HintTransformTest, Boolean) {
 // static helper in gram.y.
 Node* makeStringConst(char* string) {
   A_Const* n = makeNode(A_Const);
-  n->val.type = T_String;
-  n->val.val.str = string;
+  n->val.node.type = T_String;
+  n->val.sval.sval = string;
   n->location = -1;
   return internal::PostgresCastToNode(n);
 }
@@ -2619,8 +2622,8 @@ TEST_F(CatalogShimTestWithMemory, TransformContainerType) {
 static Node* MakeIntConst(int val, int location) {
   A_Const* n = makeNode(A_Const);
 
-  n->val.type = T_Integer;
-  n->val.val.ival = val;
+  n->val.node.type = T_Integer;
+  n->val.ival.ival = val;
   n->location = location;
 
   return reinterpret_cast<Node*>(n);

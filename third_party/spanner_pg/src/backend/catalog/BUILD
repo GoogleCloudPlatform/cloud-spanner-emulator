@@ -58,7 +58,9 @@ cc_library(
         "objectaddress.c",
         "partition.c",
         "pg_aggregate.c",
+        "pg_attrdef.c",
         "pg_cast.c",
+        "pg_class.c",
         "pg_collation.c",
         "pg_constraint.c",
         "pg_conversion.c",
@@ -69,6 +71,7 @@ cc_library(
         "pg_largeobject.c",
         "pg_namespace.c",
         "pg_operator.c",
+        "pg_parameter_acl.c",
         "pg_proc.c",
         "pg_publication.c",
         "pg_range.c",
@@ -126,6 +129,8 @@ GENERATED_CATALOG_HEADER_FILES = [
     "pg_database_d.h",
     "pg_db_role_setting_d.h",
     "pg_default_acl_d.h",
+    "pg_parameter_acl_d.h",
+    "pg_publication_namespace_d.h",
     "pg_depend_d.h",
     "pg_description_d.h",
     "pg_enum_d.h",
@@ -244,6 +249,8 @@ genrule(
             third_party/spanner_pg/src/include/catalog/pg_policy.h \
             third_party/spanner_pg/src/include/catalog/pg_replication_origin.h \
             third_party/spanner_pg/src/include/catalog/pg_default_acl.h \
+            third_party/spanner_pg/src/include/catalog/pg_parameter_acl.h \
+            third_party/spanner_pg/src/include/catalog/pg_publication_namespace.h \
             third_party/spanner_pg/src/include/catalog/pg_init_privs.h \
             third_party/spanner_pg/src/include/catalog/pg_seclabel.h \
             third_party/spanner_pg/src/include/catalog/pg_shseclabel.h \

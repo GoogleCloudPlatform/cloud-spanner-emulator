@@ -37,7 +37,7 @@ constexpr char kCloudSpannerEmulatorFunctionCatalogName[] = "Spanner";
 
 // A catalog of all SQL functions.
 //
-// The FunctionCatalog supports looking up a function by name and emunerating
+// The FunctionCatalog supports looking up a function by name and enumerating
 // all existing functions.
 class FunctionCatalog {
  public:

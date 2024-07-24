@@ -115,7 +115,7 @@ struct TranslationOptions {
   // which is a non-stored generated column.
   bool enable_virtual_generated_column = false;
   // enable_vector_length allows translation of <VECTOR LENGTH> clause.
-  bool enable_vector_length = false;
+  bool enable_vector_length = true;
 };
 
 // Interface for translating PostgreSQL DDL parse tree (AST) to Spanner schema

@@ -1,5 +1,5 @@
 
-# Copyright (c) 2021, PostgreSQL Global Development Group
+# Copyright (c) 2021-2022, PostgreSQL Global Development Group
 
 # Set of tests for authentication and pg_hba.conf. The following password
 # methods are checked through this test:
@@ -10,19 +10,14 @@
 
 use strict;
 use warnings;
-use PostgresNode;
-use TestLib;
+use PostgreSQL::Test::Cluster;
+use PostgreSQL::Test::Utils;
 use Test::More;
 if (!$use_unix_sockets)
 {
 	plan skip_all =>
 	  "authentication tests cannot run without Unix-domain sockets";
 }
-else
-{
-	plan tests => 23;
-}
-
 
 # Delete pg_hba.conf from the given node, add a new entry to it
 # and then execute a reload to refresh it.
@@ -64,7 +59,7 @@ sub test_role
 }
 
 # Initialize primary node
-my $node = get_new_node('primary');
+my $node = PostgreSQL::Test::Cluster->new('primary');
 $node->init;
 $node->append_conf('postgresql.conf', "log_connections = on\n");
 $node->start;
@@ -136,7 +131,7 @@ $ENV{"PGCHANNELBINDING"} = 'require';
 test_role($node, 'scram_role', 'scram-sha-256', 2);
 
 # Test .pgpass processing; but use a temp file, don't overwrite the real one!
-my $pgpassfile = "${TestLib::tmp_check}/pgpass";
+my $pgpassfile = "${PostgreSQL::Test::Utils::tmp_check}/pgpass";
 
 delete $ENV{"PGPASSWORD"};
 delete $ENV{"PGCHANNELBINDING"};
@@ -160,3 +155,5 @@ append_to_file(
 !);
 
 test_role($node, 'md5_role', 'password from pgpass', 0);
+
+done_testing();

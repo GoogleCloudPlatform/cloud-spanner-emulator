@@ -3,7 +3,7 @@
   descr => 'representation for TOKENLIST type in Spanner',
   typname => 'tokenlist', typnamespace => 'spanner',
   typlen => '-1', typbyval => 'f', typcategory => 'X',
-  typinput => 'spanner_tokenlist_in', typoutput => 'spanner_tokenlist_out',
+  typinput => 'textin', typoutput => 'textout',
   typreceive => '-', typsend => '-',
   typalign => 'i', typstorage => 'p' },
   ]

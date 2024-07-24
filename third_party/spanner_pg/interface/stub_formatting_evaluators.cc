@@ -29,7 +29,10 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
+#include <string>
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/interface/formatting_evaluators.h"
 
 namespace postgres_translator::function_evaluators {
@@ -44,6 +47,11 @@ absl::StatusOr<std::string> Int8ToChar(int64_t value,
 absl::StatusOr<std::string> Float8ToChar(double value,
                                          absl::string_view number_format) {
   return absl::UnimplementedError("invoked stub Float8ToChar");
+}
+
+absl::StatusOr<std::string> Float4ToChar(float value,
+                                         absl::string_view number_format) {
+  return absl::UnimplementedError("invoked stub Float4ToChar");
 }
 
 absl::StatusOr<std::string> NumericToChar(

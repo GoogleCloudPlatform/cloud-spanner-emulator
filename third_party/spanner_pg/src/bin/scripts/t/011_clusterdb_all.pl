@@ -1,14 +1,14 @@
 
-# Copyright (c) 2021, PostgreSQL Global Development Group
+# Copyright (c) 2021-2022, PostgreSQL Global Development Group
 
 use strict;
 use warnings;
 
-use PostgresNode;
-use TestLib;
-use Test::More tests => 4;
+use PostgreSQL::Test::Cluster;
+use PostgreSQL::Test::Utils;
+use Test::More;
 
-my $node = get_new_node('main');
+my $node = PostgreSQL::Test::Cluster->new('main');
 $node->init;
 $node->start;
 
@@ -31,5 +31,8 @@ $node->command_ok([ 'clusterdb', '-a' ],
 
 # Doesn't quite belong here, but don't want to waste time by creating an
 # invalid database in 010_clusterdb.pl as well.
-$node->command_fails([ 'clusterdb', '-d', 'regression_invalid'],
+$node->command_fails_like([ 'clusterdb', '-d', 'regression_invalid'],
+  qr/FATAL:  cannot connect to invalid database "regression_invalid"/,
   'clusterdb cannot target invalid database');
+
+done_testing();

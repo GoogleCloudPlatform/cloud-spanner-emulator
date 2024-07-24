@@ -34,10 +34,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -54,7 +56,9 @@
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "absl/base/casts.h"
+#include "absl/base/optimization.h"
 #include "absl/flags/flag.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
@@ -112,6 +116,7 @@ using ::zetasql::FunctionSignatureRewriteOptions;
 const zetasql::Type* gsql_bool = zetasql::types::BoolType();
 const zetasql::Type* gsql_bytes = zetasql::types::BytesType();
 const zetasql::Type* gsql_date = zetasql::types::DateType();
+const zetasql::Type* gsql_float = zetasql::types::FloatType();
 const zetasql::Type* gsql_double = zetasql::types::DoubleType();
 const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
 const zetasql::Type* gsql_string = zetasql::types::StringType();
@@ -152,6 +157,7 @@ using ::postgres_translator::function_evaluators::DateMii;
 using ::postgres_translator::function_evaluators::DatePli;
 using ::postgres_translator::function_evaluators::Divide;
 using ::postgres_translator::function_evaluators::DivideTruncateTowardsZero;
+using ::postgres_translator::function_evaluators::Float4ToChar;
 using ::postgres_translator::function_evaluators::Float8ToChar;
 using ::postgres_translator::function_evaluators::Floor;
 using ::postgres_translator::function_evaluators::Int8ToChar;
@@ -428,6 +434,12 @@ absl::StatusOr<zetasql::Value> EvalToChar(
           Float8ToChar(args[0].double_value(), args[1].string_value()));
       return zetasql::Value::String(result);
     }
+    case zetasql::TYPE_FLOAT: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::string result,
+          Float4ToChar(args[0].float_value(), args[1].string_value()));
+      return zetasql::Value::String(result);
+    }
     case zetasql::TYPE_EXTENDED:
       if (args[0].type()->Equals(gsql_pg_numeric)) {
         ZETASQL_ASSIGN_OR_RETURN(absl::Cord numeric_string,
@@ -463,6 +475,9 @@ std::unique_ptr<zetasql::Function> ToCharFunction(
                                        /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{gsql_string,
                                        {gsql_double, gsql_string},
+                                       /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{gsql_string,
+                                       {gsql_float, gsql_string},
                                        /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{gsql_string,
                                        {gsql_pg_numeric, gsql_string},
@@ -891,6 +906,8 @@ std::unique_ptr<zetasql::Function> CastToNumericFunction(
           zetasql::FunctionSignature{
               gsql_pg_numeric, {gsql_double}, /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{
+              gsql_pg_numeric, {gsql_float}, /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{
               gsql_pg_numeric, {gsql_string}, /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{
               gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
@@ -935,6 +952,21 @@ std::unique_ptr<zetasql::Function> CastNumericToDoubleFunction(
       zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
           gsql_double, {gsql_pg_numeric}, /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> CastNumericToFloatFunction(
+    absl::string_view catalog_name) {
+  static const zetasql::Type* gsql_pg_numeric =
+      spangres::datatypes::GetPgNumericType();
+
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalCastNumericToFloat));
+  return std::make_unique<zetasql::Function>(
+      kPGCastNumericToFloatFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+          gsql_float, {gsql_pg_numeric}, /*context_ptr=*/nullptr}},
       function_options);
 }
 
@@ -1497,20 +1529,22 @@ std::unique_ptr<zetasql::Function> ExtractFunction(
       function_options);
 }
 
-// Maps double value to an integer value in such a way, that the PostgreSQL
-// sort order/comparison semantics of DOUBLE PRECISION (FLOAT8) type values is
-// preserved in the order of obtained (after mapping) int64_t values ({input x <
-// input y} => {output for x < output for y}).
+// Maps float and double value to an integer value in such a way, that the
+// PostgreSQL sort order/comparison semantics of FLOAT4 and FLOAT8 type
+// values is preserved in the order of obtained (after mapping) int64_t values
+// ({input x < input y} => {output for x < output for y}).
 //
-// PostgreSQL FLOAT8 comparison semantic rules are as follows:
+// PostgreSQL FLOAT4 or FLOAT8 comparison semantic rules are as follows:
 // * All Nan values are equal (including negative).
 // * Nan value is bigger than any other non-null floating point value.
 // * Negative zero (-0.0) is equal to positive zero (0.0).
-absl::StatusOr<zetasql::Value> EvalMapDoubleToInt(
+template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
+absl::StatusOr<zetasql::Value> EvalMapFloatingPointToInt(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 1);
 
-  double num = args[0].double_value();
+  double num = static_cast<double>(args[0].Get<T>());
+
   if (std::isnan(num)) {
     return zetasql::Value::Int64(std::numeric_limits<int64_t>::max());
   }
@@ -1529,13 +1563,28 @@ std::unique_ptr<zetasql::Function> MapDoubleToIntFunction(
     const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
-      zetasql::FunctionEvaluator(EvalMapDoubleToInt));
+      zetasql::FunctionEvaluator(EvalMapFloatingPointToInt<double>));
 
   return std::make_unique<zetasql::Function>(
       kPGMapDoubleToIntFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{zetasql::types::Int64Type(),
                                        {zetasql::types::DoubleType()},
+                                       nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> MapFloatToIntFunction(
+    const std::string& catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(
+      zetasql::FunctionEvaluator(EvalMapFloatingPointToInt<float>));
+
+  return std::make_unique<zetasql::Function>(
+      kPGMapFloatToIntFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{zetasql::types::Int64Type(),
+                                       {zetasql::types::FloatType()},
                                        nullptr}},
       function_options);
 }
@@ -1560,6 +1609,8 @@ absl::StatusOr<std::string> GetStringRepresentation(
       return value.bool_value() ? kTrue : kFalse;
     case zetasql::TYPE_DOUBLE:
       return zetasql::RoundTripDoubleToString(value.double_value());
+    case zetasql::TYPE_FLOAT:
+      return zetasql::RoundTripFloatToString(value.float_value());
     case zetasql::TYPE_STRING:
       return value.string_value();
     case zetasql::TYPE_BYTES:
@@ -1633,14 +1684,15 @@ absl::StatusOr<zetasql::Value> EvalToJsonbFromBool(
   return CreatePgJsonbValue(GetStringRepresentation(arg).value());
 }
 
-// Returns a normalized PG.JSONB value from the double input.
-absl::StatusOr<zetasql::Value> EvalToJsonbFromDouble(
+// Returns a normalized PG.JSONB value from the floating point input.
+template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
+absl::StatusOr<zetasql::Value> EvalToJsonbFromFloatingPoint(
     const zetasql::Value arg) {
-  if (std::isnan(arg.double_value())) {
+  if (std::isnan(arg.Get<T>())) {
     return CreatePgJsonbValueFromNormalized(absl::Cord(kNanString));
   }
-  if (std::isinf(arg.double_value())) {
-    return arg.double_value() > 0
+  if (std::isinf(arg.Get<T>())) {
+    return arg.Get<T>() > 0
                ? CreatePgJsonbValueFromNormalized(absl::Cord(kInfString))
                : CreatePgJsonbValueFromNormalized(absl::Cord(kNegInfString));
   }
@@ -1733,7 +1785,9 @@ absl::StatusOr<zetasql::Value> EvalToJsonbFromValue(
     case zetasql::TYPE_BOOL:
       return EvalToJsonbFromBool(arg);
     case zetasql::TYPE_DOUBLE:
-      return EvalToJsonbFromDouble(arg);
+      return EvalToJsonbFromFloatingPoint<double>(arg);
+    case zetasql::TYPE_FLOAT:
+      return EvalToJsonbFromFloatingPoint<float>(arg);
     case zetasql::TYPE_STRING:
       return EvalToJsonbFromString(arg);
     case zetasql::TYPE_BYTES:
@@ -1784,6 +1838,10 @@ std::unique_ptr<zetasql::Function> ToJsonbFunction(
           zetasql::FunctionSignature{
               gsql_pg_jsonb, {gsql_double_array}, /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{
+              gsql_pg_jsonb, {gsql_float}, /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{
+              gsql_pg_jsonb, {gsql_float_array}, /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{
               gsql_pg_jsonb, {gsql_int64}, /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{
               gsql_pg_jsonb, {gsql_int64_array}, /*context_ptr=*/nullptr},
@@ -1818,6 +1876,8 @@ absl::StatusOr<zetasql::Value> EvalCastFromJsonb(
       return spangres::datatypes::PgJsonbToBoolConversion(args);
     case zetasql::TYPE_DOUBLE:
       return spangres::datatypes::PgJsonbToDoubleConversion(args);
+    case zetasql::TYPE_FLOAT:
+      return spangres::datatypes::PgJsonbToFloatConversion(args);
     case zetasql::TYPE_STRING:
       return spangres::datatypes::PgJsonbToStringConversion(args);
     default:
@@ -2127,20 +2187,22 @@ std::unique_ptr<zetasql::Function> JsonbBuildObjectFunction(
       function_options);
 }
 
-// PgDoubleLess and PgDoubleGreater are alternatives to std::less<double> and
-// std::greater<double> which capture Postgres' ordering semantics.
-// std::less<double> and std::greater<double> do not have proper ordering
-// semantics for NaN values, they will always return false when one of the
-// argument is NaN. In Postgres NaN is the highest valued float8 and NUMERIC.
+// PgLesser and PgGreater are alternatives to
+// std::less<float|double> and std::greater<float|double> which capture
+// Postgres' ordering semantics. std::less<float|double> and
+// std::greater<float|double> do not have proper ordering semantics for NaN
+// values, they will always return false when one of the argument is NaN. In
+// Postgres NaN is the highest valued float4, float8 and NUMERIC.
 // LEAST(12::float8, 3::float8, 'nan'::float8, null::float8) => 3
 // GREATEST(12::float8, 3::float8, 'nan'::float8, null::float8) => NaN
-class PgDoubleLess {
+template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
+class PgFloatingPointLesser {
  public:
   // Returns true iff lhs is strictly less than rhs.
   bool operator()(const zetasql::Value lhs,
                   const zetasql::Value rhs) const {
-    double typed_lhs = lhs.double_value();
-    double typed_rhs = rhs.double_value();
+    T typed_lhs = lhs.Get<T>();
+    T typed_rhs = rhs.Get<T>();
 
     if (std::isnan(typed_lhs) && std::isnan(typed_rhs)) {
       return false;
@@ -2154,13 +2216,14 @@ class PgDoubleLess {
   }
 };
 
-class PgDoubleGreater {
+template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
+class PgFloatingPointGreater {
  public:
   // Returns true iff lhs is strictly greater than rhs.
   bool operator()(const zetasql::Value lhs,
                   const zetasql::Value rhs) const {
-    double typed_lhs = lhs.double_value();
-    double typed_rhs = rhs.double_value();
+    T typed_lhs = lhs.Get<T>();
+    T typed_rhs = rhs.Get<T>();
 
     if (std::isnan(typed_lhs) && std::isnan(typed_rhs)) {
       return false;
@@ -2174,7 +2237,7 @@ class PgDoubleGreater {
   }
 };
 
-class PgLess {
+class PgLesser {
  public:
   // Returns true iff lhs is strictly less than rhs.
   bool operator()(const zetasql::Value lhs,
@@ -2238,7 +2301,8 @@ absl::StatusOr<zetasql::Value> EvalLeastGreatest(
 std::pair<std::unique_ptr<zetasql::Function>,
           std::unique_ptr<zetasql::Function>>
 LeastGreatestFunctions(const std::string& catalog_name) {
-  auto is_non_double_supported_type = [](const zetasql::Type* type) -> bool {
+  auto is_non_floating_point_supported_type =
+      [](const zetasql::Type* type) -> bool {
     return (type->IsInt64() || type->IsBool() || type->IsBytes() ||
             type->IsString() || type->IsDate() || type->IsTimestamp());
   };
@@ -2247,10 +2311,12 @@ LeastGreatestFunctions(const std::string& catalog_name) {
       [&](const zetasql::FunctionSignature& signature)
           -> absl::StatusOr<zetasql::FunctionEvaluator> {
         if (signature.result_type().type()->IsDouble()) {
-          return EvalLeastGreatest<PgDoubleLess>;
-        } else if (is_non_double_supported_type(
+          return EvalLeastGreatest<PgFloatingPointLesser<double>>;
+        } else if (signature.result_type().type()->IsFloat()) {
+          return EvalLeastGreatest<PgFloatingPointLesser<float>>;
+        } else if (is_non_floating_point_supported_type(
                        signature.result_type().type())) {
-          return EvalLeastGreatest<PgLess>;
+          return EvalLeastGreatest<PgLesser>;
         }
         return absl::InvalidArgumentError(
             absl::Substitute("Unsupported type $0 when calling $1()",
@@ -2265,8 +2331,10 @@ LeastGreatestFunctions(const std::string& catalog_name) {
       [&](const zetasql::FunctionSignature& signature)
           -> absl::StatusOr<zetasql::FunctionEvaluator> {
         if (signature.result_type().type()->IsDouble()) {
-          return EvalLeastGreatest<PgDoubleGreater>;
-        } else if (is_non_double_supported_type(
+          return EvalLeastGreatest<PgFloatingPointGreater<double>>;
+        } else if (signature.result_type().type()->IsFloat()) {
+          return EvalLeastGreatest<PgFloatingPointGreater<float>>;
+        } else if (is_non_floating_point_supported_type(
                        signature.result_type().type())) {
           return EvalLeastGreatest<PgGreater>;
         }
@@ -2281,6 +2349,7 @@ LeastGreatestFunctions(const std::string& catalog_name) {
 
   std::vector<const zetasql::Type*> supported_types{
       zetasql::types::DoubleType(),
+      zetasql::types::FloatType(),
       zetasql::types::Int64Type(),
       zetasql::types::BoolType(),
       zetasql::types::BytesType(),
@@ -2314,10 +2383,11 @@ LeastGreatestFunctions(const std::string& catalog_name) {
 
 // Aggregate functions.
 
-class MinDoubleEvaluator : public zetasql::AggregateFunctionEvaluator {
+template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
+class MinFloatingPointEvaluator : public zetasql::AggregateFunctionEvaluator {
  public:
-  explicit MinDoubleEvaluator() {}
-  ~MinDoubleEvaluator() override = default;
+  explicit MinFloatingPointEvaluator() {}
+  ~MinFloatingPointEvaluator() override = default;
 
   absl::Status Reset() override { return absl::OkStatus(); }
 
@@ -2330,9 +2400,9 @@ class MinDoubleEvaluator : public zetasql::AggregateFunctionEvaluator {
     }
 
     const zetasql::Value value = *args[0];
-    if (!value.type()->IsDouble()) {
+    if (!value.type()->IsDouble() && !value.type()->IsFloat()) {
       return absl::InvalidArgumentError(
-          "Cannot accumulate value which is not of type double.");
+          "Cannot accumulate value which is not of type double or float.");
     }
 
     // TODO: Figure out why IgnoreNulls(), which defaults to true
@@ -2345,13 +2415,12 @@ class MinDoubleEvaluator : public zetasql::AggregateFunctionEvaluator {
     // comparison with the current value in context as NaN is greater than all
     // other values in PostgreSQL.
     if (result_.is_null()) {
-      result_ =
-          zetasql::Value::Double(std::numeric_limits<double>::quiet_NaN());
+      result_ = zetasql::Value::Make<T>(std::numeric_limits<T>::quiet_NaN());
     }
 
     // Use the comparison function that respects the NaN-ordering semantics of
     // PostgreSQL.
-    if (PgDoubleLess()(value, result_)) {
+    if (PgFloatingPointLesser<T>()(value, result_)) {
       result_ = value;
     }
 
@@ -2363,15 +2432,19 @@ class MinDoubleEvaluator : public zetasql::AggregateFunctionEvaluator {
  private:
   // Initialized to NULL as it's the default value to return if no values are
   // provided to aggregate or if all the values to aggregate are NULL.
-  zetasql::Value result_ = zetasql::values::NullDouble();
+  zetasql::Value result_ = zetasql::Value::MakeNull<T>();
 };
 
 std::unique_ptr<zetasql::Function> MinAggregator(
     const std::string& catalog_name) {
   zetasql::AggregateFunctionEvaluatorFactory aggregate_fn =
-      [](const zetasql::FunctionSignature& sig) {
-        return std::make_unique<MinDoubleEvaluator>();
-      };
+      [](const zetasql::FunctionSignature& sig)
+      -> std::unique_ptr<zetasql::AggregateFunctionEvaluator> {
+    if (sig.result_type().type()->IsFloat()) {
+      return std::make_unique<MinFloatingPointEvaluator<float>>();
+    }
+    return std::make_unique<MinFloatingPointEvaluator<double>>();
+  };
 
   zetasql::FunctionOptions options;
   options.set_aggregate_function_evaluator_factory(aggregate_fn);
@@ -2380,6 +2453,9 @@ std::unique_ptr<zetasql::Function> MinAggregator(
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{zetasql::types::DoubleType(),
                                        {zetasql::types::DoubleType()},
+                                       nullptr},
+          zetasql::FunctionSignature{zetasql::types::FloatType(),
+                                       {zetasql::types::FloatType()},
                                        nullptr}},
       options);
 }
@@ -2478,7 +2554,9 @@ std::unique_ptr<zetasql::Function> MaxNumericAggregator(
       options);
 }
 
-// Can evaluate a sum for INT64, DOUBLE and PG.NUMERIC.
+enum SumAvgAggregatorType { Sum, Avg };
+
+// Can evaluate a sum for INT64, FLOAT, DOUBLE and PG.NUMERIC.
 class SumEvaluator : public zetasql::AggregateFunctionEvaluator {
  public:
   explicit SumEvaluator() {}
@@ -2503,6 +2581,11 @@ class SumEvaluator : public zetasql::AggregateFunctionEvaluator {
       if (value.type_kind() == zetasql::TYPE_DOUBLE) {
         kind_ = zetasql::TYPE_DOUBLE;
         result_ = zetasql::values::NullDouble();
+      } else if (value.type_kind() == zetasql::TYPE_FLOAT) {
+        kind_ = zetasql::TYPE_FLOAT;
+        // Avg of float returns a double.
+        result_ = IsAvgEvaluator() ? zetasql::values::NullDouble()
+                                   : zetasql::values::NullFloat();
       } else if (value.type_kind() == zetasql::TYPE_INT64 ||
                  (value.type_kind() == zetasql::TYPE_EXTENDED &&
                   value.type()->Equals(gsql_pg_numeric_))) {
@@ -2511,8 +2594,8 @@ class SumEvaluator : public zetasql::AggregateFunctionEvaluator {
         result_ = zetasql::values::Null(gsql_pg_numeric_);
       } else {
         return absl::InvalidArgumentError(
-            "Cannot accumulate value which is not of type INT64, DOUBLE or "
-            "PG.NUMERIC.");
+            "Cannot accumulate value which is not of type INT64, FLOAT, DOUBLE "
+            "or PG.NUMERIC.");
       }
     } else if (value.type_kind() != kind_ ||
                (value.type_kind() == zetasql::TYPE_EXTENDED &&
@@ -2537,6 +2620,11 @@ class SumEvaluator : public zetasql::AggregateFunctionEvaluator {
         // correct type.
         ZETASQL_ASSIGN_OR_RETURN(result_, CreatePgNumericValueWithMemoryContext(
                                       absl::StrCat(value.int64_value())));
+      } else if (IsAvgEvaluator() &&
+                 value.type_kind() == zetasql::TYPE_FLOAT) {
+        // Convert the float to double for avg calculations.
+        result_ =
+            zetasql::values::Double(static_cast<double>(value.float_value()));
       } else {
         result_ = value;
       }
@@ -2562,6 +2650,25 @@ class SumEvaluator : public zetasql::AggregateFunctionEvaluator {
       absl::Status status;
       if (!zetasql::functions::Add(result_.double_value(),
                                      value.double_value(), &result, &status)) {
+        return status;
+      }
+      result_ = zetasql::values::Double(result);
+    } else if (value.type_kind() == zetasql::TYPE_FLOAT &&
+               !IsAvgEvaluator()) {
+      float result;
+      absl::Status status;
+      if (!zetasql::functions::Add(result_.float_value(), value.float_value(),
+                                     &result, &status)) {
+        return status;
+      }
+      result_ = zetasql::values::Float(result);
+    } else if (value.type_kind() == zetasql::TYPE_FLOAT && IsAvgEvaluator()) {
+      // Calculations of avg over float values happens in the double domain.
+      double result;
+      absl::Status status;
+      if (!zetasql::functions::Add(result_.double_value(),
+                                     static_cast<double>(value.float_value()),
+                                     &result, &status)) {
         return status;
       }
       result_ = zetasql::values::Double(result);
@@ -2595,6 +2702,8 @@ class SumEvaluator : public zetasql::AggregateFunctionEvaluator {
   zetasql::Value result_;
   const zetasql::Type* gsql_pg_numeric_ =
       spangres::datatypes::GetPgNumericType();
+
+  virtual bool IsAvgEvaluator() { return false; }
 };
 
 std::unique_ptr<zetasql::Function> SumAggregator(
@@ -2617,12 +2726,15 @@ std::unique_ptr<zetasql::Function> SumAggregator(
           zetasql::FunctionSignature{zetasql::types::DoubleType(),
                                        {zetasql::types::DoubleType()},
                                        nullptr},
+          zetasql::FunctionSignature{zetasql::types::FloatType(),
+                                       {zetasql::types::FloatType()},
+                                       nullptr},
           zetasql::FunctionSignature{
               gsql_pg_numeric, {gsql_pg_numeric}, nullptr}},
       options);
 }
 
-// Can evaluate the avg for INT64, DOUBLE and PG.NUMERIC.
+// Can evaluate the avg for INT64, FLOAT, DOUBLE and PG.NUMERIC.
 class AvgEvaluator : public SumEvaluator {
  public:
   absl::StatusOr<zetasql::Value> GetFinalResult() override {
@@ -2634,12 +2746,13 @@ class AvgEvaluator : public SumEvaluator {
       return zetasql::values::Null(gsql_pg_numeric_);
     }
 
-    if (kind_ == zetasql::TYPE_DOUBLE) {
+    if (kind_ == zetasql::TYPE_DOUBLE || kind_ == zetasql::TYPE_FLOAT) {
       if (result_.is_null()) {
         return zetasql::values::NullDouble();
       }
       double result;
       absl::Status status;
+      // `result_` is always a double value, even for when the input is float.
       if (!zetasql::functions::Divide(result_.double_value(),
                                         static_cast<double>(count_), &result,
                                         &status)) {
@@ -2658,6 +2771,9 @@ class AvgEvaluator : public SumEvaluator {
                      CreatePgNumericValue(absl::StrCat(count_)));
     return EvalNumericDivide(absl::MakeConstSpan({result_, count_as_numeric}));
   }
+
+ protected:
+  virtual bool IsAvgEvaluator() override { return true; }
 };
 
 std::unique_ptr<zetasql::Function> AvgAggregator(
@@ -2679,6 +2795,9 @@ std::unique_ptr<zetasql::Function> AvgAggregator(
               gsql_pg_numeric, {zetasql::types::Int64Type()}, nullptr},
           zetasql::FunctionSignature{zetasql::types::DoubleType(),
                                        {zetasql::types::DoubleType()},
+                                       nullptr},
+          zetasql::FunctionSignature{zetasql::types::DoubleType(),
+                                       {zetasql::types::FloatType()},
                                        nullptr},
           zetasql::FunctionSignature{
               gsql_pg_numeric, {gsql_pg_numeric}, nullptr}},
@@ -3225,6 +3344,23 @@ absl::StatusOr<zetasql::Value> EvalCastNumericToDouble(
   return zetasql::Value::Double(out);
 }
 
+absl::StatusOr<zetasql::Value> EvalCastNumericToFloat(
+    absl::Span<const zetasql::Value> args) {
+  ZETASQL_RET_CHECK(args.size() == 1);
+  if (args[0].is_null()) {
+    return zetasql::Value::NullFloat();
+  }
+  ZETASQL_ASSIGN_OR_RETURN(absl::Cord normalized_value,
+                   GetPgNumericNormalizedValue(args[0]));
+  float out;
+  bool result = absl::SimpleAtof(std::string(normalized_value), &out);
+  if (!result || std::isinf(out)) {
+    return absl::OutOfRangeError(absl::StrCat("Cannot cast to float from ",
+                                              std::string(normalized_value)));
+  }
+  return zetasql::Value::Float(out);
+}
+
 absl::StatusOr<zetasql::Value> EvalCastNumericToString(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 1);
@@ -3235,6 +3371,21 @@ absl::StatusOr<zetasql::Value> EvalCastNumericToString(
                    GetPgNumericNormalizedValue(args[0]));
   return zetasql::Value::String(std::string(normalized_value));
 }
+
+namespace {
+template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
+absl::StatusOr<std::string> FloatingPointToNumeric(
+    zetasql::Value gsql_value) {
+  if (std::isnan(gsql_value.Get<T>())) {
+    return kNan;
+  } else if (std::isinf(gsql_value.Get<T>())) {
+    return absl::InvalidArgumentError("Cannot cast infinity to PG.NUMERIC");
+  } else {
+    return absl::StrFormat("%.*g", std::numeric_limits<T>::digits10,
+                           gsql_value.Get<T>());
+  }
+}
+}  // namespace
 
 absl::StatusOr<zetasql::Value> EvalCastToNumeric(
     absl::Span<const zetasql::Value> args) {
@@ -3267,18 +3418,15 @@ absl::StatusOr<zetasql::Value> EvalCastToNumeric(
     case zetasql::TYPE_INT64:
       input_to_string = absl::StrCat(args[0].int64_value());
       break;
-    case zetasql::TYPE_DOUBLE:
-      if (std::isnan(args[0].double_value())) {
-        input_to_string = kNan;
-        break;
-      }
-      if (std::isinf(args[0].double_value())) {
-        return absl::InvalidArgumentError("Cannot cast infinity to PG.NUMERIC");
-      }
-      input_to_string =
-          absl::StrFormat("%.*g", std::numeric_limits<double>::digits10,
-                          args[0].double_value());
+    case zetasql::TYPE_DOUBLE: {
+      ZETASQL_ASSIGN_OR_RETURN(input_to_string,
+                       FloatingPointToNumeric<double>(args[0]));
       break;
+    }
+    case zetasql::TYPE_FLOAT: {
+      ZETASQL_ASSIGN_OR_RETURN(input_to_string, FloatingPointToNumeric<float>(args[0]));
+      break;
+    }
     case zetasql::TYPE_STRING:
       input_to_string = args[0].string_value();
       break;
@@ -3374,6 +3522,88 @@ absl::StatusOr<zetasql::Value> EvalCastOidToString(
   return zetasql::Value::String(absl::StrCat(oid));
 }
 
+namespace {
+inline bool FloatDivide(float in1, float in2, float* out, absl::Status* error) {
+  if (ABSL_PREDICT_FALSE(in2 == 0)) {
+    *error = absl::OutOfRangeError(
+        absl::StrCat("division by zero: ", in1, " / ", in2));
+    return false;
+  }
+  *out = in1 / in2;
+  if (ABSL_PREDICT_TRUE(std::isfinite(*out))) {
+    return true;
+  } else if (!std::isfinite(in1) || !std::isfinite(in2)) {
+    return true;
+  } else {
+    *error = absl::OutOfRangeError(
+        absl::StrCat("float overflow: ", in1, " / ", in2));
+    return false;
+  }
+}
+}  // namespace
+
+absl::StatusOr<zetasql::Value> EvalFloatArithmetic(
+    absl::Span<const zetasql::Value> args,
+    std::function<bool(float, float, float*, absl::Status*)> Fn) {
+  ZETASQL_RET_CHECK(args.size() == 2 && Fn != nullptr);
+  if (args[0].is_null() || args[1].is_null()) {
+    return zetasql::Value::Null(zetasql::types::FloatType());
+  }
+
+  float arg0 = args[0].float_value();
+  float arg1 = args[1].float_value();
+
+  float result;
+  absl::Status error;
+  bool is_success = Fn(arg0, arg1, &result, &error);
+
+  if (!is_success || !error.ok()) {
+    return error;
+  }
+
+  return zetasql::Value::Float(result);
+}
+
+std::unique_ptr<zetasql::Function> FloatArithmeticFunction(
+    absl::string_view function_name, absl::string_view catalog_name) {
+  zetasql::FunctionOptions function_options;
+
+  if (function_name == kPGFloatAddFunctionName) {
+    function_options.set_evaluator(
+        PGFunctionEvaluator([&](absl::Span<const zetasql::Value> args) {
+          return EvalFloatArithmetic(args, zetasql::functions::Add<float>);
+        }));
+  } else if (function_name == kPGFloatSubtractFunctionName) {
+    function_options.set_evaluator(
+        PGFunctionEvaluator([&](absl::Span<const zetasql::Value> args) {
+          return EvalFloatArithmetic(args,
+                                     zetasql::functions::Subtract<float>);
+        }));
+  } else if (function_name == kPGFloatMultiplyFunctionName) {
+    function_options.set_evaluator(
+        PGFunctionEvaluator([&](absl::Span<const zetasql::Value> args) {
+          return EvalFloatArithmetic(args,
+                                     zetasql::functions::Multiply<float>);
+        }));
+  } else if (function_name == kPGFloatDivideFunctionName) {
+    function_options.set_evaluator(
+        PGFunctionEvaluator([&](absl::Span<const zetasql::Value> args) {
+          return EvalFloatArithmetic(args, FloatDivide);
+        }));
+  } else {
+    ABSL_DCHECK(false) << "Unsupported float arithmetic function: "
+                  << function_name;
+    return nullptr;
+  }
+
+  return std::make_unique<zetasql::Function>(
+      function_name, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{{gsql_float,
+                                                 {gsql_float, gsql_float},
+                                                 /*context_ptr=*/nullptr}},
+      function_options);
+}
+
 SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   SpannerPGFunctions functions;
 
@@ -3396,6 +3626,9 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
 
   auto map_double_to_int_func = MapDoubleToIntFunction(catalog_name);
   functions.push_back(std::move(map_double_to_int_func));
+
+  auto map_float_to_int_func = MapFloatToIntFunction(catalog_name);
+  functions.push_back(std::move(map_float_to_int_func));
 
   auto least_greatest_funcs = LeastGreatestFunctions(catalog_name);
   functions.push_back(std::move(least_greatest_funcs.first));   // least
@@ -3467,6 +3700,19 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   auto jsonb_build_object_func = JsonbBuildObjectFunction(catalog_name);
   functions.push_back(std::move(jsonb_build_object_func));
 
+  auto float_add_func =
+      FloatArithmeticFunction(kPGFloatAddFunctionName, catalog_name);
+  functions.push_back(std::move(float_add_func));
+  auto float_subtract_func =
+      FloatArithmeticFunction(kPGFloatSubtractFunctionName, catalog_name);
+  functions.push_back(std::move(float_subtract_func));
+  auto float_multiply_func =
+      FloatArithmeticFunction(kPGFloatMultiplyFunctionName, catalog_name);
+  functions.push_back(std::move(float_multiply_func));
+  auto float_divide_func =
+      FloatArithmeticFunction(kPGFloatDivideFunctionName, catalog_name);
+  functions.push_back(std::move(float_divide_func));
+
   auto numeric_abs_func = NumericAbsFunction(catalog_name);
   functions.push_back(std::move(numeric_abs_func));
   auto numeric_add_func = NumericAddFunction(catalog_name);
@@ -3495,6 +3741,8 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(cast_numeric_to_int64_func));
   auto cast_numeric_to_double_func = CastNumericToDoubleFunction(catalog_name);
   functions.push_back(std::move(cast_numeric_to_double_func));
+  auto cast_numeric_to_float_func = CastNumericToFloatFunction(catalog_name);
+  functions.push_back(std::move(cast_numeric_to_float_func));
   auto cast_to_numeric_func = CastToNumericFunction(catalog_name);
   functions.push_back(std::move(cast_to_numeric_func));
   auto cast_numeric_to_string_func = CastNumericToStringFunction(catalog_name);

@@ -96,8 +96,7 @@ static absl::Status DateTimeParseError(int dterr, absl::string_view str,
  * should be safe to call directly instead of through the error shim.
  */
 absl::StatusOr<PGInterval> ParseInterval(absl::string_view input_string) {
-  fsec_t fsec;
-  struct pg_tm tt, *tm = &tt;
+  struct pg_itm_in tt, *itm_in = &tt;
   int dtype;
   int nf;
   int range = INTERVAL_FULL_RANGE;
@@ -109,7 +108,7 @@ absl::StatusOr<PGInterval> ParseInterval(absl::string_view input_string) {
   dterr = ParseDateTime(input_string.data(), workbuf, sizeof(workbuf), field,
                         ftype, MAXDATEFIELDS, &nf);
   if (dterr == 0) {
-    dterr = DecodeInterval(field, ftype, nf, range, &dtype, tm, &fsec);
+    dterr = DecodeInterval(field, ftype, nf, range, &dtype, itm_in);
   }
 
   /* if those functions think it's a bad format, try ISO8601 style */
@@ -119,7 +118,7 @@ absl::StatusOr<PGInterval> ParseInterval(absl::string_view input_string) {
    */
   char *non_const_input = const_cast<char *>(input_string.data());
   if (dterr == DTERR_BAD_FORMAT) {
-    dterr = DecodeISO8601Interval(non_const_input, &dtype, tm, &fsec);
+    dterr = DecodeISO8601Interval(non_const_input, &dtype, itm_in);
   }
 
   if (dterr != 0) {
@@ -130,7 +129,7 @@ absl::StatusOr<PGInterval> ParseInterval(absl::string_view input_string) {
   }
 
   Interval res;
-  if (tm2interval(tm, 0, &res) != 0) {
+  if (itmin2interval(itm_in, &res) != 0) {
     return absl::InvalidArgumentError(
         absl::StrFormat("invalid interval: \"%s\"", input_string));
   }

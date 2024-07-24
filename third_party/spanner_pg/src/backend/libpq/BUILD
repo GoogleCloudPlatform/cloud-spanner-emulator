@@ -48,6 +48,7 @@ cc_library(
     name = "libpq",
     srcs = [
         "auth.c",
+        "auth-sasl.c",
         "auth-scram.c",
         "be-fsstubs.c",
         "be-secure.c",

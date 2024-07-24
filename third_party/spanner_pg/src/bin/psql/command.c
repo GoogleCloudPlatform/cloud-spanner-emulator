@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2022, PostgreSQL Global Development Group
  *
  * src/bin/psql/command.c
  */
@@ -13,6 +13,7 @@
 #include <utime.h>
 #ifndef WIN32
 #include <sys/stat.h>			/* for stat() */
+#include <sys/time.h>			/* for setitimer() */
 #include <fcntl.h>				/* open() flags */
 #include <unistd.h>				/* for geteuid(), getpid(), stat() */
 #else
@@ -97,6 +98,8 @@ static backslashResult process_command_g_options(char *first_option,
 												 bool active_branch,
 												 const char *cmd);
 static backslashResult exec_command_gdesc(PsqlScanState scan_state, bool active_branch);
+static backslashResult exec_command_getenv(PsqlScanState scan_state, bool active_branch,
+										   const char *cmd);
 static backslashResult exec_command_gexec(PsqlScanState scan_state, bool active_branch);
 static backslashResult exec_command_gset(PsqlScanState scan_state, bool active_branch);
 static backslashResult exec_command_help(PsqlScanState scan_state, bool active_branch);
@@ -228,7 +231,7 @@ HandleSlashCmds(PsqlScanState scan_state,
 	{
 		pg_log_error("invalid command \\%s", cmd);
 		if (pset.cur_cmd_interactive)
-			pg_log_info("Try \\? for help.");
+			pg_log_error_hint("Try \\? for help.");
 		status = PSQL_CMD_ERROR;
 	}
 
@@ -275,7 +278,7 @@ HandleSlashCmds(PsqlScanState scan_state,
  * Subroutine to actually try to execute a backslash command.
  *
  * The typical "success" result code is PSQL_CMD_SKIP_LINE, although some
- * commands return something else.  Failure results are PSQL_CMD_ERROR,
+ * commands return something else.  Failure result code is PSQL_CMD_ERROR,
  * unless PSQL_CMD_UNKNOWN is more appropriate.
  */
 static backslashResult
@@ -346,6 +349,8 @@ exec_command(const char *cmd,
 		status = exec_command_g(scan_state, active_branch, cmd);
 	else if (strcmp(cmd, "gdesc") == 0)
 		status = exec_command_gdesc(scan_state, active_branch);
+	else if (strcmp(cmd, "getenv") == 0)
+		status = exec_command_getenv(scan_state, active_branch, cmd);
 	else if (strcmp(cmd, "gexec") == 0)
 		status = exec_command_gexec(scan_state, active_branch);
 	else if (strcmp(cmd, "gset") == 0)
@@ -552,19 +557,25 @@ exec_command_cd(PsqlScanState scan_state, bool active_branch, const char *cmd)
 		else
 		{
 #ifndef WIN32
-			struct passwd *pw;
-			uid_t		user_id = geteuid();
-
-			errno = 0;			/* clear errno before call */
-			pw = getpwuid(user_id);
-			if (!pw)
+			/* This should match get_home_path() */
+			dir = getenv("HOME");
+			if (dir == NULL || dir[0] == '\0')
 			{
-				pg_log_error("could not get home directory for user ID %ld: %s",
-							 (long) user_id,
-							 errno ? strerror(errno) : _("user does not exist"));
-				exit(EXIT_FAILURE);
+				uid_t		user_id = geteuid();
+				struct passwd *pw;
+
+				errno = 0;		/* clear errno before call */
+				pw = getpwuid(user_id);
+				if (pw)
+					dir = pw->pw_dir;
+				else
+				{
+					pg_log_error("could not get home directory for user ID %ld: %s",
+								 (long) user_id,
+								 errno ? strerror(errno) : _("user does not exist"));
+					success = false;
+				}
 			}
-			dir = pw->pw_dir;
 #else							/* WIN32 */
 
 			/*
@@ -575,7 +586,8 @@ exec_command_cd(PsqlScanState scan_state, bool active_branch, const char *cmd)
 #endif							/* WIN32 */
 		}
 
-		if (chdir(dir) == -1)
+		if (success &&
+			chdir(dir) < 0)
 		{
 			pg_log_error("\\%s: could not change directory to \"%s\": %m",
 						 cmd, dir);
@@ -670,7 +682,7 @@ exec_command_copyright(PsqlScanState scan_state, bool active_branch)
 }
 
 /*
- * \crosstabview -- execute a query and display results in crosstab
+ * \crosstabview -- execute a query and display result in crosstab
  */
 static backslashResult
 exec_command_crosstabview(PsqlScanState scan_state, bool active_branch)
@@ -767,7 +779,14 @@ exec_command_d(PsqlScanState scan_state, bool active_branch, const char *cmd)
 				success = describeTablespaces(pattern, show_verbose);
 				break;
 			case 'c':
-				success = listConversions(pattern, show_verbose, show_system);
+				if (strncmp(cmd, "dconfig", 7) == 0)
+					success = describeConfigurationParameters(pattern,
+															  show_verbose,
+															  show_system);
+				else
+					success = listConversions(pattern,
+											  show_verbose,
+											  show_system);
 				break;
 			case 'C':
 				success = listCasts(pattern, show_verbose);
@@ -805,7 +824,7 @@ exec_command_d(PsqlScanState scan_state, bool active_branch, const char *cmd)
 				success = describeRoles(pattern, show_verbose, show_system);
 				break;
 			case 'l':
-				success = do_lo_list();
+				success = listLargeObjects(show_verbose);
 				break;
 			case 'L':
 				success = listLanguages(pattern, show_verbose, show_system);
@@ -1101,21 +1120,7 @@ exec_command_ef_ev(PsqlScanState scan_state, bool active_branch,
 													  NULL, true);
 		int			lineno = -1;
 
-		if (pset.sversion < (is_func ? 80400 : 70400))
-		{
-			char		sverbuf[32];
-
-			formatPGVersionNumber(pset.sversion, false,
-								  sverbuf, sizeof(sverbuf));
-			if (is_func)
-				pg_log_error("The server (version %s) does not support editing function source.",
-							 sverbuf);
-			else
-				pg_log_error("The server (version %s) does not support editing view definitions.",
-							 sverbuf);
-			status = PSQL_CMD_ERROR;
-		}
-		else if (!query_buf)
+		if (!query_buf)
 		{
 			pg_log_error("no query buffer");
 			status = PSQL_CMD_ERROR;
@@ -1493,6 +1498,43 @@ exec_command_gdesc(PsqlScanState scan_state, bool active_branch)
 	}
 
 	return status;
+}
+
+/*
+ * \getenv -- set variable from environment variable
+ */
+static backslashResult
+exec_command_getenv(PsqlScanState scan_state, bool active_branch,
+					const char *cmd)
+{
+	bool		success = true;
+
+	if (active_branch)
+	{
+		char	   *myvar = psql_scan_slash_option(scan_state,
+												   OT_NORMAL, NULL, false);
+		char	   *envvar = psql_scan_slash_option(scan_state,
+													OT_NORMAL, NULL, false);
+
+		if (!myvar || !envvar)
+		{
+			pg_log_error("\\%s: missing required argument", cmd);
+			success = false;
+		}
+		else
+		{
+			char	   *envval = getenv(envvar);
+
+			if (envval && !SetVariable(pset.vars, myvar, envval))
+				success = false;
+		}
+		free(myvar);
+		free(envvar);
+	}
+	else
+		ignore_slash_options(scan_state);
+
+	return success ? PSQL_CMD_SKIP_LINE : PSQL_CMD_ERROR;
 }
 
 /*
@@ -1936,7 +1978,9 @@ exec_command_lo(PsqlScanState scan_state, bool active_branch, const char *cmd)
 		}
 
 		else if (strcmp(cmd + 3, "list") == 0)
-			success = do_lo_list();
+			success = listLargeObjects(false);
+		else if (strcmp(cmd + 3, "list+") == 0)
+			success = listLargeObjects(true);
 
 		else if (strcmp(cmd + 3, "unlink") == 0)
 		{
@@ -2025,9 +2069,10 @@ exec_command_password(PsqlScanState scan_state, bool active_branch)
 	{
 		char	   *user = psql_scan_slash_option(scan_state,
 												  OT_SQLID, NULL, true);
-		char	   *pw1;
-		char	   *pw2;
+		char	   *pw1 = NULL;
+		char	   *pw2 = NULL;
 		PQExpBufferData buf;
+		PromptInterruptContext prompt_ctx;
 
 		if (user == NULL)
 		{
@@ -2042,13 +2087,24 @@ exec_command_password(PsqlScanState scan_state, bool active_branch)
 			PQclear(res);
 		}
 
+		/* Set up to let SIGINT cancel simple_prompt_extended() */
+		prompt_ctx.jmpbuf = sigint_interrupt_jmp;
+		prompt_ctx.enabled = &sigint_interrupt_enabled;
+		prompt_ctx.canceled = false;
+
 		initPQExpBuffer(&buf);
 		printfPQExpBuffer(&buf, _("Enter new password for user \"%s\": "), user);
 
-		pw1 = simple_prompt(buf.data, false);
-		pw2 = simple_prompt("Enter it again: ", false);
+		pw1 = simple_prompt_extended(buf.data, false, &prompt_ctx);
+		if (!prompt_ctx.canceled)
+			pw2 = simple_prompt_extended("Enter it again: ", false, &prompt_ctx);
 
-		if (strcmp(pw1, pw2) != 0)
+		if (prompt_ctx.canceled)
+		{
+			/* fail silently */
+			success = false;
+		}
+		else if (strcmp(pw1, pw2) != 0)
 		{
 			pg_log_error("Passwords didn't match.");
 			success = false;
@@ -2081,8 +2137,10 @@ exec_command_password(PsqlScanState scan_state, bool active_branch)
 		}
 
 		free(user);
-		free(pw1);
-		free(pw2);
+		if (pw1)
+			free(pw1);
+		if (pw2)
+			free(pw2);
 		termPQExpBuffer(&buf);
 	}
 	else
@@ -2118,6 +2176,12 @@ exec_command_prompt(PsqlScanState scan_state, bool active_branch,
 		else
 		{
 			char	   *result;
+			PromptInterruptContext prompt_ctx;
+
+			/* Set up to let SIGINT cancel simple_prompt_extended() */
+			prompt_ctx.jmpbuf = sigint_interrupt_jmp;
+			prompt_ctx.enabled = &sigint_interrupt_enabled;
+			prompt_ctx.canceled = false;
 
 			if (arg2)
 			{
@@ -2129,7 +2193,7 @@ exec_command_prompt(PsqlScanState scan_state, bool active_branch,
 
 			if (!pset.inputfile)
 			{
-				result = simple_prompt(prompt_text, true);
+				result = simple_prompt_extended(prompt_text, true, &prompt_ctx);
 			}
 			else
 			{
@@ -2147,8 +2211,8 @@ exec_command_prompt(PsqlScanState scan_state, bool active_branch,
 				}
 			}
 
-			if (result &&
-				!SetVariable(pset.vars, opt, result))
+			if (prompt_ctx.canceled ||
+				(result && !SetVariable(pset.vars, opt, result)))
 				success = false;
 
 			if (result)
@@ -2398,21 +2462,7 @@ exec_command_sf_sv(PsqlScanState scan_state, bool active_branch,
 		buf = createPQExpBuffer();
 		obj_desc = psql_scan_slash_option(scan_state,
 										  OT_WHOLE_LINE, NULL, true);
-		if (pset.sversion < (is_func ? 80400 : 70400))
-		{
-			char		sverbuf[32];
-
-			formatPGVersionNumber(pset.sversion, false,
-								  sverbuf, sizeof(sverbuf));
-			if (is_func)
-				pg_log_error("The server (version %s) does not support showing function source.",
-							 sverbuf);
-			else
-				pg_log_error("The server (version %s) does not support showing view definitions.",
-							 sverbuf);
-			status = PSQL_CMD_ERROR;
-		}
-		else if (!obj_desc)
+		if (!obj_desc)
 		{
 			if (is_func)
 				pg_log_error("function name is required");
@@ -3037,24 +3087,36 @@ copy_previous_query(PQExpBuffer query_buf, PQExpBuffer previous_buf)
 
 /*
  * Ask the user for a password; 'username' is the username the
- * password is for, if one has been explicitly specified. Returns a
- * malloc'd string.
+ * password is for, if one has been explicitly specified.
+ * Returns a malloc'd string.
+ * If 'canceled' is provided, *canceled will be set to true if the prompt
+ * is canceled via SIGINT, and to false otherwise.
  */
 static char *
-prompt_for_password(const char *username)
+prompt_for_password(const char *username, bool *canceled)
 {
 	char	   *result;
+	PromptInterruptContext prompt_ctx;
+
+	/* Set up to let SIGINT cancel simple_prompt_extended() */
+	prompt_ctx.jmpbuf = sigint_interrupt_jmp;
+	prompt_ctx.enabled = &sigint_interrupt_enabled;
+	prompt_ctx.canceled = false;
 
 	if (username == NULL || username[0] == '\0')
-		result = simple_prompt("Password: ", false);
+		result = simple_prompt_extended("Password: ", false, &prompt_ctx);
 	else
 	{
 		char	   *prompt_text;
 
 		prompt_text = psprintf(_("Password for user %s: "), username);
-		result = simple_prompt(prompt_text, false);
+		result = simple_prompt_extended(prompt_text, false, &prompt_ctx);
 		free(prompt_text);
 	}
+
+	if (canceled)
+		*canceled = prompt_ctx.canceled;
+
 	return result;
 }
 
@@ -3310,6 +3372,8 @@ do_connect(enum trivalue reuse_previous_specification,
 	 */
 	if (pset.getPassword == TRI_YES && success)
 	{
+		bool		canceled = false;
+
 		/*
 		 * If a connstring or URI is provided, we don't know which username
 		 * will be used, since we haven't dug that out of the connstring.
@@ -3317,7 +3381,9 @@ do_connect(enum trivalue reuse_previous_specification,
 		 * not seem worth working harder, since this getPassword setting is
 		 * normally only used in noninteractive cases.
 		 */
-		password = prompt_for_password(has_connection_string ? NULL : user);
+		password = prompt_for_password(has_connection_string ? NULL : user,
+									   &canceled);
+		success = !canceled;
 	}
 
 	/*
@@ -3396,13 +3462,16 @@ do_connect(enum trivalue reuse_previous_specification,
 		 */
 		if (!password && PQconnectionNeedsPassword(n_conn) && pset.getPassword != TRI_NO)
 		{
+			bool		canceled = false;
+
 			/*
 			 * Prompt for password using the username we actually connected
 			 * with --- it might've come out of "dbname" rather than "user".
 			 */
-			password = prompt_for_password(PQuser(n_conn));
+			password = prompt_for_password(PQuser(n_conn), &canceled);
 			PQfinish(n_conn);
 			n_conn = NULL;
+			success = !canceled;
 			continue;
 		}
 
@@ -3565,7 +3634,12 @@ connection_warnings(bool in_startup)
 		else if (in_startup)
 			printf("%s (%s)\n", pset.progname, PG_VERSION);
 
-		if (pset.sversion / 100 > client_ver / 100)
+		/*
+		 * Warn if server's major version is newer than ours, or if server
+		 * predates our support cutoff (currently 9.2).
+		 */
+		if (pset.sversion / 100 > client_ver / 100 ||
+			pset.sversion < 90200)
 			printf(_("WARNING: %s major version %s, server major version %s.\n"
 					 "         Some psql features might not work.\n"),
 				   pset.progname,
@@ -3594,7 +3668,6 @@ printSSLInfo(void)
 {
 	const char *protocol;
 	const char *cipher;
-	const char *bits;
 	const char *compression;
 
 	if (!PQsslInUse(pset.db))
@@ -3602,13 +3675,11 @@ printSSLInfo(void)
 
 	protocol = PQsslAttribute(pset.db, "protocol");
 	cipher = PQsslAttribute(pset.db, "cipher");
-	bits = PQsslAttribute(pset.db, "key_bits");
 	compression = PQsslAttribute(pset.db, "compression");
 
-	printf(_("SSL connection (protocol: %s, cipher: %s, bits: %s, compression: %s)\n"),
+	printf(_("SSL connection (protocol: %s, cipher: %s, compression: %s)\n"),
 		   protocol ? protocol : _("unknown"),
 		   cipher ? cipher : _("unknown"),
-		   bits ? bits : _("unknown"),
 		   (compression && strcmp(compression, "off") != 0) ? _("on") : _("off"));
 }
 
@@ -4896,13 +4967,80 @@ do_watch(PQExpBuffer query_buf, double sleep)
 	const char *strftime_fmt;
 	const char *user_title;
 	char	   *title;
+	const char *pagerprog = NULL;
+	FILE	   *pagerpipe = NULL;
 	int			title_len;
 	int			res = 0;
+#ifdef HAVE_POSIX_DECL_SIGWAIT
+	sigset_t	sigalrm_sigchld_sigint;
+	sigset_t	sigalrm_sigchld;
+	sigset_t	sigint;
+	struct itimerval interval;
+	bool		done = false;
+#endif
 
 	if (!query_buf || query_buf->len <= 0)
 	{
 		pg_log_error("\\watch cannot be used with an empty query");
 		return false;
+	}
+
+#ifdef HAVE_POSIX_DECL_SIGWAIT
+	sigemptyset(&sigalrm_sigchld_sigint);
+	sigaddset(&sigalrm_sigchld_sigint, SIGCHLD);
+	sigaddset(&sigalrm_sigchld_sigint, SIGALRM);
+	sigaddset(&sigalrm_sigchld_sigint, SIGINT);
+
+	sigemptyset(&sigalrm_sigchld);
+	sigaddset(&sigalrm_sigchld, SIGCHLD);
+	sigaddset(&sigalrm_sigchld, SIGALRM);
+
+	sigemptyset(&sigint);
+	sigaddset(&sigint, SIGINT);
+
+	/*
+	 * Block SIGALRM and SIGCHLD before we start the timer and the pager (if
+	 * configured), to avoid races.  sigwait() will receive them.
+	 */
+	sigprocmask(SIG_BLOCK, &sigalrm_sigchld, NULL);
+
+	/*
+	 * Set a timer to interrupt sigwait() so we can run the query at the
+	 * requested intervals.
+	 */
+	interval.it_value.tv_sec = sleep_ms / 1000;
+	interval.it_value.tv_usec = (sleep_ms % 1000) * 1000;
+	interval.it_interval = interval.it_value;
+	if (setitimer(ITIMER_REAL, &interval, NULL) < 0)
+	{
+		pg_log_error("could not set timer: %m");
+		done = true;
+	}
+#endif
+
+	/*
+	 * For \watch, we ignore the size of the result and always use the pager
+	 * as long as we're talking to a terminal and "\pset pager" is enabled.
+	 * However, we'll only use the pager identified by PSQL_WATCH_PAGER.  We
+	 * ignore the regular PSQL_PAGER or PAGER environment variables, because
+	 * traditional pagers probably won't be very useful for showing a stream
+	 * of results.
+	 */
+#ifdef HAVE_POSIX_DECL_SIGWAIT
+	pagerprog = getenv("PSQL_WATCH_PAGER");
+	/* if variable is empty or all-white-space, don't use pager */
+	if (pagerprog && strspn(pagerprog, " \t\r\n") == strlen(pagerprog))
+		pagerprog = NULL;
+#endif
+	if (pagerprog && myopt.topt.pager &&
+		isatty(fileno(stdin)) && isatty(fileno(stdout)))
+	{
+		disable_sigpipe_trap();
+		pagerpipe = popen(pagerprog, "w");
+
+		if (!pagerpipe)
+			/* silently proceed without pager */
+			restore_sigpipe_trap();
 	}
 
 	/*
@@ -4913,10 +5051,12 @@ do_watch(PQExpBuffer query_buf, double sleep)
 	strftime_fmt = "%c";
 
 	/*
-	 * Set up rendering options, in particular, disable the pager, because
-	 * nobody wants to be prompted while watching the output of 'watch'.
+	 * Set up rendering options, in particular, disable the pager unless
+	 * PSQL_WATCH_PAGER was successfully launched.
 	 */
-	myopt.topt.pager = 0;
+	if (!pagerpipe)
+		myopt.topt.pager = 0;
+
 
 	/*
 	 * If there's a title in the user configuration, make sure we have room
@@ -4931,7 +5071,6 @@ do_watch(PQExpBuffer query_buf, double sleep)
 	{
 		time_t		timer;
 		char		timebuf[128];
-		long		i;
 
 		/*
 		 * Prepare title for output.  Note that we intentionally include a
@@ -4949,8 +5088,8 @@ do_watch(PQExpBuffer query_buf, double sleep)
 					 timebuf, sleep);
 		myopt.title = title;
 
-		/* Run the query and print out the results */
-		res = PSQLexecWatch(query_buf->data, &myopt);
+		/* Run the query and print out the result */
+		res = PSQLexecWatch(query_buf->data, &myopt, pagerpipe);
 
 		/*
 		 * PSQLexecWatch handles the case where we can no longer repeat the
@@ -4958,6 +5097,11 @@ do_watch(PQExpBuffer query_buf, double sleep)
 		 */
 		if (res <= 0)
 			break;
+
+		if (pagerpipe && ferror(pagerpipe))
+			break;
+
+#ifndef HAVE_POSIX_DECL_SIGWAIT
 
 		/*
 		 * Set up cancellation of 'watch' via SIGINT.  We redo this each time
@@ -4969,12 +5113,10 @@ do_watch(PQExpBuffer query_buf, double sleep)
 
 		/*
 		 * Enable 'watch' cancellations and wait a while before running the
-		 * query again.  Break the sleep into short intervals (at most 1s)
-		 * since pg_usleep isn't interruptible on some platforms.
+		 * query again.  Break the sleep into short intervals (at most 1s).
 		 */
 		sigint_interrupt_enabled = true;
-		i = sleep_ms;
-		while (i > 0)
+		for (long i = sleep_ms; i > 0;)
 		{
 			long		s = Min(i, 1000L);
 
@@ -4984,15 +5126,69 @@ do_watch(PQExpBuffer query_buf, double sleep)
 			i -= s;
 		}
 		sigint_interrupt_enabled = false;
+#else
+		/* sigwait() will handle SIGINT. */
+		sigprocmask(SIG_BLOCK, &sigint, NULL);
+		if (cancel_pressed)
+			done = true;
+
+		/* Wait for SIGINT, SIGCHLD or SIGALRM. */
+		while (!done)
+		{
+			int			signal_received;
+
+			errno = sigwait(&sigalrm_sigchld_sigint, &signal_received);
+			if (errno != 0)
+			{
+				/* Some other signal arrived? */
+				if (errno == EINTR)
+					continue;
+				else
+				{
+					pg_log_error("could not wait for signals: %m");
+					done = true;
+					break;
+				}
+			}
+			/* On ^C or pager exit, it's time to stop running the query. */
+			if (signal_received == SIGINT || signal_received == SIGCHLD)
+				done = true;
+			/* Otherwise, we must have SIGALRM.  Time to run the query again. */
+			break;
+		}
+
+		/* Unblock SIGINT so that slow queries can be interrupted. */
+		sigprocmask(SIG_UNBLOCK, &sigint, NULL);
+		if (done)
+			break;
+#endif
 	}
 
-	/*
-	 * If the terminal driver echoed "^C", libedit/libreadline might be
-	 * confused about the cursor position.  Therefore, inject a newline
-	 * before the next prompt is displayed.
-	 */
-	fprintf(stdout, "\n");
-	fflush(stdout);
+	if (pagerpipe)
+	{
+		pclose(pagerpipe);
+		restore_sigpipe_trap();
+	}
+	else
+	{
+		/*
+		 * If the terminal driver echoed "^C", libedit/libreadline might be
+		 * confused about the cursor position.  Therefore, inject a newline
+		 * before the next prompt is displayed.  We only do this when not
+		 * using a pager, because pagers are expected to restore the screen to
+		 * a sane state on exit.
+		 */
+		fprintf(stdout, "\n");
+		fflush(stdout);
+	}
+
+#ifdef HAVE_POSIX_DECL_SIGWAIT
+	/* Disable the interval timer. */
+	memset(&interval, 0, sizeof(interval));
+	setitimer(ITIMER_REAL, &interval, NULL);
+	/* Unblock SIGINT, SIGCHLD and SIGALRM. */
+	sigprocmask(SIG_UNBLOCK, &sigalrm_sigchld_sigint, NULL);
+#endif
 
 	pg_free(title);
 	return (res >= 0);
@@ -5118,8 +5314,7 @@ get_create_object_cmd(EditableObjectType obj_type, Oid oid,
 			 * ensure the right view gets replaced.  Also, check relation kind
 			 * to be sure it's a view.
 			 *
-			 * Starting with 9.2, views may have reloptions (security_barrier)
-			 * and from 9.4 onwards they may also have WITH [LOCAL|CASCADED]
+			 * Starting with PG 9.4, views may have WITH [LOCAL|CASCADED]
 			 * CHECK OPTION.  These are not part of the view definition
 			 * returned by pg_get_viewdef() and so need to be retrieved
 			 * separately.  Materialized views (introduced in 9.3) may have
@@ -5138,24 +5333,12 @@ get_create_object_cmd(EditableObjectType obj_type, Oid oid,
 								  "ON c.relnamespace = n.oid WHERE c.oid = %u",
 								  oid);
 			}
-			else if (pset.sversion >= 90200)
-			{
-				printfPQExpBuffer(query,
-								  "SELECT nspname, relname, relkind, "
-								  "pg_catalog.pg_get_viewdef(c.oid, true), "
-								  "c.reloptions AS reloptions, "
-								  "NULL AS checkoption "
-								  "FROM pg_catalog.pg_class c "
-								  "LEFT JOIN pg_catalog.pg_namespace n "
-								  "ON c.relnamespace = n.oid WHERE c.oid = %u",
-								  oid);
-			}
 			else
 			{
 				printfPQExpBuffer(query,
 								  "SELECT nspname, relname, relkind, "
 								  "pg_catalog.pg_get_viewdef(c.oid, true), "
-								  "NULL AS reloptions, "
+								  "c.reloptions AS reloptions, "
 								  "NULL AS checkoption "
 								  "FROM pg_catalog.pg_class c "
 								  "LEFT JOIN pg_catalog.pg_namespace n "

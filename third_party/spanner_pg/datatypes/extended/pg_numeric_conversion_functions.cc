@@ -58,6 +58,16 @@ const zetasql::Function* GetDoubleToPgNumericConversion() {
   return kDoubleToPgNumericConv;
 }
 
+const zetasql::Function* GetFloatToPgNumericConversion() {
+  static const zetasql::Function* kFloatToPgNumericConv =
+      new zetasql::Function("float_to_pg_numeric_conv", "spanner",
+                              zetasql::Function::SCALAR,
+                              /*function_signatures=*/{},
+                              zetasql::FunctionOptions().set_evaluator(
+                                  PGFunctionEvaluator(EvalCastToNumeric)));
+  return kFloatToPgNumericConv;
+}
+
 const zetasql::Function* GetStringToPgNumericConversion() {
   static const zetasql::Function* kStringToPgNumericConv =
       new zetasql::Function("string_to_pg_numeric_conv", "spanner",
@@ -86,6 +96,16 @@ const zetasql::Function* GetPgNumericToDoubleConversion() {
           zetasql::FunctionOptions().set_evaluator(
               PGFunctionEvaluator(EvalCastNumericToDouble)));
   return kPgNumericToDoubleConv;
+}
+
+const zetasql::Function* GetPgNumericToFloatConversion() {
+  static const zetasql::Function* kPgNumericToFloatConv =
+      new zetasql::Function("pg_numeric_to_float_conv", "spanner",
+                              zetasql::Function::SCALAR,
+                              /*function_signatures=*/{},
+                              zetasql::FunctionOptions().set_evaluator(
+                                  PGFunctionEvaluator(EvalCastNumericToFloat)));
+  return kPgNumericToFloatConv;
 }
 
 const zetasql::Function* GetPgNumericToStringConversion() {

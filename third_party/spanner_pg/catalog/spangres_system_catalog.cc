@@ -32,12 +32,15 @@
 #include "third_party/spanner_pg/catalog/spangres_system_catalog.h"
 
 #include <optional>
+#include <string>
 
 #include "zetasql/public/builtin_function.h"
 #include "zetasql/public/builtin_function_options.h"
 #include "zetasql/analyzer/function_signature_matcher.h"
 #include "zetasql/public/input_argument_type.h"
+#include "zetasql/public/language_options.h"
 #include "zetasql/public/type.pb.h"
+#include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "absl/flags/flag.h"
@@ -79,10 +82,6 @@ namespace spangres_types = ::postgres_translator::spangres::types;
     {F_FLOAT84LT, F_INT8LT}, {F_FLOAT84GT, F_INT8GT}, {F_FLOAT84EQ, F_INT8EQ},
     {F_FLOAT84LE, F_INT8LE}, {F_FLOAT84GE, F_INT8GE}, {F_FLOAT84NE, F_INT8NE},
 });
-
-const auto kNanOrderingFunctions =
-    std::set<absl::string_view>(
-        {"pg.min", "pg.least", "pg.greatest", "pg.map_double_to_int"});
 
 static bool FunctionNameSupportedInSpanner(
     const std::string& function_name,
@@ -190,6 +189,8 @@ static absl::StatusOr<std::string> GetPgNumericCastFunctionName(
         return "pg.cast_to_int64";
       case zetasql::TypeKind::TYPE_DOUBLE:
         return "pg.cast_to_double";
+      case zetasql::TypeKind::TYPE_FLOAT:
+        return "pg.cast_to_float";
       case zetasql::TypeKind::TYPE_STRING:
         return "pg.cast_to_string";
       default:
@@ -201,6 +202,7 @@ static absl::StatusOr<std::string> GetPgNumericCastFunctionName(
     switch (source_type->kind()) {
       case zetasql::TypeKind::TYPE_INT64:
       case zetasql::TypeKind::TYPE_DOUBLE:
+      case zetasql::TypeKind::TYPE_FLOAT:
       case zetasql::TypeKind::TYPE_STRING:
         return "pg.cast_to_numeric";
       default:
@@ -296,28 +298,23 @@ SpangresSystemCatalog::GetResolvedExprForComparison(
     return gsql_expr;
   }
 
-  return GetResolvedExprForDoubleComparison(std::move(gsql_expr),
-                                            language_options);
+  return GetResolvedExprForFloatingPointComparison(std::move(gsql_expr),
+                                                   language_options);
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
-SpangresSystemCatalog::GetResolvedExprForDoubleComparison(
+SpangresSystemCatalog::GetResolvedExprForFloatingPointComparison(
     std::unique_ptr<zetasql::ResolvedExpr> gsql_expr,
     const zetasql::LanguageOptions& language_options) {
-  if (!(gsql_expr->type()->IsDouble() || gsql_expr->type()->IsFloat())) {
+  const zetasql::Type* expr_type = gsql_expr->type();
+
+  if (!(expr_type->IsDouble() || expr_type->IsFloat())) {
     return gsql_expr;
   }
 
-  if (gsql_expr->type()->IsFloat()) {
-    // First cast the float to a double, then use the standard mapping from
-    // double to int64_t.
-    gsql_expr = zetasql::MakeResolvedCast(zetasql::types::DoubleType(),
-                                            std::move(gsql_expr),
-                                            /*return_null_on_error=*/false);
-  }
-
-  ZETASQL_ASSIGN_OR_RETURN(FunctionAndSignature function_and_signature,
-                   GetMapDoubleToIntFunction(language_options));
+  ZETASQL_ASSIGN_OR_RETURN(
+      FunctionAndSignature function_and_signature,
+      GetMapFloatingPointToIntFunction(expr_type, language_options));
 
   std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
   argument_list.emplace_back(std::move(gsql_expr));
@@ -335,8 +332,9 @@ bool SpangresSystemCatalog::IsResolvedExprForComparison(
   }
 
   auto func = gsql_expr.GetAs<zetasql::ResolvedFunctionCall>();
-  return func->function()->FullName(/*include_group=*/false) ==
-         "pg.map_double_to_int";
+  auto func_name = func->function()->FullName(/*include_group=*/false);
+  return func_name == "pg.map_double_to_int" ||
+         func_name == "pg.map_float_to_int";
 }
 
 absl::StatusOr<const zetasql::ResolvedExpr*>
@@ -362,22 +360,28 @@ std::optional<Oid> SpangresSystemCatalog::GetMappedOidForComparisonFuncid(
 }
 
 absl::StatusOr<FunctionAndSignature>
-SpangresSystemCatalog::GetMapDoubleToIntFunction(
+SpangresSystemCatalog::GetMapFloatingPointToIntFunction(
+    const zetasql::Type* source_type,
     const zetasql::LanguageOptions& language_options) {
+  ZETASQL_RET_CHECK(source_type->IsDouble() || source_type->IsFloat())
+      << "source_type is not double or float";
+
   // TOD(b/228246295): Lookup this FunctionAndSignature only once.
-  static const std::string function_name = "pg.map_double_to_int";
+  const std::string function_name =
+      source_type->IsDouble() ? "pg.map_double_to_int" : "pg.map_float_to_int";
 
   ZETASQL_ASSIGN_OR_RETURN(const zetasql::Function* builtin_function,
                    GetBuiltinFunction(function_name));
 
-  ZETASQL_RET_CHECK(builtin_function) << "Cannot find pg.map_double_to_int in the list "
-                                 "of builtin function of SpangresSystemCatalog";
+  ZETASQL_RET_CHECK(builtin_function)
+      << "Cannot find " << function_name
+      << " in the list of builtin function of SpangresSystemCatalog";
 
   // Try find the matching signature. Run the ZetaSQL Function Signature
   // Matcher to determine if the input arguments exactly match the signature
   bool found_signature = false;
-  static const std::vector<zetasql::InputArgumentType> input_argument_types{
-      zetasql::InputArgumentType(zetasql::types::DoubleType())};
+  const std::vector<zetasql::InputArgumentType> input_argument_types{
+      zetasql::InputArgumentType(source_type)};
 
   zetasql::Coercer coercer(type_factory(), &language_options, this);
   const std::vector<const zetasql::ASTNode*> arg_ast_nodes;
@@ -404,8 +408,9 @@ SpangresSystemCatalog::GetMapDoubleToIntFunction(
     }
   }
 
-  ZETASQL_RET_CHECK(found_signature) << "Could not find a matching signature for "
-                                "pg.map_double_to_int function.";
+  ZETASQL_RET_CHECK(found_signature)
+      << "Could not find a matching signature for " << function_name
+      << " function." << " source_type: " << source_type->DebugString();
 
   return FunctionAndSignature(builtin_function, *result_signature);
 }
@@ -517,6 +522,8 @@ absl::Status SpangresSystemCatalog::AddFunctions(
       ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_int64"));
       ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_double"));
       ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_string"));
+
+        ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_float"));
 
   // Add casting override functions for STRING->DATE and STRING->TIMESTAMP.
   ZETASQL_RETURN_IF_ERROR(AddCastOverrideFunction(

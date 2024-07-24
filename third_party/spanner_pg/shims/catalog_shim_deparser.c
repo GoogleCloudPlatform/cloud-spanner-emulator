@@ -97,54 +97,37 @@ void appendContextKeyword(deparse_context* context, const char* str,
                           int indentBefore, int indentAfter, int indentPlus);
 void simple_quote_literal(StringInfo buf, const char* val);
 
-char* GetStringValue(Value* val) {
-  if (val->type != T_String) {
-    elog(ERROR, "invalid parse tree: string value expected, but got %s",
-         CNodeTagToNodeString(val->type));
-  }
-
-  return val->val.str;
-}
-
-int GetIntValue(Value* val) {
-  if (val->type != T_Integer) {
-    elog(ERROR, "invalid parse tree: integer value expected, but got %s",
-         CNodeTagToNodeString(val->type));
-  }
-
-  return val->val.ival;
-}
-
 // Deparse Value node and print it as literal depending on type:
 //   - for int nodes, just print as is
 //   - for string nodes, quote the value before printing
-void GetValueDef(Value* val, deparse_context* context) {
+void GetValueDef(A_Const* aconst, deparse_context* context) {
   StringInfo buf = context->buf;
 
-  switch (val->type) {
+  switch (aconst->val.node.type) {
     case T_Integer:
-      appendStringInfo(buf, "%d", val->val.ival);
+      appendStringInfo(buf, "%d", aconst->val.ival.ival);
       break;
 
     case T_String:
-      simple_quote_literal(buf, val->val.str);
+      simple_quote_literal(buf, aconst->val.sval.sval);
       break;
 
     // TODO: add test case and support for T_Float, T_Null values
     default:
-      elog(ERROR, "unexpected value type %s", CNodeTagToNodeString(val->type));
+      elog(ERROR, "unexpected value type %s",
+           CNodeTagToNodeString(aconst->val.node.type));
   }
 }
 
 // Deparse Value node and print it as identifier
-void GetIdentifierValueDef(Value* val, deparse_context* context) {
+void GetIdentifierValueDef(union ValUnion* val, deparse_context* context) {
   StringInfo buf = context->buf;
 
-  if (val->type != T_String || val->val.str == NULL) {
+  if (val->node.type != T_String || val->sval.sval == NULL) {
     elog(ERROR, "invalid identifier type");
   }
 
-  appendStringInfoString(buf, quote_identifier(val->val.str));
+  appendStringInfoString(buf, quote_identifier(val->sval.sval));
 }
 
 // Deparse RangeVar and append it to buf.
@@ -204,7 +187,7 @@ void GetTypeNameDef(TypeName* stmt, deparse_context* context) {
              type_name);
       }
       A_Const* typmod_node = castNode(A_Const, linitial(stmt->typmods));
-      GetValueDef(&typmod_node->val, context);
+      GetValueDef(typmod_node, context);
     } else if (strcmp(type_name, "numeric") == 0) {
       if (list_length(stmt->typmods) != 2) {
         elog(ERROR,
@@ -213,9 +196,9 @@ void GetTypeNameDef(TypeName* stmt, deparse_context* context) {
       }
       A_Const* precision_node = castNode(A_Const, linitial(stmt->typmods));
       A_Const* scale_node = castNode(A_Const, lsecond(stmt->typmods));
-      GetValueDef(&precision_node->val, context);
+      GetValueDef(precision_node, context);
       appendStringInfoString(buf, ", ");
-      GetValueDef(&scale_node->val, context);
+      GetValueDef(scale_node, context);
     } else {
       elog(ERROR, "type modifiers are not allowed for type %s", type_name);
     }
@@ -482,7 +465,7 @@ void GetConstraintDef(Constraint* stmt, deparse_context* context) {
         appendStringInfoString(buf, " (");
         for (ListCell* pk_it = list_head(stmt->keys); pk_it;
              pk_it = lnext(stmt->keys, pk_it)) {
-          GetIdentifierValueDef((Value*)lfirst(pk_it), context);
+          GetIdentifierValueDef((union ValUnion*)lfirst(pk_it), context);
 
           if (lnext(stmt->keys, pk_it) != NULL) {
             appendStringInfo(buf, ", ");
@@ -516,7 +499,7 @@ void GetConstraintDef(Constraint* stmt, deparse_context* context) {
 
         for (ListCell* fk_it = list_head(stmt->fk_attrs); fk_it;
              fk_it = lnext(stmt->fk_attrs, fk_it)) {
-          GetIdentifierValueDef((Value*)lfirst(fk_it), context);
+          GetIdentifierValueDef(lfirst(fk_it), context);
 
           if (lnext(stmt->fk_attrs, fk_it) != NULL) {
             appendStringInfo(buf, ", ");
@@ -531,7 +514,7 @@ void GetConstraintDef(Constraint* stmt, deparse_context* context) {
 
       for (ListCell* pk_it = list_head(stmt->pk_attrs); pk_it;
            pk_it = lnext(stmt->pk_attrs, pk_it)) {
-        GetIdentifierValueDef((Value*)lfirst(pk_it), context);
+        GetIdentifierValueDef(lfirst(pk_it), context);
 
         if (lnext(stmt->pk_attrs, pk_it) != NULL) {
           appendStringInfo(buf, ", ");
@@ -639,7 +622,7 @@ void GetAlterDatabaseSetStmtDef(AlterDatabaseSetStmt* stmt,
       }
 
       A_Const* const_node = castNode(A_Const, linitial(set_statement->args));
-      GetValueDef(&const_node->val, context);
+      GetValueDef(const_node, context);
 
       return;
     }
@@ -721,12 +704,12 @@ void GetDropStmtDef(DropStmt* stmt, deparse_context* context) {
     elog(ERROR,
          "catalog qualifiers support is not implemented in <DROP> statement");
   } else if (list_length(name_components) == 2) {
-    GetIdentifierValueDef((Value*)list_nth(name_components, 0), context);
+    GetIdentifierValueDef(list_nth(name_components, 0), context);
     appendStringInfoString(buf, ".");
-    GetIdentifierValueDef((Value*)list_nth(name_components, 1), context);
+    GetIdentifierValueDef(list_nth(name_components, 1), context);
     return;
   }
-  GetIdentifierValueDef((Value*)linitial(name_components), context);
+  GetIdentifierValueDef(linitial(name_components), context);
 }
 
 void GetAlterTableCmdDropColumn(AlterTableCmd* cmd, deparse_context* context) {

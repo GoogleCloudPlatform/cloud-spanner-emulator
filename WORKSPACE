@@ -22,6 +22,22 @@ workspace(name = "com_google_cloud_spanner_emulator")
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
+http_archive(
+    name = "rules_proto",
+    sha256 = "6fb6767d1bef535310547e03247f7518b03487740c11b6c6adb7952033fe1295",
+    strip_prefix = "rules_proto-6.0.2",
+    url = "https://github.com/bazelbuild/rules_proto/releases/download/6.0.2/rules_proto-6.0.2.tar.gz",
+)
+
+load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies")
+rules_proto_dependencies()
+
+load("@rules_proto//proto:setup.bzl", "rules_proto_setup")
+rules_proto_setup()
+
+load("@rules_proto//proto:toolchains.bzl", "rules_proto_toolchains")
+rules_proto_toolchains()
+
 ################################################################################
 # Bazel utility rules                                                          #
 ################################################################################
@@ -65,11 +81,11 @@ switched_rules_by_language(
 ################################################################################
 # Go Build Support                                                             #
 ################################################################################
-_rules_go_version = "v0.39.1"
+_rules_go_version = "v0.48.1"
 
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "6dc2da7ab4cf5d7bfc7c949776b1b7c733f05e56edc4bcd9022bb249d2e2a996",
+    sha256 = "b2038e2de2cace18f032249cb4bb0048abf583a36369fa98f687af1b3f880b26",
     urls = [
         "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/{0}/rules_go-{0}.zip".format(_rules_go_version),
         "https://github.com/bazelbuild/rules_go/releases/download/{0}/rules_go-{0}.zip.format(_rules_go_version)",
@@ -78,13 +94,13 @@ http_archive(
 
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 
-go_register_toolchains(version = "1.20.13")
+go_register_toolchains(version = "1.21.11")
 
-_bazel_gazelle_version = "0.31.1"
+_bazel_gazelle_version = "0.36.0"
 
 http_archive(
     name = "bazel_gazelle",
-    sha256 = "b8b6d75de6e4bf7c41b7737b183523085f56283f6db929b86c5e7e1f09cf59c9",
+    sha256 = "75df288c4b31c81eb50f51e2e14f4763cb7548daae126817247064637fd9ea62",
     urls = [
         "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v{0}/bazel-gazelle-v{0}.tar.gz".format(_bazel_gazelle_version),
         "https://github.com/bazelbuild/bazel-gazelle/releases/download/v{0}/bazel-gazelle-v{0}.tar.gz".format(_bazel_gazelle_version),
@@ -103,24 +119,18 @@ go_repository(
     name = "org_golang_google_grpc",
     build_file_proto_mode = "disable_global",
     importpath = "google.golang.org/grpc",
-    sum = "h1:EhTqbhiYeixwWQtAEZAxmV9MGqcjEU2mFx52xCzNyag=",
-    version = "v1.54.0",
-)
-
-go_repository(
-    name = "grpc_ecosystem_grpc_gateway",
-    build_file_proto_mode = "disable_global",
-    importpath = "github.com/grpc-ecosystem/grpc-gateway/v2",
-    sum = "h1:1JYBfzqrWPcCclBwxFCPAou9n+q86mfnu7NAeHfte7A=",
-    version = "v2.15.0",
+    sum = "h1:LKtvyfbX3UGVPFcGqJ9ItpVWW6oN/2XqTxfAnwRRXiA=",
+    version = "v1.64.1",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
     name = "org_golang_google_genproto",
     build_file_proto_mode = "disable_global",
     importpath = "google.golang.org/genproto",
-    sum = "h1:KpwkzHKEF7B9Zxg18WzOa7djJ+Ha5DzthMyZYQfEn2A=",
-    version = "v0.0.0-20230410155749-daa745c078e1",
+    sum = "h1:F6qOa9AZTYJXOUEr4jDysRDLrm4PHePlge4v4TGAlxY=",
+    version = "v0.0.0-20240227224415-6ceb2ff114de",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
@@ -129,8 +139,35 @@ go_repository(
     importpath = "google.golang.org/protobuf",
     patch_args = ["-p1"],
     patches = ["//build/bazel:golang_protobuf.patch"],
-    sum = "h1:g0LDEJHgrBl9N9r17Ru3sqWhkIx2NB67okBHPwC7hs8=",
-    version = "v1.31.0",
+    sum = "h1:6xV6lTsCfpGD21XK49h7MhtcApnLqkfYgPcdHftf6hg=",
+    version = "v1.34.2",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
+)
+
+go_repository(
+    name = "org_golang_google_genproto_googleapis_api",
+    importpath = "google.golang.org/genproto/googleapis/api",
+    sum = "h1:kHjw/5UfflP/L5EbledDrcG4C2597RtymmGRZvHiCuY=",
+    version = "v0.0.0-20240711142825-46eb208f015d",
+)
+
+go_repository(
+    name = "org_golang_google_genproto_googleapis_rpc",
+    importpath = "google.golang.org/genproto/googleapis/rpc",
+    sum = "h1:JU0iKnSg02Gmb5ZdV8nYsKEKsP6o/FGVWTrw4i1DA9A=",
+    version = "v0.0.0-20240711142825-46eb208f015d",
+)
+
+go_repository(
+    name = "grpc_ecosystem_grpc_gateway",
+    build_file_proto_mode = "disable_global",
+    importpath = "github.com/grpc-ecosystem/grpc-gateway/v2",
+    sum = "h1:bkypFPDjIYGfCYD5mRBvpqxfYX1YCS1PXdKYWi8FsN0=",
+    version = "v2.20.0",
+    repo_mapping = {
+      "@go_googleapis": "@com_google_googleapis",
+      "@googleapis": "@com_google_googleapis",
+    },
 )
 
 go_rules_dependencies()
@@ -139,9 +176,11 @@ go_repository(
     name = "com_github_golang_protobuf",
     build_file_proto_mode = "disable_global",
     importpath = "github.com/golang/protobuf",
-    sum = "h1:KhyjKVUg7Usr/dYsdSqoFveMYd5ko72D+zANwlG1mmg=",
-    version = "v1.5.3",
+    sum = "h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=",
+    version = "v1.5.4",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
+
 
 go_repository(
     name = "in_gopkg_yaml_v3",
@@ -149,38 +188,43 @@ go_repository(
     importpath = "gopkg.in/yaml.v3",
     sum = "h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=",
     version = "v3.0.1",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
     name = "com_github_golang_glog",
     build_file_proto_mode = "disable_global",
     importpath = "github.com/golang/glog",
-    sum = "h1:/d3pCKDPWNnvIWe0vVUpNP32qc8U3PDVxySP/y360qE=",
-    version = "v1.1.0",
+    sum = "h1:uCdmnmatrKCgMBlM4rMuJZWOkPDqdbZPnrMXDY4gI68=",
+    version = "v1.2.0",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
     name = "org_golang_x_net",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/net",
-    sum = "h1:ugBLEUaxABaB5AJqW9enI0ACdci2RUd4eP51NTBvuJ8=",
-    version = "v0.15.0",
+    sum = "h1:soB7SVo0PWrY4vPW/+ay0jKDNScG2X9wFeYlXIvJsOQ=",
+    version = "v0.26.0",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
     name = "org_golang_x_sys",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/sys",
-    sum = "h1:CM0HF96J0hcLAwsHPJZjfdNzs0gftsLfgKt57wWHJ0o=",
-    version = "v0.12.0",
+    sum = "h1:rF+pYz3DAGSQAxAu1CbC7catZg4ebC4UIeIhKxBZvws=",
+    version = "v0.21.0",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
     name = "org_golang_x_text",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/text",
-    sum = "h1:ablQoSUd0tRdKxZewP80B+BaqeKJuVhuRxj/dkrun3k=",
-    version = "v0.13.0",
+    sum = "h1:a94ExnEXNtEwYLGJSIUxnWoxoRz/ZcCsV63ROupILh4=",
+    version = "v0.16.0",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 ################################################################################

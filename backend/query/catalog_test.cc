@@ -125,13 +125,8 @@ class CatalogTest : public testing::Test {
   void MakeCatalog(absl::Span<const std::string> statements,
                    database_api::DatabaseDialect dialect =
                        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        schema_, test::CreateSchemaFromDDL(statements,
-                                           &type_factory_
-                                           ,
-                                           ""
-                                           ,
-                                           dialect));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema_, test::CreateSchemaFromDDL(
+                                      statements, &type_factory_, "", dialect));
     catalog_ = std::make_unique<Catalog>(schema_.get(), &function_catalog_,
                                          &type_factory_);
   }

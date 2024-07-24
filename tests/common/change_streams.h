@@ -16,18 +16,27 @@
 
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_TESTS_COMMON_CHANGE_STREAMS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_TESTS_COMMON_CHANGE_STREAMS_H_
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
-#include "absl/time/time.h"
+#include "google/spanner/v1/spanner.grpc.pb.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "google/cloud/spanner/database.h"
 #include "frontend/converters/pg_change_streams.h"
+#include "grpcpp/support/sync_stream.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace test {
+namespace spanner_api = ::google::spanner::v1;
+using SpannerStub = v1::Spanner::Stub;
 
 struct DataChangeRecord {
   google::protobuf::Value commit_timestamp;
@@ -156,6 +165,19 @@ inline std::string EncodeTimestampString(absl::Time timestamp,
                                        absl::UTCTimeZone()),
                       "Z");
 }
+absl::StatusOr<std::string> CreateTestSession(
+    SpannerStub* client, const cloud::spanner::Database* database);
+
+absl::Status ReadFromClientReader(
+    std::unique_ptr<grpc::ClientReader<spanner_api::PartialResultSet>> reader,
+    std::vector<spanner_api::PartialResultSet>* response);
+
+absl::StatusOr<test::ChangeStreamRecords> ExecuteChangeStreamQuery(
+    absl::string_view sql, absl::string_view session_uri, SpannerStub* client);
+
+absl::StatusOr<std::vector<std::string>> GetActiveTokenFromInitialQuery(
+    absl::Time start, absl::string_view change_stream_name,
+    absl::string_view session_uri, SpannerStub* client);
 
 }  // namespace test
 }  // namespace emulator

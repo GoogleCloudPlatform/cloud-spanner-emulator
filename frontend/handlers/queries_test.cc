@@ -453,6 +453,313 @@ TEST_F(QueryApiTest, ExecuteSqlWithDmlAndParameters) {
           )pb"));
 }
 
+TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningAndParameters) {
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction transaction_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"""(
+        sql: "INSERT INTO test_table (int64_col, string_col) "
+             "VALUES (@p1, @p2) THEN RETURN int64_col, string_col"
+      )""");
+  request.set_session(test_session_uri_);
+  request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
+  request.mutable_transaction()->set_id(transaction_response.id());
+
+  spanner_api::ResultSet response;
+  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  EXPECT_THAT(
+      response,
+      EqualsProto(
+          R"pb(
+            metadata {
+              row_type {
+                fields {
+                  name: "int64_col"
+                  type { code: INT64 }
+                }
+                fields {
+                  name: "string_col"
+                  type { code: STRING }
+                }
+              }
+              undeclared_parameters {
+                fields {
+                  name: "p1"
+                  type { code: INT64 }
+                }
+                fields {
+                  name: "p2"
+                  type { code: STRING }
+                }
+              }
+            }
+            stats {
+              query_plan { plan_nodes { display_name: "No query plan" } }
+              row_count_exact: 0
+            }
+          )pb"));
+}
+
+TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningReturnsStats) {
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction transaction_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"""(
+        sql: "INSERT INTO test_table (int64_col, string_col) "
+             "VALUES (10, 'row_10') THEN RETURN int64_col, string_col"
+      )""");
+  request.set_session(test_session_uri_);
+  request.mutable_transaction()->set_id(transaction_response.id());
+
+  spanner_api::ResultSet response;
+  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  EXPECT_THAT(response, EqualsProto(
+                            R"pb(
+                              metadata {
+                                row_type {
+                                  fields {
+                                    name: "int64_col"
+                                    type { code: INT64 }
+                                  }
+                                  fields {
+                                    name: "string_col"
+                                    type { code: STRING }
+                                  }
+                                }
+                              }
+                              rows {
+                                values { string_value: "10" }
+                                values { string_value: "row_10" }
+                              }
+                              stats { row_count_exact: 1 }
+                            )pb"));
+}
+
+TEST_F(QueryApiTest, ExecuteStreamingSqlWithDmlReturningReturnsStats) {
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction transaction_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"""(
+        sql: "INSERT INTO test_table (int64_col, string_col) "
+             "VALUES (10, 'row_10') THEN RETURN int64_col, string_col"
+      )""");
+  request.set_session(test_session_uri_);
+  request.mutable_transaction()->set_id(transaction_response.id());
+
+  std::vector<spanner_api::PartialResultSet> response;
+  ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  EXPECT_THAT(response, ElementsAre(EqualsProto(
+                            R"pb(metadata {
+                                   row_type {
+                                     fields {
+                                       name: "int64_col"
+                                       type { code: INT64 }
+                                     }
+                                     fields {
+                                       name: "string_col"
+                                       type { code: STRING }
+                                     }
+                                   }
+                                 }
+                                 values { string_value: "10" }
+                                 values { string_value: "row_10" }
+                                 chunked_value: false
+                                 stats { row_count_exact: 1 }
+                            )pb")));
+}
+
+TEST_F(QueryApiTest,
+       ExecuteStreamingSqlWithDmlReturningInPlanModeReturnsEmptyStats) {
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction transaction_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"""(
+        sql: "INSERT INTO test_table (int64_col, string_col) "
+             "VALUES (10, 'row_10') THEN RETURN int64_col, string_col"
+      )""");
+  request.set_session(test_session_uri_);
+  request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
+  request.mutable_transaction()->set_id(transaction_response.id());
+
+  std::vector<spanner_api::PartialResultSet> response;
+  ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  EXPECT_THAT(response, ElementsAre(EqualsProto(
+                            R"pb(metadata {
+                                   row_type {
+                                     fields {
+                                       name: "int64_col"
+                                       type { code: INT64 }
+                                     }
+                                     fields {
+                                       name: "string_col"
+                                       type { code: STRING }
+                                     }
+                                   }
+                                 }
+                                 chunked_value: false
+                                 stats { row_count_exact: 0 }
+                            )pb")));
+}
+
+TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningStar) {
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction transaction_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"""(
+        sql: "DELETE test_table WHERE TRUE THEN RETURN *"
+      )""");
+  request.set_session(test_session_uri_);
+  request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
+  request.mutable_transaction()->set_id(transaction_response.id());
+
+  spanner_api::ResultSet response;
+  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  EXPECT_THAT(
+      response,
+      EqualsProto(
+          R"pb(
+            metadata {
+              row_type {
+                fields {
+                  name: "int64_col"
+                  type { code: INT64 }
+                }
+                fields {
+                  name: "string_col"
+                  type { code: STRING }
+                }
+              }
+            }
+            stats {
+              query_plan { plan_nodes { display_name: "No query plan" } }
+              row_count_exact: 0
+            }
+          )pb"));
+}
+
+TEST_F(QueryApiTest, ExecuteSqlUpdateReturning) {
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction transaction_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"""(
+        sql: "UPDATE test_table SET string_col=@p1 "
+             "WHERE int64_col=@p2 THEN RETURN string_col"
+      )""");
+  request.set_session(test_session_uri_);
+  request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
+  request.mutable_transaction()->set_id(transaction_response.id());
+
+  spanner_api::ResultSet response;
+  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  EXPECT_THAT(
+      response,
+      EqualsProto(
+          R"pb(
+            metadata {
+              row_type {
+                fields {
+                  name: "string_col"
+                  type { code: STRING }
+                }
+              }
+              undeclared_parameters {
+                fields {
+                  name: "p1"
+                  type { code: STRING }
+                }
+                fields {
+                  name: "p2"
+                  type { code: INT64 }
+                }
+              }
+            }
+            stats {
+              query_plan { plan_nodes { display_name: "No query plan" } }
+              row_count_exact: 0
+            }
+          )pb"));
+}
+
+TEST_F(QueryApiTest, ExecuteSqlDmlPlanWithoutReturning) {
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction transaction_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"""(
+        sql: "UPDATE test_table SET string_col=@p1 "
+             "WHERE int64_col=@p2"
+      )""");
+  request.set_session(test_session_uri_);
+  request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
+  request.mutable_transaction()->set_id(transaction_response.id());
+
+  spanner_api::ResultSet response;
+  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  EXPECT_THAT(
+      response,
+      EqualsProto(
+          R"pb(
+            metadata {
+              row_type {}
+              undeclared_parameters {
+                fields {
+                  name: "p1"
+                  type { code: STRING }
+                }
+                fields {
+                  name: "p2"
+                  type { code: INT64 }
+                }
+              }
+            }
+            stats {
+              query_plan { plan_nodes { display_name: "No query plan" } }
+              row_count_exact: 0
+            }
+          )pb"));
+}
+
 TEST_F(QueryApiTest, ExecuteSqlWithDmlAndProtoParameters) {
   ZETASQL_ASSERT_OK(AddProtoTables());
 

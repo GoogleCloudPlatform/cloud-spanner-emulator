@@ -394,9 +394,10 @@ static absl::StatusOr<List*> ExpandNSItemVarsForJoinCpp(
 
   List* result = NIL;
   int colindex = -1;
-  for (Value* colnameval : StructList<Value*>(nsitem->p_rte->eref->colnames)) {
+  for (String* colnameval :
+       StructList<String*>(nsitem->p_rte->eref->colnames)) {
     ++colindex;
-    const char* colname = strVal(colnameval);
+    const char* colname = colnameval->sval;
 
     // During ordinary parsing, there will never be any
     // deleted columns in the join; but we have to check since

@@ -40,6 +40,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -177,6 +178,21 @@ const zetasql::Value kDoubleMinValue =
     zetasql::values::Double(std::numeric_limits<double>::min());
 const zetasql::Value kDoubleLowestValue =
     zetasql::values::Double(std::numeric_limits<double>::lowest());
+
+const zetasql::Value kNullFloatValue = zetasql::values::NullFloat();
+const zetasql::Value kFloatValue = zetasql::values::Float(1.0);
+const zetasql::Value kPosInfFloatValue =
+    zetasql::values::Float(std::numeric_limits<float>::infinity());
+const zetasql::Value kNegInfFloatValue =
+    zetasql::values::Float(-1 * std::numeric_limits<float>::infinity());
+const zetasql::Value kFloatNaNValue =
+    zetasql::values::Float(std::numeric_limits<float>::quiet_NaN());
+const zetasql::Value kFloatMaxValue =
+    zetasql::values::Float(std::numeric_limits<float>::max());
+const zetasql::Value kFloatMinValue =
+    zetasql::values::Float(std::numeric_limits<float>::min());
+const zetasql::Value kFloatLowestValue =
+    zetasql::values::Float(std::numeric_limits<float>::lowest());
 
 const zetasql::Value kNullInt64Value = zetasql::values::NullInt64();
 const zetasql::Value kInt64Value = zetasql::values::Int64(1);
@@ -812,6 +828,50 @@ INSTANTIATE_TEST_SUITE_P(
                                  {CreatePgNumericNullValue()},
                                  kNullDoubleValue},
 
+        PGScalarFunctionTestCase{
+            kPGCastNumericToFloatFunctionName,
+            {*CreatePgNumericValueWithMemoryContext("1.00001")},
+            zetasql::Value::Float(1.00001f)},
+        PGScalarFunctionTestCase{
+            kPGCastNumericToFloatFunctionName,
+            {*CreatePgNumericValueWithMemoryContext("0.299997")},
+            zetasql::Value::Float(0.299997f)},
+        PGScalarFunctionTestCase{
+            kPGCastNumericToFloatFunctionName,
+            {*CreatePgNumericValueWithMemoryContext("0.2999997")},
+            zetasql::Value::Float(0.2999997f)},
+        PGScalarFunctionTestCase{
+            kPGCastNumericToFloatFunctionName,
+            {*CreatePgNumericValueWithMemoryContext("299997")},
+            zetasql::Value::Float(299997)},
+        PGScalarFunctionTestCase{
+            kPGCastNumericToFloatFunctionName,
+            {*CreatePgNumericValueWithMemoryContext("2999997")},
+            zetasql::Value::Float(2999997)},
+        PGScalarFunctionTestCase{
+            kPGCastNumericToFloatFunctionName,
+            {*CreatePgNumericValueWithMemoryContext("-0.2999997")},
+            zetasql::Value::Float(-0.2999997f)},
+        PGScalarFunctionTestCase{
+            kPGCastNumericToFloatFunctionName,
+            {*CreatePgNumericValueWithMemoryContext("-0.29999997")},
+            zetasql::Value::Float(-0.29999997f)},
+        PGScalarFunctionTestCase{
+            kPGCastNumericToFloatFunctionName,
+            {*CreatePgNumericValueWithMemoryContext("-2999997")},
+            zetasql::Value::Float(-2999997)},
+        PGScalarFunctionTestCase{
+            kPGCastNumericToFloatFunctionName,
+            {*CreatePgNumericValueWithMemoryContext("-29999997")},
+            zetasql::Value::Float(-29999997)},
+        PGScalarFunctionTestCase{
+            kPGCastNumericToFloatFunctionName,
+            {*CreatePgNumericValueWithMemoryContext("NaN")},
+            kFloatNaNValue},
+        PGScalarFunctionTestCase{kPGCastNumericToFloatFunctionName,
+                                 {CreatePgNumericNullValue()},
+                                 kNullFloatValue},
+
         PGScalarFunctionTestCase{kPGCastNumericToStringFunctionName,
                                  {kPGNumericNaNValue},
                                  zetasql::Value::String("NaN")},
@@ -877,6 +937,11 @@ INSTANTIATE_TEST_SUITE_P(
             {zetasql::Value::String("123.123"), zetasql::Value::Int64(5),
              zetasql::Value::Int64(2)},
             *CreatePgNumericValueWithMemoryContext("123.12")},
+        PGScalarFunctionTestCase{
+            kPGCastToNumericFunctionName,
+            {zetasql::Value::String("294"), zetasql::Value::Int64(2),
+             zetasql::Value::Int64(-1)},
+            *CreatePgNumericValueWithMemoryContext("290")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {zetasql::Value::String("NaN"), zetasql::Value::Int64(5),
@@ -1654,7 +1719,94 @@ INSTANTIATE_TEST_SUITE_P(
                                  zetasql::values::NullBool()},
         PGScalarFunctionTestCase{kPGOidGreaterThanEqualsFunctionName,
                                  {kNullPGOidValue, kPGOidMinValue},
-                                 zetasql::values::NullBool()}));
+                                 zetasql::values::NullBool()},
+
+        // PG.FLOAT_ADD
+        PGScalarFunctionTestCase{kPGFloatAddFunctionName,
+                                 {kNullFloatValue, kNullFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatAddFunctionName,
+                                 {kNullFloatValue, kFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatAddFunctionName,
+                                 {kFloatValue, kNullFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatAddFunctionName,
+                                 {kFloatValue, kFloatValue},
+                                 zetasql::values::Float(2.0f)},
+
+        // PG.FLOAT_SUBTRACT
+        PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
+                                 {kNullFloatValue, kNullFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
+                                 {kNullFloatValue, kFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
+                                 {kFloatValue, kNullFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
+                                 {kFloatValue, kFloatValue},
+                                 zetasql::values::Float(0)},
+        PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
+                                 {kFloatValue, zetasql::values::Float(2.0)},
+                                 zetasql::values::Float(-1.0f)},
+        PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
+                                 {zetasql::values::Float(2.0), kFloatValue},
+                                 zetasql::values::Float(1.0f)},
+
+        // PG.FLOAT_MULTIPLY
+        PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
+                                 {kNullFloatValue, kNullFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
+                                 {kNullFloatValue, kFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
+                                 {kFloatValue, kNullFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
+                                 {kFloatValue, kFloatValue},
+                                 zetasql::values::Float(1.0f)},
+        PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
+                                 {kFloatValue, zetasql::values::Float(-2.0f)},
+                                 zetasql::values::Float(-2.0f)},
+        PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
+                                 {kFloatValue, zetasql::values::Float(0)},
+                                 zetasql::values::Float(0)},
+
+        // PG.FLOAT_DIVIDE
+        PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
+                                 {kNullFloatValue, kNullFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
+                                 {kNullFloatValue, kFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
+                                 {kFloatValue, kNullFloatValue},
+                                 zetasql::values::NullFloat()},
+        PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
+                                 {kFloatValue, kFloatValue},
+                                 zetasql::values::Float(1.0f)},
+        PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
+                                 {kFloatValue, zetasql::values::Float(2.0)},
+                                 zetasql::values::Float(0.5f)},
+        PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
+                                 {zetasql::values::Float(2.0), kFloatValue},
+                                 zetasql::values::Float(2.0f)}),
+    [](const testing::TestParamInfo<PGScalarFunctionTestCase>& info) {
+      std::string name = absl::StrCat(
+          "idx_", info.index, "_", info.param.function_name, "_",
+          absl::StrJoin(info.param.function_arguments, "_",
+                        [](std::string* out, zetasql::Value v) {
+                          absl::StrAppend(
+                              out, absl::StrCat(v.type()->DebugString(), "_",
+                                                // Limit number of chars.
+                                                v.DebugString().substr(0, 10)));
+                        }));
+      absl::c_replace_if(name, [](char c) { return !std::isalnum(c); }, '_');
+      return name;
+    });
 
 TEST_F(EmulatorFunctionsTest,
        RegexpMatchReturnsNullElementForUnmatchedOptionalCapturingGroups) {
@@ -1941,6 +2093,125 @@ TEST_F(EmulatorFunctionsTest, UminusReturnsErrorWhenArgumentsAreInvalid) {
               zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
+TEST_F(EmulatorFunctionsTest, FloatAddReturnsErrorWhenArgumentsAreInvalid) {
+  const zetasql::Function* function =
+      functions_[kPGFloatAddFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+
+  std::vector<zetasql::Value> args = {};
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+}
+
+TEST_F(EmulatorFunctionsTest, FloatAddReturnsErrorWhenResultIsOverflow) {
+  const zetasql::Function* function =
+      functions_[kPGFloatAddFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kFloatMaxValue, kFloatMaxValue})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan({kFloatLowestValue, kFloatLowestValue})),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+}
+
+TEST_F(EmulatorFunctionsTest,
+       FloatSubtractReturnsErrorWhenArgumentsAreInvalid) {
+  const zetasql::Function* function =
+      functions_[kPGFloatSubtractFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+
+  std::vector<zetasql::Value> args = {};
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+}
+
+TEST_F(EmulatorFunctionsTest, FloatSubtractReturnsErrorWhenResultIsOverflow) {
+  const zetasql::Function* function =
+      functions_[kPGFloatSubtractFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {kFloatLowestValue, kFloatMaxValue})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {kFloatMaxValue, kFloatLowestValue})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+}
+
+TEST_F(EmulatorFunctionsTest,
+       FloatMultiplyReturnsErrorWhenArgumentsAreInvalid) {
+  const zetasql::Function* function =
+      functions_[kPGFloatMultiplyFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+
+  std::vector<zetasql::Value> args = {};
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+}
+
+TEST_F(EmulatorFunctionsTest, FloatMultiplyReturnsErrorWhenResultIsOverflow) {
+  const zetasql::Function* function =
+      functions_[kPGFloatMultiplyFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kFloatMaxValue, kFloatMaxValue})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {kFloatLowestValue, kFloatLowestValue})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+}
+
+TEST_F(EmulatorFunctionsTest, FloatDivideReturnsErrorWhenArgumentsAreInvalid) {
+  const zetasql::Function* function =
+      functions_[kPGFloatDivideFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+
+  std::vector<zetasql::Value> args = {};
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+}
+
+TEST_F(EmulatorFunctionsTest, FloatDivideReturnsErrorWhenDividingByZero) {
+  const zetasql::Function* function =
+      functions_[kPGFloatDivideFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {kFloatMaxValue, zetasql::Value::Float(0.0f)})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {kFloatMinValue, zetasql::Value::Float(0.0f)})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+}
+
+TEST_F(EmulatorFunctionsTest, FloatDivideReturnsErrorWhenResultIsOverflow) {
+  const zetasql::Function* function =
+      functions_[kPGFloatDivideFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {kFloatMaxValue, kFloatMinValue})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {kFloatLowestValue, kFloatMinValue})),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+}
+
 TEST_F(EmulatorFunctionsTest,
        CastOidToInt64ReturnsErrorWhenArgumentsAreInvalid) {
   const zetasql::Function* function =
@@ -2029,6 +2300,24 @@ TEST_F(EmulatorFunctionsTest,
           {*CreatePgNumericValueWithMemoryContext("-1.79769313486232e+308")})),
       StatusIs(absl::StatusCode::kOutOfRange,
                HasSubstr("Cannot cast to double")));
+}
+
+TEST_F(EmulatorFunctionsTest,
+       CastNumericToFloatReturnsErrorWhenArgumentsAreInvalid) {
+  const zetasql::Function* function =
+      functions_[kPGCastNumericToFloatFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+  // Insufficient arguments.
+  std::vector<zetasql::Value> args = {};
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+  // Value too small to be represented by a float.
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {*CreatePgNumericValueWithMemoryContext("-3.4028238e+38")})),
+      StatusIs(absl::StatusCode::kOutOfRange,
+               HasSubstr("Cannot cast to float")));
 }
 
 TEST_F(EmulatorFunctionsTest,
@@ -2144,16 +2433,11 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithOutOfRangePrecisionScaleError) {
                                        function->signatures().front()));
 
   // Out of range precision and scale
-  EXPECT_THAT(
-      evaluator_(
-          absl::MakeConstSpan({kPGNumericValue, zetasql::Value::Int64(2),
-                               zetasql::Value::Int64(3)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
-  EXPECT_THAT(
-      evaluator_(
-          absl::MakeConstSpan({kPGNumericValue, zetasql::Value::Int64(2),
-                               zetasql::Value::Int64(-1)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPGNumericValue,
+                                              zetasql::Value::Int64(2),
+                                              zetasql::Value::Int64(3)})),
+              StatusIs(absl::StatusCode::kOutOfRange,
+                       HasSubstr("numeric field overflow")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPGNumericValue,
                                               zetasql::Value::Int64(1001),
                                               zetasql::Value::Int64(0)})),
@@ -2169,39 +2453,27 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithOutOfRangePrecisionScaleError) {
                                               zetasql::Value::Int64(0)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
-  EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("1.0"),
-                                      zetasql::Value::Int64(2),
-                                      zetasql::Value::Int64(3)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("1.0"),
+                                              zetasql::Value::Int64(2),
+                                              zetasql::Value::Int64(3)})),
+              StatusIs(absl::StatusCode::kOutOfRange,
+                       HasSubstr("numeric field overflow")));
 
   // Test that out-of-range precision and scale is checked first when value is
   // special (NaN/NULL).
-  EXPECT_THAT(
-      evaluator_(
-          absl::MakeConstSpan({kNullPGNumericValue, zetasql::Value::Int64(2),
-                               zetasql::Value::Int64(3)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
-  EXPECT_THAT(
-      evaluator_(
-          absl::MakeConstSpan({kPGNumericNaNValue, zetasql::Value::Int64(2),
-                               zetasql::Value::Int64(3)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
-  EXPECT_THAT(
-      evaluator_(
-          absl::MakeConstSpan({kNullDoubleValue, zetasql::Value::Int64(2),
-                               zetasql::Value::Int64(-1)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
-  EXPECT_THAT(
-      evaluator_(
-          absl::MakeConstSpan({kDoubleNaNValue, zetasql::Value::Int64(2),
-                               zetasql::Value::Int64(-1)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
-  EXPECT_THAT(
-      evaluator_(
-          absl::MakeConstSpan({kPosInfDoubleValue, zetasql::Value::Int64(2),
-                               zetasql::Value::Int64(-1)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNullPGNumericValue,
+                                              zetasql::Value::Int64(2),
+                                              zetasql::Value::Int64(3)})),
+              zetasql_base::testing::IsOkAndHolds(kNullPGNumericValue));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNullDoubleValue,
+                                              zetasql::Value::Int64(2),
+                                              zetasql::Value::Int64(-1)})),
+              zetasql_base::testing::IsOkAndHolds(kNullPGNumericValue));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPosInfDoubleValue,
+                                              zetasql::Value::Int64(2),
+                                              zetasql::Value::Int64(-1)})),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Cannot cast infinity to PG.NUMERIC")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNegInfDoubleValue,
                                               zetasql::Value::Int64(1001),
                                               zetasql::Value::Int64(0)})),
@@ -2217,11 +2489,10 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithOutOfRangePrecisionScaleError) {
                                               zetasql::Value::Int64(0)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
-  EXPECT_THAT(
-      evaluator_(
-          absl::MakeConstSpan({kNullStringValue, zetasql::Value::Int64(2),
-                               zetasql::Value::Int64(3)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNullStringValue,
+                                              zetasql::Value::Int64(2),
+                                              zetasql::Value::Int64(3)})),
+              zetasql_base::testing::IsOkAndHolds(kNullPGNumericValue));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("-Inf"),
                                               zetasql::Value::Int64(10001),
                                               zetasql::Value::Int64(3)})),
@@ -2288,11 +2559,11 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithInfinityDoubleError) {
 
   // Infinity double value with out of range precision and scale: expect error
   // regarding invalid precision/scale
-  EXPECT_THAT(
-      evaluator_(
-          absl::MakeConstSpan({kNegInfDoubleValue, zetasql::Value::Int64(100),
-                               zetasql::Value::Int64(1000)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNegInfDoubleValue,
+                                              zetasql::Value::Int64(100),
+                                              zetasql::Value::Int64(1000)})),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Cannot cast infinity to PG.NUMERIC")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {kPosInfDoubleValue, zetasql::Value::Int64(1001)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -2301,11 +2572,11 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithInfinityDoubleError) {
                   {kPosInfDoubleValue, zetasql::Value::Int64(0)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
-  EXPECT_THAT(
-      evaluator_(
-          absl::MakeConstSpan({kNegInfDoubleValue, zetasql::Value::Int64(100),
-                               zetasql::Value::Int64(-1)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNegInfDoubleValue,
+                                              zetasql::Value::Int64(100),
+                                              zetasql::Value::Int64(-1)})),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Cannot cast infinity to PG.NUMERIC")));
 
   // Infinity double value with null precision and scale: expect error regarding
   // null
@@ -2423,7 +2694,8 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithInfinityStringError) {
       evaluator_(absl::MakeConstSpan({zetasql::Value::String("-infinity"),
                                       zetasql::Value::Int64(100),
                                       zetasql::Value::Int64(1000)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
+      StatusIs(absl::StatusCode::kOutOfRange,
+               HasSubstr("numeric field overflow")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan({zetasql::Value::String(" INFinity "),
                                       zetasql::Value::Int64(1001)})),
@@ -2434,11 +2706,11 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithInfinityStringError) {
                                       zetasql::Value::Int64(0)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("NUMERIC precision")));
-  EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("-iNf"),
-                                      zetasql::Value::Int64(100),
-                                      zetasql::Value::Int64(1000)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("-iNf"),
+                                              zetasql::Value::Int64(100),
+                                              zetasql::Value::Int64(1000)})),
+              StatusIs(absl::StatusCode::kOutOfRange,
+                       HasSubstr("numeric field overflow")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("inf"),
                                               zetasql::Value::Int64(1001)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -2617,11 +2889,6 @@ TEST_F(EmulatorFunctionsTest,
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("NUMERIC precision")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("1e-100000"),
-                                      zetasql::Value::Int64(3),
-                                      zetasql::Value::Int64(100)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
-  EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
           {zetasql::Value::String("1e-10000"), zetasql::Value::Int64(0)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
@@ -2692,12 +2959,12 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithTooLargeStringValueError) {
 
   // Values are too large to be represented as a numeric value but precision and
   // scale are invalid: expect error regarding invalid precision/scale
-  EXPECT_THAT(
-      evaluator_(
-          absl::MakeConstSpan({zetasql::Value::String(std::string(
-                                   kMaxPGNumericWholeDigits + 1, '9')),
-                               kInt64Value, zetasql::Value::Int64(1000)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {zetasql::Value::String(
+                       std::string(kMaxPGNumericWholeDigits + 1, '9')),
+                   kInt64Value, zetasql::Value::Int64(1000)})),
+              StatusIs(absl::StatusCode::kOutOfRange,
+                       HasSubstr("numeric field overflow")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
           {zetasql::Value::String(std::string(
@@ -2713,13 +2980,13 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithTooLargeStringValueError) {
            zetasql::Value::Int64(0)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("NUMERIC precision")));
-  EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String(absl::StrCat(
-               std::string(kMaxPGNumericWholeDigits + 1, '9'), ".",
-               std::string(kMaxPGNumericFractionalDigits + 1, '9'))),
-           kInt64Value, zetasql::Value::Int64(-1)})),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {zetasql::Value::String(absl::StrCat(
+                       std::string(kMaxPGNumericWholeDigits + 1, '9'), ".",
+                       std::string(kMaxPGNumericFractionalDigits + 1, '9'))),
+                   kInt64Value, zetasql::Value::Int64(-1)})),
+              StatusIs(absl::StatusCode::kOutOfRange,
+                       HasSubstr("numeric field overflow")));
 
   // Values are too large to be represented as a numeric value but precision and
   // scale are null: expect error regarding null
@@ -3500,22 +3767,28 @@ TEST_F(EvalCastToTimestampTest, InvalidArgsCount) {
               zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
-class EvalMapDoubleToIntTest : public EmulatorFunctionsTest {
+template <typename T,
+            typename = std::enable_if_t<std::is_floating_point_v<T>>>
+class EvalMapFloatingPointToIntTest : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
-    const zetasql::Function* function =
-        functions_[kPGMapDoubleToIntFunctionName].get();
+    const zetasql::Function* function;
+    if constexpr (std::is_same_v<T, double>) {
+      function = functions_[kPGMapDoubleToIntFunctionName].get();
+    } else {
+      function = functions_[kPGMapFloatToIntFunctionName].get();
+    }
     ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 
-  void VerifyEquality(const absl::Span<const double> values) {
+  void VerifyEquality(const absl::Span<const T> values) {
     ASSERT_GT(values.size(), 1);
     for (int i = 1; i < values.size(); i++) {
       std::vector<zetasql::Value> args1 = {
-          zetasql::values::Double(values[i - 1])};
+          zetasql::Value::Make<T>(values[i - 1])};
       std::vector<zetasql::Value> args2 = {
-          zetasql::values::Double(values[i])};
+          zetasql::Value::Make<T>(values[i])};
       ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value res1,
                            evaluator_(absl::MakeConstSpan(args1)));
       ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value res2,
@@ -3524,13 +3797,13 @@ class EvalMapDoubleToIntTest : public EmulatorFunctionsTest {
     }
   }
 
-  void VerifyGivenOrder(const absl::Span<const double> values) {
+  void VerifyGivenOrder(const absl::Span<const T> values) {
     ASSERT_GT(values.size(), 1);
     for (int i = 1; i < values.size(); i++) {
       std::vector<zetasql::Value> args1 = {
-          zetasql::values::Double(values[i - 1])};
+          zetasql::Value::Make<T>(values[i - 1])};
       std::vector<zetasql::Value> args2 = {
-          zetasql::values::Double(values[i])};
+          zetasql::Value::Make<T>(values[i])};
       ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value res1,
                            evaluator_(absl::MakeConstSpan(args1)));
       ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value res2,
@@ -3546,39 +3819,55 @@ class EvalMapDoubleToIntTest : public EmulatorFunctionsTest {
   }
 };
 
+using FloatTypes = ::testing::Types<double, float>;
+TYPED_TEST_SUITE(EvalMapFloatingPointToIntTest, FloatTypes);
+
 // Verifies that all Nans are mapped to the same value.
-TEST_F(EvalMapDoubleToIntTest, NansEquality) {
-  VerifyEquality({std::numeric_limits<double>::quiet_NaN(),
-                  -std::numeric_limits<double>::quiet_NaN(),
-                  std::numeric_limits<double>::signaling_NaN(),
-                  -std::numeric_limits<double>::signaling_NaN(), -std::nan(""),
-                  -std::nan(RandomString().c_str())});
+TYPED_TEST(EvalMapFloatingPointToIntTest, NansEquality) {
+  TypeParam nan1;
+  TypeParam nan2;
+
+  if constexpr (std::is_same_v<TypeParam, double>) {
+    nan1 = -std::nan("");
+    nan2 = -std::nan(this->RandomString().c_str());
+  } else {
+    nan1 = -std::nanf("");
+    nan2 = -std::nanf(this->RandomString().c_str());
+  }
+
+  this->VerifyEquality({std::numeric_limits<TypeParam>::quiet_NaN(),
+                        -std::numeric_limits<TypeParam>::quiet_NaN(),
+                        std::numeric_limits<TypeParam>::signaling_NaN(),
+                        -std::numeric_limits<TypeParam>::signaling_NaN(), nan1,
+                        nan2});
 }
 
 // Verifies that all Zeros are mapped to the same value.
-TEST_F(EvalMapDoubleToIntTest, ZerosEquality) { VerifyEquality({0.0, -0.0}); }
-
-// Verifies that outputs follow PostgreSQL FLOAT8 order rules for inputs.
-TEST_F(EvalMapDoubleToIntTest, FixedOrder) {
-  VerifyGivenOrder({-std::numeric_limits<double>::infinity(),
-                    std::numeric_limits<double>::lowest(), -1.03,
-                    -std::numeric_limits<double>::min(), 0,
-                    std::numeric_limits<double>::min(), 1,
-                    std::numeric_limits<double>::max(),
-                    std::numeric_limits<double>::infinity(),
-                    std::numeric_limits<double>::quiet_NaN()});
+TYPED_TEST(EvalMapFloatingPointToIntTest, ZerosEquality) {
+  this->VerifyEquality({0.0, -0.0});
 }
 
-TEST_F(EvalMapDoubleToIntTest, RandomOrder) {
+// Verifies that outputs follow PostgreSQL FLOAT8 order rules for inputs.
+TYPED_TEST(EvalMapFloatingPointToIntTest, FixedOrder) {
+  this->VerifyGivenOrder({-std::numeric_limits<TypeParam>::infinity(),
+                            std::numeric_limits<TypeParam>::lowest(), -1.03,
+                            -std::numeric_limits<TypeParam>::min(), 0,
+                            std::numeric_limits<TypeParam>::min(), 1,
+                            std::numeric_limits<TypeParam>::max(),
+                            std::numeric_limits<TypeParam>::infinity(),
+                            std::numeric_limits<TypeParam>::quiet_NaN()});
+}
+
+TYPED_TEST(EvalMapFloatingPointToIntTest, RandomOrder) {
   // Add at least two distrinct values, so we never end up with one value after
   // dedup.
-  std::vector<double> values{std::numeric_limits<double>::min(), 0};
+  std::vector<TypeParam> values{std::numeric_limits<TypeParam>::min(), 0};
   absl::BitGen gen;
   for (int i = 0; i < 10; i++) {
     values.push_back(
-        absl::Uniform<double>(absl::IntervalClosedClosed, gen,
-                              -std::numeric_limits<double>::infinity(),
-                              std::numeric_limits<double>::infinity()));
+        absl::Uniform<TypeParam>(absl::IntervalClosedClosed, gen,
+                              -std::numeric_limits<TypeParam>::infinity(),
+                              std::numeric_limits<TypeParam>::infinity()));
   }
   std::sort(values.begin(), values.end());
 
@@ -3586,12 +3875,12 @@ TEST_F(EvalMapDoubleToIntTest, RandomOrder) {
   values.erase(std::unique(values.begin(), values.end()), values.end());
 
   // Verification.
-  VerifyGivenOrder(values);
+  this->VerifyGivenOrder(values);
 }
 
-TEST_F(EvalMapDoubleToIntTest, InvalidArgsCount) {
+TYPED_TEST(EvalMapFloatingPointToIntTest, InvalidArgsCount) {
   std::vector<zetasql::Value> args = {};
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
+  EXPECT_THAT(this->evaluator_(absl::MakeConstSpan(args)),
               zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
@@ -3622,10 +3911,10 @@ TEST_P(EvalLeastGreatestTest, TestEvalLeastGreatest) {
       functions[kPGGreatestFunctionName].get();
 
   const std::vector<const zetasql::Type*> types = {
-      zetasql::types::DoubleType(),   zetasql::types::Int64Type(),
-      zetasql::types::BoolType(),     zetasql::types::BytesType(),
-      zetasql::types::StringType(),   zetasql::types::DateType(),
-      zetasql::types::TimestampType()};
+      zetasql::types::DoubleType(), zetasql::types::Int64Type(),
+      zetasql::types::BoolType(),   zetasql::types::BytesType(),
+      zetasql::types::StringType(), zetasql::types::DateType(),
+      zetasql::types::FloatType(),  zetasql::types::TimestampType()};
 
   absl::flat_hash_map<std::string, zetasql::FunctionEvaluator>
       least_evaluators;
@@ -3750,6 +4039,84 @@ INSTANTIATE_TEST_SUITE_P(
          {"DoubleSkipNullLast",
           {zetasql::values::Double(200), zetasql::values::NullDouble()},
           zetasql::types::DoubleType()->DebugString(),
+          0,
+          0,
+          absl::StatusCode::kOk},
+         {"FloatResultsInMid",
+          {zetasql::values::Float(-12), zetasql::values::Float(-87980.125f),
+           zetasql::values::Float(100), zetasql::values::Float(-7)},
+          zetasql::types::FloatType()->DebugString(),
+          1,
+          2,
+          absl::StatusCode::kOk},
+         {"FloatAscending",
+          {zetasql::values::Float(-10000.123f), zetasql::values::Float(-12),
+           zetasql::values::Float(-7), zetasql::values::Float(100)},
+          zetasql::types::FloatType()->DebugString(),
+          0,
+          3,
+          absl::StatusCode::kOk},
+         {"FloatDescending",
+          {zetasql::values::Float(100), zetasql::values::Float(-7),
+           zetasql::values::Float(-12), zetasql::values::Float(-879.125f)},
+          zetasql::types::FloatType()->DebugString(),
+          3,
+          0,
+          absl::StatusCode::kOk},
+         {"FloatWithNaN",
+          {zetasql::values::Float(std::numeric_limits<float>::quiet_NaN()),
+           zetasql::values::Float(-12), zetasql::values::Float(-5),
+           zetasql::values::Float(-7)},
+          zetasql::types::FloatType()->DebugString(),
+          1,
+          0,
+          absl::StatusCode::kOk},
+         {"FloatWithNegativeNaN",
+          {zetasql::values::Float(-std::numeric_limits<float>::quiet_NaN()),
+           zetasql::values::Float(-12), zetasql::values::Float(-5),
+           zetasql::values::Float(-7)},
+          zetasql::types::FloatType()->DebugString(),
+          1,
+          0,
+          absl::StatusCode::kOk},
+         {"FloatSingleValue",
+          {zetasql::values::Float(-87980.125f)},
+          zetasql::types::FloatType()->DebugString(),
+          0,
+          0,
+          absl::StatusCode::kOk},
+         {"FloatWithInfinitiesAndNaNAndNull",
+          {zetasql::values::Float(87980.125f),
+           zetasql::values::Float(std::numeric_limits<float>::infinity()),
+           zetasql::values::Float(std::numeric_limits<float>::quiet_NaN()),
+           zetasql::values::NullFloat(),
+           zetasql::values::Float(-std::numeric_limits<float>::infinity())},
+          zetasql::types::FloatType()->DebugString(),
+          4,
+          2,
+          absl::StatusCode::kOk},
+         {"FloatAllNaNs",
+          {zetasql::values::Float(std::numeric_limits<float>::quiet_NaN()),
+           zetasql::values::Float(std::numeric_limits<float>::quiet_NaN())},
+          zetasql::types::FloatType()->DebugString(),
+          0,
+          0,
+          absl::StatusCode::kOk},
+         {"FloatAllNulls",
+          {zetasql::values::NullFloat(), zetasql::values::NullFloat()},
+          zetasql::types::FloatType()->DebugString(),
+          0,
+          0,
+          absl::StatusCode::kOk},
+         {"FloatSkipNullFirst",
+          {zetasql::values::NullFloat(), zetasql::values::Float(100)},
+          zetasql::types::FloatType()->DebugString(),
+          1,
+          1,
+          absl::StatusCode::kOk},
+         {"FloatSkipNullLast",
+          {zetasql::values::Float(200), zetasql::values::NullFloat()},
+          zetasql::types::FloatType()->DebugString(),
           0,
           0,
           absl::StatusCode::kOk},
@@ -3879,10 +4246,13 @@ TEST(EvalMinSignatureTest, MinOnlyForDoubleType) {
   const zetasql::Function* function = functions[kPGMinFunctionName].get();
   const std::vector<zetasql::FunctionSignature>& signatures =
       function->signatures();
-  EXPECT_THAT(signatures.size(), 1);
-  EXPECT_TRUE(signatures.front().result_type().type()->IsDouble());
-  EXPECT_THAT(signatures.front().arguments().size(), 1);
-  EXPECT_TRUE(signatures.front().arguments().front().type()->IsDouble());
+  EXPECT_THAT(signatures.size(), 2);
+  EXPECT_TRUE(signatures[0].result_type().type()->IsDouble());
+  EXPECT_THAT(signatures[0].arguments().size(), 1);
+  EXPECT_TRUE(signatures[0].arguments().front().type()->IsDouble());
+  EXPECT_TRUE(signatures[1].result_type().type()->IsFloat());
+  EXPECT_THAT(signatures[1].arguments().size(), 1);
+  EXPECT_TRUE(signatures[1].arguments().front().type()->IsFloat());
 }
 
 struct EvalAggregatorTestCase {
@@ -3903,10 +4273,9 @@ TEST_P(EvalMinTest, TestMin) {
   for (auto& function : spanner_pg_functions) {
     functions[function->Name()] = std::move(function);
   }
-  zetasql::FunctionSignature signature(zetasql::types::DoubleType(),
-                                         {zetasql::types::DoubleType()},
-                                         nullptr);
   const EvalAggregatorTestCase& test_case = GetParam();
+  const zetasql::Type* agg_type = test_case.expected_value.type();
+  zetasql::FunctionSignature signature(agg_type, {agg_type}, nullptr);
   const zetasql::Function* min_function =
       functions[test_case.function_name].get();
   auto callback = min_function->GetAggregateFunctionEvaluatorFactory();
@@ -3942,12 +4311,12 @@ TEST_P(EvalMinTest, TestMin) {
 
 INSTANTIATE_TEST_SUITE_P(EvalMinTests, EvalMinTest,
                          ::testing::ValuesIn<EvalAggregatorTestCase>({
-                             {"OneNullArg",
+                             {"OneDoubleNullArg",
                               kPGMinFunctionName,
                               {&kNullDoubleValue},
                               kNullDoubleValue,
                               absl::StatusCode::kOk},
-                             {"EmptyArgs",
+                             {"EmptyDoubleArgs",
                               kPGMinFunctionName,
                               {},
                               kNullDoubleValue,
@@ -3972,22 +4341,22 @@ INSTANTIATE_TEST_SUITE_P(EvalMinTests, EvalMinTest,
                               {&kDoubleValue, &kNegInfDoubleValue},
                               kNegInfDoubleValue,
                               absl::StatusCode::kOk},
-                             {"OnePosInfArgOneNegInfArg",
+                             {"OneDoublePosInfArgOneNegInfArg",
                               kPGMinFunctionName,
                               {&kPosInfDoubleValue, &kNegInfDoubleValue},
                               kNegInfDoubleValue,
                               absl::StatusCode::kOk},
-                             {"OnePosInfArgOneNegInfArg",
+                             {"OneDoublePosInfArgOneNegInfArg",
                               kPGMinFunctionName,
                               {&kPosInfDoubleValue, &kNegInfDoubleValue},
                               kNegInfDoubleValue,
                               absl::StatusCode::kOk},
-                             {"OneNanArg",
+                             {"OneDoubleNanArg",
                               kPGMinFunctionName,
                               {&kDoubleNaNValue},
                               kDoubleNaNValue,
                               absl::StatusCode::kOk},
-                             {"OneNullArgOneNanArg",
+                             {"OneDoubleNullArgOneNanArg",
                               kPGMinFunctionName,
                               {&kNullDoubleValue, &kDoubleNaNValue},
                               kDoubleNaNValue,
@@ -3997,15 +4366,81 @@ INSTANTIATE_TEST_SUITE_P(EvalMinTests, EvalMinTest,
                               {&kDoubleValue, &kDoubleNaNValue},
                               kDoubleValue,
                               absl::StatusCode::kOk},
-                             {"OneNegInfArgOneNanArg",
+                             {"OneDoubleNegInfArgOneNanArg",
                               kPGMinFunctionName,
                               {&kNegInfDoubleValue, &kDoubleNaNValue},
                               kNegInfDoubleValue,
                               absl::StatusCode::kOk},
-                             {"OnePosInfArgOneNanArg",
+                             {"OneDoublePosInfArgOneNanArg",
                               kPGMinFunctionName,
                               {&kPosInfDoubleValue, &kDoubleNaNValue},
                               kPosInfDoubleValue,
+                              absl::StatusCode::kOk},
+
+                             {"OneFloatNullArg",
+                              kPGMinFunctionName,
+                              {&kNullFloatValue},
+                              kNullFloatValue,
+                              absl::StatusCode::kOk},
+                             {"EmptyFloatArgs",
+                              kPGMinFunctionName,
+                              {},
+                              kNullFloatValue,
+                              absl::StatusCode::kOk},
+                             {"OneFloatArg",
+                              kPGMinFunctionName,
+                              {&kFloatValue},
+                              kFloatValue,
+                              absl::StatusCode::kOk},
+                             {"OneFloatArgOneNullArg",
+                              kPGMinFunctionName,
+                              {&kFloatValue, &kNullFloatValue},
+                              kFloatValue,
+                              absl::StatusCode::kOk},
+                             {"OneFloatArgOnePosInfArg",
+                              kPGMinFunctionName,
+                              {&kFloatValue, &kPosInfFloatValue},
+                              kFloatValue,
+                              absl::StatusCode::kOk},
+                             {"OneFloatArgOneNegInfArg",
+                              kPGMinFunctionName,
+                              {&kFloatValue, &kNegInfFloatValue},
+                              kNegInfFloatValue,
+                              absl::StatusCode::kOk},
+                             {"OneFloatPosInfArgOneNegInfArg",
+                              kPGMinFunctionName,
+                              {&kPosInfFloatValue, &kNegInfFloatValue},
+                              kNegInfFloatValue,
+                              absl::StatusCode::kOk},
+                             {"OneFloatPosInfArgOneNegInfArg",
+                              kPGMinFunctionName,
+                              {&kPosInfFloatValue, &kNegInfFloatValue},
+                              kNegInfFloatValue,
+                              absl::StatusCode::kOk},
+                             {"OneFloatNanArg",
+                              kPGMinFunctionName,
+                              {&kFloatNaNValue},
+                              kFloatNaNValue,
+                              absl::StatusCode::kOk},
+                             {"OneFloatNullArgOneNanArg",
+                              kPGMinFunctionName,
+                              {&kNullFloatValue, &kFloatNaNValue},
+                              kFloatNaNValue,
+                              absl::StatusCode::kOk},
+                             {"OneFloatArgOneNanArg",
+                              kPGMinFunctionName,
+                              {&kFloatValue, &kFloatNaNValue},
+                              kFloatValue,
+                              absl::StatusCode::kOk},
+                             {"OneFloatNegInfArgOneNanArg",
+                              kPGMinFunctionName,
+                              {&kNegInfFloatValue, &kFloatNaNValue},
+                              kNegInfFloatValue,
+                              absl::StatusCode::kOk},
+                             {"OneFloatPosInfArgOneNanArg",
+                              kPGMinFunctionName,
+                              {&kPosInfFloatValue, &kFloatNaNValue},
+                              kPosInfFloatValue,
                               absl::StatusCode::kOk},
                          }));
 
@@ -4020,6 +4455,16 @@ INSTANTIATE_TEST_SUITE_P(EvalMinFailureTests, EvalMinTest,
                               kPGMinFunctionName,
                               {&kDoubleValue, &kInt64Value},
                               kNullDoubleValue,  // ignored
+                              absl::StatusCode::kInvalidArgument},
+                             {"OneFloatInvalidArg",
+                              kPGMinFunctionName,
+                              {&kInt64Value},
+                              kNullFloatValue,  // ignored
+                              absl::StatusCode::kInvalidArgument},
+                             {"OneFloatValidArgOneInvalidArg",
+                              kPGMinFunctionName,
+                              {&kFloatValue, &kInt64Value},
+                              kNullFloatValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
                          }));
 
@@ -4177,6 +4622,8 @@ TEST_P(EvalSumAvgTest, TestSumAvgAggregator) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
 
+  const EvalAggregatorTestCase& test_case = GetParam();
+
   absl::flat_hash_map<zetasql::TypeKind, zetasql::FunctionSignature>
       signature_map = {
           {zetasql::TYPE_INT64,
@@ -4185,12 +4632,19 @@ TEST_P(EvalSumAvgTest, TestSumAvgAggregator) {
            {zetasql::types::DoubleType(),
             {zetasql::types::DoubleType()},
             nullptr}},
+          {zetasql::TYPE_FLOAT,
+           // For avg, the result type is double if the input type is float.
+           // For sum, the result type is float if the input type is float.
+           {test_case.function_name == kPGAvgFunctionName
+                ? zetasql::types::DoubleType()
+                : zetasql::types::FloatType(),
+            {zetasql::types::FloatType()},
+            nullptr}},
           {zetasql::TYPE_EXTENDED,
            {gsql_pg_numeric, {gsql_pg_numeric}, nullptr}},
       };
 
   bool stop_acc = false;
-  const EvalAggregatorTestCase& test_case = GetParam();
 
   const zetasql::Function* function =
       functions[test_case.function_name].get();
@@ -4344,6 +4798,63 @@ INSTANTIATE_TEST_SUITE_P(
          kPGSumFunctionName,
          {&kPosInfDoubleValue, &kNegInfDoubleValue},
          kDoubleNaNValue,
+         absl::StatusCode::kOk},
+
+        // Tests for pg.sum of FLOAT
+        {"OneNullFloatArg",
+         kPGSumFunctionName,
+         {&kNullFloatValue},
+         kNullFloatValue,
+         absl::StatusCode::kOk},
+        {"OneFloatArg",
+         kPGSumFunctionName,
+         {&kFloatValue},
+         kFloatValue,
+         absl::StatusCode::kOk},
+        {"ManyFloatArgs",
+         kPGSumFunctionName,
+         {&kFloatValue, &kFloatValue, &kFloatValue},
+         zetasql::values::Float(3.0f),
+         absl::StatusCode::kOk},
+        {"NullFloatArgFirst",
+         kPGSumFunctionName,
+         {&kNullFloatValue, &kFloatValue, &kFloatValue},
+         zetasql::values::Float(2.0f),
+         absl::StatusCode::kOk},
+        {"NullFloatArgsBeforeFloatValues",
+         kPGSumFunctionName,
+         {&kNullFloatValue, &kNullFloatValue, &kFloatValue, &kFloatValue},
+         zetasql::values::Float(2.0f),
+         absl::StatusCode::kOk},
+        {"NullFloatArgsElsewhere",
+         kPGSumFunctionName,
+         {&kFloatValue, &kNullFloatValue, &kFloatValue, &kNullFloatValue},
+         zetasql::values::Float(2.0f),
+         absl::StatusCode::kOk},
+        {"OneNanFloatArg",
+         kPGSumFunctionName,
+         {&kFloatNaNValue},
+         kFloatNaNValue,
+         absl::StatusCode::kOk},
+        {"ManyNanFloatArgs",
+         kPGSumFunctionName,
+         {&kFloatValue, &kFloatNaNValue, &kFloatValue, &kFloatNaNValue},
+         kFloatNaNValue,
+         absl::StatusCode::kOk},
+        {"OneInfinityFloatArg",
+         kPGSumFunctionName,
+         {&kPosInfFloatValue},
+         kPosInfFloatValue,
+         absl::StatusCode::kOk},
+        {"ManyInfinityFloatArgs",
+         kPGSumFunctionName,
+         {&kPosInfFloatValue, &kPosInfFloatValue, &kPosInfFloatValue},
+         kPosInfFloatValue,
+         absl::StatusCode::kOk},
+        {"PosAndNegInfinityMakesNaN",
+         kPGSumFunctionName,
+         {&kPosInfFloatValue, &kNegInfFloatValue},
+         kFloatNaNValue,
          absl::StatusCode::kOk},
 
         // Tests for pg.sum of PG.NUMERIC
@@ -4511,6 +5022,75 @@ INSTANTIATE_TEST_SUITE_P(
                                    2.0),
          absl::StatusCode::kOk},
 
+        // Tests for pg.avg of FLOAT
+        {"OneNullFloatArg",
+         kPGAvgFunctionName,
+         {&kNullFloatValue},
+         kNullDoubleValue,
+         absl::StatusCode::kOk},
+        {"OneFloatArg",
+         kPGAvgFunctionName,
+         {&kFloatValue},
+         kDoubleValue,
+         absl::StatusCode::kOk},
+        {"ManyFloatArgs",
+         kPGAvgFunctionName,
+         {&kFloatValue, &kFloatValue, &kFloatValue},
+         kDoubleValue,
+         absl::StatusCode::kOk},
+        {"NullFloatArgFirst",
+         kPGAvgFunctionName,
+         {&kNullFloatValue, &kFloatValue, &kFloatValue},
+         kDoubleValue,
+         absl::StatusCode::kOk},
+        {"NullFloatArgsBeforeFloatValues",
+         kPGAvgFunctionName,
+         {&kNullFloatValue, &kNullFloatValue, &kFloatValue, &kFloatValue},
+         kDoubleValue,
+         absl::StatusCode::kOk},
+        {"NullFloatArgsElsewhere",
+         kPGAvgFunctionName,
+         {&kFloatValue, &kNullFloatValue, &kFloatValue, &kNullFloatValue},
+         kDoubleValue,
+         absl::StatusCode::kOk},
+        {"OneNanFloatArg",
+         kPGAvgFunctionName,
+         {&kFloatNaNValue},
+         kDoubleNaNValue,
+         absl::StatusCode::kOk},
+        {"ManyNanFloatArgs",
+         kPGAvgFunctionName,
+         {&kFloatValue, &kFloatNaNValue, &kFloatValue, &kFloatNaNValue},
+         kDoubleNaNValue,
+         absl::StatusCode::kOk},
+        {"OneInfinityFloatArg",
+         kPGAvgFunctionName,
+         {&kPosInfFloatValue},
+         kPosInfDoubleValue,
+         absl::StatusCode::kOk},
+        {"ManyInfinityFloatArgs",
+         kPGAvgFunctionName,
+         {&kPosInfFloatValue, &kPosInfFloatValue, &kPosInfFloatValue},
+         kPosInfDoubleValue,
+         absl::StatusCode::kOk},
+        {"PosAndNegInfinityMakesNaN",
+         kPGAvgFunctionName,
+         {&kPosInfFloatValue, &kNegInfFloatValue},
+         kDoubleNaNValue,
+         absl::StatusCode::kOk},
+        {"AvgMinAndMaxFloat",
+         kPGAvgFunctionName,
+         {&kFloatMinValue, &kFloatMaxValue},
+         zetasql::values::Double((std::numeric_limits<float>::min() +
+                                    std::numeric_limits<float>::max()) /
+                                   2.0),
+         absl::StatusCode::kOk},
+        {"AvgFloatMaxDoesNotOverflow",
+         kPGAvgFunctionName,
+         {&kFloatMaxValue, &kFloatMaxValue},
+         zetasql::values::Double(std::numeric_limits<float>::max()),
+         absl::StatusCode::kOk},
+
         // Tests for pg.avg of PG.NUMERIC
         {"OneNullPGNumericArg",
          kPGAvgFunctionName,
@@ -4574,10 +5154,20 @@ INSTANTIATE_TEST_SUITE_P(EvalSumAvgFailureTests, EvalSumAvgTest,
                               {&kDoubleValue, &kInt64Value},
                               kNullDoubleValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
+                             {"SumFloatWithInconsistentTypes",
+                              kPGSumFunctionName,
+                              {&kDoubleValue, &kFloatValue},
+                              kNullFloatValue,  // ignored
+                              absl::StatusCode::kInvalidArgument},
                              {"SumDoubleWithOverflow",
                               kPGSumFunctionName,
                               {&kDoubleMaxValue, &kDoubleMaxValue},
                               kNullDoubleValue,  // ignored
+                              absl::StatusCode::kOutOfRange},
+                             {"SumFloatWithOverflow",
+                              kPGSumFunctionName,
+                              {&kFloatMaxValue, &kFloatMaxValue},
+                              kNullFloatValue,  // ignored
                               absl::StatusCode::kOutOfRange},
                              {"SumPGNumericWithInconsistentTypes",
                               kPGSumFunctionName,
@@ -4598,6 +5188,11 @@ INSTANTIATE_TEST_SUITE_P(EvalSumAvgFailureTests, EvalSumAvgTest,
                              {"AvgDoubleWithInconsistentTypes",
                               kPGAvgFunctionName,
                               {&kDoubleValue, &kInt64Value},
+                              kNullDoubleValue,  // ignored
+                              absl::StatusCode::kInvalidArgument},
+                             {"AvgFloatWithInconsistentTypes",
+                              kPGAvgFunctionName,
+                              {&kFloatValue, &kInt64Value},
                               kNullDoubleValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
                              {"AvgDoubleWithOverflow",

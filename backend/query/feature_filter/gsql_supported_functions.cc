@@ -194,6 +194,8 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "json_query_array",
         "json_value_array",
         "json_type",
+        "json_object",
+        "json_array",
         "$subscript",
         "$bitwise_right_shift",
         "round",

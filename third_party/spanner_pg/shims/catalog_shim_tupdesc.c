@@ -130,5 +130,6 @@ TupleDescInitEntry(TupleDesc desc,
 	att->attbyval = typeForm->typbyval;
 	att->attalign = typeForm->typalign;
 	att->attstorage = typeForm->typstorage;
+	att->attcompression = InvalidCompressionMethod;
 	att->attcollation = typeForm->typcollation;
 }

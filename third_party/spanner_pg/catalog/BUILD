@@ -217,6 +217,7 @@ cc_library(
         "@com_google_absl//absl/types:span",
         "@com_google_zetasql//zetasql/base",
         "@com_google_zetasql//zetasql/base:no_destructor",
+        "@com_google_zetasql//zetasql/public:interval_value",
         "@com_google_zetasql//zetasql/public:options_cc_proto",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
@@ -568,10 +569,6 @@ cc_library(
     name = "emulator_function_evaluators",
     srcs = ["emulator_function_evaluators.cc"],
     hdrs = ["emulator_function_evaluators.h"],
-    visibility = [
-        "//:__subpackages__",
-        "//backend/query:__subpackages__",
-    ],
     deps = [
         "//third_party/spanner_pg/function_evaluators:pg_evaluators_implementations",  # build_cleaner: keep
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -640,7 +637,9 @@ cc_library(
         "//third_party/spanner_pg/function_evaluators:pg_evaluators_implementations",  # build_cleaner: keep
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/base",
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",

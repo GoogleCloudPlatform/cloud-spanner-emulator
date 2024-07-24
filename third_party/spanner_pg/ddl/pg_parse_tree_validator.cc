@@ -52,6 +52,16 @@
 namespace postgres_translator {
 namespace spangres {
 
+absl::Status ValidateSequenceOption(
+    const List* options,
+    bool is_create,
+    const TranslationOptions& translation_options);
+
+absl::Status ValidateSequenceOption(
+    const DefElem& elem,
+    bool is_create
+);
+
 namespace {
 using PGConstants = internal::PostgreSQLConstants;
 using internal::FieldTypeChecker;
@@ -100,8 +110,9 @@ absl::Status ValidateAlterColumnType(const AlterTableStmt& node,
   if (list_length(node.cmds) > 2) {
     return UnsupportedTranslationError(
         "<ALTER TABLE ALTER COLUMN> statement can only modify one column "
-        "at a time and only support <ALTER COLUMN SET DATA TYPE> and "
-        "<ALTER COLUMN {SET|DROP} NOT NULL>.");
+        "at a time and only support <ALTER COLUMN SET DATA TYPE>, <ALTER "
+        "COLUMN {SET|DROP} NOT NULL>, <ALTER COLUMN {SET|DROP} DEFAULT>, "
+        "<ALTER COLUMN SET>, and <ALTER COLUMN RESTART COUNTER WITH>.");
   }
   if (list_length(node.cmds) == 2) {
     ZETASQL_ASSIGN_OR_RETURN(
@@ -453,7 +464,8 @@ absl::Status ValidateParseTreeNode(const AlterDatabaseSetStmt& node) {
   return absl::OkStatus();
 }
 
-absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter) {
+absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
+                                   const TranslationOptions& options) {
   // Make sure that if Constraint structure changes we update the
   // translator.
   AssertPGNodeConsistsOf(node, FieldTypeChecker<ConstrType>(node.contype),
@@ -466,6 +478,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter) {
                          FieldTypeChecker<char*>(node.cooked_expr),
                          FieldTypeChecker<char>(node.generated_when),
                          FieldTypeChecker<GeneratedColStoreOpt>(node.stored_kind),
+                         FieldTypeChecker<bool>(node.nulls_not_distinct),
                          FieldTypeChecker<List*>(node.keys),
                          FieldTypeChecker<List*>(node.including),
                          FieldTypeChecker<List*>(node.exclusions),
@@ -481,6 +494,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter) {
                          FieldTypeChecker<char>(node.fk_matchtype),
                          FieldTypeChecker<char>(node.fk_upd_action),
                          FieldTypeChecker<char>(node.fk_del_action),
+                         FieldTypeChecker<List*>(node.fk_del_set_cols),
                          FieldTypeChecker<List*>(node.old_conpfeqop),
                          FieldTypeChecker<Oid>(node.old_pktable_oid),
                          FieldTypeChecker<bool>(node.skip_validation),
@@ -583,11 +597,11 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter) {
   // `exclusions` is used for EXCLUDE constraints which are not supported.
   ZETASQL_RET_CHECK_EQ(node.exclusions, nullptr);
 
-  // `options` are defined in WITH clause, which is not supported.
   if (!IsListEmpty(node.options)) {
-    return UnsupportedTranslationError(
-        "<WITH> clause is not supported in constraint definitions.");
-  }
+      // `options` are defined in WITH clause, which is not supported.
+      return UnsupportedTranslationError(
+          "<WITH> clause is not supported in constraint definitions.");
+    }
 
   // `indexname` is used in ALTER TABLE ADD [UNIQUE | PRIMARY KEY] USING INDEX.
   // This type of ALTER statement is not supported.
@@ -887,10 +901,10 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
       }
       for (int i = 0; i < list_length(object_to_drop_list); ++i) {
         ZETASQL_ASSIGN_OR_RETURN(
-            const Value* object_to_drop_node,
-            (GetListItemAsNode<Value, T_String>)(object_to_drop_list, i));
+            const String* object_to_drop_node,
+            (GetListItemAsNode<String, T_String>)(object_to_drop_list, i));
 
-        char* object_to_drop = object_to_drop_node->val.str;
+        char* object_to_drop = object_to_drop_node->sval;
         // Expected to see non-empty object name to drop.
         ZETASQL_RET_CHECK(object_to_drop && *object_to_drop != '\0');
       }
@@ -901,18 +915,18 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
             "statement.");
       }
       ZETASQL_ASSIGN_OR_RETURN(
-          const Value* object_to_drop_node,
-          (SingleItemListAsNode<Value, T_String>)(object_to_drop_list));
+          const String* object_to_drop_node,
+          (SingleItemListAsNode<String, T_String>)(object_to_drop_list));
 
-      char* object_to_drop = object_to_drop_node->val.str;
+      char* object_to_drop = object_to_drop_node->sval;
       // Expected to see non-empty object name to drop.
       ZETASQL_RET_CHECK(object_to_drop && *object_to_drop != '\0');
     }
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(const Value* object_to_drop_node,
-                     (SingleItemListAsNode<Value, T_String>)(node.objects));
+    ZETASQL_ASSIGN_OR_RETURN(const String* object_to_drop_node,
+                     (SingleItemListAsNode<String, T_String>)(node.objects));
 
-    char* object_to_drop = object_to_drop_node->val.str;
+    char* object_to_drop = object_to_drop_node->sval;
     // Expected to see non-empty object name to drop.
     ZETASQL_RET_CHECK(object_to_drop && *object_to_drop != '\0');
   }
@@ -929,8 +943,10 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
     // if not enabled, or not a table or index, then an error.
     if (!options.enable_if_not_exists ||
         !(node.removeType == OBJECT_TABLE || node.removeType == OBJECT_INDEX ||
-          node.removeType == OBJECT_SEQUENCE || node.removeType == OBJECT_VIEW
-         || node.removeType == OBJECT_SCHEMA)) {
+          node.removeType == OBJECT_SEQUENCE ||
+          node.removeType == OBJECT_VIEW ||
+          node.removeType == OBJECT_SCHEMA
+          )) {
       return UnsupportedTranslationError(
           "<IF EXISTS> is not supported by <DROP> statement.");
     }
@@ -963,10 +979,10 @@ absl::Status ValidateParseTreeNode(const TypeName& node) {
   // (catalog name and type name) elements.
   ZETASQL_RET_CHECK(!IsListEmpty(node.names));
   ZETASQL_RET_CHECK_LE(list_length(node.names), 2);
-  for (const Value* type_name_part : StructList<Value*>(node.names)) {
+  for (const String* type_name_part : StructList<String*>(node.names)) {
     ZETASQL_RET_CHECK_EQ(type_name_part->type, T_String);
-    ZETASQL_RET_CHECK_NE(type_name_part->val.str, nullptr);
-    ZETASQL_RET_CHECK_NE(*type_name_part->val.str, '\0');
+    ZETASQL_RET_CHECK_NE(type_name_part->sval, nullptr);
+    ZETASQL_RET_CHECK_NE(*type_name_part->sval, '\0');
   }
 
   // `typeOid` is used when type is defined internally via oid. Not used during
@@ -1006,10 +1022,11 @@ absl::Status ValidateParseTreeNode(const TypeName& node) {
 }
 
 // Validate the option for both <CREATE SEQUENCE> and <ALTER SEQUENCE>.
-absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create) {
+absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create
+                                   ) {
   absl::string_view name = elem.defname;
   absl::string_view parent_statement_type =
-      is_create ? "CREATE SEQUENCE" : "ALTER SEQUENCE";
+            (is_create ? "CREATE SEQUENCE" : "ALTER SEQUENCE");
   ZETASQL_RET_CHECK(!name.empty());
   if (name == "minvalue") {
     if (elem.arg != nullptr) {
@@ -1024,10 +1041,10 @@ absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create) {
           parent_statement_type));
     }
   } else if (name == "skip_range") {
-    ZETASQL_RET_CHECK_NE(elem.arg, nullptr);
-    ZETASQL_ASSIGN_OR_RETURN(const List* range_values,
-                     (DowncastNode<List, T_List>(elem.arg)));
-    ZETASQL_RET_CHECK_EQ(list_length(range_values), 2);
+      ZETASQL_RET_CHECK_NE(elem.arg, nullptr);
+      ZETASQL_ASSIGN_OR_RETURN(const List* range_values,
+                      (DowncastNode<List, T_List>(elem.arg)));
+      ZETASQL_RET_CHECK_EQ(list_length(range_values), 2);
   } else if (name == "start_counter" && is_create) {
     ZETASQL_RET_CHECK_NE(elem.arg, nullptr);
     // Pg integer-looking string will get lexed as T_Float if the value is
@@ -1038,13 +1055,14 @@ absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create) {
     // Pg integer-looking string will get lexed as T_Float if the value is
     // too large to fit in an 'int'.
     ZETASQL_RET_CHECK(elem.arg->type == T_Integer || elem.arg->type == T_Float);
-  } else if (name == "owned_by") {
+  } else if (name == "owned_by"
+            ) {
     ZETASQL_ASSIGN_OR_RETURN(const List* names, (DowncastNode<List, T_List>(elem.arg)));
     ZETASQL_RET_CHECK_GE(list_length(names), 1);
     if (list_length(names) == 1) {
-      ZETASQL_ASSIGN_OR_RETURN(const Value* name,
-                       (SingleItemListAsNode<Value, T_String>(names)));
-      absl::string_view name_str = strVal(name);
+      ZETASQL_ASSIGN_OR_RETURN(const String* name,
+                       (SingleItemListAsNode<String, T_String>(names)));
+      absl::string_view name_str = name->sval;
       if (name_str == "none") {
         return absl::OkStatus();
       }
@@ -1052,10 +1070,9 @@ absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create) {
     return UnsupportedTranslationError(
         "Optional clause <owned_by> only support `NONE` as the value.");
   } else if (name == "cycle") {
-    ZETASQL_ASSIGN_OR_RETURN(const Value* cycleValue,
-                     (DowncastNode<Value, T_Integer>(elem.arg)));
-    int32_t cycle = intVal(cycleValue);
-    if (cycle != 0) {
+    ZETASQL_ASSIGN_OR_RETURN(const Boolean* has_cycle,
+                     (DowncastNode<Boolean, T_Boolean>(elem.arg)));
+    if (has_cycle->boolval) {
       return UnsupportedTranslationError(
           "Optional clause <cycle> only support `NO CYCLE` as the value.");
     }
@@ -1067,7 +1084,9 @@ absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create) {
   return absl::OkStatus();
 }
 
-absl::Status ValidateSequenceOption(const List* options, bool is_create) {
+absl::Status ValidateSequenceOption(
+    const List* options, bool is_create,
+    const TranslationOptions& translation_options) {
   bool seen_bit_reversed_positive = false;
   for (int i = 0; i < list_length(options); ++i) {
     DefElem* elem = ::postgres_translator::internal::PostgresCastNode(
@@ -1077,16 +1096,19 @@ absl::Status ValidateSequenceOption(const List* options, bool is_create) {
     if (name == "bit_reversed_positive" && is_create) {
       seen_bit_reversed_positive = true;
     } else {
-      ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(*elem, is_create));
+      ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(
+          *elem,
+          is_create
+          ));
     }
   }
 
-  // Currently BIT_REVERSED_POSITIVE is mandatory.
-  if (!seen_bit_reversed_positive && is_create) {
-    return UnsupportedTranslationError(
-        "Only BIT_REVERSED_POSITIVE sequences are supported. Use `CREATE "
-        "SEQUENCE <name> BIT_REVERSED_POSITIVE ...` to create sequence.");
-  }
+    if (!seen_bit_reversed_positive && is_create) {
+      return UnsupportedTranslationError(
+          "Only BIT_REVERSED_POSITIVE sequences are supported. Use `CREATE "
+          "SEQUENCE <name> BIT_REVERSED_POSITIVE ...` to create sequence.");
+    }
+
   return absl::OkStatus();
 }
 
@@ -1112,7 +1134,9 @@ absl::Status ValidateParseTreeNode(const CreateSeqStmt& node,
   // `options` defines the property of the sequence. Spangres only supports a
   // few portions of native PostgreSQL's options.
   List* opts = node.options;
-  ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(opts, true));
+  ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(
+      opts, /*is_create=*/true,
+      options));
 
   // `ownerId` should be the default value after parsing.
   ZETASQL_RET_CHECK_EQ(node.ownerId, InvalidOid);
@@ -1139,7 +1163,9 @@ absl::Status ValidateParseTreeNode(const AlterSeqStmt& node,
   // specified options we don't (currently) allow.
   List* opts = node.options;
   if (opts != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(opts, false));
+    ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(
+        opts, /*is_create=*/false,
+        options));
   }
 
   // `for_identity` true when it created for SERIAL
@@ -1350,9 +1376,9 @@ absl::Status ValidateParseTreeNode(const AlterSpangresStatsStmt& node) {
         "spanner.<name>");
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(const Value* package_namespace,
-                   (GetListItemAsNode<Value, T_String>(node.package_name, 0)));
-  if (std::string(package_namespace->val.str) != PGConstants::kNamespace) {
+  ZETASQL_ASSIGN_OR_RETURN(const String* package_namespace,
+                   (GetListItemAsNode<String, T_String>(node.package_name, 0)));
+  if (std::string(package_namespace->sval) != PGConstants::kNamespace) {
     return UnsupportedTranslationError(absl::StrCat(
         "<ALTER STATISTICS> statement requires package name to be prefixed by "
         "'",
@@ -1837,7 +1863,9 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
       FieldTypeChecker<Oid>(node.indexOid), FieldTypeChecker<Oid>(node.oldNode),
       FieldTypeChecker<SubTransactionId>(node.oldCreateSubid),
       FieldTypeChecker<SubTransactionId>(node.oldFirstRelfilenodeSubid),
-      FieldTypeChecker<bool>(node.unique), FieldTypeChecker<bool>(node.primary),
+      FieldTypeChecker<bool>(node.unique),
+      FieldTypeChecker<bool>(node.nulls_not_distinct),
+      FieldTypeChecker<bool>(node.primary),
       FieldTypeChecker<bool>(node.isconstraint),
       FieldTypeChecker<bool>(node.deferrable),
       FieldTypeChecker<bool>(node.initdeferred),
@@ -2052,12 +2080,6 @@ absl::Status ValidateParseTreeNode(const NullTest& node) {
   // `argisrow` True to perform field-by-field null checks for a row type value.
   // This value is set during analyzer phase. No validation needed.
 
-  return absl::OkStatus();
-}
-
-absl::Status ValidateParseTreeNode(const Value& node) {
-  AssertStructConsistsOf(node, FieldTypeChecker<NodeTag>(node.type),
-                         FieldTypeChecker<Value::ValUnion>(node.val));
   return absl::OkStatus();
 }
 

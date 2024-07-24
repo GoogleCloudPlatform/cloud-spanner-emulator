@@ -647,8 +647,6 @@ absl::Status CannotSetDefaultValueOnGeneratedColumn(
     absl::string_view column_name);
 
 // Query errors.
-absl::Status UnableToInferUndeclaredParameter(absl::string_view parameter_name,
-                                              absl::string_view type);
 absl::Status InvalidHint(absl::string_view hint_string);
 absl::Status InvalidEmulatorHint(absl::string_view hint_string);
 absl::Status InvalidHintValue(absl::string_view hint_string,

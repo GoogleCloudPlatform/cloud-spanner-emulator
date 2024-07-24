@@ -60,6 +60,7 @@ namespace {
 const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
 const zetasql::Type* gsql_string = zetasql::types::StringType();
 const zetasql::Type* gsql_bool = zetasql::types::BoolType();
+const zetasql::Type* gsql_float = zetasql::types::FloatType();
 const zetasql::Type* gsql_double = zetasql::types::DoubleType();
 const zetasql::Type* gsql_bytes = zetasql::types::BytesType();
 const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
@@ -254,10 +255,11 @@ static void AddPgNumericNewFunctions(
           /*context_ptr=*/nullptr},
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_mod_fn_name}}});
-  functions.push_back({"numeric_div_trunc",
-                       "div",
-                       {{{gsql_pg_numeric,
-                          {gsql_pg_numeric, gsql_pg_numeric},
+  functions.push_back(
+      {"numeric_div_trunc",
+       "div",
+       {{{gsql_pg_numeric,
+          {gsql_pg_numeric, gsql_pg_numeric},
           /*context_ptr=*/nullptr},
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_div_trunc_fn_name}}});
@@ -272,7 +274,8 @@ static void AddPgNumericNewFunctions(
   functions.push_back(
       {"numeric_uminus",
        "$unary_minus",
-       {{{gsql_pg_numeric, {gsql_pg_numeric},
+       {{{gsql_pg_numeric,
+          {gsql_pg_numeric},
           /*context_ptr=*/nullptr},
          /*has_mapped_function=*/true,
          /*explicit_mapped_function_name=*/emulator_uminus_fn_name}}});
@@ -330,6 +333,21 @@ static void AddPgNumericNewFunctions(
   constexpr zetasql::Function::Mode AGGREGATE =
       zetasql::Function::AGGREGATE;
 
+  std::vector<PostgresFunctionSignatureArguments> sum_signatures = {
+      {{gsql_pg_numeric, {gsql_int64}, /*context_ptr=*/nullptr}},
+      {{gsql_double, {gsql_double}, /*context_ptr=*/nullptr}},
+      {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}};
+
+  std::vector<PostgresFunctionSignatureArguments> avg_signatures = {
+      {{gsql_pg_numeric, {gsql_int64}, /*context_ptr=*/nullptr}},
+      {{gsql_double, {gsql_double}, /*context_ptr=*/nullptr}},
+      {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}};
+
+    sum_signatures.push_back(
+        {{gsql_float, {gsql_float}, /*context_ptr=*/nullptr}});
+    avg_signatures.push_back(
+        {{gsql_double, {gsql_float}, /*context_ptr=*/nullptr}});
+
   // Remove existing function registration for sum.
   functions.erase(std::remove_if(functions.begin(), functions.end(),
                                  [](const PostgresFunctionArguments& args) {
@@ -337,14 +355,9 @@ static void AddPgNumericNewFunctions(
                                           "sum";
                                  }),
                   functions.end());
+
   // Register new function mapping for sum.
-  functions.push_back(
-      {"sum",
-       "pg.sum",
-       {{{gsql_pg_numeric, {gsql_int64}, /*context_ptr=*/nullptr}},
-        {{gsql_double, {gsql_double}, /*context_ptr=*/nullptr}},
-        {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}},
-       AGGREGATE});
+  functions.push_back({"sum", "pg.sum", sum_signatures, AGGREGATE});
 
   // Remove existing function registration for avg.
   functions.erase(std::remove_if(functions.begin(), functions.end(),
@@ -353,13 +366,7 @@ static void AddPgNumericNewFunctions(
                                           "avg";
                                  }),
                   functions.end());
-  functions.push_back(
-      {"avg",
-       "pg.avg",
-       {{{gsql_pg_numeric, {gsql_int64}, /*context_ptr=*/nullptr}},
-        {{gsql_double, {gsql_double}, /*context_ptr=*/nullptr}},
-        {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}},
-       AGGREGATE});
+  functions.push_back({"avg", "pg.avg", avg_signatures, AGGREGATE});
 }
 
 void AddPgNumericFunctions(std::vector<PostgresFunctionArguments>& functions) {
@@ -887,18 +894,18 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
 
     const zetasql::Type* gsql_pg_jsonb =
         types::PgJsonbMapping()->mapped_type();
-      functions.push_back({"ml_predict_row",
-                           "ml_predict_row",
-                           {
-                               {{gsql_pg_jsonb,
-                                 {gsql_string, gsql_pg_jsonb},
-                                 /*context_ptr=*/nullptr}},
-                               {{gsql_pg_jsonb,
-                                 {gsql_pg_jsonb, gsql_pg_jsonb},
-                                 /*context_ptr=*/nullptr}},
-                           },
-                           /*mode=*/zetasql::Function::SCALAR,
-                           /*postgres_namespace=*/"spanner"});
+    functions.push_back({"ml_predict_row",
+                          "ml_predict_row",
+                          {
+                              {{gsql_pg_jsonb,
+                                {gsql_string, gsql_pg_jsonb},
+                                /*context_ptr=*/nullptr}},
+                              {{gsql_pg_jsonb,
+                                {gsql_pg_jsonb, gsql_pg_jsonb},
+                                /*context_ptr=*/nullptr}},
+                          },
+                          /*mode=*/zetasql::Function::SCALAR,
+                          /*postgres_namespace=*/"spanner"});
 
       functions.push_back({"int64_array",
                            "int64_array",
@@ -973,15 +980,21 @@ static void RemapMinFunction(
     const zetasql::Type* argumentType =
         existing_signature.signature().argument(0).type();
 
-    if (!argumentType->IsDouble()) {
-      function_signatures.push_back(existing_signature);
-    } else {
-      // For double use PG.MIN function instead of default MIN to follow
-      // Postgres' order semantics.
+    // For float and double use PG.MIN function instead of default MIN to follow
+    // Postgres' order semantics.
+    if (argumentType->IsDouble()) {
       function_signatures.push_back(
           {{gsql_double, {gsql_double}, /*context_ptr=*/nullptr},
            /*has_mapped_function=*/true,
            /*explicit_mapped_function_name=*/"pg.min"});
+    } else if (argumentType->IsFloat()
+              ) {
+      function_signatures.push_back(
+          {{gsql_float, {gsql_float}, /*context_ptr=*/nullptr},
+           /*has_mapped_function=*/true,
+           /*explicit_mapped_function_name=*/"pg.min"});
+    } else {
+      function_signatures.push_back(existing_signature);
     }
   }
 

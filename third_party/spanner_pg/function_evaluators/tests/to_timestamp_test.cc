@@ -387,6 +387,10 @@ TEST_F(RegressionTest, ReturnsUnimplementedForTZPattern) {
 
 // --config=asan
 TEST_F(RegressionTest, ASANViolation) {
+  EXPECT_THAT(ToTimestamp("92996999\3649999999999\376\2769999999",
+                          "IDDDtm\242\215GITM"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("timestamp out of range")));
   EXPECT_THAT(ToTimestamp("\013 \010\25411111111\010",
                           std::string("\232\361UC--------tym---.\000----", 24)),
               StatusIs(absl::StatusCode::kInvalidArgument));

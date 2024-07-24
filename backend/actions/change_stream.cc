@@ -57,7 +57,6 @@
 #include "nlohmann/json_fwd.hpp"
 #include "nlohmann/json.hpp"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
-#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 namespace google {
 namespace spanner {
@@ -452,6 +451,10 @@ absl::Status LogTableMod(
   ZETASQL_RETURN_IF_ERROR(std::visit(
       overloaded{
           [&](const InsertOp& op) -> absl::Status {
+            if (change_stream->exclude_insert().has_value() &&
+                change_stream->exclude_insert().value()) {
+              return absl::OkStatus();
+            }
             std::pair<std::vector<const Column*>, std::vector<zetasql::Value>>
                 tracked_columns_and_values = GetTrackedColumnsAndValues(
                     op.columns, op.values, change_stream, op.table);
@@ -464,6 +467,10 @@ absl::Status LogTableMod(
             return absl::OkStatus();
           },
           [&](const UpdateOp& op) -> absl::Status {
+            if (change_stream->exclude_update().has_value() &&
+                change_stream->exclude_update().value()) {
+              return absl::OkStatus();
+            }
             std::pair<std::vector<const Column*>, std::vector<zetasql::Value>>
                 tracked_columns_and_values = GetTrackedColumnsAndValues(
                     op.columns, op.values, change_stream, op.table);
@@ -476,6 +483,10 @@ absl::Status LogTableMod(
             return absl::OkStatus();
           },
           [&](const DeleteOp& op) -> absl::Status {
+            if (change_stream->exclude_delete().has_value() &&
+                change_stream->exclude_delete().value()) {
+              return absl::OkStatus();
+            }
             std::vector<const Column*> columns;
             for (const KeyColumn* pk : op.table->primary_key()) {
               columns.push_back(pk->column());
@@ -527,6 +538,10 @@ void CloudValueToJSONValue(const zetasql::Value value, JSONValueRef& ref) {
   switch (value.type_kind()) {
     case zetasql::TYPE_DOUBLE: {
       ref.SetDouble(value.double_value());
+      break;
+    }
+    case zetasql::TYPE_FLOAT: {
+      ref.SetDouble(static_cast<double>(value.float_value()));
       break;
     }
     case zetasql::TYPE_STRING: {

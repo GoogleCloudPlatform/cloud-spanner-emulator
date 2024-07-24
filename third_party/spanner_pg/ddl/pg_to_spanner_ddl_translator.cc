@@ -33,6 +33,7 @@
 
 #include <string.h>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <set>
@@ -47,6 +48,8 @@
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/types/optional.h"
@@ -70,7 +73,6 @@ typedef google::protobuf::RepeatedPtrField<google::spanner::emulator::backend::d
 namespace {
 using PGConstants = internal::PostgreSQLConstants;
 using internal::FieldTypeChecker;
-using ::postgres_translator::internal::PostgresCastToValue;
 using ::postgres_translator::internal::PostgresCastToNode;
 
 // Translator from PostgreSQL DDL to Spanner schema dialect.
@@ -296,7 +298,7 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::Status TranslateCreateDatabase(const CreatedbStmt& create_statement,
                                        google::spanner::emulator::backend::ddl::CreateDatabase& out) const;
   absl::StatusOr<internal::PGAlterOption> TranslateOption(
-      absl::string_view option_name) const;
+      absl::string_view option_name, const TranslationOptions& options) const;
 
   absl::Status UnsupportedTranslationError(
       absl::string_view error_mesage) const;
@@ -308,7 +310,7 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       char action) const;
 
   absl::StatusOr<std::string> GetSchemaName(
-      const Value& value, absl::string_view parent_statement_type) const;
+      const String& value, absl::string_view parent_statement_type) const;
 
   absl::StatusOr<std::string> GetTableName(
       const RangeVar& range_var, absl::string_view parent_statement_type) const;
@@ -396,7 +398,7 @@ absl::StatusOr<char*> IntervalString(const Ttl& node) {
   }
   ZETASQL_ASSIGN_OR_RETURN(const A_Const* acnode,
                    (DowncastNode<A_Const, T_A_Const>(tcnode->arg)));
-  return acnode->val.val.str;
+  return acnode->val.sval.sval;
 }
 
 // Returns true if PG list is empty or nullptr
@@ -459,7 +461,9 @@ GetTypeMap() {
       {"int4range", absl::nullopt},
       {"int8range", absl::nullopt},
       {"internal", absl::nullopt},
+      // copybara::insert_begin(interval-emulator-support)
       {"interval", absl::nullopt},
+      // copybara::insert_end
       {"json", absl::nullopt},
       {"jsonpath", absl::nullopt},
       {"language_handler", absl::nullopt},
@@ -526,6 +530,34 @@ GetTypeMap() {
       {"smallserial", absl::nullopt},
       {"serial2", absl::nullopt},
   };
+
+  return *map;
+}
+
+// Suggest a type for unsupported PostgreSQL types based on
+// https://cloud.google.com/spanner/docs/migrating-postgres-spanner-pgcompat#data-types
+const absl::flat_hash_map<absl::string_view, std::vector<absl::string_view>>&
+GetSuggestedTypeMap() {
+  static auto* map = new absl::flat_hash_map<absl::string_view,
+                                             std::vector<absl::string_view>>{
+      {"bigserial", {"bigint", "int8"}},
+      {"serial8", {"bigint", "int8"}},
+      {"cidr", {"text"}},
+      {"inet", {"text"}},
+      {"integer", {"bigint", "int8"}},
+      {"int4", {"bigint", "int8"}},
+      {"json", {"jsonb"}},
+      {"macaddr", {"text"}},
+      {"money", {"numeric", "decimal"}},
+      {"realfloat4", {"double precision", "float8"}},
+      {"smallint", {"bigint", "int8"}},
+      {"int2", {"bigint", "int8"}},
+      {"smallserial", {"bigint", "int8"}},
+      {"serial2", {"bigint", "int8"}},
+      {"serial", {"bigint, int8"}},
+      {"serial4", {"bigint", "int8"}},
+      {"uuid", {"text", "bytea"}},
+      {"xml", {"text"}}};
 
   return *map;
 }
@@ -616,7 +648,7 @@ PostgreSQLToSpannerDDLTranslatorImpl::GetInterleaveClauseType(
 
 absl::StatusOr<internal::PGAlterOption>
 PostgreSQLToSpannerDDLTranslatorImpl::TranslateOption(
-    absl::string_view option_name) const {
+    absl::string_view option_name, const TranslationOptions& options) const {
   ZETASQL_RET_CHECK(!option_name.empty()) << "Option name is missing.";
 
   absl::optional<internal::PGAlterOption> option =
@@ -625,6 +657,7 @@ PostgreSQLToSpannerDDLTranslatorImpl::TranslateOption(
     return UnsupportedTranslationError(
         absl::StrCat("Database option <", option_name, "> is not supported."));
   }
+
   return *option;
 }
 
@@ -637,12 +670,12 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ParseColumnType(
 
   schema_name = "";
 
-  for (const Value* type_name_part : StructList<Value*>(type.names)) {
+  for (const String* type_name_part : StructList<String*>(type.names)) {
     if (type_name_contains_schema_part) {
-      schema_name = type_name_part->val.str;
+      schema_name = type_name_part->sval;
       type_name_contains_schema_part = false;
     } else {
-      type_name = type_name_part->val.str;
+      type_name = type_name_part->sval;
     }
   }
 
@@ -653,7 +686,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
     const Constraint& constraint, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::ColumnDefinition* target_column,
     TableContext& context) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(constraint, /*add_in_alter=*/false));
+  ZETASQL_RETURN_IF_ERROR(
+      ValidateParseTreeNode(constraint, /*add_in_alter=*/false, options));
 
   switch (constraint.contype) {
     case CONSTR_PRIMARY: {
@@ -677,12 +711,12 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
       } else {
         // Constraint is defined as a separate expression.
         ZETASQL_RET_CHECK(!IsListEmpty(constraint.keys));
-        for (const Value* primary_key_part :
-             StructList<Value*>(constraint.keys)) {
+        for (const String* primary_key_part :
+             StructList<String*>(constraint.keys)) {
           ZETASQL_RET_CHECK_EQ(primary_key_part->type, T_String);
-          ZETASQL_RET_CHECK_NE(primary_key_part->val.str, nullptr);
+          ZETASQL_RET_CHECK_NE(primary_key_part->sval, nullptr);
 
-          primary_key_column_names.push_back(primary_key_part->val.str);
+          primary_key_column_names.push_back(primary_key_part->sval);
         }
       }
 
@@ -779,7 +813,6 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
       return absl::OkStatus();
     }
 
-
     case CONSTR_ATTR_IMMEDIATE:
     case CONSTR_ATTR_NOT_DEFERRABLE: {
       // This means NOT DEFERRABLE and/or INITIALLY IMMEDIATE is set on
@@ -814,15 +847,13 @@ PostgreSQLToSpannerDDLTranslatorImpl::GetInterleaveParentDeleteActionType(
 }
 
 absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::GetSchemaName(
-    const Value& value, absl::string_view parent_statement_type) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(value));
-  if (value.val.str == nullptr) {
+    const String& value, absl::string_view parent_statement_type) const {
+  if (value.sval == nullptr) {
     return absl::InvalidArgumentError(absl::Substitute(
         "Schema name not specified in $0 statement.", parent_statement_type));
   }
-  ZETASQL_RET_CHECK_EQ(value.type, T_String);
-  if (strcmp(value.val.str, "public") != 0) {
-    return value.val.str;
+  if (strcmp(value.sval, "public") != 0) {
+    return value.sval;
   }
   // Return empty string for public schema.
   return "";
@@ -860,7 +891,7 @@ PostgreSQLToSpannerDDLTranslatorImpl::GetFunctionName(
   bool uses_spanner_namespace = false;
   if (list_length(object_with_args.objname) == 2) {
     absl::string_view function_namespace =
-        static_cast<Value*>(linitial(object_with_args.objname))->val.str;
+        static_cast<String*>(linitial(object_with_args.objname))->sval;
     if (function_namespace == "spanner") {
       uses_spanner_namespace = true;
     }
@@ -871,7 +902,7 @@ PostgreSQLToSpannerDDLTranslatorImpl::GetFunctionName(
         parent_statement_type));
   }
   std::string function_name =
-      static_cast<Value*>(lsecond(object_with_args.objname))->val.str;
+      static_cast<String*>(lsecond(object_with_args.objname))->sval;
   return function_name;
 }
 
@@ -1071,18 +1102,18 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateForeignKey(
     // Constraint is defined at table level -> we use data from constraint
     // itself to set constrained columns
     ZETASQL_RET_CHECK(!IsListEmpty(constraint.fk_attrs));
-    for (Value* attr_name : StructList<Value*>(constraint.fk_attrs)) {
+    for (String* attr_name : StructList<String*>(constraint.fk_attrs)) {
       ZETASQL_RET_CHECK_NE(attr_name, nullptr);
       ZETASQL_RET_CHECK_EQ(attr_name->type, T_String);
 
-      out.add_constrained_column_name(attr_name->val.str);
+      out.add_constrained_column_name(attr_name->sval);
     }
   }
 
-  for (Value* attr_name : StructList<Value*>(constraint.pk_attrs)) {
+  for (String* attr_name : StructList<String*>(constraint.pk_attrs)) {
     ZETASQL_RET_CHECK_NE(attr_name, nullptr);
     ZETASQL_RET_CHECK_EQ(attr_name->type, T_String);
-    out.add_referenced_column_name(attr_name->val.str);
+    out.add_referenced_column_name(attr_name->sval);
   }
 
   ZETASQL_ASSIGN_OR_RETURN(std::string pk_table_name,
@@ -1198,6 +1229,14 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessPostgresType(
   }
   if (!type_it->second.has_value()) {
     // type not supported
+    auto suggested_type_it = GetSuggestedTypeMap().find(type_name);
+    if (suggested_type_it != GetSuggestedTypeMap().end()) {
+      // Type <bigserial> is unsupported; use bigint or int8_t instead.
+      return UnsupportedTranslationError(
+          absl::StrFormat(
+              "Type <%s> is not supported; use %s instead.", type_name,
+              absl::StrJoin(suggested_type_it->second, " or ")));
+    }
     return UnsupportedTranslationError(
         absl::StrCat("Type <", type_name, "> is not supported."));
   }
@@ -1227,12 +1266,12 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessPostgresType(
           ZETASQL_ASSIGN_OR_RETURN(
               const A_Const* length,
               (SingleItemListAsNode<A_Const, T_A_Const>)(type.typmods));
-          if (length->val.val.ival > PGConstants::kMaxStringLength) {
+          if (length->val.ival.ival > PGConstants::kMaxStringLength) {
             return UnsupportedTranslationError(
                 absl::StrCat("Maximum length for <varchar> fields is ",
                              PGConstants::kMaxStringLength, "."));
           }
-          where_to_set_type->set_length(length->val.val.ival);
+          where_to_set_type->set_length(length->val.ival.ival);
         } else {
           // should never get here
           ZETASQL_RET_CHECK_FAIL() << "Unexpected type name: " << type_name << ".";
@@ -1312,11 +1351,10 @@ PostgreSQLToSpannerDDLTranslatorImpl::ProcessSequenceSkipRangeOption(
                    (DowncastNode<List, T_List>(skip_range.arg)));
   // Can not use the DowncastNode because the type tag could be either
   // T_INTEGER or T_FLOAT.
-  Value* skip_range_min = PostgresCastToValue(linitial(args));
   char min_name[] = "skip_range_min";
   ZETASQL_ASSIGN_OR_RETURN(
       DefElem * min_elem,
-      CheckedPgMakeDefElem(min_name, PostgresCastToNode(skip_range_min),
+      CheckedPgMakeDefElem(min_name, PostgresCastToNode(linitial(args)),
                            skip_range.location));
   ZETASQL_ASSIGN_OR_RETURN(int64_t min_int64, CheckedPgDefGetInt64(min_elem));
   skip_range_min_option.set_option_name(min_name);
@@ -1324,11 +1362,10 @@ PostgreSQLToSpannerDDLTranslatorImpl::ProcessSequenceSkipRangeOption(
 
   // Can not use the DowncastNode because the type tag could be either
   // T_INTEGER or T_FLOAT.
-  Value* skip_range_max = PostgresCastToValue(lsecond(args));
   char max_name[] = "skip_range_max";
   ZETASQL_ASSIGN_OR_RETURN(
       DefElem * max_elem,
-      CheckedPgMakeDefElem(max_name, PostgresCastToNode(skip_range_max),
+      CheckedPgMakeDefElem(max_name, PostgresCastToNode(lsecond(args)),
                            skip_range.location));
   ZETASQL_ASSIGN_OR_RETURN(int64_t max_int64, CheckedPgDefGetInt64(max_elem));
   skip_range_max_option.set_option_name(max_name);
@@ -1438,26 +1475,26 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSequence(
   // sequence_to_drop_list is 1 or 2.
   if (sequence_to_drop_list->length == 2) {
     ZETASQL_ASSIGN_OR_RETURN(
-        const Value* schema_to_drop_node,
-        (GetListItemAsNode<Value, T_String>)(sequence_to_drop_list, 0));
+        const String* schema_to_drop_node,
+        (GetListItemAsNode<String, T_String>)(sequence_to_drop_list, 0));
     ZETASQL_ASSIGN_OR_RETURN(
-        const Value* sequence_to_drop_node,
-        (GetListItemAsNode<Value, T_String>)(sequence_to_drop_list, 1));
-    if (strcmp(schema_to_drop_node->val.str, "public") != 0) {
+        const String* sequence_to_drop_node,
+        (GetListItemAsNode<String, T_String>)(sequence_to_drop_list, 1));
+    if (strcmp(schema_to_drop_node->sval, "public") != 0) {
       *out.mutable_sequence_name() =
-          absl::Substitute("$0.$1", schema_to_drop_node->val.str,
-                           sequence_to_drop_node->val.str);
+          absl::Substitute("$0.$1", schema_to_drop_node->sval,
+                           sequence_to_drop_node->sval);
     } else {
       *out.mutable_sequence_name() =
-          absl::StrCat(sequence_to_drop_node->val.str);
+          absl::StrCat(sequence_to_drop_node->sval);
     }
   } else {
     ZETASQL_RET_CHECK_EQ(sequence_to_drop_list->length, 1)
         << "Incorrect number of name components in drop target.";
     ZETASQL_ASSIGN_OR_RETURN(
-        const Value* sequence_to_drop_node,
-        (SingleItemListAsNode<Value, T_String>)(sequence_to_drop_list));
-    *out.mutable_sequence_name() = sequence_to_drop_node->val.str;
+        const String* sequence_to_drop_node,
+        (SingleItemListAsNode<String, T_String>)(sequence_to_drop_list));
+    *out.mutable_sequence_name() = sequence_to_drop_node->sval;
   }
 
   if (drop_statement.missing_ok) {
@@ -1582,8 +1619,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
   }
 
   if (out.primary_key_size() == 0) {
-      return UnsupportedTranslationError(absl::StrCat(
-          "Primary key must be defined for table \"", table_name, "\"."));
+    return UnsupportedTranslationError(absl::StrCat(
+        "Primary key must be defined for table \"", table_name, "\"."));
   }
 
   return absl::OkStatus();
@@ -1664,7 +1701,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
           const Constraint* constraint,
           (DowncastNode<Constraint, T_Constraint>(first_cmd->def)));
       ZETASQL_RETURN_IF_ERROR(
-          ValidateParseTreeNode(*constraint, /*add_in_alter=*/true));
+          ValidateParseTreeNode(*constraint, /*add_in_alter=*/true, options));
 
       if (!constraint->initially_valid && constraint->skip_validation) {
         return UnsupportedTranslationError(
@@ -1875,6 +1912,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropStatement(
     case OBJECT_CHANGE_STREAM:
       return TranslateDropChangeStream(
           drop_statement, options, *out.mutable_drop_change_stream());
+
     case OBJECT_SEQUENCE:
       return TranslateDropSequence(drop_statement, options,
                                    *out.mutable_drop_sequence());
@@ -1920,22 +1958,22 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropView(
 
   if (view_to_drop_list->length == 2) {
     ZETASQL_ASSIGN_OR_RETURN(
-        const Value* schema_to_drop_node,
-        (GetListItemAsNode<Value, T_String>)(view_to_drop_list, 0));
+        const String* schema_to_drop_node,
+        (GetListItemAsNode<String, T_String>)(view_to_drop_list, 0));
     ZETASQL_ASSIGN_OR_RETURN(
-        const Value* view_to_drop_node,
-        (GetListItemAsNode<Value, T_String>)(view_to_drop_list, 1));
-    if (strcmp(schema_to_drop_node->val.str, "public") != 0) {
+        const String* view_to_drop_node,
+        (GetListItemAsNode<String, T_String>)(view_to_drop_list, 1));
+    if (strcmp(schema_to_drop_node->sval, "public") != 0) {
       *out.mutable_function_name() = absl::Substitute(
-          "$0.$1", schema_to_drop_node->val.str, view_to_drop_node->val.str);
+          "$0.$1", schema_to_drop_node->sval, view_to_drop_node->sval);
     } else {
-      *out.mutable_function_name() = view_to_drop_node->val.str;
+      *out.mutable_function_name() = view_to_drop_node->sval;
     }
   } else if (view_to_drop_list->length == 1) {
     ZETASQL_ASSIGN_OR_RETURN(
-        const Value* view_to_drop_node,
-        (SingleItemListAsNode<Value, T_String>)(view_to_drop_list));
-    *out.mutable_function_name() = view_to_drop_node->val.str;
+        const String* view_to_drop_node,
+        (SingleItemListAsNode<String, T_String>)(view_to_drop_list));
+    *out.mutable_function_name() = view_to_drop_node->sval;
   } else {
     // Caller should have called ValidateParseTreeNode, which ensures the size
     // of view_to_drop_list is 1 or 2. So this should never be reached.
@@ -1962,26 +2000,26 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropTable(
   // Caller should have called ValidateParseTreeNode, which ensures the size of
   // table_to_drop_list is 1 or 2.
   if (table_to_drop_list->length == 2) {
-    ZETASQL_ASSIGN_OR_RETURN(const Value* schema_to_drop_node,
-                     (GetListItemAsNode<Value, T_String>)(
+    ZETASQL_ASSIGN_OR_RETURN(const String* schema_to_drop_node,
+                     (GetListItemAsNode<String, T_String>)(
                          table_to_drop_list, 0));
-    ZETASQL_ASSIGN_OR_RETURN(const Value* table_to_drop_node,
-                     (GetListItemAsNode<Value, T_String>)(
+    ZETASQL_ASSIGN_OR_RETURN(const String* table_to_drop_node,
+                     (GetListItemAsNode<String, T_String>)(
                          table_to_drop_list, 1));
-    if (strcmp(schema_to_drop_node->val.str, "public") != 0) {
+    if (strcmp(schema_to_drop_node->sval, "public") != 0) {
       *out.mutable_table_name() = absl::Substitute("$0.$1",
-                                                  schema_to_drop_node->val.str,
-                                                  table_to_drop_node->val.str);
+                                                  schema_to_drop_node->sval,
+                                                  table_to_drop_node->sval);
     } else {
-      *out.mutable_table_name() = absl::StrCat(table_to_drop_node->val.str);
+      *out.mutable_table_name() = absl::StrCat(table_to_drop_node->sval);
     }
   } else {
     ZETASQL_RET_CHECK_EQ(table_to_drop_list->length, 1)
         << "Incorrect number of name components in drop target.";
-    ZETASQL_ASSIGN_OR_RETURN(const Value* table_to_drop_node,
-                     (SingleItemListAsNode<Value, T_String>)(
+    ZETASQL_ASSIGN_OR_RETURN(const String* table_to_drop_node,
+                     (SingleItemListAsNode<String, T_String>)(
                          table_to_drop_list));
-    *out.mutable_table_name() = table_to_drop_node->val.str;
+    *out.mutable_table_name() = table_to_drop_node->sval;
   }
 
   if (drop_statement.missing_ok && options.enable_if_not_exists) {
@@ -2026,26 +2064,26 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropIndex(
   // Caller should have called ValidateParseTreeNode, which ensures the size of
   // index_to_drop_list is 1 or 2.
   if (index_to_drop_list->length == 2) {
-    ZETASQL_ASSIGN_OR_RETURN(const Value* schema_to_drop_node,
-                     (GetListItemAsNode<Value, T_String>)(
+    ZETASQL_ASSIGN_OR_RETURN(const String* schema_to_drop_node,
+                     (GetListItemAsNode<String, T_String>)(
                          index_to_drop_list, 0));
-    ZETASQL_ASSIGN_OR_RETURN(const Value* index_to_drop_node,
-                     (GetListItemAsNode<Value, T_String>)(
+    ZETASQL_ASSIGN_OR_RETURN(const String* index_to_drop_node,
+                     (GetListItemAsNode<String, T_String>)(
                          index_to_drop_list, 1));
-    if (strcmp(schema_to_drop_node->val.str, "public") != 0) {
+    if (strcmp(schema_to_drop_node->sval, "public") != 0) {
       *out.mutable_index_name() = absl::Substitute("$0.$1",
-                                                  schema_to_drop_node->val.str,
-                                                  index_to_drop_node->val.str);
+                                                  schema_to_drop_node->sval,
+                                                  index_to_drop_node->sval);
     } else {
-      *out.mutable_index_name() = absl::StrCat(index_to_drop_node->val.str);
+      *out.mutable_index_name() = absl::StrCat(index_to_drop_node->sval);
     }
   } else {
     ZETASQL_RET_CHECK_EQ(index_to_drop_list->length, 1)
         << "Incorrect number of name components in drop target.";
-    ZETASQL_ASSIGN_OR_RETURN(const Value* index_to_drop_node,
-                     (SingleItemListAsNode<Value, T_String>)(
+    ZETASQL_ASSIGN_OR_RETURN(const String* index_to_drop_node,
+                     (SingleItemListAsNode<String, T_String>)(
                          index_to_drop_list));
-    *out.mutable_index_name() = index_to_drop_node->val.str;
+    *out.mutable_index_name() = index_to_drop_node->sval;
   }
 
   if (drop_statement.missing_ok && options.enable_if_not_exists) {
@@ -2083,10 +2121,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSchema(
   ZETASQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_SCHEMA);
 
   ZETASQL_ASSIGN_OR_RETURN(
-      const Value* schema_to_drop_node,
-      (SingleItemListAsNode<Value, T_String>)(drop_statement.objects));
+      const String* schema_to_drop_node,
+      (SingleItemListAsNode<String, T_String>)(drop_statement.objects));
 
-  *out.mutable_schema_name() = schema_to_drop_node->val.str;
+  *out.mutable_schema_name() = schema_to_drop_node->sval;
 
   if (drop_statement.missing_ok) {
     out.set_if_exists(true);
@@ -2174,12 +2212,12 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterChangeStream(
 
   // Populate the change stream reset options, if any.
   if (alter_change_stream_stmt.opt_reset_options != nullptr) {
-    for (const Value* option_name :
-         StructList<Value*>(alter_change_stream_stmt.opt_reset_options)) {
+    for (const String* option_name :
+         StructList<String*>(alter_change_stream_stmt.opt_reset_options)) {
       ZETASQL_RET_CHECK_EQ(option_name->type, T_String);
-      ZETASQL_RET_CHECK_NE(option_name->val.str, nullptr);
-      ZETASQL_RET_CHECK_NE(*option_name->val.str, '\0');
-      std::string option_string = option_name->val.str;
+      ZETASQL_RET_CHECK_NE(option_name->sval, nullptr);
+      ZETASQL_RET_CHECK_NE(*option_name->sval, '\0');
+      std::string option_string = option_name->sval;
       if (option_string == internal::PostgreSQLConstants::
           kChangeStreamValueCaptureTypeOptionName) {
         google::spanner::emulator::backend::ddl::SetOption* option_out =
@@ -2283,9 +2321,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamOptions(
             "Failed to provide valid option value for '$0' in <$1> statement.",
             def_elem->defname, parent_statement));
       }
-      ZETASQL_ASSIGN_OR_RETURN(const Value* arg_value,
-                       (DowncastNode<Value, T_String>(def_elem->arg)));
-      std::string value = arg_value->val.str;
+      ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
+                       (DowncastNode<String, T_String>(def_elem->arg)));
+      std::string value = arg_value->sval;
       google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
       option_out->set_option_name(def_elem->defname);
       if (absl::AsciiStrToLower(value) == "null") {
@@ -2326,9 +2364,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamOptions(
             "Failed to provide valid option value for '$0' in <$1> statement.",
             def_elem->defname, parent_statement));
       }
-      ZETASQL_ASSIGN_OR_RETURN(const Value* arg_value,
-                       (DowncastNode<Value, T_String>(def_elem->arg)));
-      std::string value = arg_value->val.str;
+      ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
+                       (DowncastNode<String, T_String>(def_elem->arg)));
+      std::string value = arg_value->sval;
       google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
       option_out->set_option_name(def_elem->defname);
       if (absl::AsciiStrToLower(value) == "null") {
@@ -2377,8 +2415,9 @@ PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamForClause(
         // If there are explicitly tracked columns, for_all_columns cannot
         // be set to true.
         ZETASQL_RET_CHECK_EQ(tracked_table->for_all_columns, false);
-        for (Value* column_value : StructList<Value*>(tracked_table->columns)) {
-          const char* column_name = column_value->val.str;
+        for (String* column_value :
+             StructList<String*>(tracked_table->columns)) {
+          const char* column_name = column_value->sval;
           ZETASQL_RET_CHECK(column_name && *column_name != '\0');
           columns->add_column_name(column_name);
         }
@@ -2868,9 +2907,9 @@ absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
     return WhereClauseTranslationError();
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(const Value* value,
-                   (SingleItemListAsNode<Value, T_String>(column_list)));
-  const char* column_name = value->val.str;
+  ZETASQL_ASSIGN_OR_RETURN(const String* value,
+                   (SingleItemListAsNode<String, T_String>(column_list)));
+  const char* column_name = value->sval;
   ZETASQL_RET_CHECK(column_name && *column_name != '\0');
 
   return column_name;

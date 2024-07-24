@@ -90,15 +90,18 @@ class InformationSchemaTest
   // Information schema columns not yet supported.
   const std::pair<std::string, Value> kUnsupportedColumns{
       "unsupported_columns",
-      std::vector<std::string>({"IS_HIDDEN", "IS_STORED_VOLATILE"})};
+      std::vector<std::string>({
+          "IS_HIDDEN", "IS_STORED_VOLATILE",
+      })};
 
   // Information schema constraints not yet supported.
   const std::pair<std::string, Value> kUnsupportedConstraints{
-      "unsupported_constraints", std::vector<std::string>({
-                                     "CK_IS_NOT_NULL_TABLES_TABLE_TYPE",
-                                     "CK_IS_NOT_NULL_VIEWS_SECURITY_TYPE",
-                                     "CK_IS_NOT_NULL_COLUMNS_IS_HIDDEN",
-                                 })};
+      "unsupported_constraints",
+      std::vector<std::string>({
+          "CK_IS_NOT_NULL_TABLES_TABLE_TYPE",
+          "CK_IS_NOT_NULL_VIEWS_SECURITY_TYPE",
+          "CK_IS_NOT_NULL_COLUMNS_IS_HIDDEN",
+      })};
 
   // Returns the given rows, replacing matching string patterns with their
   // actual values from the given results.
@@ -364,6 +367,7 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
         t.table_schema = 'INFORMATION_SCHEMA'
         and t.table_name not in unnest(@unsupported_tables)
         and not (t.table_name = 'COLUMNS' and t.column_name in unnest(@unsupported_columns))
+        and not (t.table_name = 'INDEXES' and t.column_name in unnest(@unsupported_columns))
         and not (t.table_name = 'TABLES' and t.column_name = 'INTERLEAVE_TYPE')
         and not (t.table_name = 'TABLES' and t.column_name = 'ROW_DELETION_POLICY_EXPRESSION')
         and not (t.table_name = 'TABLES' and t.column_name = 'TABLE_TYPE')
@@ -1074,36 +1078,38 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     filter = "t.constraint_schema = 'information_schema'";
   } else {
-    filter = R"(t.constraint_schema = 'INFORMATION_SCHEMA'
-        and t.constraint_catalog = ''
-        and t.constraint_name not in unnest(@unsupported_constraints)
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_CHANGE_STREAM%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_DATABASE_OPTIONS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_VIEWS_TABLE%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_COLUMN_PRIVILEGES%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_TABLE_PRIVILEGES%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLES%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_GRANTEES%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_TABLE_GRANTS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_COLUMN_GRANTS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_CHANGE_STREAM_GRANTS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_MODEL_GRANTS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_ROUTINE_GRANTS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODELS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_OPTIONS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMNS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMN_OPTIONS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_PRIVILEGES%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PLACEMENTS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PLACEMENT_OPTIONS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PARAMETERS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINES%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_OPTIONS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_PRIVILEGES%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_TABLE_SYNONYMS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_INDEX_OPTIONS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_AAC_APPROVAL_CONFIGS%'
-        and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_COLUMN_PARAMETERS%')";
+    filter =
+        "t.constraint_schema = 'INFORMATION_SCHEMA' "
+        "and t.constraint_catalog = '' "
+        "and t.constraint_name not in unnest(@unsupported_constraints) "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_CHANGE_STREAM%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_DATABASE_OPTIONS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_VIEWS_TABLE%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_COLUMN_PRIVILEGES%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_TABLE_PRIVILEGES%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLES%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_GRANTEES%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_TABLE_GRANTS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_COLUMN_GRANTS%' "
+        "and t.constraint_name NOT LIKE "
+        "'CK_IS_NOT_NULL_ROLE_CHANGE_STREAM_GRANTS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_MODEL_GRANTS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROLE_ROUTINE_GRANTS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODELS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_OPTIONS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMNS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMN_OPTIONS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_PRIVILEGES%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PLACEMENTS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PLACEMENT_OPTIONS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PARAMETERS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINES%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_OPTIONS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_PRIVILEGES%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_TABLE_SYNONYMS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_INDEX_OPTIONS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_AAC_APPROVAL_CONFIGS%' "
+        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_COLUMN_PARAMETERS%'";
   }
 
   std::string query = absl::Substitute(R"(
@@ -2037,22 +2043,24 @@ TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
     {"", "", "base", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "bool_value", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "int_value", 4, Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "double_value", 5, Ns(), Ns(), "YES", "FLOAT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "str_value", 6, Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "byte_value", 7, Ns(), Ns(), "YES", "BYTES(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "timestamp_value", 8, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "date_value", 9, Ns(), Ns(), "YES", "DATE", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "bool_array", 10, Ns(), Ns(), "NO", "ARRAY<BOOL>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "int_array", 11, Ns(), Ns(), "YES", "ARRAY<INT64>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "double_array", 12, Ns(), Ns(), "YES", "ARRAY<FLOAT64>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "str_array", 13, Ns(), Ns(), "YES", "ARRAY<STRING(256)>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "byte_array", 14, Ns(), Ns(), "YES", "ARRAY<BYTES(MAX)>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "timestamp_array", 15, Ns(), Ns(), "YES", "ARRAY<TIMESTAMP>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "date_array", 16, Ns(), Ns(), "YES", "ARRAY<DATE>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "gen_value", 17, Ns(), Ns(), "YES", "INT64", "ALWAYS", "key1 + 1", "YES", "COMMITTED"},  // NOLINT
-    {"", "", "base", "gen_function_value", 18, Ns(), Ns(), "YES", "INT64", "ALWAYS", "LENGTH(key2)", "NO", "COMMITTED"},  // NOLINT
-    {"", "", "base", "default_col_value", 19, "100", Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
-    {"", "", "base", "default_timestamp_col_value", 20, "CURRENT_TIMESTAMP()", Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "float_value", 5, Ns(), Ns(), "YES", "FLOAT32", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "double_value", 6, Ns(), Ns(), "YES", "FLOAT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "str_value", 7, Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "byte_value", 8, Ns(), Ns(), "YES", "BYTES(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "timestamp_value", 9, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "date_value", 10, Ns(), Ns(), "YES", "DATE", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "bool_array", 11, Ns(), Ns(), "NO", "ARRAY<BOOL>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "int_array", 12, Ns(), Ns(), "YES", "ARRAY<INT64>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "float_array", 13, Ns(), Ns(), "YES", "ARRAY<FLOAT32>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "double_array", 14, Ns(), Ns(), "YES", "ARRAY<FLOAT64>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "str_array", 15, Ns(), Ns(), "YES", "ARRAY<STRING(256)>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "byte_array", 16, Ns(), Ns(), "YES", "ARRAY<BYTES(MAX)>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "timestamp_array", 17, Ns(), Ns(), "YES", "ARRAY<TIMESTAMP>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "date_array", 18, Ns(), Ns(), "YES", "ARRAY<DATE>", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "gen_value", 19, Ns(), Ns(), "YES", "INT64", "ALWAYS", "key1 + 1", "YES", "COMMITTED"},  // NOLINT
+    {"", "", "base", "gen_function_value", 20, Ns(), Ns(), "YES", "INT64", "ALWAYS", "LENGTH(key2)", "NO", "COMMITTED"},  // NOLINT
+    {"", "", "base", "default_col_value", 21, "100", Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "default_timestamp_col_value", 22, "CURRENT_TIMESTAMP()", Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base_view", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "cascade_child", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "cascade_child", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
@@ -2112,22 +2120,24 @@ TEST_P(InformationSchemaTest, PGDefaultColumns) {
     {"public", "base", "key2", 2, Ns(), "character varying", "NO", "character varying(256)", "NEVER", Ns(), Ns(), "COMMITTED", 256, Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base", "bool_value", 3, Ns(), "boolean", "YES", "boolean", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base", "int_value", 4, Ns(), "bigint", "NO", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
-    {"public", "base", "double_value", 5, Ns(), "double precision", "YES", "double precision", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 53, 2, Ni()},  // NOLINT
-    {"public", "base", "str_value", 6, Ns(), "character varying", "YES", "character varying", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "byte_value", 7, Ns(), "bytea", "YES", "bytea", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "timestamp_value", 8, Ns(), "spanner.commit_timestamp", "YES", "spanner.commit_timestamp", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "date_value", 9, Ns(), "date", "YES", "date", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "bool_array", 10, Ns(), "ARRAY", "NO", "boolean[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "int_array", 11, Ns(), "ARRAY", "YES", "bigint[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "double_array", 12, Ns(), "ARRAY", "YES", "double precision[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "str_array", 13, Ns(), "ARRAY", "YES", "character varying(256)[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "byte_array", 14, Ns(), "ARRAY", "YES", "bytea[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "timestamp_array", 15, Ns(), "ARRAY", "YES", "timestamp with time zone[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "date_array", 16, Ns(), "ARRAY", "YES", "date[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"public", "base", "gen_value", 17, Ns(), "bigint", "YES", "bigint", "ALWAYS", "(key1 + '1'::bigint)", "YES", "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
-    {"public", "base", "gen_function_value", 18, Ns(), "bigint", "YES", "bigint", "ALWAYS", "length(key2)", "NO", "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
-    {"public", "base", "default_col_value", 19, "'100'::bigint", "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
-    {"public", "base", "default_timestamp_col_value", 20, "CURRENT_TIMESTAMP", "timestamp with time zone", "YES", "timestamp with time zone", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "float_value", 5, Ns(), "real", "YES", "real", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 24, 2, Ni()},  // NOLINT
+    {"public", "base", "double_value", 6, Ns(), "double precision", "YES", "double precision", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 53, 2, Ni()},  // NOLINT
+    {"public", "base", "str_value", 7, Ns(), "character varying", "YES", "character varying", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "byte_value", 8, Ns(), "bytea", "YES", "bytea", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "timestamp_value", 9, Ns(), "spanner.commit_timestamp", "YES", "spanner.commit_timestamp", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "date_value", 10, Ns(), "date", "YES", "date", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "bool_array", 11, Ns(), "ARRAY", "NO", "boolean[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "int_array", 12, Ns(), "ARRAY", "YES", "bigint[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "float_array", 13, Ns(), "ARRAY", "YES", "real[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "double_array", 14, Ns(), "ARRAY", "YES", "double precision[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "str_array", 15, Ns(), "ARRAY", "YES", "character varying(256)[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "byte_array", 16, Ns(), "ARRAY", "YES", "bytea[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "timestamp_array", 17, Ns(), "ARRAY", "YES", "timestamp with time zone[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "date_array", 18, Ns(), "ARRAY", "YES", "date[]", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "gen_value", 19, Ns(), "bigint", "YES", "bigint", "ALWAYS", "(key1 + '1'::bigint)", "YES", "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
+    {"public", "base", "gen_function_value", 20, Ns(), "bigint", "YES", "bigint", "ALWAYS", "length(key2)", "NO", "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
+    {"public", "base", "default_col_value", 21, "'100'::bigint", "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
+    {"public", "base", "default_timestamp_col_value", 22, "CURRENT_TIMESTAMP", "timestamp with time zone", "YES", "timestamp with time zone", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base_view", "key1", 1, Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
   });
   // clang-format on

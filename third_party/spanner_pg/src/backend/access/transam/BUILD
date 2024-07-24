@@ -65,7 +65,9 @@ cc_library(
         "xlogarchive.c",
         "xlogfuncs.c",
         "xloginsert.c",
+        "xlogprefetcher.c",
         "xlogreader.c",
+        "xlogrecovery.c",
         "xlogutils.c",
     ],
     copts = [

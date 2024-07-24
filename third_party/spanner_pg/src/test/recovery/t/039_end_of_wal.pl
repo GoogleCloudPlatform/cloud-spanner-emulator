@@ -72,12 +72,6 @@ sub write_wal
 	close $fh;
 }
 
-sub format_lsn
-{
-	my $lsn = shift;
-	return sprintf("%X/%X", $lsn >> 32, $lsn & 0xffffffff);
-}
-
 # Emit a WAL record of arbitrary size.  Returns the end LSN of the
 # record inserted, in bytes.
 sub emit_message
@@ -181,7 +175,7 @@ sub advance_out_of_record_splitting_zone
 {
 	my $node = shift;
 
-	my $page_threshold = 2000;
+	my $page_threshold = $WAL_BLOCK_SIZE / 4;
 	my $end_lsn = get_insert_lsn($node);
 	my $page_offset = $end_lsn % $WAL_BLOCK_SIZE;
 	while ($page_offset >= $WAL_BLOCK_SIZE - $page_threshold)

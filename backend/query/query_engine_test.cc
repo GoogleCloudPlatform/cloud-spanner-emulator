@@ -213,6 +213,7 @@ class QueryEngineTestBase : public testing::Test {
   const Schema* model_schema() { return model_schema_.get(); }
   const Schema* sequence_schema() { return sequence_schema_.get(); }
   const Schema* gpk_schema() { return gpk_schema_.get(); }
+  const Schema* timestamp_date_schema() { return timestamp_date_schema_.get(); }
   RowReader* change_stream_partition_table_reader() {
     return &change_stream_partition_table_reader_;
   }
@@ -220,6 +221,9 @@ class QueryEngineTestBase : public testing::Test {
     return &change_stream_data_table_reader_;
   }
   RowReader* gpk_table_reader() { return &gpk_table_reader_; }
+  RowReader* timestamp_date_table_reader() {
+    return &timestamp_date_table_reader_;
+  }
   RowReader* reader() { return &reader_; }
   QueryEngine& query_engine() { return query_engine_; }
   zetasql::TypeFactory* type_factory() { return &type_factory_; }
@@ -318,17 +322,25 @@ class QueryEngineTestBase : public testing::Test {
   std::unique_ptr<const Schema> model_schema_;
   std::unique_ptr<const Schema> sequence_schema_;
   std::unique_ptr<const Schema> gpk_schema_;
+  std::unique_ptr<const Schema> timestamp_date_schema_;
 
  private:
   std::unique_ptr<const Schema> views_schema_ =
       test::CreateSchemaWithView(&type_factory_);
   test::TestRowReader reader_{
       {{"test_table",
-        {{"int64_col", "string_col"},
-         {zetasql::types::Int64Type(), zetasql::types::StringType()},
-         {{zetasql::values::Int64(1), zetasql::values::String("one")},
-          {zetasql::values::Int64(2), zetasql::values::String("two")},
-          {zetasql::values::Int64(4), zetasql::values::String("four")}}}}}};
+        {{"int64_col", "string_col", "date_col", "timestamp_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType(),
+          zetasql::types::DateType(), zetasql::types::TimestampType()},
+         {{zetasql::values::Int64(1), zetasql::values::String("one"),
+           zetasql::values::Date(1),
+           zetasql::values::Timestamp(absl::FromUnixSeconds(1))},
+          {zetasql::values::Int64(2), zetasql::values::String("two"),
+           zetasql::values::Date(2),
+           zetasql::values::Timestamp(absl::FromUnixSeconds(2))},
+          {zetasql::values::Int64(4), zetasql::values::String("four"),
+           zetasql::values::Date(4),
+           zetasql::values::Timestamp(absl::FromUnixSeconds(4))}}}}}};
   QueryEngine query_engine_{&type_factory_};
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_setter_ =
       test::ScopedEmulatorFeatureFlagsSetter(
@@ -349,6 +361,14 @@ class QueryEngineTestBase : public testing::Test {
           zetasql::types::Int64Type()}}}}};
   std::unique_ptr<const Schema> proto_schema_ =
       test::CreateSchemaWithProtoEnumColumn(&type_factory_, read_descriptors());
+  test::TestRowReader timestamp_date_table_reader_{
+      {{"timestamp_date_table",
+        {{"int64_col", "timestamp_col", "date_col"},
+         {zetasql::types::Int64Type(), zetasql::types::TimestampType(),
+          zetasql::types::DateType()},
+         {{zetasql::values::Int64(1),
+           zetasql::values::Timestamp(absl::FromUnixSeconds(1)),
+           zetasql::values::Date(1)}}}}}};
 };
 
 struct TestQuery {
@@ -382,6 +402,8 @@ class QueryEngineTest
           test::CreateSchemaWithOneSequence(
               &type_factory_, database_api::DatabaseDialect::POSTGRESQL));
       query_engine().SetLatestSchemaForFunctionCatalog(sequence_schema_.get());
+      timestamp_date_schema_ = test::CreateSchemaWithTimestampDateTable(
+          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
     } else if (GetParam() ==
                database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
       schema_ = test::CreateSchemaWithOneTable(&type_factory_);
@@ -394,6 +416,8 @@ class QueryEngineTest
       ZETASQL_ASSERT_OK_AND_ASSIGN(sequence_schema_,
                            test::CreateSchemaWithOneSequence(&type_factory_));
       query_engine().SetLatestSchemaForFunctionCatalog(sequence_schema_.get());
+      timestamp_date_schema_ =
+          test::CreateSchemaWithTimestampDateTable(&type_factory_);
     }
   }
 };
@@ -796,6 +820,34 @@ TEST_P(QueryEngineTest, ExecuteSqlRefusesIncompleteParameters) {
                        HasSubstr("Incomplete query parameters")));
 }
 
+TEST_P(QueryEngineTest, ExecuteSqlAcceptsNonNullUntypedParameter) {
+  Query query;
+  google::protobuf::Value p1, p2;
+  p1.set_string_value("0001-01-01T00:00:00.00Z");
+  p2.set_string_value("0001-01-01");
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    query = {/*sql=*/
+             "SELECT int64_col FROM timestamp_date_table WHERE "
+             "timestamp_col=$1 AND date_col=$2",
+             /*declared_params=*/{},
+             /*undeclared_params=*/{{"p1", p1}, {"p2", p2}}};
+  } else {
+    query = {/*sql=*/
+             "SELECT int64_col FROM timestamp_date_table WHERE "
+             "timestamp_col=@p1 AND date_col=@p2",
+             /*declared_params=*/{},
+             /*undeclared_params=*/{{"p1", p1}, {"p2", p2}}};
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          query,
+          QueryContext{timestamp_date_schema(), timestamp_date_table_reader()},
+          v1::ExecuteSqlRequest::NORMAL));
+  EXPECT_THAT(GetParamNames(result), ElementsAre("p1", "p2"));
+  EXPECT_THAT(GetParamTypes(result), ElementsAre(TimestampType(), DateType()));
+}
+
 TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTableWithForceIndexHint) {
   std::string hint = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
                          ? "/*@ force_index=test_index */"
@@ -998,6 +1050,31 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlFlagDisabled) {
   }
 }
 
+TEST_P(QueryEngineTest, InsertOrIgnoreDmlWithReturning) {
+  MockRowWriter writer;
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT OR IGNORE INTO test_table (int64_col) VALUES(1) "
+                  "THEN RETURN *"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr("Returning clause in Insert or ignore statement is not "
+                      "supported in Emulator")));
+  } else {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_table (int64_col) VALUES(1) "
+                  "ON CONFLICT(int64_col) DO NOTHING RETURNING *"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr("Returning clause in Insert or ignore statement is not "
+                      "supported in Emulator")));
+  }
+}
+
 TEST_P(QueryEngineTest, InsertOrUpdateDmlFlagDisabled) {
   test::ScopedEmulatorFeatureFlagsSetter setter(
       {.enable_upsert_queries = false});
@@ -1022,6 +1099,32 @@ TEST_P(QueryEngineTest, InsertOrUpdateDmlFlagDisabled) {
             absl::StatusCode::kUnimplemented,
             HasSubstr(
                 "Insert or update statement is not supported in Emulator")));
+  }
+}
+
+TEST_P(QueryEngineTest, InsertOrUpdateDmlWithReturning) {
+  MockRowWriter writer;
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT OR UPDATE INTO test_table (int64_col) VALUES(1) "
+                  "THEN RETURN *"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr("Returning clause in Insert or update statement is not "
+                      "supported in Emulator")));
+  } else {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_table (int64_col) VALUES(1) "
+                  "ON CONFLICT(int64_col) DO UPDATE "
+                  "SET int64_col = excluded.int64_col RETURNING *"},
+            QueryContext{schema(), reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr("Returning clause in Insert or update statement is not "
+                      "supported in Emulator")));
   }
 }
 

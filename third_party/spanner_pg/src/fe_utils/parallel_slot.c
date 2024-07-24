@@ -4,7 +4,7 @@
  *		Parallel support for front-end parallel database connections
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/fe_utils/parallel_slot.c
@@ -316,7 +316,7 @@ connect_slot(ParallelSlotArray *sa, int slotno, const char *dbname)
 #ifdef WIN32
 	if (slotno >= FD_SETSIZE)
 	{
-		pg_log_fatal("too many jobs for this platform: %d", slotno);
+		pg_log_error("too many jobs for this platform: %d", slotno);
 		exit(1);
 	}
 #else
@@ -325,8 +325,9 @@ connect_slot(ParallelSlotArray *sa, int slotno, const char *dbname)
 
 		if (fd >= FD_SETSIZE)
 		{
-			pg_log_fatal("socket file descriptor out of range for select(): %d",
+			pg_log_error("socket file descriptor out of range for select(): %d",
 						 fd);
+			pg_log_error_hint("Try fewer jobs.");
 			exit(1);
 		}
 	}

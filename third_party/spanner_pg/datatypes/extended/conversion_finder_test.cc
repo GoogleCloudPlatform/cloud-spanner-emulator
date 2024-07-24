@@ -64,6 +64,7 @@ MATCHER_P(EqPG, result,
 using ::zetasql::types::BoolType;
 using ::zetasql::types::BytesType;
 using ::zetasql::types::DoubleType;
+using ::zetasql::types::FloatType;
 using ::zetasql::types::Int64Type;
 using ::zetasql::types::StringType;
 using FindConversionOptions = ::zetasql::Catalog::FindConversionOptions;
@@ -103,6 +104,11 @@ std::vector<ConversionFoundTestCase> GetConversionFoundTestCases() {
                              ConversionSourceExpressionKind::kOther),
        zetasql::Value::Double(-123.523535),
        CreatePgNumericValueWithMemoryContext("-123.523535").value()},
+      {FloatType(), GetPgNumericType(),
+       FindConversionOptions(/*is_explicit=*/true,
+                             ConversionSourceExpressionKind::kOther),
+       zetasql::Value::Float(-123.523f),
+       CreatePgNumericValueWithMemoryContext("-123.523").value()},
       {StringType(), GetPgNumericType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
@@ -119,6 +125,11 @@ std::vector<ConversionFoundTestCase> GetConversionFoundTestCases() {
                              ConversionSourceExpressionKind::kOther),
        CreatePgNumericValueWithMemoryContext("123.52353500").value(),
        zetasql::Value::Double(123.523535)},
+      {GetPgNumericType(), FloatType(),
+       FindConversionOptions(/*is_explicit=*/true,
+                             ConversionSourceExpressionKind::kOther),
+       CreatePgNumericValueWithMemoryContext("123.52300").value(),
+       zetasql::Value::Float(123.523f)},
       {GetPgNumericType(), StringType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
@@ -141,6 +152,11 @@ std::vector<ConversionFoundTestCase> GetConversionFoundTestCases() {
                              ConversionSourceExpressionKind::kOther),
        CreatePgJsonbValueWithMemoryContext("123.52353500").value(),
        zetasql::Value::Double(123.523535)},
+      {GetPgJsonbType(), FloatType(),
+       FindConversionOptions(/*is_explicit=*/true,
+                             ConversionSourceExpressionKind::kOther),
+       CreatePgJsonbValueWithMemoryContext("123.523500").value(),
+       zetasql::Value::Float(123.5235f)},
       {GetPgJsonbType(), GetPgNumericType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
@@ -154,23 +170,19 @@ std::vector<ConversionFoundTestCase> GetConversionFoundTestCases() {
       {GetPgOidType(), StringType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       *CreatePgOidValue(42),
-       zetasql::Value::String("42")},
+       *CreatePgOidValue(42), zetasql::Value::String("42")},
       {StringType(), GetPgOidType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       zetasql::Value::String("42"),
-       *CreatePgOidValue(42)},
+       zetasql::Value::String("42"), *CreatePgOidValue(42)},
       {GetPgOidType(), Int64Type(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       *CreatePgOidValue(42),
-       zetasql::Value::Int64(42)},
+       *CreatePgOidValue(42), zetasql::Value::Int64(42)},
       {Int64Type(), GetPgOidType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       zetasql::Value::Int64(42),
-       *CreatePgOidValue(42)},
+       zetasql::Value::Int64(42), *CreatePgOidValue(42)},
   };
 }
 

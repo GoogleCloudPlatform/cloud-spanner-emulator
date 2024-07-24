@@ -268,9 +268,13 @@ cc_library(
     srcs = ["change_streams.cc"],
     hdrs = ["change_streams.h"],
     deps = [
+        ":chunking",
         "//frontend/converters:pg_change_streams",
+        "@com_github_googleapis_google_cloud_cpp//:spanner",
+        "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_protobuf//:cc_wkt_protos",

@@ -33,11 +33,13 @@
 #define CATALOG_SPANGRES_SYSTEM_CATALOG_H_
 
 #include "zetasql/public/language_options.h"
+#include "zetasql/public/types/type.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
+#include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/interface/engine_builtin_function_catalog.h"
 
 namespace postgres_translator {
@@ -126,18 +128,19 @@ class SpangresSystemCatalog : public EngineSystemCatalog {
       const zetasql::LanguageOptions& language_options) override;
 
   // If the input `gsql_expr` returns a double type, wraps it in a call to
-  // PG.MapDoubleToInt in order to preserve double/float8 ordering and equality
-  // semantics.
+  // PG.MapDoubleToInt or PG.MapFloatToInt in order to preserve float8/float4
+  // ordering and equality semantics.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
-  GetResolvedExprForDoubleComparison(
+  GetResolvedExprForFloatingPointComparison(
       std::unique_ptr<zetasql::ResolvedExpr> gsql_expr,
       const zetasql::LanguageOptions& language_options);
 
-  // MapDoubleToInt function is necessary because Spanner has different sort
-  // semantics for FLOAT8 type compared to Postgres. Wrapping ResolvedExprs
-  // which return FLOAT8 with this function allows sort and comparison semantics
-  // to be equivalent.
-  absl::StatusOr<FunctionAndSignature> GetMapDoubleToIntFunction(
+  // MapDoubleToInt and MapFloatToInt functions are necessary because Spanner
+  // has different sort semantics for FLOAT4 and FLOAT8 types compared to
+  // Postgres. Wrapping ResolvedExprs which return FLOAT4 or FLOAT8 with these
+  // function allows sort and comparison semantics to be equivalent.
+  absl::StatusOr<FunctionAndSignature> GetMapFloatingPointToIntFunction(
+      const zetasql::Type* source_type,
       const zetasql::LanguageOptions& language_options);
 };
 

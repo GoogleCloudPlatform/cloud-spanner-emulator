@@ -56,6 +56,7 @@ using ::zetasql::CastFunctionType;
 using ::zetasql::Catalog;
 
 const zetasql::Type* gsql_bool = zetasql::types::BoolType();
+const zetasql::Type* gsql_float = zetasql::types::FloatType();
 const zetasql::Type* gsql_double = zetasql::types::DoubleType();
 const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
 const zetasql::Type* gsql_string = zetasql::types::StringType();
@@ -124,6 +125,9 @@ static const ConversionMap& GetConversionMap() {
        {{gsql_double, gsql_pg_numeric},
         {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
          GetDoubleToPgNumericConversion()}},
+       {{gsql_float, gsql_pg_numeric},
+        {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
+         GetFloatToPgNumericConversion()}},
        {{gsql_string, gsql_pg_numeric},
         {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
          GetStringToPgNumericConversion()}},
@@ -134,6 +138,9 @@ static const ConversionMap& GetConversionMap() {
        {{gsql_pg_numeric, gsql_double},
         {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
          GetPgNumericToDoubleConversion()}},
+       {{gsql_pg_numeric, gsql_float},
+        {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
+         GetPgNumericToFloatConversion()}},
        {{gsql_pg_numeric, gsql_string},
         {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
          GetPgNumericToStringConversion()}},
@@ -148,6 +155,9 @@ static const ConversionMap& GetConversionMap() {
        {{gsql_pg_jsonb, gsql_double},
         {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
          GetPgJsonbToDoubleConversion()}},
+       {{gsql_pg_jsonb, gsql_float},
+        {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
+         GetPgJsonbToFloatConversion()}},
        {{gsql_pg_jsonb, gsql_int64},
         {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
          GetPgJsonbToInt64Conversion()}},

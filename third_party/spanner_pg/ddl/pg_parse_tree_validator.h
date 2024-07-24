@@ -80,7 +80,8 @@ absl::Status ValidateParseTreeNode(const RangeVar& node,
                                    absl::string_view parent_statement_type);
 absl::Status ValidateParseTreeNode(const InterleaveSpec& node,
                                    absl::string_view parent_statement_type);
-absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter);
+absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
+                                   const TranslationOptions& options);
 absl::Status ValidateParseTreeNode(const AlterTableStmt& node,
                                    const TranslationOptions& options);
 absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
@@ -125,7 +126,6 @@ absl::Status ValidateParseTreeNode(const RenameStmt& node,
 absl::Status ValidateParseTreeNode(const TableChainedRenameStmt& node,
                                    const TranslationOptions& options);
 absl::Status ValidateParseTreeNode(const TableRenameOp& node);
-absl::Status ValidateParseTreeNode(const Value& node);
 
 }  // namespace spangres
 }  // namespace postgres_translator

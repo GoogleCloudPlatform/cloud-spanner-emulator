@@ -776,11 +776,11 @@ drop table cchild;
 \a\t
 
 SELECT viewname, definition FROM pg_views
-WHERE schemaname IN ('pg_catalog', 'public')
+WHERE schemaname = 'pg_catalog'
 ORDER BY viewname;
 
 SELECT tablename, rulename, definition FROM pg_rules
-WHERE schemaname IN ('pg_catalog', 'public')
+WHERE schemaname = 'pg_catalog'
 ORDER BY tablename, rulename;
 
 -- restore normal output mode
@@ -1264,6 +1264,88 @@ ALTER RULE rules_parted_table_insert ON rules_parted_table RENAME TO rules_parte
 DROP TABLE rules_parted_table;
 
 --
+-- test MERGE
+--
+CREATE TABLE rule_merge1 (a int, b text);
+CREATE TABLE rule_merge2 (a int, b text);
+CREATE RULE rule1 AS ON INSERT TO rule_merge1
+	DO INSTEAD INSERT INTO rule_merge2 VALUES (NEW.*);
+CREATE RULE rule2 AS ON UPDATE TO rule_merge1
+	DO INSTEAD UPDATE rule_merge2 SET a = NEW.a, b = NEW.b
+	WHERE a = OLD.a;
+CREATE RULE rule3 AS ON DELETE TO rule_merge1
+	DO INSTEAD DELETE FROM rule_merge2 WHERE a = OLD.a;
+
+-- MERGE not supported for table with rules
+MERGE INTO rule_merge1 t USING (SELECT 1 AS a) s
+	ON t.a = s.a
+	WHEN MATCHED AND t.a < 2 THEN
+		UPDATE SET b = b || ' updated by merge'
+	WHEN MATCHED AND t.a > 2 THEN
+		DELETE
+	WHEN NOT MATCHED THEN
+		INSERT VALUES (s.a, '');
+
+-- should be ok with the other table though
+MERGE INTO rule_merge2 t USING (SELECT 1 AS a) s
+	ON t.a = s.a
+	WHEN MATCHED AND t.a < 2 THEN
+		UPDATE SET b = b || ' updated by merge'
+	WHEN MATCHED AND t.a > 2 THEN
+		DELETE
+	WHEN NOT MATCHED THEN
+		INSERT VALUES (s.a, '');
+
+-- test deparsing
+CREATE TABLE sf_target(id int, data text, filling int[]);
+
+CREATE FUNCTION merge_sf_test()
+ RETURNS void
+ LANGUAGE sql
+BEGIN ATOMIC
+ MERGE INTO sf_target t
+   USING rule_merge1 s
+   ON (s.a = t.id)
+WHEN MATCHED
+   AND (s.a + t.id) = 42
+   THEN UPDATE SET data = repeat(t.data, s.a) || s.b, id = length(s.b)
+WHEN NOT MATCHED
+   AND (s.b IS NOT NULL)
+   THEN INSERT (data, id)
+   VALUES (s.b, s.a)
+WHEN MATCHED
+   AND length(s.b || t.data) > 10
+   THEN UPDATE SET data = s.b
+WHEN MATCHED
+   AND s.a > 200
+   THEN UPDATE SET filling[s.a] = t.id
+WHEN MATCHED
+   AND s.a > 100
+   THEN DELETE
+WHEN MATCHED
+   THEN DO NOTHING
+WHEN NOT MATCHED
+   AND s.a > 200
+   THEN INSERT DEFAULT VALUES
+WHEN NOT MATCHED
+   AND s.a > 100
+   THEN INSERT (id, data) OVERRIDING USER VALUE
+   VALUES (s.a, DEFAULT)
+WHEN NOT MATCHED
+   AND s.a > 0
+   THEN INSERT
+   VALUES (s.a, s.b, DEFAULT)
+WHEN NOT MATCHED
+   THEN INSERT (filling[1], id)
+   VALUES (s.a, s.a);
+END;
+
+\sf merge_sf_test
+
+DROP FUNCTION merge_sf_test;
+DROP TABLE sf_target;
+
+--
 -- Test enabling/disabling
 --
 CREATE TABLE ruletest1 (a int);
@@ -1288,3 +1370,31 @@ SELECT * FROM ruletest2;
 
 DROP TABLE ruletest1;
 DROP TABLE ruletest2;
+
+--
+-- Test non-SELECT rule on security invoker view.
+-- Should use view owner's permissions.
+--
+CREATE USER regress_rule_user1;
+
+CREATE TABLE ruletest_t1 (x int);
+CREATE TABLE ruletest_t2 (x int);
+CREATE VIEW ruletest_v1 WITH (security_invoker=true) AS
+    SELECT * FROM ruletest_t1;
+GRANT INSERT ON ruletest_v1 TO regress_rule_user1;
+
+CREATE RULE rule1 AS ON INSERT TO ruletest_v1
+    DO INSTEAD INSERT INTO ruletest_t2 VALUES (NEW.*);
+
+SET SESSION AUTHORIZATION regress_rule_user1;
+INSERT INTO ruletest_v1 VALUES (1);
+
+RESET SESSION AUTHORIZATION;
+SELECT * FROM ruletest_t1;
+SELECT * FROM ruletest_t2;
+
+DROP VIEW ruletest_v1;
+DROP TABLE ruletest_t2;
+DROP TABLE ruletest_t1;
+
+DROP USER regress_rule_user1;

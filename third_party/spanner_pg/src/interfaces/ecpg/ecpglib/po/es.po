@@ -7,10 +7,10 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: ecpglib (PostgreSQL) 14\n"
+"Project-Id-Version: ecpglib (PostgreSQL) 15\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@lists.postgresql.org\n"
-"POT-Creation-Date: 2023-05-07 16:54+0000\n"
-"PO-Revision-Date: 2019-06-06 17:20-0400\n"
+"POT-Creation-Date: 2023-05-07 16:39+0000\n"
+"PO-Revision-Date: 2022-10-20 09:05+0200\n"
 "Last-Translator: Emanuel Calvo Franco <postgres-arg@gmail.com>\n"
 "Language-Team: PgSQL-es-Ayuda <pgsql-es-ayuda@lists.postgresql.org>\n"
 "Language: es\n"
@@ -22,7 +22,7 @@ msgstr ""
 msgid "empty message text"
 msgstr "mensaje de texto vacío"
 
-#: connect.c:411 connect.c:676
+#: connect.c:410 connect.c:675
 msgid "<DEFAULT>"
 msgstr "<POR OMISIÓN>"
 
@@ -195,6 +195,6 @@ msgstr "se ha perdido la conexión al servidor"
 msgid "SQL error: %s\n"
 msgstr "error SQL: %s\n"
 
-#: execute.c:2190 execute.c:2197
+#: execute.c:2189 execute.c:2196
 msgid "<empty>"
 msgstr "<vacío>"

@@ -662,11 +662,11 @@ void cancel_parser_errposition_callback(ParseCallbackState* pcbstate);
 // field is removed from ParseState.
 void free_parsestate(ParseState* pstate);
 
-// Convert a Value node (as returned by the grammar) to a Const node
+// Convert a A_Const value (as returned by the grammar) to a Const node
 // and assign a type for the constant. The original PostgreSQL function chooses
 // int4, int8_t, or numeric for integers and floats but the Spangres function will
 // only choose int8_t or numeric..
-Const* make_const(ParseState* pstate, Value* value, int location);
+Const* make_const(ParseState* pstate, A_Const* aconst);
 
 /*---------------------------------------------------------------------------*/
 /* Shimmed functions from parser/parse_oper.c */

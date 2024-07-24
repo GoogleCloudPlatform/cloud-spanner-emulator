@@ -88,7 +88,6 @@ const zetasql::Type* gsql_float = zetasql::types::FloatType();
 const zetasql::Type* gsql_string = zetasql::types::StringType();
 const zetasql::Type* gsql_date = zetasql::types::DateType();
 const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
-
 const zetasql::Type* gsql_int64_array = zetasql::types::Int64ArrayType();
 const zetasql::Type* gsql_string_array = zetasql::types::StringArrayType();
 const zetasql::Type* gsql_bool_array = zetasql::types::BoolArrayType();
@@ -216,28 +215,14 @@ TEST_F(SpangresSystemCatalogTest, GetTypes) {
   absl::flat_hash_set<const zetasql::Type*> types;
   ZETASQL_ASSERT_OK(catalog->GetTypes(&types));
   std::vector<const zetasql::Type*> expected_types{
-      gsql_bool,
-      gsql_int64,
-      gsql_float,
-      gsql_double,
-      gsql_string,
-      gsql_bytes,
-      gsql_date,
-      gsql_timestamp,
+      gsql_bool, gsql_int64, gsql_float, gsql_double, gsql_string, gsql_bytes,
+      gsql_date, gsql_timestamp,
       types::PgNumericMapping()->mapped_type(),
       types::PgJsonbMapping()->mapped_type(),
-      types::PgOidMapping()->mapped_type(),
-      gsql_bool_array,
-      gsql_int64_array,
-      gsql_float_array,
-      gsql_double_array,
-      gsql_string_array,
-      gsql_bytes_array,
-      gsql_date_array,
-      gsql_timestamp_array,
-      GetPgNumericArrayType(),
-      GetPgJsonbArrayType(),
-      GetPgOidArrayType()};
+      types::PgOidMapping()->mapped_type(), gsql_bool_array, gsql_int64_array,
+      gsql_float_array, gsql_double_array, gsql_string_array, gsql_bytes_array,
+      gsql_date_array, gsql_timestamp_array,
+      GetPgNumericArrayType(), GetPgJsonbArrayType(), GetPgOidArrayType()};
 
   EXPECT_THAT(types, UnorderedPointwise(TypeEquals(), expected_types));
 }
@@ -616,6 +601,7 @@ TEST_F(SpangresSystemCatalogTest, MinAggregateRemapTest) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
 
+  bool has_signature_for_float = false;
   bool has_signature_for_double = false;
   bool has_signature_for_numeric = false;
   for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
@@ -624,6 +610,10 @@ TEST_F(SpangresSystemCatalogTest, MinAggregateRemapTest) {
     const zetasql::Type* argument_type = signature->argument(0).type();
     if (argument_type->IsDouble()) {
       has_signature_for_double = true;
+      EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
+                "pg.min");
+    } else if (argument_type->IsFloat()) {
+      has_signature_for_float = true;
       EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
                 "pg.min");
     } else if (

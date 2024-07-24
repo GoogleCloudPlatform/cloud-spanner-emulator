@@ -190,10 +190,13 @@ static constexpr char kModelOptions[] = "MODEL_OPTIONS";
 static constexpr char kModelColumns[] = "MODEL_COLUMNS";
 static constexpr char kModelColumnOptions[] = "MODEL_COLUMN_OPTIONS";
 
+static int kFloatNumericPrecision = 24;
 static int kDoubleNumericPrecision = 53;
 static int kBigintNumericPrecision = 64;
-static int kDoubleNumericPrecisionRadix = 2;
-static int kPGNumericNumericPrecisionRadix = 10;
+
+// The radix for binary or decimal representation of a numeric value.
+static int kBinaryRepresentedNumericPrecisionRadix = 2;
+static int kDecimalRepresentedNumericPrecisionRadix = 10;
 
 static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
     // For now, this is a set of tables that are created from metadata. Once the
@@ -714,6 +717,8 @@ zetasql::Value GetPGNumericPrecision(const zetasql::Type* type) {
     return Int64(kDoubleNumericPrecision);
   } else if (type->IsInt64()) {
     return Int64(kBigintNumericPrecision);
+  } else if (type->IsFloat()) {
+    return Int64(kFloatNumericPrecision);
   }
   return NullInt64();
 }
@@ -722,11 +727,11 @@ zetasql::Value GetPGNumericPrecision(const zetasql::Type* type) {
 // "columns" table, based on the given column type.
 zetasql::Value GetPGNumericPrecisionRadix(const zetasql::Type* type) {
   // Setting the numeric precision radix.
-  if (type->IsDouble() || type->IsInt64()) {
-    return Int64(kDoubleNumericPrecisionRadix);
+  if (type->IsDouble() || type->IsInt64() || type->IsFloat()) {
+    return Int64(kBinaryRepresentedNumericPrecisionRadix);
   } else if (type == postgres_translator::spangres::types::PgNumericMapping()
                          ->mapped_type()) {
-    return Int64(kPGNumericNumericPrecisionRadix);
+    return Int64(kDecimalRepresentedNumericPrecisionRadix);
   }
   return NullInt64();
 }

@@ -60,6 +60,7 @@
 #include "third_party/spanner_pg/src/include/access/htup_details.h"
 #include "third_party/spanner_pg/src/include/access/nbtree.h"
 #include "third_party/spanner_pg/src/include/access/sysattr.h"
+#include "third_party/spanner_pg/src/include/access/toast_compression.h"
 #include "third_party/spanner_pg/src/include/catalog/index.h"
 #include "third_party/spanner_pg/src/include/catalog/namespace.h"
 #include "third_party/spanner_pg/src/include/catalog/pg_aggregate.h"
@@ -111,7 +112,6 @@
 #include "third_party/spanner_pg/src/include/utils/elog.h"
 #include "third_party/spanner_pg/src/include/utils/fmgrtab.h"
 #include "third_party/spanner_pg/src/include/utils/formatting.h"
-#include "third_party/spanner_pg/src/include/utils/int8.h"  // DO_NOT_TRANSFORM
 #include "third_party/spanner_pg/src/include/utils/lsyscache.h"
 #include "third_party/spanner_pg/src/include/utils/memutils.h"
 #include "third_party/spanner_pg/src/include/utils/numeric.h"

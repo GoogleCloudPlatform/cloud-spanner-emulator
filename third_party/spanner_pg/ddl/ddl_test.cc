@@ -55,8 +55,9 @@ namespace {
 
 using ::google::spanner::emulator::backend::ddl::DDLStatementList;
 using ::testing::ElementsAre;
-using ::zetasql_base::testing::StatusIs;
+using ::testing::SizeIs;
 using ::zetasql_base::testing::IsOkAndHolds;
+using ::zetasql_base::testing::StatusIs;
 
 class DdlTest : public testing::Test {
  protected:
@@ -134,7 +135,7 @@ TEST_F(DdlTest, DisableDateType) {
                                           {.enable_date_type = false});
 
   EXPECT_THAT(statements,
-              zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
                                         "Type <date> is not supported."));
 }
 
@@ -153,7 +154,7 @@ TEST_F(DdlTest, DisablePgJsonbType) {
                                           {.enable_jsonb_type = false});
 
   EXPECT_THAT(statements,
-              zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
                                         "Type <jsonb> is not supported."));
 }
 
@@ -170,7 +171,7 @@ TEST_F(DdlTest, DisableAnalyze) {
       base_helper_.Translator()->Translate(parsed_statements,
                                            {.enable_analyze = false});
 
-  EXPECT_THAT(statements, zetasql_base::testing::StatusIs(
+  EXPECT_THAT(statements, StatusIs(
                               absl::StatusCode::kFailedPrecondition,
                               "<ANALYZE> statement is not supported."));
 }
@@ -188,7 +189,7 @@ TEST_F(DdlTest, DisableCreateView) {
       base_helper_.Translator()->Translate(parsed_statements,
                                            {.enable_create_view = false});
 
-  EXPECT_THAT(statements, zetasql_base::testing::StatusIs(
+  EXPECT_THAT(statements, StatusIs(
                               absl::StatusCode::kFailedPrecondition,
                               "<CREATE VIEW> statement is not supported."));
 }
@@ -206,13 +207,9 @@ TEST_F(DdlTest, UnsupportedDropTypeDomain) {
       base_helper_.Translator()->Translate(parsed_statements,
                                            {.enable_create_view = false});
 
-  EXPECT_THAT(
-      statements,
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kFailedPrecondition,
-          "<DROP DOMAIN> is not supported. Only <DROP TABLE>, <DROP INDEX>, "
-          "<DROP SCHEMA>, <DROP VIEW>, <DROP SEQUENCE>, and "
-          "<DROP CHANGE STREAM> statements are supported."));
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       testing::HasSubstr("<DROP DOMAIN> is not supported.")));
 }
 
 // For unsupported by Spangres statements SchemaPrinter should error out
@@ -224,7 +221,7 @@ TEST_F(DdlTest, UnsupportedCreateViewStatement) {
   create_function->set_sql_security(
       google::spanner::emulator::backend::ddl::Function::UNSPECIFIED_SQL_SECURITY);
   EXPECT_THAT(base_helper_.SchemaPrinter()->PrintDDLStatement(input),
-              zetasql_base::testing::StatusIs(
+              StatusIs(
                   absl::StatusCode::kInternal,
                   testing::HasSubstr(
                       "Only SQL SECURITY INVOKER or DEFINER is supported.")));
@@ -389,7 +386,7 @@ TEST_F(DdlTest, DisableCreateChangeStream) {
                                            {.enable_change_streams = false});
 
   EXPECT_THAT(statements,
-              zetasql_base::testing::StatusIs(
+              StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   "<CREATE CHANGE STREAM> statement is not supported."));
 }
@@ -410,7 +407,7 @@ TEST_F(DdlTest, DisableChangeStreamModTypeFilter) {
           parsed_statements,
           {.enable_change_streams = true,
            .enable_change_streams_mod_type_filter_options = false});
-  EXPECT_THAT(statements, zetasql_base::testing::StatusIs(
+  EXPECT_THAT(statements, StatusIs(
                               absl::StatusCode::kFailedPrecondition,
                               "Options exclude_insert, exclude_update, and "
                               "exclude_delete are not supported yet."));
@@ -433,7 +430,7 @@ TEST_F(DdlTest, DisableChangeStreamTtlDeletesFilter) {
           {.enable_change_streams = true,
            .enable_change_streams_ttl_deletes_filter_option = false});
   EXPECT_THAT(statements,
-              zetasql_base::testing::StatusIs(
+              StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   "Option exclude_ttl_deletes is not supported yet."));
 }
@@ -455,7 +452,7 @@ TEST_F(DdlTest, DisableChangeStreamAllowTxnExclusion) {
           {.enable_change_streams = true,
            .enable_change_streams_allow_txn_exclusion_option = false});
   EXPECT_THAT(statements,
-              zetasql_base::testing::StatusIs(
+              StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   "Option allow_txn_exclusion is not supported yet."));
 }
@@ -493,7 +490,7 @@ TEST_F(DdlTest, DisableAlterChangeStream) {
                                            {.enable_change_streams = false});
 
   EXPECT_THAT(statements,
-              zetasql_base::testing::StatusIs(
+              StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   "<ALTER CHANGE STREAM> statement is not supported."));
 }
@@ -512,7 +509,7 @@ TEST_F(DdlTest, DisableDropChangeStream) {
                                            {.enable_change_streams = false});
 
   EXPECT_THAT(statements,
-              zetasql_base::testing::StatusIs(
+              StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   "<DROP CHANGE STREAM> statement is not supported."));
 }
@@ -589,7 +586,7 @@ TEST_F(DdlTest, DisableVectorLength) {
                                           {.enable_vector_length = false});
 
   EXPECT_THAT(statements,
-              zetasql_base::testing::StatusIs(
+              StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   "<VECTOR LENGTH> constraint type is not supported."));
 }

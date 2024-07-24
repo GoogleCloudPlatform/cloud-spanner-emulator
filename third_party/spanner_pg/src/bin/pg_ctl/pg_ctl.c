@@ -2,7 +2,7 @@
  *
  * pg_ctl --- start/stops/restarts the PostgreSQL server
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  *
  * src/bin/pg_ctl/pg_ctl.c
  *
@@ -559,11 +559,11 @@ start_postmaster(void)
 		else
 			close(fd);
 
-		cmd = psprintf("\"%s\" /C \"\"%s\" %s%s < \"%s\" >> \"%s\" 2>&1\"",
+		cmd = psprintf("\"%s\" /D /C \"\"%s\" %s%s < \"%s\" >> \"%s\" 2>&1\"",
 					   comspec, exec_path, pgdata_opt, post_opts, DEVNULL, log_file);
 	}
 	else
-		cmd = psprintf("\"%s\" /C \"\"%s\" %s%s < \"%s\" 2>&1\"",
+		cmd = psprintf("\"%s\" /D /C \"\"%s\" %s%s < \"%s\" 2>&1\"",
 					   comspec, exec_path, pgdata_opt, post_opts, DEVNULL);
 
 	if (!CreateRestrictedProcess(cmd, &pi, false))
@@ -886,14 +886,10 @@ find_other_exec_or_die(const char *argv0, const char *target, const char *versio
 			strlcpy(full_path, progname, sizeof(full_path));
 
 		if (ret == -1)
-			write_stderr(_("The program \"%s\" is needed by %s but was not found in the\n"
-						   "same directory as \"%s\".\n"
-						   "Check your installation.\n"),
+			write_stderr(_("program \"%s\" is needed by %s but was not found in the same directory as \"%s\"\n"),
 						 target, progname, full_path);
 		else
-			write_stderr(_("The program \"%s\" was found by \"%s\"\n"
-						   "but was not the same version as %s.\n"
-						   "Check your installation.\n"),
+			write_stderr(_("program \"%s\" was found by \"%s\" but was not the same version as %s\n"),
 						 target, full_path, progname);
 		exit(1);
 	}
@@ -1025,7 +1021,6 @@ static void
 do_stop(void)
 {
 	pgpid_t		pid;
-	struct stat statbuf;
 
 	pid = get_pgpid(false);
 
@@ -1058,20 +1053,6 @@ do_stop(void)
 	}
 	else
 	{
-		/*
-		 * If backup_label exists, an online backup is running. Warn the user
-		 * that smart shutdown will wait for it to finish. However, if the
-		 * server is in archive recovery, we're recovering from an online
-		 * backup instead of performing one.
-		 */
-		if (shutdown_mode == SMART_MODE &&
-			stat(backup_file, &statbuf) == 0 &&
-			get_control_dbstate() != DB_IN_ARCHIVE_RECOVERY)
-		{
-			print_msg(_("WARNING: online backup mode is active\n"
-						"Shutdown will not complete until pg_stop_backup() is called.\n\n"));
-		}
-
 		print_msg(_("waiting for server to shut down..."));
 
 		if (!wait_for_postmaster_stop())
@@ -1099,7 +1080,6 @@ static void
 do_restart(void)
 {
 	pgpid_t		pid;
-	struct stat statbuf;
 
 	pid = get_pgpid(false);
 
@@ -1132,20 +1112,6 @@ do_restart(void)
 			write_stderr(_("%s: could not send stop signal (PID: %ld): %s\n"), progname, pid,
 						 strerror(errno));
 			exit(1);
-		}
-
-		/*
-		 * If backup_label exists, an online backup is running. Warn the user
-		 * that smart shutdown will wait for it to finish. However, if the
-		 * server is in archive recovery, we're recovering from an online
-		 * backup instead of performing one.
-		 */
-		if (shutdown_mode == SMART_MODE &&
-			stat(backup_file, &statbuf) == 0 &&
-			get_control_dbstate() != DB_IN_ARCHIVE_RECOVERY)
-		{
-			print_msg(_("WARNING: online backup mode is active\n"
-						"Shutdown will not complete until pg_stop_backup() is called.\n\n"));
 		}
 
 		print_msg(_("waiting for server to shut down..."));
@@ -1774,6 +1740,31 @@ typedef BOOL (WINAPI * __AssignProcessToJobObject) (HANDLE, HANDLE);
 typedef BOOL (WINAPI * __QueryInformationJobObject) (HANDLE, JOBOBJECTINFOCLASS, LPVOID, DWORD, LPDWORD);
 
 /*
+ * Set up STARTUPINFO for the new process to inherit this process' handles.
+ *
+ * Process started as services appear to have "empty" handles (GetStdHandle()
+ * returns NULL) rather than invalid ones. But passing down NULL ourselves
+ * doesn't work, it's interpreted as STARTUPINFO->hStd* not being set. But we
+ * can pass down INVALID_HANDLE_VALUE - which makes GetStdHandle() in the new
+ * process (and its child processes!) return INVALID_HANDLE_VALUE. Which
+ * achieves the goal of postmaster running in a similar environment as pg_ctl.
+ */
+static void
+InheritStdHandles(STARTUPINFO *si)
+{
+	si->dwFlags |= STARTF_USESTDHANDLES;
+	si->hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+	if (si->hStdInput == NULL)
+		si->hStdInput = INVALID_HANDLE_VALUE;
+	si->hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (si->hStdOutput == NULL)
+		si->hStdOutput = INVALID_HANDLE_VALUE;
+	si->hStdError = GetStdHandle(STD_ERROR_HANDLE);
+	if (si->hStdError == NULL)
+		si->hStdError = INVALID_HANDLE_VALUE;
+}
+
+/*
  * Create a restricted token, a job object sandbox, and execute the specified
  * process with it.
  *
@@ -1809,6 +1800,14 @@ CreateRestrictedProcess(char *cmd, PROCESS_INFORMATION *processInfo, bool as_ser
 
 	ZeroMemory(&si, sizeof(si));
 	si.cb = sizeof(si);
+
+	/*
+	 * Set stdin/stdout/stderr handles to be inherited in the child process.
+	 * That allows postmaster and the processes it starts to perform
+	 * additional checks to see if running in a service (otherwise they get
+	 * the default console handles - which point to "somewhere").
+	 */
+	InheritStdHandles(&si);
 
 	Advapi32Handle = LoadLibrary("ADVAPI32.DLL");
 	if (Advapi32Handle != NULL)
