@@ -204,6 +204,11 @@ std::vector<const zetasql::Type*> GetParamTypes(
   return types;
 }
 
+class MockRowWriter : public RowWriter {
+ public:
+  MOCK_METHOD(absl::Status, Write, (const Mutation& m), (override));
+};
+
 class QueryEngineTestBase : public testing::Test {
  public:
   const Schema* schema() { return schema_.get(); }
@@ -419,6 +424,60 @@ class QueryEngineTest
       timestamp_date_schema_ =
           test::CreateSchemaWithTimestampDateTable(&type_factory_);
     }
+  }
+
+  void ExecuteAndValidateReturningActionSingleRow(
+      std::string sql, MutationOpType op_type, std::vector<std::string> columns,
+      std::vector<zetasql::Value> mutation_values,
+      std::vector<std::string> returning_columns,
+      std::vector<testing::Matcher<const zetasql::Type*>>
+          returning_column_types,
+      std::vector<zetasql::Value> returning_rows) {
+    MockRowWriter writer;
+    if (op_type == MutationOpType::kDelete) {
+      EXPECT_CALL(
+          writer,
+          Write(Property(&Mutation::ops,
+                         UnorderedElementsAre(AllOf(
+                             Field(&MutationOp::type, op_type),
+                             Field(&MutationOp::table, "test_table"),
+                             Field(&MutationOp::key_set,
+                                   Property(&KeySet::keys,
+                                            UnorderedElementsAre(Key{
+                                                {mutation_values[0]}}))))))))
+          .Times(1)
+          .WillOnce(Return(absl::OkStatus()));
+    } else {
+      EXPECT_CALL(
+          writer,
+          Write(Property(&Mutation::ops,
+                         UnorderedElementsAre(AllOf(
+                             Field(&MutationOp::type, op_type),
+                             Field(&MutationOp::table, "test_table"),
+                             Field(&MutationOp::columns, columns),
+                             Field(&MutationOp::rows,
+                                   UnorderedElementsAre(mutation_values)))))))
+          .Times(1)
+          .WillOnce(Return(absl::OkStatus()));
+    }
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult result,
+        query_engine().ExecuteSql(Query{sql},
+                                  QueryContext{schema(), reader(), &writer}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_EQ(result.modified_row_count, 1);
+    ASSERT_EQ(returning_columns.size(), returning_column_types.size());
+    ASSERT_EQ(returning_columns.size(), 3);
+    EXPECT_THAT(GetColumnNames(*result.rows),
+                ElementsAre(returning_columns[0], returning_columns[1],
+                            returning_columns[2]));
+    EXPECT_THAT(
+        GetColumnTypes(*result.rows),
+        ElementsAre(returning_column_types[0], returning_column_types[1],
+                    returning_column_types[2]));
+    ASSERT_EQ(returning_rows.size(), 3);
+    EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+                IsOkAndHolds(UnorderedElementsAre(returning_rows)));
   }
 };
 
@@ -1019,11 +1078,6 @@ TEST_P(QueryEngineTest, DISABLED_PartitionableParentChildTable) {
       query, QueryContext{multi_table_schema(), reader()}));
 }
 
-class MockRowWriter : public RowWriter {
- public:
-  MOCK_METHOD(absl::Status, Write, (const Mutation& m), (override));
-};
-
 TEST_P(QueryEngineTest, InsertOrIgnoreDmlFlagDisabled) {
   test::ScopedEmulatorFeatureFlagsSetter setter(
       {.enable_upsert_queries = false});
@@ -1050,7 +1104,9 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlFlagDisabled) {
   }
 }
 
-TEST_P(QueryEngineTest, InsertOrIgnoreDmlWithReturning) {
+TEST_P(QueryEngineTest, InsertOrIgnoreDmlWithReturningFlagDisabled) {
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_upsert_queries_with_returning = false});
   MockRowWriter writer;
   if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
     EXPECT_THAT(
@@ -1102,7 +1158,9 @@ TEST_P(QueryEngineTest, InsertOrUpdateDmlFlagDisabled) {
   }
 }
 
-TEST_P(QueryEngineTest, InsertOrUpdateDmlWithReturning) {
+TEST_P(QueryEngineTest, InsertOrUpdateDmlWithReturningFlagDisabled) {
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_upsert_queries_with_returning = false});
   MockRowWriter writer;
   if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
     EXPECT_THAT(
@@ -2320,6 +2378,56 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlInsertsNewRows) {
   EXPECT_EQ(result.modified_row_count, 2);
 }
 
+TEST_P(QueryEngineTest, InsertOrIgnoreDmlInsertsWithReturning) {
+  std::string sql;
+  // The insert statement inserts 2 new rows and ignores the existing row with
+  // primary key (int64_col:1)
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql =
+        "INSERT INTO test_table (int64_col, string_col) "
+        "VALUES(10, 'ten'), (1, 'one'), (10, 'ten'), (3, 'three') "
+        "ON CONFLICT(int64_col) DO NOTHING "
+        "RETURNING *, int64_col + 10 AS col";
+  } else {
+    sql =
+        "INSERT OR IGNORE INTO test_table (int64_col, string_col) "
+        "VALUES(10, 'ten'), (1, 'one'), (10, 'ten'), (3, 'three') "
+        "THEN RETURN *, int64_col + 10 AS col";
+  }
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(
+              AllOf(Field(&MutationOp::type, MutationOpType::kInsert),
+                    Field(&MutationOp::table, "test_table"),
+                    Field(&MutationOp::columns,
+                          std::vector<std::string>{"int64_col", "string_col"}),
+                    Field(&MutationOp::rows,
+                          UnorderedElementsAre(
+                              ValueList{Int64(10), String("ten")},
+                              ValueList{Int64(3), String("three")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("int64_col", "string_col", "col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), StringType(), Int64Type()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(
+                  ValueList{Int64(10), String("ten"), Int64(20)},
+                  ValueList{Int64(3), String("three"), Int64(13)})));
+}
+
 TEST_P(QueryEngineTest, InsertOrUpdateDmlInsertsNewRows) {
   std::string sql;
   // The insert statement inserts 2 new rows and updates the existing row with
@@ -2362,6 +2470,59 @@ TEST_P(QueryEngineTest, InsertOrUpdateDmlInsertsNewRows) {
   EXPECT_EQ(result.modified_row_count, 3);
 }
 
+TEST_P(QueryEngineTest, InsertOrUpdateDmlInsertsWithReturning) {
+  std::string sql;
+  // The insert statement inserts 2 new rows and updates the existing row with
+  // primary key (int64_col:1).
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql =
+        "INSERT INTO test_table (int64_col, string_col) "
+        "VALUES(10, 'ten'), (1, 'one updated'), (3, 'three updated') "
+        "ON CONFLICT(int64_col) DO UPDATE SET "
+        "int64_col = excluded.int64_col, string_col = excluded.string_col "
+        "RETURNING *, int64_col + 10 AS col";
+  } else {
+    sql =
+        "INSERT OR UPDATE INTO test_table (int64_col, string_col) "
+        "VALUES(10, 'ten'), (1, 'one updated'), (3, 'three updated') "
+        "THEN RETURN *, int64_col + 10 AS col";
+  }
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsertOrUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "string_col"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(
+                        ValueList{Int64(10), String("ten")},
+                        ValueList{Int64(1), String("one updated")},
+                        ValueList{Int64(3), String("three updated")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 3);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("int64_col", "string_col", "col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), StringType(), Int64Type()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(
+                  ValueList{Int64(10), String("ten"), Int64(20)},
+                  ValueList{Int64(1), String("one updated"), Int64(11)},
+                  ValueList{Int64(3), String("three updated"), Int64(13)})));
+}
+
 TEST_P(QueryEngineTest, InsertOrUpdateDuplicateInputRowsReturnError) {
   std::string sql;
   // Spanner does not allow duplicate insert rows with same key.
@@ -2384,6 +2545,103 @@ TEST_P(QueryEngineTest, InsertOrUpdateDuplicateInputRowsReturnError) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Cannot affect a row second time for key: "
                                  "{Int64(10)}")));
+}
+
+TEST_P(QueryEngineTest, InsertDMLWithReturningAction) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ExecuteAndValidateReturningActionSingleRow(
+      absl::StrCat(
+          "INSERT INTO test_table (int64_col, string_col) ",
+          "VALUES(10, 'ten') ",
+          "THEN RETURN WITH ACTION as int64_col int64_col, string_col"),
+      MutationOpType::kInsert,
+      /*columns=*/{"int64_col", "string_col"},
+      /*mutation_values=*/{ValueList{Int64(10), String("ten")}},
+      /*returning_columns=*/{"int64_col", "string_col", "int64_col"},
+      /*returning_column_types=*/{Int64Type(), StringType(), StringType()},
+      /*returning_rows=*/
+      {ValueList{Int64(10), String("ten"), String("INSERT")}});
+}
+
+TEST_P(QueryEngineTest, UpdateDMLWithReturningAction) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ExecuteAndValidateReturningActionSingleRow(
+      absl::StrCat(
+          "UPDATE test_table SET string_col = 'one updated' ",
+          "WHERE int64_col = 1 ",
+          "THEN RETURN WITH ACTION as int64_col int64_col, string_col"),
+      MutationOpType::kUpdate,
+      /*columns=*/{"int64_col", "string_col"},
+      /*mutation_values=*/{ValueList{Int64(1), String("one updated")}},
+      /*returning_columns=*/{"int64_col", "string_col", "int64_col"},
+      /*returning_column_types=*/{Int64Type(), StringType(), StringType()},
+      /*returning_rows=*/
+      {ValueList{Int64(1), String("one updated"), String("UPDATE")}});
+}
+
+TEST_P(QueryEngineTest, DeleteDMLWithReturningAction) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ExecuteAndValidateReturningActionSingleRow(
+      absl::StrCat(
+          "DELETE FROM test_table WHERE int64_col = 1 ",
+          "THEN RETURN WITH ACTION as int64_col int64_col, string_col"),
+      MutationOpType::kDelete,
+      /*columns=*/{"int64_col"}, /*mutation_values=*/{ValueList{Int64(1)}},
+      /*returning_columns=*/{"int64_col", "string_col", "int64_col"},
+      /*returning_column_types=*/{Int64Type(), StringType(), StringType()},
+      /*returning_rows=*/
+      {ValueList{Int64(1), String("one"), String("DELETE")}});
+}
+
+TEST_P(QueryEngineTest, UpsertDMLWithReturningAction) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  std::string sql = absl::StrCat(
+      "INSERT OR UPDATE INTO test_table (int64_col, string_col) ",
+      "VALUES(1, 'one updated'), (10, 'ten') ",
+      "THEN RETURN WITH ACTION as int64_col int64_col, string_col");
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(
+              AllOf(Field(&MutationOp::type, MutationOpType::kInsertOrUpdate),
+                    Field(&MutationOp::table, "test_table"),
+                    Field(&MutationOp::columns,
+                          std::vector<std::string>{"int64_col", "string_col"}),
+                    Field(&MutationOp::rows,
+                          UnorderedElementsAre(
+                              ValueList{Int64(1), String("one updated")},
+                              ValueList{Int64(10), String("ten")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{schema(), reader(), &writer}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("int64_col", "string_col", "int64_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), StringType(), StringType()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(
+                  ValueList{Int64(1), String("one updated"), String("UPDATE")},
+                  ValueList{Int64(10), String("ten"), String("INSERT")})));
 }
 
 TEST_P(QueryEngineTest, UpsertPGqueryWithGeneratedKeyUnsupported) {
@@ -2961,6 +3219,45 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOrIgnoreGPK) {
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
 }
 
+TEST_F(GeneratedPrimaryKeyTest, InsertOrIgnoreGPKWithReturning) {
+  // The insert statement inserts 2 new row. Ignores the existing row with
+  // primary key (k1_pk: 2, k3gen_storedpk:2) and the 2nd insert row
+  // with the duplicate key of (k1_pk:3, kggen_storedpk:3).
+  std::string sql =
+      "INSERT OR IGNORE INTO test_table (k1_pk, k2, k4) "
+      "VALUES (2, 2, 8), (3, 3, 12), (5, 5, 20), (3, 3, 12) "
+      "THEN RETURN k2, k3gen_storedpk, k5";
+  MockRowWriter writer;
+  EXPECT_CALL(writer,
+              Write(Property(
+                  &Mutation::ops,
+                  UnorderedElementsAre(AllOf(
+                      Field(&MutationOp::type, MutationOpType::kInsert),
+                      Field(&MutationOp::table, "test_table"),
+                      Field(&MutationOp::columns,
+                            std::vector<std::string>{"k1_pk", "k2", "k4"}),
+                      Field(&MutationOp::rows,
+                            UnorderedElementsAre(
+                                ValueList{Int64(3), Int64(3), Int64(12)},
+                                ValueList{Int64(5), Int64(5), Int64(20)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{schema(), reader(), &writer}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("k2", "k3gen_storedpk", "k5"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), Int64Type(), Int64Type()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(
+                  ValueList{Int64(3), Int64(3), Int64(13)},
+                  ValueList{Int64(5), Int64(5), Int64(21)})));
+}
+
 TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateGPK) {
   // The insert statement inserts 1 new row and updates the existing row with
   // primary key (k1_pk:2, k3gen_storedpk:2).
@@ -2985,6 +3282,44 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateGPK) {
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{sql}, QueryContext{schema(), reader(), &writer}),
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateGPKWithReturning) {
+  // The insert statement inserts 2 new row. Updates the existing row with
+  // primary key (k1_pk: 2, k3gen_storedpk:2).
+  std::string sql =
+      "INSERT OR UPDATE INTO test_table (k1_pk, k2, k4) "
+      "VALUES (2, 2, 8), (3, 3, 12) "
+      "THEN RETURN k2, k3gen_storedpk, k4, k5";
+  MockRowWriter writer;
+  EXPECT_CALL(writer,
+              Write(Property(
+                  &Mutation::ops,
+                  UnorderedElementsAre(AllOf(
+                      Field(&MutationOp::type, MutationOpType::kInsertOrUpdate),
+                      Field(&MutationOp::table, "test_table"),
+                      Field(&MutationOp::columns,
+                            std::vector<std::string>{"k1_pk", "k2", "k4"}),
+                      Field(&MutationOp::rows,
+                            UnorderedElementsAre(
+                                ValueList{Int64(2), Int64(2), Int64(8)},
+                                ValueList{Int64(3), Int64(3), Int64(12)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{schema(), reader(), &writer}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("k2", "k3gen_storedpk", "k4", "k5"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), Int64Type(), Int64Type(), Int64Type()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(
+                  ValueList{Int64(2), Int64(2), Int64(8), Int64(9)},
+                  ValueList{Int64(3), Int64(3), Int64(12), Int64(13)})));
 }
 
 TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
