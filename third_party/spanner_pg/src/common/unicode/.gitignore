@@ -3,5 +3,6 @@
 
 # Files downloaded from the Unicode Character Database
 /CompositionExclusions.txt
+/EastAsianWidth.txt
 /NormalizationTest.txt
 /UnicodeData.txt

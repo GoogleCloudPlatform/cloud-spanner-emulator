@@ -74,6 +74,21 @@ absl::StatusOr<std::string> Float8ToChar(double value,
   return CheckedPgTextDatumGetCString(formatted_number_datum);
 }
 
+absl::StatusOr<std::string> Float4ToChar(float value,
+                                         absl::string_view number_format) {
+  Datum value_in_datum = Float4GetDatum(value);
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum number_format_in_datum,
+      CheckedPgStringToDatum(std::string(number_format).c_str(), TEXTOID));
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum formatted_number_datum,
+      postgres_translator::CheckedOidFunctionCall2(
+          F_TO_CHAR_FLOAT4_TEXT, value_in_datum, number_format_in_datum));
+
+  return CheckedPgTextDatumGetCString(formatted_number_datum);
+}
+
 absl::StatusOr<std::string> NumericToChar(
     absl::string_view numeric_decimal_string, absl::string_view number_format) {
   std::string numeric_string = std::string(numeric_decimal_string);

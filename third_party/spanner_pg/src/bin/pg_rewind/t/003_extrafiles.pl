@@ -1,12 +1,12 @@
 
-# Copyright (c) 2021, PostgreSQL Global Development Group
+# Copyright (c) 2021-2022, PostgreSQL Global Development Group
 
 # Test how pg_rewind reacts to extra files and directories in the data dirs.
 
 use strict;
 use warnings;
-use TestLib;
-use Test::More tests => 5;
+use PostgreSQL::Test::Utils;
+use Test::More;
 
 use File::Find;
 
@@ -78,6 +78,19 @@ sub run_test
 		},
 		$test_primary_datadir);
 	@paths = sort @paths;
+
+	# File::Find converts backslashes to slashes in the newer Perl
+	# versions. To support all Perl versions, do the same conversion
+	# for Windows before comparing the paths.
+	if ($windows_os)
+	{
+		for my $filename (@paths)
+		{
+			$filename =~ s{\\}{/}g;
+		}
+		$test_primary_datadir =~ s{\\}{/}g;
+	}
+
 	is_deeply(
 		\@paths,
 		[
@@ -103,4 +116,4 @@ sub run_test
 run_test('local');
 run_test('remote');
 
-exit(0);
+done_testing();

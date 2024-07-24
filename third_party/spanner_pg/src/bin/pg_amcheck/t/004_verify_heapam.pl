@@ -1,11 +1,11 @@
 
-# Copyright (c) 2021, PostgreSQL Global Development Group
+# Copyright (c) 2021-2022, PostgreSQL Global Development Group
 
 use strict;
 use warnings;
 
-use PostgresNode;
-use TestLib;
+use PostgreSQL::Test::Cluster;
+use PostgreSQL::Test::Utils;
 
 use Test::More;
 
@@ -177,7 +177,7 @@ umask(0077);
 # Set up the node.  Once we create and corrupt the table,
 # autovacuum workers visiting the table could crash the backend.
 # Disable autovacuum so that won't happen.
-my $node = get_new_node('test');
+my $node = PostgreSQL::Test::Cluster->new('test');
 $node->init;
 $node->append_conf('postgresql.conf', 'autovacuum=off');
 
@@ -296,7 +296,6 @@ close($file)
 $node->start;
 
 # Ok, Xids and page layout look ok.  We can run corruption tests.
-plan tests => 20;
 
 # Check that pg_amcheck runs against the uncorrupted table without error.
 $node->command_ok(
@@ -539,3 +538,5 @@ $node->command_checks_all(
 
 $node->teardown_node;
 $node->clean_node;
+
+done_testing();

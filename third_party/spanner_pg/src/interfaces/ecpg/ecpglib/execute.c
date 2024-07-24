@@ -1389,7 +1389,6 @@ ecpg_build_params(struct statement *stmt)
 				if (sqlda->sqln == desc_counter)
 					desc_counter = 0;
 			}
-
 		}
 		else
 		{

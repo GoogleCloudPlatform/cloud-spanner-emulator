@@ -208,10 +208,10 @@ const Node* PostgresConstCastToNode(const void* pointer);
 Expr* PostgresCastToExpr(void* pointer);
 const Expr* PostgresConstCastToExpr(const void* pointer);
 
-// Casts a Postgres object held by `pointer` to Value type, using C++ style
+// Casts a Postgres object held by `pointer` to String type, using C++ style
 // casting. `pointer` should point to a valid PostgreSQL object that is a
-// derived class of Value.
-Value* PostgresCastToValue(void* pointer);
+// derived class of String.
+String* PostgresCastToString(void* pointer);
 
 // PostgreSQL safe cast function. Mimics the behavior of castNode(), but with
 // C++ constructs.

@@ -394,7 +394,7 @@ void get_utility_query_def(Query *query, deparse_context *context) {
   abort();
 }
 
-Const* make_const(ParseState* pstate, Value* value, int location) {
+Const* make_const(ParseState* pstate, A_Const* aconst) {
   abort();
 }
 

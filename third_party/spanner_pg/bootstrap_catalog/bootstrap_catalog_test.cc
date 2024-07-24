@@ -491,6 +491,22 @@ TEST(BootstrapCatalog, SpannerBitReverseProc) {
   EXPECT_STREQ(NameStr(procs[0]->proname), "bit_reverse");
 }
 
+TEST(BootstrapCatalog, SpannerFarmFingerprintProc) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      Oid namespace_oid,
+      PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      absl::Span<const FormData_pg_proc* const> procs,
+      PgBootstrapCatalog::Default()->GetProcsByName("farm_fingerprint"));
+
+  ASSERT_EQ(procs.size(), 2);
+  for (auto* proc : procs) {
+    EXPECT_EQ(proc->pronamespace, namespace_oid);
+    EXPECT_STREQ(NameStr(proc->proname), "farm_fingerprint");
+  }
+}
+
 TEST(BootstrapCatalog, SpannerGetInternalSequenceStateProc) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       Oid namespace_oid,

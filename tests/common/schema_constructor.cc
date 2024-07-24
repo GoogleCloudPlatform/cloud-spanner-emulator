@@ -102,6 +102,38 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
   return std::move(maybe_schema.value());
 }
 
+std::unique_ptr<const backend::Schema> CreateSchemaWithTimestampDateTable(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect) {
+  std::string timestamp_date_table =
+      R"(
+          CREATE TABLE timestamp_date_table (
+            int64_col INT64 NOT NULL,
+            timestamp_col TIMESTAMP,
+            date_col DATE
+          ) PRIMARY KEY (int64_col)
+      )";
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    timestamp_date_table =
+        R"(
+            CREATE TABLE timestamp_date_table (
+              int64_col bigint NOT NULL PRIMARY KEY,
+              timestamp_col timestamptz,
+              date_col date
+            )
+        )";
+  }
+  auto maybe_schema = CreateSchemaFromDDL(
+      {
+          timestamp_date_table,
+      },
+      type_factory, "" /*proto_descriptor_bytes*/
+      ,
+      dialect);
+  ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
+  return std::move(maybe_schema.value());
+}
+
 std::unique_ptr<const backend::Schema>
 CreateSchemaWithOneTableAndOneChangeStream(
     zetasql::TypeFactory* type_factory,

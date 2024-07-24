@@ -44,6 +44,8 @@ absl::StatusOr<zetasql::Value> PgJsonbToInt64Conversion(
     const absl::Span<const zetasql::Value> args);
 absl::StatusOr<zetasql::Value> PgJsonbToDoubleConversion(
     const absl::Span<const zetasql::Value> args);
+absl::StatusOr<zetasql::Value> PgJsonbToFloatConversion(
+    const absl::Span<const zetasql::Value> args);
 absl::StatusOr<zetasql::Value> PgJsonbToPgNumericConversion(
     const absl::Span<const zetasql::Value> args);
 absl::StatusOr<zetasql::Value> PgJsonbToStringConversion(
@@ -53,6 +55,7 @@ const zetasql::Function* GetStringToPgJsonbConversion();
 const zetasql::Function* GetPgJsonbToBoolConversion();
 const zetasql::Function* GetPgJsonbToInt64Conversion();
 const zetasql::Function* GetPgJsonbToDoubleConversion();
+const zetasql::Function* GetPgJsonbToFloatConversion();
 const zetasql::Function* GetPgJsonbToPgNumericConversion();
 const zetasql::Function* GetPgJsonbToStringConversion();
 }  // namespace datatypes

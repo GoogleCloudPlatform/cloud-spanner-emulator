@@ -50,7 +50,9 @@ cc_library(
     name = "error",
     srcs = [
         "assert.c",
+        "csvlog.c",
         "elog.c",
+        "jsonlog.c",
     ],
     copts = [
         "-D_GNU_SOURCE",

@@ -190,7 +190,7 @@ expandNSItemVars(ParseState *pstate, ParseNamespaceItem *nsitem,
 	colindex = 0;
 	foreach(lc, nsitem->p_rte->eref->colnames)
 	{
-		Value	   *colnameval = (Value *) lfirst(lc);
+		void	   *colnameval = (void *) lfirst(lc);
 		const char *colname = strVal(colnameval);
 		ParseNamespaceColumn *nscol = nsitem->p_nscolumns + colindex;
 

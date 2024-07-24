@@ -319,6 +319,47 @@ TEST_F(TypeTest, PgDateMapping) {
               IsOkAndHolds(zetasql::Value::NullDate()));
 }
 
+TEST_F(TypeTest, PgIntervalMapping) {
+  const PostgresTypeMapping* pg_interval_mapping = types::PgIntervalMapping();
+  EXPECT_TRUE(pg_interval_mapping->mapped_type()->IsInterval());
+  EXPECT_EQ(pg_interval_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+            "pg.interval");
+  EXPECT_EQ(pg_interval_mapping->PostgresTypeOid(), INTERVALOID);
+  EXPECT_TRUE(
+      pg_interval_mapping->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_interval_mapping->Equals(types::PgIntervalMapping()));
+
+  Interval interval;
+
+  interval.month = 10;
+  interval.day = -50;
+  interval.time = 5057089;
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
+                       CheckedPgMakeConst(
+                           /*consttype=*/INTERVALOID,
+                           /*consttypmod=*/-1,
+                           /*constcollid=*/InvalidOid,
+                           /*constlen=*/sizeof(Interval),
+                           /*constvalue=*/IntervalPGetDatum(&interval),
+                           /*constisnull=*/false,
+                           /*constbyval=*/false));
+  EXPECT_THAT(
+      pg_interval_mapping->MakeGsqlValue(pg_const),
+      IsOkAndHolds(zetasql::Value::Interval(
+          *zetasql::IntervalValue::FromMonthsDaysMicros(10, -50, 5057089))));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const, CheckedPgMakeConst(
+                                     /*consttype=*/INTERVALOID,
+                                     /*consttypmod=*/-1,
+                                     /*constcollid=*/InvalidOid,
+                                     /*constlen=*/sizeof(Interval),
+                                     /*constvalue=*/IntervalPGetDatum(nullptr),
+                                     /*constisnull=*/true,
+                                     /*constbyval=*/false));
+  EXPECT_THAT(pg_interval_mapping->MakeGsqlValue(pg_const),
+              IsOkAndHolds(zetasql::Value::NullInterval()));
+}
+
 // Supported Array Types.
 TEST_F(TypeTest, PgBoolArrayMapping) {
   const PostgresTypeMapping* pg_bool_array_mapping =

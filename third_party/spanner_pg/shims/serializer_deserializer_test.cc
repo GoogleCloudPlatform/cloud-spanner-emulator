@@ -138,7 +138,7 @@ MATCHER(CanSerializeAndDeserialize, "") {
 // where you need a placeholder Node value and you don't care what it is.
 Node* PlaceHolderNode() {
   A_Const* a_const = makeNode(A_Const);
-  a_const->val = *makeString(pstrdup("PlaceHolder Test Node"));
+  a_const->val.sval = *makeString(pstrdup("PlaceHolder Test Node"));
   a_const->location = 1;
 
   // If C supported inheritance, Node would be a base class for A_Const,
@@ -177,8 +177,7 @@ TEST_F(SerializationDeserializationTest, AConstNull) {
   // 'makeAConst()' and friends are declared static so we can't call them here.
   // Do something equivalent ourselves.
   A_Const* a_const = makeNode(A_Const);
-  a_const->val.type = T_Null;
-  a_const->val.val.str = nullptr;
+  a_const->isnull = true;
   a_const->location = 4;
   EXPECT_THAT(a_const, CanSerializeAndDeserialize());
 }
@@ -187,7 +186,7 @@ TEST_F(SerializationDeserializationTest, AConstInteger) {
   // 'makeAConst()' and friends are declared static so we can't call them here.
   // Do something equivalent ourselves.
   A_Const* a_const = makeNode(A_Const);
-  a_const->val = *makeInteger(1);
+  a_const->val.ival = *makeInteger(1);
   a_const->location = 3;
   EXPECT_THAT(a_const, CanSerializeAndDeserialize());
 }
@@ -196,7 +195,7 @@ TEST_F(SerializationDeserializationTest, AConstNegativeInteger) {
   // 'makeAConst()' and friends are declared static so we can't call them here.
   // Do something equivalent ourselves.
   A_Const* a_const = makeNode(A_Const);
-  a_const->val = *makeInteger(-1);
+  a_const->val.ival = *makeInteger(-1);
   a_const->location = 5;
   EXPECT_THAT(a_const, CanSerializeAndDeserialize());
 }
@@ -205,7 +204,7 @@ TEST_F(SerializationDeserializationTest, AConstFloat) {
   // 'makeAConst()' and friends are declared static so we can't call them here.
   // Do something equivalent ourselves.
   A_Const* a_const = makeNode(A_Const);
-  a_const->val = *makeFloat(pstrdup("123.456"));
+  a_const->val.fval = *makeFloat(pstrdup("123.456"));
   a_const->location = 6;
   EXPECT_THAT(a_const, CanSerializeAndDeserialize());
 }
@@ -214,7 +213,7 @@ TEST_F(SerializationDeserializationTest, AConstBitString) {
   // 'makeAConst()' and friends are declared static so we can't call them here.
   // Do something equivalent ourselves.
   A_Const* a_const = makeNode(A_Const);
-  a_const->val = *makeBitString(pstrdup("b1010"));
+  a_const->val.bsval = *makeBitString(pstrdup("b1010"));
   a_const->location = 7;
   EXPECT_THAT(a_const, CanSerializeAndDeserialize());
 }
@@ -223,7 +222,7 @@ TEST_F(SerializationDeserializationTest, AConstString) {
   // 'makeAConst()' and friends are declared static so we can't call them here.
   // Do something equivalent ourselves.
   A_Const* a_const = makeNode(A_Const);
-  a_const->val = *makeString(pstrdup("Hello World"));
+  a_const->val.sval = *makeString(pstrdup("Hello World"));
   a_const->location = 8;
   EXPECT_THAT(a_const, CanSerializeAndDeserialize());
 }
@@ -232,7 +231,7 @@ TEST_F(SerializationDeserializationTest, AConstEmptyString) {
   // 'makeAConst()' and friends are declared static so we can't call them here.
   // Do something equivalent ourselves.
   A_Const* a_const = makeNode(A_Const);
-  a_const->val = *makeString(pstrdup(""));
+  a_const->val.sval = *makeString(pstrdup(""));
   a_const->location = 8;
   EXPECT_THAT(a_const, CanSerializeAndDeserialize());
 }
@@ -241,7 +240,7 @@ TEST_F(SerializationDeserializationTest, AConstStringWithSpecialChars) {
   // 'makeAConst()' and friends are declared static so we can't call them here.
   // Do something equivalent ourselves.
   A_Const* a_const = makeNode(A_Const);
-  a_const->val = *makeString(pstrdup("\n\\n🙂"));
+  a_const->val.sval = *makeString(pstrdup("\n\\n🙂"));
   a_const->location = 8;
   EXPECT_THAT(a_const, CanSerializeAndDeserialize());
 }
@@ -590,6 +589,7 @@ TEST_F(SerializationDeserializationTest, IndexStmt) {
   index_stmt->indexOid = 124;
   index_stmt->oldNode = 125;
   index_stmt->unique = true;
+  index_stmt->nulls_not_distinct = true;
   index_stmt->primary = true;
   index_stmt->isconstraint = true;
   index_stmt->deferrable = true;

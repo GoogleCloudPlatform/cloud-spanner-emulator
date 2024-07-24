@@ -63,7 +63,10 @@ cc_library(
 cc_library(
     name = "bootstrap_catalog_info",
     srcs = ["bootstrap_catalog_info.c"],
-    hdrs = ["bootstrap_catalog_info.h"],
+    hdrs = [
+        "bootstrap_catalog_info.h",
+        "bootstrap_catalog_textproto.h",
+    ],
     copts = ["-Ithird_party/spanner_pg/shims"],
     deps = [
         ":bootstrap_catalog_srcs",
@@ -128,6 +131,7 @@ genrule(
     outs = [
         "bootstrap_catalog_info.h",
         "bootstrap_catalog_info.c",
+        "bootstrap_catalog_textproto.h",
     ],
     # Includes Spanner-specific bootstrap catalog data.
     # The order of the files in the following list is important.
@@ -191,6 +195,8 @@ genrule(
             third_party/spanner_pg/src/include/catalog/pg_policy.h \
             third_party/spanner_pg/src/include/catalog/pg_replication_origin.h \
             third_party/spanner_pg/src/include/catalog/pg_default_acl.h \
+            third_party/spanner_pg/src/include/catalog/pg_parameter_acl.h \
+            third_party/spanner_pg/src/include/catalog/pg_publication_namespace.h \
             third_party/spanner_pg/src/include/catalog/pg_init_privs.h \
             third_party/spanner_pg/src/include/catalog/pg_seclabel.h \
             third_party/spanner_pg/src/include/catalog/pg_shseclabel.h \
@@ -206,6 +212,7 @@ genrule(
 
         mv /tmp/bootstrap_catalog_info.h $(location bootstrap_catalog_info.h)
         mv /tmp/bootstrap_catalog_info.c $(location bootstrap_catalog_info.c)
+        mv /tmp/bootstrap_catalog_textproto.h $(location bootstrap_catalog_textproto.h)
     """,
     tools = ["gen_catalog_info.pl"],
 )

@@ -327,20 +327,6 @@ ForwardTransformer::BuildGsqlCastExpression(
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedExpr> resolved_input,
                    BuildGsqlResolvedExpr(input, expr_transformer_info));
 
-  // Casts between FLOAT4 and NUMERIC/JSONB must go through TEXT.
-  // Casts from FLOAT4 -> JSONB are not supported in native PG so they are
-  // not handled here.
-  // TODO: b/324455289 - remove when casts between FLOAT4 and NUMERIC/JSONB are
-  // supported in Spanner.
-  if ((source_type_oid == JSONBOID && result_type == FLOAT4OID) ||
-      (source_type_oid == FLOAT4OID && result_type == NUMERICOID) ||
-      (source_type_oid == NUMERICOID && result_type == FLOAT4OID)) {
-    ZETASQL_ASSIGN_OR_RETURN(resolved_input,
-                     BuildGsqlCastExpression(TEXTOID, input, typmod,
-                                             expr_transformer_info));
-    source_type_oid = TEXTOID;
-  }
-
   const zetasql::Type* target_type = resolved_type;
   const zetasql::Type* source_type = resolved_input->type();
 
@@ -398,14 +384,8 @@ ForwardTransformer::BuildGsqlCastExpression(
         target_type, function_and_signature.function(),
         function_and_signature.signature(), std::move(argument_list),
         zetasql::ResolvedFunctionCallBase::DEFAULT_ERROR_MODE);
-    if (!(source_type_oid == NUMERICOID && result_type == FLOAT4OID)) {
-      return resolved_input;
-    }
-    // For a cast from PG.NUMERIC to FLOAT32, the casting function call has
-    // performed the cast from PG.NUMERIC to FLOAT64. Now we need to cast from
-    // FLOAT64 to FLOAT32.
-    source_type = zetasql::types::DoubleType();
-    target_type = zetasql::types::FloatType();
+
+    return resolved_input;
   }
 
   // If not pg.numeric, rely on ResolvedCast.

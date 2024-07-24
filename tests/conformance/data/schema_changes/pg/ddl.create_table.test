@@ -269,13 +269,14 @@ CREATE TABLE "" (id bigint PRIMARY KEY);
 ERROR: zero-length delimited identifier at or near """"
 ==
 
-CREATE TABLE identity_not_supported(
-  id bigint PRIMARY KEY,
-  ident bigint GENERATED ALWAYS AS IDENTITY
-);
---
-ERROR: Constraint type is not supported.
-==
+# TODO: When identity in ddl is supported, re-enable this test.
+# CREATE TABLE identity_not_supported(
+#   id bigint PRIMARY KEY,
+#   ident bigint GENERATED ALWAYS AS IDENTITY
+# );
+# --
+# ERROR: Constraint type is not supported.
+# ==
 
 CREATE TABLE typed_table_not_supported OF some_type(col WITH OPTIONS DEFAULT 123)
 --

@@ -279,7 +279,7 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   if (query.onConflict != nullptr) {
     switch (query.onConflict->action) {
       case ONCONFLICT_NOTHING:
-          insert_mode = zetasql::ResolvedInsertStmt::OR_IGNORE;
+        insert_mode = zetasql::ResolvedInsertStmt::OR_IGNORE;
         break;
       case ONCONFLICT_UPDATE:
         insert_mode = zetasql::ResolvedInsertStmt::OR_UPDATE;

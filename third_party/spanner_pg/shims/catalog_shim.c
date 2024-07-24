@@ -312,8 +312,8 @@ Node* HintColumnRefToString(ColumnRef* column_ref) {
     }
     Assert(IsA(value, String));
     A_Const* a_const = makeNode(A_Const);
-    a_const->val.type = T_String;
-    a_const->val.val.str = strVal(value);
+    a_const->val.node.type = T_String;
+    a_const->val.sval.sval = strVal(value);
     a_const->location = column_ref->location;
     return (Node*)a_const;
   }

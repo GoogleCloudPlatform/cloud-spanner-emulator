@@ -3,7 +3,7 @@
  * pl_exec.c		- Executor for the PL/pgSQL
  *			  procedural language
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -341,6 +341,7 @@ static void exec_prepare_plan(PLpgSQL_execstate *estate,
 static void exec_simple_check_plan(PLpgSQL_execstate *estate, PLpgSQL_expr *expr);
 static void exec_save_simple_expr(PLpgSQL_expr *expr, CachedPlan *cplan);
 static void exec_check_rw_parameter(PLpgSQL_expr *expr);
+static void exec_check_assignable(PLpgSQL_execstate *estate, int dno);
 static bool exec_eval_simple_expr(PLpgSQL_execstate *estate,
 								  PLpgSQL_expr *expr,
 								  Datum *result,
@@ -639,11 +640,16 @@ plpgsql_exec_function(PLpgSQL_function *func, FunctionCallInfo fcinfo,
 		ReturnSetInfo *rsi = estate.rsi;
 
 		/* Check caller can handle a set result */
-		if (!rsi || !IsA(rsi, ReturnSetInfo) ||
-			(rsi->allowedModes & SFRM_Materialize) == 0)
+		if (!rsi || !IsA(rsi, ReturnSetInfo))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("set-valued function called in context that cannot accept a set")));
+
+		if (!(rsi->allowedModes & SFRM_Materialize))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("materialize mode required, but it is not allowed in this context")));
+
 		rsi->returnMode = SFRM_Materialize;
 
 		/* If we produced any tuples, send back the result */
@@ -1224,6 +1230,20 @@ static void
 plpgsql_exec_error_callback(void *arg)
 {
 	PLpgSQL_execstate *estate = (PLpgSQL_execstate *) arg;
+	int			err_lineno;
+
+	/*
+	 * If err_var is set, report the variable's declaration line number.
+	 * Otherwise, if err_stmt is set, report the err_stmt's line number.  When
+	 * err_stmt is not set, we're in function entry/exit, or some such place
+	 * not attached to a specific line number.
+	 */
+	if (estate->err_var != NULL)
+		err_lineno = estate->err_var->lineno;
+	else if (estate->err_stmt != NULL)
+		err_lineno = estate->err_stmt->lineno;
+	else
+		err_lineno = 0;
 
 	if (estate->err_text != NULL)
 	{
@@ -1232,13 +1252,8 @@ plpgsql_exec_error_callback(void *arg)
 		 * actually need it.  Therefore, places that set up err_text should
 		 * use gettext_noop() to ensure the strings get recorded in the
 		 * message dictionary.
-		 *
-		 * If both err_text and err_stmt are set, use the err_text as
-		 * description, but report the err_stmt's line number.  When err_stmt
-		 * is not set, we're in function entry/exit, or some such place not
-		 * attached to a specific line number.
 		 */
-		if (estate->err_stmt != NULL)
+		if (err_lineno > 0)
 		{
 			/*
 			 * translator: last %s is a phrase such as "during statement block
@@ -1246,7 +1261,7 @@ plpgsql_exec_error_callback(void *arg)
 			 */
 			errcontext("PL/pgSQL function %s line %d %s",
 					   estate->func->fn_signature,
-					   estate->err_stmt->lineno,
+					   err_lineno,
 					   _(estate->err_text));
 		}
 		else
@@ -1260,12 +1275,12 @@ plpgsql_exec_error_callback(void *arg)
 					   _(estate->err_text));
 		}
 	}
-	else if (estate->err_stmt != NULL)
+	else if (estate->err_stmt != NULL && err_lineno > 0)
 	{
 		/* translator: last %s is a plpgsql statement type name */
 		errcontext("PL/pgSQL function %s line %d at %s",
 				   estate->func->fn_signature,
-				   estate->err_stmt->lineno,
+				   err_lineno,
 				   plpgsql_stmt_typename(estate->err_stmt));
 	}
 	else
@@ -1653,7 +1668,12 @@ exec_stmt_block(PLpgSQL_execstate *estate, PLpgSQL_stmt_block *block)
 		 * Note that we currently don't support promise datums within blocks,
 		 * only at a function's outermost scope, so we needn't handle those
 		 * here.
+		 *
+		 * Since RECFIELD isn't a supported case either, it's okay to cast the
+		 * PLpgSQL_datum to PLpgSQL_variable.
 		 */
+		estate->err_var = (PLpgSQL_variable *) datum;
+
 		switch (datum->dtype)
 		{
 			case PLPGSQL_DTYPE_VAR:
@@ -1726,6 +1746,8 @@ exec_stmt_block(PLpgSQL_execstate *estate, PLpgSQL_stmt_block *block)
 				elog(ERROR, "unrecognized dtype: %d", datum->dtype);
 		}
 	}
+
+	estate->err_var = NULL;
 
 	if (block->exceptions)
 	{
@@ -2331,9 +2353,13 @@ make_callstmt_target(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 			if (IsA(n, Param))
 			{
 				Param	   *param = (Param *) n;
+				int			dno;
 
 				/* paramid is offset by 1 (see make_datum_param()) */
-				row->varnos[nfields++] = param->paramid - 1;
+				dno = param->paramid - 1;
+				/* must check assignability now, because grammar can't */
+				exec_check_assignable(estate, dno);
+				row->varnos[nfields++] = dno;
 			}
 			else
 			{
@@ -2915,10 +2941,14 @@ exec_stmt_forc(PLpgSQL_execstate *estate, PLpgSQL_stmt_forc *stmt)
 			 SPI_result_code_string(SPI_result));
 
 	/*
-	 * If cursor variable was NULL, store the generated portal name in it
+	 * If cursor variable was NULL, store the generated portal name in it,
+	 * after verifying it's okay to assign to.
 	 */
 	if (curname == NULL)
+	{
+		exec_check_assignable(estate, stmt->curvar);
 		assign_text_var(estate, curvar, portal->name);
+	}
 
 	/*
 	 * Clean up before entering exec_for_query
@@ -3639,12 +3669,16 @@ exec_init_tuple_store(PLpgSQL_execstate *estate)
 	/*
 	 * Check caller can handle a set result in the way we want
 	 */
-	if (!rsi || !IsA(rsi, ReturnSetInfo) ||
-		(rsi->allowedModes & SFRM_Materialize) == 0 ||
-		rsi->expectedDesc == NULL)
+	if (!rsi || !IsA(rsi, ReturnSetInfo))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("set-valued function called in context that cannot accept a set")));
+
+	if (!(rsi->allowedModes & SFRM_Materialize) ||
+		rsi->expectedDesc == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("materialize mode required, but it is not allowed in this context")));
 
 	/*
 	 * Switch to the right memory context and resource owner for storing the
@@ -4056,6 +4090,7 @@ plpgsql_estate_setup(PLpgSQL_execstate *estate,
 	estate->eval_econtext = NULL;
 
 	estate->err_stmt = NULL;
+	estate->err_var = NULL;
 	estate->err_text = NULL;
 
 	estate->plugin_info = NULL;
@@ -4066,15 +4101,18 @@ plpgsql_estate_setup(PLpgSQL_execstate *estate,
 	plpgsql_create_econtext(estate);
 
 	/*
-	 * Let the plugin see this function before we initialize any local
-	 * PL/pgSQL variables - note that we also give the plugin a few function
-	 * pointers so it can call back into PL/pgSQL for doing things like
-	 * variable assignments and stack traces
+	 * Let the plugin, if any, see this function before we initialize local
+	 * PL/pgSQL variables.  Note that we also give the plugin a few function
+	 * pointers, so it can call back into PL/pgSQL for doing things like
+	 * variable assignments and stack traces.
 	 */
 	if (*plpgsql_plugin_ptr)
 	{
 		(*plpgsql_plugin_ptr)->error_callback = plpgsql_exec_error_callback;
 		(*plpgsql_plugin_ptr)->assign_expr = exec_assign_expr;
+		(*plpgsql_plugin_ptr)->assign_value = exec_assign_value;
+		(*plpgsql_plugin_ptr)->eval_datum = exec_eval_datum;
+		(*plpgsql_plugin_ptr)->cast_value = exec_cast_value;
 
 		if ((*plpgsql_plugin_ptr)->func_setup)
 			((*plpgsql_plugin_ptr)->func_setup) (estate, func);
@@ -4183,7 +4221,7 @@ exec_stmt_execsql(PLpgSQL_execstate *estate,
 
 	/*
 	 * On the first call for this statement generate the plan, and detect
-	 * whether the statement is INSERT/UPDATE/DELETE
+	 * whether the statement is INSERT/UPDATE/DELETE/MERGE
 	 */
 	if (expr->plan == NULL)
 		exec_prepare_plan(estate, expr, CURSOR_OPT_PARALLEL_OK);
@@ -4205,7 +4243,8 @@ exec_stmt_execsql(PLpgSQL_execstate *estate,
 			 */
 			if (plansource->commandTag == CMDTAG_INSERT ||
 				plansource->commandTag == CMDTAG_UPDATE ||
-				plansource->commandTag == CMDTAG_DELETE)
+				plansource->commandTag == CMDTAG_DELETE ||
+				plansource->commandTag == CMDTAG_MERGE)
 			{
 				stmt->mod_stmt = true;
 				break;
@@ -4265,6 +4304,7 @@ exec_stmt_execsql(PLpgSQL_execstate *estate,
 		case SPI_OK_INSERT_RETURNING:
 		case SPI_OK_UPDATE_RETURNING:
 		case SPI_OK_DELETE_RETURNING:
+		case SPI_OK_MERGE:
 			Assert(stmt->mod_stmt);
 			exec_set_found(estate, (SPI_processed != 0));
 			break;
@@ -4446,6 +4486,7 @@ exec_stmt_dynexecute(PLpgSQL_execstate *estate,
 		case SPI_OK_INSERT_RETURNING:
 		case SPI_OK_UPDATE_RETURNING:
 		case SPI_OK_DELETE_RETURNING:
+		case SPI_OK_MERGE:
 		case SPI_OK_UTILITY:
 		case SPI_OK_REWRITTEN:
 			break;
@@ -4671,13 +4712,18 @@ exec_stmt_open(PLpgSQL_execstate *estate, PLpgSQL_stmt_open *stmt)
 										   stmt->cursor_options);
 
 		/*
-		 * If cursor variable was NULL, store the generated portal name in it.
+		 * If cursor variable was NULL, store the generated portal name in it,
+		 * after verifying it's okay to assign to.
+		 *
 		 * Note: exec_dynquery_with_params already reset the stmt_mcontext, so
 		 * curname is a dangling pointer here; but testing it for nullness is
 		 * OK.
 		 */
 		if (curname == NULL)
+		{
+			exec_check_assignable(estate, stmt->curvar);
 			assign_text_var(estate, curvar, portal->name);
+		}
 
 		return PLPGSQL_RC_OK;
 	}
@@ -4746,10 +4792,14 @@ exec_stmt_open(PLpgSQL_execstate *estate, PLpgSQL_stmt_open *stmt)
 			 SPI_result_code_string(SPI_result));
 
 	/*
-	 * If cursor variable was NULL, store the generated portal name in it
+	 * If cursor variable was NULL, store the generated portal name in it,
+	 * after verifying it's okay to assign to.
 	 */
 	if (curname == NULL)
+	{
+		exec_check_assignable(estate, stmt->curvar);
 		assign_text_var(estate, curvar, portal->name);
+	}
 
 	/* If we had any transient data, clean it up */
 	exec_eval_cleanup(estate);
@@ -8063,7 +8113,7 @@ exec_save_simple_expr(PLpgSQL_expr *expr, CachedPlan *cplan)
 	{
 		/* Extract the single tlist expression */
 		Assert(list_length(plan->targetlist) == 1);
-		tle_expr = castNode(TargetEntry, linitial(plan->targetlist))->expr;
+		tle_expr = linitial_node(TargetEntry, plan->targetlist)->expr;
 
 		if (IsA(plan, Result))
 		{
@@ -8243,6 +8293,43 @@ exec_check_rw_parameter(PLpgSQL_expr *expr)
 				return;
 			}
 		}
+	}
+}
+
+/*
+ * exec_check_assignable --- is it OK to assign to the indicated datum?
+ *
+ * This should match pl_gram.y's check_assignable().
+ */
+static void
+exec_check_assignable(PLpgSQL_execstate *estate, int dno)
+{
+	PLpgSQL_datum *datum;
+
+	Assert(dno >= 0 && dno < estate->ndatums);
+	datum = estate->datums[dno];
+	switch (datum->dtype)
+	{
+		case PLPGSQL_DTYPE_VAR:
+		case PLPGSQL_DTYPE_PROMISE:
+		case PLPGSQL_DTYPE_REC:
+			if (((PLpgSQL_variable *) datum)->isconst)
+				ereport(ERROR,
+						(errcode(ERRCODE_ERROR_IN_ASSIGNMENT),
+						 errmsg("variable \"%s\" is declared CONSTANT",
+								((PLpgSQL_variable *) datum)->refname)));
+			break;
+		case PLPGSQL_DTYPE_ROW:
+			/* always assignable; member vars were checked at compile time */
+			break;
+		case PLPGSQL_DTYPE_RECFIELD:
+			/* assignable if parent record is */
+			exec_check_assignable(estate,
+								  ((PLpgSQL_recfield *) datum)->recparentno);
+			break;
+		default:
+			elog(ERROR, "unrecognized dtype: %d", datum->dtype);
+			break;
 	}
 }
 

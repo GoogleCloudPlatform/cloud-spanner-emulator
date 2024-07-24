@@ -61,6 +61,10 @@ struct Query {
 // Returns true if the given query is a DML statement.
 bool IsDMLQuery(const std::string& query);
 
+// Returns the returning clause of a DML statement.
+const zetasql::ResolvedReturningClause* GetReturningClause(
+    const zetasql::ResolvedStatement* resolved_statement);
+
 // QueryResult specifies the output of a query request.
 struct QueryResult {
   // A row cursor containing the query result rows. It's null for DML requests

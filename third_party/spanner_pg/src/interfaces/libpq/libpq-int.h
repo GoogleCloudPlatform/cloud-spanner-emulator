@@ -9,7 +9,7 @@
  *	  more likely to break across PostgreSQL releases than code that uses
  *	  only the official API.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/interfaces/libpq/libpq-int.h
@@ -41,6 +41,7 @@
 #include "getaddrinfo.h"
 #include "libpq/pqcomm.h"
 /* include stuff found in fe only */
+#include "fe-auth-sasl.h"
 #include "pqexpbuffer.h"
 
 #ifdef ENABLE_GSS
@@ -497,11 +498,21 @@ struct pg_conn
 	PGdataValue *rowBuf;		/* array for passing values to rowProcessor */
 	int			rowBufLen;		/* number of entries allocated in rowBuf */
 
-	/* Status for asynchronous result construction */
+	/*
+	 * Status for asynchronous result construction.  If result isn't NULL, it
+	 * is a result being constructed or ready to return.  If result is NULL
+	 * and error_result is true, then we need to return a PGRES_FATAL_ERROR
+	 * result, but haven't yet constructed it; text for the error has been
+	 * appended to conn->errorMessage.  (Delaying construction simplifies
+	 * dealing with out-of-memory cases.)  If next_result isn't NULL, it is a
+	 * PGresult that will replace "result" after we return that one.
+	 */
 	PGresult   *result;			/* result being constructed */
+	bool		error_result;	/* do we need to make an ERROR result? */
 	PGresult   *next_result;	/* next result (used in single-row mode) */
 
 	/* Assorted state for SASL, SSL, GSS, etc */
+	const pg_fe_sasl_mech *sasl;
 	void	   *sasl_state;
 
 	/* SSL structures */
@@ -542,8 +553,8 @@ struct pg_conn
 	int			gss_SendLength; /* End of data available in gss_SendBuffer */
 	int			gss_SendNext;	/* Next index to send a byte from
 								 * gss_SendBuffer */
-	int			gss_SendConsumed;	/* Number of *unencrypted* bytes consumed
-									 * for current contents of gss_SendBuffer */
+	int			gss_SendConsumed;	/* Number of source bytes encrypted but
+									 * not yet reported as sent */
 	char	   *gss_RecvBuffer; /* Received, encrypted data */
 	int			gss_RecvLength; /* End of data available in gss_RecvBuffer */
 	char	   *gss_ResultBuffer;	/* Decryption of data in gss_RecvBuffer */
@@ -567,8 +578,14 @@ struct pg_conn
 	 * Buffer for current error message.  This is cleared at the start of any
 	 * connection attempt or query cycle; after that, all code should append
 	 * messages to it, never overwrite.
+	 *
+	 * In some situations we might report an error more than once in a query
+	 * cycle.  If so, errorMessage accumulates text from all the errors, and
+	 * errorReported tracks how much we've already reported, so that the
+	 * individual error PGresult objects don't contain duplicative text.
 	 */
 	PQExpBufferData errorMessage;	/* expansible string */
+	int			errorReported;	/* # bytes of string already reported */
 
 	/* Buffer for receiving various parts of messages */
 	PQExpBufferData workBuffer; /* expansible string */
@@ -583,6 +600,13 @@ struct pg_cancel
 	SockAddr	raddr;			/* Remote address */
 	int			be_pid;			/* PID of backend --- needed for cancels */
 	int			be_key;			/* key of backend --- needed for cancels */
+	int			pgtcp_user_timeout; /* tcp user timeout */
+	int			keepalives;		/* use TCP keepalives? */
+	int			keepalives_idle;	/* time between TCP keepalives */
+	int			keepalives_interval;	/* time between TCP keepalive
+										 * retransmits */
+	int			keepalives_count;	/* maximum number of TCP keepalive
+									 * retransmits */
 };
 
 
@@ -628,13 +652,6 @@ extern bool pqGetHomeDirectory(char *buf, int bufsize);
 #ifdef ENABLE_THREAD_SAFETY
 extern pgthreadlock_t pg_g_threadlock;
 
-#define PGTHREAD_ERROR(msg) \
-	do { \
-		fprintf(stderr, "%s\n", msg); \
-		abort(); \
-	} while (0)
-
-
 #define pglock_thread()		pg_g_threadlock(true)
 #define pgunlock_thread()	pg_g_threadlock(false)
 #else
@@ -644,7 +661,7 @@ extern pgthreadlock_t pg_g_threadlock;
 
 /* === in fe-exec.c === */
 
-extern void pqSetResultError(PGresult *res, PQExpBuffer errorMessage);
+extern void pqSetResultError(PGresult *res, PQExpBuffer errorMessage, int offset);
 extern void *pqResultAlloc(PGresult *res, size_t nBytes, bool isBinary);
 extern char *pqResultStrdup(PGresult *res, const char *str);
 extern void pqClearAsyncResult(PGconn *conn);
@@ -656,7 +673,8 @@ extern void pqSaveMessageField(PGresult *res, char code,
 extern void pqSaveParameterStatus(PGconn *conn, const char *name,
 								  const char *value);
 extern int	pqRowProcessor(PGconn *conn, const char **errmsgp);
-extern void pqCommandQueueAdvance(PGconn *conn);
+extern void pqCommandQueueAdvance(PGconn *conn, bool isReadyForQuery,
+								  bool gotSync);
 extern int	PQsendQueryContinue(PGconn *conn, const char *query);
 
 /* === in fe-protocol3.c === */
@@ -831,6 +849,21 @@ extern void pqTraceOutputNoTypeByteMessage(PGconn *conn, const char *message);
 /* === miscellaneous macros === */
 
 /*
+ * Reset the conn's error-reporting state.
+ */
+#define pqClearConnErrorState(conn) \
+	(resetPQExpBuffer(&(conn)->errorMessage), \
+	 (conn)->errorReported = 0)
+
+/*
+ * Check whether we have a PGresult pending to be returned --- either a
+ * constructed one in conn->result, or a "virtual" error result that we
+ * don't intend to materialize until the end of the query cycle.
+ */
+#define pgHavePendingResult(conn) \
+	((conn)->result != NULL || (conn)->error_result)
+
+/*
  * this is so that we can check if a connection is non-blocking internally
  * without the overhead of a function call
  */
@@ -848,6 +881,11 @@ extern char *libpq_ngettext(const char *msgid, const char *msgid_plural, unsigne
 #define libpq_gettext(x) (x)
 #define libpq_ngettext(s, p, n) ((n) == 1 ? (s) : (p))
 #endif
+/*
+ * libpq code should use the above, not _(), since that would use the
+ * surrounding programs's message catalog.
+ */
+#undef _
 
 /*
  * These macros are needed to let error-handling code be portable between

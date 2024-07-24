@@ -32,6 +32,8 @@ our @include_path;
 my $include_path;
 my $engine_catalog_path = '';
 
+my $num_errors = 0;
+
 # More args means more RAM reserved for the generated tables.
 # Set this to the max number of args needed by any current PostgreSQL function.
 # (We could compute this but then the script would need to be 2-pass.)
@@ -392,6 +394,9 @@ open my $cc, '>', $ccfile . $tmpext
 my $headerfile = $output_path . 'bootstrap_catalog_info.h';
 open my $header, '>', $headerfile . $tmpext
   or die "can't open $headerfile$tmpext: $!";
+my $textprotofile = $output_path . 'bootstrap_catalog_textproto.h';
+open my $textproto, '>', $textprotofile . $tmpext
+  or die "can't open $textprotofile$tmpext: $!";
 
 # var for unused code
 my $bki;
@@ -416,6 +421,12 @@ print $header "\n";
 print $header "#include \"third_party/spanner_pg/postgres_includes/all.h\"\n";
 print $header "\n";
 
+print $textproto "#ifndef GENERATED__GEN_CATALOG_INFO_PL__BOOTSTRAP_CATALOG_TEXTPROTO_H_\n";
+print $textproto "#define GENERATED__GEN_CATALOG_INFO_PL__BOOTSTRAP_CATALOG_TEXTPROTO_H_\n";
+print $textproto "\n";
+print $textproto "#include <string>\n";
+print $textproto "#include <vector>\n";
+print $textproto "\n";
 
 print $cc "#include \"bootstrap_catalog_info.h\"\n";
 print $cc "\n";
@@ -430,6 +441,7 @@ print $cc "\n";
 print $cc "static const int ENCODING = -1; // TODO: Discover encoding\n";
 print $cc "static const int SIZEOF_POINTER = sizeof(void*);\n";
 print $cc "static const int ALIGNOF_POINTER = alignof(void*);\n";
+print $cc "static const int LOCALE_PROVIDER = 'c';\n";
 print $cc "\n";
 
 # produce output, one catalog at a time
@@ -463,6 +475,9 @@ foreach my $catname (@catnames)
 	{
 		print $cc "const FormData_${catname} ${catname}_data[] = {\n";
 	}
+	print $textproto "const std::vector<std::string> ";
+	print $textproto "${catname}_textproto_data = {\n";
+
 	# 'bki' is PostgreSQL's name for some of the stuff we're building.
 	# Doesn't make a lot of sense here, but the naming scheme is
 	# shared with our common dependency `Catalog.pm`.
@@ -559,9 +574,11 @@ foreach my $catname (@catnames)
 			}
 		}
 		output_oid_record($cc, \%bki_values, $catalog, $catname);
+		output_textproto($textproto, \%bki_values, $catalog, $catname);
 	}
 
 	print $cc "};\n";
+	print $textproto "};\n";
 
 	# Compute the array size in the compiled file and expose it as a symbol.
 	#
@@ -577,6 +594,7 @@ foreach my $catname (@catnames)
 	# Abseil has a similar class span absl::Span.)
 	print $cc "const size_t ${catname}_data_size = sizeof(${catname}_data)/sizeof(${catname}_data[0]);\n";
 	print $cc "\n";
+	print $textproto "\n";
 }
 
 print $header "#ifdef __cplusplus\n";
@@ -588,6 +606,8 @@ print $header "#endif  // __cplusplus\n";
 print $header "\n";
 print $header "#endif  // GENERATED__GEN_CATALOG_INFO_PL__BOOTSTRAP_CATALOG_INFO_H_\n";
 
+print $textproto "#endif  // GENERATED__GEN_CATALOG_INFO_PL__BOOTSTRAP_CATALOG_TEXTPROTO_H_\n";
+
 # We're done emitting data
 close $cc;
 close $header;
@@ -595,8 +615,9 @@ close $header;
 # Finally, rename the completed files into place.
 Catalog::RenameTempFile($ccfile,    $tmpext);
 Catalog::RenameTempFile($headerfile, $tmpext);
+Catalog::RenameTempFile($textprotofile, $tmpext);
 
-exit 0;
+exit($num_errors != 0 ? 1 : 0);
 
 #################### Subroutines ########################
 
@@ -796,6 +817,145 @@ sub output_oid_record
 		print $cc "},";
  	}
  	print $cc "\n";
+}
+
+sub output_textproto
+{
+	my($cc, $values, $catalog, $catname) = @_;
+	print $cc "  \"";
+
+	for my $i (0..$#{ $catalog->{columns} })
+ 	{
+		my $column = $catalog->{columns}[$i];
+
+ 		my $attname = $column->{name};
+		my $val = $values->{$attname};
+		my $coltype = $column->{type};
+		output_field_for_textproto($cc, $attname, $val, $coltype, $catname);
+	}
+
+	print $cc "\",\n";
+}
+
+# Output a single field for a textproto.
+# The field looks like "fieldname: Value, ".
+sub output_field_for_textproto
+{
+	my ($cc, $attname, $val, $coltype, $catname) = @_;
+	if ($val eq "_null_")
+	{
+		# Textproto will parse absent values as null.
+		return;
+	}
+	if (index($coltype, "_") != -1)
+	{
+		if ($val =~ /^{[\w, ]*}$/)
+		{
+			# Strip leading and trailing brackets
+			$val = substr($val, 1, -1);
+		}
+		my @vals;
+		if ($val =~ /^[\w,]*$/) {
+			@vals = split(/,/, $val);
+		} else {
+			@vals = split(/, /, $val);
+		}
+
+		foreach my $element (@vals)
+		{
+			output_field_for_textproto(
+				$cc, $attname, $element, substr($coltype, 1), $catname);
+		}
+		return;
+	}
+	elsif ($coltype eq "oidvector")
+	{
+		if ($val =~ /^"[0-9 ]*"$/)
+		{
+			# Strip leading and trailing quotes
+			$val = substr($val, 1, -1);
+		}
+		my @vals = split(/ /, $val);
+
+		foreach my $oid (@vals)
+		{
+			output_field_for_textproto($cc, $attname, $oid, "oid", $catname);
+		}
+		return;
+	}
+
+	print $cc "$attname: ";
+
+	if ($coltype eq "regproc" && $val !~ /^[0-9]*$/)
+	{
+		# Regproc fields are cross references.
+		# If $regprocoids (above) hasn't already resolved this reference to an
+		# oid, omit it so we can still compile.
+		# This probably means that the order of scanned #include files is
+		# wrong.
+		print $cc "InvalidOid /*$val*/";
+	}
+	elsif ($coltype =~ /^int.*/ && $val =~ /^"[0-9 ]*"$/)
+	{
+		# We seem to have some quoted numbers.  Not clear why.
+		$val = substr($val, 1, -1);
+		print $cc $val
+	}
+	# Format based on data type
+	elsif ($coltype eq "name")
+	{
+		# Make sure value is wrapped as \"STRING\"
+		# In the existing source, sometimes we have "STRING"
+		# and sometimes we just have STRING
+		if ($val !~ /^\{".*"\}$/)
+		{
+			$val = "\\\"$val\\\"";
+		}
+		print $cc $val;
+	}
+	elsif ($coltype eq "text")
+	{
+		print $cc "\\\"$val\\\"";
+	}
+	elsif ($coltype eq "char" && (length($val) == 0 || length($val) == 1 || substr($val, 0, 1) eq "\\"))
+	{
+		if (length($val) == 0)
+		{
+			# Represent the empty character as null.
+			print $cc "\\\"\\\"";
+		}
+		else
+		{
+			# Quote single-character chars
+			print $cc "\\\"$val\\\"";
+		}
+	}
+	elsif ($coltype eq "bool")
+	{
+		# Convert SQL bool syntax to textproto bool syntax.
+		# Pass enum/#define'd constants through.
+		if ($val eq "t")
+		{
+			print $cc "true";
+		}
+		elsif ($val eq "f")
+		{
+			print $cc "false";
+		}
+		else
+		{
+			print $cc $val;
+		}
+	}
+	else
+	{
+		# If we don't know what it is,
+		# it's probably something that is represented equivalently
+		# in SQL and in C.  Just pass it through.
+		print $cc $val;
+	}
+
+	print $cc ", ";
 }
 
 # Output one record of a regular FormData struct
@@ -1165,7 +1325,7 @@ sub morph_row_for_schemapg
 sub lookup_oids
 {
 	my ($lookup, $catname, $attname, $lookup_opt, $bki_values, @lookupnames)
-		= @_;
+	  = @_;
 
 	my @lookupoids;
 	foreach my $lookupname (@lookupnames)
@@ -1180,16 +1340,20 @@ sub lookup_oids
 			push @lookupoids, $lookupname;
 			if ($lookupname eq '-' or $lookupname eq '0')
 			{
-				Carp::confess sprintf
-				  "invalid zero OID reference in %s.dat field %s line %s\n",
-				  $catname, $attname, $bki_values->{line_number}
-				  if !$lookup_opt;
+				if (!$lookup_opt)
+				{
+					Carp::confess sprintf
+					  "invalid zero OID reference in %s.dat field %s line %s\n",
+					  $catname, $attname, $bki_values->{line_number};
+					$num_errors++;
+				}
 			}
 			else
 			{
 				Carp::confess sprintf
 				  "unresolved OID reference \"%s\" in %s.dat field %s line %s\n",
 				  $lookupname, $catname, $attname, $bki_values->{line_number};
+				$num_errors++;
 			}
 		}
 	}

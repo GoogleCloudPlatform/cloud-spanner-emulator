@@ -52,8 +52,6 @@ licenses(["notice"])
 cc_library(
     name = "replication",
     srcs = [
-        "backup_manifest.c",
-        "basebackup.c",
         "repl_gram.c",
         "slot.c",
         "slotfuncs.c",
@@ -77,6 +75,7 @@ cc_library(
         "syncrep_gram.h",
     ],
     deps = [
+        "//third_party/spanner_pg/src/backend/backup",
         "//third_party/spanner_pg/src/include",
     ],
     alwayslink = 1,

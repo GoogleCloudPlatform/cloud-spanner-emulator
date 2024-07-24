@@ -1,6 +1,6 @@
 # src/test/modules/unsafe_tests/Makefile
 
-REGRESS = rolenames alter_system_table
+REGRESS = rolenames alter_system_table guc_privs
 
 # the whole point of these tests is to not run installcheck
 NO_INSTALLCHECK = 1

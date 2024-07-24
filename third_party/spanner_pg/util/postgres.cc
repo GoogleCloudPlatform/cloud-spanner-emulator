@@ -532,18 +532,7 @@ bool IsExpr(const Node& input) {
   }
 }
 
-bool IsValue(const Node& input) {
-  switch (nodeTag(&input)) {
-    case T_Integer:
-    case T_Float:
-    case T_String:
-    case T_BitString:
-    case T_Null:
-      return true;
-    default:
-      return false;
-  }
-}
+bool IsString(const Node& input) { return nodeTag(&input) == T_String; }
 
 Node* PostgresCastToNode(void* pointer) {
   ABSL_CHECK_NE(pointer, nullptr);
@@ -575,12 +564,12 @@ const Expr* PostgresConstCastToExpr(const void* pointer) {
   return reinterpret_cast<const Expr*>(pointer);
 }
 
-Value* PostgresCastToValue(void* pointer) {
+String* PostgresCastToString(void* pointer) {
   ABSL_CHECK_NE(pointer, nullptr);
 
   // Check that pointer is an actual Value before casting it.
-  ABSL_CHECK(IsValue(*PostgresCastToNode(pointer)));
-  return reinterpret_cast<Value*>(pointer);
+  ABSL_CHECK(IsString(*PostgresCastToNode(pointer)));
+  return reinterpret_cast<String*>(pointer);
 }
 
 std::string RTEKindToString(RTEKind rtekind) {

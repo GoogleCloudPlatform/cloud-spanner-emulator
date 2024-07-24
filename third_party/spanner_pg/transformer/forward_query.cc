@@ -147,7 +147,7 @@ absl::Status CheckTypeSupportsOrdering(
 }  // namespace
 
 absl::StatusOr<zetasql::ResolvedColumn> ForwardTransformer::GetResolvedColumn(
-    const VarIndexScope& var_index_scope, Index varno, AttrNumber varattno,
+    const VarIndexScope& var_index_scope, int varno, AttrNumber varattno,
     int var_levels_up, CorrelatedColumnsSetList* correlated_columns_sets) {
   VarIndex var_index{.varno = varno, .varattno = varattno};
   zetasql::ResolvedColumn result;
@@ -196,7 +196,7 @@ absl::StatusOr<const zetasql::Table*> ForwardTransformer::GetTableFromRTE(
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedTableScan>>
 ForwardTransformer::BuildGsqlResolvedTableScan(const RangeTblEntry& rte,
-                                               Index rtindex,
+                                               int rtindex,
                                                VarIndexScope* output_scope) {
   ZETASQL_ASSIGN_OR_RETURN(const zetasql::Table* table, GetTableFromRTE(rte));
 
@@ -242,7 +242,7 @@ ForwardTransformer::BuildGsqlResolvedTableScan(const RangeTblEntry& rte,
 }
 
 absl::Status ForwardTransformer::MapVarIndexToColumn(
-    const zetasql::ResolvedScan& scan, Index rtindex,
+    const zetasql::ResolvedScan& scan, int rtindex,
     VarIndexScope* var_index_scope) {
   ZETASQL_RET_CHECK(var_index_scope != nullptr);
   for (int i = 0; i < scan.column_list_size(); ++i) {
@@ -255,7 +255,7 @@ absl::Status ForwardTransformer::MapVarIndexToColumn(
 }
 
 absl::Status ForwardTransformer::MapVarIndexToColumnForJoin(
-    const RangeTblEntry& rte, Index rtindex, VarIndexScope* var_index_scope) {
+    const RangeTblEntry& rte, int rtindex, VarIndexScope* var_index_scope) {
   ZETASQL_RET_CHECK_EQ(rte.rtekind, RTE_JOIN);
   int var_index = 1;
 
@@ -440,7 +440,7 @@ ForwardTransformer::BuildGsqlResolvedScanForFunctionCall(
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedProjectScan>>
 ForwardTransformer::ConvertZeroBasedOffsetToOneBasedOrdinal(
     std::unique_ptr<zetasql::ResolvedArrayScan> array_scan,
-    const Index& rtindex, VarIndexScope* output_scope) {
+    const int rtindex, VarIndexScope* output_scope) {
   ZETASQL_RET_CHECK(array_scan->array_offset_column() != nullptr);
 
   ZETASQL_ASSIGN_OR_RETURN(
@@ -570,7 +570,7 @@ absl::Status ForwardTransformer::PrepareTVFInputArguments(
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedWithRefScan>>
 ForwardTransformer::BuildGsqlResolvedWithRefScan(absl::string_view with_alias,
-                                                 Index rtindex,
+                                                 int rtindex,
                                                  VarIndexScope* output_scope) {
   // The ZetaSQL ResolvedWithRefScan is used whenever a WITH clause subquery
   // is referenced in the primary query or in another WITH clause subquery.
@@ -1193,7 +1193,7 @@ ForwardTransformer::BuildGsqlResolvedScanForQueryExpression(
 // an array (including repeated proto values).
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedArrayScan>>
 ForwardTransformer::BuildGsqlResolvedArrayScan(
-    const RangeTblEntry& rte, Index rtindex,
+    const RangeTblEntry& rte, int rtindex,
     const VarIndexScope* external_scope, VarIndexScope* output_scope) {
   // Caller has already verified that this is an UNNEST function call. We only
   // need to verify it's a supported kind of UNNEST.
@@ -1312,7 +1312,7 @@ ForwardTransformer::BuildGsqlResolvedArrayScan(
 //   - TVF Arguments are scalar only (never relation or model)
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedTVFScan>>
 ForwardTransformer::BuildGsqlResolvedTVFScan(
-    const RangeTblEntry& rte, Index rtindex,
+    const RangeTblEntry& rte, int rtindex,
     const VarIndexScope* external_scope,
     const zetasql::TableValuedFunction* tvf_catalog_entry,
     VarIndexScope* output_scope) {

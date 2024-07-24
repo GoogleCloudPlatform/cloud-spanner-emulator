@@ -4,7 +4,7 @@
  *	  OpenSSL support
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -30,7 +30,6 @@
 #include "fe-auth.h"
 #include "fe-secure-common.h"
 #include "libpq-int.h"
-#include "common/openssl.h"
 
 #ifdef WIN32
 #include "win32.h"
@@ -55,17 +54,27 @@
 #endif
 #endif
 
-#include <openssl/ssl.h>
+/*
+ * These SSL-related #includes must come after all system-provided headers.
+ * This ensures that OpenSSL can take care of conflicts with Windows'
+ * <wincrypt.h> by #undef'ing the conflicting macros.  (We don't directly
+ * include <wincrypt.h>, but some other Windows headers do.)
+ */
+#include "common/openssl.h"
 #include <openssl/conf.h>
 #ifdef USE_SSL_ENGINE
 #include <openssl/engine.h>
 #endif
 #include <openssl/x509v3.h>
 
+
 static int	verify_cb(int ok, X509_STORE_CTX *ctx);
 static int	openssl_verify_peer_name_matches_certificate_name(PGconn *conn,
 															  ASN1_STRING *name,
 															  char **store_name);
+static int	openssl_verify_peer_name_matches_certificate_ip(PGconn *conn,
+															ASN1_OCTET_STRING *addr_entry,
+															char **store_name);
 static void destroy_ssl_system(void);
 static int	initialize_SSL(PGconn *conn);
 static PostgresPollingStatusType open_client_SSL(PGconn *);
@@ -200,7 +209,7 @@ rloop:
 			 */
 			goto rloop;
 		case SSL_ERROR_SYSCALL:
-			if (n < 0)
+			if (n < 0 && SOCK_ERRNO != 0)
 			{
 				result_errno = SOCK_ERRNO;
 				if (result_errno == EPIPE ||
@@ -308,7 +317,13 @@ pgtls_write(PGconn *conn, const void *ptr, size_t len)
 			n = 0;
 			break;
 		case SSL_ERROR_SYSCALL:
-			if (n < 0)
+
+			/*
+			 * If errno is still zero then assume it's a read EOF situation,
+			 * and report EOF.  (This seems possible because SSL_write can
+			 * also do reads.)
+			 */
+			if (n < 0 && SOCK_ERRNO != 0)
 			{
 				result_errno = SOCK_ERRNO;
 				if (result_errno == EPIPE || result_errno == ECONNRESET)
@@ -509,6 +524,56 @@ openssl_verify_peer_name_matches_certificate_name(PGconn *conn, ASN1_STRING *nam
 }
 
 /*
+ * OpenSSL-specific wrapper around
+ * pq_verify_peer_name_matches_certificate_ip(), converting the
+ * ASN1_OCTET_STRING into a plain C string.
+ */
+static int
+openssl_verify_peer_name_matches_certificate_ip(PGconn *conn,
+												ASN1_OCTET_STRING *addr_entry,
+												char **store_name)
+{
+	int			len;
+	const unsigned char *addrdata;
+
+	/* Should not happen... */
+	if (addr_entry == NULL)
+	{
+		appendPQExpBufferStr(&conn->errorMessage,
+							 libpq_gettext("SSL certificate's address entry is missing\n"));
+		return -1;
+	}
+
+	/*
+	 * GEN_IPADD is an OCTET STRING containing an IP address in network byte
+	 * order.
+	 */
+#ifdef HAVE_ASN1_STRING_GET0_DATA
+	addrdata = ASN1_STRING_get0_data(addr_entry);
+#else
+	addrdata = ASN1_STRING_data(addr_entry);
+#endif
+	len = ASN1_STRING_length(addr_entry);
+
+	return pq_verify_peer_name_matches_certificate_ip(conn, addrdata, len, store_name);
+}
+
+static bool
+is_ip_address(const char *host)
+{
+	struct in_addr dummy4;
+#ifdef HAVE_INET_PTON
+	struct in6_addr dummy6;
+#endif
+
+	return inet_aton(host, &dummy4)
+#ifdef HAVE_INET_PTON
+		|| (inet_pton(AF_INET6, host, &dummy6) == 1)
+#endif
+		;
+}
+
+/*
  *	Verify that the server certificate matches the hostname we connected to.
  *
  * The certificate's Common Name and Subject Alternative Names are considered.
@@ -521,6 +586,36 @@ pgtls_verify_peer_name_matches_certificate_guts(PGconn *conn,
 	STACK_OF(GENERAL_NAME) * peer_san;
 	int			i;
 	int			rc = 0;
+	char	   *host = conn->connhost[conn->whichhost].host;
+	int			host_type;
+	bool		check_cn = true;
+
+	Assert(host && host[0]);	/* should be guaranteed by caller */
+
+	/*
+	 * We try to match the NSS behavior here, which is a slight departure from
+	 * the spec but seems to make more intuitive sense:
+	 *
+	 * If connhost contains a DNS name, and the certificate's SANs contain any
+	 * dNSName entries, then we'll ignore the Subject Common Name entirely;
+	 * otherwise, we fall back to checking the CN. (This behavior matches the
+	 * RFC.)
+	 *
+	 * If connhost contains an IP address, and the SANs contain iPAddress
+	 * entries, we again ignore the CN. Otherwise, we allow the CN to match,
+	 * EVEN IF there is a dNSName in the SANs. (RFC 6125 prohibits this: "A
+	 * client MUST NOT seek a match for a reference identifier of CN-ID if the
+	 * presented identifiers include a DNS-ID, SRV-ID, URI-ID, or any
+	 * application-specific identifier types supported by the client.")
+	 *
+	 * NOTE: Prior versions of libpq did not consider iPAddress entries at
+	 * all, so this new behavior might break a certificate that has different
+	 * IP addresses in the Subject CN and the SANs.
+	 */
+	if (is_ip_address(host))
+		host_type = GEN_IPADD;
+	else
+		host_type = GEN_DNS;
 
 	/*
 	 * First, get the Subject Alternative Names (SANs) from the certificate,
@@ -536,38 +631,62 @@ pgtls_verify_peer_name_matches_certificate_guts(PGconn *conn,
 		for (i = 0; i < san_len; i++)
 		{
 			const GENERAL_NAME *name = sk_GENERAL_NAME_value(peer_san, i);
+			char	   *alt_name = NULL;
+
+			if (name->type == host_type)
+			{
+				/*
+				 * This SAN is of the same type (IP or DNS) as our host name,
+				 * so don't allow a fallback check of the CN.
+				 */
+				check_cn = false;
+			}
 
 			if (name->type == GEN_DNS)
 			{
-				char	   *alt_name;
-
 				(*names_examined)++;
 				rc = openssl_verify_peer_name_matches_certificate_name(conn,
 																	   name->d.dNSName,
 																	   &alt_name);
-
-				if (alt_name)
-				{
-					if (!*first_name)
-						*first_name = alt_name;
-					else
-						free(alt_name);
-				}
 			}
+			else if (name->type == GEN_IPADD)
+			{
+				(*names_examined)++;
+				rc = openssl_verify_peer_name_matches_certificate_ip(conn,
+																	 name->d.iPAddress,
+																	 &alt_name);
+			}
+
+			if (alt_name)
+			{
+				if (!*first_name)
+					*first_name = alt_name;
+				else
+					free(alt_name);
+			}
+
 			if (rc != 0)
+			{
+				/*
+				 * Either we hit an error or a match, and either way we should
+				 * not fall back to the CN.
+				 */
+				check_cn = false;
 				break;
+			}
 		}
 		sk_GENERAL_NAME_pop_free(peer_san, GENERAL_NAME_free);
 	}
 
 	/*
-	 * If there is no subjectAltName extension of type dNSName, check the
+	 * If there is no subjectAltName extension of the matching type, check the
 	 * Common Name.
 	 *
 	 * (Per RFC 2818 and RFC 6125, if the subjectAltName extension of type
-	 * dNSName is present, the CN must be ignored.)
+	 * dNSName is present, the CN must be ignored. We break this rule if host
+	 * is an IP address; see the comment above.)
 	 */
-	if (*names_examined == 0)
+	if (check_cn)
 	{
 		X509_NAME  *subject_name;
 
@@ -580,10 +699,20 @@ pgtls_verify_peer_name_matches_certificate_guts(PGconn *conn,
 												  NID_commonName, -1);
 			if (cn_index >= 0)
 			{
+				char	   *common_name = NULL;
+
 				(*names_examined)++;
 				rc = openssl_verify_peer_name_matches_certificate_name(conn,
 																	   X509_NAME_ENTRY_get_data(X509_NAME_get_entry(subject_name, cn_index)),
-																	   first_name);
+																	   &common_name);
+
+				if (common_name)
+				{
+					if (!*first_name)
+						*first_name = common_name;
+					else
+						free(common_name);
+				}
 			}
 		}
 	}
@@ -616,15 +745,20 @@ static pthread_mutex_t *pq_lockarray;
 static void
 pq_lockingcallback(int mode, int n, const char *file, int line)
 {
+	/*
+	 * There's no way to report a mutex-primitive failure, so we just Assert
+	 * in development builds, and ignore any errors otherwise.  Fortunately
+	 * this is all obsolete in modern OpenSSL.
+	 */
 	if (mode & CRYPTO_LOCK)
 	{
 		if (pthread_mutex_lock(&pq_lockarray[n]))
-			PGTHREAD_ERROR("failed to lock mutex");
+			Assert(false);
 	}
 	else
 	{
 		if (pthread_mutex_unlock(&pq_lockarray[n]))
-			PGTHREAD_ERROR("failed to unlock mutex");
+			Assert(false);
 	}
 }
 #endif							/* ENABLE_THREAD_SAFETY && HAVE_CRYPTO_LOCK */
@@ -1229,9 +1363,14 @@ initialize_SSL(PGconn *conn)
 
 		if (stat(fnbuf, &buf) != 0)
 		{
-			appendPQExpBuffer(&conn->errorMessage,
-							  libpq_gettext("certificate present, but not private key file \"%s\"\n"),
-							  fnbuf);
+			if (errno == ENOENT)
+				appendPQExpBuffer(&conn->errorMessage,
+								  libpq_gettext("certificate present, but not private key file \"%s\"\n"),
+								  fnbuf);
+			else
+				appendPQExpBuffer(&conn->errorMessage,
+								  libpq_gettext("could not stat private key file \"%s\": %m\n"),
+								  fnbuf);
 			return -1;
 		}
 
@@ -1304,7 +1443,6 @@ initialize_SSL(PGconn *conn)
 			}
 
 			SSLerrfree(err);
-
 		}
 	}
 
@@ -1347,10 +1485,12 @@ open_client_SSL(PGconn *conn)
 {
 	int			r;
 
+	SOCK_ERRNO_SET(0);
 	ERR_clear_error();
 	r = SSL_connect(conn->ssl);
 	if (r <= 0)
 	{
+		int			save_errno = SOCK_ERRNO;
 		int			err = SSL_get_error(conn->ssl, r);
 		unsigned long ecode;
 
@@ -1367,10 +1507,10 @@ open_client_SSL(PGconn *conn)
 				{
 					char		sebuf[PG_STRERROR_R_BUFLEN];
 
-					if (r == -1)
+					if (r == -1 && save_errno != 0)
 						appendPQExpBuffer(&conn->errorMessage,
 										  libpq_gettext("SSL SYSCALL error: %s\n"),
-										  SOCK_STRERROR(SOCK_ERRNO, sebuf, sizeof(sebuf)));
+										  SOCK_STRERROR(save_errno, sebuf, sizeof(sebuf)));
 					else
 						appendPQExpBufferStr(&conn->errorMessage,
 											 libpq_gettext("SSL SYSCALL error: EOF detected\n"));
@@ -1621,7 +1761,14 @@ const char *
 PQsslAttribute(PGconn *conn, const char *attribute_name)
 {
 	if (!conn)
+	{
+		/* PQsslAttribute(NULL, "library") reports the default SSL library */
+		if (strcmp(attribute_name, "library") == 0)
+			return "OpenSSL";
 		return NULL;
+	}
+
+	/* All attributes read as NULL for a non-encrypted connection */
 	if (conn->ssl == NULL)
 		return NULL;
 
@@ -1661,11 +1808,7 @@ PQsslAttribute(PGconn *conn, const char *attribute_name)
  * to retry; do we need to adopt their logic for that?
  */
 
-#ifndef HAVE_BIO_GET_DATA
-#define BIO_get_data(bio) (bio->ptr)
-#define BIO_set_data(bio, data) (bio->ptr = data)
-#endif
-
+/* protected by ssl_config_mutex */
 static BIO_METHOD *my_bio_methods;
 
 static int
@@ -1673,7 +1816,7 @@ my_sock_read(BIO *h, char *buf, int size)
 {
 	int			res;
 
-	res = pqsecure_raw_read((PGconn *) BIO_get_data(h), buf, size);
+	res = pqsecure_raw_read((PGconn *) BIO_get_app_data(h), buf, size);
 	BIO_clear_retry_flags(h);
 	if (res < 0)
 	{
@@ -1703,7 +1846,7 @@ my_sock_write(BIO *h, const char *buf, int size)
 {
 	int			res;
 
-	res = pqsecure_raw_write((PGconn *) BIO_get_data(h), buf, size);
+	res = pqsecure_raw_write((PGconn *) BIO_get_app_data(h), buf, size);
 	BIO_clear_retry_flags(h);
 	if (res < 0)
 	{
@@ -1731,6 +1874,15 @@ my_sock_write(BIO *h, const char *buf, int size)
 static BIO_METHOD *
 my_BIO_s_socket(void)
 {
+	BIO_METHOD *res;
+
+#ifdef ENABLE_THREAD_SAFETY
+	if (pthread_mutex_lock(&ssl_config_mutex))
+		return NULL;
+#endif
+
+	res = my_bio_methods;
+
 	if (!my_bio_methods)
 	{
 		BIO_METHOD *biom = (BIO_METHOD *) BIO_s_socket();
@@ -1739,39 +1891,58 @@ my_BIO_s_socket(void)
 
 		my_bio_index = BIO_get_new_index();
 		if (my_bio_index == -1)
-			return NULL;
+			goto err;
 		my_bio_index |= (BIO_TYPE_DESCRIPTOR | BIO_TYPE_SOURCE_SINK);
-		my_bio_methods = BIO_meth_new(my_bio_index, "libpq socket");
-		if (!my_bio_methods)
-			return NULL;
+		res = BIO_meth_new(my_bio_index, "libpq socket");
+		if (!res)
+			goto err;
 
 		/*
 		 * As of this writing, these functions never fail. But check anyway,
 		 * like OpenSSL's own examples do.
 		 */
-		if (!BIO_meth_set_write(my_bio_methods, my_sock_write) ||
-			!BIO_meth_set_read(my_bio_methods, my_sock_read) ||
-			!BIO_meth_set_gets(my_bio_methods, BIO_meth_get_gets(biom)) ||
-			!BIO_meth_set_puts(my_bio_methods, BIO_meth_get_puts(biom)) ||
-			!BIO_meth_set_ctrl(my_bio_methods, BIO_meth_get_ctrl(biom)) ||
-			!BIO_meth_set_create(my_bio_methods, BIO_meth_get_create(biom)) ||
-			!BIO_meth_set_destroy(my_bio_methods, BIO_meth_get_destroy(biom)) ||
-			!BIO_meth_set_callback_ctrl(my_bio_methods, BIO_meth_get_callback_ctrl(biom)))
+		if (!BIO_meth_set_write(res, my_sock_write) ||
+			!BIO_meth_set_read(res, my_sock_read) ||
+			!BIO_meth_set_gets(res, BIO_meth_get_gets(biom)) ||
+			!BIO_meth_set_puts(res, BIO_meth_get_puts(biom)) ||
+			!BIO_meth_set_ctrl(res, BIO_meth_get_ctrl(biom)) ||
+			!BIO_meth_set_create(res, BIO_meth_get_create(biom)) ||
+			!BIO_meth_set_destroy(res, BIO_meth_get_destroy(biom)) ||
+			!BIO_meth_set_callback_ctrl(res, BIO_meth_get_callback_ctrl(biom)))
 		{
-			BIO_meth_free(my_bio_methods);
-			my_bio_methods = NULL;
-			return NULL;
+			goto err;
 		}
 #else
-		my_bio_methods = malloc(sizeof(BIO_METHOD));
-		if (!my_bio_methods)
-			return NULL;
-		memcpy(my_bio_methods, biom, sizeof(BIO_METHOD));
-		my_bio_methods->bread = my_sock_read;
-		my_bio_methods->bwrite = my_sock_write;
+		res = malloc(sizeof(BIO_METHOD));
+		if (!res)
+			goto err;
+		memcpy(res, biom, sizeof(BIO_METHOD));
+		res->bread = my_sock_read;
+		res->bwrite = my_sock_write;
 #endif
 	}
-	return my_bio_methods;
+
+	my_bio_methods = res;
+
+#ifdef ENABLE_THREAD_SAFETY
+	pthread_mutex_unlock(&ssl_config_mutex);
+#endif
+
+	return res;
+
+err:
+#ifdef HAVE_BIO_METH_NEW
+	if (res)
+		BIO_meth_free(res);
+#else
+	if (res)
+		free(res);
+#endif
+
+#ifdef ENABLE_THREAD_SAFETY
+	pthread_mutex_unlock(&ssl_config_mutex);
+#endif
+	return NULL;
 }
 
 /* This should exactly match OpenSSL's SSL_set_fd except for using my BIO */
@@ -1794,7 +1965,7 @@ my_SSL_set_fd(PGconn *conn, int fd)
 		SSLerr(SSL_F_SSL_SET_FD, ERR_R_BUF_LIB);
 		goto err;
 	}
-	BIO_set_data(bio, conn);
+	BIO_set_app_data(bio, conn);
 
 	SSL_set_bio(conn->ssl, bio, bio);
 	BIO_set_fd(bio, fd, BIO_NOCLOSE);

@@ -52,6 +52,10 @@ using JSON = ::nlohmann::json;
 using zetasql::JSONValue;
 using zetasql::NumericValue;
 using zetasql::values::Bool;
+using zetasql::values::Double;
+using zetasql::values::DoubleArray;
+using zetasql::values::Float;
+using zetasql::values::FloatArray;
 using zetasql::values::Int64;
 using zetasql::values::Json;
 using zetasql::values::JsonArray;
@@ -92,6 +96,22 @@ class ChangeStreamTest : public test::ActionsTest {
                         )"},
                     &type_factory_)
                     .value()),
+        float_schema_(emulator::test::CreateSchemaFromDDL(
+                          {
+                              R"(
+                            CREATE TABLE FloatTable (
+                              int64_col INT64 NOT NULL,
+                              float_col FLOAT32,
+                              double_col FLOAT64,
+                              float_arr ARRAY<FLOAT32>,
+                              double_arr ARRAY<FLOAT64>
+                            ) PRIMARY KEY (int64_col)
+                          )",
+                              R"(
+                            CREATE CHANGE STREAM ChangeStream_FloatTable FOR FloatTable OPTIONS ( value_capture_type = 'NEW_VALUES' )
+                        )"},
+                          &type_factory_)
+                          .value()),
         pg_schema_(
             emulator::test::CreateSchemaFromDDL(
                 {
@@ -106,15 +126,16 @@ class ChangeStreamTest : public test::ActionsTest {
                         )",
                     R"(CREATE CHANGE STREAM pg_stream FOR ALL WITH ( value_capture_type = 'NEW_VALUES' ))",
                 },
-                &type_factory_,
-                "", /*proto_descriptor_bytes*/
+                &type_factory_, "", /*proto_descriptor_bytes*/
                 database_api::DatabaseDialect::POSTGRESQL)
                 .value()),
         table_(schema_->FindTable("TestTable")),
         table2_(schema_->FindTable("TestTable2")),
+        float_table_(float_schema_->FindTable("FloatTable")),
         pg_table_(pg_schema_->FindTable("entended_pg_datatypes")),
         base_columns_(table_->columns()),
         base_columns_table_2_all_col_(table2_->columns()),
+        float_columns_(float_table_->columns()),
         pg_columns_(pg_table_->columns()),
         change_stream_(schema_->FindChangeStream("ChangeStream_All")),
         change_stream2_(
@@ -122,26 +143,31 @@ class ChangeStreamTest : public test::ActionsTest {
         change_stream3_(
             schema_->FindChangeStream("ChangeStream_TestTable2KeyOnly")),
         change_stream4_(schema_->FindChangeStream("ChangeStream_TestTable2")),
+        float_change_stream_(
+            float_schema_->FindChangeStream("ChangeStream_FloatTable")),
         pg_change_stream_(pg_schema_->FindChangeStream("pg_stream")) {}
 
  protected:
   // Test components.
   zetasql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
+  std::unique_ptr<const Schema> float_schema_;
   std::unique_ptr<const Schema> pg_schema_;
 
   // Test variables.
   const Table* table_;
   const Table* table2_;
-  const Table* table3_;
+  const Table* float_table_;
   const Table* pg_table_;
   absl::Span<const Column* const> base_columns_;
   absl::Span<const Column* const> base_columns_table_2_all_col_;
+  absl::Span<const Column* const> float_columns_;
   absl::Span<const Column* const> pg_columns_;
   const ChangeStream* change_stream_;
   const ChangeStream* change_stream2_;
   const ChangeStream* change_stream3_;
   const ChangeStream* change_stream4_;
+  const ChangeStream* float_change_stream_;
   const ChangeStream* pg_change_stream_;
   std::vector<const Column*> key_and_another_string_col_table_1_ = {
       table_->FindColumn("int64_col"),
@@ -1086,6 +1112,110 @@ TEST_F(ChangeStreamTest, PgVerifyExtendedDatatypesValueAndType) {
       mod_new_values.element(0),
       zetasql::Value(String(
           R"({"jsonb_arr":["1","2"],"jsonb_col":"2024","numeric_arr":["22","33"],"numeric_col":"11"})")));
+  zetasql::Value mod_old_values = operation->values[12];
+  ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
+  // Verify mod_type
+  ASSERT_EQ(operation->values[13], zetasql::Value(String("INSERT")));
+  // Verify value_capture_type
+  ASSERT_EQ(operation->values[14], zetasql::Value(String("NEW_VALUES")));
+  // Verify number_of_records_in_transaction
+  ASSERT_EQ(operation->values[15], zetasql::Value(Int64(1)));
+  // Verify number_of_partitions_in_transaction
+  ASSERT_EQ(operation->values[16], zetasql::Value(Int64(1)));
+  // Verify transaction_tag
+  ASSERT_EQ(operation->values[17], zetasql::Value(String("")));
+  // Verify is_system_transaction
+  ASSERT_EQ(operation->values[18], zetasql::Value(Bool(false)));
+}
+
+TEST_F(ChangeStreamTest, FloatValueAndTypes) {
+  set_up_partition_token_for_change_stream_partition_table(float_change_stream_,
+                                                           store());
+  // Insert base table entry.
+  std::vector<WriteOp> buffered_write_ops;
+  buffered_write_ops.push_back(
+      Insert(float_table_, Key({Int64(1)}), float_columns_,
+             {Int64(1), Float(1.1f), Double(2.2), FloatArray({1.1f, 3.14f}),
+              DoubleArray({2.2, 2.71})}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<WriteOp> change_stream_write_ops,
+      BuildChangeStreamWriteOps(float_schema_.get(), buffered_write_ops,
+                                store(), 1));
+
+  // Verify change stream entry is added to the transaction buffer.
+  ASSERT_EQ(change_stream_write_ops.size(), 1);
+  WriteOp op = change_stream_write_ops[0];
+  // Verify the table of the received WriteOp
+  ASSERT_EQ(TableOf(op), float_change_stream_->change_stream_data_table());
+  // Verify the received WriteOp is InsertOp
+  auto* operation = std::get_if<InsertOp>(&op);
+  ASSERT_NE(operation, nullptr);
+  // Verify columns in the rebuilt InsertOp corresponds to columns in
+  // change_stream_data_table
+  ASSERT_EQ(operation->columns,
+            float_change_stream_->change_stream_data_table()->columns());
+
+  // Verify values in the rebuilt InsertOp are correct
+  // Verify partition_token
+  ASSERT_EQ(operation->values[0], zetasql::Value::String("11111"));
+  // Verify record_sequence
+  ASSERT_EQ(operation->values[3], zetasql::Value(String("00000000")));
+  // Verify is_last_record_in_transaction_in_partition
+  ASSERT_EQ(operation->values[4], zetasql::Value(Bool(true)));
+  // Verify table_name
+  ASSERT_EQ(operation->values[5], zetasql::Value(String("FloatTable")));
+  // Verify column_types_name
+  ASSERT_EQ(operation->values[6],
+            zetasql::values::Array(zetasql::types::StringArrayType(),
+                                     {zetasql::Value(String("int64_col")),
+                                      zetasql::Value(String("float_col")),
+                                      zetasql::Value(String("double_col")),
+                                      zetasql::Value(String("float_arr")),
+                                      zetasql::Value(String("double_arr"))}));
+  // Verify column_types_type
+  JSON int_type;
+  int_type["code"] = "INT64";
+  JSON float32_type;
+  float32_type["code"] = "FLOAT32";
+  JSON float32_arr_type;
+  float32_arr_type["code"] = "ARRAY";
+  float32_arr_type["array_element_type"]["code"] = "FLOAT32";
+  JSON float64_type;
+  float64_type["code"] = "FLOAT64";
+  JSON float64_arr_type;
+  float64_arr_type["code"] = "ARRAY";
+  float64_arr_type["array_element_type"]["code"] = "FLOAT64";
+  ASSERT_EQ(operation->values[7],
+            zetasql::values::Array(
+                zetasql::types::StringArrayType(),
+                {zetasql::Value(String(int_type.dump())),
+                 zetasql::Value(String(float32_type.dump())),
+                 zetasql::Value(String(float64_type.dump())),
+                 zetasql::Value(String(float32_arr_type.dump())),
+                 zetasql::Value(String(float64_arr_type.dump()))}));
+  // Verify column_types_is_primary_key
+  ASSERT_EQ(operation->values[8],
+            zetasql::values::Array(
+                zetasql::types::BoolArrayType(),
+                {zetasql::Value(Bool(true)), zetasql::Value(Bool(false)),
+                 zetasql::Value(Bool(false)), zetasql::Value(Bool(false)),
+                 zetasql::Value(Bool(false))}));
+  // Verify column_types_ordinal_position
+  ASSERT_EQ(operation->values[9],
+            zetasql::values::Array(
+                zetasql::types::Int64ArrayType(),
+                {zetasql::Value(Int64(1)), zetasql::Value(Int64(2)),
+                 zetasql::Value(Int64(3)), zetasql::Value(Int64(4)),
+                 zetasql::Value(Int64(5))}));
+  // Verify mods
+  zetasql::Value mod_keys = operation->values[10];
+  ASSERT_EQ(mod_keys.element(0),
+            zetasql::Value(String("{\"int64_col\":\"1\"}")));
+  zetasql::Value mod_new_values = operation->values[11];
+  ASSERT_EQ(
+      mod_new_values.element(0),
+      zetasql::Value(String(
+          R"({"double_arr":[2.2,2.71],"double_col":2.2,"float_arr":[1.100000023841858,3.140000104904175],"float_col":1.100000023841858})")));
   zetasql::Value mod_old_values = operation->values[12];
   ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
   // Verify mod_type

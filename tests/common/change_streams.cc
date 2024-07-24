@@ -17,12 +17,23 @@
 #include "tests/common/change_streams.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "google/protobuf/struct.pb.h"
+#include "google/spanner/v1/spanner.pb.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "absl/strings/substitute.h"
+#include "absl/time/time.h"
+#include "google/cloud/spanner/database.h"
 #include "frontend/converters/pg_change_streams.h"
+#include "tests/common/chunking.h"
+#include "grpcpp/client_context.h"
 #include "google/protobuf/json/json.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
@@ -234,6 +245,74 @@ absl::StatusOr<ChangeStreamRecords> GetChangeStreamRecordsFromResultSet(
             .ok());
   }
   return change_stream_records;
+}
+
+// Creates a new session for tests using raw grpc client.
+absl::StatusOr<std::string> CreateTestSession(
+    SpannerStub* client, const cloud::spanner::Database* database) {
+  grpc::ClientContext context;
+  spanner_api::CreateSessionRequest request;
+  spanner_api::Session response;
+  request.set_database(database->FullName());
+  ZETASQL_RETURN_IF_ERROR(client->CreateSession(&context, request, &response));
+  return response.name();
+}
+
+// Reads from a grpc::ClientReader and returns the response in a vector.
+absl::Status ReadFromClientReader(
+    std::unique_ptr<grpc::ClientReader<spanner_api::PartialResultSet>> reader,
+    std::vector<spanner_api::PartialResultSet>* response) {
+  response->clear();
+  spanner_api::PartialResultSet result;
+  while (reader->Read(&result)) {
+    response->push_back(result);
+  }
+  return reader->Finish();
+}
+
+absl::StatusOr<test::ChangeStreamRecords> ExecuteChangeStreamQuery(
+    absl::string_view sql, absl::string_view session_uri, SpannerStub* client) {
+  // Build the request that will be executed.
+  spanner_api::ExecuteSqlRequest request;
+  request.mutable_transaction()
+      ->mutable_single_use()
+      ->mutable_read_only()
+      ->set_strong(true);
+  *request.mutable_sql() = sql;
+  request.set_session(session_uri);
+
+  // Execute the tvf query with ExecuteStreamingSql API.
+  std::vector<spanner_api::PartialResultSet> response;
+  grpc::ClientContext context;
+  auto client_reader = client->ExecuteStreamingSql(&context, request);
+  ZETASQL_RETURN_IF_ERROR(ReadFromClientReader(std::move(client_reader), &response));
+
+  ZETASQL_ASSIGN_OR_RETURN(auto result_set, backend::test::MergePartialResultSets(
+                                        response, /*columns_per_row=*/1));
+  ZETASQL_ASSIGN_OR_RETURN(ChangeStreamRecords change_records,
+                   GetChangeStreamRecordsFromResultSet(result_set));
+  return change_records;
+}
+
+absl::StatusOr<std::vector<std::string>> GetActiveTokenFromInitialQuery(
+    absl::Time start, absl::string_view change_stream_name,
+    absl::string_view session_uri, SpannerStub* client) {
+  std::vector<std::string> active_tokens;
+  std::string sql = absl::Substitute(
+      "SELECT * FROM "
+      "READ_$0 ('$1',NULL, NULL, 300000 )",
+      change_stream_name, start);
+  ZETASQL_ASSIGN_OR_RETURN(test::ChangeStreamRecords change_records,
+                   ExecuteChangeStreamQuery(sql, session_uri, client));
+  for (const auto& child_partition_record :
+       change_records.child_partition_records) {
+    for (const auto& child_partition :
+         child_partition_record.child_partitions.values()) {
+      active_tokens.push_back(
+          child_partition.list_value().values(0).string_value());
+    }
+  }
+  return active_tokens;
 }
 
 }  // namespace test

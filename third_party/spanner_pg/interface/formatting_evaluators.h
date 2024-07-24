@@ -51,6 +51,10 @@ absl::StatusOr<std::string> Int8ToChar(int64_t value,
 absl::StatusOr<std::string> Float8ToChar(double value,
                                          absl::string_view number_format);
 
+// Converts float32 to string according to the given format.
+absl::StatusOr<std::string> Float4ToChar(float value,
+                                         absl::string_view number_format);
+
 // Converts numeric decimal string to string according to the given format
 absl::StatusOr<std::string> NumericToChar(
     absl::string_view numeric_decimal_string, absl::string_view number_format);

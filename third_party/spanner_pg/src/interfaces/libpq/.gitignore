@@ -1,4 +1,6 @@
 /exports.list
+/libpq-refs-stamp
+/tmp_check/
 /libpq.rc
 # .c files that are symlinked in from elsewhere
 /chklocale.c

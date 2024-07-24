@@ -26,6 +26,9 @@ CREATE TABLE gtest_err_3 (a int PRIMARY KEY, b int GENERATED ALWAYS AS (c * 2) S
 
 -- generation expression must be immutable
 CREATE TABLE gtest_err_4 (a int PRIMARY KEY, b double precision GENERATED ALWAYS AS (random()) STORED);
+-- ... but be sure that the immutability test is accurate
+CREATE TABLE gtest2 (a int, b text GENERATED ALWAYS AS (a || ' sec') STORED);
+DROP TABLE gtest2;
 
 -- cannot have default/identity and generated
 CREATE TABLE gtest_err_5a (a int PRIMARY KEY, b int DEFAULT 5 GENERATED ALWAYS AS (a * 2) STORED);
@@ -80,6 +83,21 @@ UPDATE gtest1 SET a = 3 WHERE b = 4;
 SELECT * FROM gtest1 ORDER BY a;
 DELETE FROM gtest1 WHERE b = 2;
 SELECT * FROM gtest1 ORDER BY a;
+
+-- test MERGE
+CREATE TABLE gtestm (
+  id int PRIMARY KEY,
+  f1 int,
+  f2 int,
+  f3 int GENERATED ALWAYS AS (f1 * 2) STORED,
+  f4 int GENERATED ALWAYS AS (f2 * 2) STORED
+);
+INSERT INTO gtestm VALUES (1, 5, 100);
+MERGE INTO gtestm t USING (VALUES (1, 10), (2, 20)) v(id, f1) ON t.id = v.id
+  WHEN MATCHED THEN UPDATE SET f1 = v.f1
+  WHEN NOT MATCHED THEN INSERT VALUES (v.id, v.f1, 200);
+SELECT * FROM gtestm ORDER BY id;
+DROP TABLE gtestm;
 
 -- views
 CREATE VIEW gtest1v AS SELECT * FROM gtest1;
@@ -240,7 +258,8 @@ SELECT * FROM gtest_tableoid;
 
 -- drop column behavior
 CREATE TABLE gtest10 (a int PRIMARY KEY, b int, c int GENERATED ALWAYS AS (b * 2) STORED);
-ALTER TABLE gtest10 DROP COLUMN b;
+ALTER TABLE gtest10 DROP COLUMN b;  -- fails
+ALTER TABLE gtest10 DROP COLUMN b CASCADE;  -- drops c too
 
 \d gtest10
 
@@ -269,6 +288,7 @@ SELECT gf1(10);  -- not allowed
 SELECT a, c FROM gtest12s;  -- allowed
 RESET ROLE;
 
+DROP FUNCTION gf1(int);  -- fail
 DROP TABLE gtest11s, gtest12s;
 DROP FUNCTION gf1(int);
 DROP USER regress_user11;

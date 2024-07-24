@@ -95,6 +95,7 @@ cc_library(
         "typecmds.c",
         "user.c",
         "vacuum.c",
+        "vacuumparallel.c",
         "variable.c",
         "view.c",
     ],

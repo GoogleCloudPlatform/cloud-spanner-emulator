@@ -333,11 +333,11 @@ TEST_P(DateExtractErrorTest, DateExtractError) {
   const DateExtractErrorTestCase& test_case = GetParam();
   ZETASQL_ASSERT_OK_AND_ASSIGN(int32_t source_input, PgDateIn(test_case.source));
   for (const auto& unsupported_field : test_case.unsupported_fields) {
-    EXPECT_THAT(
-        PgDateExtract(unsupported_field, source_input),
-        StatusIs(absl::StatusCode::kUnimplemented,
-                 HasSubstr(absl::StrFormat("date units \"%s\" not supported",
-                                           unsupported_field))));
+    EXPECT_THAT(PgDateExtract(unsupported_field, source_input),
+                StatusIs(absl::StatusCode::kUnimplemented,
+                         HasSubstr(absl::StrFormat(
+                             "unit \"%s\" not supported for type date",
+                             unsupported_field))));
   }
 }
 

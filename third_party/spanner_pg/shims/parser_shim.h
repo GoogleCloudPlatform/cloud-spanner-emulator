@@ -120,6 +120,7 @@ typedef struct Constraint {
   GeneratedColStoreOpt stored_kind;     /* STORED or VIRTUAL */
 
   /* Fields used for unique constraints (UNIQUE and PRIMARY KEY): */
+  bool nulls_not_distinct; /* null treatment for UNIQUE constraints */
   List *keys;      /* String nodes naming referenced key
                     * column(s) */
   List *including; /* String nodes naming referenced nonkey
@@ -145,6 +146,7 @@ typedef struct Constraint {
   char fk_matchtype;   /* FULL, PARTIAL, SIMPLE */
   char fk_upd_action;  /* ON UPDATE action */
   char fk_del_action;  /* ON DELETE action */
+  List *fk_del_set_cols; /* ON DELETE SET NULL/DEFAULT (col1, col2) */
   List *old_conpfeqop; /* pg_constraint.conpfeqop of my former self */
   Oid old_pktable_oid; /* pg_constraint.confrelid of my former
                         * self */

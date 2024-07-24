@@ -39,8 +39,11 @@
 #include <string>
 
 #include "zetasql/public/function.h"
+#include "absl/base/optimization.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
@@ -129,7 +132,8 @@ absl::StatusOr<int64_t> GetInt64FromPgJsonb(const absl::Cord& jsonb) {
   return result;
 }
 
-absl::StatusOr<double> OutOfRangeForDoubleError(absl::string_view input) {
+absl::Status OutOfRangeForFloatingPointError(absl::string_view input,
+                                             absl::string_view pg_type_name) {
   // We expect that the input value should come from already processed JSON,
   // thus it should be valid UTF-8 string and we don't need to do any additional
   // escaping using functions like EnsureValidUTF8. However, we don't want to
@@ -142,41 +146,57 @@ absl::StatusOr<double> OutOfRangeForDoubleError(absl::string_view input) {
     terminator = "...";
   }
   return absl::OutOfRangeError(absl::StrCat(
-      "\"", input, terminator, "\" is out of range for type double precision"));
+      "\"", input, terminator, "\" is out of range for type ", pg_type_name));
 }
 
-inline absl::StatusOr<double> ParseDouble(absl::string_view input) {
-  double result;
-  if (ABSL_PREDICT_FALSE(!absl::SimpleAtod(input, &result) ||
-                         std::isnan(result) || std::isinf(result))) {
-    return OutOfRangeForDoubleError(input);
+template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
+inline absl::StatusOr<T> ParseFloatingPoint(absl::string_view input) {
+  T result;
+  bool is_success;
+  if constexpr (std::is_same_v<T, double>) {
+    is_success = absl::SimpleAtod(input, &result);
+  } else {
+    is_success = absl::SimpleAtof(input, &result);
+  }
+  if (ABSL_PREDICT_FALSE(!is_success || std::isnan(result) ||
+                         std::isinf(result))) {
+    return OutOfRangeForFloatingPointError(
+        input, std::is_same_v<T, double> ? "double precision" : "real");
   }
 
   return result;
 }
 
-absl::StatusOr<double> GetDoubleFromPgJsonb(const absl::Cord& jsonb) {
+template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
+absl::StatusOr<T> GetFloatingPointFromPgJsonb(const absl::Cord& jsonb) {
   ZETASQL_RET_CHECK_GT(jsonb.size(), 0);
 
   // Check that value is actually a number.
   const char first_char = jsonb[0];
   if (ABSL_PREDICT_FALSE(!std::isdigit(first_char) && first_char != '-')) {
-    return GetPgJsonbCastErrorMessage(first_char, "double precision");
+    return GetPgJsonbCastErrorMessage(
+        first_char, std::is_same_v<T, double> ? "double precision" : "real");
   }
 
+  // T == FLOAT:
+  // We only need first 47 characters (3(-,0,.) + FLT_DIG(6) +
+  // FLT_MIN_10_EXP(37) + 1 additional character for detecting out of range
+  // values) of the jsonb string to convert it to a float.
+  // T == DOUBLE:
   // We only need first 326 characters (3(-,0,.) + DBL_DIG(15) +
   // DBL_MIN_10_EXP(307) + 1 additional character for detecting out of range
-  // values) of the jsonb string to convert it to a double
-  constexpr size_t kMaxDoubleDigitsLength = 326;
+  // values) of the jsonb string to convert it to a double.
+  constexpr size_t kMaxFloatingPointDigitsLength =
+      std::is_same_v<T, double> ? 326 : 47;
 
-  std::array<char, kMaxDoubleDigitsLength> buffer;
+  std::array<char, kMaxFloatingPointDigitsLength> buffer;
   int i;
-  for (i = 0; i < jsonb.size() && i < kMaxDoubleDigitsLength; ++i) {
+  for (i = 0; i < jsonb.size() && i < kMaxFloatingPointDigitsLength; ++i) {
     buffer[i] = jsonb[i];
   }
   const size_t number_size = i;
   std::string_view input = absl::string_view{buffer.data(), number_size};
-  return ParseDouble(input);
+  return ParseFloatingPoint<T>(input);
 }
 
 absl::StatusOr<zetasql::Value> PgJsonbToBoolConversion(
@@ -208,8 +228,19 @@ absl::StatusOr<zetasql::Value> PgJsonbToDoubleConversion(
     return zetasql::Value::NullDouble();
   }
   ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  ZETASQL_ASSIGN_OR_RETURN(double d, GetDoubleFromPgJsonb(jsonb));
+  ZETASQL_ASSIGN_OR_RETURN(double d, GetFloatingPointFromPgJsonb<double>(jsonb));
   return zetasql::Value::Double(d);
+}
+
+absl::StatusOr<zetasql::Value> PgJsonbToFloatConversion(
+    const absl::Span<const zetasql::Value> args) {
+  ZETASQL_RET_CHECK_EQ(args.size(), 1);
+  if (args[0].is_null()) {
+    return zetasql::Value::NullFloat();
+  }
+  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
+  ZETASQL_ASSIGN_OR_RETURN(float f, GetFloatingPointFromPgJsonb<float>(jsonb));
+  return zetasql::Value::Float(f);
 }
 
 absl::StatusOr<zetasql::Value> PgJsonbToPgNumericConversion(
@@ -281,6 +312,16 @@ const zetasql::Function* GetPgJsonbToDoubleConversion() {
           zetasql::FunctionOptions().set_evaluator(
               PGFunctionEvaluator(PgJsonbToDoubleConversion)));
   return kPgJsonbToDoubleConv;
+}
+
+const zetasql::Function* GetPgJsonbToFloatConversion() {
+  static const zetasql::Function* kPgJsonbToFloatConv =
+      new zetasql::Function(
+          "pg_jsonb_to_float_conv", "spanner", zetasql::Function::SCALAR,
+          /*function_signatures=*/{},
+          zetasql::FunctionOptions().set_evaluator(
+              PGFunctionEvaluator(PgJsonbToFloatConversion)));
+  return kPgJsonbToFloatConv;
 }
 
 const zetasql::Function* GetPgJsonbToPgNumericConversion() {

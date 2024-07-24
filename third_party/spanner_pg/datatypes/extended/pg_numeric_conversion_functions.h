@@ -40,10 +40,12 @@ namespace datatypes {
 // PG.NUMERIC conversion functions.
 const zetasql::Function* GetInt64ToPgNumericConversion();
 const zetasql::Function* GetDoubleToPgNumericConversion();
+const zetasql::Function* GetFloatToPgNumericConversion();
 const zetasql::Function* GetStringToPgNumericConversion();
 
 const zetasql::Function* GetPgNumericToInt64Conversion();
 const zetasql::Function* GetPgNumericToDoubleConversion();
+const zetasql::Function* GetPgNumericToFloatConversion();
 const zetasql::Function* GetPgNumericToStringConversion();
 
 }  // namespace datatypes

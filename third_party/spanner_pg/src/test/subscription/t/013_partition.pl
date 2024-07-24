@@ -1,24 +1,24 @@
 
-# Copyright (c) 2021, PostgreSQL Global Development Group
+# Copyright (c) 2021-2022, PostgreSQL Global Development Group
 
 # Test logical replication with partitioned tables
 use strict;
 use warnings;
-use PostgresNode;
-use TestLib;
-use Test::More tests => 71;
+use PostgreSQL::Test::Cluster;
+use PostgreSQL::Test::Utils;
+use Test::More;
 
 # setup
 
-my $node_publisher = get_new_node('publisher');
+my $node_publisher = PostgreSQL::Test::Cluster->new('publisher');
 $node_publisher->init(allows_streaming => 'logical');
 $node_publisher->start;
 
-my $node_subscriber1 = get_new_node('subscriber1');
+my $node_subscriber1 = PostgreSQL::Test::Cluster->new('subscriber1');
 $node_subscriber1->init(allows_streaming => 'logical');
 $node_subscriber1->start;
 
-my $node_subscriber2 = get_new_node('subscriber2');
+my $node_subscriber2 = PostgreSQL::Test::Cluster->new('subscriber2');
 $node_subscriber2->init(allows_streaming => 'logical');
 $node_subscriber2->start;
 
@@ -405,12 +405,15 @@ $node_publisher->safe_psql('postgres',
 	"CREATE TABLE tab3 (a int PRIMARY KEY, b text) PARTITION BY LIST (a)");
 $node_publisher->safe_psql('postgres',
 	"CREATE TABLE tab3_1 PARTITION OF tab3 FOR VALUES IN (0, 1, 2, 3, 5, 6)");
+
 $node_publisher->safe_psql('postgres',
 	"CREATE TABLE tab4 (a int PRIMARY KEY) PARTITION BY LIST (a)");
 $node_publisher->safe_psql('postgres',
-	"CREATE TABLE tab4_1 PARTITION OF tab4 FOR VALUES IN (0, 1) PARTITION BY LIST (a)");
+	"CREATE TABLE tab4_1 PARTITION OF tab4 FOR VALUES IN (0, 1) PARTITION BY LIST (a)"
+);
 $node_publisher->safe_psql('postgres',
 	"CREATE TABLE tab4_1_1 PARTITION OF tab4_1 FOR VALUES IN (0, 1)");
+
 $node_publisher->safe_psql('postgres',
 	"ALTER PUBLICATION pub_all SET (publish_via_partition_root = true)");
 # Note: tab3_1's parent is not in the publication, in which case its
@@ -420,6 +423,8 @@ $node_publisher->safe_psql('postgres',
 $node_publisher->safe_psql('postgres',
 	"CREATE PUBLICATION pub_viaroot FOR TABLE tab2, tab2_1, tab3_1 WITH (publish_via_partition_root = true)"
 );
+
+# for tab4, we publish changes through the "middle" partitioned table
 $node_publisher->safe_psql('postgres',
 	"CREATE PUBLICATION pub_lower_level FOR TABLE tab4_1 WITH (publish_via_partition_root = true)"
 );
@@ -467,14 +472,16 @@ $node_subscriber2->safe_psql('postgres',
 $node_subscriber2->safe_psql('postgres',
 	"CREATE TABLE tab3_1 (a int PRIMARY KEY, c text DEFAULT 'sub2_tab3_1', b text)"
 );
+
+# Note: We create two separate tables, not a partitioned one, so that we can
+# easily identity through which relation were the changes replicated.
 $node_subscriber2->safe_psql('postgres',
-	"CREATE TABLE tab4 (a int PRIMARY KEY)"
-);
+	"CREATE TABLE tab4 (a int PRIMARY KEY)");
 $node_subscriber2->safe_psql('postgres',
-	"CREATE TABLE tab4_1 (a int PRIMARY KEY)"
-);
+	"CREATE TABLE tab4_1 (a int PRIMARY KEY)");
 # Publication that sub2 points to now publishes via root, so must update
-# subscription target relations.
+# subscription target relations. We set the list of publications so that
+# the FOR ALL TABLES publication is second (the list order matters).
 $node_subscriber2->safe_psql('postgres',
 	"ALTER SUBSCRIPTION sub2 SET PUBLICATION pub_lower_level, pub_all");
 
@@ -483,9 +490,8 @@ $node_subscriber1->wait_for_subscription_sync;
 $node_subscriber2->wait_for_subscription_sync;
 
 # check that data is synced correctly
-$result = $node_subscriber1->safe_psql('postgres',
-	"SELECT c, a FROM tab2");
-is( $result, qq(sub1_tab2|1), 'initial data synced for pub_viaroot');
+$result = $node_subscriber1->safe_psql('postgres', "SELECT c, a FROM tab2");
+is($result, qq(sub1_tab2|1), 'initial data synced for pub_viaroot');
 
 # insert
 $node_publisher->safe_psql('postgres', "INSERT INTO tab1 VALUES (1), (0)");
@@ -495,8 +501,10 @@ $node_publisher->safe_psql('postgres',
 	"INSERT INTO tab2 VALUES (0), (3), (5)");
 $node_publisher->safe_psql('postgres',
 	"INSERT INTO tab3 VALUES (1), (0), (3), (5)");
-$node_publisher->safe_psql('postgres',
-	"INSERT INTO tab4 VALUES (0)");
+
+# Insert a row into the leaf partition, should be replicated through the
+# partition root (thanks to the FOR ALL TABLES partition).
+$node_publisher->safe_psql('postgres', "INSERT INTO tab4 VALUES (0)");
 
 $node_publisher->wait_for_catchup('sub_viaroot');
 $node_publisher->wait_for_catchup('sub2');
@@ -536,13 +544,16 @@ sub2_tab3|1
 sub2_tab3|3
 sub2_tab3|5), 'inserts into tab3 replicated');
 
-$result = $node_subscriber2->safe_psql('postgres',
-	"SELECT a FROM tab4 ORDER BY 1");
-is( $result, qq(0), 'inserts into tab4 replicated');
+# tab4 change should be replicated through the root partition, which
+# maps to the tab4 relation on subscriber.
+$result =
+  $node_subscriber2->safe_psql('postgres', "SELECT a FROM tab4 ORDER BY 1");
+is($result, qq(0), 'inserts into tab4 replicated');
 
-$result = $node_subscriber2->safe_psql('postgres',
-	"SELECT a FROM tab4_1 ORDER BY 1");
-is( $result, qq(), 'inserts into tab4_1 replicated');
+$result =
+  $node_subscriber2->safe_psql('postgres', "SELECT a FROM tab4_1 ORDER BY 1");
+is($result, qq(), 'inserts into tab4_1 replicated');
+
 
 # now switch the order of publications in the list, try again, the result
 # should be the same (no dependence on order of pulications)
@@ -555,21 +566,21 @@ $node_subscriber2->wait_for_subscription_sync;
 
 # Insert a change into the leaf partition, should be replicated through
 # the partition root (thanks to the FOR ALL TABLES partition).
-$node_publisher->safe_psql('postgres',
-	"INSERT INTO tab4 VALUES (1)");
+$node_publisher->safe_psql('postgres', "INSERT INTO tab4 VALUES (1)");
 
 $node_publisher->wait_for_catchup('sub2');
 
 # tab4 change should be replicated through the root partition, which
 # maps to the tab4 relation on subscriber.
-$result = $node_subscriber2->safe_psql('postgres',
-	"SELECT a FROM tab4 ORDER BY 1");
+$result =
+  $node_subscriber2->safe_psql('postgres', "SELECT a FROM tab4 ORDER BY 1");
 is( $result, qq(0
 1), 'inserts into tab4 replicated');
 
-$result = $node_subscriber2->safe_psql('postgres',
-	"SELECT a FROM tab4_1 ORDER BY 1");
-is( $result, qq(), 'inserts into tab4_1 replicated');
+$result =
+  $node_subscriber2->safe_psql('postgres', "SELECT a FROM tab4_1 ORDER BY 1");
+is($result, qq(), 'inserts into tab4_1 replicated');
+
 
 # update (replicated as update)
 $node_publisher->safe_psql('postgres', "UPDATE tab1 SET a = 6 WHERE a = 5");
@@ -832,7 +843,9 @@ $node_publisher->wait_for_catchup('sub2');
 
 $result = $node_subscriber2->safe_psql('postgres',
 	"SELECT a, b, c FROM tab5 ORDER BY 1");
-is($result, qq(3|1|), 'updates of tab5 replicated correctly after altering table on subscriber');
+is($result, qq(3|1|),
+	'updates of tab5 replicated correctly after altering table on subscriber'
+);
 
 # Test that replication into the partitioned target table continues to
 # work correctly when the published table is altered.
@@ -847,7 +860,8 @@ $node_publisher->wait_for_catchup('sub2');
 
 $result = $node_subscriber2->safe_psql('postgres',
 	"SELECT a, b, c FROM tab5 ORDER BY 1");
-is($result, qq(3||1), 'updates of tab5 replicated correctly after altering table on publisher');
+is($result, qq(3||1),
+	'updates of tab5 replicated correctly after altering table on publisher');
 
 # Test that replication works correctly as long as the leaf partition
 # has the necessary REPLICA IDENTITY, even though the actual target
@@ -862,3 +876,5 @@ $node_publisher->wait_for_catchup('sub2');
 $result = $node_subscriber2->safe_psql('postgres',
 	"SELECT a, b, c FROM tab5_1 ORDER BY 1");
 is($result, qq(4||1), 'updates of tab5 replicated correctly');
+
+done_testing();

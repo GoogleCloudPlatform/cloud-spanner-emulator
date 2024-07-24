@@ -320,11 +320,11 @@ TEST_F(ErrorShimTest, CheckedPgListDeleteNthCell) {
 }
 
 TEST_F(ErrorShimTest, CheckedPgLinitialNode) {
-  Value* arg1 = makeString(pstrdup("column1"));
-  Value* arg2 = makeString(pstrdup("column2"));
+  String* arg1 = makeString(pstrdup("column1"));
+  String* arg2 = makeString(pstrdup("column2"));
   List* test_list = list_make2(arg1, arg2);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Value * initial_arg,
-                       CheckedPgLinitialNode<Value>(test_list));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(String * initial_arg,
+                       CheckedPgLinitialNode<String>(test_list));
   EXPECT_EQ(initial_arg, arg1);
 }
 

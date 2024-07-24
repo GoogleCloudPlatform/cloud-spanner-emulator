@@ -466,13 +466,6 @@ absl::Status ExecuteStreamingSql(
         std::vector<spanner_api::PartialResultSet> responses;
         if (is_dml_query) {
           responses.emplace_back();
-          if (txn->IsPartitionedDml()) {
-            responses.back().mutable_stats()->set_row_count_lower_bound(
-                result.modified_row_count);
-          } else {
-            responses.back().mutable_stats()->set_row_count_exact(
-                result.modified_row_count);
-          }
           if (result.rows == nullptr) {
             // Set empty row type.
             responses.back().mutable_metadata()->mutable_row_type();
@@ -480,6 +473,13 @@ absl::Status ExecuteStreamingSql(
             // It contains DML THEN RETURN row results.
             ZETASQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
                                             result.rows.get(), /*limit=*/0));
+          }
+          if (txn->IsPartitionedDml()) {
+            responses.back().mutable_stats()->set_row_count_lower_bound(
+                result.modified_row_count);
+          } else {
+            responses.back().mutable_stats()->set_row_count_exact(
+                result.modified_row_count);
           }
         } else {
           ZETASQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(

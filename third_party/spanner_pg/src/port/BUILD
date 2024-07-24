@@ -49,7 +49,6 @@ filegroup(
     srcs = [
         "bsearch_arg.c",
         "chklocale.c",
-        "erand48.c",
         "explicit_bzero.c",
         "fls.c",
         "getpeereid.c",
@@ -108,8 +107,6 @@ filegroup(
         "pg_crc32c_armv8.c",
         "pg_crc32c_armv8_choose.c",
         "pthread-win32.h",
-        "random.c",
-        "srandom.c",
         "strnlen.c",
         "system.c",
         "unsetenv.c",

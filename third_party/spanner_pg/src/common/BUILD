@@ -50,6 +50,7 @@ filegroup(
         "archive.c",
         "base64.c",
         "checksum_helper.c",
+        "compression.c",
         "config_info.c",
         "controldata_utils.c",
         "cryptohash.c",
@@ -69,6 +70,7 @@ filegroup(
         "md5_common.c",
         "pg_get_line.c",
         "pg_lzcompress.c",
+        "pg_prng.c",
         "pgfnames.c",
         "psprintf.c",
         "relpath.c",
@@ -130,6 +132,8 @@ cc_library(
         "//third_party/spanner_pg/src/include",
         "//third_party/spanner_pg/src/include:kwlist_d_header",
         "//third_party/spanner_pg/src/port:port_srv",
+        "@net_zstd//:zstdlib",
+        "@zlib",
     ],
 )
 
@@ -153,6 +157,8 @@ cc_library(
         "//third_party/spanner_pg/src/include",
         "//third_party/spanner_pg/src/include:kwlist_d_header",
         "//third_party/spanner_pg/src/port:port_frontend",
+        "@net_zstd//:zstdlib",
+        "@zlib",
     ],
 )
 

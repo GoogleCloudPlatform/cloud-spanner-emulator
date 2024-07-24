@@ -1,17 +1,18 @@
 
-# Copyright (c) 2021, PostgreSQL Global Development Group
+# Copyright (c) 2021-2022, PostgreSQL Global Development Group
 
 use strict;
 use warnings;
 
-use PostgresNode;
-use TestLib;
+use PostgreSQL::Test::Cluster;
+use PostgreSQL::Test::Utils;
 use Test::More;
-use Config;
 
 # start a pgbench specific server
-my $node = get_new_node('main');
-$node->init;
+my $node = PostgreSQL::Test::Cluster->new('main');
+# Set to untranslated messages, to be able to compare program output with
+# expected strings.
+$node->init(extra => [ '--locale', 'C' ]);
 $node->start;
 
 # tablespace for testing, because partitioned tables cannot use pg_default
@@ -109,7 +110,8 @@ $node->pgbench(
 		qr{builtin: TPC-B},
 		qr{clients: 2\b},
 		qr{processed: 10/10},
-		qr{mode: simple}
+		qr{mode: simple},
+		qr{maximum number of tries: 1}
 	],
 	[qr{^$}],
 	'pgbench tpcb-like');
@@ -250,7 +252,7 @@ select $$'Valame Dios!' dijo Sancho; 'no le dije yo a vuestra merced que mirase 
 select column1::jsonb from (values (:value), (:long)) as q;
 ]
 	});
-my $log = TestLib::slurp_file($node->logfile);
+my $log = PostgreSQL::Test::Utils::slurp_file($node->logfile);
 unlike(
 	$log,
 	qr[DETAIL:  parameters: \$1 = '\{ invalid ',],
@@ -291,7 +293,7 @@ select $$'Valame Dios!' dijo Sancho; 'no le dije yo a vuestra merced que mirase 
 select column1::jsonb from (values (:value), (:long)) as q;
 ]
 	});
-$log = TestLib::slurp_file($node->logfile);
+$log = PostgreSQL::Test::Utils::slurp_file($node->logfile);
 like(
 	$log,
 	qr[DETAIL:  parameters: \$1 = '\{ invalid ', \$2 = '''Valame Dios!'' dijo Sancho; ''no le dije yo a vuestra merced que mirase bien lo que hacia\?'''],
@@ -336,7 +338,7 @@ select $$'Valame Dios!' dijo Sancho; 'no le dije yo a vuestra merced que mirase 
 select column1::jsonb from (values (:value), (:long)) as q;
 ]
 	});
-$log = TestLib::slurp_file($node->logfile);
+$log = PostgreSQL::Test::Utils::slurp_file($node->logfile);
 like(
 	$log,
 	qr[DETAIL:  parameters: \$1 = '\{ inval\.\.\.', \$2 = '''Valame\.\.\.'],
@@ -367,7 +369,6 @@ $node->append_conf('postgresql.conf',
 $node->reload;
 
 # test expressions
-# command 1..3 and 23 depend on random seed which is used to call srandom.
 $node->pgbench(
 	'--random-seed=5432 -t 1 -Dfoo=-10.1 -Dbla=false -Di=+3 -Dn=null -Dt=t -Df=of -Dd=1.0',
 	0,
@@ -376,9 +377,9 @@ $node->pgbench(
 		qr{setting random seed to 5432\b},
 
 		# After explicit seeding, the four random checks (1-3,20) are
-		# deterministic
-		qr{command=1.: int 13\b},      # uniform random
-		qr{command=2.: int 116\b},     # exponential random
+		# deterministic; but see also magic values in checks 111,113.
+		qr{command=1.: int 17\b},      # uniform random
+		qr{command=2.: int 104\b},     # exponential random
 		qr{command=3.: int 1498\b},    # gaussian random
 		qr{command=4.: int 4\b},
 		qr{command=5.: int 5\b},
@@ -392,7 +393,7 @@ $node->pgbench(
 		qr{command=15.: double 15\b},
 		qr{command=16.: double 16\b},
 		qr{command=17.: double 17\b},
-		qr{command=20.: int 1\b},    # zipfian random
+		qr{command=20.: int 3\b},    # zipfian random
 		qr{command=21.: double -27\b},
 		qr{command=22.: double 1024\b},
 		qr{command=23.: double 1\b},
@@ -446,6 +447,7 @@ $node->pgbench(
 		qr{command=109.: boolean true\b},
 		qr{command=110.: boolean true\b},
 		qr{command=111.: boolean true\b},
+		qr{command=113.: boolean true\b},
 	],
 	'pgbench expressions',
 	{
@@ -589,8 +591,17 @@ SELECT :v0, :v1, :v2, :v3;
 \set t debug(0 <= :p and :p < :size and :p = permute(:v + :size, :size) and :p <> permute(:v + 1, :size))
 -- actual values
 \set t debug(permute(:v, 1) = 0)
-\set t debug(permute(0, 2, 5432) = 0 and permute(1, 2, 5432) = 1 and \
-             permute(0, 2, 5435) = 1 and permute(1, 2, 5435) = 0)
+\set t debug(permute(0, 2, 5431) = 0 and permute(1, 2, 5431) = 1 and \
+             permute(0, 2, 5433) = 1 and permute(1, 2, 5433) = 0)
+-- check permute's portability across architectures
+\set size debug(:max - 10)
+\set t debug(permute(:size-1, :size, 5432) = 520382784483822430 and \
+             permute(:size-2, :size, 5432) = 1143715004660802862 and \
+             permute(:size-3, :size, 5432) = 447293596416496998 and \
+             permute(:size-4, :size, 5432) = 916527772266572956 and \
+             permute(:size-5, :size, 5432) = 2763809008686028849 and \
+             permute(:size-6, :size, 5432) = 8648551549198294572 and \
+             permute(:size-7, :size, 5432) = 4542876852200565125)
 }
 	});
 
@@ -779,6 +790,8 @@ $node->pgbench(
 		'001_pgbench_pipeline_prep' => q{
 -- test startpipeline
 \startpipeline
+\endpipeline
+\startpipeline
 } . "select 1;\n" x 10 . q{
 \endpipeline
 }
@@ -828,9 +841,37 @@ select 1 \gset f
 }
 	});
 
+# Try \startpipeline without \endpipeline in a single transaction
+$node->pgbench(
+	'-t 1 -n -M extended',
+	2,
+	[],
+	[qr{end of script reached with pipeline open}],
+	'error: call \startpipeline without \endpipeline in a single transaction',
+	{
+		'001_pgbench_pipeline_5' => q{
+-- startpipeline only with single transaction
+\startpipeline
+}
+	});
+
+# Try \startpipeline without \endpipeline
+$node->pgbench(
+	'-t 2 -n -M extended',
+	2,
+	[],
+	[qr{end of script reached with pipeline open}],
+	'error: call \startpipeline without \endpipeline',
+	{
+		'001_pgbench_pipeline_6' => q{
+-- startpipeline only
+\startpipeline
+}
+	});
+
 # Working \startpipeline in prepared query mode with serializable
 $node->pgbench(
-	'-c4 -j2 -t 10 -n -M prepared',
+	'-c4 -t 10 -n -M prepared',
 	0,
 	[
 		qr{type: .*/001_pgbench_pipeline_serializable},
@@ -1208,6 +1249,225 @@ $node->pgbench(
 # The ID of a single client (1st field) should match 0.
 check_pgbench_logs($bdir, '001_pgbench_log_3', 1, 10, 10,
 	qr{^0 \d{1,2} \d+ \d \d+ \d+$});
+
+# abortion of the client if the script contains an incomplete transaction block
+$node->pgbench(
+	'--no-vacuum',
+	2,
+	[qr{processed: 1/10}],
+	[
+		qr{client 0 aborted: end of script reached without completing the last transaction}
+	],
+	'incomplete transaction block',
+	{ '001_pgbench_incomplete_transaction_block' => q{BEGIN;SELECT 1;} });
+
+# Test the concurrent update in the table row and deadlocks.
+
+$node->safe_psql('postgres',
+	    'CREATE UNLOGGED TABLE first_client_table (value integer); '
+	  . 'CREATE UNLOGGED TABLE xy (x integer, y integer); '
+	  . 'INSERT INTO xy VALUES (1, 2);');
+
+# Serialization error and retry
+
+local $ENV{PGOPTIONS} = "-c default_transaction_isolation=repeatable\\ read";
+
+# Check that we have a serialization error and the same random value of the
+# delta variable in the next try
+my $err_pattern =
+    "(client (0|1) sending UPDATE xy SET y = y \\+ -?\\d+\\b).*"
+  . "client \\2 got an error in command 3 \\(SQL\\) of script 0; "
+  . "ERROR:  could not serialize access due to concurrent update\\b.*"
+  . "\\1";
+
+$node->pgbench(
+	"-n -c 2 -t 1 -d --verbose-errors --max-tries 2",
+	0,
+	[
+		qr{processed: 2/2\b},
+		qr{number of transactions retried: 1\b},
+		qr{total number of retries: 1\b}
+	],
+	[qr/$err_pattern/s],
+	'concurrent update with retrying',
+	{
+		'001_pgbench_serialization' => q{
+-- What's happening:
+-- The first client starts the transaction with the isolation level Repeatable
+-- Read:
+--
+-- BEGIN;
+-- UPDATE xy SET y = ... WHERE x = 1;
+--
+-- The second client starts a similar transaction with the same isolation level:
+--
+-- BEGIN;
+-- UPDATE xy SET y = ... WHERE x = 1;
+-- <waiting for the first client>
+--
+-- The first client commits its transaction, and the second client gets a
+-- serialization error.
+
+\set delta random(-5000, 5000)
+
+-- The second client will stop here
+SELECT pg_advisory_lock(0);
+
+-- Start transaction with concurrent update
+BEGIN;
+UPDATE xy SET y = y + :delta WHERE x = 1 AND pg_advisory_lock(1) IS NOT NULL;
+
+-- Wait for the second client
+DO $$
+DECLARE
+  exists boolean;
+  waiters integer;
+BEGIN
+  -- The second client always comes in second, and the number of rows in the
+  -- table first_client_table reflect this. Here the first client inserts a row,
+  -- so the second client will see a non-empty table when repeating the
+  -- transaction after the serialization error.
+  SELECT EXISTS (SELECT * FROM first_client_table) INTO STRICT exists;
+  IF NOT exists THEN
+	-- Let the second client begin
+	PERFORM pg_advisory_unlock(0);
+	-- And wait until the second client tries to get the same lock
+	LOOP
+	  SELECT COUNT(*) INTO STRICT waiters FROM pg_locks WHERE
+	  locktype = 'advisory' AND objsubid = 1 AND
+	  ((classid::bigint << 32) | objid::bigint = 1::bigint) AND NOT granted;
+	  IF waiters = 1 THEN
+		INSERT INTO first_client_table VALUES (1);
+
+		-- Exit loop
+		EXIT;
+	  END IF;
+	END LOOP;
+  END IF;
+END$$;
+
+COMMIT;
+SELECT pg_advisory_unlock_all();
+}
+	});
+
+# Clean up
+
+$node->safe_psql('postgres', 'DELETE FROM first_client_table;');
+
+local $ENV{PGOPTIONS} = "-c default_transaction_isolation=read\\ committed";
+
+# Deadlock error and retry
+
+# Check that we have a deadlock error
+$err_pattern =
+    "client (0|1) got an error in command (3|5) \\(SQL\\) of script 0; "
+  . "ERROR:  deadlock detected\\b";
+
+$node->pgbench(
+	"-n -c 2 -t 1 --max-tries 2 --verbose-errors",
+	0,
+	[
+		qr{processed: 2/2\b},
+		qr{number of transactions retried: 1\b},
+		qr{total number of retries: 1\b}
+	],
+	[qr{$err_pattern}],
+	'deadlock with retrying',
+	{
+		'001_pgbench_deadlock' => q{
+-- What's happening:
+-- The first client gets the lock 2.
+-- The second client gets the lock 3 and tries to get the lock 2.
+-- The first client tries to get the lock 3 and one of them gets a deadlock
+-- error.
+--
+-- A client that does not get a deadlock error must hold a lock at the
+-- transaction start. Thus in the end it releases all of its locks before the
+-- client with the deadlock error starts a retry (we do not want any errors
+-- again).
+
+-- Since the client with the deadlock error has not released the blocking locks,
+-- let's do this here.
+SELECT pg_advisory_unlock_all();
+
+-- The second client and the client with the deadlock error stop here
+SELECT pg_advisory_lock(0);
+SELECT pg_advisory_lock(1);
+
+-- The second client and the client with the deadlock error always come after
+-- the first and the number of rows in the table first_client_table reflects
+-- this. Here the first client inserts a row, so in the future the table is
+-- always non-empty.
+DO $$
+DECLARE
+  exists boolean;
+BEGIN
+  SELECT EXISTS (SELECT * FROM first_client_table) INTO STRICT exists;
+  IF exists THEN
+	-- We are the second client or the client with the deadlock error
+
+	-- The first client will take care by itself of this lock (see below)
+	PERFORM pg_advisory_unlock(0);
+
+	PERFORM pg_advisory_lock(3);
+
+	-- The second client can get a deadlock here
+	PERFORM pg_advisory_lock(2);
+  ELSE
+	-- We are the first client
+
+	-- This code should not be used in a new transaction after an error
+	INSERT INTO first_client_table VALUES (1);
+
+	PERFORM pg_advisory_lock(2);
+  END IF;
+END$$;
+
+DO $$
+DECLARE
+  num_rows integer;
+  waiters integer;
+BEGIN
+  -- Check if we are the first client
+  SELECT COUNT(*) FROM first_client_table INTO STRICT num_rows;
+  IF num_rows = 1 THEN
+	-- This code should not be used in a new transaction after an error
+	INSERT INTO first_client_table VALUES (2);
+
+	-- Let the second client begin
+	PERFORM pg_advisory_unlock(0);
+	PERFORM pg_advisory_unlock(1);
+
+	-- Make sure the second client is ready for deadlock
+	LOOP
+	  SELECT COUNT(*) INTO STRICT waiters FROM pg_locks WHERE
+	  locktype = 'advisory' AND
+	  objsubid = 1 AND
+	  ((classid::bigint << 32) | objid::bigint = 2::bigint) AND
+	  NOT granted;
+
+	  IF waiters = 1 THEN
+	    -- Exit loop
+		EXIT;
+	  END IF;
+	END LOOP;
+
+	PERFORM pg_advisory_lock(0);
+    -- And the second client took care by itself of the lock 1
+  END IF;
+END$$;
+
+-- The first client can get a deadlock here
+SELECT pg_advisory_lock(3);
+
+SELECT pg_advisory_unlock_all();
+}
+	});
+
+# Clean up
+$node->safe_psql('postgres', 'DROP TABLE first_client_table, xy;');
+
 
 # done
 $node->safe_psql('postgres', 'DROP TABLESPACE regress_pgbench_tap_1_ts');

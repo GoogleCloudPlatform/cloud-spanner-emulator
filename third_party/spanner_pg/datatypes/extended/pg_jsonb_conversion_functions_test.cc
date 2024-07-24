@@ -40,6 +40,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "zetasql/base/no_destructor.h"
+#include "absl/status/status.h"
 #include "third_party/spanner_pg/datatypes/common/numeric_core.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
@@ -52,6 +53,7 @@ namespace {
 
 const zetasql::Type* gsql_bool = zetasql::types::BoolType();
 const zetasql::Type* gsql_double = zetasql::types::DoubleType();
+const zetasql::Type* gsql_float = zetasql::types::FloatType();
 const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
 const zetasql::Type* gsql_string = zetasql::types::StringType();
 
@@ -92,6 +94,7 @@ static const ConversionMap& GetConversionMap() {
       // PG.JSONB -> <TYPE>
       {{gsql_pg_jsonb, gsql_bool}, PgJsonbToBoolConversion},
       {{gsql_pg_jsonb, gsql_double}, PgJsonbToDoubleConversion},
+      {{gsql_pg_jsonb, gsql_float}, PgJsonbToFloatConversion},
       {{gsql_pg_jsonb, gsql_int64}, PgJsonbToInt64Conversion},
       {{gsql_pg_jsonb, gsql_pg_numeric}, PgJsonbToPgNumericConversion},
       {{gsql_pg_jsonb, gsql_string}, PgJsonbToStringConversion},
@@ -314,6 +317,95 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToDoubleError) {
         absl::StrCat("input:", input, " expected_error: ", expected_error));
     TestConversion(
         GetPgJsonbType(), zetasql::types::DoubleType(),
+        CreatePgJsonbValueWithMemoryContext(input).value(), std::nullopt,
+        /* is_error= */ true, absl::StatusCode::kOutOfRange, expected_error);
+  }
+}
+
+TEST(PgJsonbConversionTest, ConvertPgJsonbToFloatSuccess) {
+  TestConversion(
+      GetPgJsonbType(), zetasql::types::FloatType(),
+      zetasql::Value::Null(
+          postgres_translator::spangres::datatypes::GetPgJsonbType()),
+      zetasql::Value::NullFloat());
+
+  std::vector<std::pair<std::string, float>> float_test_cases = {
+      {"0", 0},
+      {"0.0", 0.0f},
+      {"3.14", 3.14f},
+      {"3.14000000", 3.14f},
+      {"123", 123},
+      {"3.145678", 3.145678f},
+      {"3.1456789", 3.145679f},
+      {"-33.12349", -33.12349f},
+      {"0.00001342", 1.342e-05f},
+      {"0.00000000000000000001000000001", 1e-20f},
+      {"0.0000000000000000000100000001", 1.00000001e-20f},
+
+      {absl::StrCat("34028235", std::string(31, '0')),
+       std::numeric_limits<float>::max()},
+      {absl::StrCat("-34028235", std::string(31, '0')),
+       std::numeric_limits<float>::lowest()},
+      {absl::StrCat("0.", std::string(37, '0'), "11754944"),
+       std::numeric_limits<float>::min()},
+
+      {"3.4028233e+38", 3.4028233e+38f},
+      {"3.4028234e+38", 3.4028235e+38f},
+      {"3.4028235e+38", 3.4028235e+38f},
+
+      {"1.1754943e-38", 1.1754944e-38f},
+      {"1.1754944e-38", 1.1754944e-38f},
+      {"1.1754945e-38", 1.1754945e-38f},
+
+      {"-3.4028233e+38", -3.4028233e+38f},
+      {"-3.4028234e+38", -3.4028235e+38f},
+      {"-3.4028235e+38", -3.4028235e+38f},
+  };
+  for (const auto& [input, expected_output] : float_test_cases) {
+    SCOPED_TRACE(absl::StrCat(
+        "input:", input, " expected_output:", std::to_string(expected_output)));
+    TestConversion(GetPgJsonbType(), zetasql::types::FloatType(),
+                   CreatePgJsonbValueWithMemoryContext(input).value(),
+                   zetasql::Value::Float(expected_output));
+  }
+}
+
+TEST(PgJsonbConversionTest, ConvertPgJsonbToFloatError) {
+  std::vector<std::pair<std::string, std::string>>
+      float_invalid_arg_test_cases = {
+          {"\"abc\"", "cannot cast jsonb string to type real"},
+          {"[1, 2]", "cannot cast jsonb array to type real"},
+          {"{\"a\": 2}", "cannot cast jsonb object to type real"},
+          {"true", "cannot cast jsonb boolean to type real"},
+          {"false", "cannot cast jsonb boolean to type real"},
+          {"null", "cannot cast jsonb null to type real"},
+          {"\"NaN\"", "cannot cast jsonb string to type real"},
+          {"\"-Infinity\"", "cannot cast jsonb string to type real"},
+          {"\"Infinity\"", "cannot cast jsonb string to type real"},
+      };
+  for (const auto& [input, expected_error] : float_invalid_arg_test_cases) {
+    SCOPED_TRACE(
+        absl::StrCat("input:", input, " expected_error: ", expected_error));
+    TestConversion(GetPgJsonbType(), zetasql::types::FloatType(),
+                   CreatePgJsonbValueWithMemoryContext(input).value(),
+                   std::nullopt,
+                   /* is_error= */ true, absl::StatusCode::kInvalidArgument,
+                   expected_error);
+  }
+
+  std::vector<std::pair<std::string, std::string>>
+      float_out_of_range_test_cases = {
+          {"3.4028236e+38", absl::StrCat("\"34028236", std::string(31, '0'),
+                                         "\" is out of range for type real")},
+          {"3.4028235e+39", absl::StrCat("\"34028235", std::string(32, '0'),
+                                         "\" is out of range for type real")},
+          {"-3.4028236e+38", absl::StrCat("\"-34028236", std::string(31, '0'),
+                                          "\" is out of range for type real")}};
+  for (const auto& [input, expected_error] : float_out_of_range_test_cases) {
+    SCOPED_TRACE(
+        absl::StrCat("input:", input, " expected_error: ", expected_error));
+    TestConversion(
+        GetPgJsonbType(), zetasql::types::FloatType(),
         CreatePgJsonbValueWithMemoryContext(input).value(), std::nullopt,
         /* is_error= */ true, absl::StatusCode::kOutOfRange, expected_error);
   }

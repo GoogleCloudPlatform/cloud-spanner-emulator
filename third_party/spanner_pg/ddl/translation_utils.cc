@@ -314,6 +314,10 @@ absl::StatusOr<std::string> ObjectTypeToString(ObjectType object_type) {
       return "USER MAPPING";
     case OBJECT_VIEW:
       return "VIEW";
+    case OBJECT_PARAMETER_ACL:
+      return "PARAMETER_ACL";
+    case OBJECT_PUBLICATION_NAMESPACE:
+      return "PUBLICATION_NAMESPACE";
   }
   return absl::FailedPreconditionError("Unknown object type");
 }

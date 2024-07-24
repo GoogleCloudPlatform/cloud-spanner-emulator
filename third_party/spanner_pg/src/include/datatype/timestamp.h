@@ -5,7 +5,7 @@
  *
  * Note: this file must be includable in both frontend and backend contexts.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/datatype/timestamp.h
@@ -40,7 +40,10 @@ typedef int64 TimestampTz;
 typedef int64 TimeOffset;
 typedef int32 fsec_t;			/* fractional seconds (in microseconds) */
 
-/* Spangres: name the Interval struct IntervalS instead of making it anonymous
+/*
+ * Storage format for type interval.
+ * 
+ * Spangres: name the Interval struct IntervalS instead of making it anonymous
  * and then typedef it as Interval. This allows the datetime parsing library
  * to be used by the Spangres analyzer and Spanner execution
  */
@@ -53,6 +56,41 @@ struct IntervalS
 };
 
 typedef struct IntervalS Interval;
+
+/*
+ * Data structure representing a broken-down interval.
+ *
+ * For historical reasons, this is modeled on struct pg_tm for timestamps.
+ * Unlike the situation for timestamps, there's no magic interpretation
+ * needed for months or years: they're just zero or not.  Note that fields
+ * can be negative; however, because of the divisions done while converting
+ * from struct Interval, only tm_mday could be INT_MIN.  This is important
+ * because we may need to negate the values in some code paths.
+ */
+struct pg_itm
+{
+	int			tm_usec;
+	int			tm_sec;
+	int			tm_min;
+	int64		tm_hour;		/* needs to be wide */
+	int			tm_mday;
+	int			tm_mon;
+	int			tm_year;
+};
+
+/*
+ * Data structure for decoding intervals.  We could just use struct pg_itm,
+ * but then the requirement for tm_usec to be 64 bits would propagate to
+ * places where it's not really needed.  Also, omitting the fields that
+ * aren't used during decoding seems like a good error-prevention measure.
+ */
+struct pg_itm_in
+{
+	int64		tm_usec;		/* needs to be wide */
+	int			tm_mday;
+	int			tm_mon;
+	int			tm_year;
+};
 
 
 /* Limits on the "precision" option (typmod) for these data types */

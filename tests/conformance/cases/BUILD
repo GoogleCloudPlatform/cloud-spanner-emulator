@@ -27,6 +27,7 @@ cc_library(
         "arrays.cc",
         "batch_dml.cc",
         "case_sensitivity.cc",
+        "change_streams_exclusion.cc",
         "change_streams_read_write.cc",
         "check_constraint_read_write.cc",
         "column_constraints.cc",

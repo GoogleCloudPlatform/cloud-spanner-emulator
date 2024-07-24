@@ -1597,17 +1597,16 @@ TEST_P(SchemaUpdaterTest, CreateTableIfNotExists) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTableWithVectorLength) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_EXPECT_OK(CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         a1 ARRAY<FLOAT64>(vector_length=>123),
+        a2 ARRAY<FLOAT32>(vector_length=>123),
       ) PRIMARY KEY (k1)
     )"}));
 }
 
 TEST_P(SchemaUpdaterTest, CreateTableWithVectorLengthOnInvalidType) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
@@ -1624,7 +1623,7 @@ TEST_P(SchemaUpdaterTest, AlterTableAlterColumnAddVectorLength) {
       CREATE TABLE T (
         k1 INT64,
         a1 ARRAY<FLOAT64>(vector_length=>123),
-        a2 ARRAY<FLOAT64>,
+        a2 ARRAY<FLOAT32>,
       ) PRIMARY KEY (k1)
     )sql"}));
 
@@ -1635,12 +1634,11 @@ TEST_P(SchemaUpdaterTest, AlterTableAlterColumnAddVectorLength) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTableAlterColumnRemoveVectorLength) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         a1 ARRAY<FLOAT64>(vector_length=>2),
-        a2 ARRAY<FLOAT64>,
+        a2 ARRAY<FLOAT32>,
       ) PRIMARY KEY (k1)
     )sql"}));
 

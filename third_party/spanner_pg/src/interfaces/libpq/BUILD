@@ -75,6 +75,7 @@ cc_library(
     srcs = [
         "fe-auth.c",
         "fe-auth.h",
+        "fe-auth-sasl.h",
         "fe-auth-scram.c",
         "fe-connect.c",
         "fe-exec.c",
@@ -88,7 +89,7 @@ cc_library(
         "libpq-events.h",
         "libpq-int.h",
         "pqexpbuffer.c",
-        "test/uri-regress.c",
+        "test/libpq_uri_regress.c",
     ],
     hdrs = [
         "libpq-fe.h",

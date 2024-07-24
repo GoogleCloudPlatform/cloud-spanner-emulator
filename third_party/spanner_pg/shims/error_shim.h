@@ -51,12 +51,12 @@ absl::StatusOr<interfaces::ParserOutput> CheckedPgRawParserFullOutput(
     const char* sql);
 absl::StatusOr<List*> CheckedPgRawParser(const char* sql);
 absl::StatusOr<Query*> CheckedPgParseAnalyze(RawStmt* raw_stmt, const char* sql,
-                                             Oid* param_types, int num_params,
+                                             const Oid* param_types,
+                                             int num_params,
                                              QueryEnvironment* query_env);
-absl::StatusOr<Query*> CheckedPgParseAnalyzeVarparams(RawStmt* raw_stmt,
-                                                      const char* sql,
-                                                      Oid** param_types,
-                                                      int* num_params);
+absl::StatusOr<Query*> CheckedPgParseAnalyzeVarparams(
+    RawStmt* raw_stmt, const char* sql, Oid** param_types, int* num_params,
+    QueryEnvironment* query_env = NULL);
 absl::StatusOr<void*> CheckedPgStringToNode(const char* data);
 absl::StatusOr<char*> CheckedPgNodeToString(const void* obj);
 absl::StatusOr<char*> CheckedPgPrettyFormatNodeDump(const char* dump);
@@ -115,10 +115,10 @@ absl::Status CheckedPgGetSortGroupOperators(Oid argtype, bool needLT,
                                             bool needEQ, bool needGT,
                                             Oid* ltOpr, Oid* eqOpr, Oid* gtOpr,
                                             bool* isHashable);
-absl::StatusOr<Var*> CheckedPgMakeVar(Index varno, AttrNumber varattno,
+absl::StatusOr<Var*> CheckedPgMakeVar(int varno, AttrNumber varattno,
                                       Oid vartype, int32_t vartypmod,
                                       Oid varcollid, Index varlevelsup);
-absl::StatusOr<Value*> CheckedPgMakeString(char* input);
+absl::StatusOr<String*> CheckedPgMakeString(char* input);
 absl::StatusOr<Alias*> CheckedPgMakeAlias(const char* aliasname,
                                           List* colnames);
 absl::StatusOr<Const*> CheckedPgMakeConst(Oid consttype, int32_t consttypmod,

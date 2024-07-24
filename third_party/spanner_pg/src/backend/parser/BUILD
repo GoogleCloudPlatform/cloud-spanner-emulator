@@ -62,6 +62,7 @@ cc_library(
         "parse_enr.c",
         "parse_expr.c",
         "parse_func.c",
+        "parse_merge.c",
         "parse_node.c",
         "parse_oper.c",
         "parse_param.c",

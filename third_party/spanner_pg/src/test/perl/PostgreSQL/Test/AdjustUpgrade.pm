@@ -294,34 +294,6 @@ sub adjust_old_dumpfile
 		$dump =~ s/(?<=^\Q$prefix\E)\Q$orig\E/$repl/mg;
 	}
 
-	# dumps from pre-9.6 databases will show assorted default grants explicitly
-	if ($old_version lt '9.6')
-	{
-		my $comment =
-		  "-- Name: SCHEMA public; Type: ACL; Schema: -; Owner: .*";
-		my $sql =
-		    "REVOKE ALL ON SCHEMA public FROM PUBLIC;\n"
-		  . "REVOKE ALL ON SCHEMA public FROM .*;\n"
-		  . "GRANT ALL ON SCHEMA public TO .*;\n"
-		  . "GRANT ALL ON SCHEMA public TO PUBLIC;";
-		$dump =~ s/^--\n$comment\n--\n+$sql\n+//mg;
-
-		$comment = "-- Name: DATABASE .*; Type: ACL; Schema: -; Owner: .*";
-		$sql =
-		    "REVOKE ALL ON DATABASE .* FROM PUBLIC;\n"
-		  . "REVOKE ALL ON DATABASE .* FROM .*;\n"
-		  . "GRANT ALL ON DATABASE .* TO .*;\n"
-		  . "GRANT CONNECT,TEMPORARY ON DATABASE .* TO PUBLIC;\n";
-		$dump =~ s/^--\n$comment\n--\n+$sql\n+//mg;
-		$dump =~ s/^$sql//mg;
-
-		$sql =
-		    "REVOKE ALL ON TABLE .* FROM PUBLIC;\n"
-		  . "REVOKE ALL ON TABLE .* FROM .*;\n"
-		  . "GRANT ALL ON TABLE .* TO .*;\n";
-		$dump =~ s/^$sql//mg;
-	}
-
 	if ($old_version lt '9.5')
 	{
 		# adjust some places where we don't print so many parens anymore

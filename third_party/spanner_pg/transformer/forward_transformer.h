@@ -144,7 +144,7 @@ class ForwardTransformer {
   // Requires that `rte.rtekind` is RTE_RELATION.
   // `rtindex` is used for MapVarIndexToColumn.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedTableScan>>
-  BuildGsqlResolvedTableScan(const RangeTblEntry& rte, Index rtindex,
+  BuildGsqlResolvedTableScan(const RangeTblEntry& rte, int rtindex,
                              VarIndexScope* output_scope);
 
   // Builds a `ResolvedFilterScan` object. `where_clause` is taken from the
@@ -185,7 +185,7 @@ class ForwardTransformer {
 
   // Builds a `ResolvedArrayScan` for UNNEST.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedArrayScan>>
-  BuildGsqlResolvedArrayScan(const RangeTblEntry& rte, Index rtindex,
+  BuildGsqlResolvedArrayScan(const RangeTblEntry& rte, int rtindex,
                              const VarIndexScope* external_scope,
                              VarIndexScope* output_scope);
 
@@ -193,7 +193,7 @@ class ForwardTransformer {
   // Currently this is just the Change Streams TVF.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedTVFScan>>
   BuildGsqlResolvedTVFScan(
-      const RangeTblEntry& rte, Index rtindex,
+      const RangeTblEntry& rte, int rtindex,
       const VarIndexScope* external_scope,
       const zetasql::TableValuedFunction* tvf_catalog_entry,
       VarIndexScope* output_scope);
@@ -310,7 +310,7 @@ class ForwardTransformer {
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedProjectScan>>
   ConvertZeroBasedOffsetToOneBasedOrdinal(
       std::unique_ptr<zetasql::ResolvedArrayScan> array_scan,
-      const Index& rtindex, VarIndexScope* output_scope);
+      const int rtindex, VarIndexScope* output_scope);
 
   // Simplified version of the ZetaSQL analyzer function of the same name.
   // This version only supports scalar arguments, which eliminates the need for
@@ -327,7 +327,7 @@ class ForwardTransformer {
       std::vector<zetasql::TVFInputArgumentType>* tvf_input_arguments);
 
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedWithRefScan>>
-  BuildGsqlResolvedWithRefScan(absl::string_view with_alias, Index rtindex,
+  BuildGsqlResolvedWithRefScan(absl::string_view with_alias, int rtindex,
                                VarIndexScope* output_scope);
 
   // Returns a ZetaSQL join type corresponding to the input PostgreSQL
@@ -982,7 +982,7 @@ class ForwardTransformer {
   //
   // This is used for the forward transformation.
   absl::Status MapVarIndexToColumn(const zetasql::ResolvedScan& scan,
-                                   Index rtindex,
+                                   int rtindex,
                                    VarIndexScope* var_index_scope);
   // Builds a synthetic limit node from a provided offset
   // if a limit is not provided.
@@ -1000,12 +1000,12 @@ class ForwardTransformer {
   // other non-join RangeTblEntry objects, so that their ResolvedColumns are
   // already indexed in the map.
   absl::Status MapVarIndexToColumnForJoin(const RangeTblEntry& rte,
-                                          Index rtindex,
+                                          int rtindex,
                                           VarIndexScope* var_index_scope);
 
   // This is used for the forward transformation.
   absl::StatusOr<zetasql::ResolvedColumn> GetResolvedColumn(
-      const VarIndexScope& var_index_scope, Index varno, AttrNumber varattno,
+      const VarIndexScope& var_index_scope, int varno, AttrNumber varattno,
       int var_levels_up,
       CorrelatedColumnsSetList* correlated_columns_sets = nullptr);
 

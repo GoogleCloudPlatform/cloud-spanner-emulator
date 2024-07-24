@@ -279,6 +279,20 @@ cc_test(
 )
 
 cc_test(
+    name = "float4_to_char_test",
+    srcs = [
+        "float4_to_char_test.cc",
+    ],
+    deps = [
+        ":test_base",
+        "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
     name = "numeric_to_char_test",
     srcs = [
         "numeric_to_char_test.cc",
