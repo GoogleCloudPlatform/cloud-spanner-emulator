@@ -42,7 +42,7 @@ class EmulatorFeatureFlags {
     bool enable_bit_reversed_positive_sequences_postgresql = true;
     bool enable_upsert_queries = true;
     bool enable_batch_query_with_no_table_scan = true;
-    bool enable_upsert_queries_with_returning = false;
+    bool enable_upsert_queries_with_returning = true;
   };
 
   static const EmulatorFeatureFlags& instance() {

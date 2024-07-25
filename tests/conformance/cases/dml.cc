@@ -562,6 +562,45 @@ TEST_P(DmlTest, Returning) {
               IsOkAndHoldsRows({}));
 }
 
+TEST_P(DmlTest, ReturningWithAction) {
+  // WITH ACTION is available in ZetaSQL only.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_upsert_queries_with_returning = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  // Insert THEN RETURN WITH ACTION returns "INSERT" as action string
+  std::vector<ValueRow> result_for_insert;
+  ZETASQL_EXPECT_OK(CommitDmlReturning(
+      {SqlStatement("INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27) "
+                    "THEN RETURN WITH ACTION AS action age;")},
+      result_for_insert));
+
+  absl::StatusOr<std::vector<ValueRow>> result_or = result_for_insert;
+  EXPECT_THAT(result_or, IsOkAndHoldsRow({Value(27), "INSERT"}));
+
+  // Update THEN RETURN WITH ACTION returns "UPDATE" as action string
+  std::vector<ValueRow> result_for_update;
+  ZETASQL_EXPECT_OK(CommitDmlReturning(
+      {SqlStatement("UPDATE users SET age = age + 1 WHERE id = 1 "
+                    "THEN RETURN WITH ACTION AS action age, name;")},
+      result_for_update));
+  result_or = result_for_update;
+  EXPECT_THAT(result_or, IsOkAndHoldsRow({28, "Levin", "UPDATE"}));
+
+  // Delete THEN RETURN WITH ACTION returns "DELETE" as action string
+  std::vector<ValueRow> result_for_delete;
+  ZETASQL_EXPECT_OK(CommitDmlReturning(
+      {SqlStatement("DELETE FROM users WHERE id = 1 "
+                    "THEN RETURN WITH ACTION AS action name, age;")},
+      result_for_delete));
+  result_or = result_for_delete;
+  EXPECT_THAT(result_or, IsOkAndHoldsRow({"Levin", 28, "DELETE"}));
+}
+
 // TODO: Reenable once fixed
 TEST_P(DmlTest, DISABLED_ReturningGeneratedColumns) {
   EmulatorFeatureFlags::Flags flags;
@@ -708,6 +747,101 @@ TEST_P(DmlTest, UpsertDmlGeneratedColumnTable) {
     EXPECT_THAT(
         Query("SELECT k, g1, g2, v3 FROM tablegen WHERE TRUE ORDER BY k"),
         IsOkAndHoldsRows({{1, 21, 20, 1}, {2, 41, 40, 2}, {5, 101, 100, 5}}));
+  }
+}
+
+TEST_P(DmlTest, ReturningUpsertDml) {
+  // Populate `tablegen` table
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("INSERT INTO tablegen(k, v1, v2) VALUES (1, 1, 1);")}));
+
+  // Test UPSERT queries with returning clause.
+  // In GSQL, SQL has WITH ACTION clause as it is supported in GSQL only.
+  // In PG, returning generated columns do not work. Test returning with
+  // non-generated columns. b/310194797.
+
+  std::vector<ValueRow> result_for_insert_ignore;
+  // 1. INSERT OR IGNORE DML with returning clause.
+  std::string sql =
+      "INSERT $0 INTO tablegen(k, v1, v2) "
+      "VALUES (1, 2, 2), (2, 2, 2) $1 $2";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(sql, "", "ON CONFLICT(k) DO NOTHING",
+                           "RETURNING k, v1, v2, v3");
+  } else {
+    sql = absl::Substitute(sql, "OR IGNORE", "",
+                           "THEN RETURN WITH ACTION AS action k, g1, g2, v3");
+  }
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, result_for_insert_ignore));
+  absl::StatusOr<std::vector<ValueRow>> result_or = result_for_insert_ignore;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(result_or, IsOkAndHoldsRow({2, 2, 2, 2}));
+  } else {
+    EXPECT_THAT(result_or, IsOkAndHoldsRow({2, 5, 4, 2, "INSERT"}));
+  }
+  // Read generated column values when run in GSQL dialect.
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        Query("SELECT k, g1, g2, v3 FROM tablegen WHERE TRUE ORDER BY k"),
+        IsOkAndHoldsRows({{1, 3, 2, 2}, {2, 5, 4, 2}}));
+  }
+
+  // 2. Insert new row with INSERT OR UPDATE DML with returning clause.
+  std::vector<ValueRow> result_for_insert_update;
+  sql =
+      "INSERT $0 INTO tablegen(k, v1, v2, v3) "
+      "VALUES (5, 50, 50, 5) $1 $2";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(sql, "",
+                           "ON CONFLICT(k) DO UPDATE SET k = excluded.k, "
+                           "v1 = excluded.v1, v2 = excluded.v2, "
+                           "v3 = excluded.v3",
+                           "RETURNING k, v1, v2, v3");
+  } else {
+    sql = absl::Substitute(sql, "OR UPDATE", "",
+                           "THEN RETURN WITH ACTION AS action k, g1, g2, v3");
+  }
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, result_for_insert_update));
+  absl::StatusOr<std::vector<ValueRow>> result_or1 = result_for_insert_update;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(result_or1, IsOkAndHoldsRow({5, 50, 50, 5}));
+  } else {
+    EXPECT_THAT(result_or1, IsOkAndHoldsRow({5, 101, 100, 5, "INSERT"}));
+  }
+  // Read generated column values of inserted row when run in GSQL dialect.
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        Query("SELECT k, g1, g2, v3 FROM tablegen WHERE k = 5 ORDER BY k"),
+        IsOkAndHoldsRow({5, 101, 100, 5}));
+  }
+
+  // 3. Update existing row with INSERT OR UPDATE DML with returning clause.
+  std::vector<ValueRow> result_for_insert_update2;
+  sql =
+      "INSERT $0 INTO tablegen(k, v1, v2, v3) "
+      "VALUES (2, 20, 20, 20) $1 $2";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(sql, "",
+                           "ON CONFLICT(k) DO UPDATE SET k = excluded.k, "
+                           "v1 = excluded.v1, v2 = excluded.v2, "
+                           "v3 = excluded.v3",
+                           "RETURNING k, v1, v2, v3");
+  } else {
+    sql = absl::Substitute(sql, "OR UPDATE", "",
+                           "THEN RETURN WITH ACTION AS action k, g1, g2, v3");
+  }
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, result_for_insert_update2));
+  absl::StatusOr<std::vector<ValueRow>> result_or2 = result_for_insert_update2;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(result_or2, IsOkAndHoldsRow({2, 20, 20, 20}));
+  } else {
+    EXPECT_THAT(result_or2, IsOkAndHoldsRow({2, 41, 40, 20, "UPDATE"}));
+  }
+  // Read generated column values of updated row when run in GSQL dialect.
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        Query("SELECT k, g1, g2, v3 FROM tablegen WHERE k = 2 ORDER BY k"),
+        IsOkAndHoldsRow({2, 41, 40, 20}));
   }
 }
 
