@@ -43,152 +43,149 @@
   prorettype => 'timestamptz', proargtypes => 'text timestamptz timestamptz',
   prosrc => 'timestamptz_bin' },
 
+{ oid => '50056', proname => 'get_table_column_identity_state',
+  pronamespace => 'spanner', prorettype => 'int8', proargtypes => 'text',
+  prosrc => 'get_table_column_identity_state' },
+
 #############################
 # FTS TOKENIZATION FUNCTIONS
 #############################
 # TOKENIZE_FULLTEXT
 { oid => '50016', proname => 'tokenize_fulltext', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => 'text',
-  proargnames => '{value}',
+  prorettype => 'tokenlist', proargtypes => 'text text text text',
+  proargnames => '{value,language_tag,content_type,token_category}',
   prosrc => 'spangres_fts_func' },
 
 { oid => '50017', proname => 'tokenize_fulltext', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => '_text',
-  proargnames => '{value}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50018', proname => 'tokenize_fulltext', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => 'text text',
-  proargnames => '{value,language_tag}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50019', proname => 'tokenize_fulltext', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => '_text text',
-  proargnames => '{value,language_tag}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50020', proname => 'tokenize_fulltext', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => 'text text text',
-  proargnames => '{value,language_tag,content_type}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50021', proname => 'tokenize_fulltext', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => '_text text text',
-  proargnames => '{value,language_tag,content_type}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50022', proname => 'tokenize_fulltext', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => 'text text text text',
-  proargnames => '{value,language_tag,content_type,hit_category}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50023', proname => 'tokenize_fulltext', pronamespace => 'spanner',
   prorettype => 'tokenlist', proargtypes => '_text text text text',
-  proargnames => '{value,language_tag,content_type,hit_category}',
+  proargnames => '{value,language_tag,content_type,token_category}',
   prosrc => 'spangres_fts_func' },
 
 # TOKENIZE_SUBSTRING
-{ oid => '50024', proname => 'tokenize_substring', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => 'text',
-  proargnames => '{value}',
+{ oid => '50018', proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text int8 int8 text _text bool text bool',
+  proargnames => '{value,ngram_size_max,ngram_size_min,content_type,relative_search_types,short_tokens_only_for_anchors,language_tag,remove_diacritics}',
   prosrc => 'spangres_fts_func' },
 
-{ oid => '50025', proname => 'tokenize_substring', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => '_text',
-  proargnames => '{value}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50026', proname => 'tokenize_substring', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => 'text int8',
-  proargnames => '{value, ngram_size_max}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50027', proname => 'tokenize_substring', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => '_text int8',
-  proargnames => '{value, ngram_size_max}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50028', proname => 'tokenize_substring', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => 'text int8 int8',
-  proargnames => '{value, ngram_size_max, ngram_size_min}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50029', proname => 'tokenize_substring', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => '_text int8 int8',
-  proargnames => '{value, ngram_size_max, ngram_size_min}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50030', proname => 'tokenize_substring', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => 'text int8 int8 bool',
-  proargnames => '{value, ngram_size_max, ngram_size_min, support_relative_search}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50031', proname => 'tokenize_substring', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => '_text int8 int8 bool',
-  proargnames => '{value, ngram_size_max, ngram_size_min, support_relative_search}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50032', proname => 'tokenize_substring', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => 'text int8 int8 bool text',
-  proargnames => '{value, ngram_size_max, ngram_size_min, support_relative_search, content_type}',
-  prosrc => 'spangres_fts_func' },
-
-{ oid => '50033', proname => 'tokenize_substring', pronamespace => 'spanner',
-  prorettype => 'tokenlist', proargtypes => '_text int8 int8 bool text',
-  proargnames => '{value, ngram_size_max, ngram_size_min, support_relative_search, content_type}',
+{ oid => '50019', proname => 'tokenize_substring', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_text int8 int8 text _text bool text bool',
+  proargnames => '{value,ngram_size_max,ngram_size_min,content_type,relative_search_types,short_tokens_only_for_anchors,language_tag,remove_diacritics}',
   prosrc => 'spangres_fts_func' },
 
 # TOKEN
-{ oid => '50034', proname => 'token', pronamespace => 'spanner',
+{ oid => '50020', proname => 'token', pronamespace => 'spanner',
   prorettype => 'tokenlist', proargtypes => 'text',
-  proargnames => '{value}',
   prosrc => 'spangres_fts_func' },
 
-{ oid => '50035', proname => 'token', pronamespace => 'spanner',
+{ oid => '50021', proname => 'token', pronamespace => 'spanner',
   prorettype => 'tokenlist', proargtypes => '_text',
-  proargnames => '{value}',
   prosrc => 'spangres_fts_func' },
 
-{ oid => '50036', proname => 'token', pronamespace => 'spanner',
+{ oid => '50022', proname => 'token', pronamespace => 'spanner',
   prorettype => 'tokenlist', proargtypes => 'bytea',
-  proargnames => '{value}',
   prosrc => 'spangres_fts_func' },
 
-{ oid => '50037', proname => 'token', pronamespace => 'spanner',
+{ oid => '50023', proname => 'token', pronamespace => 'spanner',
   prorettype => 'tokenlist', proargtypes => '_bytea',
-  proargnames => '{value}',
   prosrc => 'spangres_fts_func' },
-
 
 # TOKENIZE_NUMBER
+{ oid => 50024, proname => 'tokenize_number', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'float8 text text float8 float8 float8 int8 int8',
+  proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,precision}',
+  prosrc => 'spangres_fts_func' },
+
+{ oid => 50025, proname => 'tokenize_number', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_float8 text text float8 float8 float8 int8 int8',
+  proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,precision}',
+  prosrc => 'spangres_fts_func' },
+
+{ oid => 50026, proname => 'tokenize_number', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'int8 text text int8 int8 int8 int8 int8',
+  proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,precision}',
+  prosrc => 'spangres_fts_func' },
+
+{ oid => 50027, proname => 'tokenize_number', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_int8 text text int8 int8 int8 int8 int8',
+  proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,precision}',
+  prosrc => 'spangres_fts_func' },
+
+{ oid => 50028, proname => 'tokenize_number', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'float4 text text float8 float8 float8 int8 int8',
+  proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,precision}',
+  prosrc => 'spangres_fts_func' },
+
+{ oid => 50029, proname => 'tokenize_number', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_float4 text text float8 float8 float8 int8 int8',
+  proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,precision}',
+  prosrc => 'spangres_fts_func' },
 
 # TOKENIZE_BOOL
+{ oid => 50030, proname => 'tokenize_bool', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'bool', proargnames => '{value}',
+  prosrc => 'spangres_fts_func' },
+
+# TOKENIZE_NGRAMS
+{ oid => 50031, proname => 'tokenize_ngrams', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'text int8 int8 bool',
+  proargnames => '{value,ngram_size_max,ngram_size_min,remove_diacritics}',
+  prosrc => 'spangres_fts_func' },
 
 # TOKENLIST_CONCAT
+{ oid => 50032, proname => 'tokenlist_concat', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => '_tokenlist',
+  proargnames => '{tokens}',
+  prosrc => 'spangres_fts_func' },
 
 #############################
 # FTS SEARCH FUNCTIONS
 #############################
 
 # SEARCH
+{ oid => 50033, proname => 'search', pronamespace => 'spanner',
+  prorettype => 'bool', proargtypes => 'tokenlist text bool text',
+  proargnames => '{tokens,query,enhance_query,language_tag}',
+  prosrc => 'spangres_fts_func' },
 
 # SEARCH_SUBSTRING
+{ oid => 50034, proname => 'search_substring', pronamespace => 'spanner',
+  prorettype => 'bool', proargtypes => 'tokenlist text text text',
+  proargnames => '{tokens,query,relative_search_type,language_tag}',
+  prosrc => 'spangres_fts_func' },
+
+# SEARCH_NGRAMS
+{ oid => 50035, proname => 'search_ngrams', pronamespace => 'spanner',
+  prorettype => 'bool', proargtypes => 'tokenlist text int8 float8 text',
+  proargnames => '{tokens,ngrams_query,min_ngrams,min_ngrams_percent,language_tag}',
+  prosrc => 'spangres_fts_func' },
 
 # SCORE
+
+# SCORE_NGRAMS
+{ oid => 50036, proname => 'score_ngrams', pronamespace => 'spanner',
+  prorettype => 'float8', proargtypes => 'tokenlist text text text',
+  proargnames => '{tokens,ngrams_query,algorithm,language_tag}',
+  prosrc => 'spangres_fts_func' },
 
 #############################
 # FTS DEBUG FUNCTIONS
 #############################
 
-# TOKENLIST_DEBUG
-
-# SEARCH_DEBUG
+# DEBUG_TOKENLIST
+{ oid => 50003, proname => 'debug_tokenlist', pronamespace => 'spanner',
+  prorettype => 'text', proargtypes => 'tokenlist',
+  prosrc => 'spangres_fts_func' },
 
 #############################
 # FTS MISC FUNCTIONS
 #############################
 
 # SNIPPET
+
+# SOUNDEX
+{ oid => 50037, proname => 'soundex', pronamespace => 'spanner',
+  prorettype => 'bool', proargtypes => 'text',
+  prosrc => 'spangres_fts_func' },
 
 #############################
 # VECTOR FUNCTIONS
@@ -229,12 +226,12 @@
 
 { oid => '50040', proname => 'ml_predict_row', pronamespace => 'spanner',
   prorettype => 'jsonb', proargtypes => 'jsonb jsonb',
-  proargnames => '{model_endpoint args}',
+  proargnames => '{model_endpoint,args}',
   prosrc => 'ml_predict_row' },
 
 { oid => '50041', proname => 'ml_predict_row', pronamespace => 'spanner',
   prorettype => 'jsonb', proargtypes => 'text jsonb',
-  proargnames => '{model_endpoint args}',
+  proargnames => '{model_endpoint,args}',
   prosrc => 'ml_predict_row' },
 
 #############################

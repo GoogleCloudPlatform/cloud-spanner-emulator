@@ -43,6 +43,14 @@ ABSL_FLAG(bool, disable_query_null_filtered_index_check, false,
           "to disable this check per query, instead of disabling this check "
           "for all the queries at once.");
 
+ABSL_FLAG(
+    int, abort_current_transaction_probability, 20,
+    "The probability that the emulator will try to abort the current "
+    "transaction if a new transaction is requested. A higher value gives "
+    "higher priority to new transactions. A lower value gives higher priority "
+    "to the current transaction. A value of zero means that the emulator will "
+    "never abort the current transaction.");
+
 namespace google {
 namespace spanner {
 namespace emulator {
@@ -58,6 +66,14 @@ bool fault_injection_enabled() {
 
 bool disable_query_null_filtered_index_check() {
   return absl::GetFlag(FLAGS_disable_query_null_filtered_index_check);
+}
+
+int abort_current_transaction_probability() {
+  return absl::GetFlag(FLAGS_abort_current_transaction_probability);
+}
+
+void set_abort_current_transaction_probability(int probability) {
+  absl::SetFlag(&FLAGS_abort_current_transaction_probability, probability);
 }
 
 }  // namespace config

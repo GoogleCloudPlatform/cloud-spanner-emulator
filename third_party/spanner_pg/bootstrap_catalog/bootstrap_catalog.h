@@ -41,6 +41,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog_info.h"
+#include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
 namespace postgres_translator {
@@ -60,6 +61,7 @@ class PgBootstrapCatalog {
       absl::Span<const FormData_pg_namespace> pg_namespace_data,
       absl::Span<const FormData_pg_type> pg_type_data,
       absl::Span<const FormData_pg_proc_WithArgTypes> pg_proc_data,
+      std::vector<std::string> pg_proc_textproto_data,
       absl::Span<const FormData_pg_cast> pg_cast_data,
       absl::Span<const FormData_pg_operator> pg_operator_data,
       absl::Span<const FormData_pg_aggregate> pg_aggregate_data,
@@ -109,6 +111,9 @@ class PgBootstrapCatalog {
   // Proc ======================================================================
   // Given an oid, returns the corresponding pg_proc.
   absl::StatusOr<const FormData_pg_proc*> GetProc(Oid oid) const;
+
+  // Given an oid, returns the corresponding pg_proc proto.
+  absl::StatusOr<const PgProcData*> GetProcProto(Oid oid) const;
 
   // Given an oid, returns the corresponding proc name.
   absl::StatusOr<const char*> GetProcName(Oid oid) const;
@@ -270,8 +275,14 @@ class PgBootstrapCatalog {
   // return its raw pointer. If it's deleted, return a nullptr. If it is
   // modified, use `UpdateProc` to create a modified copy and return a raw
   // pointer to the modified copy.
-  const FormData_pg_proc_WithArgTypes* GetFinalProcData(
+  const FormData_pg_proc_WithArgTypes* GetFinalProcFormData(
       const FormData_pg_proc_WithArgTypes& original_proc);
+
+  // Given a proc, return the final version of it. If the proc is unmodified,
+  // return its raw pointer. If it's deleted, return a nullptr. If it is
+  // modified, use `UpdateProc` to create a modified copy and return a raw
+  // pointer to the modified copy.
+  std::unique_ptr<PgProcData> GetFinalProcProto(PgProcData& proto);
 
   // Given an operator, return the final version of it. If the underlying proc
   // is unmodified, return the raw pointer of the original operator. If the
@@ -310,6 +321,8 @@ class PgBootstrapCatalog {
   // TODO: Refactor code to only use `amproc_by_familykey_`.
   absl::flat_hash_map<AmprocFamilyKey, std::vector<const FormData_pg_amproc*>>
       amprocs_by_partial_familykey_;
+
+  absl::flat_hash_map<Oid, std::unique_ptr<PgProcData>> proc_proto_by_oid_;
 
   // The updated FormData_pg_proc_WithArgTypes and FormData_pg_operator
   // objects are owned by the bootstrap catalog.

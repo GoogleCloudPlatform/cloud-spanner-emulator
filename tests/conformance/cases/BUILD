@@ -85,6 +85,7 @@ cc_library(
     ],
     deps = [
         "//common:clock",
+        "//common:config",
         "//common:feature_flags",
         "//frontend/converters:pg_change_streams",
         "//frontend/handlers:change_streams",

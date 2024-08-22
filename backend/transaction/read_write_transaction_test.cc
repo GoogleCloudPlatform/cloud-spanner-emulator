@@ -44,6 +44,7 @@
 #include "backend/transaction/actions.h"
 #include "backend/transaction/options.h"
 #include "common/clock.h"
+#include "common/config.h"
 #include "tests/common/schema_constructor.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "absl/status/status.h"
@@ -291,6 +292,8 @@ TEST_F(ReadWriteTransactionTest, CommitWithMultipleChangesToDatabase) {
 
 TEST_F(ReadWriteTransactionTest,
        ConcurrentReadWriteTransactionsReturnsAborted) {
+  auto current_probability = config::abort_current_transaction_probability();
+  config::set_abort_current_transaction_probability(0);
   // Started "writes" on first transaction.
   Mutation m1;
   m1.AddWriteOp(MutationOpType::kInsert, "test_table",
@@ -317,6 +320,8 @@ TEST_F(ReadWriteTransactionTest,
   ZETASQL_EXPECT_OK(txn2->Write(m2));
   ZETASQL_EXPECT_OK(txn2->Commit());
   EXPECT_EQ(txn2->state(), ReadWriteTransaction::State::kCommitted);
+
+  config::set_abort_current_transaction_probability(current_probability);
 }
 
 TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
@@ -344,10 +349,10 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
   for (int i = 0; i < n; ++i) {
     threads.emplace_back([&]() {
       for (int j = 0; j < k; ++j) {
-        // Start a  ReadWriteTransaction that will read and increment
-        // this value.
-        auto cur_txn = CreateReadWriteTransaction();
         while (true) {
+          // Start a  ReadWriteTransaction that will read and increment
+          // this value.
+          auto cur_txn = CreateReadWriteTransaction();
           std::unique_ptr<backend::RowCursor> cursor;
           absl::Status status = cur_txn->Read(read_arg, &cursor);
           if (status.ok()) {
@@ -365,19 +370,18 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
             status.Update(cur_txn->Write(m));
             if (status.ok()) {
               status.Update(cur_txn->Commit());
-              ZETASQL_ASSERT_OK(status);
+              if (status.ok()) {
+                ZETASQL_ASSERT_OK(status);
 
-              EXPECT_EQ(cur_txn->state(),
-                        ReadWriteTransaction::State::kCommitted);
+                EXPECT_EQ(cur_txn->state(),
+                          ReadWriteTransaction::State::kCommitted);
 
-              break;
+                break;
+              }
             }
           }
 
           // Retry on abort.
-          if (status.code() == absl::StatusCode::kAborted) {
-            continue;
-          }
         }
       }
     });
@@ -397,6 +401,83 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
     final_val = cursor->ColumnValue(0).int64_value();
   }
   EXPECT_THAT(final_val, n * k);
+}
+
+TEST_F(ReadWriteTransactionTest, OneTransactionDoesNotBlockAllOthers) {
+  // Create a row that can be read by read/write transactions.
+  Mutation seed_m;
+  seed_m.AddWriteOp(MutationOpType::kInsert, "test_table",
+                    {"int64_col", "int64_val_col"}, {{Int64(1), Int64(0)}});
+
+  auto setup_txn = CreateReadWriteTransaction();
+  ZETASQL_ASSERT_OK(setup_txn->Write(seed_m));
+  ZETASQL_ASSERT_OK(setup_txn->Commit());
+  ASSERT_EQ(setup_txn->state(), ReadWriteTransaction::State::kCommitted);
+
+  // Read args.
+  backend::ReadArg read_arg;
+  read_arg.table = "test_table";
+  read_arg.columns = {"int64_val_col"};
+  read_arg.key_set = KeySet(Key({Int64(1)}));
+
+  // Start a ReadWriteTransaction that will read and increment
+  // the value, but not (yet) commit.
+  auto cur_txn = CreateReadWriteTransaction();
+  std::unique_ptr<backend::RowCursor> cursor;
+  ZETASQL_ASSERT_OK(cur_txn->Read(read_arg, &cursor));
+  // Increment and save this value to the database.
+  int cur_val = 0;
+  while (cursor->Next()) {
+    cur_val = cursor->ColumnValue(0).int64_value();
+  }
+  ZETASQL_ASSERT_OK(cursor->Status());
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kUpdate, "test_table",
+               {"int64_col", "int64_val_col"},
+               {{Int64(1), Int64(cur_val + 1)}});
+  ZETASQL_ASSERT_OK(cur_txn->Write(m));
+
+  // Start another read/write transaction that will read and update the same
+  // value. We do this in a retry loop to make sure it eventually succeeds.
+  // This is how all read/write transactions on Spanner should be executed.
+  auto attempts = 0;
+  while (true) {
+    auto other_txn = CreateReadWriteTransaction();
+    auto status = other_txn->Read(read_arg, &cursor);
+    if (status.ok()) {
+      while (cursor->Next()) {
+        cur_val = cursor->ColumnValue(0).int64_value();
+      }
+      ZETASQL_ASSERT_OK(cursor->Status());
+      m.AddWriteOp(MutationOpType::kUpdate, "test_table",
+                   {"int64_col", "int64_val_col"},
+                   {{Int64(1), Int64(cur_val + 1)}});
+      ZETASQL_ASSERT_OK(other_txn->Write(m));
+      ZETASQL_ASSERT_OK(other_txn->Commit());
+      ASSERT_EQ(other_txn->state(), ReadWriteTransaction::State::kCommitted);
+      break;
+    } else {
+      // Retry if the status is Aborted. Fail in all other cases.
+      ASSERT_EQ(status.code(), absl::StatusCode::kAborted);
+    }
+    attempts++;
+    if (attempts > 1000) {
+      FAIL() << "Transaction did not succeed after 1000 attempts.";
+    }
+  }
+
+  // Verify that the first transaction was aborted.
+  EXPECT_EQ(cur_txn->state(), ReadWriteTransaction::State::kAborted);
+
+  // Verify the value.
+  auto verify_txn = CreateReadWriteTransaction();
+  ZETASQL_ASSERT_OK(verify_txn->Read(read_arg, &cursor));
+  int final_val;
+  while (cursor->Next()) {
+    final_val = cursor->ColumnValue(0).int64_value();
+  }
+  ZETASQL_ASSERT_OK(verify_txn->Commit());
+  EXPECT_EQ(final_val, 1);
 }
 
 TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {

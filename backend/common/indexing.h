@@ -37,9 +37,10 @@ absl::StatusOr<Key> ComputeIndexKey(const Row& base_row, const Index* index);
 // Computes an the ordered list of index row values using the given base row.
 ValueList ComputeIndexValues(const Row& base_row, const Index* index);
 
-// Returns true if no index entry should be added for the given base table key.
-bool ShouldFilterIndexKey(const Index* index, const Key& key);
-
+// Returns true if no index entry should be added for the given base table key
+// or value.
+bool ShouldFilterIndexKeyOrValue(const Index* index, const Key& key,
+                                 const Row& base_row);
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

@@ -430,6 +430,10 @@ FuncCandidateList FuncnameGetCandidates(List* names, int nargs, List* argnames,
                                         bool include_out_arguments,
                                         bool missing_ok);
 
+bool NamedCallMatchFound(Oid proc_oid, int nargs, List* argnames,
+                         bool include_out_arguments, int pronargs,
+                         int** argnumbers);
+
 // Given an Operator name, returns a list of candidate functions to be selected
 // from based on desired operand types.
 FuncCandidateList OpernameGetCandidates(List* names, char oprkind,

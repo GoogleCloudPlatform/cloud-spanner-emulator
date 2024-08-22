@@ -87,6 +87,11 @@ class Index::Builder {
     return *this;
   }
 
+  Builder& add_null_filtered_column(const Column* column) {
+    instance_->null_filtered_columns_.push_back(column);
+    return *this;
+  }
+
   Builder& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
     if (postgresql_oid.has_value()) {
       instance_->set_postgresql_oid(postgresql_oid.value());

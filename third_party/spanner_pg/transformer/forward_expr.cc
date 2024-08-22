@@ -559,6 +559,13 @@ ForwardTransformer::BuildGsqlResolvedExpr(
   return BuildGsqlResolvedExpr(*relabel_type.arg, expr_transformer_info);
 }
 
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+ForwardTransformer::BuildGsqlResolvedExpr(
+    const NamedArgExpr& named_arg,
+    ExprTransformerInfo* expr_transformer_info) {
+  return BuildGsqlResolvedExpr(*named_arg.arg, expr_transformer_info);
+}
+
 absl::Status ForwardTransformer::UnsupportedCastError(Oid source_type_oid,
                                                       Oid target_type_oid) {
   ZETASQL_ASSIGN_OR_RETURN(
@@ -629,6 +636,10 @@ ForwardTransformer::BuildGsqlResolvedExpr(
   switch (expr.type) {
     case T_Const: {
       return BuildGsqlResolvedLiteral(*PostgresConstCastNode(Const, &expr));
+    }
+    case T_NamedArgExpr: {
+      return BuildGsqlResolvedExpr(*PostgresConstCastNode(NamedArgExpr, &expr),
+                                   expr_transformer_info);
     }
     case T_Var: {
       // NOTE: Var might mean `ResolvedColumn` in some cases. But those cases

@@ -56,6 +56,7 @@ cc_library(
         "catalog",
     ],
     visibility = [
+        "//spanner/datatypes/common/jsonb:__pkg__",
         "//spanner/tests/spangres_end_to_end_test:__subpackages__",
         # Use spangres/postgres_includes for safe PostgreSQL headers in non-PostgreSQL code.
         "//third_party/spanner_pg/postgres_includes:__pkg__",

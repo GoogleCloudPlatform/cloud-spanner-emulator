@@ -28,6 +28,7 @@
 #include "absl/algorithm/container.h"
 #include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -471,6 +472,16 @@ void VisitStoredColumnListNode(
   }
 }
 
+void VisitCreateIndexWhereClause(
+    const SimpleNode* node, google::protobuf::RepeatedPtrField<std::string>* columns) {
+  CheckNode(node, JJTCREATE_INDEX_WHERE_CLAUSE);
+  ABSL_CHECK_GT(node->jjtGetNumChildren(), 0);  // Crash ok.
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i, JJTPATH);
+    *columns->Add() = child->image();
+  }
+}
+
 // All length requirements/restrictions will be enforced by the validator code.
 void SetColumnLength(const SimpleNode* length_node, ColumnDefinition* column) {
   // If the length is MAX, then we leave off the length from ColumnDefinition.
@@ -766,65 +777,61 @@ void VisitColumnNodeAlter(const std::string& table_name,
   CheckNode(node, JJTCOLUMN_DEF_ALTER);
   const SimpleNode* child = GetChildNode(node, 0);
   AlterTable* alter_table = statement->mutable_alter_table();
+  if (child->getId() == JJTOPTIONS_CLAUSE) {
+    // "ALTER COLUMN c SET OPTIONS (...)" does not contain the
+    // column TYPE or NOT NULL attributes. Translate this into a
+    // SetColumnOptions statement which does not take these
+    // attributes as input, and the schema change code will keep
+    // these attributes unchanged.
+    SetColumnOptions* set_options = statement->mutable_set_column_options();
+    SetColumnOptions::ColumnPath* path = set_options->add_column_path();
+    path->set_table_name(table_name);
+    path->set_column_name(column_name);
+    VisitColumnOptionListNode(child, 0 /* option_list_offset */,
+                              set_options->mutable_options(), errors);
+    return;
+  }
+  if (child->getId() == JJTCOLUMN_DEF_ALTER_ATTRS) {
+    // For "ALTER COLUMN c TYPE NOT NULL"
+    alter_table->set_table_name(table_name);
+    ColumnDefinition* column =
+        alter_table->mutable_alter_column()->mutable_column();
+    VisitColumnNodeAlterAttrs(child, column_name, column, ddl_text, errors);
+    return;
+  }
+
+  alter_table->set_table_name(table_name);
+  AlterTable::AlterColumn* alter_column = alter_table->mutable_alter_column();
+  ColumnDefinition* column = alter_column->mutable_column();
+  column->set_column_name(column_name);
+  // `type` is required in ColumnDefinition, so set it to NONE here.
+  column->set_type(ColumnDefinition::NONE);
+
   switch (child->getId()) {
-    case JJTOPTIONS_CLAUSE: {
-      // "ALTER COLUMN c SET OPTIONS (...)" does not contain the
-      // column TYPE or NOT NULL attributes. Translate this into a
-      // SetColumnOptions statement which does not take these
-      // attributes as input, and the schema change code will keep
-      // these attributes unchanged.
-      SetColumnOptions* set_options = statement->mutable_set_column_options();
-      SetColumnOptions::ColumnPath* path = set_options->add_column_path();
-      path->set_table_name(table_name);
-      path->set_column_name(column_name);
-      VisitColumnOptionListNode(child, 0 /* option_list_offset */,
-                                set_options->mutable_options(), errors);
-      break;
-    }
     case JJTCOLUMN_DEFAULT_CLAUSE: {
       // "ALTER COLUMN c SET DEFAULT " does not contain the column TYPE or
       // NOT NULL attributes.
-      alter_table->set_table_name(table_name);
-      AlterTable::AlterColumn* alter_column =
-          alter_table->mutable_alter_column();
-      ColumnDefinition* column = alter_column->mutable_column();
       alter_column->set_operation(AlterTable::AlterColumn::SET_DEFAULT);
-      column->set_column_name(column_name);
-      // `type` is required in ColumnDefinition, so set it to NONE here.
-      column->set_type(ColumnDefinition::NONE);
       VisitColumnDefaultClauseNode(child, column, ddl_text);
       break;
     }
     case JJTDROP_COLUMN_DEFAULT: {
       // "ALTER COLUMN c DROP DEFAULT " does not contain the column TYPE or
       // NOT NULL attributes.
-      alter_table->set_table_name(table_name);
-      AlterTable::AlterColumn* alter_column =
-          alter_table->mutable_alter_column();
-      ColumnDefinition* column = alter_column->mutable_column();
       alter_column->set_operation(AlterTable::AlterColumn::DROP_DEFAULT);
-      column->set_column_name(column_name);
-      // `type` is required in ColumnDefinition, so set it to NONE here.
-      column->set_type(ColumnDefinition::NONE);
       column->clear_column_default();
       break;
     }
-    case JJTCOLUMN_DEF_ALTER_ATTRS: {
-      // For "ALTER COLUMN c TYPE NOT NULL"
-      alter_table->set_table_name(table_name);
-      ColumnDefinition* column =
-          alter_table->mutable_alter_column()->mutable_column();
-      VisitColumnNodeAlterAttrs(child, column_name, column, ddl_text, errors);
-      break;
-    }
-    case JJTSET_NOT_NULL:
+    case JJTSET_NOT_NULL: {
       errors->push_back(
           "ALTER COLUMN SET NOT NULL not supported without a column type");
       break;
-    case JJTDROP_NOT_NULL:
+    }
+    case JJTDROP_NOT_NULL: {
       errors->push_back(
           "ALTER COLUMN DROP NOT NULL not supported without a column type");
       break;
+    }
     default:
       ABSL_LOG(FATAL) << "Unexpected alter column type: "
                  << GetChildNode(node, 1)->toString();
@@ -1017,6 +1024,10 @@ void VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index,
         break;
       case JJTINDEX_INTERLEAVE_CLAUSE:
         VisitIndexInterleaveNode(child, index->mutable_interleave_in_table());
+        break;
+      case JJTCREATE_INDEX_WHERE_CLAUSE:
+        VisitCreateIndexWhereClause(child,
+                                    index->mutable_null_filtered_column());
         break;
       case JJTIF_NOT_EXISTS:
         index->set_existence_modifier(IF_NOT_EXISTS);

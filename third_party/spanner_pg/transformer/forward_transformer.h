@@ -716,6 +716,10 @@ class ForwardTransformer {
   BuildGsqlResolvedExpr(const RelabelType& relabel_type,
                         ExprTransformerInfo* expr_transformer_info);
 
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  BuildGsqlResolvedExpr(const NamedArgExpr& named_arg,
+                        ExprTransformerInfo* expr_transformer_info);
+
   absl::Status UnsupportedCastError(Oid source_type_oid, Oid target_type_oid);
 
   // Transforms a list of DefElem nodes containing query hints into a vector of

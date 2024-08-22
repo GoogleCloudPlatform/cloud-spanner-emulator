@@ -214,6 +214,21 @@ class Column::Editor {
         });
     ABSL_DCHECK(itr != instance_->change_streams_.end());
     instance_->change_streams_.erase(itr);
+
+    // Remove the change stream from the list of change streams explicitly
+    // tracking the column if exists.
+    auto itr_tracking_columns = std::find_if(
+        instance_->change_streams_explicitly_tracking_column_.begin(),
+        instance_->change_streams_explicitly_tracking_column_.end(),
+        [change_stream](const auto& change_stream_element) {
+          return absl::EqualsIgnoreCase(change_stream->Name(),
+                                        change_stream_element->Name());
+        });
+    if (itr_tracking_columns !=
+        instance_->change_streams_explicitly_tracking_column_.end()) {
+      instance_->change_streams_explicitly_tracking_column_.erase(
+          itr_tracking_columns);
+    }
     return *this;
   }
 

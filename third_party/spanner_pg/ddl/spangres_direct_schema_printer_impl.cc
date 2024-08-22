@@ -428,6 +428,14 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
       return StrCat(alter_table, " SET ON DELETE", action);
     }
 
+    case google::spanner::emulator::backend::ddl::AlterTable::kSetInterleaveClause: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::string interleave,
+          PrintInterleaveClause(
+              statement.set_interleave_clause().interleave_clause()));
+      return StrCat(alter_table, " SET ", interleave);
+    }
+
     case google::spanner::emulator::backend::ddl::AlterTable::kRenameTo: {
       std::string rename_clause = statement.rename_to().has_synonym() ?
           " RENAME WITH SYNONYM TO " : " RENAME TO ";
@@ -844,10 +852,12 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSequence(
   }
   create_statement_clauses.push_back(
       QuoteQualifiedIdentifier(statement.sequence_name()));
-  create_statement_clauses.push_back("BIT_REVERSED_POSITIVE");
   std::optional<int64_t> skip_range_min, skip_range_max;
   for (const ::google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
-    if (option.option_name() == "start_with_counter") {
+    if (option.option_name() == "sequence_kind") {
+      ZETASQL_RET_CHECK_EQ(option.string_value(), "bit_reversed_positive");
+      create_statement_clauses.push_back("BIT_REVERSED_POSITIVE");
+    } else if (option.option_name() == "start_with_counter") {
       create_statement_clauses.push_back(
           absl::Substitute("START COUNTER WITH $0", option.int64_value()));
     } else if (option.option_name() == "skip_range_min") {

@@ -27,6 +27,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/time/clock.h"
+#include "backend/common/ids.h"
 
 namespace google {
 namespace spanner {
@@ -52,7 +53,8 @@ class LockManagerTest : public testing::Test {
 
 TEST_F(LockManagerTest, SingleTransactionAcquiresLock) {
   std::unique_ptr<LockHandle> lh =
-      manager()->CreateHandle(TransactionID(1), TransactionPriority(1));
+      manager()->CreateHandle(TransactionID(1),
+                              /*try_abort_fn=*/nullptr, TransactionPriority(1));
   lh->EnqueueLock(request());
   EXPECT_FALSE(lh->IsBlocked());
   ZETASQL_EXPECT_OK(lh->Wait());
@@ -60,9 +62,11 @@ TEST_F(LockManagerTest, SingleTransactionAcquiresLock) {
 
 TEST_F(LockManagerTest, ConcurrentTransactionIsAborted) {
   std::unique_ptr<LockHandle> lh1 =
-      manager()->CreateHandle(TransactionID(1), TransactionPriority(1));
+      manager()->CreateHandle(TransactionID(1),
+                              /*try_abort_fn=*/nullptr, TransactionPriority(1));
   std::unique_ptr<LockHandle> lh2 =
-      manager()->CreateHandle(TransactionID(2), TransactionPriority(1));
+      manager()->CreateHandle(TransactionID(2),
+                              /*try_abort_fn=*/nullptr, TransactionPriority(1));
 
   // First transaction gets the lock.
   lh1->EnqueueLock(request());
@@ -82,11 +86,14 @@ TEST_F(LockManagerTest, ConcurrentTransactionIsAborted) {
 
 TEST_F(LockManagerTest, SequentialTransactionAcquiresLock) {
   std::unique_ptr<LockHandle> lh1 =
-      manager()->CreateHandle(TransactionID(1), TransactionPriority(1));
+      manager()->CreateHandle(TransactionID(1),
+                              /*try_abort_fn=*/nullptr, TransactionPriority(1));
   std::unique_ptr<LockHandle> lh2 =
-      manager()->CreateHandle(TransactionID(2), TransactionPriority(1));
+      manager()->CreateHandle(TransactionID(2),
+                              /*try_abort_fn=*/nullptr, TransactionPriority(1));
   std::unique_ptr<LockHandle> lh3 =
-      manager()->CreateHandle(TransactionID(3), TransactionPriority(1));
+      manager()->CreateHandle(TransactionID(3),
+                              /*try_abort_fn=*/nullptr, TransactionPriority(1));
 
   // First transaction gets the lock.
   lh1->EnqueueLock(request());
@@ -111,11 +118,13 @@ TEST_F(LockManagerTest, SequentialTransactionAcquiresLock) {
 
 TEST_F(LockManagerTest, TransactionsThatDidNotAcquireLockCanReleaseIt) {
   std::unique_ptr<LockHandle> lh1 =
-      manager()->CreateHandle(TransactionID(1), TransactionPriority(1));
+      manager()->CreateHandle(TransactionID(1),
+                              /*try_abort_fn=*/nullptr, TransactionPriority(1));
   lh1->UnlockAll();
 
   std::unique_ptr<LockHandle> lh2 =
-      manager()->CreateHandle(TransactionID(1), TransactionPriority(1));
+      manager()->CreateHandle(TransactionID(1),
+                              /*try_abort_fn=*/nullptr, TransactionPriority(1));
   lh2->EnqueueLock(request());
   EXPECT_FALSE(lh2->IsBlocked());
   ZETASQL_EXPECT_OK(lh2->Wait());
@@ -145,7 +154,8 @@ TEST_F(LockManagerTest, EnsuresSerializationWithParallelTransactions) {
             while (true) {
               // Get a lock.
               std::unique_ptr<LockHandle> lh = manager()->CreateHandle(
-                  TransactionID(++id_counter), TransactionPriority(1));
+                  TransactionID(++id_counter),
+                  /*try_abort_fn=*/nullptr, TransactionPriority(1));
               lh->EnqueueLock(request());
               absl::Status status = lh->Wait();
 

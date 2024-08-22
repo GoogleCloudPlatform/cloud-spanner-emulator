@@ -69,6 +69,9 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
     // Rolledback transaction (initiated by user), cannot be retried.
     kRolledback,
 
+    // Transaction was aborted by another transaction.
+    kAborted,
+
     // Transaction has been invalidated due to non-recoverable constraint
     // errors. It cannot be retried. This is not the same as the transaction
     // returning kAborted status error, in that case the transaction can be
@@ -93,6 +96,10 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
   absl::Status Commit() ABSL_LOCKS_EXCLUDED(mu_);
 
   absl::Status Rollback() ABSL_LOCKS_EXCLUDED(mu_);
+
+  // Tries to abort the transaction. This is a best effort attempt and returns
+  // OK only if the transaction could successfully be aborted.
+  absl::Status TryAbort() ABSL_LOCKS_EXCLUDED(mu_);
 
   absl::Status Invalidate() ABSL_LOCKS_EXCLUDED(mu_);
 

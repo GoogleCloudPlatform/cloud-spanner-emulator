@@ -28,6 +28,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
+#include "absl/synchronization/mutex.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
@@ -68,6 +69,7 @@ absl::Status Sequence::DeepClone(SchemaGraphEditor* editor,
 }
 
 absl::StatusOr<zetasql::Value> Sequence::GetNextSequenceValue() const {
+  absl::MutexLock lock(&SequenceMutex);
   if (!Sequence::SequenceLastValues.contains(name_)) {
     if (start_with_.has_value()) {
       Sequence::SequenceLastValues[name_] = start_with_.value();
@@ -113,6 +115,7 @@ absl::StatusOr<zetasql::Value> Sequence::GetNextSequenceValue() const {
 zetasql::Value Sequence::GetInternalSequenceState() const {
   // If no sequence value has been retrieved before, then the current state is
   // NULL.
+  absl::MutexLock lock(&SequenceMutex);
   if (!Sequence::SequenceLastValues.contains(name_)) {
     return zetasql::Value::NullInt64();
   }
@@ -120,6 +123,7 @@ zetasql::Value Sequence::GetInternalSequenceState() const {
 }
 
 void Sequence::ResetSequenceLastValue() const {
+  absl::MutexLock lock(&SequenceMutex);
   if (!Sequence::SequenceLastValues.contains(name_)) {
     return;
   }
@@ -131,6 +135,7 @@ void Sequence::ResetSequenceLastValue() const {
 }
 
 void Sequence::RemoveSequenceFromLastValuesMap() const {
+  absl::MutexLock lock(&SequenceMutex);
   absl::flat_hash_map<std::string, int64_t>::iterator it =
       Sequence::SequenceLastValues.find(name_);
   if (it != Sequence::SequenceLastValues.end()) {

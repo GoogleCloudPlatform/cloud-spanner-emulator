@@ -135,6 +135,12 @@ FuncCandidateList FuncnameGetCandidates(List* names, int nargs, List* argnames,
   abort();
 }
 
+bool NamedCallMatchFound(Oid proc_oid, int nargs, List *argnames,
+                         bool include_out_arguments, int pronargs,
+                         int **argnumbers) {
+  abort();
+}
+
 void fmgr_info_cxt_security(Oid functionId, FmgrInfo* finfo,
                             MemoryContext mcxt, bool ignore_security) {
   abort();

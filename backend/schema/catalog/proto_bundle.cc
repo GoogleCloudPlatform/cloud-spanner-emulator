@@ -172,8 +172,12 @@ absl::Status ProtoBundle::ValidateRestrictedPackages() {
 absl::Status ProtoBundle::ValidateMessage(
     const google::protobuf::Descriptor* descriptor,
     absl::flat_hash_set<const google::protobuf::Descriptor*>& visited_descriptors) const {
-  ZETASQL_RET_CHECK(visited_descriptors.insert(descriptor).second)
-      << "Cyclic dependency on message " << descriptor->full_name();
+  if (!visited_descriptors.insert(descriptor).second) {
+    // If a descriptor is already visited, we don't need to validate it again.
+    // Cyclic dependency should be ok. E.g. google.protobuf.Value refers to
+    // itself. Spanner supports it, and emulator should too.
+    return absl::OkStatus();
+  }
   if (descriptor->extension_count() > 0) {
     return error::MessageExtensionsNotSupported(descriptor->full_name());
   }

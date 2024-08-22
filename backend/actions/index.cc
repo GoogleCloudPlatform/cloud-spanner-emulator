@@ -68,7 +68,7 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
   Row base_row = MakeRow(op.columns, op.values);
   ZETASQL_ASSIGN_OR_RETURN(Key index_key, ComputeIndexKey(base_row, index_));
   ValueList index_values = ComputeIndexValues(base_row, index_);
-  if (ShouldFilterIndexKey(index_, index_key)) {
+  if (ShouldFilterIndexKeyOrValue(index_, index_key, base_row)) {
     return absl::OkStatus();
   }
 
@@ -92,7 +92,7 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
 
   // If a previous index entry existed, delete it.
   ZETASQL_ASSIGN_OR_RETURN(Key old_index_key, ComputeIndexKey(base_row, index_));
-  if (!ShouldFilterIndexKey(index_, old_index_key)) {
+  if (!ShouldFilterIndexKeyOrValue(index_, old_index_key, base_row)) {
     ctx->effects()->Delete(index_->index_data_table(), old_index_key);
   }
 
@@ -102,7 +102,7 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
   }
   ZETASQL_ASSIGN_OR_RETURN(Key new_index_key, ComputeIndexKey(base_row, index_));
   ValueList index_values = ComputeIndexValues(base_row, index_);
-  if (ShouldFilterIndexKey(index_, new_index_key)) {
+  if (ShouldFilterIndexKeyOrValue(index_, new_index_key, base_row)) {
     return absl::OkStatus();
   }
 
@@ -125,7 +125,7 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
 
   // Compute the index key to delete.
   ZETASQL_ASSIGN_OR_RETURN(Key index_key, ComputeIndexKey(base_row, index_));
-  if (ShouldFilterIndexKey(index_, index_key)) {
+  if (ShouldFilterIndexKeyOrValue(index_, index_key, base_row)) {
     return absl::OkStatus();
   }
 

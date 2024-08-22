@@ -936,6 +936,44 @@ TEST_P(SchemaUpdaterTest, ChangeStreamTrackAll_TracksNewlyAddedTable) {
                   ->FindChangeStream("change_stream_test_table"));
 }
 
+TEST_P(SchemaUpdaterTest,
+       CanDropExplicitlyTrackedTablesColumnAfterDropChangeStream) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto schema, CreateSchema({R"(
+          CREATE TABLE Users(
+            UserId     INT64 NOT NULL,
+            Name       STRING(MAX),
+            Age        INT64,
+          ) PRIMARY KEY (UserId)
+        )",
+                                 R"(CREATE CHANGE STREAM C FOR Users(Name))"}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
+      DROP CHANGE STREAM C)"}));
+
+  ZETASQL_ASSERT_OK(UpdateSchema(updated_schema.get(), {R"(
+      ALTER TABLE Users DROP COLUMN Name)"}));
+}
+
+TEST_P(SchemaUpdaterTest,
+       CanDropExplicitlyTrackedTablesColumnAfterAlterChangeStream) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto schema, CreateSchema({R"(
+          CREATE TABLE Users(
+            UserId     INT64 NOT NULL,
+            Name       STRING(MAX),
+            Age        INT64,
+          ) PRIMARY KEY (UserId)
+        )",
+                                 R"(CREATE CHANGE STREAM C FOR Users(Name))"}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
+      ALTER CHANGE STREAM C SET FOR Users(Age))"}));
+
+  ZETASQL_ASSERT_OK(UpdateSchema(updated_schema.get(), {R"(
+      ALTER TABLE Users DROP COLUMN Name)"}));
+}
+
 }  // namespace
 
 }  // namespace test

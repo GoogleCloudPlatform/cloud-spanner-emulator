@@ -154,9 +154,9 @@ FuncCandidateList FuncnameGetCandidates(List* names, int nargs,
 										bool missing_ok) {
 	FuncCandidateList resultList = NULL;
 	bool		any_special = false;
-	char	   *schemaname;
-	char	   *funcname;
-	Oid			namespaceId;
+	char	   *schemaname = NULL;
+	char	   *funcname = NULL;
+	Oid			namespaceId = InvalidOid;
 
 	/* Check for caller error */
 	Assert(nargs >= 0 || !(expand_variadic | expand_defaults));
@@ -189,6 +189,7 @@ FuncCandidateList FuncnameGetCandidates(List* names, int nargs,
 		bool variadic = false;
 		bool use_defaults = false;
 		Oid va_elem_type = InvalidOid;
+		int	*argnumbers = NULL;
 
 		/* 
 		 * Here PostgreSQL would check search path if a namespace was not
@@ -219,11 +220,47 @@ FuncCandidateList FuncnameGetCandidates(List* names, int nargs,
 
 		if (argnames != NIL) {
 			/*
-			 * Call uses named or mixed notation. Named arguments are not supported in
-			 * Spangres.
+			 * Call uses named or mixed notation
+			 *
+			 * Named or mixed notation can match a variadic function only if
+			 * expand_variadic is off; otherwise there is no way to match the
+			 * presumed-nameless parameters expanded from the variadic array.
 			 */
-			ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-											errmsg("Named arguments are not supported")));
+			if (OidIsValid(procform->provariadic) && expand_variadic)
+				continue;
+			va_elem_type = InvalidOid;
+			variadic = false;
+
+			/*
+			 * Check argument count.
+			 */
+			Assert(nargs >= 0); /* -1 not supported with argnames */
+
+			if (pronargs > nargs && expand_defaults)
+			{
+				/* Ignore if not enough default expressions */
+				if (nargs + procform->pronargdefaults < pronargs)
+					continue;
+				use_defaults = true;
+			}
+			else
+				use_defaults = false;
+
+			/* Ignore if it doesn't match requested argument count */
+			if (pronargs != nargs && !use_defaults)
+				continue;
+
+			/* Check for argument name match, generate positional mapping */
+			/* SPANGRES BEGIN */
+			// Replace MatchNamedCall with NamedCallMatchFound which is a shim with a
+			// different signature to avoid using HeapTuple.
+			if (!NamedCallMatchFound(procform->oid, nargs, argnames,
+															 include_out_arguments, pronargs, &argnumbers))
+				continue;
+			/* SPANGRES END */
+
+			/* Named argument matching is always "special" */
+			any_special = true;
 		} else {
 			/*
 			 * Call uses positional notation
@@ -275,18 +312,22 @@ FuncCandidateList FuncnameGetCandidates(List* names, int nargs,
 				   effective_nargs * sizeof(Oid));
 		newResult->pathpos = 0;	// Search path is not supported.
 		newResult->oid = procform->oid;
+		newResult->nominalnargs = pronargs;
 		newResult->nargs = effective_nargs;
-		newResult->argnumbers = NULL;	// Named arguments not supported.
+		newResult->argnumbers = argnumbers;
+		if (argnumbers)
+		{
+			/* Re-order the argument types into call's logical order */
+			int			i;
 
-		/*
-		 * Here PostgreSQL would re-order named arguments to match the positional
-		 * order.
-		 * TODO: Add support for named arguments.
-		 */
-
-		/* Simple positional case, just copy proargtypes as-is */
-		memcpy(newResult->args, procform->proargtypes.values,
-					 pronargs * sizeof(Oid));
+			for (i = 0; i < pronargs; i++)
+				newResult->args[i] = procform->proargtypes.values[argnumbers[i]];
+		}
+		else
+		{
+			memcpy(newResult->args, procform->proargtypes.values,
+						pronargs * sizeof(Oid));
+		}
 
 		if (variadic)
 		{
@@ -426,6 +467,130 @@ FuncCandidateList FuncnameGetCandidates(List* names, int nargs,
 	}
 
 	return resultList;
+}
+
+/*
+ * NamedCallMatchFound (modified version of MatchNamedCall)
+ *		Given a pg_proc oid and a call's list of argument names,
+ *		check whether the function could match the call.
+ *
+ * The call could match if all supplied argument names are accepted by
+ * the function, in positions after the last positional argument, and there
+ * are defaults for all unsupplied arguments.
+ *
+ * If include_out_arguments is true, we are treating OUT arguments as
+ * included in the argument list.  pronargs is the number of arguments
+ * we're considering (the length of either proargtypes or proallargtypes).
+ *
+ * The number of positional arguments is nargs - list_length(argnames).
+ * Note caller has already done basic checks on argument count.
+ *
+ * On match, return true and fill *argnumbers with a palloc'd array showing
+ * the mapping from call argument positions to actual function argument
+ * numbers.  Defaulted arguments are included in this map, at positions
+ * after the last supplied argument.
+ */
+bool
+NamedCallMatchFound(Oid proc_oid, int nargs, List *argnames,
+			   						bool include_out_arguments, int pronargs,
+			   						int **argnumbers)
+{
+	const FormData_pg_proc *procform = GetProcByOid(proc_oid);
+	int			numposargs = nargs - list_length(argnames);
+	int			pronallargs;
+	Oid		   *p_argtypes = NULL;
+	char	  **p_argnames = NULL;
+	char	   *p_argmodes = NULL;
+	bool		arggiven[FUNC_MAX_ARGS];
+	int			ap;				/* call args position */
+	int			pp;				/* proargs position */
+	ListCell   *lc;
+
+	Assert(argnames != NIL);
+	Assert(numposargs >= 0);
+	Assert(nargs <= pronargs);
+
+	/* OK, let's extract the argument names and types */
+	pronallargs = GetFunctionArgInfo(
+		proc_oid, &p_argtypes, &p_argnames, &p_argmodes);
+
+	/* Ignore this function if its proargnames is null */
+	if (p_argnames == NULL)
+		return false;
+
+	Assert(p_argnames != NULL);
+
+	Assert(include_out_arguments ? (pronargs == pronallargs) : (pronargs <= pronallargs));
+
+	/* initialize state for matching */
+	*argnumbers = (int *) palloc(pronargs * sizeof(int));
+	memset(arggiven, false, pronargs * sizeof(bool));
+
+	/* there are numposargs positional args before the named args */
+	for (ap = 0; ap < numposargs; ap++)
+	{
+		(*argnumbers)[ap] = ap;
+		arggiven[ap] = true;
+	}
+
+	/* now examine the named args */
+	foreach(lc, argnames)
+	{
+		char	   *argname = (char *) lfirst(lc);
+		bool		found;
+		int			i;
+
+		pp = 0;
+		found = false;
+		for (i = 0; i < pronallargs; i++)
+		{
+			/* consider only input params, except with include_out_arguments */
+			if (!include_out_arguments &&
+				p_argmodes &&
+				(p_argmodes[i] != FUNC_PARAM_IN &&
+				 p_argmodes[i] != FUNC_PARAM_INOUT &&
+				 p_argmodes[i] != FUNC_PARAM_VARIADIC))
+				continue;
+			if (p_argnames[i] && strcmp(p_argnames[i], argname) == 0)
+			{
+				/* fail if argname matches a positional argument */
+				if (arggiven[pp])
+					return false;
+				arggiven[pp] = true;
+				(*argnumbers)[ap] = pp;
+				found = true;
+				break;
+			}
+			/* increase pp only for considered parameters */
+			pp++;
+		}
+		/* if name isn't in proargnames, fail */
+		if (!found)
+			return false;
+		ap++;
+	}
+
+	Assert(ap == nargs);		/* processed all actual parameters */
+
+	/* Check for default arguments */
+	if (nargs < pronargs)
+	{
+		int			first_arg_with_default = pronargs - procform->pronargdefaults;
+
+		for (pp = numposargs; pp < pronargs; pp++)
+		{
+			if (arggiven[pp])
+				continue;
+			/* fail if arg not given and no default available */
+			if (pp < first_arg_with_default)
+				return false;
+			(*argnumbers)[ap++] = pp;
+		}
+	}
+
+	Assert(ap == pronargs);		/* processed all function parameters */
+
+	return true;
 }
 
 /*

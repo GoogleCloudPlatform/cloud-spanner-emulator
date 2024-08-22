@@ -541,6 +541,7 @@ message AlterTable {
       DROP_DEFAULT = 2;
       SET_NOT_NULL = 3;
       DROP_NOT_NULL = 4;
+
     }
     // Defines the specific alter operation on the column.
     optional AlterColumnOp operation = 2;
@@ -762,6 +763,9 @@ message CreateIndex {
 
   // Determines what to do if the index already exists. Defaults to an error.
   optional ExistenceModifier existence_modifier = 17;
+
+  // Columns that are being null filtered using the WHERE syntax.
+  repeated string null_filtered_column = 18;
 }
 
 message AlterIndex {

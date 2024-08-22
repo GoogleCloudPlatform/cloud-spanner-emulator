@@ -78,6 +78,9 @@ RangeTblEntry* AddRangeTableEntryByOidC(ParseState* pstate, Oid relation_oid,
 // RETURNS a palloc'd copy of the name string or nullptr if not found.
 char* GetAttributeNameC(Oid relid, AttrNumber attnum, bool missing_ok);
 
+int GetFunctionArgInfo(Oid proc_oid, Oid **p_argtypes, char ***p_argnames,
+                       char **p_argmodes);
+
 // Given an oid identifying a relation and an attribute number, gets the type
 // information (type oid, typemod, and collation) for that column and returns
 // it.

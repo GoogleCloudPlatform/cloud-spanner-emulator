@@ -601,6 +601,48 @@ static absl::Status GetProcsByNameFromUserCatalog(
   return absl::OkStatus();
 }
 
+// This is a helper function that handles retrieving UDF data for
+// GetFunctionArgInfo. Returns true iff the TVF is found with one signature.
+static bool GetArgInfoForTVF(Oid tvf_oid, std::vector<Oid>& argument_types,
+                             std::vector<std::string>& argument_names) {
+  const auto adapter = postgres_translator::GetCatalogAdapter();
+  if (!adapter.ok()) {
+    postgres_translator::ereport_helper(adapter.status(),
+                                        ERRCODE_INTERNAL_ERROR,
+                                        "Failed to get catalog adapter");
+    return false;  // Unreachable.
+  }
+  auto tvf = adapter.value()->GetTVFFromOid(tvf_oid);
+  if (tvf.ok()) {
+    if (tvf.value()->NumSignatures() != 1) {
+      postgres_translator::ereport_helper(
+          tvf.status(), ERRCODE_INTERNAL_ERROR,
+          "TVF with multiple signatures is not supported");
+      return false;  // Unreachable.
+    }
+    const zetasql::FunctionSignature* signature =
+        tvf.value()->GetSignature(0);
+    for (const auto& arg : signature->arguments()) {
+      auto pg_type =
+          adapter.value()->GetEngineSystemCatalog()->GetTypeFromReverseMapping(
+              arg.type());
+      argument_types.push_back(pg_type->PostgresTypeOid());
+      if (arg.has_argument_name()) {
+        argument_names.push_back(arg.argument_name());
+      } else {
+        argument_names.push_back("");
+      }
+    }
+    return true;
+  } else if (tvf.status().code() != absl::StatusCode::kNotFound) {
+    postgres_translator::ereport_helper(tvf.status(), ERRCODE_INTERNAL_ERROR,
+                                        "Failed to get TVF");
+    return false;  // Unreachable.
+  }
+  // TVF not found.
+  return false;
+}
+
 }  // namespace postgres_translator
 
 extern "C" RangeTblEntry* AddRangeTableEntryC(ParseState* pstate,
@@ -1076,4 +1118,72 @@ extern "C" const FormData_pg_proc* GetProcByOid(Oid oid) {
 
 extern "C" bool ShouldCoerceUnknownLiterals() {
   return false;
+}
+
+extern "C" int GetFunctionArgInfo(Oid proc_oid, Oid **p_argtypes,
+                                  char ***p_argnames, char **p_argmodes) {
+  auto proc_proto = postgres_translator::PgBootstrapCatalog::Default()
+      ->GetProcProto(proc_oid);
+  if (proc_proto.ok()) {
+    const postgres_translator::PgProcData *proc = proc_proto.value();
+
+    // Set argtypes.
+    int numargs = 0;
+    if (proc->proallargtypes_size() > 0) {
+      numargs = proc->proallargtypes_size();
+      *p_argtypes = (Oid *) proc->proallargtypes().data();
+    } else {
+      numargs = proc->proargtypes_size();
+      *p_argtypes = (Oid *) proc->proargtypes().data();
+    }
+
+    // Set argnames.
+    if (proc->proargnames_size() > 0) {
+      *p_argnames = (char **) palloc(numargs * sizeof(char *));
+      for (int i = 0; i < numargs; ++i) {
+        (*p_argnames)[i] = (char *) proc->proargnames(i).c_str();
+      }
+    } else {
+      *p_argnames = NULL;
+    }
+
+    // Set argmodes.
+    if (proc->proargmodes_size() > 0) {
+      // The proargmodes field contains a single character null-terminated
+      // string. This cannot be pointed to directly, so we need to copy it.
+      *p_argmodes = (char *) palloc(numargs * sizeof(char));
+      for (int i = 0; i < numargs; ++i) {
+        (*p_argmodes)[i] = proc->proargmodes(i).at(0);
+      }
+    } else {
+      *p_argmodes = NULL;
+    }
+
+    return numargs;
+  } else if (!absl::IsNotFound(proc_proto.status())) {
+    postgres_translator::ereport_helper(proc_proto.status(),
+                                        ERRCODE_INTERNAL_ERROR,
+                                        "Proc lookup by oid failed");
+    return 0;  // Unreachable.
+  }
+  // Function not found in BootstrapCatalog which means it may be a UDF.
+  std::vector<std::string> argument_names;
+  std::vector<Oid> argument_types;
+  if (postgres_translator::GetArgInfoForTVF(proc_oid, argument_types,
+                                            argument_names)) {
+    // Cannot point directly to the data for UDFs so we need to copy it.
+    *p_argtypes = (Oid*)palloc(argument_types.size() * sizeof(Oid));
+    memcpy(*p_argtypes, argument_types.data(),
+           sizeof(Oid) * argument_types.size());
+    *p_argnames = (char**)palloc(argument_names.size() * sizeof(char*));
+    for (int i = 0; i < argument_names.size(); ++i) {
+      (*p_argnames)[i] = pstrdup(argument_names[i].c_str());
+    }
+    return argument_types.size();
+  };
+  // Function not found.
+  *p_argtypes = NULL;
+  *p_argnames = NULL;
+  *p_argmodes = NULL;
+  return 0;
 }

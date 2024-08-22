@@ -298,11 +298,6 @@ group {
   }
 
   message {
-    name: "NamedParametersNotSupport"
-    pg_message_id: "Named arguments are not supported"
-  }
-
-  message {
     name: "InvalidOrderByClause"
     pg_message_id: "invalid UNION/INTERSECT/EXCEPT ORDER BY clause"
   }

@@ -3047,6 +3047,13 @@ alter_table_cmd:
 					n->missing_ok = false;
 					$$ = (Node *)n;
 				}
+			| SET OptInterleave
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_SetInterleaveIn;
+					n->def = (Node *) $2;
+					$$ = (Node *) n;
+				}
 		;
 
 alter_column_default:
@@ -4651,11 +4658,14 @@ OptConsTableSpace:   USING INDEX TABLESPACE name	{ $$ = $4; }
 ExistingIndex:   USING INDEX name					{ $$ = $3; }
 		;
 
-OptInterleave: INTERLEAVE IN_P qualified_name
+OptInterleave: INTERLEAVE IN_P qualified_name interleave_action
 			{
 				InterleaveSpec *n = makeNode(InterleaveSpec);
 				n->interleavetype = INTERLEAVE_IN;
 				n->parent = $3;
+				if ($4) {
+					n->on_delete_action = $4->action;
+				}
 				n->location = @1;
 				$$ = n;
 			}
@@ -4664,7 +4674,9 @@ OptInterleave: INTERLEAVE IN_P qualified_name
 				InterleaveSpec *n = makeNode(InterleaveSpec);
 				n->interleavetype = INTERLEAVE_IN_PARENT;
 				n->parent = $4;
-				n->on_delete_action = $5->action;
+				if ($5) {
+					n->on_delete_action = $5->action;
+				}
 				n->location = @1;
 				$$ = n;
 			}
@@ -4681,14 +4693,7 @@ OptInterleaveIndex: INTERLEAVE IN_P qualified_name
 		| /*EMPTY*/								{ $$ = NULL; }
 
 interleave_action: key_delete	{ $$ = $1; }
-		| /*EMPTY*/
-			{
-				KeyAction *n = palloc(sizeof(KeyAction));
-
-				n->action = FKCONSTR_ACTION_NOACTION;
-				n->cols = NIL;
-				$$ = n;
-			}
+		| /*EMPTY*/								{ $$ = NULL; }
 
 /*****************************************************************************
  *
@@ -16332,7 +16337,7 @@ opt_existing_window_name: ColId						{ $$ = $1; }
 			| /*EMPTY*/				%prec Op		{ $$ = NULL; }
 		;
 
-opt_partition_clause: PARTITION BY expr_list		{ $$ = $3; }
+opt_partition_clause: PARTITION BY expr_list  	{ $$ = $3; }
 			| /*EMPTY*/								{ $$ = NIL; }
 		;
 

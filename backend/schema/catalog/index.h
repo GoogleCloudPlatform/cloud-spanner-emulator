@@ -89,10 +89,20 @@ class Index : public SchemaNode {
     return stored_columns_;
   }
 
+  // Returns the list of all the null filtered columns.
+  absl::Span<const Column* const> null_filtered_columns() const {
+    return null_filtered_columns_;
+  }
+
+  bool is_null_filtered_column(const Column* column) const {
+    auto it = std::find(null_filtered_columns_.begin(),
+                        null_filtered_columns_.end(), column);
+    return it != null_filtered_columns_.end();
+  }
   // Returns true if this is a unique index.
   bool is_unique() const { return is_unique_; }
 
-  // Returns true if null filtering is enabled for this index.
+  // Returns true if this index has NULL_FILTERED enabled.
   bool is_null_filtered() const { return is_null_filtered_; }
 
   // Returns true if this index is managed by other schema nodes. Managed
@@ -180,8 +190,12 @@ class Index : public SchemaNode {
   // constraints will be checked to enforce uniqueness for the Index.
   bool is_unique_ = false;
 
-  // Whether NULL value results should be filtered out.
+  // Whether this index has NULL_FILTERED enabled which applies to all index key
+  // columns.
   bool is_null_filtered_ = false;
+  // Columns specified in the WHERE IS NOT NULL clause. References are
+  // to the corresponding columns in 'index_data_table_'.
+  std::vector<const Column*> null_filtered_columns_;
 };
 
 }  // namespace backend

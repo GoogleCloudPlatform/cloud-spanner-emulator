@@ -106,10 +106,10 @@ class PGChangeStreamTest : public DatabaseTest {
           bool_val bool NOT NULL,
           bytes_val bytea NOT NULL,
           date_val date NOT NULL,
-          float_val float8 NOT NULL,
+          double_val float8 NOT NULL,
           string_val varchar NOT NULL,
           timestamp_val timestamptz NOT NULL,
-          PRIMARY KEY (int_val,bool_val,bytes_val,date_val,float_val,string_val,timestamp_val)
+          PRIMARY KEY (int_val,bool_val,bytes_val,date_val,double_val,string_val,timestamp_val)
           );
         )",
         R"(
@@ -118,13 +118,14 @@ class PGChangeStreamTest : public DatabaseTest {
           bool_val bool,
           bytes_val bytea,
           date_val date,
-          float_val float8,
+          double_val float8,
           string_val varchar,
           timestamp_val timestamptz,
           jsonb_val jsonb,
           jsonb_arr jsonb[],
           numeric_val numeric,
-          numeric_arr numeric[]
+          numeric_arr numeric[],
+          float_val float4
           );
         )",
         R"(
@@ -261,16 +262,16 @@ class PGChangeStreamTest : public DatabaseTest {
                                cloud::spanner::MakeNumeric("678.9").value()};
     auto mutation_builder = InsertMutationBuilder(
         "scalar_types_table",
-        {"int_val", "bytes_val", "date_val", "float_val", "timestamp_val",
-         "jsonb_val", "jsonb_arr", "numeric_val", "numeric_arr"});
-    mutation_builder.AddRow(
-        ValueRow{1,
-                 cloud::spanner::Bytes(
-                     cloud::spanner_internal::BytesFromBase64("blue").value()),
-                 "2014-09-27", (float)1.1,
-                 cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value(),
-                 JsonB(R"("3")"), jsonb_arr,
-                 cloud::spanner::MakeNumeric("111.1").value(), numeric_arr});
+        {"int_val", "bytes_val", "date_val", "double_val", "timestamp_val",
+         "jsonb_val", "jsonb_arr", "numeric_val", "numeric_arr", "float_val"});
+    mutation_builder.AddRow(ValueRow{
+        1,
+        cloud::spanner::Bytes(
+            cloud::spanner_internal::BytesFromBase64("blue").value()),
+        "2014-09-27", 1.1,
+        cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value(),
+        JsonB(R"("3")"), jsonb_arr,
+        cloud::spanner::MakeNumeric("111.1").value(), numeric_arr, 3.14f});
     ZETASQL_ASSIGN_OR_RETURN(auto commit_result, Commit({mutation_builder.Build()}));
     initial_data_population_ts_ = GetCommitTimestampOrDie(commit_result);
     return absl::OkStatus();
@@ -299,13 +300,14 @@ TEST_F(PGChangeStreamTest, SingleInsertVerifyDataChangeRecordContent) {
       {"is_primary_key":false,"name":"bool_val","ordinal_position":2,"type":{"code":"BOOL"}},
       {"is_primary_key":false,"name":"bytes_val","ordinal_position":3,"type":{"code":"BYTES"}},
       {"is_primary_key":false,"name":"date_val","ordinal_position":4,"type":{"code":"DATE"}},
-      {"is_primary_key":false,"name":"float_val","ordinal_position":5,"type":{"code":"FLOAT64"}},
+      {"is_primary_key":false,"name":"double_val","ordinal_position":5,"type":{"code":"FLOAT64"}},
       {"is_primary_key":false,"name":"string_val","ordinal_position":6,"type":{"code":"STRING"}},
       {"is_primary_key":false,"name":"timestamp_val","ordinal_position":7,"type":{"code":"TIMESTAMP"}},
       {"is_primary_key":false,"name":"jsonb_val","ordinal_position":8,"type":{"code":"JSON","type_annotation":"PG_JSONB"}},
       {"is_primary_key":false,"name":"jsonb_arr","ordinal_position":9,"type":{"array_element_type":{"code":"JSON","type_annotation":"PG_JSONB"},"code":"ARRAY"}},
       {"is_primary_key":false,"name":"numeric_val","ordinal_position":10,"type":{"code":"NUMERIC","type_annotation":"PG_NUMERIC"}},
-      {"is_primary_key":false,"name":"numeric_arr","ordinal_position":11,"type":{"array_element_type":{"code":"NUMERIC","type_annotation":"PG_NUMERIC"},"code":"ARRAY"}}
+      {"is_primary_key":false,"name":"numeric_arr","ordinal_position":11,"type":{"array_element_type":{"code":"NUMERIC","type_annotation":"PG_NUMERIC"},"code":"ARRAY"}},
+      {"is_primary_key":false,"name":"float_val","ordinal_position":12,"type":{"code":"FLOAT32"}}
       ])json";
   EXPECT_THAT(data_change_records[0].column_types,
               JsonContentEquals(expected_col_types));
@@ -317,7 +319,8 @@ TEST_F(PGChangeStreamTest, SingleInsertVerifyDataChangeRecordContent) {
       "bytes_val":"blue",
       "bool_val":null,
       "date_val":"2014-09-27",
-      "float_val":1.1000000238418579,
+      "double_val":1.1,
+      "float_val":3.140000104904175,
       "jsonb_arr":["\"1\"","\"2\""],
       "jsonb_val":"\"3\"",
       "numeric_arr":["123.45","678.9"],
@@ -345,16 +348,16 @@ TEST_F(PGChangeStreamTest, SingleUpdateVerifyDataChangeRecordContent) {
                              cloud::spanner::MakeNumeric("77").value()};
   auto mutation_builder = UpdateMutationBuilder(
       "scalar_types_table",
-      {"int_val", "bool_val", "bytes_val", "date_val", "float_val",
+      {"int_val", "bool_val", "bytes_val", "date_val", "double_val",
        "string_val", "timestamp_val", "jsonb_val", "jsonb_arr", "numeric_val",
-       "numeric_arr"});
+       "numeric_arr", "float_val"});
   mutation_builder.AddRow(ValueRow{
       1, true,
       cloud::spanner::Bytes(
           cloud::spanner_internal::BytesFromBase64("Zm9vYmFy").value()),
-      "2015-09-27", (float)2.2, "hello", Null<Timestamp>(),
+      "2015-09-27", 2.2, "hello", Null<Timestamp>(),
       JsonB(R"({"a": [2], "b": [1]})"), Null<Array<JsonB>>(),
-      cloud::spanner::MakeNumeric("999.9").value(), numeric_arr});
+      cloud::spanner::MakeNumeric("999.9").value(), numeric_arr, 3.14f});
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result, Commit({mutation_builder.Build()}));
   const absl::Time commit_ts = GetCommitTimestampOrDie(commit_result);
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<DataChangeRecord> data_change_records,
@@ -373,13 +376,14 @@ TEST_F(PGChangeStreamTest, SingleUpdateVerifyDataChangeRecordContent) {
       {"is_primary_key":false,"name":"bool_val","ordinal_position":2,"type":{"code":"BOOL"}},
       {"is_primary_key":false,"name":"bytes_val","ordinal_position":3,"type":{"code":"BYTES"}},
       {"is_primary_key":false,"name":"date_val","ordinal_position":4,"type":{"code":"DATE"}},
-      {"is_primary_key":false,"name":"float_val","ordinal_position":5,"type":{"code":"FLOAT64"}},
+      {"is_primary_key":false,"name":"double_val","ordinal_position":5,"type":{"code":"FLOAT64"}},
       {"is_primary_key":false,"name":"string_val","ordinal_position":6,"type":{"code":"STRING"}},
       {"is_primary_key":false,"name":"timestamp_val","ordinal_position":7,"type":{"code":"TIMESTAMP"}},
       {"is_primary_key":false,"name":"jsonb_val","ordinal_position":8,"type":{"code":"JSON","type_annotation":"PG_JSONB"}},
       {"is_primary_key":false,"name":"jsonb_arr","ordinal_position":9,"type":{"array_element_type":{"code":"JSON","type_annotation":"PG_JSONB"},"code":"ARRAY"}},
       {"is_primary_key":false,"name":"numeric_val","ordinal_position":10,"type":{"code":"NUMERIC","type_annotation":"PG_NUMERIC"}},
-      {"is_primary_key":false,"name":"numeric_arr","ordinal_position":11,"type":{"array_element_type":{"code":"NUMERIC","type_annotation":"PG_NUMERIC"},"code":"ARRAY"}}
+      {"is_primary_key":false,"name":"numeric_arr","ordinal_position":11,"type":{"array_element_type":{"code":"NUMERIC","type_annotation":"PG_NUMERIC"},"code":"ARRAY"}},
+      {"is_primary_key":false,"name":"float_val","ordinal_position":12,"type":{"code":"FLOAT32"}}
       ])json";
   EXPECT_THAT(data_change_records[0].column_types,
               JsonContentEquals(expected_col_types));
@@ -391,7 +395,8 @@ TEST_F(PGChangeStreamTest, SingleUpdateVerifyDataChangeRecordContent) {
       "bytes_val":"Zm9vYmFy",
       "bool_val":true,
       "date_val":"2015-09-27",
-      "float_val":2.2000000476837158,
+      "double_val":2.2,
+      "float_val":3.140000104904175,
       "jsonb_arr":null,
       "jsonb_val":"{\"a\": [2], \"b\": [1]}",
       "numeric_arr":["88","77"],
@@ -435,13 +440,14 @@ TEST_F(PGChangeStreamTest, SingleDeleteVerifyDataChangeRecordContent) {
       {"is_primary_key":false,"name":"bool_val","ordinal_position":2,"type":{"code":"BOOL"}},
       {"is_primary_key":false,"name":"bytes_val","ordinal_position":3,"type":{"code":"BYTES"}},
       {"is_primary_key":false,"name":"date_val","ordinal_position":4,"type":{"code":"DATE"}},
-      {"is_primary_key":false,"name":"float_val","ordinal_position":5,"type":{"code":"FLOAT64"}},
+      {"is_primary_key":false,"name":"double_val","ordinal_position":5,"type":{"code":"FLOAT64"}},
       {"is_primary_key":false,"name":"string_val","ordinal_position":6,"type":{"code":"STRING"}},
       {"is_primary_key":false,"name":"timestamp_val","ordinal_position":7,"type":{"code":"TIMESTAMP"}},
       {"is_primary_key":false,"name":"jsonb_val","ordinal_position":8,"type":{"code":"JSON","type_annotation":"PG_JSONB"}},
       {"is_primary_key":false,"name":"jsonb_arr","ordinal_position":9,"type":{"array_element_type":{"code":"JSON","type_annotation":"PG_JSONB"},"code":"ARRAY"}},
       {"is_primary_key":false,"name":"numeric_val","ordinal_position":10,"type":{"code":"NUMERIC","type_annotation":"PG_NUMERIC"}},
-      {"is_primary_key":false,"name":"numeric_arr","ordinal_position":11,"type":{"array_element_type":{"code":"NUMERIC","type_annotation":"PG_NUMERIC"},"code":"ARRAY"}}
+      {"is_primary_key":false,"name":"numeric_arr","ordinal_position":11,"type":{"array_element_type":{"code":"NUMERIC","type_annotation":"PG_NUMERIC"},"code":"ARRAY"}},
+      {"is_primary_key":false,"name":"float_val","ordinal_position":12,"type":{"code":"FLOAT32"}}
       ])json";
   EXPECT_THAT(data_change_records[0].column_types,
               JsonContentEquals(expected_col_types));
@@ -467,12 +473,12 @@ TEST_F(PGChangeStreamTest, DiffDataTypesInKey) {
   auto mutation_builder =
       InsertMutationBuilder("scalar_types_all_keys_table",
                             {"int_val", "bool_val", "bytes_val", "date_val",
-                             "float_val", "string_val", "timestamp_val"});
+                             "double_val", "string_val", "timestamp_val"});
   mutation_builder.AddRow(
       ValueRow{1, true,
                cloud::spanner::Bytes(
                    cloud::spanner_internal::BytesFromBase64("blue").value()),
-               "2014-09-27", (float)1.1, "test_str",
+               "2014-09-27", 1.1, "test_str",
                cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value()});
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result, Commit({mutation_builder.Build()}));
   absl::Time commit_ts = GetCommitTimestampOrDie(commit_result);
@@ -493,7 +499,7 @@ TEST_F(PGChangeStreamTest, DiffDataTypesInKey) {
       {"is_primary_key":true,"name":"bool_val","ordinal_position":2,"type":{"code":"BOOL"}},
       {"is_primary_key":true,"name":"bytes_val","ordinal_position":3,"type":{"code":"BYTES"}},
       {"is_primary_key":true,"name":"date_val","ordinal_position":4,"type":{"code":"DATE"}},
-      {"is_primary_key":true,"name":"float_val","ordinal_position":5,"type":{"code":"FLOAT64"}},
+      {"is_primary_key":true,"name":"double_val","ordinal_position":5,"type":{"code":"FLOAT64"}},
       {"is_primary_key":true,"name":"string_val","ordinal_position":6,"type":{"code":"STRING"}},
       {"is_primary_key":true,"name":"timestamp_val","ordinal_position":7,"type":{"code":"TIMESTAMP"}}
       ])json";
@@ -509,7 +515,7 @@ TEST_F(PGChangeStreamTest, DiffDataTypesInKey) {
       "bool_val":true,
       "bytes_val":"blue",
       "date_val":"2014-09-27",
-      "float_val":1.1000000238418579,
+      "double_val":1.1,
       "string_val":"test_str",
       "timestamp_val":"1970-01-01T00:00:00Z"
       },

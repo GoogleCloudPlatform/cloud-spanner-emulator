@@ -132,6 +132,7 @@ using ::postgres_translator::interfaces::ExpressionTranslateResult;
 struct ColumnsUsedByIndex {
   std::vector<const KeyColumn*> index_key_columns;
   std::vector<const Column*> stored_columns;
+  std::vector<const Column*> null_filtered_columns;
 };
 
 // Get all the names of objects in a vector of objects. Useful for creating
@@ -211,10 +212,7 @@ class SchemaUpdaterImpl {
 
   // Applies the given `statement` on to `latest_schema_`.
   absl::StatusOr<std::unique_ptr<const Schema>> ApplyDDLStatement(
-      absl::string_view statement
-      ,
-      absl::string_view proto_descriptor_bytes
-      ,
+      absl::string_view statement, absl::string_view proto_descriptor_bytes,
       const database_api::DatabaseDialect& dialect);
 
   // Run any pending schema actions resulting from the schema change statements.
@@ -373,13 +371,13 @@ class SchemaUpdaterImpl {
 
   absl::StatusOr<const Column*> CreateIndexDataTableColumn(
       const Table* indexed_table, const std::string& source_column_name,
-      const Table* index_data_table, bool null_filtered_key_column);
+      const Table* index_data_table, bool is_null_filtered);
 
-  absl::Status AddSearchIndexColumnsByName(const std::string& column_name,
-                                           const Table* indexed_table,
-                                           bool is_null_filtered,
-                                           std::vector<const Column*>& columns,
-                                           Table::Builder& builder);
+  absl::Status AddIndexColumnsByName(const std::string& column_name,
+                                     const Table* indexed_table,
+                                     bool is_null_filtered,
+                                     std::vector<const Column*>& columns,
+                                     Table::Builder& builder);
 
   absl::Status AddSearchIndexColumns(
       const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>& key_parts,
@@ -392,6 +390,7 @@ class SchemaUpdaterImpl {
       const std::string* interleave_in_table,
       const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
           stored_columns,
+      const ::google::protobuf::RepeatedPtrField<std::string>* null_filtered_columns,
       const Index* index, const Table* indexed_table,
       ColumnsUsedByIndex* columns_used_by_index);
 
@@ -421,6 +420,7 @@ class SchemaUpdaterImpl {
       const std::vector<ddl::KeyPartClause>& table_pk,
       const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
           stored_columns,
+      const ::google::protobuf::RepeatedPtrField<std::string>* null_filtered_columns,
       const Table* indexed_table);
 
   absl::Status CreateFunction(const ddl::CreateFunction& ddl_function);
@@ -620,10 +620,7 @@ absl::Status ValidateDdlStatement(const ddl::DDLStatement& ddl,
 
 absl::StatusOr<std::unique_ptr<const Schema>>
 SchemaUpdaterImpl::ApplyDDLStatement(
-    absl::string_view statement
-    ,
-    absl::string_view proto_descriptor_bytes
-    ,
+    absl::string_view statement, absl::string_view proto_descriptor_bytes,
     const database_api::DatabaseDialect& dialect) {
   if (statement.empty()) {
     return error::EmptyDDLStatement();
@@ -808,11 +805,8 @@ SchemaUpdaterImpl::ApplyDDLStatement(
   // validation, please use schema->proto_bundle().
   statement_context_->set_proto_bundle(proto_bundle);
   ZETASQL_ASSIGN_OR_RETURN(auto new_schema_graph, editor_->CanonicalizeGraph());
-  return std::make_unique<const OwningSchema>(std::move(new_schema_graph)
-                                              ,
-                                              proto_bundle
-                                              ,
-                                              dialect);
+  return std::make_unique<const OwningSchema>(std::move(new_schema_graph),
+                                              proto_bundle, dialect);
 }
 
 absl::StatusOr<std::vector<SchemaValidationContext>>
@@ -840,12 +834,9 @@ SchemaUpdaterImpl::ApplyDDLStatements(
     statement_context_->SetTempNewSchemaSnapshotConstructor(
         [this,
          &new_tmp_schema](const SchemaGraph* unowned_graph) -> const Schema* {
-          new_tmp_schema =
-              std::make_unique<const Schema>(unowned_graph
-                                             ,
-                                             latest_schema_->proto_bundle()
-                                             ,
-                                             latest_schema_->dialect());
+          new_tmp_schema = std::make_unique<const Schema>(
+              unowned_graph, latest_schema_->proto_bundle(),
+              latest_schema_->dialect());
           return new_tmp_schema.get();
         });
 
@@ -856,10 +847,8 @@ SchemaUpdaterImpl::ApplyDDLStatements(
     // If there is a semantic validation error, then we return right away.
     ZETASQL_ASSIGN_OR_RETURN(
         auto new_schema,
-        ApplyDDLStatement(statement
-                          ,
-                          schema_change_operation.proto_descriptor_bytes
-                          ,
+        ApplyDDLStatement(statement,
+                          schema_change_operation.proto_descriptor_bytes,
                           schema_change_operation.database_dialect));
 
     // We save every schema snapshot as verifiers/backfillers from the
@@ -1085,11 +1074,8 @@ absl::Status SchemaUpdaterImpl::InitColumnNameAndTypesFromTable(
     for (const ddl::ColumnDefinition& ddl_column : ddl_create_table->column()) {
       ZETASQL_ASSIGN_OR_RETURN(
           const zetasql::Type* type,
-          DDLColumnTypeToGoogleSqlType(ddl_column,
-                                       type_factory_
-                                       ,
-                                       latest_schema_->proto_bundle().get()
-                                       ));
+          DDLColumnTypeToGoogleSqlType(ddl_column, type_factory_,
+                                       latest_schema_->proto_bundle().get()));
       name_and_types->emplace_back(ddl_column.column_name(), type);
     }
   } else {
@@ -1202,11 +1188,8 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
   // Process any changes in column definition.
   ZETASQL_ASSIGN_OR_RETURN(
       const zetasql::Type* column_type,
-      DDLColumnTypeToGoogleSqlType(ddl_column,
-                                   type_factory_
-                                   ,
-                                   latest_schema_->proto_bundle().get()
-                                   ));
+      DDLColumnTypeToGoogleSqlType(ddl_column, type_factory_,
+                                   latest_schema_->proto_bundle().get()));
   modifier->set_type(column_type);
 
   // For the case of removing a vector length param in ALTER TABLE ALTER COLUMN.
@@ -2431,7 +2414,7 @@ absl::Status SchemaUpdaterImpl::CreateTable(
 
 absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
     const Table* indexed_table, const std::string& source_column_name,
-    const Table* index_data_table, bool null_filtered_key_column) {
+    const Table* index_data_table, bool is_null_filtered) {
   const Column* source_column =
       indexed_table->FindColumnCaseSensitive(source_column_name);
   if (source_column == nullptr) {
@@ -2446,7 +2429,7 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
       .set_source_column(source_column)
       .set_table(index_data_table);
 
-  if (null_filtered_key_column) {
+  if (is_null_filtered) {
     builder.set_nullable(false);
   } else {
     builder.set_nullable(source_column->is_nullable());
@@ -2457,7 +2440,7 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
   return column;
 }
 
-absl::Status SchemaUpdaterImpl::AddSearchIndexColumnsByName(
+absl::Status SchemaUpdaterImpl::AddIndexColumnsByName(
     const std::string& column_name, const Table* indexed_table,
     bool is_null_filtered, std::vector<const Column*>& columns,
     Table::Builder& builder) {
@@ -2480,8 +2463,8 @@ absl::Status SchemaUpdaterImpl::AddSearchIndexColumns(
     std::vector<const Column*>& columns, Table::Builder& builder) {
   for (const ddl::KeyPartClause& ddl_key_part : key_parts) {
     const std::string& column_name = ddl_key_part.key_name();
-    ZETASQL_RETURN_IF_ERROR(AddSearchIndexColumnsByName(
-        column_name, indexed_table, is_null_filtered, columns, builder));
+    ZETASQL_RETURN_IF_ERROR(AddIndexColumnsByName(column_name, indexed_table,
+                                          is_null_filtered, columns, builder));
   }
 
   return absl::OkStatus();
@@ -2698,6 +2681,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
     const std::string* interleave_in_table,
     const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
         stored_columns,
+    const ::google::protobuf::RepeatedPtrField<std::string>* null_filtered_columns,
     const Index* index, const Table* indexed_table,
     ColumnsUsedByIndex* columns_used_by_index) {
   std::string table_name = absl::StrCat(kIndexDataTablePrefix, index_name);
@@ -2705,6 +2689,13 @@ SchemaUpdaterImpl::CreateIndexDataTable(
   builder.set_name(table_name)
       .set_id(table_id_generator_->NextId(table_name))
       .set_owner_index(index);
+  absl::flat_hash_set<std::string> null_filtered_columns_set;
+  // Add null filtered columns to index data table.
+  if (null_filtered_columns != nullptr) {
+    for (const std::string& column_name : *null_filtered_columns) {
+      null_filtered_columns_set.insert(column_name);
+    }
+  }
 
   // Add indexed columns to the index_data_table's columns and primary key.
   if (!index_pk.empty()) {
@@ -2719,8 +2710,10 @@ SchemaUpdaterImpl::CreateIndexDataTable(
       const std::string& column_name = ddl_key_part.key_name();
       ZETASQL_ASSIGN_OR_RETURN(
           const Column* column,
-          CreateIndexDataTableColumn(indexed_table, column_name, builder.get(),
-                                     index->is_null_filtered()));
+          CreateIndexDataTableColumn(
+              indexed_table, column_name, builder.get(),
+              index->is_null_filtered() ||
+                  null_filtered_columns_set.contains(column_name)));
       builder.add_column(column);
     }
 
@@ -2733,8 +2726,10 @@ SchemaUpdaterImpl::CreateIndexDataTable(
       std::string key_col_name = key_col->column()->Name();
       ZETASQL_ASSIGN_OR_RETURN(
           const Column* column,
-          CreateIndexDataTableColumn(indexed_table, key_col_name, builder.get(),
-                                     index->is_null_filtered()));
+          CreateIndexDataTableColumn(
+              indexed_table, key_col_name, builder.get(),
+              index->is_null_filtered() ||
+                  null_filtered_columns_set.contains(key_col_name)));
       builder.add_column(column);
 
       // Add to the PK specification.
@@ -2775,12 +2770,23 @@ SchemaUpdaterImpl::CreateIndexDataTable(
   // Add stored columns to index data table.
   for (const ddl::StoredColumnDefinition& ddl_column : stored_columns) {
     const std::string& column_name = ddl_column.name();
-    ZETASQL_ASSIGN_OR_RETURN(
-        const Column* column,
-        CreateIndexDataTableColumn(indexed_table, column_name, builder.get(),
-                                   /*null_filtered_key_column=*/false));
+    ZETASQL_ASSIGN_OR_RETURN(const Column* column,
+                     CreateIndexDataTableColumn(
+                         indexed_table, column_name, builder.get(),
+                         /*is_null_filtered=*/
+                         null_filtered_columns_set.contains(column_name)));
     builder.add_column(column);
     columns_used_by_index->stored_columns.push_back(column);
+  }
+
+  // Add null filtered columns to index data table.
+  if (null_filtered_columns != nullptr) {
+    // Add null filtered columns to index data table.
+    for (const std::string& column_name : *null_filtered_columns) {
+      ZETASQL_RETURN_IF_ERROR(AddIndexColumnsByName(
+          column_name, indexed_table, /*is_null_filtered=*/true,
+          columns_used_by_index->null_filtered_columns, builder));
+    }
   }
 
   return builder.build();
@@ -2803,10 +2809,12 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
     return index;
   }
 
-  return CreateIndexHelper(ddl_index.index_name(), ddl_index.index_base_name(),
-                           is_unique, is_null_filtered, interleave_in_table,
-                           index_pk, ddl_index.stored_column_definition(),
-                           indexed_table);
+  return CreateIndexHelper(
+      ddl_index.index_name(), ddl_index.index_base_name(), is_unique,
+      is_null_filtered, interleave_in_table, index_pk,
+      ddl_index.stored_column_definition(),
+      /*null_filtered_columns=*/&ddl_index.null_filtered_column(),
+      indexed_table);
 }
 
 absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
@@ -3000,6 +3008,7 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
     const std::vector<ddl::KeyPartClause>& table_pk,
     const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
         stored_columns,
+    const ::google::protobuf::RepeatedPtrField<std::string>* null_filtered_columns,
     const Table* indexed_table) {
   if (indexed_table == nullptr) {
     indexed_table = latest_schema_->FindTableCaseSensitive(index_base_name);
@@ -3027,9 +3036,10 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
   ColumnsUsedByIndex columns_used_by_index;
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<const Table> data_table,
-      CreateIndexDataTable(
-          index_name, table_pk, interleave_in_table, stored_columns,
-          builder.get(), indexed_table, &columns_used_by_index));
+      CreateIndexDataTable(index_name, table_pk, interleave_in_table,
+                           stored_columns,
+                           null_filtered_columns, builder.get(), indexed_table,
+                           &columns_used_by_index));
 
   builder.set_index_data_table(data_table.get());
 
@@ -3039,6 +3049,9 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
 
   for (const Column* col : columns_used_by_index.stored_columns) {
     builder.add_stored_column(col);
+  }
+  for (const Column* col : columns_used_by_index.null_filtered_columns) {
+    builder.add_null_filtered_column(col);
   }
 
   ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
@@ -3704,9 +3717,9 @@ absl::Status SchemaUpdaterImpl::AlterIndex(const ddl::AlterIndex& alter_index) {
       }
 
       ZETASQL_ASSIGN_OR_RETURN(const Column* new_index_data_table_column,
-                       CreateIndexDataTableColumn(indexed_table, column_name,
-                                                  indexed_data_table,
-                                                  index->is_null_filtered()));
+                       CreateIndexDataTableColumn(
+                           indexed_table, column_name, indexed_data_table,
+                           /*null_filtered_key_column=*/false));
 
       ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
           indexed_data_table,
@@ -4025,11 +4038,8 @@ absl::StatusOr<Model::ModelColumn> SchemaUpdaterImpl::CreateModelColumn(
   const std::string& column_name = ddl_column.column_name();
   ZETASQL_ASSIGN_OR_RETURN(
       const zetasql::Type* column_type,
-      DDLColumnTypeToGoogleSqlType(ddl_column,
-                                   type_factory_
-                                   ,
-                                   latest_schema_->proto_bundle().get()
-                                   ));
+      DDLColumnTypeToGoogleSqlType(ddl_column, type_factory_,
+                                   latest_schema_->proto_bundle().get()));
   if (ddl_column.not_null()) {
     return error::ModelColumnNotNull(model->Name(), column_name);
   }
@@ -4202,12 +4212,8 @@ SchemaUpdaterImpl::DropProtoBundle() {
 
 const Schema* EmptySchema(database_api::DatabaseDialect dialect) {
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-    static const Schema* empty_pg_schema =
-        new Schema(SchemaGraph::CreateEmpty()
-                   ,
-                   ProtoBundle::CreateEmpty()
-                   ,
-                   dialect);
+    static const Schema* empty_pg_schema = new Schema(
+        SchemaGraph::CreateEmpty(), ProtoBundle::CreateEmpty(), dialect);
     return empty_pg_schema;
   }
   static const Schema* empty_gsql_schema = new Schema;

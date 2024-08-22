@@ -31,6 +31,7 @@
 
 #include <vector>
 
+#include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
 namespace postgres_translator {
@@ -60,8 +61,12 @@ bool ProcIsRemoved(const FormData_pg_proc& proc);
 // bootstrap catalog. If true, should be followed by GetUpdatedProcSignature
 bool ProcIsModified(const FormData_pg_proc& proc);
 
-// Returns the new signature for this proc. Should only be called after
-// ProcIsModified has returned true.
+// Returns the new signature for this proc. Returns a nullptr if ProcIsModified
+// is false.
 const PgProcSignature* GetUpdatedProcSignature(const FormData_pg_proc& proc);
+
+// Returns the new signature for this proc. Does not check if the proc should be
+// modified. Only call on functions that should be modified.
+const PgProcSignature* GetUpdatedProcSignature(const PgProcData& proc);
 
 }  // namespace postgres_translator

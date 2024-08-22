@@ -132,7 +132,7 @@ absl::Status BackfillIndex(const Index* index,
     ZETASQL_ASSIGN_OR_RETURN(Key index_data_table_key, ComputeIndexKey(base_row, index),
                      _.SetErrorCode(absl::StatusCode::kFailedPrecondition));
     ValueList index_values = ComputeIndexValues(base_row, index);
-    if (ShouldFilterIndexKey(index, index_data_table_key)) {
+    if (ShouldFilterIndexKeyOrValue(index, index_data_table_key, base_row)) {
       continue;
     }
 

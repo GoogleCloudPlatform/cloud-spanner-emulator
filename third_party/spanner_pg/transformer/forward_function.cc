@@ -69,18 +69,36 @@ absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
 ForwardTransformer::BuildGsqlFunctionArgumentList(
     List* args, ExprTransformerInfo* expr_transformer_info) {
   std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
+
+  // Named arguments can be out of order but the NamedArgExpr will have the
+  // correct position. We need to build a map of the position to the argument
+  // so we can build the argument list in the correct order.
+  absl::flat_hash_map<int, std::unique_ptr<zetasql::ResolvedExpr>>
+      arg_index_to_expr;
+  uint8_t positional_index = 0;
   for (Expr* arg : StructList<Expr*>(args)) {
     if (arg->type == T_TargetEntry) {
       // This is an aggregate function argument. Build the argument from
       // the inner expression.
       TargetEntry* target_entry_arg =
           internal::PostgresCastNode(TargetEntry, arg);
-      arg = target_entry_arg->expr;
+      ZETASQL_ASSIGN_OR_RETURN(arg_index_to_expr[positional_index++],
+                       BuildGsqlResolvedExpr(*target_entry_arg->expr,
+                                             expr_transformer_info));
+    } else if (arg->type == T_NamedArgExpr) {
+      NamedArgExpr* named_arg_expr =
+          internal::PostgresCastNode(NamedArgExpr, arg);
+      ZETASQL_ASSIGN_OR_RETURN(
+          arg_index_to_expr[named_arg_expr->argnumber],
+          BuildGsqlResolvedExpr(*named_arg_expr->arg, expr_transformer_info));
+    } else {
+      ZETASQL_ASSIGN_OR_RETURN(arg_index_to_expr[positional_index++],
+                       BuildGsqlResolvedExpr(*arg, expr_transformer_info));
     }
-
-    ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedExpr> expr,
-                     BuildGsqlResolvedExpr(*arg, expr_transformer_info));
-    argument_list.push_back(std::move(expr));
+  }
+  argument_list.reserve(list_length(args));
+  for (int i = 0; i < list_length(args); ++i) {
+    argument_list.push_back(std::move(arg_index_to_expr[i]));
   }
   return argument_list;
 }

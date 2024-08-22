@@ -1006,6 +1006,8 @@ TEST_F(CatalogShimTestWithMemory, FuncnameGetCandidatesNamespace) {
   EXPECT_TRUE(FunctionFound("spanner", "farm_fingerprint", /*nargs=*/1));
   EXPECT_TRUE(FunctionFound("spanner", "get_internal_sequence_state",
                             /*nargs=*/-1));
+  EXPECT_TRUE(FunctionFound("spanner", "get_table_column_identity_state",
+                            /*nargs=*/1));
 
   // Missing catalog for Spanner function.
   EXPECT_FALSE(
@@ -1014,12 +1016,15 @@ TEST_F(CatalogShimTestWithMemory, FuncnameGetCandidatesNamespace) {
   EXPECT_FALSE(FunctionFound(/*namespace_name=*/nullptr, "farm_fingerprint"));
   EXPECT_FALSE(
       FunctionFound(/*namespace_name=*/nullptr, "get_internal_sequence_state"));
+  EXPECT_FALSE(FunctionFound(/*namespace_name=*/nullptr,
+                             "get_table_column_identity_state"));
 
   // Incorrect catalog for Spanner function.
   EXPECT_FALSE(FunctionFound("pg_catalog", "pending_commit_timestamp"));
   EXPECT_FALSE(FunctionFound("pg_catalog", "bit_reverse"));
   EXPECT_FALSE(FunctionFound("pg_catalog", "farm_fingerprint"));
   EXPECT_FALSE(FunctionFound("pg_catalog", "get_internal_sequence_state"));
+  EXPECT_FALSE(FunctionFound("pg_catalog", "get_table_column_identity_state"));
 
 }
 

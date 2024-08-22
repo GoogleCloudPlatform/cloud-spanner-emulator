@@ -314,8 +314,7 @@ absl::Status TableValidator::Validate(const Table* table,
     ZETASQL_RET_CHECK(table->parent_table_->is_public()
               // Change stream partition table should have interleave
               // compatibility even though it's not a public table.
-              || table->parent_table_->owner_change_stream() != nullptr
-    );
+              || table->parent_table_->owner_change_stream() != nullptr);
     auto parent_pk = table->parent_table_->primary_key();
     for (int i = 0; i < parent_pk.size(); ++i) {
       // The child has fewer primary key parts than the parent.
@@ -463,9 +462,11 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
     }
 
     // New columns cannot be nullable unless it is a generated column or
-    // it has a default value.
-    if (!column->is_nullable() && !column->is_generated() &&
-        !column->has_default_value()) {
+    // it has a default value. Index stored columns of the index data table
+    // could be as non nullable as the source table is, but these checks
+    // (nullable, generated, default value) do not apply.
+    if (!table->owner_index_ && !column->is_nullable() &&
+        !column->is_generated() && !column->has_default_value()) {
       return error::AddingNotNullColumn(table->name_, column->Name());
     }
   }

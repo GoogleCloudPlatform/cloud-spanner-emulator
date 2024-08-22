@@ -67,6 +67,7 @@ cc_library(
         "//common:errors",
         "//common:limits",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log",
@@ -76,6 +77,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_zetasql//zetasql/base:ret_check",
@@ -104,6 +106,24 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
+    ],
+)
+
+cc_test(
+    name = "sequence_test",
+    srcs = [
+        "sequence_test.cc",
+    ],
+    deps = [
+        ":schema",
+        "//backend/schema/builders:schema_builders",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 

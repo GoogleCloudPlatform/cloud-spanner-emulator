@@ -225,6 +225,7 @@ cc_library(
     name = "scoped_schema_change_lock",
     hdrs = ["scoped_schema_change_lock.h"],
     deps = [
+        "//backend/common:ids",
         "//backend/datamodel:key_range",
         "//backend/locking:manager",
         "//common:errors",

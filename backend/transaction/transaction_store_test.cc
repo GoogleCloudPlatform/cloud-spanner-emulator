@@ -52,6 +52,7 @@ class TransactionStoreTest : public testing::Test {
   TransactionStoreTest()
       : lock_manager_(LockManager(&clock_)),
         lock_handle_(lock_manager_.CreateHandle(TransactionID(1),
+                                                /*try_abort_fn=*/nullptr,
                                                 TransactionPriority(1))),
         base_storage_(std::make_unique<InMemoryStorage>()),
         commit_timestamp_tracker_(std::make_unique<CommitTimestampTracker>()),

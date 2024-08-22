@@ -50,8 +50,9 @@ class LockManager {
   // Returns a handle for a single transaction with the given id and priority.
   // Subsequent communication between the transaction and the lock manager
   // happens via the handle. See LockHandle methods for more details.
-  std::unique_ptr<LockHandle> CreateHandle(TransactionID id,
-                                           TransactionPriority priority);
+  std::unique_ptr<LockHandle> CreateHandle(
+      TransactionID id, const std::function<absl::Status()>& abort_fn,
+      TransactionPriority priority);
 
   // Returns the timestamp at which last schema update or commit completed.
   absl::Time LastCommitTimestamp();
@@ -70,8 +71,8 @@ class LockManager {
   // Mutex to guard state below.
   absl::Mutex mu_;
 
-  // The currently active transaction ID (only one transaction can be active).
-  TransactionID active_tid_ ABSL_GUARDED_BY(mu_) = kInvalidTransactionID;
+  // The currently active transaction (only one transaction can be active).
+  LockHandle* active_handle_ ABSL_GUARDED_BY(mu_) = nullptr;
 
   // System wide monotonic clock used to provide commit and read timestamps.
   Clock* clock_;

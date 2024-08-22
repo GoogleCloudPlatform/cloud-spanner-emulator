@@ -18,6 +18,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
+#include "common/config.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -167,6 +168,9 @@ TEST_F(BatchDmlTest, MixDmlAndBatchDmlInTransactionSucceeds) {
 }
 
 TEST_F(BatchDmlTest, ConcurrentTransactionWithBatchDmlNotAllowed) {
+  auto current_probability = config::abort_current_transaction_probability();
+  config::set_abort_current_transaction_probability(0);
+
   auto txn1 = Transaction(Transaction::ReadWriteOptions());
   auto txn2 = Transaction(Transaction::ReadWriteOptions());
 
@@ -204,6 +208,8 @@ TEST_F(BatchDmlTest, ConcurrentTransactionWithBatchDmlNotAllowed) {
 
   // Commit second transaction succeeds.
   ZETASQL_EXPECT_OK(CommitTransaction(txn2, {}));
+
+  config::set_abort_current_transaction_probability(current_probability);
 }
 
 TEST_F(BatchDmlTest, InvalidDmlFailsButCommitSucceeds) {

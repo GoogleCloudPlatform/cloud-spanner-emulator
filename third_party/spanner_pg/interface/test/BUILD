@@ -50,8 +50,6 @@ disabled_non_emulator_golden_tests = [
     "testdata/gencol_emulator_insertdml.test",
     # The emulator and spanner have different resolved ASTs for the distance functions
     "testdata/float4_functions_only_emulator.test",
-    # TODO: reenable once Spangres is on the Spanner dev branch.
-    "testdata/fts_functions.test",
 ]
 
 cc_library(

@@ -109,11 +109,16 @@ class LockHandle {
   friend class LockManager;
   friend std::unique_ptr<LockHandle>::deleter_type;
   LockHandle(LockManager* manager, TransactionID tid,
+             const std::function<absl::Status()>& abort_fn,
              TransactionPriority priority);
   ~LockHandle();
 
   // Aborts the requests made by this handle (and puts it in a final state).
   void Abort(const absl::Status& status) ABSL_LOCKS_EXCLUDED(mu_);
+  // Tries to abort this transaction. This is a best effort attempt and returns
+  // OK only if the transaction could successfully be aborted.
+  absl::Status TryAbortTransaction(const absl::Status& status)
+      ABSL_LOCKS_EXCLUDED(mu_);
 
   // Resets the state of this handle.
   void Reset() ABSL_LOCKS_EXCLUDED(mu_);
@@ -123,6 +128,13 @@ class LockHandle {
 
   // The ID of the transaction which owns this lock handle.
   TransactionID tid_;
+
+  // A function to try to abort the underlying transaction. The function will
+  // be called if another transaction wants to acquire the locks held by this
+  // transaction. The function will return OK only if the transaction was
+  // successfully aborted.
+  // This can be nullptr if the transaction cannot be aborted.
+  std::function<absl::Status()> try_abort_transaction_fn_;
 
   // The priority of the transaction which owns this lock handle.
   TransactionPriority priority_;

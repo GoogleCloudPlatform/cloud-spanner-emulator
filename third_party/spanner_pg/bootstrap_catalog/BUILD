@@ -49,6 +49,7 @@ cc_library(
     deps = [
         ":bootstrap_catalog_info",
         ":proc_changelist",
+        "//third_party/spanner_pg/interface:bootstrap_catalog_data_cc_proto",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -56,6 +57,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
+        "@com_google_protobuf//:protobuf",
         "@com_google_zetasql//zetasql/base:logging",
     ],
 )
@@ -80,6 +82,7 @@ cc_library(
     srcs = ["proc_changelist.cc"],
     hdrs = ["proc_changelist.h"],
     deps = [
+        "//third_party/spanner_pg/interface:bootstrap_catalog_data_cc_proto",
         "//third_party/spanner_pg/postgres_includes",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -97,6 +100,7 @@ cc_test(
         "//third_party/spanner_pg/util:valid_memory_context_fixture",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",

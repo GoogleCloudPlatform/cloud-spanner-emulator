@@ -31,6 +31,7 @@
 #include "backend/schema/updater/schema_updater.h"
 #include "backend/transaction/options.h"
 #include "common/clock.h"
+#include "common/config.h"
 #include "common/errors.h"
 
 namespace google {
@@ -223,6 +224,9 @@ TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
 }
 
 TEST_F(DatabaseTest, ConcurrentSchemaChangeIsAborted) {
+  auto current_probability = config::abort_current_transaction_probability();
+  config::set_abort_current_transaction_probability(0);
+
   std::vector<std::string> create_statements = {R"(
     CREATE TABLE T(
       k1 INT64,
@@ -253,6 +257,8 @@ TEST_F(DatabaseTest, ConcurrentSchemaChangeIsAborted) {
       db->UpdateSchema(SchemaChangeOperation{.statements = update_statements},
                        &completed_statements, &commit_ts, &backfill_status),
       error::ConcurrentSchemaChangeOrReadWriteTxnInProgress());
+
+  config::set_abort_current_transaction_probability(current_probability);
 }
 
 TEST_F(DatabaseTest, SchemaChangeLocksSuccesfullyReleased) {

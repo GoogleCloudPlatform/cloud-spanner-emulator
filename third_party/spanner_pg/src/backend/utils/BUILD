@@ -90,6 +90,10 @@ genrule(
 cc_library(
     name = "fmgr_sources_header",
     hdrs = [":generate_fmgr_sources"],
+    visibility = [
+        "//:__subpackages__",
+        "//spanner/datatypes/common/jsonb:__pkg__",
+    ],
 )
 
 genrule(

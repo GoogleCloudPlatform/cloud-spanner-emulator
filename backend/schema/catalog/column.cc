@@ -25,6 +25,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/table.h"
@@ -33,6 +34,7 @@
 #include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
 #include "common/limits.h"
+#include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
@@ -43,16 +45,22 @@ namespace backend {
 
 namespace {
 
-bool IsNullFilteredIndexKeyColumn(const Column* column) {
-  if (!column->table()->owner_index()->is_null_filtered()) {
-    return false;
+bool IsNullFilteredIndexColumn(const Column* column) {
+  // The column should be filtered if:
+  // 1. The index is NULL_FILTERED and the column is part of the index key.
+  // 2. The column is specified in the WHERE IS NOT NULL clause.
+  bool is_null_filtered_index_key = false;
+  if (column->table()->owner_index()->is_null_filtered()) {
+    const auto& index_key = column->table()->owner_index()->key_columns();
+    auto it = std::find_if(index_key.begin(), index_key.end(),
+                           [column](const KeyColumn* key_column) {
+                             return key_column->column()->id() == column->id();
+                           });
+    is_null_filtered_index_key = (it != index_key.end());
   }
-  const auto& index_key = column->table()->owner_index()->key_columns();
-  auto it = std::find_if(index_key.begin(), index_key.end(),
-                         [column](const KeyColumn* key_column) {
-                           return key_column->column()->id() == column->id();
-                         });
-  return it != index_key.end();
+  bool is_not_null_column =
+      column->table()->owner_index()->is_null_filtered_column(column);
+  return is_null_filtered_index_key || is_not_null_column;
 }
 
 }  // namespace
@@ -94,6 +102,8 @@ absl::Status Column::DeepClone(SchemaGraphEditor* editor,
   }
 
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_));
+  ZETASQL_RETURN_IF_ERROR(
+      editor->CloneVector(&change_streams_explicitly_tracking_column_));
 
   for (const Column*& column : dependent_columns_) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));
@@ -111,13 +121,14 @@ absl::Status Column::DeepClone(SchemaGraphEditor* editor,
     // Source column's type attributes must be copied explicitly as they
     // may have been changed by an ALTER on the source column.
     // However, nullability should not be copied if the column is part of
-    // the index key of a null-filtering index.
+    // the null-filtering index.
     type_ = source_column_->type_;
     declared_max_length_ = source_column_->declared_max_length_;
     ZETASQL_RET_CHECK(!table_->is_public());
-    if (!IsNullFilteredIndexKeyColumn(this)) {
-      is_nullable_ = source_column_->is_nullable_;
-    }
+    // is_nullable should be false for null-filtered index columns, otherwise
+    // it should be the same as the source column.
+    is_nullable_ =
+        IsNullFilteredIndexColumn(this) ? false : source_column_->is_nullable_;
   }
   return absl::OkStatus();
 }

@@ -125,6 +125,11 @@ absl::Status MutationTableRequired();
 // Transaction errors.
 absl::Status AbortConcurrentTransaction(int64_t requestor_id,
                                         int64_t holder_id);
+absl::Status AbortCurrentTransaction(backend::TransactionID holder_id,
+                                     backend::TransactionID requestor_id);
+absl::Status WoundedTransaction(backend::TransactionID id);
+absl::Status CouldNotObtainLockHandleMutex(backend::TransactionID id);
+absl::Status CouldNotObtainTransactionMutex(backend::TransactionID id);
 absl::Status TransactionNotFound(backend::TransactionID id);
 absl::Status TransactionClosed(backend::TransactionID id);
 absl::Status InvalidTransactionID(backend::TransactionID id);
