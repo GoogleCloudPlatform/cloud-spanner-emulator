@@ -636,6 +636,7 @@ cc_test(
     ],
     deps = [
         ":error_shim",
+        ":parser_shim",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
         "//third_party/spanner_pg/util:postgres",

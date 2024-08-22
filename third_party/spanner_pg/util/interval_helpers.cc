@@ -32,13 +32,37 @@
 #include "third_party/spanner_pg/util/interval_helpers.h"
 
 #include <cstdint>
+#include <cstdlib>
+#include <string>
 
 #include "absl/flags/flag.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
-#include "third_party/spanner_pg/postgres_includes/all.h"
+#include "absl/strings/strip.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"  // IWYU pragma: keep
 #include "zetasql/base/status_macros.h"
+
+// Constant Declarations
+static const int64_t kNumMillisPerSecond = 1000LL;
+static const int64_t kNumMillisPerMinute = 60LL * kNumMillisPerSecond;
+static const int64_t kNumMillisPerHour = 60LL * kNumMillisPerMinute;
+
+static const int64_t kNumMicrosPerMilli = 1000LL;
+static const int64_t kNumMicrosPerSecond = kNumMillisPerSecond * 1000LL;
+static const int64_t kNumMicrosPerMinute = kNumMillisPerMinute * 1000LL;
+static const int64_t kNumMicrosPerHour = kNumMillisPerHour * 1000LL;
+static const __int128 kNumNanosPerMicro = 1000LL;
+static const __int128 kNumNanosPerMilli =
+    kNumMicrosPerMilli * kNumNanosPerMicro;
+static const __int128 kNumNanosPerSecond =
+    kNumMicrosPerSecond * kNumNanosPerMicro;
+static const __int128 kNumNanosPerMinute =
+    kNumMicrosPerMinute * kNumNanosPerMicro;
+static const __int128 kNumNanosPerHour = kNumMicrosPerHour * kNumNanosPerMicro;
+static const int64_t kMonthsPerYear = 12;
 
 /*
  * Report an error detected by one of the datetime input processing routines.
@@ -143,4 +167,90 @@ absl::StatusOr<int64_t> IntervalToSecs(absl::string_view input_string) {
   total = (((interval.months * 30) + interval.days) * 86400) +
           interval.micros / USECS_PER_SEC;
   return total;
+}
+
+std::string IntervalToString(const PGInterval &interval) {
+  // Year-Month part
+  bool is_month_negative = interval.months < 0;
+  int64_t total_months = std::abs(interval.months);
+  int64_t years = total_months / kMonthsPerYear;
+  int64_t months = total_months - years * kMonthsPerYear;
+
+  // Days part
+  bool is_day_negative = interval.days < 0;
+  int64_t days = std::abs(interval.days);
+
+  // Hour:Minute:Second and optional fractional seconds part.
+  __int128 total_nanos = __int128(interval.micros) * kNumMillisPerSecond +
+                         __int128(interval.nano_fraction);
+  bool is_second_negative = total_nanos < 0;
+
+  // Cannot overflow because valid range of nanos is smaller than most
+  // negative value.
+  total_nanos = total_nanos < 0 ? -total_nanos : total_nanos;
+
+  int64_t hours = total_nanos / kNumNanosPerHour;
+  total_nanos -= hours * kNumNanosPerHour;
+  int64_t minutes = total_nanos / kNumNanosPerMinute;
+  total_nanos -= minutes * kNumNanosPerMinute;
+  int64_t seconds = total_nanos / kNumNanosPerSecond;
+  total_nanos -= seconds * kNumNanosPerSecond;
+
+  // Fractional part of second
+  bool has_millis = total_nanos != 0;
+  int64_t millis = total_nanos / kNumNanosPerMilli;
+  total_nanos -= millis * kNumNanosPerMilli;
+  bool has_micros = total_nanos != 0;
+  int64_t micros = total_nanos / kNumNanosPerMicro;
+  total_nanos -= micros * kNumNanosPerMicro;
+  bool has_nanos = total_nanos != 0;
+  int64_t nanos = total_nanos;
+
+  std::string result;
+  bool is_last_field_negative = false;
+  std::string sign_str;
+  std::string suffix;
+
+  if (years != 0) {
+    sign_str = is_month_negative ? "-" : "";
+    suffix = is_month_negative || (years != 1) ? "years" : "year";
+    absl::StrAppendFormat(&result, "%s%d %s ", sign_str, years, suffix);
+    is_last_field_negative = is_month_negative;
+  }
+
+  if (months != 0) {
+    sign_str = is_month_negative ? "-" : "";
+    suffix = is_month_negative || (months != 1) ? "mons" : "mon";
+    absl::StrAppendFormat(&result, "%s%d %s ", sign_str, months, suffix);
+    is_last_field_negative = is_month_negative;
+  }
+
+  if (days != 0) {
+    sign_str = is_day_negative ? "-" : (is_last_field_negative ? "+" : "");
+    suffix = is_day_negative || (days != 1) ? "days" : "day";
+    absl::StrAppendFormat(&result, "%s%d %s ", sign_str, days, suffix);
+    is_last_field_negative = is_day_negative;
+  }
+
+  // Time part is always added.
+  sign_str = is_second_negative ? "-" : is_last_field_negative ? "+" : "";
+  absl::StrAppendFormat(&result, "%s%02d:%02d:%02d", sign_str, hours, minutes,
+                        seconds);
+
+  std::string fraction_str;
+  if (has_millis) {
+    absl::StrAppendFormat(&fraction_str, ".%03d", millis);
+    if (has_micros) {
+      absl::StrAppendFormat(&fraction_str, "%03d", micros);
+      if (has_nanos) {
+        absl::StrAppendFormat(&fraction_str, "%03d", nanos);
+      }
+    }
+  }
+
+  // Strip trailing zeros from fractional part.
+  while (absl::EndsWith(fraction_str, "0")) fraction_str.pop_back();
+
+  absl::StrAppend(&result, fraction_str);
+  return result;
 }

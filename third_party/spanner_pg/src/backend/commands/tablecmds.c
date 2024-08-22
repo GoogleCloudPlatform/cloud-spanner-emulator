@@ -6247,6 +6247,8 @@ alter_table_type_to_string(AlterTableType cmdtype)
 		case AT_SetOnDeleteCascade:
 		case AT_SetOnDeleteNoAction:
 			return "SET INTERLEAVE IN PARENT ON DELETE";
+		case AT_SetInterleaveIn:
+			return "ALTER TABLE ... SET INTERLEAVE IN";
 		case AT_AddIndexIncludeColumn:
 			return "ALTER INDEX ... ADD INCLUDE COLUMN";
 		case AT_DropIndexIncludeColumn:

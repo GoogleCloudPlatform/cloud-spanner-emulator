@@ -921,13 +921,13 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
                               /*context_ptr=*/nullptr}}},
                            /*mode=*/zetasql::Function::SCALAR,
                            /*postgres_namespace=*/"spanner"});
-        functions.push_back({"float32_array",
-                             "float32_array",
-                             {{{gsql_float_array,
-                                {gsql_pg_jsonb},
-                                /*context_ptr=*/nullptr}}},
-                             /*mode=*/zetasql::Function::SCALAR,
-                             /*postgres_namespace=*/"spanner"});
+      functions.push_back({"float32_array",
+                           "float32_array",
+                           {{{gsql_float_array,
+                              {gsql_pg_jsonb},
+                              /*context_ptr=*/nullptr}}},
+                           /*mode=*/zetasql::Function::SCALAR,
+                           /*postgres_namespace=*/"spanner"});
       functions.push_back({"bool_array",
                            "bool_array",
                            {{{gsql_bool_array,

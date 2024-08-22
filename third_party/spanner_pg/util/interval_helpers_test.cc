@@ -30,6 +30,7 @@
 //------------------------------------------------------------------------------
 
 #include "third_party/spanner_pg/util/interval_helpers.h"
+#include <string>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -108,4 +109,145 @@ TEST(Intervals, ParseInterval) {
            PGInterval{.months = 0, .days = 0, .micros = 9000000000});
 }
 
+struct IntervalToStringTestParams {
+  PGInterval interval;
+  std::string expected;
+};
+
+class IntervalToStringTest
+    : public testing::TestWithParam<IntervalToStringTestParams> {};
+
+TEST_P(IntervalToStringTest, Basic) {
+  IntervalToStringTestParams params = GetParam();
+  EXPECT_EQ(IntervalToString(params.interval), params.expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    IntervalToStringTest, IntervalToStringTest,
+    testing::ValuesIn<IntervalToStringTestParams>({
+        // zero-interval
+        {.interval =
+             PGInterval{
+                 .months = 0, .days = 0, .micros = 0, .nano_fraction = 0},
+         .expected = "00:00:00"},
+        // max-value
+        {.interval = PGInterval{.months = 120000,
+                                .days = 3660000,
+                                .micros = 31622400000000000,
+                                .nano_fraction = 0},
+         .expected = "10000 years 3660000 days 8784000:00:00"},
+        // min-value
+        {.interval = PGInterval{.months = -120000,
+                                .days = -3660000,
+                                .micros = -31622400000000000,
+                                .nano_fraction = 0},
+         .expected = "-10000 years -3660000 days -8784000:00:00"},
+        // year-month part
+        {.interval =
+             PGInterval{
+                 .months = 12, .days = 0, .micros = 0, .nano_fraction = 0},
+         .expected = "1 year 00:00:00"},
+        {.interval =
+             PGInterval{
+                 .months = -12, .days = 0, .micros = 0, .nano_fraction = 0},
+         .expected = "-1 years +00:00:00"},
+        {.interval =
+             PGInterval{
+                 .months = 1, .days = 0, .micros = 0, .nano_fraction = 0},
+         .expected = "1 mon 00:00:00"},
+        {.interval =
+             PGInterval{
+                 .months = -1, .days = 0, .micros = 0, .nano_fraction = 0},
+         .expected = "-1 mons +00:00:00"},
+        {.interval =
+             PGInterval{
+                 .months = 25, .days = 0, .micros = 0, .nano_fraction = 0},
+         .expected = "2 years 1 mon 00:00:00"},
+        {.interval =
+             PGInterval{
+                 .months = -25, .days = 0, .micros = 0, .nano_fraction = 0},
+         .expected = "-2 years -1 mons +00:00:00"},
+        // day part
+        {.interval =
+             PGInterval{
+                 .months = 0, .days = 1, .micros = 0, .nano_fraction = 0},
+         .expected = "1 day 00:00:00"},
+        {.interval =
+             PGInterval{
+                 .months = 0, .days = -1, .micros = 0, .nano_fraction = 0},
+         .expected = "-1 days +00:00:00"},
+        {.interval =
+             PGInterval{
+                 .months = 0, .days = 31, .micros = 0, .nano_fraction = 0},
+         .expected = "31 days 00:00:00"},
+        {.interval =
+             PGInterval{
+                 .months = 0, .days = -31, .micros = 0, .nano_fraction = 0},
+         .expected = "-31 days +00:00:00"},
+        // Time part
+        {.interval =
+             PGInterval{
+                 .months = 0, .days = 0, .micros = 0, .nano_fraction = 1},
+         .expected = "00:00:00.000000001"},
+        {.interval =
+             PGInterval{
+                 .months = 0, .days = 0, .micros = 0, .nano_fraction = -1},
+         .expected = "-00:00:00.000000001"},
+        {.interval =
+             PGInterval{
+                 .months = 0, .days = 0, .micros = 1, .nano_fraction = 0},
+         .expected = "00:00:00.000001"},
+        {.interval =
+             PGInterval{
+                 .months = 0, .days = 0, .micros = -1, .nano_fraction = 0},
+         .expected = "-00:00:00.000001"},
+        {.interval = PGInterval{.months = 0,
+                                .days = 0,
+                                .micros = -100,
+                                .nano_fraction = 0},
+         .expected = "-00:00:00.0001"},
+        {.interval = PGInterval{.months = 0,
+                                .days = 0,
+                                .micros = 100000,
+                                .nano_fraction = 0},
+         .expected = "00:00:00.1"},
+        {.interval = PGInterval{.months = 0,
+                                .days = 0,
+                                .micros = 100000000,
+                                .nano_fraction = 0},
+         .expected = "00:01:40"},
+        // mixed signs
+        {.interval = PGInterval{.months = -34,
+                                .days = 12,
+                                .micros = 18956478,
+                                .nano_fraction = 978},
+         .expected = "-2 years -10 mons +12 days 00:00:18.956478978"},
+        {.interval = PGInterval{.months = -34,
+                                .days = -12,
+                                .micros = 18956478,
+                                .nano_fraction = 978},
+         .expected = "-2 years -10 mons -12 days +00:00:18.956478978"},
+        {.interval = PGInterval{.months = -34,
+                                .micros = 18956478,
+                                .nano_fraction = 978},
+         .expected = "-2 years -10 mons +00:00:18.956478978"},
+        {.interval =
+             PGInterval{.months = 34, .micros = 18956478, .nano_fraction = 978},
+         .expected = "2 years 10 mons 00:00:18.956478978"},
+        {.interval = PGInterval{.months = 789,
+                                .days = -56784,
+                                .micros = -320,
+                                .nano_fraction = 7},
+         .expected = "65 years 9 mons -56784 days -00:00:00.000319993"},
+        {.interval = PGInterval{.months = 56946,
+                                .days = -4809,
+                                .micros = -1978,
+                                .nano_fraction = 5678},
+         .expected = "4745 years 6 mons -4809 days -00:00:00.001972322"},
+        {.interval = PGInterval{.months = 78654,
+                                .days = -2301,
+                                .micros = 1378,
+                                .nano_fraction = 52},
+         .expected = "6554 years 6 mons -2301 days +00:00:00.001378052"},
+    }));
 }  // namespace

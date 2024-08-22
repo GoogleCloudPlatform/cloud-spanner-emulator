@@ -33,6 +33,7 @@
 #define UTIL_INTERVAL_HELPERS_H_
 
 #include <cstdint>
+#include <string>
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -41,6 +42,7 @@ struct PGInterval {
   int64_t months;
   int64_t days;
   int64_t micros;
+  int64_t nano_fraction;
 };
 
 // ParseInterval turns a postgres-format interval specifier string, like "2
@@ -56,5 +58,10 @@ absl::StatusOr<PGInterval> ParseInterval(absl::string_view input_string);
 // Internally uses ParseInterval for canonicalizing into `(months, days and
 // micros)`.
 absl::StatusOr<int64_t> IntervalToSecs(absl::string_view input_string);
+
+// Converts Interval to Postgres-Style Interval String.
+// [<sign>][x] year[s] [<sign>][x] mon[s] [<sign>][x] day[s]
+// [<sign>]x:x:x[.ddd[ddd[ddd]]]
+std::string IntervalToString(const PGInterval& interval);
 
 #endif  // UTIL_INTERVAL_HELPERS_H_

@@ -217,8 +217,9 @@ ReadWriteTransaction::ReadWriteTransaction(
       clock_(clock),
       base_storage_(storage),
       versioned_catalog_(versioned_catalog),
-      lock_handle_(
-          lock_manager->CreateHandle(transaction_id, retry_state_.priority)),
+      lock_handle_(lock_manager->CreateHandle(
+          transaction_id, [&]() -> absl::Status { return TryAbort(); },
+          retry_state_.priority)),
       commit_timestamp_tracker_(std::make_unique<CommitTimestampTracker>()),
       transaction_store_(std::make_unique<TransactionStore>(
           base_storage_, lock_handle_.get(), commit_timestamp_tracker_.get())),
@@ -319,6 +320,12 @@ absl::Status ReadWriteTransaction::GuardedCall(
     case State::kCommitted:
       return error::Internal(absl::StrCat(
           "Invalid call to Committed transaction. Transaction: ", id()));
+    case State::kAborted: {
+      if (op != OpType::kRollback) {
+        return error::WoundedTransaction(id_);
+      }
+      break;
+    }
     case State::kUninitialized: {
       schema_ = versioned_catalog_->GetLatestSchema();
       auto maybe_action_registry =
@@ -616,6 +623,28 @@ absl::Status ReadWriteTransaction::Rollback() {
 
     return absl::OkStatus();
   });
+}
+
+absl::Status ReadWriteTransaction::TryAbort() {
+  if (!mu_.TryLock()) {
+    return error::CouldNotObtainTransactionMutex(id());
+  }
+
+  if (state_ != State::kActive) {
+    mu_.Unlock();
+    return error::TransactionClosed(id());
+  }
+
+  // Reset the transaction and release the lock handle.
+  // Aborts do not invalidate the transaction.
+  // Reset();
+  ++retry_state_.abort_retry_count;
+
+  // Mark the transaction as aborted.
+  state_ = State::kAborted;
+
+  mu_.Unlock();
+  return absl::OkStatus();
 }
 
 absl::Status ReadWriteTransaction::Invalidate() {

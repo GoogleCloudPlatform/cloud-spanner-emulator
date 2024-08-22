@@ -259,7 +259,7 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       TableContext& context) const;
 
   absl::Status TranslateInterleaveIn(
-      const InterleaveSpec* pg_interleave, const TableContext& context,
+      const InterleaveSpec* pg_interleave,
       google::spanner::emulator::backend::ddl::InterleaveClause* interleave_out,
       const TranslationOptions& options) const;
 
@@ -907,7 +907,7 @@ PostgreSQLToSpannerDDLTranslatorImpl::GetFunctionName(
 }
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateInterleaveIn(
-    const InterleaveSpec* pg_interleave, const TableContext& context,
+    const InterleaveSpec* pg_interleave,
     google::spanner::emulator::backend::ddl::InterleaveClause* interleave_out,
     const TranslationOptions& options) const {
   ZETASQL_RET_CHECK_NE(pg_interleave, nullptr);
@@ -922,23 +922,21 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateInterleaveIn(
                    GetInterleaveClauseType(pg_interleave->interleavetype));
 
   switch (type) {
-    case google::spanner::emulator::backend::ddl::InterleaveClause::IN_PARENT: {
-      ZETASQL_ASSIGN_OR_RETURN(
-          google::spanner::emulator::backend::ddl::InterleaveClause::Action action,
-          GetInterleaveParentDeleteActionType(pg_interleave->on_delete_action));
-      // on_delete action is optional in sdl proto, only set it when it is
-      // CASCADE to skip handling of on_delete for in printing and test cases.
-      if (action == google::spanner::emulator::backend::ddl::InterleaveClause::CASCADE) {
-        interleave_out->set_on_delete(action);
-      }
-      break;
-    }
-
     case google::spanner::emulator::backend::ddl::InterleaveClause::IN: {
       if (!options.enable_interleave_in) {
         return UnsupportedTranslationError(
             "<INTERLEAVE IN> clause is not supported. Consider using "
             "<INTERLEAVE IN PARENT>.");
+      }
+    }
+    [[fallthrough]];
+    case google::spanner::emulator::backend::ddl::InterleaveClause::IN_PARENT: {
+      if (pg_interleave->on_delete_action) {
+        ZETASQL_ASSIGN_OR_RETURN(
+            google::spanner::emulator::backend::ddl::InterleaveClause::Action action,
+            GetInterleaveParentDeleteActionType(
+                pg_interleave->on_delete_action));
+        interleave_out->set_on_delete(action);
       }
       break;
     }
@@ -1384,30 +1382,38 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSequence(
                    GetTableName(*create_statement.sequence, "CREATE SEQUENCE"));
   out.set_sequence_name(sequence_name);
 
-  // pg_parse_tree_validator guarantees the iff `BIT_REVERSED_POSITIVE` is used
-  // can pass the validation.
-  google::spanner::emulator::backend::ddl::CreateSequence::Type seq_type =
-      google::spanner::emulator::backend::ddl::CreateSequence::BIT_REVERSED_POSITIVE;
+  List* opts = create_statement.options;
 
-  // sequence_type in the options also required to be set.
-  ::google::spanner::emulator::backend::ddl::SetOption* sequence_type = out.add_set_options();
-  sequence_type->set_option_name(PGConstants::kSequenceKindOptionName);
-  sequence_type->set_string_value(
-      PGConstants::kSequenceKindBitReversedPositive);
+  // This function originally translated and added `sequence_kind` option first
+  // because it is mandatory. The option is now optional after the support
+  // of `default_sequence_kind` database option but we still want to keep this
+  // ordering of options; hence, we add an extra for loop to search and add
+  // `bit_reversed_positive` instead of just searching for it in the original
+  // for loop.
+  for (int i = 0; i < list_length(opts); ++i) {
+    DefElem* elem = ::postgres_translator::internal::PostgresCastNode(
+        DefElem, opts->elements[i].ptr_value);
+    absl::string_view name = elem->defname;
+    if (name == "bit_reversed_positive") {
+      out.set_type(google::spanner::emulator::backend::ddl::CreateSequence::BIT_REVERSED_POSITIVE);
+      ::google::spanner::emulator::backend::ddl::SetOption* sequence_type = out.add_set_options();
+      sequence_type->set_option_name(PGConstants::kSequenceKindOptionName);
+      sequence_type->set_string_value(
+          PGConstants::kSequenceKindBitReversedPositive);
+      break;
+    }
+  }
 
   // Default `start_with_counter` value is `1`.
   ::google::spanner::emulator::backend::ddl::SetOption* start_counter = out.add_set_options();
   start_counter->set_option_name("start_with_counter");
   start_counter->set_int64_value(1);
 
-  List* opts = create_statement.options;
   for (int i = 0; i < list_length(opts); ++i) {
     DefElem* elem = ::postgres_translator::internal::PostgresCastNode(
         DefElem, opts->elements[i].ptr_value);
     absl::string_view name = elem->defname;
-    if (name == "bit_reversed") {
-      // Do nothing, just short cut the for loop.
-    } else if (name == "start_counter") {
+    if (name == "start_counter") {
       ZETASQL_ASSIGN_OR_RETURN(int64_t value, CheckedPgDefGetInt64(elem));
       start_counter->set_int64_value(value);
     } else if (name == "skip_range") {
@@ -1416,7 +1422,6 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSequence(
     }
   }
 
-  out.set_type(seq_type);
   if (create_statement.if_not_exists) {
     out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
   }
@@ -1569,9 +1574,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
   }
 
   if (create_statement.interleavespec != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(
-        TranslateInterleaveIn(create_statement.interleavespec, context,
-                              out.mutable_interleave_clause(), options));
+    ZETASQL_RETURN_IF_ERROR(TranslateInterleaveIn(create_statement.interleavespec,
+                                          out.mutable_interleave_clause(),
+                                          options));
   }
 
   if (create_statement.ttl != nullptr) {
@@ -1853,6 +1858,22 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
     case AT_SetOnDeleteNoAction: {
       out.mutable_set_on_delete()->set_action(
           google::spanner::emulator::backend::ddl::InterleaveClause::NO_ACTION);
+      return absl::OkStatus();
+    }
+    case AT_SetInterleaveIn: {
+      if (!options.enable_interleave_in) {
+        return UnsupportedTranslationError(
+            "<ALTER TABLE ... SET INTERLEAVE IN> statement is not supported.");
+      }
+
+      ZETASQL_ASSIGN_OR_RETURN(
+          const InterleaveSpec* interleavespec,
+          (DowncastNode<InterleaveSpec, T_InterleaveSpec>(first_cmd->def)));
+
+      ZETASQL_RETURN_IF_ERROR(TranslateInterleaveIn(
+          interleavespec,
+          out.mutable_set_interleave_clause()->mutable_interleave_clause(),
+          options));
       return absl::OkStatus();
     }
 

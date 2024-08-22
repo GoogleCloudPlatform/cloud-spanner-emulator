@@ -68,6 +68,7 @@ cc_test(
         "//backend/schema/updater:schema_updater",
         "//backend/transaction:read_only_transaction",
         "//common:clock",
+        "//common:config",
         "//common:errors",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",

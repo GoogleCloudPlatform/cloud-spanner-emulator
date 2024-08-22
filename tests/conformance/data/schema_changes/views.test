@@ -120,7 +120,7 @@ CREATE VIEW v SQL SECURITY INVOKER
 ALTER TABLE t ALTER COLUMN c BYTES(MAX);
 --
 ERROR: FAILED_PRECONDITION: .* Cannot alter column `t.c`. The new definition causes the definition of VIEW `v` to become invalid
- with the following diagnostic message: No matching signature for function CHAR_LENGTH for argument types: BYTES. .*
+ with the following diagnostic message: .*
 ==
 # Cannot drop a view which does not exist.
 # --regex

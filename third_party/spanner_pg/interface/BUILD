@@ -416,6 +416,16 @@ cc_test(
     ],
 )
 
+proto_library(
+    name = "bootstrap_catalog_data",
+    srcs = ["bootstrap_catalog_data.proto"],
+)
+
+cc_proto_library(
+    name = "bootstrap_catalog_data_cc_proto",
+    deps = [":bootstrap_catalog_data"],
+)
+
 cc_library(
     name = "emulator_builtin_function_catalog",
     hdrs = [

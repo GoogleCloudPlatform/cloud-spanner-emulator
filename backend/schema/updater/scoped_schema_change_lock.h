@@ -21,6 +21,7 @@
 
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
+#include "backend/common/ids.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/locking/handle.h"
 #include "backend/locking/manager.h"
@@ -39,7 +40,8 @@ namespace backend {
 class ScopedSchemaChangeLock {
  public:
   ScopedSchemaChangeLock(TransactionID tid, LockManager* lock_manager) {
-    lock_handle_ = lock_manager->CreateHandle(tid, TransactionPriority(1));
+    lock_handle_ = lock_manager->CreateHandle(tid, /*abort_fn=*/nullptr,
+                                              TransactionPriority(1));
 
     // Use dummy arguments to represent a "database-wide lock".
     LockRequest req{LockMode::kExclusive, /*table_id=*/"", KeyRange::All(),

@@ -1139,6 +1139,76 @@ TEST_F(CatalogShimCcWrappersTest, UdfLookUpCaseSensitive) {
   EXPECT_EQ(proc_count, 0);
 }
 
+TEST_F(CatalogShimCcWrappersTest, GetFunctionArgInfo) {
+  zetasql::AnalyzerOptions analyzer_options =
+      GetSpangresTestAnalyzerOptions();
+  std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
+      GetSpangresTestCatalogAdapterHolder(analyzer_options);
+
+  Oid * argtypes;
+  char ** argnames;
+  char * argmodes;
+
+  // All arrays are correctly allocating memory and returning the right values.
+  constexpr Oid jsonb_array_elements_oid = 3219;
+  int nargs = GetFunctionArgInfo(jsonb_array_elements_oid, &argtypes,
+                                 &argnames, &argmodes);
+  ASSERT_EQ(nargs, 2);
+  ASSERT_NE(argtypes, nullptr);
+  EXPECT_EQ(argtypes[0], 3802);
+  EXPECT_EQ(argtypes[1], 3802);
+  ASSERT_NE(argnames, nullptr);
+  EXPECT_STREQ(argnames[0], "from_json");
+  EXPECT_STREQ(argnames[1], "value");
+  ASSERT_NE(argmodes, nullptr);
+  EXPECT_EQ(argmodes[0], FUNC_PARAM_IN);
+  EXPECT_EQ(argmodes[1], FUNC_PARAM_OUT);
+
+  // Empty arrays should be set to nullptr.
+  constexpr Oid int84eq_oid = 474;
+  nargs = GetFunctionArgInfo(int84eq_oid, &argtypes, &argnames, &argmodes);
+  ASSERT_EQ(nargs, 2);
+  ASSERT_NE(argtypes, nullptr);
+  EXPECT_EQ(argtypes[0], 20);
+  EXPECT_EQ(argtypes[1], 23);
+  EXPECT_EQ(argnames, nullptr);
+  EXPECT_EQ(argmodes, nullptr);
+
+  // NotFound errors should return 0 and set the output pointers to nullptr.
+  nargs = GetFunctionArgInfo(InvalidOid, &argtypes, &argnames, &argmodes);
+  EXPECT_EQ(nargs, 0);
+  EXPECT_EQ(argtypes, nullptr);
+  EXPECT_EQ(argnames, nullptr);
+  EXPECT_EQ(argmodes, nullptr);
+
+  // UDFs rely on a lookup map that is constructed when creating pg_proc structs
+  // which would happen during parsing. This call to GetProcsByName initializes
+  // the map for this test.
+  const std::string kTvfName = "read_json_keyvalue_change_stream";
+  const FormData_pg_proc** proc_list;
+  size_t proc_count;
+  GetProcsByName(kTvfName.c_str(), &proc_list, &proc_count);
+
+  ASSERT_EQ(proc_count, 1);
+  const Oid read_json_keyvalue_change_stream_oid = proc_list[0]->oid;
+  nargs = GetFunctionArgInfo(read_json_keyvalue_change_stream_oid, &argtypes,
+                             &argnames, &argmodes);
+  ASSERT_EQ(nargs, 5);
+  ASSERT_NE(argtypes, nullptr);
+  EXPECT_EQ(argtypes[0], 1184);
+  EXPECT_EQ(argtypes[1], 1184);
+  EXPECT_EQ(argtypes[2], 25);
+  EXPECT_EQ(argtypes[3], 20);
+  EXPECT_EQ(argtypes[4], 1009);
+  ASSERT_NE(argnames, nullptr);
+  EXPECT_STREQ(argnames[0], "start_timestamp");
+  EXPECT_STREQ(argnames[1], "end_timestamp");
+  EXPECT_STREQ(argnames[2], "partition_token");
+  EXPECT_STREQ(argnames[3], "heartbeat_milliseconds");
+  EXPECT_STREQ(argnames[4], "read_options");
+  ASSERT_EQ(argmodes, nullptr);
+}
+
 }  // namespace
 }  // namespace postgres_translator::test
 

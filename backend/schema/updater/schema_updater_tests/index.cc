@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include "backend/schema/catalog/index.h"
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -25,7 +27,11 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/strings/str_cat.h"
+#include "absl/types/span.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/schema/catalog/table.h"
+#include "backend/schema/updater/schema_updater.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/errors.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
@@ -183,6 +189,60 @@ TEST_P(SchemaUpdaterTest, CreateIndexIfNotExists) {
               StatusIs(absl::OkStatus()));
 }
 
+TEST_P(SchemaUpdaterTest, CreateIndexWhereIsNotNull) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  std::string ddl[] = {
+      R"sql(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 INT64,
+        s1 STRING(MAX),
+      ) PRIMARY KEY (k1)
+    )sql",
+      R"sql(
+      CREATE INDEX Idx ON T(c1, s1) WHERE c1 IS NOT NULL AND s1 IS NOT NULL
+    )sql"};
+  absl::Span<const std::string> ddls(ddl);
+  std::unique_ptr<const Schema> schema;
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(ddls));
+  const Index* idx = schema->FindIndex("Idx");
+  EXPECT_NE(idx, nullptr);
+
+  const Table* base_table = schema->FindTable("T");
+  EXPECT_EQ(idx->indexed_table(), base_table);
+  EXPECT_FALSE(idx->is_null_filtered());
+  EXPECT_FALSE(idx->is_unique());
+  EXPECT_EQ(idx->key_columns().size(), 2);
+  EXPECT_EQ(idx->stored_columns().size(), 0);
+
+  // The data table is not discoverable in the Schema.
+  EXPECT_EQ(schema->FindTable(absl::StrCat(kIndexDataTablePrefix, "Idx")),
+            nullptr);
+  const Table* idx_data = idx->index_data_table();
+  EXPECT_NE(idx_data, nullptr);
+  EXPECT_TRUE(idx_data->indexes().empty());
+
+  EXPECT_EQ(idx_data->primary_key().size(), 3);
+  auto data_pk = idx_data->primary_key();
+
+  auto t_c1 = base_table->FindColumn("c1");
+  EXPECT_THAT(data_pk[0]->column(), ColumnIs("c1", type_factory_.get_int64()));
+  EXPECT_THAT(data_pk[0]->column(), SourceColumnIs(t_c1));
+  EXPECT_EQ(data_pk[0], idx->key_columns()[0]);
+  EXPECT_FALSE(data_pk[0]->column()->is_nullable());
+
+  auto t_s1 = base_table->FindColumn("s1");
+  EXPECT_THAT(data_pk[1]->column(), ColumnIs("s1", type_factory_.get_string()));
+  EXPECT_THAT(data_pk[1]->column(), SourceColumnIs(t_s1));
+  EXPECT_FALSE(data_pk[1]->column()->is_nullable());
+
+  auto t_k1 = base_table->FindColumn("k1");
+  EXPECT_THAT(data_pk[2]->column(), ColumnIs("k1", type_factory_.get_int64()));
+  EXPECT_THAT(data_pk[2]->column(), SourceColumnIs(t_k1));
+  EXPECT_TRUE(data_pk[2]->column()->is_nullable());
+}
+
 TEST_P(SchemaUpdaterTest, CreateIndexIfNotExistsOnExistingIndex) {
   // IF NOT EXISTS isn't yet supported on the PG side of the emulator
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
@@ -239,8 +299,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_AscKeys) {
                                        R"sql(
         CREATE INDEX Idx ON T(c1, k1)
       )sql"},
-                                      /*proto_descriptor_bytes=*/"",
-                                      POSTGRESQL,
+                                      /*proto_descriptor_bytes=*/"", POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"sql(
@@ -531,6 +590,44 @@ TEST_P(SchemaUpdaterTest, AlterIndex_AddColumn) {
   EXPECT_THAT(idx->stored_columns(),
               UnorderedElementsAre(ColumnIs("c2", int_array_type),
                                    ColumnIs("c3", types::StringType())));
+}
+
+TEST_P(SchemaUpdaterTest, AlterIndex_StoreNotNullColumn) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX) NOT NULL,
+        col3 INT64 NOT NULL,
+      ) PRIMARY KEY (col1)
+    )sql",
+                                        R"sql(
+      CREATE INDEX Idx ON T(col2)
+    )sql"}));
+
+  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"sql(
+      ALTER INDEX Idx ADD STORED COLUMN col3
+    )sql"}));
+}
+
+TEST_P(SchemaUpdaterTest, AlterIndex_StoreNotNullColumnWithNullFilteredIndex) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX) NOT NULL,
+        col3 INT64 NOT NULL,
+      ) PRIMARY KEY (col1)
+    )sql",
+                                        R"sql(
+      CREATE NULL_FILTERED INDEX Idx ON T(col2)
+    )sql"}));
+
+  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"sql(
+      ALTER INDEX Idx ADD STORED COLUMN col3
+    )sql"}));
 }
 
 TEST_P(SchemaUpdaterTest, AlterIndex_AddColumnNotFound) {

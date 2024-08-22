@@ -33,8 +33,6 @@ syntax = "proto2";
 
 package postgres_translator;
 
-option cc_api_version = 2;
-
 message PgCollationData {
   optional uint32 oid = 1;
   optional string collname = 2;
@@ -54,15 +52,33 @@ message PgProcData {
   optional uint32 oid = 1;
   optional string proname = 2;
   optional uint32 pronamespace = 3;
+  optional uint32 proowner = 13;
+  optional uint32 prolang = 14;
+  optional float procost = 15;
   optional int32 prorows = 4;
   optional uint32 provariadic = 5;
+  optional uint32 prosupport = 16;
   optional string prokind = 6;
+  optional bool prosecdef = 17;
+  optional bool proleakproof = 18;
+  optional bool proisstrict = 19;
   optional bool proretset = 7;
   optional string provolatile = 8;
+  optional string proparallel = 20;
   optional int32 pronargs = 9;
+  optional int32 pronargdefaults = 21;
   optional uint32 prorettype = 10;
   repeated uint32 proargtypes = 11 [packed = true];
+  repeated uint32 proallargtypes = 23 [packed = true];
+  repeated string proargmodes = 24;
+  repeated string proargnames = 25;
+  optional string proargdefaults = 26;
+  repeated uint32 protrftypes = 27 [packed = true];
+  optional string prosrc = 22;
+  optional string probin = 28;
   optional string prosqlbody = 12;
+  repeated string proconfig = 29;
+  repeated string aclitem = 30;
 }
 
 message PgTypeData {

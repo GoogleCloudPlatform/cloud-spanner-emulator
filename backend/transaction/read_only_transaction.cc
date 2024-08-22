@@ -57,7 +57,9 @@ ReadOnlyTransaction::ReadOnlyTransaction(
       base_storage_(storage),
       versioned_catalog_(versioned_catalog),
       lock_manager_(lock_manager) {
-  lock_handle_ = lock_manager_->CreateHandle(transaction_id, /*priority=*/1);
+  lock_handle_ = lock_manager_->CreateHandle(transaction_id,
+                                             /*try_abort_fn=*/nullptr,
+                                             /*priority=*/1);
   read_timestamp_ = PickReadTimestamp();
 }
 

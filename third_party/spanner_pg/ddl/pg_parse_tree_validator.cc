@@ -323,6 +323,8 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
         case AT_SetOnDeleteCascade:
         case AT_SetOnDeleteNoAction:
           break;
+        case AT_SetInterleaveIn:
+          break;
         case AT_AddSynonym:
         case AT_DropSynonym: {
           ZETASQL_RET_CHECK_NE(node.name, nullptr);
@@ -597,8 +599,8 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
   // `exclusions` is used for EXCLUDE constraints which are not supported.
   ZETASQL_RET_CHECK_EQ(node.exclusions, nullptr);
 
-  if (!IsListEmpty(node.options)) {
-      // `options` are defined in WITH clause, which is not supported.
+    // `options` are defined in WITH clause, which is not supported.
+    if (!IsListEmpty(node.options)) {
       return UnsupportedTranslationError(
           "<WITH> clause is not supported in constraint definitions.");
     }

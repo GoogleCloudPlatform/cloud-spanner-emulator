@@ -1148,6 +1148,40 @@ TEST(ParseCreateIndex, CanParseCreateUniqueIndex) {
                   )pb")));
 }
 
+TEST(ParseCreateIndex, CanUseWhereIsNotNull) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE INDEX Idx ON Users(UserId) WHERE UserId IS NOT NULL
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_index {
+                      index_name: "Idx"
+                      index_base_name: "Users"
+                      key { key_name: "UserId" }
+                      null_filtered_column: "UserId"
+                    }
+                  )pb")));
+}
+
+TEST(ParseCreateIndex, CanUseWhereIsNotNullMultipleColumns) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE INDEX Idx ON Users(UserId, Name) WHERE UserId IS NOT NULL AND Name IS NOT NULL
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_index {
+                      index_name: "Idx"
+                      index_base_name: "Users"
+                      key { key_name: "UserId" }
+                      key { key_name: "Name" }
+                      null_filtered_column: "UserId"
+                      null_filtered_column: "Name"
+                    }
+                  )pb")));
+}
+
 // DROP TABLE
 
 TEST(ParseDropTable, CanParseDropTableBasic) {

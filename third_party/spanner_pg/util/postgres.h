@@ -35,6 +35,7 @@
 #include <string>
 
 #include "zetasql/base/logging.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
@@ -77,6 +78,10 @@ absl::StatusOr<Param*> makeParam(ParamKind paramkind, int paramid,
                                  Oid paramtype, int32_t paramtypmod = -1,
                                  Oid paramcollid = InvalidOid,
                                  int location = -1);
+
+absl::StatusOr<NamedArgExpr*> makeNamedArgExpr(Expr* arg,
+                                               const std::string& name,
+                                               int arg_num);
 
 absl::StatusOr<FuncExpr*> makeFuncExpr(Oid funcid, Oid rettype, List* args,
                                        CoercionForm funcformat);

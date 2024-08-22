@@ -35,6 +35,7 @@
 #include "absl/cleanup/cleanup.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
+#include "third_party/spanner_pg/shims/parser_shim.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
 
@@ -886,6 +887,25 @@ TEST_F(SerializationDeserializationTest, AddTTL) {
   add->name = pstrdup("a_column");
 
   EXPECT_THAT(add, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, AlterSetInterleaveIn) {
+  std::vector<InterleaveInType> all_interleave_kinds = {
+    INTERLEAVE_IN,
+    INTERLEAVE_IN_PARENT
+  };
+  for (InterleaveInType type : all_interleave_kinds) {
+    AlterTableCmd *add = makeNode(AlterTableCmd);
+    add->subtype = AT_SetInterleaveIn;
+    InterleaveSpec* interleave_spec = makeNode(InterleaveSpec);
+    interleave_spec->interleavetype = type;
+    interleave_spec->parent =
+        makeRangeVar(pstrdup("schemaname"), pstrdup("tablename"), -1);
+    interleave_spec->location = -1;
+    add->def = (Node *) interleave_spec;
+
+    EXPECT_THAT(add, CanSerializeAndDeserialize());
+  }
 }
 
 TEST_F(SerializationDeserializationTest, RangeFunction) {

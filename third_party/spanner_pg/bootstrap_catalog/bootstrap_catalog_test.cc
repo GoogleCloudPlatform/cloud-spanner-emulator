@@ -38,6 +38,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_format.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
@@ -156,6 +157,42 @@ TEST(BootstrapCatalog, GetProcInt8Sum) {
   EXPECT_STREQ(NameStr(data->proname), "int8_sum");
 }
 
+TEST(BootstrapCatalog, GetProcProtoInt8Sum) {
+  const Oid sum_oid = 1842;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const PgProcData* proc_proto,
+                       PgBootstrapCatalog::Default()->GetProcProto(sum_oid));
+  ASSERT_NE(proc_proto, nullptr);
+  EXPECT_EQ(proc_proto->oid(), sum_oid);
+  EXPECT_EQ(proc_proto->proname(), "int8_sum");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_proc* data,
+                       PgBootstrapCatalog::Default()->GetProc(sum_oid));
+
+  // Check that the data in the proto matches the data in the struct.
+  ASSERT_NE(data, nullptr);
+  EXPECT_STREQ(proc_proto->proname().c_str(), NameStr(data->proname));
+  EXPECT_EQ(proc_proto->pronamespace(), data->pronamespace);
+  EXPECT_EQ(proc_proto->proowner(), data->proowner);
+  EXPECT_EQ(proc_proto->prolang(), data->prolang);
+  EXPECT_EQ(proc_proto->procost(), data->procost);
+  EXPECT_EQ(proc_proto->provariadic(), data->provariadic);
+  EXPECT_EQ(proc_proto->prosupport(), data->prosupport);
+  EXPECT_EQ(proc_proto->prokind(), absl::StrFormat("%c", data->prokind));
+  EXPECT_EQ(proc_proto->prosecdef(), data->prosecdef);
+  EXPECT_EQ(proc_proto->proleakproof(), data->proleakproof);
+  EXPECT_EQ(proc_proto->proisstrict(), data->proisstrict);
+  EXPECT_EQ(proc_proto->proretset(), data->proretset);
+  EXPECT_EQ(proc_proto->provolatile(),
+            absl::StrFormat("%c", data->provolatile));
+  EXPECT_EQ(proc_proto->proparallel(),
+            absl::StrFormat("%c", data->proparallel));
+  EXPECT_EQ(proc_proto->pronargs(), data->pronargs);
+  EXPECT_EQ(proc_proto->pronargdefaults(), data->pronargdefaults);
+  EXPECT_EQ(proc_proto->prorettype(), data->prorettype);
+  for (int i = 0; i < data->proargtypes.vl_len_; ++i) {
+    EXPECT_EQ(proc_proto->proargtypes(i), data->proargtypes.values[i]);
+  }
+}
+
 TEST(BootstrapCatalog, GetProcOidInt8Sum) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> int8_sum_oid, GetProcOids("int8_sum"));
   EXPECT_THAT(int8_sum_oid, ElementsAre(1842));
@@ -164,6 +201,48 @@ TEST(BootstrapCatalog, GetProcOidInt8Sum) {
 TEST(BootstrapCatalog, GetProcOidsLog) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> log_oids, GetProcOids("log"));
   EXPECT_THAT(log_oids, ElementsAre(1340, 1736, 1741));
+}
+
+TEST(BootstrapCatalog, GetProcProtoSubstring) {
+  const Oid substring_oid = 936;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      const PgProcData* proc_proto,
+      PgBootstrapCatalog::Default()->GetProcProto(substring_oid));
+  ASSERT_NE(proc_proto, nullptr);
+  EXPECT_EQ(proc_proto->oid(), substring_oid);
+  EXPECT_EQ(proc_proto->proname(), "substring");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_proc* data,
+                       PgBootstrapCatalog::Default()->GetProc(substring_oid));
+
+  // Check that the signature was modified.
+  EXPECT_EQ(proc_proto->prorettype(), TEXTOID);
+  EXPECT_THAT(proc_proto->proargtypes(),
+              ElementsAre(TEXTOID, INT8OID, INT8OID));
+
+  // Check that the data in the proto matches the data in the struct.
+  ASSERT_NE(data, nullptr);
+  EXPECT_STREQ(proc_proto->proname().c_str(), NameStr(data->proname));
+  EXPECT_EQ(proc_proto->pronamespace(), data->pronamespace);
+  EXPECT_EQ(proc_proto->proowner(), data->proowner);
+  EXPECT_EQ(proc_proto->prolang(), data->prolang);
+  EXPECT_EQ(proc_proto->procost(), data->procost);
+  EXPECT_EQ(proc_proto->provariadic(), data->provariadic);
+  EXPECT_EQ(proc_proto->prosupport(), data->prosupport);
+  EXPECT_EQ(proc_proto->prokind(), absl::StrFormat("%c", data->prokind));
+  EXPECT_EQ(proc_proto->prosecdef(), data->prosecdef);
+  EXPECT_EQ(proc_proto->proleakproof(), data->proleakproof);
+  EXPECT_EQ(proc_proto->proisstrict(), data->proisstrict);
+  EXPECT_EQ(proc_proto->proretset(), data->proretset);
+  EXPECT_EQ(proc_proto->provolatile(),
+            absl::StrFormat("%c", data->provolatile));
+  EXPECT_EQ(proc_proto->proparallel(),
+            absl::StrFormat("%c", data->proparallel));
+  EXPECT_EQ(proc_proto->pronargs(), data->pronargs);
+  EXPECT_EQ(proc_proto->pronargdefaults(), data->pronargdefaults);
+  EXPECT_EQ(proc_proto->prorettype(), data->prorettype);
+  for (int i = 0; i < data->proargtypes.vl_len_; ++i) {
+    EXPECT_EQ(proc_proto->proargtypes(i), data->proargtypes.values[i]);
+  }
 }
 
 TEST(BootstrapCatalog, GetProcOidSubstring) {
@@ -380,6 +459,9 @@ TEST(BootstrapCatalog, PrunedInt4Functions) {
   EXPECT_THAT(PgBootstrapCatalog::Default()->GetProc(480),
               StatusIs(absl::StatusCode::kNotFound));
 
+  EXPECT_THAT(PgBootstrapCatalog::Default()->GetProcProto(480),
+              StatusIs(absl::StatusCode::kNotFound));
+
   EXPECT_THAT(PgBootstrapCatalog::Default()->GetCast(INT8OID, INT4OID),
               StatusIs(absl::StatusCode::kNotFound));
 }
@@ -520,6 +602,20 @@ TEST(BootstrapCatalog, SpannerGetInternalSequenceStateProc) {
   ASSERT_EQ(procs.size(), 1);
   EXPECT_EQ(procs[0]->pronamespace, namespace_oid);
   EXPECT_STREQ(NameStr(procs[0]->proname), "get_internal_sequence_state");
+}
+
+TEST(BootstrapCatalog, SpannerGetTableColumnIdentityStateProc) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      Oid namespace_oid,
+      PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Span<const FormData_pg_proc* const> procs,
+                       PgBootstrapCatalog::Default()->GetProcsByName(
+                           "get_table_column_identity_state"));
+
+  ASSERT_EQ(procs.size(), 1);
+  EXPECT_EQ(procs[0]->pronamespace, namespace_oid);
+  EXPECT_STREQ(NameStr(procs[0]->proname), "get_table_column_identity_state");
 }
 
 TEST(BootstrapCatalog, SpannerGenerateUuidProc) {

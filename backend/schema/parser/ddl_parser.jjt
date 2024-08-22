@@ -210,7 +210,10 @@ void column_def() :
   identifier() #name
   column_type()
   [ <NOT> <NULLL> #not_null ]
-  [ generation_clause() | column_default_clause() ]
+  [ generation_clause()
+  | column_default_clause()
+
+  ]
   [ <HIDDEN> #hidden ]
   [ options_clause() ]
 }
@@ -220,7 +223,10 @@ void column_def_alter_attrs() :
 {
   column_type()
   [ <NOT> <NULLL> #not_null ]
-  [ generation_clause() | column_default_clause() ]
+  [ generation_clause()
+  | column_default_clause()
+
+  ]
 }
 
 void column_def_alter() :
@@ -374,6 +380,7 @@ void create_index_statement() :
   <ON> qualified_identifier() #table
   key() #columns
   [ <STORING> stored_column_list() ]
+  [ <WHERE> create_index_where_clause() ]
   [ LOOKAHEAD(2) "," index_interleave_clause() ]
 }
 

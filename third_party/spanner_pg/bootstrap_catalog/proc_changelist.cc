@@ -36,6 +36,7 @@
 #include "zetasql/base/logging.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 
 namespace postgres_translator {
 namespace {
@@ -158,8 +159,19 @@ bool ProcIsModified(const FormData_pg_proc& proc) {
 }
 
 const PgProcSignature* GetUpdatedProcSignature(const FormData_pg_proc& proc) {
-  ABSL_CHECK(ProcIsModified(proc));
+  if (!ProcIsModified(proc)) {
+    return nullptr;
+  }
   return &procs_to_update.find(MakePgProcId(proc))->second;
+}
+
+const PgProcSignature* GetUpdatedProcSignature(const PgProcData& proc) {
+  return &procs_to_update.find(
+             {.name = proc.proname(),
+              .signature = {.arg_types = std::vector<Oid>(
+                               proc.proargtypes().begin(),
+                               proc.proargtypes().end()),
+                           .return_type = proc.prorettype()}})->second;
 }
 
 }  // namespace postgres_translator

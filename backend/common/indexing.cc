@@ -16,7 +16,13 @@
 
 #include "backend/common/indexing.h"
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "backend/common/rows.h"
+#include "backend/datamodel/key.h"
+#include "backend/datamodel/value.h"
+#include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/index.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "zetasql/base/status_macros.h"
@@ -60,15 +66,22 @@ ValueList ComputeIndexValues(const Row& base_row, const Index* index) {
   return values;
 }
 
-bool ShouldFilterIndexKey(const Index* index, const Key& key) {
-  if (!index->is_null_filtered()) {
-    return false;
-  }
-
-  // Cloud Spanner only checks index key columns for null filtering.
-  for (int i = 0; i < index->key_columns().size(); ++i) {
-    if (key.ColumnValue(i).is_null()) {
-      return true;
+bool ShouldFilterIndexKeyOrValue(const Index* index, const Key& key,
+                                 const Row& base_row) {
+  if (index->is_null_filtered()) {
+    // NULL_FILTERED index should filter the row if any of the key columns is
+    // NULL.
+    for (int i = 0; i < index->key_columns().size(); ++i) {
+      if (key.ColumnValue(i).is_null()) {
+        return true;
+      }
+    }
+  } else {
+    // Check for null filtered columns.
+    for (const Column* column : index->null_filtered_columns()) {
+      if (GetColumnValueOrNull(base_row, column->source_column()).is_null()) {
+        return true;
+      }
     }
   }
   return false;

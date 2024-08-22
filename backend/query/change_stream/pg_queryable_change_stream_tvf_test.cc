@@ -94,20 +94,15 @@ TEST_F(PgQueryableChangeStreamTvfTest,
       "NULL::timestamptz, NULL::text, 1000 , NULL::text[] )"));
 }
 
-TEST_F(PgQueryableChangeStreamTvfTest,
-       AnalyzeChangeStreamTvfQueryNamedArgFail) {
-  EXPECT_THAT(
-      AnalyzePGStatement(
-          "SELECT * FROM "
-          "spanner.read_json_change_stream_test_table ("
-          "start_timestamp=>'2022-09-27T12:30:00.123456Z'::timestamptz,"
-          "end_timestamp=>NULL::timestamptz, partition_token=>NULL::text, "
-          "heartbeat_milliseconds=>1000 , "
-          "read_options=>NULL::text[] "
-          ")"),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kUnimplemented,
-          testing::HasSubstr("Named arguments are not supported")));
+TEST_F(PgQueryableChangeStreamTvfTest, AnalyzeChangeStreamTvfQueryNamedArg) {
+  ZETASQL_EXPECT_OK(AnalyzePGStatement(
+      "SELECT * FROM "
+      "spanner.read_json_change_stream_test_table ("
+      "start_timestamp=>'2022-09-27T12:30:00.123456Z'::timestamptz,"
+      "end_timestamp=>NULL::timestamptz, partition_token=>NULL::text, "
+      "heartbeat_milliseconds=>1000 , "
+      "read_options=>NULL::text[] "
+      ")"));
 }
 
 TEST_F(PgQueryableChangeStreamTvfTest,

@@ -2064,6 +2064,7 @@ typedef enum AlterTableType
 	AT_AlterTtl,					/* ALTER TTL */
 	AT_SetOnDeleteCascade,	/* SET INTERELAVE IN PARENT ON DELETE to CASCADE */
 	AT_SetOnDeleteNoAction,	/* SET INTERLEAVE IN PARENT ON DELETE to NO ACTION */
+	AT_SetInterleaveIn,	/* SET INTERLEAVE IN */
 	AT_AddIndexIncludeColumn,	/* ALTER INDEX ADD INCLUDE COLUMN -- add an non-key 
 															column into the index */
 	AT_DropIndexIncludeColumn,	/* ALTER INDEX DROP INCLUDE COLUMN -- drop an 

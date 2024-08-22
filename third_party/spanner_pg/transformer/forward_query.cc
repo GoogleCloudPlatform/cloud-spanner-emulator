@@ -2939,7 +2939,6 @@ absl::Status ForwardTransformer::BuildSortGroupIndexToTargetEntryMap(
     const List* target_list) {
   ZETASQL_RET_CHECK(!ressortgroupref_to_target_entry_maps_.empty());
 
-  absl::flat_hash_map<Index, TargetEntry*> sort_group_index_map;
   int select_column_count = 0;
   // Iterate through target_list, add an entry to the temporary map if the
   // TargetEntry has a non-zero ressortgroupref:

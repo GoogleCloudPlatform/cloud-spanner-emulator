@@ -79,6 +79,7 @@ cc_library(
         "//backend/schema/graph:schema_node",
         "//backend/schema/printer:print_ddl",
         "//backend/schema/updater:global_schema_names",
+        "//backend/schema/updater:schema_updater",
         "//common:errors",
         "//common:feature_flags",
         "//tests/common:proto_matchers",

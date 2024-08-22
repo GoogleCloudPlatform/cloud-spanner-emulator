@@ -140,6 +140,18 @@ absl::StatusOr<Param*> makeParam(ParamKind paramkind, int paramid,
   return pg_param;
 }
 
+absl::StatusOr<NamedArgExpr*> makeNamedArgExpr(Expr* arg,
+                                               const std::string& name,
+                                               int arg_num) {
+  NamedArgExpr* named_arg;
+  ZETASQL_ASSIGN_OR_RETURN(char* name_str, CheckedPgPstrdup(name.c_str()));
+  ZETASQL_ASSIGN_OR_RETURN(named_arg, CheckedPgMakeNode(NamedArgExpr));
+  named_arg->arg = arg;
+  named_arg->name = name_str;
+  named_arg->argnumber = arg_num;
+  return named_arg;
+}
+
 absl::StatusOr<FuncExpr*> makeFuncExpr(Oid funcid, Oid rettype, List* args,
                                        CoercionForm funcformat) {
   return CheckedPgMakeFuncExpr(funcid, rettype, args, /*funccollid=*/InvalidOid,

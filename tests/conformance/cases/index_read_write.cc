@@ -51,7 +51,12 @@ class IndexTest : public DatabaseTest {
         "CREATE UNIQUE NULL_FILTERED INDEX UsersByNameUniqueFiltered ON "
         "Users(Name)",
         "CREATE TABLE NoPkTable ( Col1 INT64 ) PRIMARY KEY()",
-        "CREATE INDEX NoPkTableIdx ON NoPkTable(Col1)"});
+        "CREATE INDEX NoPkTableIdx ON NoPkTable(Col1)",
+        "CREATE INDEX UsersByNameAgeNotNull ON Users(Name, Age) WHERE Name IS "
+        "NOT NULL AND Age IS NOT NULL",
+        "CREATE INDEX UsersByNameStoreAgeNotNull ON Users(Name) STORING(Age) "
+        "WHERE Age IS NOT NULL",
+    });
   }
 };
 
@@ -145,6 +150,15 @@ TEST_F(IndexTest, NullEntriesAreFiltered) {
       ReadAllWithIndex("Users", "UsersByNameNullFiltered",
                        {"Name", "Age", "ID"}),
       IsOkAndHoldsRows({{"", 22, 1}, {"Adam", 20, 0}, {"John", 28, 3}}));
+  EXPECT_THAT(
+      ReadAllWithIndex("Users", "UsersByNameAgeNotNull", {"Name", "Age", "ID"}),
+      IsOkAndHoldsRows({{"", 22, 1}, {"Adam", 20, 0}, {"John", 28, 3}}));
+  EXPECT_THAT(ReadAllWithIndex("Users", "UsersByNameStoreAgeNotNull",
+                               {"Name", "Age", "ID"}),
+              IsOkAndHoldsRows({{Null<std::string>(), 41, 2},
+                                {"", 22, 1},
+                                {"Adam", 20, 0},
+                                {"John", 28, 3}}));
 }
 
 TEST_F(IndexTest, AllEntriesAreUnique) {

@@ -94,7 +94,6 @@ Oid FuncNameAsType(List *funcname);
  * expand_defaults).  Some care is needed if this information is to be compared
  * to the function's pg_proc entry, but in practice the caller can usually
  * just work with the call's argument ordering.
- * NOTE: Spangres does not support named arguments.
  *
  * We rely primarily on fargnames/nargs/argtypes as the argument description.
  * The actual expression node list is passed in fargs so that we can check

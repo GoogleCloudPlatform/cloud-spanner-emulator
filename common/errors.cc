@@ -492,6 +492,36 @@ absl::Status AbortConcurrentTransaction(int64_t requestor_id,
                    ". The emulator only supports one transaction at a time."));
 }
 
+absl::Status AbortCurrentTransaction(backend::TransactionID holder_id,
+                                     backend::TransactionID requestor_id) {
+  return absl::Status(
+      absl::StatusCode::kAborted,
+      absl::StrCat("Transaction: ", holder_id, " aborted due to transaction ",
+                   requestor_id,
+                   " getting priority. "
+                   "The emulator only supports one transaction at a time."));
+}
+
+absl::Status WoundedTransaction(backend::TransactionID id) {
+  return absl::Status(
+      absl::StatusCode::kAborted,
+      absl::StrCat("Transaction: ", id,
+                   " aborted due to another transaction getting priority. "
+                   "The emulator only supports one transaction at a time."));
+}
+
+absl::Status CouldNotObtainLockHandleMutex(backend::TransactionID id) {
+  return absl::Status(
+      absl::StatusCode::kInternal,
+      absl::StrCat("Could not obtain lock handle mutex for transaction: ", id));
+}
+
+absl::Status CouldNotObtainTransactionMutex(backend::TransactionID id) {
+  return absl::Status(
+      absl::StatusCode::kInternal,
+      absl::StrCat("Could not obtain transaction mutex for transaction: ", id));
+}
+
 absl::Status TransactionNotFound(backend::TransactionID id) {
   return absl::Status(
       absl::StatusCode::kNotFound,

@@ -292,7 +292,8 @@ class Table : public SchemaNode {
   // The Change Stream that owns this table if one exists.
   const ChangeStream* owner_change_stream_ = nullptr;
 
-  // The Index that owns this table if one exists.
+  // The Index that owns this table if one exists. This attribute is null for
+  // all but index data tables.
   const Index* owner_index_ = nullptr;
 
   // A map of case-insensitive column names to their backend::Column* pointers.

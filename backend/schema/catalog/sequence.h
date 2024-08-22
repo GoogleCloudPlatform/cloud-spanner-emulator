@@ -18,17 +18,15 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SEQUENCE_H_
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "zetasql/public/type.h"
+#include "absl/base/thread_annotations.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "absl/strings/substitute.h"
-#include "backend/common/case.h"
+#include "absl/synchronization/mutex.h"
 #include "backend/common/ids.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "common/constants.h"
 
 namespace google {
 namespace spanner {
@@ -59,17 +57,20 @@ class Sequence : public SchemaNode {
     }
     return "INVALID";
   }
-
-  inline static absl::flat_hash_map<std::string, int64_t> SequenceLastValues;
+  inline static absl::Mutex SequenceMutex;
+  inline static absl::flat_hash_map<std::string, int64_t> SequenceLastValues
+      ABSL_GUARDED_BY(SequenceMutex);
 
   // Returns the next sequence value according to the sequence kind.
-  absl::StatusOr<zetasql::Value> GetNextSequenceValue() const;
+  absl::StatusOr<zetasql::Value> GetNextSequenceValue() const
+      ABSL_LOCKS_EXCLUDED(SequenceMutex);
 
   // Returns the internal current counter of the sequence.
-  zetasql::Value GetInternalSequenceState() const;
+  zetasql::Value GetInternalSequenceState() const
+      ABSL_LOCKS_EXCLUDED(SequenceMutex);
 
   // Reset the sequence's last value to the schema's current start_with_.
-  void ResetSequenceLastValue() const;
+  void ResetSequenceLastValue() const ABSL_LOCKS_EXCLUDED(SequenceMutex);
 
   // SchemaNode interface implementation.
   // ------------------------------------
@@ -98,7 +99,8 @@ class Sequence : public SchemaNode {
 
   Sequence(const Sequence&) = default;
 
-  void RemoveSequenceFromLastValuesMap() const;
+  void RemoveSequenceFromLastValuesMap() const
+      ABSL_LOCKS_EXCLUDED(SequenceMutex);
 
   std::unique_ptr<SchemaNode> ShallowClone() const override {
     return absl::WrapUnique(new Sequence(*this));

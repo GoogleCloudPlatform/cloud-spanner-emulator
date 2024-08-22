@@ -36,13 +36,18 @@ cc_library(
         "//backend/common:ids",
         "//backend/datamodel:key_range",
         "//common:clock",
+        "//common:config",
         "//common:errors",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/random:distributions",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
+        "@com_google_zetasql//zetasql/base:ret_check",
     ],
 )
 
@@ -51,6 +56,7 @@ cc_test(
     srcs = ["manager_test.cc"],
     deps = [
         ":manager",
+        "//backend/common:ids",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/time",

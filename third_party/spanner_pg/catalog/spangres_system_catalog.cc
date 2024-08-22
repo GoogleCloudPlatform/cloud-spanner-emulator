@@ -480,10 +480,10 @@ absl::Status SpangresSystemCatalog::AddTypes(
     ZETASQL_RETURN_IF_ERROR(
         AddType(spangres_types::PgOidArrayMapping(), language_options));
 
-    ZETASQL_RETURN_IF_ERROR(
-        AddType(builtin_types::PgFloat4Mapping(), language_options));
-    ZETASQL_RETURN_IF_ERROR(
-        AddType(builtin_types::PgFloat4ArrayMapping(), language_options));
+  ZETASQL_RETURN_IF_ERROR(
+      AddType(builtin_types::PgFloat4Mapping(), language_options));
+  ZETASQL_RETURN_IF_ERROR(
+      AddType(builtin_types::PgFloat4ArrayMapping(), language_options));
 
   return absl::OkStatus();
 }

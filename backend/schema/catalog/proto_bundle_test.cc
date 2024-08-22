@@ -259,7 +259,7 @@ TEST_F(ProtoBundleTest, UnsupportedUseFieldDefaultsAnnotations) {
                                  "extension tag `49659010`.")));
 }
 
-TEST_F(ProtoBundleTest, FailsWithCyclicDependency) {
+TEST_F(ProtoBundleTest, AllowsRecursiveProtos) {
   const google::protobuf::FileDescriptorProto file_descriptor = PARSE_TEXT_PROTO(R"pb(
     syntax: "proto2"
     name: "0"
@@ -267,15 +267,15 @@ TEST_F(ProtoBundleTest, FailsWithCyclicDependency) {
     message_type {
       name: "Simple"
       field {
-        name: "Parent"
+        name: "Recursive"
         type: TYPE_MESSAGE
         number: 2
         label: LABEL_OPTIONAL
-        type_name: ".customer.app.Parent"
+        type_name: ".customer.app.Complex"
       }
     }
     message_type {
-      name: "Parent"
+      name: "Complex"
       field {
         name: "Simple"
         type: TYPE_MESSAGE
@@ -292,9 +292,7 @@ TEST_F(ProtoBundleTest, FailsWithCyclicDependency) {
                        ProtoBundle::Builder::New(descriptor_bytes));
   ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{"customer.app.Simple"}));
-  EXPECT_THAT(proto_bundle_builder_v1->Build(),
-              StatusIs(absl::StatusCode::kInternal,
-                       HasSubstr("Cyclic dependency on message")));
+  ZETASQL_EXPECT_OK(proto_bundle_builder_v1->Build());
 }
 
 TEST_F(ProtoBundleTest, UnsupportedMessageSetExtensions) {
