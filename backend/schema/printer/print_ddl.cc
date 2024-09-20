@@ -29,6 +29,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/substitute.h"
@@ -36,10 +37,11 @@
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/database_options.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/model.h"
-#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/view.h"
@@ -435,30 +437,25 @@ std::string PrintForeignKey(const ForeignKey* foreign_key) {
 }
 
 std::string PrintSequence(const Sequence* sequence) {
-  std::string sequence_string = absl::Substitute(
-      "CREATE SEQUENCE $0 OPTIONS (\n", PrintName(sequence->Name()));
+  std::string sequence_string =
+      absl::Substitute("CREATE SEQUENCE $0", PrintName(sequence->Name()));
 
-  absl::StrAppend(&sequence_string,
-                  "  sequence_kind = 'bit_reversed_positive'");
-  if (sequence->skip_range_min().has_value() &&
-      sequence->skip_range_max().has_value()) {
-    absl::StrAppend(&sequence_string,
-                    ",\n"
-                    "  skip_range_min = ",
-                    sequence->skip_range_min().value());
-    absl::StrAppend(&sequence_string,
-                    ",\n"
-                    "  skip_range_max = ",
-                    sequence->skip_range_max().value());
-  }
+    absl::StrAppend(&sequence_string, " OPTIONS (\n");
+    std::vector<std::string> options;
+      options.push_back("  sequence_kind = 'bit_reversed_positive'");
+    if (sequence->skip_range_min().has_value() &&
+        sequence->skip_range_max().has_value()) {
+      options.push_back(absl::StrCat("  skip_range_min = ",
+                                     sequence->skip_range_min().value()));
+      options.push_back(absl::StrCat("  skip_range_max = ",
+                                     sequence->skip_range_max().value()));
+    }
 
-  if (sequence->start_with_counter().has_value()) {
-    absl::StrAppend(&sequence_string,
-                    ",\n"
-                    "  start_with_counter = ",
-                    sequence->start_with_counter().value());
-  }
-  absl::StrAppend(&sequence_string, " )");
+    if (sequence->start_with_counter().has_value()) {
+      options.push_back(absl::StrCat("  start_with_counter = ",
+                                     sequence->start_with_counter().value()));
+    }
+    absl::StrAppend(&sequence_string, absl::StrJoin(options, ",\n"), ")");
 
   return sequence_string;
 }
@@ -501,7 +498,7 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
 
   // Print sequences
   for (auto sequence : schema->sequences()) {
-    statements.push_back(PrintSequence(sequence));
+      statements.push_back(PrintSequence(sequence));
   }
 
   // Print tables

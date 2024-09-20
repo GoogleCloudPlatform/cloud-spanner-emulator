@@ -176,9 +176,10 @@ CreateSchemaWithOneTableAndOneChangeStream(
 absl::StatusOr<std::unique_ptr<const backend::Schema>>
 CreateSchemaWithOneSequence(zetasql::TypeFactory* type_factory,
                             database_api::DatabaseDialect dialect) {
-  test::ScopedEmulatorFeatureFlagsSetter setter(
-      {.enable_bit_reversed_positive_sequences = true,
-       .enable_bit_reversed_positive_sequences_postgresql = true});
+  test::ScopedEmulatorFeatureFlagsSetter setter({
+      .enable_bit_reversed_positive_sequences = true,
+      .enable_bit_reversed_positive_sequences_postgresql = true,
+  });
 
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
     return CreateSchemaFromDDL(

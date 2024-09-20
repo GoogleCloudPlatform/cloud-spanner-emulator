@@ -3542,7 +3542,6 @@ absl::Status DdlUnavailableError() {
       absl::StatusCode::kUnavailable,
       "Error processing PostgreSQL DDL statements, retry may succeed.");
 }
-
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

@@ -326,6 +326,26 @@ group {
     name: "ProcedureWithOutArgNotSupported"
     pg_message_id: "Procedures with output arguments are not supported"
   }
+
+  message {
+    name: "LockingClauseWithGroupByNotSupported"
+    pg_message_id: "%s is not allowed with GROUP BY clause"
+  }
+
+  message {
+    name: "LockingClauseWithHavingNotSupported"
+    pg_message_id: "%s is not allowed with HAVING clause"
+  }
+
+  message {
+    name: "LockingClauseWithSetOperationNotSupported"
+    pg_message_id: "%s is not allowed with UNION/INTERSECT/EXCEPT"
+  }
+
+  message {
+    name: "LockingClauseWithTableNamesNotSupported"
+    pg_message_id: "tables names in locking clause is not supported"
+  }
 }
 
 group {
@@ -709,6 +729,11 @@ group {
   }
 
   message {
+    name: "IntervalOutOfRange"
+    pg_message_id: "interval out of range"
+  }
+
+  message {
     name: "StrideOutOfRange"
     pg_message_id: "stride must be greater than zero"
   }
@@ -726,6 +751,11 @@ group {
   message {
     name: "DateOutOfRangeWithValue"
     pg_message_id: "date out of range: \"%s\""
+  }
+
+  message {
+    name: "IntervalOutOfRangeWithValue"
+    pg_message_id: "interval out of range: \"%s\""
   }
 }
 
@@ -822,6 +852,11 @@ group {
   message {
     name: "MissingYear"
     pg_message_id: "cannot calculate day of year without year information"
+  }
+
+  message {
+    name: "InvalidIntervalFormat"
+    pg_message_id: "invalid format specification for an interval value"
   }
 }
 

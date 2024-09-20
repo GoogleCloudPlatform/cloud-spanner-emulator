@@ -195,9 +195,9 @@ absl::StatusOr<const zetasql::Table*> ForwardTransformer::GetTableFromRTE(
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedTableScan>>
-ForwardTransformer::BuildGsqlResolvedTableScan(const RangeTblEntry& rte,
-                                               int rtindex,
-                                               VarIndexScope* output_scope) {
+ForwardTransformer::BuildGsqlResolvedTableScan(
+    const RangeTblEntry& rte, const TransformerInfo* transformer_info,
+    int rtindex, VarIndexScope* output_scope) {
   ZETASQL_ASSIGN_OR_RETURN(const zetasql::Table* table, GetTableFromRTE(rte));
 
   absl::string_view table_alias =
@@ -292,15 +292,18 @@ absl::Status ForwardTransformer::MapVarIndexToColumnForJoin(
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
 ForwardTransformer::BuildGsqlResolvedScanForTableExpression(
-    const Node& node, const List& rtable, const VarIndexScope* external_scope,
-    const VarIndexScope* local_scope, VarIndexScope* output_scope) {
+    const Node& node, const List& rtable,
+    const TransformerInfo* transformer_info,
+    const VarIndexScope* external_scope, const VarIndexScope* local_scope,
+    VarIndexScope* output_scope) {
   // Modeled after the ZetaSQL ResolveTableExpression function.
   if (IsA(&node, RangeTblRef)) {
     Index rtindex = PostgresConstCastNode(RangeTblRef, &node)->rtindex;
     RangeTblEntry* rte = rt_fetch(rtindex, &rtable);
     switch (rte->rtekind) {
       case RTE_RELATION: {
-        return BuildGsqlResolvedTableScan(*rte, rtindex, output_scope);
+        return BuildGsqlResolvedTableScan(*rte, transformer_info, rtindex,
+                                          output_scope);
       }
       case RTE_SUBQUERY: {
         if (rte->lateral) {
@@ -370,13 +373,14 @@ ForwardTransformer::BuildGsqlResolvedScanForTableExpression(
     std::unique_ptr<zetasql::ResolvedScan> join_scan;
     if (list_length(join_expr->usingClause) > 0) {
       ZETASQL_ASSIGN_OR_RETURN(join_scan, BuildGsqlResolvedJoinScan(
-                                      *join_expr, rtable, external_scope,
-                                      local_scope, output_scope,
+                                      *join_expr, rtable, transformer_info,
+                                      external_scope, local_scope, output_scope,
                                       /*has_using=*/true));
     } else {
-      ZETASQL_ASSIGN_OR_RETURN(join_scan, BuildGsqlResolvedJoinScan(
-                                      *join_expr, rtable, external_scope,
-                                      local_scope, output_scope));
+      ZETASQL_ASSIGN_OR_RETURN(
+          join_scan,
+          BuildGsqlResolvedJoinScan(*join_expr, rtable, transformer_info,
+                                    external_scope, local_scope, output_scope));
     }
     return join_scan;
   } else {
@@ -659,6 +663,7 @@ absl::StatusOr<GsqlJoinType> ForwardTransformer::BuildGsqlJoinType(
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
 ForwardTransformer::BuildGsqlResolvedJoinScan(
     const JoinExpr& join_expr, const List& rtable,
+    const TransformerInfo* transformer_info,
     const VarIndexScope* external_scope, const VarIndexScope* local_scope,
     VarIndexScope* output_scope, bool has_using) {
   ZETASQL_ASSIGN_OR_RETURN(GsqlJoinType gsql_join_type,
@@ -666,8 +671,8 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
   VarIndexScope output_scope_lhs;
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedScan> left_scan,
                    BuildGsqlResolvedScanForTableExpression(
-                       *(join_expr.larg), rtable, external_scope, local_scope,
-                       &output_scope_lhs));
+                       *(join_expr.larg), rtable, transformer_info,
+                       external_scope, local_scope, &output_scope_lhs));
 
   bool is_right_or_full_join =
       gsql_join_type == zetasql::ResolvedJoinScan::RIGHT ||
@@ -724,8 +729,8 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
     }
     ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedScan> right_scan,
                      BuildGsqlResolvedScanForTableExpression(
-                         *(join_expr.rarg), rtable, &scope_for_rhs,
-                         &scope_for_rhs, &scope_for_rhs));
+                         *(join_expr.rarg), rtable, transformer_info,
+                         &scope_for_rhs, &scope_for_rhs, &scope_for_rhs));
     std::vector<zetasql::ResolvedColumn> output_columns =
         left_scan->column_list();
     output_columns.insert(output_columns.end(),
@@ -756,6 +761,11 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
       // Extract UNNEST WITH ORDINALITY column in the right scan if it exists.
       std::unique_ptr<const zetasql::ResolvedColumnHolder>
           right_scan_array_offset_col_holder = nullptr;
+      if (right_array_scan->array_offset_column() != nullptr) {
+        right_scan_array_offset_col_holder =
+            zetasql::MakeResolvedColumnHolder(
+                right_array_scan->array_offset_column()->column());
+      }
       result = zetasql::MakeResolvedArrayScan(
           /*column_list=*/output_columns,
           /*input_scan=*/std::move(left_scan),
@@ -776,8 +786,8 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
     /// Now we're in the normal table-scan case.
     ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedScan> right_scan,
                      BuildGsqlResolvedScanForTableExpression(
-                         *(join_expr.rarg), rtable, external_scope,
-                         &scope_for_rhs, &scope_for_rhs));
+                         *(join_expr.rarg), rtable, transformer_info,
+                         external_scope, &scope_for_rhs, &scope_for_rhs));
 
     // Merge the lhs and rhs into output_scope.
     output_scope->MergeFrom(output_scope_lhs);
@@ -848,6 +858,7 @@ ForwardTransformer::BuildGsqlCommaJoinResolvedJoinScan(
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
 ForwardTransformer::BuildGsqlResolvedScanForFromList(
     const List& fromlist, const List& rtable,
+    const TransformerInfo* transformer_info,
     const VarIndexScope* external_scope, VarIndexScope* output_scope) {
   std::unique_ptr<zetasql::ResolvedScan> current_tree;
   bool contains_explicit_join = false;
@@ -856,10 +867,10 @@ ForwardTransformer::BuildGsqlResolvedScanForFromList(
   // ResolvedJoinScan objects, with the first node in the innermost JoinScan.
   // The result is a left-deep tree.
   for (Node* listnode : StructList<Node*>(&fromlist)) {
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<zetasql::ResolvedScan> current_scan,
-        BuildGsqlResolvedScanForTableExpression(
-            *listnode, rtable, external_scope, external_scope, output_scope));
+    ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedScan> current_scan,
+                     BuildGsqlResolvedScanForTableExpression(
+                         *listnode, rtable, transformer_info, external_scope,
+                         external_scope, output_scope));
 
     // Connect the newly built JoinScan to the current tree, forming a left-deep
     // join tree.
@@ -1103,12 +1114,13 @@ ForwardTransformer::AddGsqlProjectScanForInSubqueries(
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
 ForwardTransformer::BuildGsqlResolvedScanForFromClause(
-    const Query& query, const VarIndexScope* external_scope,
-    VarIndexScope* output_scope) {
+    const Query& query, const TransformerInfo* transformer_info,
+    const VarIndexScope* external_scope, VarIndexScope* output_scope) {
   ZETASQL_RET_CHECK_NE(query.jointree, nullptr);
   if (query.jointree->fromlist != nullptr) {
-    return BuildGsqlResolvedScanForFromList(
-        *query.jointree->fromlist, *query.rtable, external_scope, output_scope);
+    return BuildGsqlResolvedScanForFromList(*query.jointree->fromlist,
+                                            *query.rtable, transformer_info,
+                                            external_scope, output_scope);
   } else {
     // No-from-clause query has special rules about what else can exist.
     // These errors are modeled after the errors for no-from-clause queries in
@@ -1393,12 +1405,12 @@ ForwardTransformer::BuildGsqlResolvedScanForSelect(
       TemporaryVectorElement(ressortgroupref_to_target_entry_maps_);
 
   VarIndexScope from_scan_output_scope;
-
+  auto transformer_info = std::make_unique<TransformerInfo>();
   // Postgres Query corresponds to nested ResolvedScan in ZetaSQL AST.
   std::unique_ptr<zetasql::ResolvedScan> current_scan = nullptr;
-  ZETASQL_ASSIGN_OR_RETURN(current_scan,
-                   BuildGsqlResolvedScanForFromClause(query, external_scope,
-                                                      &from_scan_output_scope));
+  ZETASQL_ASSIGN_OR_RETURN(current_scan, BuildGsqlResolvedScanForFromClause(
+                                     query, transformer_info.get(),
+                                     external_scope, &from_scan_output_scope));
 
   VarIndexScope from_scan_scope(external_scope, from_scan_output_scope);
   // The WHERE clause depends only on the FROM clause, so we resolve it before
@@ -1410,7 +1422,6 @@ ForwardTransformer::BuildGsqlResolvedScanForSelect(
                                     std::move(current_scan)));
   }
 
-  auto transformer_info = std::make_unique<TransformerInfo>();
   transformer_info->set_has_group_by(list_length(query.groupClause) > 0);
   transformer_info->set_has_having(query.havingQual != nullptr);
   transformer_info->set_has_order_by(list_length(query.sortClause) > 0);
@@ -3141,8 +3152,8 @@ absl::Status ForwardTransformer::CheckForUnsupportedFeatures(
                                             "GROUPING SET clauses"));
   ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(query.windowClause, feature_name,
                                             "WINDOW clauses"));
-  ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(query.rowMarks, feature_name,
-                                            "ROW MARK clauses"));
+    ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(query.rowMarks, feature_name,
+                                              "ROW MARK clauses"));
   ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(query.constraintDeps, feature_name,
                                             "constraint clauses"));
   ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(

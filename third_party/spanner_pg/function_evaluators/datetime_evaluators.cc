@@ -32,6 +32,7 @@
 #include "third_party/spanner_pg/interface/datetime_evaluators.h"
 
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 
@@ -44,11 +45,11 @@
 #include "absl/time/time.h"
 #include "third_party/spanner_pg/datatypes/common/pg_numeric_parse.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
-#include "third_party/spanner_pg/postgres_includes/all.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"  // IWYU pragma: keep
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
-#include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
-#include "third_party/spanner_pg/shims/timezone_helper.h"
+#include "third_party/spanner_pg/shims/memory_context_pg_arena.h"  // IWYU pragma: keep
+#include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"  // IWYU pragma: keep
+#include "third_party/spanner_pg/shims/timezone_helper.h"  // IWYU pragma: keep
 #include "third_party/spanner_pg/util/datetime_conversion.h"
 #include "third_party/spanner_pg/util/integral_helpers.h"
 #include "zetasql/base/status_macros.h"
@@ -60,6 +61,8 @@ using ::postgres_translator::spangres::datatypes::common::NormalizePgNumeric;
 
 inline constexpr char kPgTimestampOutOfRangeMessage[] =
     "date/time field value out of range";
+
+inline constexpr char kIntervalOutOfRangeMessage[] = "interval out of range";
 
 void CleanupPostgresDateTimeCache() { CleanupDateTimeCache(); }
 

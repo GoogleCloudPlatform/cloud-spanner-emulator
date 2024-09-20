@@ -46,6 +46,7 @@
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
@@ -97,6 +98,10 @@ static auto kTypeMap =
     {google::spanner::emulator::backend::ddl::ColumnDefinition::TIMESTAMP, "timestamp with time zone"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::PG_JSONB, "jsonb"},
 });
+
+std::string CreateNotNullCondition(const absl::string_view column) {
+  return StrCat(QuoteIdentifier(column), " IS NOT NULL");
+}
 
 class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
  public:
@@ -807,6 +812,10 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
   // Null filtered indexes are not supported in Spangres, therefore it should
   // not be possible for them to appear in schema.
   ZETASQL_RET_CHECK(!statement.null_filtered());
+
+  for (const std::string& column : statement.null_filtered_column()) {
+    conditions.push_back(CreateNotNullCondition(column));
+  }
 
   std::string where = "";
   if (!conditions.empty()) {

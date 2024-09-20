@@ -28,6 +28,7 @@
 #include "absl/algorithm/container.h"
 #include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/memory/memory.h"
@@ -1480,29 +1481,38 @@ void VisitCreateSequenceNode(const SimpleNode* node, CreateSequence* sequence,
   sequence->set_sequence_name(
       GetQualifiedIdentifier(GetChildNode(node, offset++, JJTNAME)));
 
-  bool has_valid_sequence_kind = false;
+  while (offset < node->jjtGetNumChildren()) {
+    const SimpleNode* child = GetChildNode(node, offset++);
+    switch (child->getId()) {
+      case JJTOPTIONS_CLAUSE: {
+        OptionList* options = sequence->mutable_set_options();
+        bool sequence_kind_visited = false;
+        bool has_valid_sequence_kind = false;
 
-  if (node->jjtGetNumChildren() == offset + 1) {
-    const SimpleNode* options_clause =
-        GetChildNode(node, offset, JJTOPTIONS_CLAUSE);
+        for (int i = 0; i < child->jjtGetNumChildren(); ++i) {
+          VisitSequenceOptionKeyValNode(
+              GetChildNode(child, i, JJTOPTION_KEY_VAL), options, errors,
+              &sequence_kind_visited);
+          if (sequence_kind_visited) {
+            has_valid_sequence_kind = sequence_kind_visited;
+          }
+        }
 
-    OptionList* options = sequence->mutable_set_options();
-    bool sequence_kind_visited = false;
-
-    for (int i = 0; i < options_clause->jjtGetNumChildren(); ++i) {
-      VisitSequenceOptionKeyValNode(
-          GetChildNode(options_clause, i, JJTOPTION_KEY_VAL), options, errors,
-          &sequence_kind_visited);
-      if (sequence_kind_visited) {
-        has_valid_sequence_kind = sequence_kind_visited;
+        if (!has_valid_sequence_kind
+        ) {
+          errors->push_back(
+              "CREATE SEQUENCE statements require option `sequence_kind` to "
+              "be set");
+          return;
+        }
+        break;
       }
+      default:
+        errors->push_back(absl::StrCat("Unexpected create sequence clause: ",
+                                       child->toString()));
+        return;
     }
   }
-  if (!has_valid_sequence_kind) {
-    errors->push_back(
-        "CREATE SEQUENCE statements require option `sequence_kind` to be set");
-  }
-  sequence->set_type(CreateSequence::BIT_REVERSED_POSITIVE);
 }
 
 void VisitCreateSchemaNode(const SimpleNode* node, CreateSchema* schema,
@@ -1531,15 +1541,22 @@ void VisitAlterSequenceNode(const SimpleNode* node, AlterSequence* sequence,
 
   sequence->set_sequence_name(
       GetQualifiedIdentifier(GetChildNode(node, offset++, JJTNAME)));
-  const SimpleNode* options_clause =
-      GetChildNode(node, offset, JJTOPTIONS_CLAUSE);
 
-  OptionList* options = sequence->mutable_set_options()->mutable_options();
-  for (int i = 0; i < options_clause->jjtGetNumChildren(); ++i) {
-    bool sequence_kind_visited;  // Unused
-    VisitSequenceOptionKeyValNode(
-        GetChildNode(options_clause, i, JJTOPTION_KEY_VAL), options, errors,
-        &sequence_kind_visited);
+  const SimpleNode* child = GetChildNode(node, offset);
+  switch (child->getId()) {
+    case JJTOPTIONS_CLAUSE: {
+      OptionList* options = sequence->mutable_set_options()->mutable_options();
+      for (int i = 0; i < child->jjtGetNumChildren(); ++i) {
+        bool sequence_kind_visited;  // Unused
+        VisitSequenceOptionKeyValNode(GetChildNode(child, i, JJTOPTION_KEY_VAL),
+                                      options, errors, &sequence_kind_visited);
+      }
+      break;
+    }
+    default:
+      errors->push_back(absl::StrCat("Unexpected alter sequence clause: ",
+                                     child->toString()));
+      return;
   }
 }
 

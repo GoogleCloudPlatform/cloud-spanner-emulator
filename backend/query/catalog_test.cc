@@ -102,6 +102,20 @@ TEST_F(AnalyzeStatementTest, SelectNestedCatalogPGFunctions) {
                        "pg.map_double_to_int(2.0)) as col"));
 }
 
+TEST_F(AnalyzeStatementTest, SelectIdentityColumnFieldsInformationSchema) {
+  ZETASQL_EXPECT_OK(AnalyzeStatement(
+      "SELECT is_identity, identity_generation, identity_kind, "
+      "identity_start_with_counter, identity_skip_range_min, "
+      "identity_skip_range_max FROM information_schema.columns"));
+}
+
+TEST_F(AnalyzeStatementTest, SelectIdentityColumnFieldsPGInformationSchema) {
+  ZETASQL_EXPECT_OK(AnalyzeStatement(
+      "SELECT is_identity, identity_generation, identity_kind, "
+      "identity_start_with_counter, identity_skip_range_min, "
+      "identity_skip_range_max FROM pg_information_schema.columns"));
+}
+
 TEST_F(AnalyzeStatementTest, SelectFromPGInformationSchema) {
   ZETASQL_EXPECT_OK(AnalyzeStatement(
       "SELECT column_name FROM pg_information_schema.columns"));

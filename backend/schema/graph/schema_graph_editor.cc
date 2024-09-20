@@ -115,18 +115,18 @@ absl::StatusOr<const SchemaNode*> SchemaGraphEditor::Clone(
 }
 
 absl::Status SchemaGraphEditor::DeleteNode(const SchemaNode* node) {
-  ZETASQL_RET_CHECK(!HasModifications())
-      << "Graph already contains modifications. "
-      << "Graph must be canonicalized before deleting another node.";
+  ZETASQL_RET_CHECK(edited_clones_.empty() && added_nodes_.empty())
+      << "Graph already contains modifications. It must be canonicalized "
+      << "before making further changes.";
   ZETASQL_RET_CHECK(IsOriginalNode(node));
-  deleted_node_ = node;
+  deleted_nodes_.emplace_back(node);
   return absl::OkStatus();
 }
 
 absl::Status SchemaGraphEditor::AddNode(
     std::unique_ptr<const SchemaNode> node) {
-  ZETASQL_RET_CHECK_EQ(deleted_node_, nullptr)
-      << "Graph already has a deleted node. It must be canonicalized before "
+  ZETASQL_RET_CHECK(deleted_nodes_.empty())
+      << "Graph already has deleted nodes. It must be canonicalized before "
       << "making further changes.";
   added_nodes_.emplace_back(std::move(node));
   return absl::OkStatus();
@@ -144,7 +144,7 @@ bool SchemaGraphEditor::IsOriginalNode(const SchemaNode* node) const {
 absl::StatusOr<std::unique_ptr<SchemaGraph>>
 SchemaGraphEditor::CanonicalizeGraph() {
   std::unique_ptr<SchemaGraph> cloned_graph = nullptr;
-  if (deleted_node_) {
+  if (!deleted_nodes_.empty()) {
     ZETASQL_VLOG(2) << "Canonicalizing deletes";
     ZETASQL_RETURN_IF_ERROR(CanonicalizeDeletion());
   } else {
@@ -178,7 +178,7 @@ SchemaGraphEditor::CanonicalizeGraph() {
   }
 
   // Finally, erase deleted nodes from the new graph.
-  if (deleted_node_) {
+  if (!deleted_nodes_.empty()) {
     trimmed_ = cloned_pool_ptr->Trim();
   }
 
@@ -246,9 +246,11 @@ absl::Status SchemaGraphEditor::CanonicalizeDeletion() {
   }
 
   // Mark the clone of the node as deleted.
-  const SchemaNode* deleted_clone = FindClone(deleted_node_);
-  ZETASQL_RET_CHECK_NE(deleted_clone, nullptr);
-  const_cast<SchemaNode*>(deleted_clone)->MarkDeleted();
+  for (const auto* node : deleted_nodes_) {
+    const SchemaNode* deleted_clone = FindClone(node);
+    ZETASQL_RET_CHECK_NE(deleted_clone, nullptr);
+    const_cast<SchemaNode*>(deleted_clone)->MarkDeleted();
+  }
 
   // To propagate the deletion information across the graph so that every node
   // can take action on deletion of its neighbor, we run Fixup as many times as

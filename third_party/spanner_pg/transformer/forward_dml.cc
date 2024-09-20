@@ -183,9 +183,11 @@ absl::Status ForwardTransformer::CheckForUnsupportedOnConflictClause(
   // Get the table entry that exposes `excluded` alias. Build the scan that
   // allows further validation on the values in SET clause below.
   RangeTblEntry* rte_for_on_conflict = rt_fetch(rte_index, query.rtable);
+  auto transformer_info = std::make_unique<TransformerInfo>();
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<zetasql::ResolvedTableScan> alias_table_scan,
-      BuildGsqlResolvedTableScan(*rte_for_on_conflict, rte_index, scope));
+      BuildGsqlResolvedTableScan(*rte_for_on_conflict, transformer_info.get(),
+                                 rte_index, scope));
   ZETASQL_RET_CHECK(!alias_table_scan->alias().empty() &&
             alias_table_scan->alias() == kExcludedAlias);
 
@@ -311,10 +313,11 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   // Get the target table, which is the first rte in the list.
   Index rtindex = 1;
   RangeTblEntry* rte = rt_fetch(rtindex, query.rtable);
+  auto transformer_info = std::make_unique<TransformerInfo>();
   VarIndexScope target_table_scope;
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<zetasql::ResolvedTableScan> table_scan,
-      BuildGsqlResolvedTableScan(*rte, rtindex, &target_table_scope));
+  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedTableScan> table_scan,
+                   BuildGsqlResolvedTableScan(*rte, transformer_info.get(),
+                                              rtindex, &target_table_scope));
   std::string table_alias = table_scan->alias().empty()
                                 ? table_scan->table()->Name()
                                 : table_scan->alias();
@@ -520,10 +523,11 @@ ForwardTransformer::BuildPartialGsqlResolvedUpdateStmt(const Query& query) {
 
   Index rtindex = 1;
   RangeTblEntry* rte = rt_fetch(rtindex, query.rtable);
+  auto transformer_info = std::make_unique<TransformerInfo>();
   VarIndexScope target_table_scope;
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<zetasql::ResolvedTableScan> table_scan,
-      BuildGsqlResolvedTableScan(*rte, rtindex, &target_table_scope));
+  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedTableScan> table_scan,
+                   BuildGsqlResolvedTableScan(*rte, transformer_info.get(),
+                                              rtindex, &target_table_scope));
   std::string table_alias = table_scan->alias().empty()
                                 ? table_scan->table()->Name()
                                 : table_scan->alias();
@@ -672,10 +676,11 @@ ForwardTransformer::BuildPartialGsqlResolvedDeleteStmt(const Query& query) {
   }
   Index rtindex = 1;
   RangeTblEntry* rte = rt_fetch(rtindex, query.rtable);
+  auto transformer_info = std::make_unique<TransformerInfo>();
   VarIndexScope target_table_scope;
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<zetasql::ResolvedTableScan> table_scan,
-      BuildGsqlResolvedTableScan(*rte, rtindex, &target_table_scope));
+  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedTableScan> table_scan,
+                   BuildGsqlResolvedTableScan(*rte, transformer_info.get(),
+                                              rtindex, &target_table_scope));
   std::string table_alias = table_scan->alias().empty()
                                 ? table_scan->table()->Name()
                                 : table_scan->alias();

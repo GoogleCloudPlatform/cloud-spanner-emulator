@@ -30,6 +30,7 @@
 //------------------------------------------------------------------------------
 
 #include <memory>
+#include <vector>
 
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
@@ -41,6 +42,7 @@
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
+#include "third_party/spanner_pg/transformer/expr_transformer_helper.h"
 #include "third_party/spanner_pg/transformer/forward_transformer.h"
 #include "third_party/spanner_pg/transformer/transformer_test.h"
 #include "third_party/spanner_pg/util/postgres.h"

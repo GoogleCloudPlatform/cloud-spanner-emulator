@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_COMMON_URIS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_COMMON_URIS_H_
 
+#include <memory>
 #include <string>
 
 #include "absl/status/status.h"
@@ -62,7 +63,7 @@ absl::Status ParseSessionUri(absl::string_view resource_uri,
 
 // Parses an operation URI into its components.
 absl::Status ParseOperationUri(absl::string_view operation_uri,
-                               absl::string_view* resource_uri,
+                               std::shared_ptr<std::string> resource_uri,
                                absl::string_view* operation_id);
 
 // Constructs a project URI from its components.

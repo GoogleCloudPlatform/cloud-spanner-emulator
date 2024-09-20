@@ -44,6 +44,7 @@
 #include "backend/storage/in_memory_storage.h"
 #include "common/errors.h"
 #include "common/limits.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 
@@ -53,6 +54,7 @@ namespace emulator {
 namespace backend {
 namespace test {
 
+using ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
 using postgres_translator::spangres::CreateSpangresDirectSchemaPrinter;
 using postgres_translator::spangres::SpangresSchemaPrinter;
 
@@ -159,6 +161,9 @@ class SchemaUpdaterTest
     : public testing::Test,
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
+  SchemaUpdaterTest()
+      : feature_flags_({
+        }) {}
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
       absl::Span<const std::string> statements
       ,
@@ -191,6 +196,7 @@ class SchemaUpdaterTest
   TableIDGenerator table_id_generator_;
   ColumnIDGenerator column_id_generator_;
   std::unique_ptr<PgOidAssigner> pg_oid_assigner_;
+  ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
 
 INSTANTIATE_TEST_SUITE_P(

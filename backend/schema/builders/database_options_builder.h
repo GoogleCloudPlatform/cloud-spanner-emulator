@@ -18,12 +18,14 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_DATABASE_OPTIONS_BUILDER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
 #include "absl/memory/memory.h"
 #include "backend/schema/catalog/database_options.h"
 #include "backend/schema/validators/database_options_validator.h"
+#include "google/protobuf/repeated_ptr_field.h"
 
 namespace google {
 namespace spanner {
@@ -47,6 +49,10 @@ class DatabaseOptions::Builder {
     return *this;
   }
   const DatabaseOptions* get() const { return instance_.get(); }
+  Builder& set_options(::google::protobuf::RepeatedPtrField<ddl::SetOption> options) {
+    instance_->options_ = options;
+    return *this;
+  }
 
  private:
   std::unique_ptr<DatabaseOptions> instance_;
@@ -57,6 +63,12 @@ class DatabaseOptions::Editor {
   explicit Editor(DatabaseOptions* instance) : instance_(instance) {}
 
   const DatabaseOptions* get() const { return instance_; }
+
+  Editor& set_options(
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption> options) {
+    instance_->options_ = options;
+    return *this;
+  }
 
  private:
   // Not owned.

@@ -39,8 +39,8 @@ absl::Status SequenceValidator::Validate(const Sequence* sequence,
   } else {
     ZETASQL_RET_CHECK(!sequence->postgresql_oid().has_value());
   }
-  ZETASQL_RETURN_IF_ERROR(
-      GlobalSchemaNames::ValidateSchemaName("Sequence", sequence->name_));
+    ZETASQL_RETURN_IF_ERROR(
+        GlobalSchemaNames::ValidateSchemaName("Sequence", sequence->name_));
   return absl::OkStatus();
 }
 

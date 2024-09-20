@@ -29,10 +29,13 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
+#include "spanner/public/type.h"
+#include "zetasql/public/interval_value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/cord.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
 #include "third_party/spanner_pg/interface/datetime_evaluators.h"

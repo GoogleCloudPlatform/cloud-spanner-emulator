@@ -287,7 +287,7 @@ CREATE TABLE TableWithIntersect (
   expr BOOL DEFAULT (((SELECT true) INTERSECT ALL (SELECT true))),
 ) PRIMARY KEY(id);
 --
-Cannot use non-scalar expressions inside column default.
+Cannot use non-scalar expressions inside column default
 ==
 # Using multiple parentheses
 CREATE TABLE TableWithIntersect (
@@ -306,7 +306,7 @@ CREATE TABLE TableWithSelect1 (
   val INT64 DEFAULT ((SELECT 1)),
 ) PRIMARY KEY(id);
 --
-Cannot use non-scalar expressions inside column default.
+Cannot use non-scalar expressions inside column default
 ==
 # Cannot change from a generated column to a default column
 CREATE TABLE T (

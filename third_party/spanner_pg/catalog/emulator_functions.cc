@@ -240,6 +240,9 @@ std::unique_ptr<zetasql::Function> ArrayUpperFunction(
                                        {gsql_double_array, gsql_int64},
                                        /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{gsql_int64,
+                                       {gsql_float_array, gsql_int64},
+                                       /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{gsql_int64,
                                        {gsql_int64_array, gsql_int64},
                                        /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{gsql_int64,
@@ -2435,6 +2438,59 @@ class MinFloatingPointEvaluator : public zetasql::AggregateFunctionEvaluator {
   zetasql::Value result_ = zetasql::Value::MakeNull<T>();
 };
 
+class MinMaxEvaluator : public zetasql::AggregateFunctionEvaluator {
+ public:
+  explicit MinMaxEvaluator(const zetasql::Type* type, bool is_min) :
+    result_(zetasql::Value::Null(type)), is_min_(is_min) {}
+  ~MinMaxEvaluator() override = default;
+
+  absl::Status Reset() override { return absl::OkStatus(); }
+
+  absl::Status Accumulate(absl::Span<const zetasql::Value*> args,
+                          bool* stop_accumulation) override {
+    // No args left to accumulate.
+    if (args.empty()) {
+      *stop_accumulation = true;
+      return absl::OkStatus();
+    }
+
+    const zetasql::Value value = *args[0];
+    if (value.type()->IsDouble() || value.type()->IsFloat()) {
+      return absl::InvalidArgumentError(
+          "Incorrect accumulator for floating point types.");
+    }
+
+    // TODO: Figure out why IgnoreNulls(), which defaults to true
+    // is not working.
+    if (value.is_null()) {
+      return absl::OkStatus();
+    }
+
+    if (result_.is_null()) {
+      result_ = value;
+      return absl::OkStatus();
+    }
+
+    if (is_min_ && !result_.LessThan(value)) {
+      // Evaluating as MIN().
+      result_ = value;
+    } else if (!is_min_ && result_.LessThan(value)) {
+      // Evaluating as MAX().
+      result_ = value;
+    }
+
+    return absl::OkStatus();
+  }
+
+  absl::StatusOr<zetasql::Value> GetFinalResult() override { return result_; }
+
+ private:
+  // Initialized to NULL as it's the default value to return if no values are
+  // provided to aggregate or if all the values to aggregate are NULL.
+  zetasql::Value result_;
+  bool is_min_;
+};
+
 std::unique_ptr<zetasql::Function> MinAggregator(
     const std::string& catalog_name) {
   zetasql::AggregateFunctionEvaluatorFactory aggregate_fn =
@@ -2442,8 +2498,12 @@ std::unique_ptr<zetasql::Function> MinAggregator(
       -> std::unique_ptr<zetasql::AggregateFunctionEvaluator> {
     if (sig.result_type().type()->IsFloat()) {
       return std::make_unique<MinFloatingPointEvaluator<float>>();
+    } else if (sig.result_type().type()->IsDouble()) {
+      return std::make_unique<MinFloatingPointEvaluator<double>>();
+    } else {
+      return std::make_unique<MinMaxEvaluator>(
+          sig.result_type().type(), /* is_min =*/true);
     }
-    return std::make_unique<MinFloatingPointEvaluator<double>>();
   };
 
   zetasql::FunctionOptions options;
@@ -2456,6 +2516,29 @@ std::unique_ptr<zetasql::Function> MinAggregator(
                                        nullptr},
           zetasql::FunctionSignature{zetasql::types::FloatType(),
                                        {zetasql::types::FloatType()},
+                                       nullptr},
+          zetasql::FunctionSignature{spangres::datatypes::GetPgOidType(),
+                                       {spangres::datatypes::GetPgOidType()},
+                                       nullptr}},
+      options);
+}
+
+std::unique_ptr<zetasql::Function> MaxAggregator(
+    const std::string& catalog_name) {
+  zetasql::AggregateFunctionEvaluatorFactory aggregate_fn =
+      [](const zetasql::FunctionSignature& sig)
+      -> std::unique_ptr<zetasql::AggregateFunctionEvaluator> {
+    return std::make_unique<MinMaxEvaluator>(
+        sig.result_type().type(), /* is_min =*/false);
+  };
+
+  zetasql::FunctionOptions options;
+  options.set_aggregate_function_evaluator_factory(aggregate_fn);
+  return std::make_unique<zetasql::Function>(
+      kPGMaxFunctionName, catalog_name, zetasql::Function::AGGREGATE,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{spangres::datatypes::GetPgOidType(),
+                                       {spangres::datatypes::GetPgOidType()},
                                        nullptr}},
       options);
 }
@@ -3636,6 +3719,8 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
 
   auto min_agg = MinAggregator(catalog_name);
   functions.push_back(std::move(min_agg));
+  auto max_agg = MaxAggregator(catalog_name);
+  functions.push_back(std::move(max_agg));
   auto min_numeric_agg = MinNumericAggregator(catalog_name);
   functions.push_back(std::move(min_numeric_agg));
   auto max_numeric_agg = MaxNumericAggregator(catalog_name);

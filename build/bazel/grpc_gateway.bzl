@@ -14,8 +14,6 @@
 # limitations under the License.
 #
 
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
-
 """grpc_gateway provides bazel rules for dealing with grpc-gateway.
 
 We use grpc-gateway (https://github.com/grpc-ecosystem/grpc-gateway) to generate
@@ -24,6 +22,8 @@ runs the grpc-gateway generator, then applies patches to the generate file. For
 more details about the patches applied and why they are required, see comments
 in fix_grpc_gateway.go in this directory.
 """
+
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 def _generate_grpc_gateway_file_impl(ctx):
     # gen-grpc-gateway generates the output file in the same directory as the
@@ -153,7 +153,6 @@ def generate_grpc_gateway(
         out_filename = out_filename,
         yaml_config = yaml_config,
     )
-
     go_library(
         importpath = "cloud_spanner_emulator/gateway/" + name,
         name = name,

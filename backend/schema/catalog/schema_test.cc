@@ -27,6 +27,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/statusor.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/schema/builders/change_stream_builder.h"
@@ -1534,11 +1535,12 @@ TEST_F(SchemaTest, PrintDDLStatementsTestSequences) {
                   R"(CREATE SEQUENCE myseq OPTIONS (
   sequence_kind = 'bit_reversed_positive',
   skip_range_min = 1,
-  skip_range_max = 1000 ))",
+  skip_range_max = 1000))",
                   R"(CREATE TABLE test_table (
   int64_col INT64 NOT NULL DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE myseq)),
   string_col STRING(MAX),
-) PRIMARY KEY(int64_col))")));
+) PRIMARY KEY(int64_col))"
+                  )));
 }
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestSequences) {
@@ -1618,7 +1620,6 @@ ALTER TABLE vanishing_data ALTER TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date
   PRIMARY KEY(id)
 ) TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date)")));
 }
-
 }  // namespace
 }  // namespace backend
 }  // namespace emulator

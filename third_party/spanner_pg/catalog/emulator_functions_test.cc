@@ -4235,7 +4235,7 @@ TEST(EvalLeastGreatestInvalidTest, InvalidType) {
               zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST(EvalMinSignatureTest, MinOnlyForDoubleType) {
+TEST(EvalMinSignatureTest, CustomMinSignatures) {
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions("TestCatalog");
   std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
@@ -4246,13 +4246,18 @@ TEST(EvalMinSignatureTest, MinOnlyForDoubleType) {
   const zetasql::Function* function = functions[kPGMinFunctionName].get();
   const std::vector<zetasql::FunctionSignature>& signatures =
       function->signatures();
-  EXPECT_THAT(signatures.size(), 2);
+  EXPECT_THAT(signatures.size(), 3);
   EXPECT_TRUE(signatures[0].result_type().type()->IsDouble());
   EXPECT_THAT(signatures[0].arguments().size(), 1);
   EXPECT_TRUE(signatures[0].arguments().front().type()->IsDouble());
   EXPECT_TRUE(signatures[1].result_type().type()->IsFloat());
   EXPECT_THAT(signatures[1].arguments().size(), 1);
   EXPECT_TRUE(signatures[1].arguments().front().type()->IsFloat());
+  EXPECT_TRUE(signatures[2].result_type().type() ==
+              spangres::datatypes::GetPgOidType());
+  EXPECT_THAT(signatures[2].arguments().size(), 1);
+  EXPECT_TRUE(signatures[2].arguments().front().type() ==
+              spangres::datatypes::GetPgOidType());
 }
 
 struct EvalAggregatorTestCase {
@@ -4263,9 +4268,9 @@ struct EvalAggregatorTestCase {
   absl::StatusCode expected_status_code;
 };
 
-using EvalMinTest = ::testing::TestWithParam<EvalAggregatorTestCase>;
+using EvalMinMaxTest = ::testing::TestWithParam<EvalAggregatorTestCase>;
 
-TEST_P(EvalMinTest, TestMin) {
+TEST_P(EvalMinMaxTest, TestMin) {
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions("TestCatalog");
   std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
@@ -4276,9 +4281,9 @@ TEST_P(EvalMinTest, TestMin) {
   const EvalAggregatorTestCase& test_case = GetParam();
   const zetasql::Type* agg_type = test_case.expected_value.type();
   zetasql::FunctionSignature signature(agg_type, {agg_type}, nullptr);
-  const zetasql::Function* min_function =
+  const zetasql::Function* function =
       functions[test_case.function_name].get();
-  auto callback = min_function->GetAggregateFunctionEvaluatorFactory();
+  auto callback = function->GetAggregateFunctionEvaluatorFactory();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<zetasql::AggregateFunctionEvaluator> evaluator,
       callback(signature));
@@ -4309,7 +4314,7 @@ TEST_P(EvalMinTest, TestMin) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(EvalMinTests, EvalMinTest,
+INSTANTIATE_TEST_SUITE_P(EvalMinTests, EvalMinMaxTest,
                          ::testing::ValuesIn<EvalAggregatorTestCase>({
                              {"OneDoubleNullArg",
                               kPGMinFunctionName,
@@ -4444,7 +4449,7 @@ INSTANTIATE_TEST_SUITE_P(EvalMinTests, EvalMinTest,
                               absl::StatusCode::kOk},
                          }));
 
-INSTANTIATE_TEST_SUITE_P(EvalMinFailureTests, EvalMinTest,
+INSTANTIATE_TEST_SUITE_P(EvalMinFailureTests, EvalMinMaxTest,
                          ::testing::ValuesIn<EvalAggregatorTestCase>({
                              {"OneInvalidArg",
                               kPGMinFunctionName,
@@ -4467,6 +4472,26 @@ INSTANTIATE_TEST_SUITE_P(EvalMinFailureTests, EvalMinTest,
                               kNullFloatValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
                          }));
+
+
+TEST(EvalMaxSignatureTest, CustomMaxSignatures) {
+  SpannerPGFunctions spanner_pg_functions =
+      GetSpannerPGFunctions("TestCatalog");
+  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
+      functions;
+  for (auto& function : spanner_pg_functions) {
+    functions[function->Name()] = std::move(function);
+  }
+  const zetasql::Function* function = functions[kPGMaxFunctionName].get();
+  const std::vector<zetasql::FunctionSignature>& signatures =
+      function->signatures();
+  EXPECT_THAT(signatures.size(), 1);
+  EXPECT_TRUE(signatures[0].result_type().type() ==
+              spangres::datatypes::GetPgOidType());
+  EXPECT_THAT(signatures[0].arguments().size(), 1);
+  EXPECT_TRUE(signatures[0].arguments().front().type() ==
+              spangres::datatypes::GetPgOidType());
+}
 
 using EvalNumericMinMaxTest = ::testing::TestWithParam<EvalAggregatorTestCase>;
 

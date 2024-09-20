@@ -26,6 +26,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 
 	"cloud_spanner_emulator/gateway"
 )
@@ -53,6 +54,12 @@ var (
 			"requests to allow testing application abort-retry behavior).")
 	disableQueryNullFilteredIndexCheck = flag.Bool("disable_query_null_filtered_index_check", false,
 		"If true, then queries that use NULL_FILTERED indexes will be answered.")
+	overrideMaxDatabasesPerInstance = flag.Int("override_max_databases_per_instance", 100,
+		"If set at a value greater than the default limit of Spanner, overrides the allowed "+
+			"maximum number of databases per instance. If the "+
+			"MAX_DATABASES_PER_INSTANCE environment variable is set, it overrides the "+
+			"value set in this flag but it is only respected if it's greater than "+
+			"the default limit of Spanner.")
 )
 
 // resolveGRPCBinary figures out the full path to the grpc binary from the --grpc_binary flag.
@@ -91,6 +98,16 @@ func main() {
 	flag.Parse()
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
+	instanceDbs := *overrideMaxDatabasesPerInstance
+	var err error
+	// If the environment variable is set, it overrides the value specified
+	// in the --override_max_databases_per_instance flag.
+	if os.Getenv("MAX_DATABASES_PER_INSTANCE") != "" {
+		instanceDbs, err = strconv.Atoi(os.Getenv("MAX_DATABASES_PER_INSTANCE"))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	// Start the gateway http server. This will run the emulator grpc server as a subprocess and
 	// proxy http/json requests into grpc requests.
 	gwopts := gateway.Options{
@@ -102,6 +119,7 @@ func main() {
 		LogRequests:                        *logRequests,
 		EnableFaultInjection:               *enableFaultInjection,
 		DisableQueryNullFilteredIndexCheck: *disableQueryNullFilteredIndexCheck,
+		OverrideMaxDatabasesPerInstance:    instanceDbs,
 	}
 	gw := gateway.New(gwopts)
 	gw.Run()

@@ -392,11 +392,11 @@ load("@com_google_zetasql//bazel:zetasql_deps_step_4.bzl", "zetasql_deps_step_4"
 
 zetasql_deps_step_4()
 
-google_cloud_cpp_version = "2.12.0"
+google_cloud_cpp_version = "2.19.0"
 
 http_archive(
     name = "com_github_googleapis_google_cloud_cpp",
-    sha256 = "8cda870803925c62de8716a765e03eb9d34249977e5cdb7d0d20367e997a55e2",
+    sha256 = "63f009092afd900cb812050bcecf607e37d762ac911e0bcbf4af9a432da91890",
     strip_prefix = "google-cloud-cpp-{0}".format(google_cloud_cpp_version),
     url = "https://github.com/googleapis/google-cloud-cpp/archive/v{0}.tar.gz".format(google_cloud_cpp_version),
 )

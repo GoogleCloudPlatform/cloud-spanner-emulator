@@ -422,6 +422,16 @@ absl::StatusOr<Datum> CheckedOidFunctionCall4(Oid functionId, Datum arg1,
                             arg4);
 }
 
+absl::StatusOr<Datum> CheckedOidFunctionCall7(Oid functionId, Datum arg1,
+                                              Datum arg2, Datum arg3,
+                                              Datum arg4, Datum arg5,
+                                              Datum arg6, Datum arg7) {
+  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  return ErrorCheckedPgCall(OidFunctionCall7Coll, functionId,
+                            /*collation=*/DEFAULT_COLLATION, arg1, arg2, arg3,
+                            arg4, arg5, arg6, arg7);
+}
+
 absl::StatusOr<List*> CheckedPgListMake1(void* datum) {
   // list_make1 is a macro. Decompose it for the error shim.
   return ErrorCheckedPgCall(list_make1_impl, T_List, list_make_ptr_cell(datum));

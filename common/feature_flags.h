@@ -24,7 +24,7 @@ namespace spanner {
 namespace emulator {
 
 // Global singleton flags that control feature availability. This may be
-// used to control the availabiliy of features in development.
+// used to control the availability of features in development.
 //
 // This class is thread safe.
 class EmulatorFeatureFlags {

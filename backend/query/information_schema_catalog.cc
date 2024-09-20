@@ -34,6 +34,7 @@
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
@@ -87,6 +88,15 @@ static constexpr char kSpannerType[] = "SPANNER_TYPE";
 static constexpr char kIsGenerated[] = "IS_GENERATED";
 static constexpr char kIsStored[] = "IS_STORED";
 static constexpr char kGenerationExpression[] = "GENERATION_EXPRESSION";
+static constexpr char kIsIdentity[] = "IS_IDENTITY";
+static constexpr char kIdentityGeneration[] = "IDENTITY_GENERATION";
+static constexpr char kIdentityKind[] = "IDENTITY_KIND";
+static constexpr char kBitReversedPositiveSequence[] =
+    "BIT_REVERSED_POSITIVE_SEQUENCE";
+static constexpr char kIdentityStartWithCounter[] =
+    "IDENTITY_START_WITH_COUNTER";
+static constexpr char kIdentitySkipRangeMin[] = "IDENTITY_SKIP_RANGE_MIN";
+static constexpr char kIdentitySkipRangeMax[] = "IDENTITY_SKIP_RANGE_MAX";
 static constexpr char kSpannerState[] = "SPANNER_STATE";
 static constexpr char kColumns[] = "COLUMNS";
 static constexpr char kSchemaName[] = "SCHEMA_NAME";
@@ -118,6 +128,7 @@ static constexpr char kYes[] = "YES";
 static constexpr char kNo[] = "NO";
 static constexpr char kNone[] = "NONE";
 static constexpr char kAlways[] = "ALWAYS";
+static constexpr char kByDefault[] = "BY DEFAULT";
 static constexpr char kNever[] = "NEVER";
 static constexpr char kPrimary_Key[] = "PRIMARY_KEY";
 static constexpr char kPrimaryKey[] = "PRIMARY KEY";
@@ -791,8 +802,9 @@ void InformationSchemaCatalog::FillColumnsTable() {
         }
 
         specific_kvs[kColumnDefault] =
-            column->has_default_value() ? String(column->expression().value())
-                                        : NullString();
+                column->has_default_value()
+                ? String(column->expression().value())
+                : NullString();
 
         specific_kvs[kDataType] = NullString();
         specific_kvs[kSpannerType] = GetSpannerType(column);
@@ -812,6 +824,12 @@ void InformationSchemaCatalog::FillColumnsTable() {
         specific_kvs[kIsStored] = NullString();
       }
       specific_kvs[kSpannerState] = String(kCommitted);
+      specific_kvs[kIsIdentity] = String(kNo);
+      specific_kvs[kIdentityGeneration] = NullString();
+      specific_kvs[kIdentityKind] = NullString();
+      specific_kvs[kIdentityStartWithCounter] = NullString();
+      specific_kvs[kIdentitySkipRangeMin] = NullString();
+      specific_kvs[kIdentitySkipRangeMax] = NullString();
 
       rows.push_back(GetRowFromRowKVs(columns, specific_kvs));
       specific_kvs.clear();
@@ -854,6 +872,12 @@ void InformationSchemaCatalog::FillColumnsTable() {
       specific_kvs[kGenerationExpression] = NullString();
       specific_kvs[kIsStored] = NullString();
       specific_kvs[kSpannerState] = String(kCommitted);
+      specific_kvs[kIsIdentity] = String(kNo);
+      specific_kvs[kIdentityGeneration] = NullString();
+      specific_kvs[kIdentityKind] = NullString();
+      specific_kvs[kIdentityStartWithCounter] = NullString();
+      specific_kvs[kIdentitySkipRangeMin] = NullString();
+      specific_kvs[kIdentitySkipRangeMax] = NullString();
 
       rows.push_back(GetRowFromRowKVs(columns, specific_kvs));
       specific_kvs.clear();
@@ -895,6 +919,12 @@ void InformationSchemaCatalog::FillColumnsTable() {
       specific_kvs[kGenerationExpression] = NullString();
       specific_kvs[kIsStored] = NullString();
       specific_kvs[kSpannerState] = NullString();
+      specific_kvs[kIsIdentity] = String(kNo);
+      specific_kvs[kIdentityGeneration] = NullString();
+      specific_kvs[kIdentityKind] = NullString();
+      specific_kvs[kIdentityStartWithCounter] = NullString();
+      specific_kvs[kIdentitySkipRangeMin] = NullString();
+      specific_kvs[kIdentitySkipRangeMax] = NullString();
 
       rows.push_back(GetRowFromRowKVs(columns, specific_kvs));
       specific_kvs.clear();
@@ -2322,6 +2352,10 @@ void InformationSchemaCatalog::FillSequencesTable() {
   auto sequences = tables_by_name_.at(GetNameForDialect(kSequences)).get();
   std::vector<std::vector<zetasql::Value>> rows;
   for (const Sequence* sequence : default_schema_->sequences()) {
+    if (absl::StartsWith(sequence->Name(), "_")) {
+      // Skip internal sequences.
+      continue;
+    }
     if (dialect_ == DatabaseDialect::POSTGRESQL) {
       rows.push_back({// sequence_catalog
                       String(""),

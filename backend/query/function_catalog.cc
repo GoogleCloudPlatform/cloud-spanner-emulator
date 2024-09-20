@@ -17,7 +17,9 @@
 #include "backend/query/function_catalog.h"
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -35,12 +37,16 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "absl/types/span.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/ml/ml_predict_row_function.h"
 #include "backend/query/ml/ml_predict_table_valued_function.h"
+#include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/table.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"

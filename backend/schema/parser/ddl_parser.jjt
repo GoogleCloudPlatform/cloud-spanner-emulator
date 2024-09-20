@@ -499,6 +499,7 @@ void create_sequence_statement() :
 {}
 {
   <SEQUENCE> [ if_not_exists() ] qualified_identifier() #name
+
   [ options_clause() ]
 }
 
@@ -717,7 +718,9 @@ void alter_change_stream_statement() :
 void alter_sequence_statement() :
 {}
 {
-  <SEQUENCE> [ if_exists() ] (qualified_identifier() #name) <SET> options_clause()
+  <SEQUENCE> [ if_exists() ] (qualified_identifier() #name)
+
+    <SET> options_clause()
 
 }
 
