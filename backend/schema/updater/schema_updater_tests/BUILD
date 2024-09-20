@@ -40,6 +40,7 @@ cc_library(
         "//common:errors",
         "//common:limits",
         "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
         "//third_party/spanner_pg/ddl:spangres_direct_schema_printer_impl",
         "//third_party/spanner_pg/ddl:spangres_schema_printer",
         "@com_github_grpc_grpc//:grpc++",

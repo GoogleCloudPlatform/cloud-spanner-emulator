@@ -18,9 +18,11 @@
 #include <ctype.h>
 #include <math.h>
 #include <limits.h>
+#include <math.h>
 #include <sys/time.h>
 
 #include "access/xact.h"
+#include "third_party/spanner_pg/util/integral_types.h"
 #include "catalog/pg_type.h"
 #include "common/int.h"
 #include "common/int128.h"
@@ -38,6 +40,10 @@
 #include "utils/float.h"
 #include "utils/numeric.h"
 #include "utils/sortsupport.h"
+
+// SPANGRES BEGIN
+#include "common/int.h"
+// SPANGRES END
 
 /*
  * gcc's -ffast-math switch breaks routines that expect exact results from
@@ -1508,14 +1514,52 @@ make_interval(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
 				 errmsg("interval out of range")));
 
-	result = (Interval *) palloc(sizeof(Interval));
-	result->month = years * MONTHS_PER_YEAR + months;
-	result->day = weeks * 7 + days;
+	// SPANGRES BEGIN
+	// Updated calculation to protect against overflows.
+	// Original calculation was -
+	// result->month = years * MONTHS_PER_YEAR + months;
+	// result->day = weeks * 7 + days;
+	// secs = rint(secs * USECS_PER_SEC);
+	// result->time = hours * ((int64) SECS_PER_HOUR * USECS_PER_SEC) +
+	//	mins * ((int64) SECS_PER_MINUTE * USECS_PER_SEC) + (int64) secs;
+	int32 total_months;
+	if (pg_mul_s32_overflow(years, MONTHS_PER_YEAR, &total_months) ||
+			pg_add_s32_overflow(total_months, months, &total_months)) {
+		ereport(ERROR, (errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+										errmsg("interval out of range")));
+	}
 
-	secs = rint(secs * USECS_PER_SEC);
-	result->time = hours * ((int64) SECS_PER_HOUR * USECS_PER_SEC) +
-		mins * ((int64) SECS_PER_MINUTE * USECS_PER_SEC) +
-		(int64) secs;
+	int32 total_days;
+	if (pg_mul_s32_overflow(weeks, 7, &total_days) ||
+			pg_add_s32_overflow(total_days, days, &total_days)) {
+		ereport(ERROR, (errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+										errmsg("interval out of range")));
+	}
+
+	// Converting Hours/Minutes to micros will never overflow.
+	int64 hours_as_micros = hours * ((int64)SECS_PER_HOUR * USECS_PER_SEC);
+	int64 mins_as_micros = mins * ((int64)SECS_PER_MINUTE * USECS_PER_SEC);
+
+	double secs_as_micros = secs * USECS_PER_SEC;
+	if(secs_as_micros > INT64_MAX || secs_as_micros < INT64_MIN){
+		ereport(ERROR, (errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+										errmsg("interval out of range")));
+	}
+
+	int64 total_micros;
+	if (pg_add_s64_overflow(hours_as_micros, mins_as_micros,
+													&total_micros) ||
+			pg_add_s64_overflow(total_micros, (int64)rint(secs_as_micros),
+													&total_micros)) {
+		ereport(ERROR, (errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+										errmsg("interval out of range")));
+	}
+
+	result = (Interval *) palloc(sizeof(Interval));
+	result->month = total_months;
+	result->day = total_days;
+	result->time = total_micros;
+  // SPANGRES END
 
 	PG_RETURN_INTERVAL_P(result);
 }

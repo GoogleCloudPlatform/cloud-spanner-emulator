@@ -180,7 +180,7 @@ absl::Status QueryValidator::ValidateHints(
 absl::Status QueryValidator::CheckSpannerHintName(
     absl::string_view name, const zetasql::ResolvedNodeKind node_kind) const {
   static const auto* supported_hints = new const absl::flat_hash_map<
-      const zetasql::ResolvedNodeKind,
+      zetasql::ResolvedNodeKind,
       absl::flat_hash_set<absl::string_view, zetasql_base::StringViewCaseHash,
                           zetasql_base::StringViewCaseEqual>>{
       {zetasql::RESOLVED_TABLE_SCAN,
@@ -220,7 +220,7 @@ absl::Status QueryValidator::CheckSpannerHintName(
 absl::Status QueryValidator::CheckEmulatorHintName(
     absl::string_view name, const zetasql::ResolvedNodeKind node_kind) const {
   static const auto* supported_hints = new const absl::flat_hash_map<
-      const zetasql::ResolvedNodeKind,
+      zetasql::ResolvedNodeKind,
       absl::flat_hash_set<absl::string_view, zetasql_base::StringViewCaseHash,
                           zetasql_base::StringViewCaseEqual>>{
       {zetasql::RESOLVED_TABLE_SCAN,

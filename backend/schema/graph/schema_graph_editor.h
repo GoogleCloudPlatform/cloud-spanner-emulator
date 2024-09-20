@@ -82,8 +82,8 @@ class SchemaGraphEditor {
   template <typename T>
   absl::Status EditNode(const SchemaNode* node,
                         const EditCallback<T>& edit_cb) {
-    ZETASQL_RET_CHECK_EQ(deleted_node_, nullptr)
-        << "Graph has a deleted node. It must be canonicalized before "
+    ZETASQL_RET_CHECK(deleted_nodes_.empty())
+        << "Graph has deleted nodes. It must be canonicalized before "
         << "making further changes.";
 
     // Get an editable node.
@@ -159,7 +159,7 @@ class SchemaGraphEditor {
 
   // Returns true if the graph has any modifications.
   bool HasModifications() const {
-    return deleted_node_ != nullptr || !edited_clones_.empty() ||
+    return !deleted_nodes_.empty() || !edited_clones_.empty() ||
            !added_nodes_.empty();
   }
 
@@ -210,7 +210,10 @@ class SchemaGraphEditor {
     if (it != added_nodes_.end()) {
       return kAdded;
     }
-    if (node == deleted_node_) {
+    auto it_deleted = std::find_if(
+        deleted_nodes_.begin(), deleted_nodes_.end(),
+        [&node](const SchemaNode* node_ptr) { return node_ptr == node; });
+    if (it_deleted != deleted_nodes_.end()) {
       return kDropped;
     }
     const auto* clone = FindClone(node);
@@ -281,8 +284,8 @@ class SchemaGraphEditor {
   // Editing state.
   // -----------------------
 
-  // The node being deleted.
-  const SchemaNode* deleted_node_ = nullptr;
+  // The nodes being deleted.
+  std::vector<const SchemaNode*> deleted_nodes_;
 
   // The nodes added to the graph.
   std::vector<std::unique_ptr<const SchemaNode>> added_nodes_;

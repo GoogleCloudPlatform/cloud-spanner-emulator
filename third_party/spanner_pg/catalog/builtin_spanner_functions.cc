@@ -497,6 +497,156 @@ void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions) {
   AddPgJsonbNewFunctions(functions);
 }
 
+static void AddFloatSignaturesForExistingFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
+  const zetasql::Type* gsql_float = zetasql::types::FloatType();
+  const zetasql::Type* gsql_float_arr = zetasql::types::FloatArrayType();
+  const zetasql::Type* gsql_pg_jsonb = types::PgJsonbMapping()->mapped_type();
+
+  std::vector<FunctionNameWithSignature>
+      existing_float_functions_with_signature;
+  existing_float_functions_with_signature.push_back(
+      {"abs", {{{gsql_float, {gsql_float}, /*context_ptr=*/nullptr}}}});
+  existing_float_functions_with_signature.push_back(
+      {"count", {{{gsql_int64, {gsql_float}, /*context_ptr=*/nullptr}}}});
+  existing_float_functions_with_signature.push_back(
+      {"count", {{{gsql_int64, {gsql_float_arr}, /*context_ptr=*/nullptr}}}});
+  existing_float_functions_with_signature.push_back(
+      {"array_agg",
+       {{{gsql_float_arr, {gsql_float}, /*context_ptr=*/nullptr}}}});
+  existing_float_functions_with_signature.push_back(
+      {"array_cat",
+       {{{gsql_float_arr,
+          {gsql_float_arr, gsql_float_arr},
+          /*context_ptr=*/nullptr}}}});
+  existing_float_functions_with_signature.push_back(
+      {"array_upper",
+       {{{gsql_int64,
+          {gsql_float_arr, gsql_int64},
+          /*context_ptr=*/nullptr}}}});
+  existing_float_functions_with_signature.push_back(
+      {"array_length",
+       {{{gsql_int64,
+          {gsql_float_arr, gsql_int64},
+          /*context_ptr=*/nullptr}}}});
+  existing_float_functions_with_signature.push_back(
+      {"euclidean_distance",
+       {{{gsql_double,
+          {gsql_float_arr, gsql_float_arr},
+          /*context_ptr=*/nullptr}}}});
+  existing_float_functions_with_signature.push_back(
+      {"cosine_distance",
+       {{{gsql_double,
+          {gsql_float_arr, gsql_float_arr},
+          /*context_ptr=*/nullptr}}}});
+
+    existing_float_functions_with_signature.push_back(
+        {"min", {{{gsql_float, {gsql_float}, /*context_ptr=*/nullptr}}}});
+    existing_float_functions_with_signature.push_back(
+        {"max", {{{gsql_float, {gsql_float}, /*context_ptr=*/nullptr}}}});
+
+    existing_float_functions_with_signature.push_back(
+        {"to_char",
+         {{{gsql_string,
+            {gsql_float, gsql_string},
+            /*context_ptr=*/nullptr}}}});
+
+      existing_float_functions_with_signature.push_back(
+          {"to_jsonb",
+           {{{gsql_pg_jsonb, {gsql_float}, /*context_ptr=*/nullptr}}}});
+
+  AddNewSignaturesForExistingFunctions(functions,
+                                       existing_float_functions_with_signature);
+}
+
+static void AddFloatNewFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_double = zetasql::types::DoubleType();
+  const zetasql::Type* gsql_float = zetasql::types::FloatType();
+
+  const zetasql::Type* gsql_double_array =
+      zetasql::types::DoubleArrayType();
+  const zetasql::Type* gsql_float_array = zetasql::types::FloatArrayType();
+  const zetasql::Type* gsql_int64_array = zetasql::types::Int64ArrayType();
+
+  functions.push_back(
+      {"float4um",
+       "$unary_minus",
+       {{{gsql_float, {gsql_float}, /*context_ptr=*/nullptr}}}});
+  functions.push_back(
+      {"float4abs",
+       "abs",
+       {{{gsql_float, {gsql_float}, /*context_ptr=*/nullptr}}}});
+
+    functions.push_back(
+        {"float4pl",
+         "pg.float_add",
+         {{{gsql_float, {gsql_float, gsql_float}, /*context_ptr=*/nullptr}}}});
+    functions.push_back(
+        {"float4mi",
+         "pg.float_subtract",
+         {{{gsql_float, {gsql_float, gsql_float}, /*context_ptr=*/nullptr}}}});
+    functions.push_back(
+        {"float4mul",
+         "pg.float_multiply",
+         {{{gsql_float, {gsql_float, gsql_float}, /*context_ptr=*/nullptr}}}});
+    functions.push_back(
+        {"float4div",
+         "pg.float_divide",
+         {{{gsql_float, {gsql_float, gsql_float}, /*context_ptr=*/nullptr}}}});
+
+    functions.push_back({"float4eq",
+                         "$equal",
+                         {{{gsql_bool,
+                            {gsql_float, gsql_float},
+                            /*context_ptr=*/nullptr}}}});
+    functions.push_back({"float4ne",
+                         "$not_equal",
+                         {{{gsql_bool,
+                            {gsql_float, gsql_float},
+                            /*context_ptr=*/nullptr}}}});
+    functions.push_back({"float4lt",
+                         "$less",
+                         {{{gsql_bool,
+                            {gsql_float, gsql_float},
+                            /*context_ptr=*/nullptr}}}});
+    functions.push_back({"float4le",
+                         "$less_or_equal",
+                         {{{gsql_bool,
+                            {gsql_float, gsql_float},
+                            /*context_ptr=*/nullptr}}}});
+    functions.push_back({"float4gt",
+                         "$greater",
+                         {{{gsql_bool,
+                            {gsql_float, gsql_float},
+                            /*context_ptr=*/nullptr}}}});
+    functions.push_back({"float4ge",
+                         "$greater_or_equal",
+                         {{{gsql_bool,
+                            {gsql_float, gsql_float},
+                            /*context_ptr=*/nullptr}}}});
+
+  functions.push_back({"dot_product",
+                       "dot_product",
+                       {{{gsql_double,
+                          {gsql_int64_array, gsql_int64_array},
+                          /*context_ptr=*/nullptr}},
+                        {{gsql_double,
+                          {gsql_double_array, gsql_double_array},
+                          /*context_ptr=*/nullptr}},
+                        {{gsql_double,
+                          {gsql_float_array, gsql_float_array},
+                          /*context_ptr=*/nullptr}}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
+}
+
+void AddFloatFunctions(std::vector<PostgresFunctionArguments>& functions) {
+  AddFloatSignaturesForExistingFunctions(functions);
+  AddFloatNewFunctions(functions);
+}
+
 void AddPgArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
   const zetasql::Type* gsql_pg_jsonb_arr =
       types::PgJsonbArrayMapping()->mapped_type();

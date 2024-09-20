@@ -146,6 +146,7 @@ cc_test(
         "//tests/common:scoped_feature_flags_setter",
         "//tests/common:test_schema_constructor",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googletest//:gtest_main",

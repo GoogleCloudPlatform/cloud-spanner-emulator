@@ -15,6 +15,7 @@
 //
 
 #include <memory>
+#include <string>
 
 #include "google/longrunning/operations.pb.h"
 #include "google/protobuf/empty.pb.h"
@@ -36,9 +37,10 @@ absl::Status ListOperations(
     RequestContext* ctx, const operations_api::ListOperationsRequest* request,
     operations_api::ListOperationsResponse* response) {
   // Verify the operations URI is valid.
-  absl::string_view resource_uri, operation_id;
+  absl::string_view operation_id;
+  std::shared_ptr<std::string> resource_uri;
   ZETASQL_RETURN_IF_ERROR(ParseOperationUri(absl::StrCat(request->name(), "/"),
-                                    &resource_uri, &operation_id));
+                                    resource_uri, &operation_id));
   ZETASQL_ASSIGN_OR_RETURN(
       std::vector<std::shared_ptr<Operation>> operations,
       ctx->env()->operation_manager()->ListOperations(request->name()));
@@ -53,9 +55,10 @@ REGISTER_GRPC_HANDLER(Operations, ListOperations);
 absl::Status GetOperation(RequestContext* ctx,
                           const operations_api::GetOperationRequest* request,
                           operations_api::Operation* response) {
-  absl::string_view resource_uri, operation_id;
+  absl::string_view operation_id;
+  std::shared_ptr<std::string> resource_uri;
   ZETASQL_RETURN_IF_ERROR(
-      ParseOperationUri(request->name(), &resource_uri, &operation_id));
+      ParseOperationUri(request->name(), resource_uri, &operation_id));
   ZETASQL_ASSIGN_OR_RETURN(
       std::shared_ptr<Operation> operation,
       ctx->env()->operation_manager()->GetOperation(request->name()));

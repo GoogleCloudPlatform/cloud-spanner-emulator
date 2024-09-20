@@ -85,8 +85,7 @@ class ActionRegistry {
       table_effectors_;
 
   // List of effectors for primary key columns per table.
-  absl::node_hash_map<const std::string,
-                      std::unique_ptr<GeneratedColumnEffector>>
+  absl::node_hash_map<std::string, std::unique_ptr<GeneratedColumnEffector>>
       table_generated_key_effectors_;
 
   // List of modifiers per table.

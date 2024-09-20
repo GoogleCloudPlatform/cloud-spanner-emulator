@@ -4008,7 +4008,6 @@ TEST(CreateSequence, SequenceKindInSingleQuotes) {
               IsOkAndHolds(test::EqualsProto(R"pb(
                 create_sequence {
                   sequence_name: "seq"
-                  type: BIT_REVERSED_POSITIVE
                   set_options {
                     option_name: "sequence_kind"
                     string_value: "bit_reversed_positive"
@@ -4025,7 +4024,6 @@ TEST(CreateSequence, WithIfNotExists) {
               IsOkAndHolds(test::EqualsProto(R"pb(
                 create_sequence {
                   sequence_name: "seq"
-                  type: BIT_REVERSED_POSITIVE
                   set_options {
                     option_name: "sequence_kind"
                     string_value: "bit_reversed_positive"
@@ -4043,7 +4041,6 @@ TEST(CreateSequence, SequenceKindInDoubleQuotes) {
               IsOkAndHolds(test::EqualsProto(R"pb(
                 create_sequence {
                   sequence_name: "seq"
-                  type: BIT_REVERSED_POSITIVE
                   set_options {
                     option_name: "sequence_kind"
                     string_value: "bit_reversed_positive"
@@ -4064,7 +4061,6 @@ TEST(CreateSequence, WithNullOptions) {
       IsOkAndHolds(test::EqualsProto(R"pb(
         create_sequence {
           sequence_name: "seq"
-          type: BIT_REVERSED_POSITIVE
           set_options {
             option_name: "sequence_kind"
             string_value: "bit_reversed_positive"
@@ -4089,7 +4085,6 @@ TEST(CreateSequence, CanParseCreateSequenceAllOptions) {
       IsOkAndHolds(test::EqualsProto(R"pb(
         create_sequence {
           sequence_name: "seq"
-          type: BIT_REVERSED_POSITIVE
           set_options {
             option_name: "sequence_kind"
             string_value: "bit_reversed_positive"
@@ -4297,7 +4292,8 @@ TEST(AlterSequence, Invalid_OptionClauseWithoutSetKeyword) {
       )
       )sql"),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("Expecting 'SET' but found 'OPTIONS'")));
+                       HasSubstr("Expecting 'SET' but found 'OPTIONS'")
+                       ));
 }
 
 TEST(AlterSequence, Invalid_SetSequenceKindToNull) {

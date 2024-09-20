@@ -36,6 +36,7 @@
 #include <memory>
 #include <string>
 
+#include "zetasql/public/interval_value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
 #include "absl/strings/string_view.h"

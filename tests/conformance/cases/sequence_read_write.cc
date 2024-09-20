@@ -653,6 +653,45 @@ TEST_P(SequenceReadWriteTest,
   }
 }
 
+TEST_P(SequenceReadWriteTest, InsertAfterIfNotExistsSchemaUpdate) {
+  std::vector<std::string> gsql_ddl_statements = {
+      R"(
+      CREATE SEQUENCE IF NOT EXISTS test_seq OPTIONS (
+        sequence_kind='bit_reversed_positive')
+      )",
+      R"(
+      CREATE TABLE IF NOT EXISTS test_table (
+          id INT64 NOT NULL DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE test_seq)),
+          value INT64 NOT NULL
+      ) PRIMARY KEY(id))"};
+  std::vector<std::string> pg_ddl_statements = {
+      R"(
+      CREATE SEQUENCE IF NOT EXISTS test_seq BIT_REVERSED_POSITIVE
+      )",
+      R"(
+      CREATE TABLE IF NOT EXISTS test_table (
+          id bigint default (nextval('test_seq')),
+          value bigint,
+          PRIMARY KEY(id)
+      ))"};
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    ZETASQL_ASSERT_OK(UpdateSchema(pg_ddl_statements));
+  } else {
+    ZETASQL_ASSERT_OK(UpdateSchema(gsql_ddl_statements));
+  }
+
+  ZETASQL_ASSERT_OK(MultiInsert("test_table", {"value"}, {{1}, {2}, {3}}));
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    ZETASQL_ASSERT_OK(UpdateSchema(pg_ddl_statements));
+  } else {
+    ZETASQL_ASSERT_OK(UpdateSchema(gsql_ddl_statements));
+  }
+
+  ZETASQL_ASSERT_OK(MultiInsert("test_table", {"value"}, {{4}, {5}, {6}}));
+}
+
 }  // namespace
 
 }  // namespace test

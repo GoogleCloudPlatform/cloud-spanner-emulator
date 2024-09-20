@@ -108,7 +108,8 @@ struct PostgreSQLConstants {
   // TODO: use kDatabaseOptimizerVersionName,
   // kInternalDatabaseVersionRetentionPeriodName,
   // kInternalCommitTimestampOptionName, kCloudDatabaseNameOption directly from
-  // spanner/common/schema_util.h after Blaze target visibility is adjusted.
+  // spanner/common/schema/schema_util.h after Blaze target visibility is
+  // adjusted.
   static constexpr absl::string_view kDatabaseOptimizerVersionName =
       "optimizer_version";
   static constexpr absl::string_view
@@ -143,7 +144,7 @@ struct PostgreSQLConstants {
           "spanner.internal.cloud_witness_location";
 
   // Options for Spanner Bit-reversed Sequences.
-  // Copied from google3/spanner/common/schema_util.h
+  // Copied from google3/spanner/common/schema/schema_util.h
   static constexpr absl::string_view kSequenceKindOptionName = "sequence_kind";
   static constexpr absl::string_view kSequenceKindBitReversedPositive =
       "bit_reversed_positive";

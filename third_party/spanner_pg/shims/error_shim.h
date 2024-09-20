@@ -92,6 +92,10 @@ absl::StatusOr<Datum> CheckedNullableOidFunctionCall3(Oid functionId,
 absl::StatusOr<Datum> CheckedOidFunctionCall4(Oid functionId, Datum arg1,
                                               Datum arg2, Datum arg3,
                                               Datum arg4);
+absl::StatusOr<Datum> CheckedOidFunctionCall7(Oid functionId, Datum arg1,
+                                              Datum arg2, Datum arg3,
+                                              Datum arg4, Datum arg5,
+                                              Datum arg6, Datum arg7);
 absl::StatusOr<List*> CheckedPgListMake1(void* datum);
 absl::StatusOr<List*> CheckedPgListMake2(void* datum1, void* datum2);
 absl::StatusOr<List*> CheckedPgLappend(List* list, void* datum);

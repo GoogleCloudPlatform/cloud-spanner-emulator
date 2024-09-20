@@ -144,8 +144,9 @@ class ForwardTransformer {
   // Requires that `rte.rtekind` is RTE_RELATION.
   // `rtindex` is used for MapVarIndexToColumn.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedTableScan>>
-  BuildGsqlResolvedTableScan(const RangeTblEntry& rte, int rtindex,
-                             VarIndexScope* output_scope);
+  BuildGsqlResolvedTableScan(const RangeTblEntry& rte,
+                             const TransformerInfo* transformer_info,
+                             int rtindex, VarIndexScope* output_scope);
 
   // Builds a `ResolvedFilterScan` object. `where_clause` is taken from the
   // `quals` node in a PostgreSQL query's `jointree`. `current_scan` should
@@ -172,6 +173,7 @@ class ForwardTransformer {
   // Modeled after the ZetaSQL ResolveFromClauseAndCreateScan function.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
   BuildGsqlResolvedScanForFromClause(const Query& query,
+                                     const TransformerInfo* transformer_info,
                                      const VarIndexScope* external_scope,
                                      VarIndexScope* output_scope);
 
@@ -290,10 +292,11 @@ class ForwardTransformer {
   // Given a Postgres Node, builds a corresponding ZetaSQL ResolvedScan
   // object. Modeled after the ZetaSQL ResolveTableExpression function.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
-  BuildGsqlResolvedScanForTableExpression(const Node& node, const List& rtable,
-                                          const VarIndexScope* external_scope,
-                                          const VarIndexScope* local_scope,
-                                          VarIndexScope* output_scope);
+  BuildGsqlResolvedScanForTableExpression(
+      const Node& node, const List& rtable,
+      const TransformerInfo* transformer_info,
+      const VarIndexScope* external_scope, const VarIndexScope* local_scope,
+      VarIndexScope* output_scope);
 
   // Helper to BuildGsqlResolvedScanForTableExpression for validating and
   // dispatching the various RTE_FUNCTION cases. Currently supported are:
@@ -338,6 +341,7 @@ class ForwardTransformer {
   // ResolvedScan object that's either a ResolvedJoinScan or ResolvedArrayScan.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
   BuildGsqlResolvedJoinScan(const JoinExpr& join_expr, const List& rtable,
+                            const TransformerInfo* transformer_info,
                             const VarIndexScope* external_scope,
                             const VarIndexScope* local_scope,
                             VarIndexScope* output_scope,
@@ -358,6 +362,7 @@ class ForwardTransformer {
   // `fromlist` and joins them in a left deep tree.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
   BuildGsqlResolvedScanForFromList(const List& fromlist, const List& rtable,
+                                   const TransformerInfo* transformer_info,
                                    const VarIndexScope* external_scope,
                                    VarIndexScope* output_scope);
 

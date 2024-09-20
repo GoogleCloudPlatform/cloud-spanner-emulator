@@ -29,6 +29,7 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -73,9 +74,9 @@ ForwardTransformer::BuildGsqlFunctionArgumentList(
   // Named arguments can be out of order but the NamedArgExpr will have the
   // correct position. We need to build a map of the position to the argument
   // so we can build the argument list in the correct order.
-  absl::flat_hash_map<int, std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::flat_hash_map<size_t, std::unique_ptr<zetasql::ResolvedExpr>>
       arg_index_to_expr;
-  uint8_t positional_index = 0;
+  size_t positional_index = 0;
   for (Expr* arg : StructList<Expr*>(args)) {
     if (arg->type == T_TargetEntry) {
       // This is an aggregate function argument. Build the argument from
@@ -98,6 +99,7 @@ ForwardTransformer::BuildGsqlFunctionArgumentList(
   }
   argument_list.reserve(list_length(args));
   for (int i = 0; i < list_length(args); ++i) {
+    ZETASQL_RET_CHECK(arg_index_to_expr.contains(i));
     argument_list.push_back(std::move(arg_index_to_expr[i]));
   }
   return argument_list;

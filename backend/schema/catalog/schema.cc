@@ -424,11 +424,11 @@ void DumpModel(const Model* model, ddl::CreateModel& create_model) {
 void DumpDatabaseOptions(const DatabaseOptions* database_option,
                          ddl::AlterDatabase& alter_database) {
   alter_database.set_db_name(database_option->Name());
-  if (database_option->options()->has_option_name()) {
+  for (const auto& option : database_option->options()) {
     ddl::SetOption* set_option =
         alter_database.mutable_set_options()->add_options();
-    set_option->set_option_name(database_option->options()->option_name());
-    set_option->set_string_value(database_option->options()->string_value());
+    set_option->set_option_name(option.option_name());
+    set_option->set_string_value(option.string_value());
   }
 }
 

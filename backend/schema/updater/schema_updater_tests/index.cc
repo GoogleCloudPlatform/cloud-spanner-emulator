@@ -190,22 +190,18 @@ TEST_P(SchemaUpdaterTest, CreateIndexIfNotExists) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndexWhereIsNotNull) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  std::string ddl[] = {
-      R"sql(
+  std::unique_ptr<const Schema> schema;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+                                   R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64,
         s1 STRING(MAX),
       ) PRIMARY KEY (k1)
     )sql",
-      R"sql(
+                                   R"sql(
       CREATE INDEX Idx ON T(c1, s1) WHERE c1 IS NOT NULL AND s1 IS NOT NULL
-    )sql"};
-  absl::Span<const std::string> ddls(ddl);
-  std::unique_ptr<const Schema> schema;
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(ddls));
+    )sql"}));
   const Index* idx = schema->FindIndex("Idx");
   EXPECT_NE(idx, nullptr);
 
@@ -240,7 +236,7 @@ TEST_P(SchemaUpdaterTest, CreateIndexWhereIsNotNull) {
   auto t_k1 = base_table->FindColumn("k1");
   EXPECT_THAT(data_pk[2]->column(), ColumnIs("k1", type_factory_.get_int64()));
   EXPECT_THAT(data_pk[2]->column(), SourceColumnIs(t_k1));
-  EXPECT_TRUE(data_pk[2]->column()->is_nullable());
+  EXPECT_EQ(data_pk[2]->column()->is_nullable(), t_k1->is_nullable());
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndexIfNotExistsOnExistingIndex) {

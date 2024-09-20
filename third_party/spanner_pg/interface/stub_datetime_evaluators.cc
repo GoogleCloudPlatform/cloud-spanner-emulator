@@ -33,8 +33,10 @@
 #include <memory>
 #include <string>
 
+#include "zetasql/public/interval_value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "third_party/spanner_pg/interface/datetime_evaluators.h"
@@ -115,5 +117,4 @@ absl::StatusOr<absl::Cord> PgDateExtract(absl::string_view field,
                                          int32_t source) {
   return absl::UnimplementedError("invoked stub PgDateExtract");
 }
-
 }  // namespace postgres_translator::function_evaluators

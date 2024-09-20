@@ -124,9 +124,6 @@ QueryableTable::AnalyzeColumnExpression(
             << " for generated column : " << column->FullName();
       }
     }
-    absl::Status s = zetasql::AnalyzeExpressionForAssignmentToType(
-        column->expression().value(), options, catalog, type_factory,
-        column->GetType(), &output);
     std::string expression_type = "default";
     if (is_generated_column) {
       expression_type = "generated";

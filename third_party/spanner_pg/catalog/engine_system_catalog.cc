@@ -289,38 +289,35 @@ EngineSystemCatalog::GetFunctionAndSignature(
       std::unique_ptr<zetasql::FunctionSignature> result_signature;
       if (SignatureMatches(input_argument_types, *signature, &result_signature,
                            language_options)) {
-         if (!signature->mapped_function()) {
-           if (signature->options().rewrite_options() &&
-               !signature->options().rewrite_options()->sql().empty()) {
-             return FunctionAndSignature(function, *result_signature);
-           }
-           // If there isn't a mapped function and the signature has not defined
-           // a rewrite in the engine system catalog, the signature is
-           // unsupported and requires an explicit cast on the output.
-           // TODO : support explicit casting on function output.
-           return absl::UnimplementedError(absl::StrCat(
-               "Postgres Function requires an explicit cast: ", "Name: ",
-               proc_name, ", ", "Oid: ", proc_oid, ", ", "Arguments: ", "(",
-               postgres_input_args_string, ")"));
-         }
+        if (!signature->mapped_function()) {
+          if (signature->options().rewrite_options() &&
+              !signature->options().rewrite_options()->sql().empty()) {
+            return FunctionAndSignature(function, *result_signature);
+          }
+          // If there isn't a mapped function and the signature has not defined
+          // a rewrite in the engine system catalog, the signature is
+          // unsupported and requires an explicit cast on the output.
+          // TODO : support explicit casting on function output.
+          return absl::UnimplementedError(absl::StrCat(
+              "Postgres Function requires an explicit cast: ", "Name: ",
+              proc_name, ", ", "Oid: ", proc_oid, ", ", "Arguments: ", "(",
+              postgres_input_args_string, ")"));
+        }
 
-         // Each PostgresExtendedFunctionSignature has a copy of the mapped
-         // function with exactly one mapped signature since the relationship
-         // from PostgresExtendedFunctionSignature : mapped signature is N:1.
-         // Get the first (only) signature out of the mapped function.
-         const zetasql::FunctionSignature* mapped_signature =
-             signature->mapped_function()->GetSignature(0);
-         // Run the function signature matcher again to be sure that the mapped
-         // builtin signature matches the input argument types.
-         if (SignatureMatches(input_argument_types, *mapped_signature,
+        for (const zetasql::FunctionSignature& mapped_signature :
+          signature->mapped_function()->signatures()) {
+          // Run the function signature matcher again to be sure that the
+          // mapped builtin signature matches the input argument types.
+          if (SignatureMatches(input_argument_types, mapped_signature,
                               &result_signature, language_options)) {
-           // We return the result signature instead of the mapped signature
-           // because the the Function Signature Matcher fills in the actual
-           // types if the original signature had ARG_TYPE_ANY_1 input or output
-           // types.
-           return FunctionAndSignature(signature->mapped_function(),
-                                       *result_signature);
-         }
+            // We return the result signature instead of the mapped signature
+            // because the Function Signature Matcher fills in the actual types
+            // if the original signature had ARG_TYPE_ANY_1 input or output
+            // types.
+            return FunctionAndSignature(signature->mapped_function(),
+                                        *result_signature);
+          }
+        }
       }
     }
   }

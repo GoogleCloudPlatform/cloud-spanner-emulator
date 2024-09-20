@@ -366,7 +366,7 @@ CREATE TABLE T2 (
   constraint fk_t2_b_t1_a check (exists (select t1.A as a from T1 t1 where t1.A = B)),
 ) PRIMARY KEY(A);
 --
-ERROR:.* Error parsing expression 'exists \(select t1.A as a from T1 t1 where t1.A = B\)' from check constraint 'fk_t2_b_t1_a' in table 'T2': Cannot use non-scalar expressions inside check constraints.
+ERROR:.* Error parsing expression 'exists \(select t1.A as a from T1 t1 where t1.A = B\)' from check constraint 'fk_t2_b_t1_a' in table 'T2':.* Cannot use non-scalar expressions inside check constraints.
 ==
 # Constraint with nested non-scalar expression.
 # --regex
@@ -375,7 +375,7 @@ CREATE TABLE T (
   CHECK (ARRAY_LENGTH(ARRAY(SELECT 1)) > A)
 ) PRIMARY KEY(A);
 --
-ERROR:.* Error parsing expression 'ARRAY_LENGTH\(ARRAY\(SELECT 1\)\) > A' from check constraint '<unnamed>' in table 'T': Cannot use non-scalar expressions inside check constraints.
+ERROR:.* Error parsing expression 'ARRAY_LENGTH\(ARRAY\(SELECT 1\)\) > A' from check constraint '<unnamed>' in table 'T':.* Cannot use non-scalar expressions inside check constraints.
 ==
 # Constraint with non-deterministic function.
 # --regex
@@ -385,7 +385,7 @@ CREATE TABLE T (
   check (EXTRACT(YEAR from CURRENT_TIMESTAMP()) > 2018),
 ) PRIMARY KEY(A);
 --
-ERROR:.* Error parsing expression 'EXTRACT\(YEAR from CURRENT_TIMESTAMP\(\)\) > 2018' from check constraint '<unnamed>' in table 'T': Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of check constraints must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
+ERROR:.* Error parsing expression 'EXTRACT\(YEAR from CURRENT_TIMESTAMP\(\)\) > 2018' from check constraint '<unnamed>' in table 'T': Expression is non-deterministic due to the use of non-determini?stic function `CURRENT_TIMESTAMP`. Expression of check constraints must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
 ==
 # Check constraint depending on non-deterministic generated column.
 # --regex
@@ -395,7 +395,7 @@ CREATE TABLE T (
   check (B > A),
 ) PRIMARY KEY(A);
 --
-ERROR:.* Error parsing the definition of generated column `T`.`B`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
+ERROR:.* Error parsing the definition of generated column `T`.`B`: Expression is non-deterministic due to the use of non-determini?stic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
 ==
 # Check constraint depending on chained non-deterministic generated column.
 # TODO, emulator and prod returns different error messages for this test.
@@ -408,7 +408,7 @@ CREATE TABLE T (
   check (C > A),
 ) PRIMARY KEY(A);
 --
-ERROR:.* Error parsing the definition of generated column `T`.`B`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
+ERROR:.* Error parsing the definition of generated column `T`.`B`: Expression is non-deterministic due to the use of non-determini?stic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
 ==
 # Commit timestamp column not supported.
 # --regex

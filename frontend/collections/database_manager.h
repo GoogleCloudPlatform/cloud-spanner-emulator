@@ -23,6 +23,7 @@
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
@@ -30,6 +31,10 @@
 #include "common/clock.h"
 #include "frontend/entities/database.h"
 #include "absl/status/status.h"
+
+// If set, and it's greater than limits::kMaxDatabasesPerInstance, then
+// override the maximum number of database that can be created per instance.
+ABSL_DECLARE_FLAG(int, override_max_databases_per_instance);
 
 namespace google {
 namespace spanner {

@@ -46,6 +46,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
@@ -147,21 +148,31 @@ class PostgreSQLToSpannerDDLTranslatorImpl
     absl::Status Translate(const AlterTableStmt& alter_index_statement,
                            google::spanner::emulator::backend::ddl::AlterIndex& out);
 
-
-   private:
+   protected:
     absl::StatusOr<absl::string_view> GetColumnName(
-        const NullTest& null_test) const;
+        const NullTest& null_test, absl::string_view parent_statement) const;
 
-    absl::Status TranslateWhereNode(const Node* node);
-    absl::Status TranslateNullTest(const NullTest* null_test);
-    absl::Status TranslateBoolExpr(const BoolExpr* bool_expr);
+    absl::Status TranslateWhereNode(
+        const Node* node, std::set<absl::string_view>* null_filtered_columns,
+        absl::string_view parent_statement);
+    absl::Status TranslateNullTest(
+        const NullTest* null_test,
+        std::set<absl::string_view>* null_filtered_columns,
+        absl::string_view parent_statement);
+    absl::Status TranslateBoolExpr(
+        const BoolExpr* bool_expr,
+        std::set<absl::string_view>* null_filtered_columns,
+        absl::string_view parent_statement);
 
     absl::StatusOr<absl::string_view> TranslateIndexElem(
         const IndexElem& index_elem,
-        google::spanner::emulator::backend::ddl::KeyPartClause::Order& ordering);
+        google::spanner::emulator::backend::ddl::KeyPartClause::Order& ordering,
+        const TranslationOptions& options);
 
     absl::StatusOr<google::spanner::emulator::backend::ddl::KeyPartClause::Order> ProcessOrdering(
-        const IndexElem& index_elem) const;
+        const SortByDir& index_elem_ordering,
+        const SortByNulls& index_elem_nulls_ordering,
+        const TranslationOptions& options) const;
 
     // We reuse the data structure "InterleaveSpec", originally created for
     // <CREATE TABLE>, for <CREATE INDEX>. Even the parser can guard on grammar
@@ -174,11 +185,13 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       return ddl_translator_.UnsupportedTranslationError(error_mesage);
     }
 
-    absl::Status WhereClauseTranslationError() const {
-      return ddl_translator_.UnsupportedTranslationError(
-          "<WHERE> clause of <CREATE INDEX> statement supports only "
+    absl::Status WhereClauseTranslationError(
+        absl::string_view parent_statement) const {
+      return ddl_translator_.UnsupportedTranslationError(absl::Substitute(
+          "<WHERE> clause of <$0> statement supports only "
           "conjunction of <column IS NOT NULL> expressions using <AND>, where "
-          "<column> is part of an index.");
+          "<column> is part of an index.",
+          parent_statement));
     }
 
     const PostgreSQLToSpannerDDLTranslatorImpl& ddl_translator_;
@@ -2717,17 +2730,19 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
 
 absl::StatusOr<google::spanner::emulator::backend::ddl::KeyPartClause::Order>
 PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::
-    ProcessOrdering(const IndexElem& index_elem) const {
+    ProcessOrdering(const SortByDir& index_elem_ordering,
+                    const SortByNulls& index_elem_nulls_ordering,
+                    const TranslationOptions& options) const {
   // This is a bit clunky, but ultimately more readable than checking if nulls
   // ordering enabled inside branches
-  if (options_.enable_nulls_ordering) {
-    switch (index_elem.ordering) {
+  if (options.enable_nulls_ordering) {
+    switch (index_elem_ordering) {
         // Spanner default nulls ordering is reverse to the PostgreSQL. This
         // means
         // that we cannot rely on defaults and have to explicitly set it.
       case SORTBY_DEFAULT:
       case SORTBY_ASC:
-        switch (index_elem.nulls_ordering) {
+        switch (index_elem_nulls_ordering) {
           case SORTBY_NULLS_DEFAULT:
           case SORTBY_NULLS_LAST:
             return google::spanner::emulator::backend::ddl::KeyPartClause::ASC_NULLS_LAST;
@@ -2739,7 +2754,7 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::
                 "statement.");
         }
       case SORTBY_DESC:
-        switch (index_elem.nulls_ordering) {
+        switch (index_elem_nulls_ordering) {
           case SORTBY_NULLS_DEFAULT:
           case SORTBY_NULLS_FIRST:
             return google::spanner::emulator::backend::ddl::KeyPartClause::DESC_NULLS_FIRST;
@@ -2756,19 +2771,19 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::
             "statement.");
     }
   } else {
-    switch (index_elem.ordering) {
+    switch (index_elem_ordering) {
         // Default sort order in Spanner is ASC
       case SORTBY_DEFAULT:
       case SORTBY_ASC:
-        if (index_elem.nulls_ordering == SORTBY_NULLS_DEFAULT ||
-            index_elem.nulls_ordering == SORTBY_NULLS_FIRST) {
+        if (index_elem_nulls_ordering == SORTBY_NULLS_DEFAULT ||
+            index_elem_nulls_ordering == SORTBY_NULLS_FIRST) {
           return google::spanner::emulator::backend::ddl::KeyPartClause::ASC;
         }
         return UnsupportedTranslationError(
             "<ASC NULLS LAST> is not supported in <CREATE INDEX> statement.");
       case SORTBY_DESC:
-        if (index_elem.nulls_ordering == SORTBY_NULLS_DEFAULT ||
-            index_elem.nulls_ordering == SORTBY_NULLS_LAST) {
+        if (index_elem_nulls_ordering == SORTBY_NULLS_DEFAULT ||
+            index_elem_nulls_ordering == SORTBY_NULLS_LAST) {
           return google::spanner::emulator::backend::ddl::KeyPartClause::DESC;
         }
         return UnsupportedTranslationError(
@@ -2808,7 +2823,7 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
        StructList<IndexElem*>(create_index_statement.indexParams)) {
     google::spanner::emulator::backend::ddl::KeyPartClause::Order ordering;
     ZETASQL_ASSIGN_OR_RETURN(absl::string_view key_name,
-                     TranslateIndexElem(*index_elem, ordering));
+                     TranslateIndexElem(*index_elem, ordering, options_));
     google::spanner::emulator::backend::ddl::KeyPartClause* key_part = create_index_out.add_key();
     key_part->set_key_name(key_name);
     key_part->set_order(ordering);
@@ -2825,14 +2840,20 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
        StructList<IndexElem*>(create_index_statement.indexIncludingParams)) {
     google::spanner::emulator::backend::ddl::KeyPartClause::Order ordering;
     ZETASQL_ASSIGN_OR_RETURN(absl::string_view key_name,
-                     TranslateIndexElem(*index_elem, ordering));
+                     TranslateIndexElem(*index_elem, ordering, options_));
     google::spanner::emulator::backend::ddl::StoredColumnDefinition* stored_column =
         create_index_out.add_stored_column_definition();
     stored_column->set_name(key_name);
   }
 
   if (create_index_statement.whereClause != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(TranslateWhereNode(create_index_statement.whereClause));
+    ZETASQL_RETURN_IF_ERROR(TranslateWhereNode(create_index_statement.whereClause,
+                                       &null_filtered_columns_,
+                                       "CREATE INDEX"));
+  }
+
+  for (absl::string_view key_name : null_filtered_columns_) {
+    create_index_out.add_null_filtered_column(key_name);
   }
 
   if (create_index_statement.interleavespec != nullptr) {
@@ -2885,27 +2906,33 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
 absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
     CreateIndexStatementTranslator::TranslateIndexElem(
         const IndexElem& index_elem,
-        google::spanner::emulator::backend::ddl::KeyPartClause::Order& ordering) {
+        google::spanner::emulator::backend::ddl::KeyPartClause::Order& ordering,
+        const TranslationOptions& options) {
   ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(index_elem));
 
-  ZETASQL_ASSIGN_OR_RETURN(ordering, ProcessOrdering(index_elem));
+  ZETASQL_ASSIGN_OR_RETURN(
+      ordering,
+      ProcessOrdering(index_elem.ordering, index_elem.nulls_ordering, options));
 
   return index_elem.name;
 }
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
     CreateIndexStatementTranslator::TranslateBoolExpr(
-        const BoolExpr* bool_expr) {
+        const BoolExpr* bool_expr,
+        std::set<absl::string_view>* null_filtered_columns,
+        absl::string_view parent_statement) {
   ZETASQL_RET_CHECK_NE(bool_expr, nullptr);
   ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*bool_expr));
 
   // Only support conjunction of <column IS NOT NULL> expressions using <AND>
   if (bool_expr->boolop != AND_EXPR) {
-    return WhereClauseTranslationError();
+    return WhereClauseTranslationError(parent_statement);
   }
 
   for (Node* node : StructList<Node*>(bool_expr->args)) {
-    ZETASQL_RETURN_IF_ERROR(TranslateWhereNode(node));
+    ZETASQL_RETURN_IF_ERROR(
+        TranslateWhereNode(node, null_filtered_columns, parent_statement));
   }
 
   return absl::OkStatus();
@@ -2913,19 +2940,19 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
 
 absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
     CreateIndexStatementTranslator::GetColumnName(
-        const NullTest& null_test) const {
+        const NullTest& null_test, absl::string_view parent_statement) const {
   ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(null_test));
 
   const Expr* column_expr = null_test.arg;
   if (nodeTag(column_expr) != T_ColumnRef) {
-    return WhereClauseTranslationError();
+    return WhereClauseTranslationError(parent_statement);
   }
 
   ZETASQL_ASSIGN_OR_RETURN(const ColumnRef* column_ref,
                    (DowncastNode<ColumnRef, T_ColumnRef, Expr>(column_expr)));
   const List* column_list = column_ref->fields;
   if (list_length(column_list) != 1) {
-    return WhereClauseTranslationError();
+    return WhereClauseTranslationError(parent_statement);
   }
 
   ZETASQL_ASSIGN_OR_RETURN(const String* value,
@@ -2938,17 +2965,20 @@ absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
     CreateIndexStatementTranslator::TranslateNullTest(
-        const NullTest* null_test) {
+        const NullTest* null_test,
+        std::set<absl::string_view>* null_filtered_columns,
+        absl::string_view parent_statement) {
   ZETASQL_RET_CHECK_NE(null_test, nullptr);
   ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*null_test));
 
   // Only support IS_NOT_NULL
   if (null_test->nulltesttype != IS_NOT_NULL) {
-    return WhereClauseTranslationError();
+    return WhereClauseTranslationError(parent_statement);
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(absl::string_view column_name, GetColumnName(*null_test));
-  null_filtered_columns_.insert(column_name);
+  ZETASQL_ASSIGN_OR_RETURN(absl::string_view column_name,
+                   GetColumnName(*null_test, parent_statement));
+  null_filtered_columns->insert(column_name);
 
   return absl::OkStatus();
 }
@@ -2982,24 +3012,28 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
 }
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
-    CreateIndexStatementTranslator::TranslateWhereNode(const Node* node) {
+    CreateIndexStatementTranslator::TranslateWhereNode(
+        const Node* node, std::set<absl::string_view>* null_filtered_columns,
+        absl::string_view parent_statement) {
   ZETASQL_RET_CHECK_NE(node, nullptr);
 
   switch (nodeTag(node)) {
     case T_BoolExpr: {
       ZETASQL_ASSIGN_OR_RETURN(const BoolExpr* bool_expr,
                        (DowncastNode<BoolExpr, T_BoolExpr>(node)));
-      ZETASQL_RETURN_IF_ERROR(TranslateBoolExpr(bool_expr));
+      ZETASQL_RETURN_IF_ERROR(TranslateBoolExpr(bool_expr, null_filtered_columns,
+                                        parent_statement));
       break;
     }
     case T_NullTest: {
       ZETASQL_ASSIGN_OR_RETURN(const NullTest* null_test,
                        (DowncastNode<NullTest, T_NullTest>(node)));
-      ZETASQL_RETURN_IF_ERROR(TranslateNullTest(null_test));
+      ZETASQL_RETURN_IF_ERROR(TranslateNullTest(null_test, null_filtered_columns,
+                                        parent_statement));
       break;
     }
     default:
-      return WhereClauseTranslationError();
+      return WhereClauseTranslationError(parent_statement);
   }
   return absl::OkStatus();
 }

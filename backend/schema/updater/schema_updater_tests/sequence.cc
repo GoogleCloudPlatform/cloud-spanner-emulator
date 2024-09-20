@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -44,14 +45,13 @@ namespace test {
 using database_api::DatabaseDialect::GOOGLE_STANDARD_SQL;
 using database_api::DatabaseDialect::POSTGRESQL;
 using ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
-// using
-// ::google::spanner::emulator::backend::test::SchemaUpdaterTest::CreateSchema;
+using testing::Optional;
 
 class SequenceSchemaUpdaterTest : public SchemaUpdaterTest {
  public:
   SequenceSchemaUpdaterTest()
-      : flag_setter_(
-            {.enable_bit_reversed_positive_sequences_postgresql = true}) {}
+      : flag_setter_({
+        }) {}
   const ScopedEmulatorFeatureFlagsSetter flag_setter_;
 };
 
@@ -420,8 +420,8 @@ TEST_P(SequenceSchemaUpdaterTest,
         )
       )"}));
   }
-  sequence = schema->FindSequence("myseq");
-  EXPECT_EQ(sequence->id(), sequence_id);
+  // Indicate that the DDL statement is a no-op.
+  EXPECT_EQ(schema, nullptr);
 }
 
 TEST_P(SequenceSchemaUpdaterTest, AlterSequence_AlterNonExistsSequence) {
@@ -539,6 +539,9 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_SetAllOptions) {
   EXPECT_EQ(sequence->start_with_counter(), 5000);
   EXPECT_EQ(sequence->skip_range_min().value(), 1);
   EXPECT_EQ(sequence->skip_range_max().value(), 1000);
+  EXPECT_EQ(sequence->DebugString(),
+            "Sequence myseq. Sequence kind: BIT_REVERSED_POSITIVE\n  "
+            "start_with_counter: 5000\n  skipped range: [1, 1000]");
 }
 
 TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeStartWithCounter) {
@@ -2314,7 +2317,6 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ViewUsesNonExistSequence) {
                     testing::HasSubstr("Sequence not found: nonexist")));
   }
 }
-
 }  // namespace test
 }  // namespace backend
 }  // namespace emulator

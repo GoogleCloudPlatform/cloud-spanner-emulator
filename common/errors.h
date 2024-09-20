@@ -845,7 +845,6 @@ absl::Status DropNamedSchemaHasDependencies(
     const std::vector<std::string>& views,
     const std::vector<std::string>& indexes,
     const std::vector<std::string>& sequences);
-
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

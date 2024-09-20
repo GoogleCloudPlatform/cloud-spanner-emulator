@@ -42,6 +42,8 @@ namespace spangres {
 void AddPgNumericFunctions(std::vector<PostgresFunctionArguments>& functions);
 void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions);
 
+void AddFloatFunctions(std::vector<PostgresFunctionArguments>& functions);
+
 void AddPgComparisonFunctions(
     std::vector<PostgresFunctionArguments>& functions);
 

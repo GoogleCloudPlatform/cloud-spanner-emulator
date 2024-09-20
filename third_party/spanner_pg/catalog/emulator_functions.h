@@ -59,6 +59,7 @@ inline constexpr char kPGGreatestFunctionName[] = "pg.greatest";
 
 // Aggregate functions.
 inline constexpr char kPGMinFunctionName[] = "pg.min";
+inline constexpr char kPGMaxFunctionName[] = "pg.max";
 inline constexpr char kPGNumericMaxFunctionName[] = "pg.numeric_max";
 inline constexpr char kPGNumericMinFunctionName[] = "pg.numeric_min";
 inline constexpr char kPGSumFunctionName[] = "pg.sum";

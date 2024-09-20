@@ -85,7 +85,6 @@ Oid FuncNameAsType(List *funcname);
  * Return values *funcid through *true_typeids receive info about the function.
  * If argdefaults isn't NULL, *argdefaults receives a list of any default
  * argument expressions that need to be added to the given arguments.
- * NOTE: Spangres does not support default arguments.
  *
  * When processing a named- or mixed-notation call (ie, fargnames isn't NIL),
  * the returned true_typeids and argdefaults are ordered according to the
@@ -341,14 +340,83 @@ FuncDetailCode func_get_detail(List* funcname,
 		*retset = pform->proretset;
 		*vatype = pform->provariadic;
 
-		/*
-		 * Here we would fetch default args if caller wants them. But Spangres does
-		 * not support default args (bootstrap catalog does not have them).
-		 * TODO: Add support for default args.
-		 */
-		if (argdefaults && best_candidate->ndargs > 0) {
-			ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-											errmsg("Default arguments are not supported.")));
+		/* fetch default args if caller wants 'em */
+		if (argdefaults && best_candidate->ndargs > 0)
+		{
+
+			/* shouldn't happen, FuncnameGetCandidates messed up */
+			if (best_candidate->ndargs > pform->pronargdefaults)
+				elog(ERROR, "not enough default arguments");
+
+			int			pronallargs;
+			Oid		   *p_argtypes;
+			char	  **p_argnames;
+			char	   *p_argmodes;
+
+			/* SPANGRES BEGIN */
+			/* Default values are inserted by the planner. The analyzer only
+			 * needs the type OIDs for validating type consistency.
+			 * Construct a list of the default argument type OIDs instead. */
+			pronallargs = GetFunctionArgInfo(
+				best_candidate->oid, &p_argtypes, &p_argnames, &p_argmodes);
+			Assert(p_argmodes == NULL);
+			List *defaults = NIL;
+			for (int i = 0; i < pform->pronargdefaults; ++i) {
+				defaults = lappend_oid(
+					defaults, p_argtypes[pronallargs - pform->pronargdefaults + i]);
+			}
+			/* SPANGRES END */
+
+			/* Delete any unused defaults from the returned list */
+			if (best_candidate->argnumbers != NULL)
+			{
+				/*
+				 * This is a bit tricky in named notation, since the supplied
+				 * arguments could replace any subset of the defaults.  We
+				 * work by making a bitmapset of the argnumbers of defaulted
+				 * arguments, then scanning the defaults list and selecting
+				 * the needed items.  (This assumes that defaulted arguments
+				 * should be supplied in their positional order.)
+				 */
+				Bitmapset  *defargnumbers;
+				int		   *firstdefarg;
+				List	   *newdefaults;
+				ListCell   *lc;
+				int			i;
+
+				defargnumbers = NULL;
+				firstdefarg = &best_candidate->argnumbers[best_candidate->nargs - best_candidate->ndargs];
+				for (i = 0; i < best_candidate->ndargs; i++)
+					defargnumbers = bms_add_member(defargnumbers,
+												   firstdefarg[i]);
+				newdefaults = NIL;
+				i = best_candidate->nominalnargs - pform->pronargdefaults;
+				foreach(lc, defaults)
+				{
+					if (bms_is_member(i, defargnumbers))
+						/* SPANGRES BEGIN */
+						/* Defaults are type OIDs as the analyser doesn't use the value. */
+						newdefaults = lappend_oid(newdefaults, lfirst_oid(lc));
+					  /* SPANGRES END */
+					i++;
+				}
+				Assert(list_length(newdefaults) == best_candidate->ndargs);
+				bms_free(defargnumbers);
+				*argdefaults = newdefaults;
+			}
+			else
+			{
+				/*
+				 * Defaults for positional notation are lots easier; just
+				 * remove any unwanted ones from the front.
+				 */
+				int			ndelete;
+
+				ndelete = list_length(defaults) - best_candidate->ndargs;
+				if (ndelete > 0)
+					defaults = list_delete_first_n(defaults, ndelete);
+				*argdefaults = defaults;
+			}
 		}
 
 		FuncDetailCode result;
@@ -954,7 +1022,6 @@ Node* ParseFuncOrColumn(ParseState* pstate, List* funcname,
 	nargsplusdefs = nargs;
 	foreach(l, argdefaults)
 	{
-		Node	   *expr = (Node *) lfirst(l);
 
 		/* probably shouldn't happen ... */
 		if (nargsplusdefs >= FUNC_MAX_ARGS)
@@ -966,7 +1033,10 @@ Node* ParseFuncOrColumn(ParseState* pstate, List* funcname,
 								   FUNC_MAX_ARGS),
 					 parser_errposition(pstate, location)));
 
-		actual_arg_types[nargsplusdefs++] = exprType(expr);
+		/* SPANGRES BEGIN */
+		/* Defaults are type OIDs because the analyser doesn't use the values. */
+		actual_arg_types[nargsplusdefs++] = lfirst_oid(l);
+		/* SPANGRES END */
 	}
 
 	/*

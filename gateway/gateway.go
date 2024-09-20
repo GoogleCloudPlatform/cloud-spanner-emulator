@@ -47,6 +47,7 @@ type Options struct {
 	LogRequests                        bool
 	EnableFaultInjection               bool
 	DisableQueryNullFilteredIndexCheck bool
+	OverrideMaxDatabasesPerInstance    int
 }
 
 // Gateway implements the emulator gateway server.
@@ -74,6 +75,9 @@ func (gw *Gateway) Run() {
 	if gw.opts.DisableQueryNullFilteredIndexCheck {
 		emulatorArgs = append(emulatorArgs, "--disable_query_null_filtered_index_check")
 	}
+	emulatorArgs = append(emulatorArgs,
+		fmt.Sprintf("--override_max_databases_per_instance=%d",
+			gw.opts.OverrideMaxDatabasesPerInstance))
 
 	cmd := exec.Command(gw.opts.FrontendBinary, emulatorArgs...)
 

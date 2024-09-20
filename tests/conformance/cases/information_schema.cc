@@ -24,6 +24,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
@@ -92,6 +93,9 @@ class InformationSchemaTest
       "unsupported_columns",
       std::vector<std::string>({
           "IS_HIDDEN", "IS_STORED_VOLATILE",
+          "IS_IDENTITY", "IDENTITY_GENERATION", "IDENTITY_KIND",
+          "IDENTITY_START_WITH_COUNTER", "IDENTITY_SKIP_RANGE_MIN",
+          "IDENTITY_SKIP_RANGE_MAX",
       })};
 
   // Information schema constraints not yet supported.
@@ -143,6 +147,46 @@ class InformationSchemaTest
   }
 
   static void LogResults(const absl::StatusOr<std::vector<ValueRow>>& results) {
+    if (!results.ok()) {
+      return;
+    }
+    const std::vector<ValueRow>& rows = results.value();
+    for (const ValueRow& row : rows) {
+      std::string text = absl::StrCat(
+          "    {",
+          absl::StrJoin(
+              row.values(), ", ",
+              [](std::string* out, const Value& value) {
+                if (value.get<std::string>().ok()) {
+                  absl::StrAppend(out, "\"", value.get<std::string>().value(),
+                                  "\"");
+                } else if (value.get<std::vector<std::string>>().ok()) {
+                  absl::StrAppend(
+                      out, "[",
+                      absl::StrJoin(
+                          value.get<std::vector<std::string>>().value(), ", ",
+                          [](std::string* out, const std::string& e) {
+                            absl::StrAppend(out, "\"", e, "\"");
+                          }),
+                      "]");
+                } else if (value.get<std::optional<std::string>>().ok()) {
+                  absl::StrAppend(out, "Ns()");
+                } else if (value.get<std::int64_t>().ok()) {
+                  absl::StrAppend(out, value.get<std::int64_t>().value());
+                } else if (value.get<std::optional<std::int64_t>>().ok()) {
+                  absl::StrAppend(out, "Ni()");
+                } else if (value.get<bool>().ok()) {
+                  absl::StrAppend(out,
+                                  value.get<bool>().value() ? "true" : "false");
+                } else if (value.get<std::optional<Bytes>>().ok()) {
+                  absl::StrAppend(out, "Nb()");
+                } else {
+                  absl::StrAppend(out, "?");
+                }
+              }),
+          "},  // NOLINT");
+      ABSL_LOG(INFO) << "row: " << text;
+    }
   }
 
   inline std::string GetNameForDialect(absl::string_view name) {
@@ -379,6 +423,8 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
     )",
                                  {kUnsupportedTables, kUnsupportedColumns});
   LogResults(results);
+  // Note that the following list must be sorted in order by table and column
+  // names.
   // clang-format off
   auto expected = std::vector<ValueRow>({
     {"", "INFORMATION_SCHEMA", "CHANGE_STREAMS", "ALL", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns()},  // NOLINT

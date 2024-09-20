@@ -541,6 +541,8 @@ absl::Status SpangresSystemCatalog::AddFunctions(
   spangres::AddPgFormattingFunctions(functions);
   spangres::AddPgStringFunctions(functions);
 
+  spangres::AddFloatFunctions(functions);
+
   // Map some Postgres functions to custom Spanner functions to match Postgres'
   // order semantics (e.g. PG.MIN).
   RemapFunctionsForSpanner(functions);

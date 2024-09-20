@@ -26,12 +26,14 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "backend/database/database.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "common/constants.h"
 #include "common/limits.h"
+#include "frontend/collections/database_manager.h"
 #include "frontend/common/uris.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/common/test_env.h"
@@ -215,7 +217,20 @@ TEST_F(DatabaseApiTest, LimitDatabasePerInstance) {
     ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
                              absl::StrCat(test_database_name_, i)));
   }
-  // Creating
+  // Creating the next database fails.
+  EXPECT_THAT(CreateDatabase(test_instance_uri_, test_database_name_),
+              StatusIs(absl::StatusCode::kResourceExhausted));
+}
+
+TEST_F(DatabaseApiTest, OverrideMaxDatabasePerInstanceLimit) {
+  int custom_max_dbs_per_instance = 150;
+  absl::SetFlag(&FLAGS_override_max_databases_per_instance,
+                custom_max_dbs_per_instance);
+  for (int i = 0; i < custom_max_dbs_per_instance; ++i) {
+    ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
+                             absl::StrCat(test_database_name_, i)));
+  }
+  // Creating the next database fails.
   EXPECT_THAT(CreateDatabase(test_instance_uri_, test_database_name_),
               StatusIs(absl::StatusCode::kResourceExhausted));
 }

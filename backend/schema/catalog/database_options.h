@@ -26,6 +26,7 @@
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
+#include "google/protobuf/repeated_ptr_field.h"
 
 namespace google {
 namespace spanner {
@@ -38,7 +39,9 @@ class DatabaseOptions : public SchemaNode {
   // Returns the name of this database.
   std::string Name() const { return database_name_; }
 
-  const ddl::SetOption* options() const { return options_; }
+  ::google::protobuf::RepeatedPtrField<ddl::SetOption> options() const {
+    return options_;
+  }
 
   // SchemaNode interface implementation.
   // ------------------------------------
@@ -81,8 +84,7 @@ class DatabaseOptions : public SchemaNode {
 
   // Name of this database.
   std::string database_name_;
-  // TODO: Add functionality to update schema.
-  const ddl::SetOption* options_ = nullptr;
+  ::google::protobuf::RepeatedPtrField<ddl::SetOption> options_;
 };
 }  // namespace backend
 }  // namespace emulator

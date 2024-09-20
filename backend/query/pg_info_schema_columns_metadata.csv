@@ -99,6 +99,10 @@ columns,identity_increment,YES,character varying
 columns,identity_maximum,YES,character varying
 columns,identity_minimum,YES,character varying
 columns,identity_cycle,YES,character varying
+columns,identity_kind,YES,character varying
+columns,identity_start_with_counter,YES,character varying
+columns,identity_skip_range_min,YES,character varying
+columns,identity_skip_range_max,YES,character varying
 columns,is_generated,YES,character varying
 columns,generation_expression,YES,character varying
 columns,is_updatable,YES,character varying

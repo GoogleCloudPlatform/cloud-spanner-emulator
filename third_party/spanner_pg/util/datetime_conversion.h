@@ -53,6 +53,9 @@ const absl::Status kInvalidDate =
 const absl::Status kInvalidTimestamp =
     absl::InvalidArgumentError("Timestamp is out of supported range");
 
+const absl::Status kInvalidInterval =
+    absl::InvalidArgumentError("Interval is out of supported range");
+
 absl::Time PgTimestamptzToAbslTime(TimestampTz pg_timestamptz);
 TimestampTz AbslTimeToPgTimestamptz(const absl::Time gsql_timestamp);
 

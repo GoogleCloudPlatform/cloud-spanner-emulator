@@ -438,7 +438,7 @@ CREATE TABLE T (
   expr BOOL AS ((SELECT true) INTERSECT ALL (SELECT true)) STORED,
 ) PRIMARY KEY();
 --
-ERROR:.* Error parsing the definition of generated column `T`.`expr`: Cannot use non-scalar expressions inside stored generated columns.
+ERROR:.* Error parsing the definition of generated column `T`.`expr`:.* Cannot use non-scalar expressions inside stored generated columns.
 ==
 # Subquery
 # --regex
@@ -446,7 +446,7 @@ CREATE TABLE TableWithSelect1 (
   val INT64 AS (SELECT 1) STORED,
 ) PRIMARY KEY();
 --
-ERROR:.* Error parsing the definition of generated column `TableWithSelect1`.`val`: Cannot use non-scalar expressions inside stored generated columns.
+ERROR:.* Error parsing the definition of generated column `TableWithSelect1`.`val`:.* Cannot use non-scalar expressions inside stored generated columns.
 ==
 # Nested Subquery
 # --regex
@@ -454,7 +454,7 @@ CREATE TABLE TableWithNestedSubquery (
   val ARRAY<INT64> AS (ARRAY_REVERSE(ARRAY(SELECT 1))) STORED,
 ) PRIMARY KEY();
 --
-ERROR:.* Error parsing the definition of generated column `TableWithNestedSubquery`.`val`: Cannot use non-scalar expressions inside stored generated columns.
+ERROR:.* Error parsing the definition of generated column `TableWithNestedSubquery`.`val`:.* Cannot use non-scalar expressions inside stored generated columns.
 ==
 # Non-deterministic function.
 # --regex
@@ -463,7 +463,7 @@ CREATE TABLE T (
   expr TIMESTAMP AS (CURRENT_TIMESTAMP()) STORED,
 ) PRIMARY KEY(id);
 --
-ERROR:.* Error parsing the definition of generated column `T`.`expr`: Expression is non-deterministic due to the use of non-determinstic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
+ERROR:.* Error parsing the definition of generated column `T`.`expr`: Expression is non-deterministic due to the use of non-determini?stic function `CURRENT_TIMESTAMP`. Expression of stored generated columns must yield the same value for the same dependent column values. Non-deterministic functions inside the expressions are not allowed.
 ==
 # allow_commit_timestamp not allowed on dependencies of generated columns.
 # --regex

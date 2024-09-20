@@ -980,7 +980,10 @@ absl::Status ValidateParseTreeNode(const TypeName& node) {
   // `names` defines the type name. Might contain one (type name) or two
   // (catalog name and type name) elements.
   ZETASQL_RET_CHECK(!IsListEmpty(node.names));
-  ZETASQL_RET_CHECK_LE(list_length(node.names), 2);
+  if (list_length(node.names) > 2) {
+    return UnsupportedTranslationError(
+        "Type names with more than two parts are not supported.");
+  }
   for (const String* type_name_part : StructList<String*>(node.names)) {
     ZETASQL_RET_CHECK_EQ(type_name_part->type, T_String);
     ZETASQL_RET_CHECK_NE(type_name_part->sval, nullptr);

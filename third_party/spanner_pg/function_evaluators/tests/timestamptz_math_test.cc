@@ -29,13 +29,20 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
+#include <cstdint>
+#include <string>
+
+#include "zetasql/public/interval_value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "absl/flags/flag.h"
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "absl/time/time.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
 #include "third_party/spanner_pg/interface/datetime_evaluators.h"
 #include "third_party/spanner_pg/shims/timezone_helper.h"
-#include "zetasql/base/status_macros.h"
 
 namespace postgres_translator::function_evaluators {
 namespace {
@@ -76,7 +83,7 @@ class TimestamptzMathTest
   }
 };
 
-TEST_P(TimestamptzMathTest, TimestamptzAdd) {
+TEST_P(TimestamptzMathTest, TimestamptzAddIntervalString) {
   const TimestamptzMathTestCase& test_case = GetParam();
   ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
                        PgTimestamptzIn(test_case.timestamptz_input_str));
@@ -90,7 +97,7 @@ TEST_P(TimestamptzMathTest, TimestamptzAdd) {
   EXPECT_EQ(expected_timestamptz, computed_time);
 }
 
-TEST_P(TimestamptzMathTest, TimestamptzSubtract) {
+TEST_P(TimestamptzMathTest, TimestamptzSubtractIntervalString) {
   const TimestamptzMathTestCase& test_case = GetParam();
   ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
                        PgTimestamptzIn(test_case.timestamptz_input_str));
@@ -100,6 +107,7 @@ TEST_P(TimestamptzMathTest, TimestamptzSubtract) {
   double interval_value = -1 * test_case.interval_value;
   std::string interval =
       absl::StrCat(interval_value, " ", test_case.interval_type);
+
   ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
                        PgTimestamptzSubtract(timestamptz_input, interval));
 

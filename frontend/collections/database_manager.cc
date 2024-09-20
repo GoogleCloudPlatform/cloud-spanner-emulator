@@ -16,6 +16,7 @@
 
 #include "frontend/collections/database_manager.h"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <string>
@@ -23,6 +24,7 @@
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
+#include "absl/flags/flag.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -33,6 +35,13 @@
 #include "common/limits.h"
 #include "frontend/common/uris.h"
 #include "zetasql/base/status_macros.h"
+
+ABSL_FLAG(int, override_max_databases_per_instance, 100,
+          "overrides the allowed maximum number of databases per instance if "
+          "the value set is greater than the default limit of Spanner. Not "
+          "recommended for use unless there's a very specific need as "
+          "overriding this value makes the emulator deviate from limits "
+          "in production.");
 
 namespace google {
 namespace spanner {
@@ -87,9 +96,11 @@ absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::CreateDatabase(
     return error::DatabaseAlreadyExists(database_uri);
   }
 
+  int max_dbs_per_instance =
+      std::max(limits::kMaxDatabasesPerInstance,
+               absl::GetFlag(FLAGS_override_max_databases_per_instance));
   // Check that the user did not exceed their database quota.
-  if (num_databases_per_instance_[instance_uri] >=
-      limits::kMaxDatabasesPerInstance) {
+  if (num_databases_per_instance_[instance_uri] >= max_dbs_per_instance) {
     return error::TooManyDatabasesPerInstance(instance_uri);
   }
 

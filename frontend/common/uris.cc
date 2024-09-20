@@ -16,6 +16,7 @@
 
 #include "frontend/common/uris.h"
 
+#include <memory>
 #include <string>
 
 #include "absl/strings/str_cat.h"
@@ -163,7 +164,7 @@ absl::Status ParseSessionUri(absl::string_view resource_uri,
 }
 
 absl::Status ParseOperationUri(absl::string_view operation_uri,
-                               absl::string_view* resource_uri,
+                               std::shared_ptr<std::string> resource_uri,
                                absl::string_view* operation_id) {
   absl::string_view project_id, instance_id, database_id;
   if (!ConsumeProject(&operation_uri, &project_id)) {
@@ -176,10 +177,11 @@ absl::Status ParseOperationUri(absl::string_view operation_uri,
   // ConsumeDatabase to remove "databases/<database_id>" if exists. Proceed
   // regardless of the returned value.
   if (ConsumeDatabase(&operation_uri, &database_id)) {
-    *resource_uri = absl::string_view(
+    resource_uri = std::make_shared<std::string>(
         MakeDatabaseUri(MakeInstanceUri(project_id, instance_id), database_id));
   } else {
-    *resource_uri = absl::string_view(MakeInstanceUri(project_id, instance_id));
+    resource_uri =
+        std::make_shared<std::string>(MakeInstanceUri(project_id, instance_id));
   }
 
   if (!ConsumeOperation(&operation_uri, operation_id)) {
