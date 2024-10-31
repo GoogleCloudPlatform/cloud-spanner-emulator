@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "zetasql/public/function.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "absl/algorithm/container.h"
@@ -50,7 +51,7 @@
 #include "third_party/spanner_pg/catalog/function_identifier.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
-#include "third_party/spanner_pg/postgres_includes/all.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"  // IWYU pragma: keep
 
 namespace postgres_translator {
 namespace spangres {
@@ -421,6 +422,8 @@ static void AddPgJsonbNewFunctions(
       types::PgNumericArrayMapping()->mapped_type();
   const zetasql::Type* gsql_pg_jsonb_arr =
       types::PgJsonbArrayMapping()->mapped_type();
+  auto gsql_pg_oid = types::PgOidMapping()->mapped_type();
+  auto gsql_pg_oid_arr = types::PgOidArrayMapping()->mapped_type();
 
   functions.push_back(
       {"to_jsonb",
@@ -434,6 +437,7 @@ static void AddPgJsonbNewFunctions(
         {{gsql_pg_jsonb, {gsql_date}, /*context_ptr=*/nullptr}},
         {{gsql_pg_jsonb, {gsql_pg_jsonb}, /*context_ptr=*/nullptr}},
         {{gsql_pg_jsonb, {gsql_int64}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_pg_oid}, /*context_ptr=*/nullptr}},
         {{gsql_pg_jsonb, {gsql_int64_arr}, /*context_ptr=*/nullptr}},
         {{gsql_pg_jsonb, {gsql_string_arr}, /*context_ptr=*/nullptr}},
         {{gsql_pg_jsonb, {gsql_bool_arr}, /*context_ptr=*/nullptr}},
@@ -442,7 +446,8 @@ static void AddPgJsonbNewFunctions(
         {{gsql_pg_jsonb, {gsql_timestamp_arr}, /*context_ptr=*/nullptr}},
         {{gsql_pg_jsonb, {gsql_date_arr}, /*context_ptr=*/nullptr}},
         {{gsql_pg_jsonb, {gsql_pg_numeric_arr}, /*context_ptr=*/nullptr}},
-        {{gsql_pg_jsonb, {gsql_pg_jsonb_arr}, /*context_ptr=*/nullptr}}}});
+        {{gsql_pg_jsonb, {gsql_pg_jsonb_arr}, /*context_ptr=*/nullptr}},
+        {{gsql_pg_jsonb, {gsql_pg_oid_arr}, /*context_ptr=*/nullptr}}}});
 
   std::string emulator_jsonb_typeof_fn_name = "pg.jsonb_typeof";
   std::string emulator_jsonb_array_element_fn_name = "pg.jsonb_array_element";
@@ -495,6 +500,103 @@ static void AddPgJsonbNewFunctions(
 void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions) {
   AddPgJsonbSignaturesForExistingFunctions(functions);
   AddPgJsonbNewFunctions(functions);
+}
+
+static void AddPgOidSignaturesForExistingFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  auto gsql_pg_oid = types::PgOidMapping()->mapped_type();
+  auto gsql_pg_oid_arr = types::PgOidArrayMapping()->mapped_type();
+
+  std::vector<FunctionNameWithSignature>
+  functions_with_new_signatures = {
+    // Scalar functions.
+    {"array_cat",
+      {{{gsql_pg_oid_arr, {gsql_pg_oid_arr, gsql_pg_oid_arr},
+        /*context_ptr=*/nullptr}}}},
+    // Aggregate functions.
+    {"array_agg",
+      {{{gsql_pg_oid_arr, {gsql_pg_oid}, /*context_ptr=*/nullptr}}}},
+    {"count",
+      {{{gsql_int64, {gsql_pg_oid}, /*context_ptr=*/nullptr}}}},
+  };
+
+    functions_with_new_signatures.push_back(
+        {"min",
+         {{
+             {gsql_pg_oid, {gsql_pg_oid}, /*context_ptr=*/nullptr},
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"pg.min",
+         }}});
+    functions_with_new_signatures.push_back(
+        {"max",
+         {{
+             {gsql_pg_oid, {gsql_pg_oid}, /*context_ptr=*/nullptr},
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"pg.max",
+         }}});
+
+  AddNewSignaturesForExistingFunctions(
+      functions, functions_with_new_signatures);
+}
+
+static void AddPgOidSignaturesForNewFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_oid = types::PgOidMapping()->mapped_type();
+  std::string emulator_eq_fn_name = "pg.oideq";
+  std::string emulator_neq_fn_name = "pg.oidne";
+  std::string emulator_lt_fn_name = "pg.oidlt";
+  std::string emulator_le_fn_name = "pg.oidle";
+  std::string emulator_gt_fn_name = "pg.oidgt";
+  std::string emulator_ge_fn_name = "pg.oidge";
+
+  functions.push_back(
+    {"oideq",
+    "$equal",
+    {{{gsql_bool,
+        {gsql_oid, gsql_oid},
+        /*context_ptr=*/nullptr},
+      /*has_mapped_function=*/true,
+      /*explicit_mapped_function_name=*/emulator_eq_fn_name}}});
+  functions.push_back(
+    {"oidne",
+    "$not_equal",
+    {{{gsql_bool, {gsql_oid, gsql_oid},
+        /*context_ptr=*/nullptr},
+      /*has_mapped_function=*/true,
+      /*explicit_mapped_function_name=*/emulator_neq_fn_name}}});
+  functions.push_back(
+    {"oidlt",
+    "$less",
+    {{{gsql_bool, {gsql_oid, gsql_oid},
+        /*context_ptr=*/nullptr},
+      /*has_mapped_function=*/true,
+      /*explicit_mapped_function_name=*/emulator_lt_fn_name}}});
+  functions.push_back(
+    {"oidle",
+    "$less_or_equal",
+    {{{gsql_bool, {gsql_oid, gsql_oid},
+        /*context_ptr=*/nullptr},
+      /*has_mapped_function=*/true,
+      /*explicit_mapped_function_name=*/emulator_le_fn_name}}});
+  functions.push_back(
+    {"oidgt",
+    "$greater",
+    {{{gsql_bool, {gsql_oid, gsql_oid},
+        /*context_ptr=*/nullptr},
+      /*has_mapped_function=*/true,
+      /*explicit_mapped_function_name=*/emulator_gt_fn_name}}});
+  functions.push_back(
+    {"oidge",
+    "$greater_or_equal",
+    {{{gsql_bool, {gsql_oid, gsql_oid},
+        /*context_ptr=*/nullptr},
+      /*has_mapped_function=*/true,
+      /*explicit_mapped_function_name=*/emulator_ge_fn_name}}});
+}
+
+void AddPgOidFunctions(std::vector<PostgresFunctionArguments>& functions) {
+  AddPgOidSignaturesForExistingFunctions(functions);
+  AddPgOidSignaturesForNewFunctions(functions);
 }
 
 static void AddFloatSignaturesForExistingFunctions(
@@ -957,6 +1059,13 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
                        {{{gsql_int64,
                           {gsql_int64, gsql_bool},
                           /*context_ptr=*/nullptr}}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
+
+  functions.push_back({"farm_fingerprint",
+                       "farm_fingerprint",
+                       {{{gsql_int64, {gsql_bytes}, /*context_ptr=*/nullptr}},
+                        {{gsql_int64, {gsql_string}, /*context_ptr=*/nullptr}}},
                        /*mode=*/zetasql::Function::SCALAR,
                        /*postgres_namespace=*/"spanner"});
 

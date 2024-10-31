@@ -19,19 +19,22 @@
 #include <string>
 #include <vector>
 
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
-#include "absl/strings/substitute.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
+#include "backend/common/case.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/global_schema_names.h"
+#include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
 #include "zetasql/base/ret_check.h"
-#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -82,6 +85,12 @@ absl::Status IndexValidator::Validate(const Index* index,
   }
 
   ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName("Index", index->name_));
+  if (!index->is_managed() &&
+      !SDLObjectName::InSameSchema(index->name_,
+                                   index->indexed_table_->Name())) {
+    return error::IndexInDifferentSchema(index->name_,
+                                         index->indexed_table_->Name());
+  }
   if (absl::EqualsIgnoreCase(index->name_, "PRIMARY_KEY")) {
     return error::CannotNameIndexPrimaryKey();
   }
@@ -101,6 +110,10 @@ absl::Status IndexValidator::Validate(const Index* index,
     }
 
     const auto* column_type = key_column->column()->GetType();
+    if (index->is_search_index() && column_type->IsTokenListType()) {
+      keys_set.insert(column_name);
+      continue;
+    }
     if (!IsSupportedKeyColumnType(column_type)) {
       return error::IndexRefsUnsupportedColumn(index->name_,
                                                ToString(column_type));
@@ -135,6 +148,31 @@ absl::Status IndexValidator::Validate(const Index* index,
     if (table != index->parent()) {
       return error::IndexInterleaveTableUnacceptable(
           index->name_, index->indexed_table_->Name(), index->parent()->Name());
+    }
+  }
+
+  if (index->is_search_index()) {
+    // check partition by restrictions
+    for (const auto* column : index->partition_by_) {
+      const auto* column_type = column->GetType();
+      if (column_type->IsTokenListType()) {
+        return error::SearchIndexNotPartitionByokenListType(index->name_,
+                                                            column->Name());
+      }
+    }
+
+    // check order by restrictions
+    for (const auto* column : index->order_by_) {
+      if (column->is_nullable() && !index->is_null_filtered_column(column)) {
+        return error::SearchIndexSortMustBeNotNullError(column->Name(),
+                                                        index->name_);
+      }
+
+      const auto* column_type = column->GetType();
+      if (!column_type->IsInteger()) {
+        return error::SearchIndexOrderByMustBeIntegerType(
+            index->name_, column->Name(), ToString(column_type));
+      }
     }
   }
 

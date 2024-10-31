@@ -20,26 +20,21 @@
 #include <iterator>
 #include <string>
 
-#include "zetasql/public/type.h"
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
-#include "absl/strings/substitute.h"
 #include "backend/common/case.h"
-#include "backend/datamodel/types.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
-#include "common/errors.h"
-#include "common/limits.h"
-#include "zetasql/base/ret_check.h"
-#include "absl/status/status.h"
+#include "backend/schema/catalog/schema.h"
+#include "backend/schema/graph/schema_graph_editor.h"
+#include "backend/schema/graph/schema_node.h"
+#include "backend/schema/updater/schema_validation_context.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -64,6 +59,26 @@ const Index* Table::FindIndex(const std::string& index_name) const {
     return nullptr;
   }
   return *itr;
+}
+
+std::string Table::FindIndexQualifiedName(
+    const std::string& qualified_or_unqualified_name) const {
+  // Check for unqualified index_name when the table is a named schema
+  // table, unqualified index_name when the base table is not a named schema
+  // table, and qualified index_name when the base table is a named schema
+  // table.
+  if (const auto& [index_schema_part, index_name_part] =
+          SDLObjectName::SplitSchemaName(qualified_or_unqualified_name);
+      index_schema_part.empty()) {
+    std::string table_name = Name();
+    if (const auto& table_schema_part =
+            SDLObjectName::GetSchemaName(table_name);
+        !table_schema_part.empty()) {
+      return std::string(table_schema_part) + "." +
+             std::string(index_name_part);
+    }
+  }
+  return qualified_or_unqualified_name;
 }
 
 const ChangeStream* Table::FindChangeStream(

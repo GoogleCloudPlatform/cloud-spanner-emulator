@@ -24,7 +24,6 @@
 #include "tests/common/proto_matchers.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -97,6 +96,11 @@ TEST(GlobalSchemaNames, GenerateForeignKeyName) {
   // Empty tables names.
   EXPECT_THAT(names.GenerateForeignKeyName("", "Songs"), Not(IsOk()));
   EXPECT_THAT(names.GenerateForeignKeyName("Albums", ""), Not(IsOk()));
+
+  // Replace '.' in objects with named schemas.
+  status = names.GenerateForeignKeyName("Schema1.Albums", "Schema2.Songs");
+  ZETASQL_EXPECT_OK(status);
+  EXPECT_THAT(status.value(), Eq("FK_Albums_Songs_42ABDA0A1D54791A_2"));
 }
 
 TEST(GlobalSchemaNames, GenerateManagedIndexName) {
@@ -108,6 +112,12 @@ TEST(GlobalSchemaNames, GenerateManagedIndexName) {
   ZETASQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(),
               Eq("IDX_Songs_FirstName_LastName_09F682A0D8AF2F47"));
+
+  status =
+      names.GenerateManagedIndexName("Schema1.Albums", {"Songs", "Artists"},
+                                     /*null_filtered=*/false, /*unique=*/false);
+  ZETASQL_EXPECT_OK(status);
+  EXPECT_THAT(status.value(), Eq("IDX_Albums_Songs_Artists_5B940F253605F140"));
 }
 
 TEST(GlobalSchemaNames, GenerateManagedNullFilteredIndexName) {
@@ -168,6 +178,23 @@ TEST(GlobalSchemaNames, ValidateConstraintName) {
                                                         "CK_IS_NOT_NULL_C"),
               Eq(error::InvalidConstraintName("Foreign Key", "CK_IS_NOT_NULL_C",
                                               "CK_IS_NOT_NULL_")));
+}
+
+TEST(GlobalSchemaNames, ValidateNamedSchemaName) {
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateNamedSchemaName("Albums"));
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", "Albums.Songs"));
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("View", "Albums.Songs"));
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Sequence", "Albums.Seq"));
+  ZETASQL_EXPECT_OK(
+      GlobalSchemaNames::ValidateSchemaName("Index", "Albums.SongsIndex"));
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Udf", "Albums.SongsUdf"));
+  EXPECT_THAT(GlobalSchemaNames::ValidateSchemaName("Schema", "Albums.Artists"),
+              Eq(error::SchemaObjectTypeUnsupportedInNamedSchema(
+                  "Schema", "Albums.Artists")));
+  EXPECT_THAT(GlobalSchemaNames::ValidateNamedSchemaName("_Albums"),
+              Eq(error::InvalidSchemaName("Schema", "_Albums")));
+  EXPECT_THAT(GlobalSchemaNames::ValidateNamedSchemaName("pg_catalog"),
+              Eq(error::InvalidSchemaName("Schema", "pg_catalog")));
 }
 
 }  // namespace

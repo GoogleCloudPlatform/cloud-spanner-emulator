@@ -168,15 +168,17 @@ absl::StatusOr<zetasql::ResolvedColumn> ForwardTransformer::GetResolvedColumn(
 absl::StatusOr<zetasql::ResolvedColumn>
 ForwardTransformer::BuildNewGsqlResolvedColumn(
     absl::string_view table_name, absl::string_view column_name,
-    const zetasql::Type* column_type) {
+    const zetasql::Type* column_type,
+    const zetasql::AnnotationMap* annotation_map) {
   ZETASQL_ASSIGN_OR_RETURN(int column_id, catalog_adapter_->AllocateColumnId());
   return zetasql::ResolvedColumn(
       column_id,
       /*table_name=*/
       catalog_adapter_->analyzer_options().id_string_pool()->Make(table_name),
       /*name=*/
-      catalog_adapter_->analyzer_options().id_string_pool()->Make(column_name),
-      /*type=*/column_type);
+      catalog_adapter_->analyzer_options().id_string_pool()->Make(
+          column_name),
+      /*annotated_type=*/{column_type, annotation_map});
 }
 
 absl::StatusOr<const zetasql::Table*> ForwardTransformer::GetTableFromRTE(
@@ -215,8 +217,9 @@ ForwardTransformer::BuildGsqlResolvedTableScan(
     // Table columns are always new (we only build TableScan once per table).
     // So we always build new ResolvedColumns and new column IDs for them.
     ZETASQL_ASSIGN_OR_RETURN(zetasql::ResolvedColumn resolved_column,
-                     BuildNewGsqlResolvedColumn(table->Name(), column->Name(),
-                                                column->GetType()));
+                     BuildNewGsqlResolvedColumn(
+                         table->Name(), column->Name(),
+                         column->GetType(), column->GetTypeAnnotationMap()));
     column_list.push_back(resolved_column);
 
     // Add each column to the var_index_scope.
@@ -481,9 +484,10 @@ ForwardTransformer::ConvertZeroBasedOffsetToOneBasedOrdinal(
   // that adds one to the original ordinality column.
   ZETASQL_ASSIGN_OR_RETURN(
       zetasql::ResolvedColumn ordinality_column,
-      BuildNewGsqlResolvedColumn(array_scan->column_list().at(1).table_name(),
-                                 array_scan->column_list().at(1).name(),
-                                 function_call->type()));
+      BuildNewGsqlResolvedColumn(
+          array_scan->column_list().at(1).table_name(),
+          array_scan->column_list().at(1).name(),
+          function_call->type(), function_call->type_annotation_map()));
   std::unique_ptr<const zetasql::ResolvedComputedColumn>
       computed_ordinality_column = zetasql::MakeResolvedComputedColumn(
           ordinality_column, std::move(function_call));
@@ -523,13 +527,45 @@ absl::Status ForwardTransformer::PrepareTVFInputArguments(
   //   - We omit type coercion because PG has already done this for us.
   //   - Prepare the TVF-specific input argument structures required by
   //     TableValuedFunction::Resolve() (computes the TVF's output signature).
-  const int num_args = list_length(func_expr.args);
+
+  // The PG Analyzer has already matched the signature, so we won't do it again.
+  // Just extract the only signature and return it.
+  ZETASQL_RET_CHECK_EQ(tvf_catalog_entry->NumSignatures(), 1);
+  const int signature_index = 0;
+  const zetasql::FunctionSignature& signature =
+      *tvf_catalog_entry->GetSignature(signature_index);
+  const int signature_size = signature.arguments().size();
+
   ExprTransformerInfo expr_transformer_info =
       ExprTransformerInfo::ForScalarFunctions(external_scope, "FROM");
-  resolved_tvf_args->reserve(num_args);
+  // Variadic functions may have more arguments than the signature specifies.
+  const int total_args = signature_size > list_length(func_expr.args) ?
+      signature_size : list_length(func_expr.args);
+  resolved_tvf_args->reserve(total_args);
+  absl::flat_hash_map<int, std::unique_ptr<zetasql::ResolvedExpr>>
+  index_to_arg;
+  int arg_index = 0;
   for (Expr* arg : StructList<Expr*>(func_expr.args)) {
-    ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedExpr> expr,
-                     BuildGsqlResolvedExpr(*arg, &expr_transformer_info));
+    if (arg->type == T_NamedArgExpr) {
+      NamedArgExpr* named_arg_expr =
+          internal::PostgresCastNode(NamedArgExpr, arg);
+      ZETASQL_ASSIGN_OR_RETURN(
+          index_to_arg[named_arg_expr->argnumber],
+          BuildGsqlResolvedExpr(*named_arg_expr->arg, &expr_transformer_info));
+    } else {
+      ZETASQL_ASSIGN_OR_RETURN(index_to_arg[arg_index++],
+                       BuildGsqlResolvedExpr(*arg, &expr_transformer_info));
+    }
+  }
+  for (int i = 0; i < total_args; ++i) {
+    std::unique_ptr<zetasql::ResolvedExpr> expr;
+    if (!index_to_arg.contains(i)) {
+      auto& arg = tvf_catalog_entry->GetSignature(0)->argument(i);
+      expr = zetasql::MakeResolvedLiteral(arg.type(),
+                                            arg.GetDefault().value());
+    } else {
+      expr = std::move(index_to_arg[i]);
+    }
     resolved_tvf_args->push_back(zetasql::MakeResolvedTVFArgument(
         std::move(expr), /*scan=*/nullptr,
         /*model=*/nullptr, /*connection=*/nullptr,
@@ -540,8 +576,8 @@ absl::Status ForwardTransformer::PrepareTVFInputArguments(
   // Prepare the input argument list for calling TableValuedFunction::Resolve.
   // ZetaSQL supports a wide range of argument types, including full
   // relations. We only support scalar expressions.
-  tvf_input_arguments->reserve(num_args);
-  for (int i = 0; i < num_args; ++i) {
+  tvf_input_arguments->reserve(total_args);
+  for (int i = 0; i < total_args; ++i) {
     const std::unique_ptr<const zetasql::ResolvedFunctionArgument>&
         resolved_arg = (*resolved_tvf_args)[i];
     ZETASQL_RET_CHECK_NE(resolved_arg->expr(), nullptr);
@@ -557,12 +593,6 @@ absl::Status ForwardTransformer::PrepareTVFInputArguments(
     tvf_input_arguments->back().set_scalar_expr(resolved_arg->expr());
   }
 
-  // The PG Analyzer has already matched the signature, so we won't do it again.
-  // Just extract the only signature and return it.
-  ZETASQL_RET_CHECK_EQ(tvf_catalog_entry->NumSignatures(), 1);
-  const int signature_index = 0;
-  const zetasql::FunctionSignature& signature =
-      *tvf_catalog_entry->GetSignature(signature_index);
   // We're not going to resolve templated types here, just make sure there
   // aren't any.
   ZETASQL_RET_CHECK(signature.IsConcrete());
@@ -622,8 +652,10 @@ ForwardTransformer::BuildGsqlResolvedWithRefScan(absl::string_view with_alias,
 
     ZETASQL_ASSIGN_OR_RETURN(
         zetasql::ResolvedColumn new_column,
-        BuildNewGsqlResolvedColumn(with_alias, new_column_alias.ToStringView(),
-                                   named_subquery->column_list[i].type()));
+        BuildNewGsqlResolvedColumn(
+            with_alias, new_column_alias.ToStringView(),
+            named_subquery->column_list[i].type(),
+            named_subquery->column_list[i].type_annotation_map()));
     column_list.push_back(new_column);
     RecordColumnAccess(column_list.back());
 
@@ -1094,8 +1126,9 @@ ForwardTransformer::AddGsqlProjectScanForInSubqueries(
 
   ZETASQL_ASSIGN_OR_RETURN(
       zetasql::ResolvedColumn column,
-      BuildNewGsqlResolvedColumn(kAnonymousExprSubquery, subquery_column.name(),
-                                 comparison_expr->type()));
+      BuildNewGsqlResolvedColumn(
+          kAnonymousExprSubquery, subquery_column.name(),
+          comparison_expr->type(), comparison_expr->type_annotation_map()));
   std::unique_ptr<const zetasql::ResolvedComputedColumn> computed_column =
       zetasql::MakeResolvedComputedColumn(column, std::move(comparison_expr));
 
@@ -1261,7 +1294,8 @@ ForwardTransformer::BuildGsqlResolvedArrayScan(
       const zetasql::ResolvedColumn array_element_column,
       BuildNewGsqlResolvedColumn(
           rte.eref->aliasname, column_name_str,
-          resolved_array_expr_argument->type()->AsArray()->element_type()));
+          resolved_array_expr_argument->type()->AsArray()->element_type(),
+          resolved_array_expr_argument->type_annotation_map()));
   // We register one output Var under the assumption that UNNEST always produces
   // exactly one output column from this RTE. This is true as long as we are
   // unnesting only a single array (checked above) and not supporting WITH
@@ -1292,9 +1326,10 @@ ForwardTransformer::BuildGsqlResolvedArrayScan(
     std::string ordinality_column_name_str(strVal(ordinality_column_name));
 
     ZETASQL_ASSIGN_OR_RETURN(const zetasql::ResolvedColumn ordinality_column,
-                     BuildNewGsqlResolvedColumn(rte.eref->aliasname,
-                                                ordinality_column_name_str,
-                                                zetasql::types::Int64Type()));
+                     BuildNewGsqlResolvedColumn(
+                         rte.eref->aliasname, ordinality_column_name_str,
+                         zetasql::types::Int64Type(),
+                         /*annotation_map=*/nullptr));
     output_scope->MapVarIndexToColumn({.varno = rtindex, .varattno = 2},
                                       ordinality_column,
                                       /*allow_override=*/true);
@@ -1370,7 +1405,7 @@ ForwardTransformer::BuildGsqlResolvedTVFScan(
         BuildNewGsqlResolvedColumn(
             tvf_catalog_entry->FullName(),
             !column.name.empty() ? column.name : absl::StrCat("$col", i),
-            column.type));
+            column.type, column.annotation_map));
 
     // Add each column to the var_index_scope.
     // Fail if the entry already exists.
@@ -1906,8 +1941,8 @@ absl::Status ForwardTransformer::BuildGsqlGroupByList(
       // to point to the group_by_column.
       ZETASQL_ASSIGN_OR_RETURN(
           group_by_column,
-          BuildGsqlGroupByColumn(entry, resolved_expr->type(),
-                                 from_clause_scope, transformer_info));
+          BuildGsqlGroupByColumn(entry, resolved_expr.get(), from_clause_scope,
+                                 transformer_info));
     }
 
     if (IsA(entry->expr, Var)) {
@@ -1938,7 +1973,8 @@ ForwardTransformer::BuildGsqlGroupBySelectColumn(
   return BuildNewGsqlResolvedColumn(
       /*table_name=*/kGroupByPrefix,
       /*column_name=*/select_column_state->alias.ToStringView(),
-      select_column_state->resolved_expr->type());
+      select_column_state->resolved_expr->type(),
+      select_column_state->resolved_expr->type_annotation_map());
 }
 
 absl::Status ForwardTransformer::UpdateGroupBySelectColumnTransformState(
@@ -1955,7 +1991,7 @@ absl::Status ForwardTransformer::UpdateGroupBySelectColumnTransformState(
 
 absl::StatusOr<zetasql::ResolvedColumn>
 ForwardTransformer::BuildGsqlGroupByColumn(
-    const TargetEntry* entry, const zetasql::Type* resolved_expr_type,
+    const TargetEntry* entry, const zetasql::ResolvedExpr* resolved_expr,
     const VarIndexScope* from_clause_scope, TransformerInfo* transformer_info) {
   // ZetaSQL tries to look up a SELECT column here with the same expr as the
   // GROUP BY expr because ZetaSQL stores SELECT columns and GROUP BY
@@ -1989,7 +2025,8 @@ ForwardTransformer::BuildGsqlGroupByColumn(
   ZETASQL_ASSIGN_OR_RETURN(
       zetasql::ResolvedColumn group_by_column,
       BuildNewGsqlResolvedColumn(
-          /*table_name=*/kGroupByPrefix, column_name, resolved_expr_type));
+          /*table_name=*/kGroupByPrefix, column_name,
+           resolved_expr->type(), resolved_expr->type_annotation_map()));
 
   return group_by_column;
 }
@@ -2135,7 +2172,8 @@ absl::Status ForwardTransformer::FinalizeOrderByTransformState(
       ZETASQL_ASSIGN_OR_RETURN(item_info.order_column,
                        BuildNewGsqlResolvedColumn(
                            /*table_name=*/kOrderByPrefix, order_by_column_name,
-                           item_info.order_expression->type()));
+                           item_info.order_expression->type(),
+                           item_info.order_expression->type_annotation_map()));
       computed_columns->emplace_back(zetasql::MakeResolvedComputedColumn(
           item_info.order_column, std::move(item_info.order_expression)));
     }
@@ -2612,8 +2650,8 @@ ForwardTransformer::BuildGsqlResolvedComputedColumnForOrderByClause(
   ZETASQL_ASSIGN_OR_RETURN(
       zetasql::ResolvedColumn computed_column,
       BuildNewGsqlResolvedColumn(
-          /*table_name=*/kOrderByPrefix, order_by_column_name, expr->type()));
-
+          /*table_name=*/kOrderByPrefix, order_by_column_name,
+          expr->type(), expr->type_annotation_map()));
   return zetasql::MakeResolvedComputedColumn(computed_column,
                                                std::move(expr));
 }

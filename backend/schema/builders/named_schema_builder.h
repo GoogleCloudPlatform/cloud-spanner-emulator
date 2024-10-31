@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_NAMED_SCHEMA_BUILDER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_NAMED_SCHEMA_BUILDER_H_
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -29,6 +30,7 @@
 #include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
 #include "backend/schema/validators/named_schema_validator.h"
 
@@ -61,11 +63,19 @@ class NamedSchema::Builder {
 
   Builder& add_table(const Table* table) {
     instance_->tables_.push_back(table);
+    instance_->tables_map_[table->Name()] = table;
+    return *this;
+  }
+
+  Builder& add_synonym(const Table* synonym) {
+    instance_->synonyms_.push_back(synonym);
+    instance_->synonyms_map_[synonym->Name()] = synonym;
     return *this;
   }
 
   Builder& add_view(const View* view) {
     instance_->views_.push_back(view);
+    instance_->views_map_[view->Name()] = view;
     return *this;
   }
 
@@ -76,6 +86,13 @@ class NamedSchema::Builder {
 
   Builder& add_sequence(const Sequence* sequence) {
     instance_->sequences_.push_back(sequence);
+    instance_->sequences_map_[sequence->Name()] = sequence;
+    return *this;
+  }
+
+  Builder& add_udf(const Udf* udf) {
+    instance_->udfs_.push_back(udf);
+    instance_->udfs_map_[udf->Name()] = udf;
     return *this;
   }
 
@@ -98,11 +115,32 @@ class NamedSchema::Editor {
 
   Editor& add_table(const Table* table) {
     instance_->tables_.push_back(table);
+    instance_->tables_map_[table->Name()] = table;
+    return *this;
+  }
+
+  Editor& add_synonym(const Table* table) {
+    instance_->synonyms_.push_back(table);
+    instance_->synonyms_map_[table->synonym()] = table;
+    return *this;
+  }
+
+  Editor& drop_synonym(const Table* table) {
+    auto itr =
+        std::find_if(instance_->synonyms_.begin(), instance_->synonyms_.end(),
+                     [table](const auto& synonym_table) {
+                       return synonym_table->synonym() == table->synonym();
+                     });
+    if (itr != instance_->synonyms_.end()) {
+      instance_->synonyms_.erase(itr);
+    }
+    instance_->synonyms_map_.erase(table->synonym());
     return *this;
   }
 
   Editor& add_view(const View* view) {
     instance_->views_.push_back(view);
+    instance_->views_map_[view->Name()] = view;
     return *this;
   }
 
@@ -113,6 +151,13 @@ class NamedSchema::Editor {
 
   Editor& add_sequence(const Sequence* sequence) {
     instance_->sequences_.push_back(sequence);
+    instance_->sequences_map_[sequence->Name()] = sequence;
+    return *this;
+  }
+
+  Editor& add_udf(const Udf* udf) {
+    instance_->udfs_.push_back(udf);
+    instance_->udfs_map_[udf->Name()] = udf;
     return *this;
   }
 

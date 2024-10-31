@@ -250,6 +250,10 @@ absl::Status TypeToProto(const zetasql::Type* type,
       return absl::OkStatus();
     }
 
+    case zetasql::TYPE_TOKENLIST: {
+      return error::ProjectTokenlistNotAllowed();
+    }
+
     case zetasql::TYPE_ARRAY: {
       type_pb->set_code(google::spanner::v1::TypeCode::ARRAY);
       ZETASQL_RETURN_IF_ERROR(TypeToProto(type->AsArray()->element_type(),

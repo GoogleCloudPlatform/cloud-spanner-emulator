@@ -430,6 +430,7 @@ cc_test(
     args = [
         "--spangres_use_emulator_jsonb_type=true",
         "--spangres_use_emulator_numeric_type=true",
+        "--spangres_use_emulator_oid_type=true",
     ],
     deps = [
         ":change_streams",

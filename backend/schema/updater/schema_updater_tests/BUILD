@@ -72,6 +72,7 @@ cc_library(
         "oid_assignment.cc",
         "sequence.cc",
         "table.cc",
+        "udf.cc",
         "views.cc",
     ],
     deps = [
@@ -96,9 +97,12 @@ cc_library(
         "@com_google_absl//absl/types:span",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/public:json_value",
+        "@com_google_zetasql//zetasql/public:numeric_value",
         "@com_google_zetasql//zetasql/public:options_cc_proto",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:type_cc_proto",
+        "@com_google_zetasql//zetasql/public:value",
     ],
     alwayslink = 1,
 )

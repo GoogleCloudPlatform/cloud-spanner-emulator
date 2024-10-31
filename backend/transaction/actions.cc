@@ -48,8 +48,6 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "nlohmann/detail/value_t.hpp"
-#include "nlohmann/json_fwd.hpp"
 #include "nlohmann/json.hpp"
 #include "zetasql/base/status_macros.h"
 

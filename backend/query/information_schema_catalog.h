@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
@@ -82,6 +83,8 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   inline zetasql::Value DialectDefaultSchema();
   inline zetasql::Value DialectBoolValue(bool value);
   zetasql::Value DialectColumnOrdering(const KeyColumn* column);
+  inline std::pair<std::string, std::string>
+  GetSchemaAndNameForInformationSchema(std::string table_name);
 
   void FillSchemataTable();
   void FillSpannerStatisticsTable();

@@ -26,6 +26,7 @@
 #include "zetasql/public/types/type.h"
 #include "absl/strings/str_cat.h"
 #include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/schema.h"
 
 namespace google {
 namespace spanner {
@@ -58,8 +59,10 @@ class QueryableModel : public zetasql::Model {
  public:
   explicit QueryableModel(const backend::Model* model);
 
-  std::string Name() const override { return wrapped_model_->Name(); }
-  std::string FullName() const override { return Name(); }
+  std::string Name() const override {
+    return std::string(SDLObjectName::GetInSchemaName(wrapped_model_->Name()));
+  }
+  std::string FullName() const override { return wrapped_model_->Name(); }
   uint64_t NumInputs() const override { return wrapped_model_->input().size(); }
   const zetasql::Column* GetInput(int i) const override {
     return input_columns_[i].get();

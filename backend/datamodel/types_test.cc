@@ -77,7 +77,7 @@ TEST_F(TypesTest, SupportedColumnType) {
 
 TEST_F(TypesTest, SupportedKeyColumnType) {
   for (const zetasql::Type* type : supported_types()) {
-    if (type->IsJson()) {
+    if (type->IsJson() || type->IsTokenList()) {
       EXPECT_FALSE(IsSupportedKeyColumnType(type));
     } else {
       EXPECT_TRUE(IsSupportedKeyColumnType(type));

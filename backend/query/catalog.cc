@@ -29,6 +29,7 @@
 #include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -36,6 +37,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "backend/access/read.h"
@@ -43,8 +45,10 @@
 #include "backend/query/function_catalog.h"
 #include "backend/query/information_schema_catalog.h"
 #include "backend/query/queryable_model.h"
+#include "backend/query/queryable_named_schema.h"
 #include "backend/query/queryable_sequence.h"
 #include "backend/query/queryable_table.h"
+#include "backend/query/queryable_udf.h"
 #include "backend/query/queryable_view.h"
 #include "backend/query/spanner_sys_catalog.h"
 #include "backend/schema/catalog/schema.h"
@@ -53,6 +57,7 @@
 #include "third_party/spanner_pg/catalog/pg_catalog.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "google/protobuf/descriptor.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -159,27 +164,95 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
     : schema_(schema),
       function_catalog_(function_catalog),
       type_factory_(type_factory) {
-  // Pass the sequences to the catalog. This step has to be the first one,
-  // because sequences may be used by table columns and views.
+  for (const auto* named_schema : schema->named_schemas()) {
+    named_schemas_[named_schema->Name()] =
+        std::make_unique<QueryableNamedSchema>(named_schema);
+  }
+
+  for (const auto* udf : schema->udfs()) {
+    std::string udf_name = udf->Name();
+    if (SDLObjectName::IsFullyQualifiedName(udf_name)) {
+      const auto [schema_part, name_part] =
+          SDLObjectName::SplitSchemaName(udf_name);
+      absl::Status status = AddObjectToNamedSchema(
+          std::string(schema_part),
+          std::make_unique<QueryableUdf>(udf, this, type_factory));
+      LOG_IF(ERROR, !status.ok()) << status.message();
+    } else {
+      udfs_[udf->Name()] =
+          std::make_unique<QueryableUdf>(udf, this, type_factory);
+    }
+  }
+
+  // Pass the sequences to the catalog. This step has to be before the below
+  // schema objects, because sequences may be used by table columns and views.
   for (const backend::Sequence* sequence : schema->sequences()) {
-    sequences_[sequence->Name()] =
-        std::make_unique<QueryableSequence>(sequence);
+    std::string name = sequence->Name();
+    if (SDLObjectName::IsFullyQualifiedName(name)) {
+      absl::Status status = AddObjectToNamedSchema(
+          std::string(SDLObjectName::GetSchemaName(name)),
+          std::make_unique<QueryableSequence>(sequence));
+      LOG_IF(ERROR, !status.ok()) << status.message();
+    } else {
+      sequences_[sequence->Name()] =
+          std::make_unique<QueryableSequence>(sequence);
+    }
   }
 
   // Pass the reader to tables.
   for (const auto* table : schema->tables()) {
-    tables_[table->Name()] = std::make_unique<QueryableTable>(
-        table, reader, options, this, type_factory);
+    std::string name = table->Name();
+    if (SDLObjectName::IsFullyQualifiedName(name)) {
+      absl::Status status = AddObjectToNamedSchema(
+          std::string(SDLObjectName::GetSchemaName(name)),
+          std::make_unique<QueryableTable>(table, reader, options, this,
+                                           type_factory));
+      LOG_IF(ERROR, !status.ok()) << status.message();
+    } else {
+      tables_[table->Name()] = std::make_unique<QueryableTable>(
+          table, reader, options, this, type_factory);
+    }
+
+    std::string synonym_name = table->synonym();
+    if (!synonym_name.empty()) {
+      if (SDLObjectName::IsFullyQualifiedName(synonym_name)) {
+        absl::Status status = AddObjectToNamedSchema(
+            std::string(SDLObjectName::GetSchemaName(synonym_name)),
+            std::make_unique<QueryableTable>(table, reader, options, this,
+                                             type_factory,
+                                             /*is_synonym=*/true));
+        LOG_IF(ERROR, !status.ok()) << status.message();
+      } else {
+        tables_[synonym_name] = std::make_unique<QueryableTable>(
+            table, reader, options, this, type_factory, /*is_synonym=*/true);
+      }
+    }
   }
 
   for (const auto* model : schema->models()) {
-    models_[model->Name()] = std::make_unique<QueryableModel>(model);
+    std::string name = model->Name();
+    if (SDLObjectName::IsFullyQualifiedName(name)) {
+      absl::Status status = AddObjectToNamedSchema(
+          std::string(SDLObjectName::GetSchemaName(name)),
+          std::make_unique<QueryableModel>(model));
+      LOG_IF(ERROR, !status.ok()) << status.message();
+    } else {
+      models_[model->Name()] = std::make_unique<QueryableModel>(model);
+    }
   }
 
   // Pass the query_evaluator to views.
   for (const auto* view : schema->views()) {
-    views_[view->Name()] =
-        std::make_unique<QueryableView>(view, query_evaluator);
+    std::string name = view->Name();
+    if (SDLObjectName::IsFullyQualifiedName(name)) {
+      absl::Status status = AddObjectToNamedSchema(
+          std::string(SDLObjectName::GetSchemaName(name)),
+          std::make_unique<QueryableView>(view, query_evaluator));
+      LOG_IF(ERROR, !status.ok()) << status.message();
+    } else {
+      views_[view->Name()] =
+          std::make_unique<QueryableView>(view, query_evaluator);
+    }
   }
 
   if (change_stream_internal_lookup.has_value()) {
@@ -218,8 +291,8 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
 
 absl::Status Catalog::PopulateSystemProcedureMap() {
   // Context id is required if we have to hold and pass on some context for
-  // the implementation to map the signature back to an evaluator. Not required
-  // here.
+  // the implementation to map the signature back to an evaluator. Not
+  // required here.
   auto [_, inserted] = procedures_.emplace(
       "cancel_query",
       std::make_unique<zetasql::Procedure>(
@@ -250,6 +323,11 @@ absl::Status Catalog::GetCatalog(const std::string& name,
   } else if (absl::EqualsIgnoreCase(name,
                                     postgres_translator::PGCatalog::kName)) {
     *catalog = GetPGCatalog();
+  } else {
+    if (QueryableNamedSchema* named_schema = GetNamedSchema(name);
+        named_schema) {
+      *catalog = named_schema;
+    }
   }
   return absl::OkStatus();
 }
@@ -305,6 +383,12 @@ absl::Status Catalog::FindTableValuedFunction(
 absl::Status Catalog::GetFunction(const std::string& name,
                                   const zetasql::Function** function,
                                   const FindOptions& options) {
+  auto it = udfs_.find(name);
+  if (it != udfs_.end()) {
+    *function = it->second.get();
+    return absl::OkStatus();
+  }
+
   function_catalog_->GetFunction(name, function);
   return absl::OkStatus();
 }
@@ -336,6 +420,8 @@ absl::Status Catalog::GetCatalogs(
   output->insert(GetInformationSchemaCatalog());
   output->insert(GetSpannerSysCatalog());
   output->insert(GetNetFunctionsCatalog());
+  ZETASQL_RETURN_IF_ERROR(GetNamedSchemas(output));
+
   return absl::OkStatus();
 }
 
@@ -385,6 +471,10 @@ absl::Status Catalog::GetType(const std::string& name,
 
 absl::Status Catalog::GetFunctions(
     absl::flat_hash_set<const zetasql::Function*>* output) const {
+  for (const auto& [unused_name, function] : udfs_) {
+    output->insert(function.get());
+  }
+
   function_catalog_->GetFunctions(output);
   return absl::OkStatus();
 }
@@ -440,10 +530,40 @@ zetasql::Catalog* Catalog::GetPGFunctionsCatalog() const {
 
 zetasql::Catalog* Catalog::GetPGCatalog() const {
   absl::MutexLock lock(&mu_);
-  if (!pg_catalog_) {
-    pg_catalog_ = std::make_unique<postgres_translator::PGCatalog>(schema_);
+  if (schema_->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
+    if (!pg_catalog_) {
+      pg_catalog_ = std::make_unique<postgres_translator::PGCatalog>(schema_);
+    }
+    return pg_catalog_.get();
   }
-  return pg_catalog_.get();
+  return nullptr;
+}
+
+QueryableNamedSchema* Catalog::GetNamedSchema(const std::string& name) {
+  if (auto it = named_schemas_.find(name); it != named_schemas_.end()) {
+    return it->second.get();
+  }
+  return nullptr;
+}
+
+absl::Status Catalog::GetNamedSchemas(
+    absl::flat_hash_set<const zetasql::Catalog*>* output) const {
+  for (auto iter = named_schemas_.begin(); iter != named_schemas_.end();
+       ++iter) {
+    output->insert(iter->second.get());
+  }
+  return absl::OkStatus();
+}
+
+template <typename T>
+absl::Status Catalog::AddObjectToNamedSchema(
+    const std::string& named_schema_name, T object) {
+  QueryableNamedSchema* named_schema = GetNamedSchema(named_schema_name);
+  if (named_schema == nullptr) {
+    return error::NamedSchemaNotFound(named_schema_name);
+  }
+  named_schema->AddObject(std::move(object));
+  return absl::OkStatus();
 }
 
 }  // namespace backend

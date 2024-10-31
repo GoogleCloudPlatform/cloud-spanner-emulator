@@ -109,8 +109,7 @@ TEST_P(ViewsTest, Basic) {
     EXPECT_THAT(absl::StripAsciiWhitespace(*v->body_origin()),
                 StrEq("SELECT col1, col2 FROM t"));
     EXPECT_THAT(absl::StripAsciiWhitespace(v->body()),
-                StrEq("SELECT t_3.a_1 AS col1, t_3.a_2 AS col2 FROM (SELECT "
-                      "t.col1 AS a_1, t.col2 AS a_2 FROM t) AS t_3"));
+                StrEq("SELECT t.col1 AS col1, t.col2 AS col2 FROM t"));
   } else {
     EXPECT_THAT(absl::StripAsciiWhitespace(v->body()),
                 StrEq("SELECT T.col1, T.col2 FROM T"));

@@ -37,6 +37,7 @@
 #include "third_party/spanner_pg/shims/pg_locale_shim.h"
 
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 

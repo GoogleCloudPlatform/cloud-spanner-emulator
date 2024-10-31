@@ -89,6 +89,7 @@ bool IsDisabledAggregateFunction(const SqlFeaturesView& query_features,
           "string_agg",
           "variance",
           "var_samp",
+          "pg.max",
       };
   return !enabled_aggregate_functions->contains(name);
 }

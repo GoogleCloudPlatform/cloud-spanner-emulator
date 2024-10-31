@@ -54,6 +54,7 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/util/postgres.h"
+#include "re2/re2.h"
 
 namespace postgres_translator {
 namespace spangres {
@@ -78,14 +79,17 @@ class PostgresNumericMapping : public PostgresTypeMapping {
       return zetasql::Value::Null(
           postgres_translator::spangres::datatypes::GetPgNumericType());
     }
-    ZETASQL_ASSIGN_OR_RETURN(const Oid numeric_out_oid,
-                     PgBootstrapCatalog::Default()->GetProcOid(
-                         "pg_catalog", "numeric_out", {NUMERICOID}));
     ZETASQL_ASSIGN_OR_RETURN(Datum numeric, CheckedOidFunctionCall1(
-                                        numeric_out_oid, pg_const->constvalue));
+        F_NUMERIC_OUT, pg_const->constvalue));
     absl::string_view string_value = DatumGetCString(numeric);
     return postgres_translator::spangres::datatypes::CreatePgNumericValue(
         string_value);
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    return absl::UnimplementedError(
+        "Numeric default values are not supported");
   }
 
   absl::StatusOr<Const*> MakePgConst(
@@ -104,13 +108,9 @@ class PostgresNumericMapping : public PostgresTypeMapping {
     }
 
     ZETASQL_ASSIGN_OR_RETURN(
-        const Oid numeric_in_oid,
-        PgBootstrapCatalog::Default()->GetProcOid(
-            "pg_catalog", "numeric_in", {CSTRINGOID, OIDOID, INT4OID}));
-    ZETASQL_ASSIGN_OR_RETURN(
         Datum const_value,
         CheckedOidFunctionCall3(
-            numeric_in_oid, CStringGetDatum(readable_numeric.data()),
+            F_NUMERIC_IN, CStringGetDatum(readable_numeric.data()),
             ObjectIdGetDatum(InvalidOid), Int32GetDatum(-1)));
     return internal::makeScalarConst(NUMERICOID, const_value, val.is_null());
   }
@@ -131,14 +131,26 @@ class PostgresJsonbMapping : public PostgresTypeMapping {
       return zetasql::Value::Null(
           postgres_translator::spangres::datatypes::GetPgJsonbType());
     }
+    return MakeGsqlValueFromDatum(pg_const->constvalue);
+  }
 
-    ZETASQL_ASSIGN_OR_RETURN(const Oid jsonb_out_oid,
-                     PgBootstrapCatalog::Default()->GetProcOid(
-                         "pg_catalog", "jsonb_out", {JSONBOID}));
-    ZETASQL_ASSIGN_OR_RETURN(Datum jsonb, CheckedOidFunctionCall1(
-                                      jsonb_out_oid, pg_const->constvalue));
-    return postgres_translator::spangres::datatypes::CreatePgJsonbValue(
-        DatumGetCString(jsonb));
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    if (string_const == "null") {
+      return zetasql::Value::Null(
+          postgres_translator::spangres::datatypes::GetPgJsonbType());
+    }
+    if (RE2::FullMatch(string_const, R"(^'.*'$)")) {
+      // Strip the leading and trailing single quotes.
+      std::string stripped_string = (std::string) string_const.substr(
+          1, string_const.size() - 2);
+      ZETASQL_ASSIGN_OR_RETURN(
+          Datum const_value, CheckedOidFunctionCall1(
+              F_JSONB_IN, CStringGetDatum(stripped_string.c_str())));
+      return MakeGsqlValueFromDatum(const_value);
+    }
+    return absl::InvalidArgumentError(
+        absl::StrCat("Invalid jsonb string: ", string_const));
   }
 
   absl::StatusOr<Const*> MakePgConst(
@@ -152,11 +164,8 @@ class PostgresJsonbMapping : public PostgresTypeMapping {
       normalized_jsonb_str.reserve(normalized_jsonb.size());
       absl::CopyCordToString(normalized_jsonb, &normalized_jsonb_str);
       Datum conval = CStringGetDatum(normalized_jsonb_str.c_str());
-      ZETASQL_ASSIGN_OR_RETURN(const Oid jsonb_in_oid,
-                       PgBootstrapCatalog::Default()->GetProcOid(
-                           "pg_catalog", "jsonb_in", {CSTRINGOID}));
       ZETASQL_ASSIGN_OR_RETURN(const_value,
-                       CheckedOidFunctionCall1(jsonb_in_oid, conval));
+                       CheckedOidFunctionCall1(F_JSONB_IN, conval));
     }
 
     return CheckedPgMakeConst(
@@ -167,6 +176,13 @@ class PostgresJsonbMapping : public PostgresTypeMapping {
         /*constvalue=*/const_value,
         /*constisnull=*/val.is_null(),
         /*constbyval=*/false);
+  }
+
+ private:
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromDatum(Datum datum) const {
+    ZETASQL_ASSIGN_OR_RETURN(Datum jsonb, CheckedOidFunctionCall1(F_JSONB_OUT, datum));
+    return postgres_translator::spangres::datatypes::CreatePgJsonbValue(
+        DatumGetCString(jsonb));
   }
 };
 
@@ -191,6 +207,12 @@ class PostgresOidMapping : public PostgresTypeMapping {
         DatumGetObjectId(pg_const->constvalue));
   }
 
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    return absl::UnimplementedError(
+        "OID default values are not supported");
+  }
+
   absl::StatusOr<Const*> MakePgConst(
       const zetasql::Value& val) const override {
     Datum const_value = 0;
@@ -205,10 +227,7 @@ class PostgresOidMapping : public PostgresTypeMapping {
       }
       std::string oid_str = absl::StrCat(oid);
       Datum conval = CStringGetDatum(oid_str.c_str());
-      ZETASQL_ASSIGN_OR_RETURN(const Oid oidin_oid,
-                       PgBootstrapCatalog::Default()->GetProcOid(
-                           "pg_catalog", "oidin", {CSTRINGOID}));
-      ZETASQL_ASSIGN_OR_RETURN(const_value, CheckedOidFunctionCall1(oidin_oid, conval));
+      ZETASQL_ASSIGN_OR_RETURN(const_value, CheckedOidFunctionCall1(F_OIDIN, conval));
     }
 
     return CheckedPgMakeConst(

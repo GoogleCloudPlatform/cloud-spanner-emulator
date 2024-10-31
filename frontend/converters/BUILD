@@ -277,6 +277,7 @@ cc_library(
     srcs = ["values.cc"],
     hdrs = ["values.h"],
     deps = [
+        "//backend/query/search:tokenizer",
         "//common:constants",
         "//common:errors",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
@@ -320,6 +321,8 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 

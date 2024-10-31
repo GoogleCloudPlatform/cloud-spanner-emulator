@@ -16,6 +16,7 @@
 
 #include "backend/schema/catalog/schema.h"
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -24,6 +25,7 @@
 #include "zetasql/public/types/type.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
+#include "absl/strings/string_view.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
@@ -31,10 +33,11 @@
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/model.h"
-#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_graph.h"
@@ -66,6 +69,22 @@ const View* Schema::FindViewCaseSensitive(const std::string& view_name) const {
     return nullptr;
   }
   return view;
+}
+
+const Udf* Schema::FindUdf(const std::string& udf_name) const {
+  auto itr = udfs_map_.find(udf_name);
+  if (itr == udfs_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
+const Udf* Schema::FindUdfCaseSensitive(const std::string& udf_name) const {
+  auto udf = FindUdf(udf_name);
+  if (!udf || udf->Name() != udf_name) {
+    return nullptr;
+  }
+  return udf;
 }
 
 const Table* Schema::FindTable(const std::string& table_name) const {
@@ -122,6 +141,22 @@ const Index* Schema::FindIndexCaseSensitive(
   return index;
 }
 
+std::vector<const Index*> Schema::FindIndexesUnderName(
+    const std::string& index_name) const {
+  std::vector<const Index*> indexes;
+  auto index = FindIndex(index_name);
+  if (index != nullptr) {
+    indexes.push_back(index);
+  }
+  for (const auto& named_schema : named_schemas()) {
+    index = FindIndex(named_schema->Name() + "." + index_name);
+    if (index != nullptr) {
+      indexes.push_back(index);
+    }
+  }
+  return indexes;
+}
+
 const ChangeStream* Schema::FindChangeStream(
     const std::string& change_stream_name) const {
   auto itr = change_streams_map_.find(change_stream_name);
@@ -131,7 +166,8 @@ const ChangeStream* Schema::FindChangeStream(
   return itr->second;
 }
 
-const Sequence* Schema::FindSequence(const std::string& sequence_name) const {
+const Sequence* Schema::FindSequence(const std::string& sequence_name
+) const {
   auto itr = sequences_map_.find(sequence_name);
   if (itr == sequences_map_.end()) {
     return nullptr;
@@ -150,6 +186,7 @@ const Model* Schema::FindModel(const std::string& model_name) const {
 const NamedSchema* Schema::FindNamedSchema(
     const std::string& named_schema_name) const {
   auto itr = named_schemas_map_.find(named_schema_name);
+
   if (itr == named_schemas_map_.end()) {
     return nullptr;
   }
@@ -514,6 +551,20 @@ ddl::DDLStatementList Schema::Dump() const {
     }
   }
 
+  for (const Udf* udf : udfs_) {
+    ddl::CreateFunction* create_function =
+        ddl_statements.add_statement()->mutable_create_function();
+    create_function->set_function_kind(ddl::Function::FUNCTION);
+    create_function->set_function_name(udf->Name());
+    create_function->set_return_typename(
+        udf->signature()->result_type().argument_name());
+    create_function->set_sql_body(udf->body());
+    if (udf->body_origin().has_value()) {
+      create_function->mutable_sql_body_origin()->set_original_expression(
+          *udf->body_origin());
+    }
+  }
+
   for (const ChangeStream* change_stream : change_streams_) {
     DumpChangeStream(
         change_stream,
@@ -529,16 +580,10 @@ ddl::DDLStatementList Schema::Dump() const {
   return ddl_statements;
 }
 
-Schema::Schema(const SchemaGraph* graph
-               ,
-               std::shared_ptr<const ProtoBundle> proto_bundle
-               ,
+Schema::Schema(const SchemaGraph* graph,
+               std::shared_ptr<const ProtoBundle> proto_bundle,
                const database_api::DatabaseDialect& dialect)
-    : graph_(graph)
-      ,
-      proto_bundle_(proto_bundle)
-      ,
-      dialect_(dialect) {
+    : graph_(graph), proto_bundle_(proto_bundle), dialect_(dialect) {
   views_.clear();
   views_map_.clear();
   tables_.clear();
@@ -552,6 +597,8 @@ Schema::Schema(const SchemaGraph* graph
   sequences_map_.clear();
   named_schemas_.clear();
   named_schemas_map_.clear();
+  udfs_.clear();
+  udfs_map_.clear();
   synonyms_.clear();
   synonyms_map_.clear();
   for (const SchemaNode* node : graph_->GetSchemaNodes()) {
@@ -607,6 +654,13 @@ Schema::Schema(const SchemaGraph* graph
       continue;
     }
 
+    const Udf* udf = node->As<Udf>();
+    if (udf != nullptr) {
+      udfs_.push_back(udf);
+      udfs_map_[udf->Name()] = udf;
+      continue;
+    }
+
     const DatabaseOptions* database_options = node->As<DatabaseOptions>();
     if (database_options != nullptr) {
       database_options_ = database_options;
@@ -614,6 +668,16 @@ Schema::Schema(const SchemaGraph* graph
     }
     // Columns need not be stored in the schema, they are just owned by the
     // graph.
+  }
+}
+
+std::pair<absl::string_view, absl::string_view> SDLObjectName::SplitSchemaName(
+    absl::string_view name) {
+  size_t last_dot = name.find_last_of('.');
+  if (last_dot == absl::string_view::npos) {
+    return {absl::string_view(), name};
+  } else {
+    return {name.substr(0, last_dot), name.substr(last_dot + 1)};
   }
 }
 

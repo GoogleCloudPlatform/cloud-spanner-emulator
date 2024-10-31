@@ -18,14 +18,18 @@
 
 #include <memory>
 
+#include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
+#include "absl/strings/string_view.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
+#include "backend/schema/catalog/schema.h"
 #include "tests/common/schema_constructor.h"
 
 namespace google {

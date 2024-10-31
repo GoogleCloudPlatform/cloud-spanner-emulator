@@ -45,12 +45,15 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/function_identifier.h"
+#include "third_party/spanner_pg/catalog/type.h"
+#include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/transformer/expr_transformer_helper.h"
@@ -69,6 +72,34 @@ using ::postgres_translator::internal::PostgresConstCastToExpr;
 absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
 ForwardTransformer::BuildGsqlFunctionArgumentList(
     List* args, ExprTransformerInfo* expr_transformer_info) {
+  std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
+  argument_list.reserve(list_length(args));
+  for (Expr* arg : StructList<Expr*>(args)) {
+    std::unique_ptr<zetasql::ResolvedExpr> arg_expr;
+    if (arg->type == T_TargetEntry) {
+      // This is an aggregate function argument. Build the argument from
+      // the inner expression.
+      TargetEntry* target_entry_arg =
+          internal::PostgresCastNode(TargetEntry, arg);
+      ZETASQL_ASSIGN_OR_RETURN(arg_expr,
+                       BuildGsqlResolvedExpr(*target_entry_arg->expr,
+                                             expr_transformer_info));
+    } else if (arg->type == T_NamedArgExpr) {
+      return absl::InvalidArgumentError(
+          "NamedArgExpr is not supported in this context");
+    } else {
+      ZETASQL_ASSIGN_OR_RETURN(arg_expr,
+                       BuildGsqlResolvedExpr(*arg, expr_transformer_info));
+    }
+    argument_list.push_back(std::move(arg_expr));
+  }
+  return argument_list;
+}
+
+absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
+ForwardTransformer::BuildGsqlFunctionArgumentList(
+    const PgProcData& proc_data, List* args,
+    ExprTransformerInfo* expr_transformer_info) {
   std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
 
   // Named arguments can be out of order but the NamedArgExpr will have the
@@ -97,12 +128,67 @@ ForwardTransformer::BuildGsqlFunctionArgumentList(
                        BuildGsqlResolvedExpr(*arg, expr_transformer_info));
     }
   }
-  argument_list.reserve(list_length(args));
-  for (int i = 0; i < list_length(args); ++i) {
-    ZETASQL_RET_CHECK(arg_index_to_expr.contains(i));
+
+  std::vector<std::string> arg_defaults;
+  if (proc_data.has_proargdefaults()) {
+    arg_defaults = absl::StrSplit(proc_data.proargdefaults(), ", ");
+  }
+
+  // Builds the argument list. Default values will be inserted if the number of
+  // arguments is less than the number of arguments in the function signature.
+  int total_arguments = proc_data.pronargs() > list_length(args) ?
+      proc_data.pronargs() : list_length(args);
+  argument_list.reserve(total_arguments);
+  for (int i = 0; i < total_arguments; ++i) {
+    if (!arg_index_to_expr.contains(i)) {
+      if (!proc_data.has_proargdefaults()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("Function argument ", i, " is missing"));
+      }
+      const int8_t default_index =
+          i - (proc_data.pronargs() - proc_data.pronargdefaults());
+      ZETASQL_RET_CHECK_GE(default_index, 0);
+      ZETASQL_RET_CHECK_LT(default_index, arg_defaults.size());
+      const std::string& default_value = arg_defaults[default_index];
+      const Oid arg_type = proc_data.proargtypes(i);
+      ZETASQL_ASSIGN_OR_RETURN(arg_index_to_expr[i],
+                       BuildGsqlResolvedLiteralForDefaultArgument(
+                           arg_type, default_value));
+    }
     argument_list.push_back(std::move(arg_index_to_expr[i]));
   }
   return argument_list;
+}
+
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedLiteral>>
+ForwardTransformer::BuildGsqlResolvedLiteralForDefaultArgument(
+    Oid arg_type, const std::string& default_value) {
+  const PostgresTypeMapping* type_mapping =
+      catalog_adapter_->GetEngineSystemCatalog()->GetType(arg_type);
+  if (type_mapping == nullptr) {
+    return absl::InvalidArgumentError(
+        absl::StrCat(
+            "Function argument type with OID ", arg_type, " is not supported"));
+  }
+
+  // The default value is expected to be in the format of "literal::type".
+  std::vector<std::string> default_value_parts =
+      absl::StrSplit(default_value, "::");
+  ZETASQL_RET_CHECK_EQ(default_value_parts.size(), 2);
+  const std::string& default_literal = default_value_parts.front();
+  const std::string& expected_type_name = default_value_parts.back();
+
+  ZETASQL_ASSIGN_OR_RETURN(auto type_name,
+                   type_mapping->PostgresExternalTypeName());
+  if (type_name != expected_type_name) {
+    return absl::InvalidArgumentError(
+        absl::StrCat(
+            "Function argument type ", type_name, " does not match default ",
+            "value type of ", expected_type_name));
+  }
+  ZETASQL_ASSIGN_OR_RETURN(zetasql::Value gsql_value,
+                   type_mapping->MakeGsqlValueFromStringConst(default_literal));
+  return zetasql::MakeResolvedLiteral(gsql_value);
 }
 
 std::vector<zetasql::InputArgumentType>
@@ -148,10 +234,7 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
       catalog_adapter_->GetEngineSystemCatalog()->GetCustomErrorForProc(
           funcid));
 
-  // Transform the input arguments.
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list,
-      BuildGsqlFunctionArgumentList(args, expr_transformer_info));
+  std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
 
   // Lookup if the input funcid is a comparison (=, <=, <, etc). If so, handle
   // by transforming the input argument with GetResolvedExpForComparison.
@@ -160,13 +243,22 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
           ->GetMappedOidForComparisonFuncid(funcid);
   if (mapped_funcid.has_value()) {
     funcid = mapped_funcid.value();
+    ZETASQL_ASSIGN_OR_RETURN(
+        argument_list,
+        BuildGsqlFunctionArgumentList(args, expr_transformer_info));
     for (std::unique_ptr<zetasql::ResolvedExpr>& arg : argument_list) {
       ZETASQL_ASSIGN_OR_RETURN(
           arg, catalog_adapter_->GetEngineSystemCatalog()
-                   ->GetResolvedExprForComparison(
-                       std::move(arg),
-                       catalog_adapter_->analyzer_options().language()));
+                  ->GetResolvedExprForComparison(
+                      std::move(arg),
+                      catalog_adapter_->analyzer_options().language()));
     }
+  } else {
+    // Build argument list with named and default argument support.
+    ZETASQL_ASSIGN_OR_RETURN(auto proc_proto,
+                    PgBootstrapCatalog::Default()->GetProcProto(funcid));
+    ZETASQL_ASSIGN_OR_RETURN(argument_list, BuildGsqlFunctionArgumentList(
+          *proc_proto, args, expr_transformer_info));
   }
 
   // Look up the function and signature.
@@ -685,7 +777,7 @@ ForwardTransformer::BuildGsqlResolvedScalarArrayFunctionCall(
                      comparator_type, " operator."));
   }
   if (useOr == false && comparator_type != "<>") {
-      return BuildGsqlAllFunctionCall(scalar_array, expr_transformer_info);
+    return BuildGsqlAllFunctionCall(scalar_array, expr_transformer_info);
   }
 
   // IN functions always have a useOr value of true, while NOT IN always has a

@@ -1670,6 +1670,28 @@ TEST_P(SchemaUpdaterTest,
     )sql"}),
       StatusIs(error::VectorLengthOnGeneratedOrDefaultColumn("T.Arr2")));
 }
+
+TEST_P(SchemaUpdaterTest, CreateTable_Tokenlist_Column_Not_Hidden) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({R"sql(
+        CREATE TABLE T(
+          col1 INT64,
+          col_token TOKENLIST AS (TOKEN(col1)) STORED,
+        ) PRIMARY KEY(col1))sql"}),
+              StatusIs(error::NonHiddenTokenlistColumn("T", "col_token")));
+}
+
+TEST_P(SchemaUpdaterTest, AlterTable_Add_Non_Hidden_Tokenlist_Column) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+        CREATE TABLE T(
+          col1 INT64
+        ) PRIMARY KEY(col1))sql"}));
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
+        ALTER TABLE T ADD COLUMN col_token TOKENLIST AS (TOKEN(col1)) STORED
+      )sql"}),
+              StatusIs(error::NonHiddenTokenlistColumn("T", "col_token")));
+}
 }  // namespace
 
 }  // namespace test

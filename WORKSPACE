@@ -165,8 +165,8 @@ go_repository(
     sum = "h1:bkypFPDjIYGfCYD5mRBvpqxfYX1YCS1PXdKYWi8FsN0=",
     version = "v2.20.0",
     repo_mapping = {
-      "@go_googleapis": "@com_google_googleapis",
-      "@googleapis": "@com_google_googleapis",
+        "@go_googleapis": "@com_google_googleapis",
+        "@googleapis": "@com_google_googleapis",
     },
 )
 
@@ -322,9 +322,9 @@ http_archive(
     patches = ["//build/bazel:zetasql.patch"],
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
-    sha256 = "c9519f5b71f6e23b6eb4939456fe56ba1831afc2cd6a863b21d0563db0655dda",
-    strip_prefix = "zetasql-b7b67f55f8792dc418959f3b60de2d1d00b33c7a",
-    url = "https://github.com/google/zetasql/archive/b7b67f55f8792dc418959f3b60de2d1d00b33c7a.tar.gz",
+    sha256 = "8457b6795d7143e4d63324b827a07fbb0651362fcb263babea5c0db15c47861b",
+    strip_prefix = "zetasql-f6df6971a205790966e73eda0134f05a022d0e6a",
+    url = "https://github.com/google/zetasql/archive/f6df6971a205790966e73eda0134f05a022d0e6a.tar.gz",
 )
 
 http_archive(

@@ -149,6 +149,10 @@ TEST_F(SpangresTypeTest, PgNumericMapping) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_numeric_type->MakePgConst(val));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
+
+  EXPECT_THAT(
+      pg_numeric_type->MakeGsqlValueFromStringConst(numeric_value),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 TEST_F(SpangresTypeTest, PgNumericArrayMapping) {
@@ -197,6 +201,26 @@ TEST_F(SpangresTypeTest, PgJsonbMapping) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_jsonb_type->MakePgConst(val));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
+
+  absl::StatusOr<zetasql::Value> gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      gsql_value,
+      pg_jsonb_type->MakeGsqlValueFromStringConst(
+          absl::StrCat("'", json_val, "'")));
+    EXPECT_EQ(gsql_value, spangres_datatypes::CreatePgJsonbValue(json_val));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      gsql_value,
+      pg_jsonb_type->MakeGsqlValueFromStringConst("'{}'"));
+    EXPECT_EQ(gsql_value, spangres_datatypes::CreatePgJsonbValue("{}"));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      gsql_value,
+      pg_jsonb_type->MakeGsqlValueFromStringConst("null"));
+  EXPECT_TRUE(gsql_value->is_null());
+
+  EXPECT_THAT(pg_jsonb_type->MakeGsqlValueFromStringConst("invalid"),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(SpangresTypeTest, PgJsonbArrayMapping) {
@@ -243,6 +267,10 @@ TEST_F(SpangresTypeTest, PgOidMapping) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_oid_type->MakePgConst(val));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
+
+  EXPECT_THAT(
+      pg_oid_type->MakeGsqlValueFromStringConst(oid_string),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 TEST_F(SpangresTypeTest, PgOidArrayMapping) {

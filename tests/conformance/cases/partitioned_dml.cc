@@ -14,8 +14,13 @@
 // limitations under the License.
 //
 
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "common/feature_flags.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -106,41 +111,6 @@ class PartitionedDmlTest : public DatabaseTest {
  private:
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
-
-TEST_F(PartitionedDmlTest, CannotReusePartitionedDmlTransactionAfterError) {
-  PopulateDatabase();
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::string transaction_id,
-                       CreatePartitionedDmlTransaction());
-  EXPECT_THAT(
-      ExecutePartitionedDmlInTransaction(
-          transaction_id, 1,
-          SqlStatement("UPDATE InvalidTable SET Name = NULL WHERE ID > 1")),
-      StatusIs(absl::StatusCode::kInvalidArgument));
-
-  EXPECT_THAT(ExecutePartitionedDmlInTransaction(
-                  transaction_id, 2,
-                  SqlStatement("UPDATE Users SET Name = NULL WHERE ID > 1")),
-              StatusIs(absl::StatusCode::kInvalidArgument));
-}
-
-TEST_F(PartitionedDmlTest, CannotReusePartitionedDmlTransactionAfterSuccess) {
-  PopulateDatabase();
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::string transaction_id,
-                       CreatePartitionedDmlTransaction());
-  ZETASQL_ASSERT_OK(ExecutePartitionedDmlInTransaction(
-      transaction_id, 1,
-      SqlStatement("UPDATE Users SET Name = NULL WHERE ID > 1")));
-  EXPECT_THAT(Query("SELECT ID, Name, Age FROM Users WHERE Name IS NOT NULL"),
-              IsOkAndHoldsRows({{1, "Levin", 27}}));
-
-  EXPECT_THAT(
-      ExecutePartitionedDmlInTransaction(
-          transaction_id, 2,
-          SqlStatement("UPDATE Users SET Name = 'UpdatedName' WHERE ID > 1")),
-      StatusIs(absl::StatusCode::kInvalidArgument));
-}
 
 TEST_F(PartitionedDmlTest, UpdateRowsSucceed) {
   PopulateDatabase();

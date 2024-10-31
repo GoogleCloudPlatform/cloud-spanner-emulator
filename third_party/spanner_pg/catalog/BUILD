@@ -53,6 +53,8 @@ cc_library(
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:distributions",
         "@com_google_absl//absl/status",
@@ -62,6 +64,7 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
         "@com_google_zetasql//zetasql/analyzer:function_signature_matcher",
+        "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:coercer",
         "@com_google_zetasql//zetasql/public:function",
@@ -120,6 +123,7 @@ cc_test(
         ":type",
         "//third_party/spanner_pg/bootstrap_catalog",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
+        "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
         "//third_party/spanner_pg/interface:emulator_builtin_function_catalog",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "//third_party/spanner_pg/test_catalog",
@@ -222,6 +226,7 @@ cc_library(
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
         "@com_google_zetasql//zetasql/public/functions:date_time_util",
+        "@com_googlesource_code_re2//:re2",
     ],
 )
 
@@ -248,6 +253,7 @@ cc_library(
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
+        "@com_googlesource_code_re2//:re2",
     ],
 )
 
@@ -702,6 +708,7 @@ cc_library(
         "//backend/query:info_schema_columns_metadata_values",
         "//backend/query:tables_from_metadata",
         "//backend/schema/catalog:schema",
+        "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/strings",

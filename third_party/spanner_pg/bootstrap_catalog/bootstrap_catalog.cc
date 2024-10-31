@@ -41,11 +41,11 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog_info.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog_textproto.h"
-#include "third_party/spanner_pg/bootstrap_catalog/proc_changelist.h"
 #include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
@@ -544,26 +544,34 @@ PgBootstrapCatalog::GetAmprocsByFamily(Oid opfamily, Oid lefttype) const {
 
 void PgBootstrapCatalog::UpdateProc(
     const FormData_pg_proc_WithArgTypes& original_proc,
-    const std::vector<Oid>& updated_arg_types, Oid updated_return_type) {
-  if (updated_arg_types.size() != original_proc.data.proargtypes.vl_len_) {
-    ABSL_LOG(ERROR) << "Updated proc for " << NameStr(original_proc.data.proname)
-               << " has a different number of input arguments than the "
-                  "original proc.";
-  }
-
+    const PgProcSignature* updated_signature,
+    uint16_t updated_default_arg_count) {
   // Create a non-const copy of the proc.
   size_t data_size = sizeof(FormData_pg_proc_WithArgTypes);
   std::unique_ptr<FormData_pg_proc_WithArgTypes> new_proc =
       std::make_unique<FormData_pg_proc_WithArgTypes>();
   memcpy(new_proc.get(), &original_proc, data_size);
 
-  // Update the arg types.
-  for (int i = 0; i < new_proc->data.proargtypes.vl_len_; ++i) {
-    new_proc->data.proargtypes.values[i] = updated_arg_types[i];
+  // Update the signature as needed.
+  if (updated_signature != nullptr) {
+    if (updated_signature->arg_types.size() !=
+        original_proc.data.proargtypes.vl_len_) {
+      ABSL_LOG(ERROR) << "Updated proc for " << NameStr(original_proc.data.proname)
+                << " has a different number of input arguments than the "
+                    "original proc.";
+    }
+
+    // Update the arg types.
+    for (int i = 0; i < new_proc->data.proargtypes.vl_len_; ++i) {
+      new_proc->data.proargtypes.values[i] = updated_signature->arg_types[i];
+    }
+
+    // Update the return type.
+    new_proc->data.prorettype = updated_signature->return_type;
   }
 
-  // Update the return type.
-  new_proc->data.prorettype = updated_return_type;
+  // Update the default arg count.
+  new_proc->data.pronargdefaults = updated_default_arg_count;
 
   // Store the updated proc.
   updated_proc_by_oid_.insert({original_proc.data.oid, std::move(new_proc)});
@@ -628,25 +636,29 @@ const FormData_pg_proc_WithArgTypes* PgBootstrapCatalog::GetFinalProcFormData(
 
   const PgProcSignature* updated_signature =
       GetUpdatedProcSignature(original_proc.data);
-  ABSL_CHECK(updated_signature != nullptr);  // Should never happen.
-  UpdateProc(original_proc, updated_signature->arg_types,
-             updated_signature->return_type);
+  uint16_t updated_default_arg_count =
+      GetProcDefaultArgumentCount(original_proc.data);
+  UpdateProc(original_proc, updated_signature, updated_default_arg_count);
   return updated_proc_by_oid_.find(original_proc.data.oid)->second.get();
 }
 
 std::unique_ptr<PgProcData> PgBootstrapCatalog::GetFinalProcProto(
     PgProcData& proto) {
-    if (!updated_proc_by_oid_.contains(proto.oid())) {
-        return std::make_unique<PgProcData>(proto);
-    }
     const PgProcSignature* signature =
         GetUpdatedProcSignature(proto);
-    ABSL_CHECK(signature != nullptr);  // Should never happen.
-    proto.clear_prorettype();
-    proto.set_prorettype(signature->return_type);
-    proto.clear_proargtypes();
-    for (Oid arg_type : signature->arg_types) {
-        proto.add_proargtypes(arg_type);
+    if (signature != nullptr) {
+      proto.clear_prorettype();
+      proto.set_prorettype(signature->return_type);
+      proto.clear_proargtypes();
+      for (Oid arg_type : signature->arg_types) {
+          proto.add_proargtypes(arg_type);
+      }
+    }
+    const std::vector<std::string>* default_args =
+        GetProcDefaultArguments(proto);
+    if (default_args != nullptr) {
+      proto.set_proargdefaults(absl::StrJoin(*default_args, ", "));
+      proto.set_pronargdefaults(default_args->size());
     }
     return std::make_unique<PgProcData>(proto);
 }

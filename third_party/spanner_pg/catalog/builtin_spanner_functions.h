@@ -32,6 +32,8 @@
 #ifndef CATALOG_BUILTIN_SPANNER_FUNCTIONS_H_
 #define CATALOG_BUILTIN_SPANNER_FUNCTIONS_H_
 
+#include <vector>
+
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 
 namespace postgres_translator {
@@ -41,7 +43,7 @@ namespace spangres {
 // functions are also augmented with appropriate signatures for pg.numeric.
 void AddPgNumericFunctions(std::vector<PostgresFunctionArguments>& functions);
 void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions);
-
+void AddPgOidFunctions(std::vector<PostgresFunctionArguments>& functions);
 void AddFloatFunctions(std::vector<PostgresFunctionArguments>& functions);
 
 void AddPgComparisonFunctions(

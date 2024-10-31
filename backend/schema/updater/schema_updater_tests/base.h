@@ -163,21 +163,16 @@ class SchemaUpdaterTest
  public:
   SchemaUpdaterTest()
       : feature_flags_({
-        }) {}
+                        .enable_user_defined_functions = true}) {}
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
-      absl::Span<const std::string> statements
-      ,
-      absl::string_view proto_descriptor_bytes = ""
-      ,
+      absl::Span<const std::string> statements,
+      absl::string_view proto_descriptor_bytes = "",
       const database_api::DatabaseDialect& dialect = GetParam(),
       bool use_gsql_to_pg_translation = true);
 
   absl::StatusOr<std::unique_ptr<const Schema>> UpdateSchema(
-      const Schema* base_schema,
-      absl::Span<const std::string> statements
-      ,
-      absl::string_view proto_descriptor_bytes = ""
-      ,
+      const Schema* base_schema, absl::Span<const std::string> statements,
+      absl::string_view proto_descriptor_bytes = "",
       const database_api::DatabaseDialect& dialect = GetParam(),
       bool use_gsql_to_pg_translation = true);
 

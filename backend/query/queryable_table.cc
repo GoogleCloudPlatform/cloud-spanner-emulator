@@ -28,10 +28,11 @@
 #include "zetasql/public/analyzer_output.h"
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/evaluator_table_iterator.h"
+#include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "absl/log/check.h"
-#include "absl/memory/memory.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -39,11 +40,12 @@
 #include "absl/strings/strip.h"  //
 #include "absl/types/span.h"
 #include "backend/access/read.h"
+#include "backend/datamodel/key_set.h"
 #include "backend/query/queryable_column.h"
 #include "backend/schema/catalog/column.h"
 #include "common/constants.h"
 #include "common/feature_flags.h"
-#include "absl/status/status.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -112,9 +114,8 @@ QueryableTable::AnalyzeColumnExpression(
   bool enable_generated_pk =
       EmulatorFeatureFlags::instance().flags().enable_generated_pk;
   bool is_generated_column = enable_generated_pk && column->is_generated();
-  if (opt_options.has_value() && (column->has_default_value()
-                                  || (is_generated_column)
-                                  )) {
+  if (opt_options.has_value() &&
+      (column->has_default_value() || (is_generated_column))) {
     zetasql::AnalyzerOptions options = opt_options.value();
     if (is_generated_column) {
       for (const Column* dep : column->dependent_columns()) {
@@ -140,8 +141,9 @@ QueryableTable::AnalyzeColumnExpression(
 QueryableTable::QueryableTable(
     const backend::Table* table, RowReader* reader,
     std::optional<const zetasql::AnalyzerOptions> opt_options,
-    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory)
-    : wrapped_table_(table), reader_(reader) {
+    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+    bool is_synonym)
+    : is_synonym_(is_synonym), wrapped_table_(table), reader_(reader) {
   bool enable_generated_pk =
       EmulatorFeatureFlags::instance().flags().enable_generated_pk;
   for (const auto* column : table->columns()) {
@@ -152,9 +154,7 @@ QueryableTable::QueryableTable(
     std::unique_ptr<const zetasql::AnalyzerOutput> output =
         std::move(analyzer_output.value());
     bool is_generated_column = enable_generated_pk && column->is_generated();
-    if (column->has_default_value()
-        || (is_generated_column)
-    ) {
+    if (column->has_default_value() || (is_generated_column)) {
       zetasql::Column::ExpressionAttributes::ExpressionKind expression_kind =
           zetasql::Column::ExpressionAttributes::ExpressionKind::DEFAULT;
       if (is_generated_column) {
@@ -196,7 +196,7 @@ QueryableTable::CreateEvaluatorTableIterator(
   }
 
   ReadArg read_arg;
-  read_arg.table = Name();
+  read_arg.table = FullName();
   read_arg.key_set = KeySet::All();
   read_arg.columns = column_names;
   // Pending commit timestamp restrictions for queries are implemented in

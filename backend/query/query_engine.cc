@@ -17,7 +17,9 @@
 #include "backend/query/query_engine.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <map>
 #include <memory>
@@ -46,16 +48,18 @@
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
 #include "absl/strings/match.h"
 #include "absl/strings/substitute.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/common/case.h"
 #include "backend/datamodel/key.h"
+#include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
@@ -71,7 +75,6 @@
 #include "backend/query/query_engine_options.h"
 #include "backend/query/query_validator.h"
 #include "backend/query/queryable_column.h"
-#include "backend/query/queryable_table.h"
 #include "backend/query/queryable_view.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/transaction/commit_timestamp.h"
@@ -85,7 +88,6 @@
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "zetasql/base/ret_check.h"
-#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -344,7 +346,7 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
   if (values.empty()) {
     return std::make_tuple(mutation, 0, has_rows);
   }
-  mutation.AddWriteOp(op_type, table->Name(), column_names, values);
+  mutation.AddWriteOp(op_type, table->FullName(), column_names, values);
   return std::make_tuple(mutation, values.size(), has_rows);
 }
 
@@ -355,7 +357,7 @@ bool IsPendingCommitTimestampSentinel(const Schema* schema,
                                       const zetasql::Column* column,
                                       const zetasql::Value& value) {
   return IsPendingCommitTimestamp(
-      schema->FindTable(table->Name())->FindColumn(column->Name()), value);
+      schema->FindTable(table->FullName())->FindColumn(column->Name()), value);
 }
 
 // Builds a UPDATE mutation and returns it along with a count of updated rows.
@@ -400,7 +402,7 @@ std::pair<Mutation, int64_t> BuildUpdate(
   }
 
   Mutation mutation;
-  mutation.AddWriteOp(op_type, table->Name(), column_names, values);
+  mutation.AddWriteOp(op_type, table->FullName(), column_names, values);
   return std::make_pair(mutation, values.size());
 }
 
@@ -426,7 +428,7 @@ std::pair<Mutation, int64_t> BuildDelete(
   }
 
   Mutation mutation;
-  mutation.AddDeleteOp(table->Name(), key_set);
+  mutation.AddDeleteOp(table->FullName(), key_set);
   return std::make_pair(mutation, key_set.keys().size());
 }
 
@@ -798,7 +800,7 @@ bool IsDMLStmtWitoutSelect(
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedStatement>>
 ExtractValidatedResolvedStatementAndOptions(
     const zetasql::AnalyzerOutput* analyzer_output,
-    const QueryContext& context,
+    const QueryContext& context, bool in_partition_query = false,
     QueryEngineOptions* query_engine_options = nullptr) {
   ZETASQL_RET_CHECK_NE(analyzer_output->resolved_statement(), nullptr);
 
@@ -815,6 +817,8 @@ ExtractValidatedResolvedStatementAndOptions(
       IsDMLStmtWitoutSelect(analyzer_output->resolved_statement())
           ? std::make_unique<DMLQueryValidator>(context, &options)
           : std::make_unique<QueryValidator>(context, &options);
+  // In Cloud Spanner, batch query is using PartitionQuery function.
+  query_validator->set_in_partition_query(in_partition_query);
 
   ZETASQL_RETURN_IF_ERROR(statement->Accept(query_validator.get()));
   if (query_engine_options != nullptr) {
@@ -822,11 +826,13 @@ ExtractValidatedResolvedStatementAndOptions(
   }
 
   // Validate the index hints.
+  bool allow_search_indexes_in_transaction =
+      IsSearchQueryAllowed(&options, context);
   IndexHintValidator index_hint_validator{
       context.schema,
       options.disable_query_null_filtered_index_check ||
-          config::disable_query_null_filtered_index_check()
-  };
+          config::disable_query_null_filtered_index_check(),
+      allow_search_indexes_in_transaction, in_partition_query};
   ZETASQL_RETURN_IF_ERROR(statement->Accept(&index_hint_validator));
 
   // Check the query size limits
@@ -1073,7 +1079,7 @@ absl::Status QueryEngine::IsPartitionable(const Query& query,
   ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
                    ExtractValidatedResolvedStatementAndOptions(
                        analyzer_output.get(), context,
-                       &options));
+                       /*in_partition_query=*/true, &options));
   if (options.disable_query_partitionability_check) {
     return absl::OkStatus();
   }
@@ -1100,9 +1106,8 @@ absl::Status QueryEngine::IsValidPartitionedDML(
 
   ZETASQL_ASSIGN_OR_RETURN(auto resolved_statement,
                    ExtractValidatedResolvedStatementAndOptions(
-                       analyzer_output.get(),
-                       context
-                       ));
+                       analyzer_output.get(), context,
+                       /*in_partition_query=*/true));
 
   // Check that the DML statement is partitionable.
   PartitionedDMLValidator validator;

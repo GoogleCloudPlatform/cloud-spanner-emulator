@@ -18,13 +18,17 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_CHECK_CONSTRAINT_BUILDER_H_
 
 #include <cstdint>
+#include <memory>
 #include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/memory/memory.h"
-#include "absl/status/status.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/graph/schema_node.h"
 #include "backend/schema/validators/check_constraint_validator.h"
 
 namespace google {
@@ -80,6 +84,16 @@ class CheckConstraint::Builder {
     if (postgresql_oid.has_value()) {
       instance_->set_postgresql_oid(postgresql_oid.value());
     }
+    return *this;
+  }
+
+  Builder& add_dependent_udf(const SchemaNode* udf) {
+    instance_->udf_dependencies_.push_back(udf);
+    return *this;
+  }
+
+  Builder& clear_udf_dependencies() {
+    instance_->udf_dependencies_.clear();
     return *this;
   }
 

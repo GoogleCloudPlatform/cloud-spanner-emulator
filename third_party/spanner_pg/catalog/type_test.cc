@@ -56,6 +56,7 @@ namespace {
 
 using TypeTest = ::postgres_translator::test::ValidMemoryContext;
 using ::zetasql_base::testing::IsOkAndHolds;
+using ::zetasql_base::testing::StatusIs;
 
 // Supported Scalar Types.
 TEST_F(TypeTest, PgBoolMapping) {
@@ -86,6 +87,25 @@ TEST_F(TypeTest, PgBoolMapping) {
       built_const, pg_bool_mapping->MakePgConst(zetasql::Value::NullBool()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bool_mapping->MakeGsqlValueFromStringConst(
+                           "true"));
+  EXPECT_EQ(gsql_value.bool_value(), true);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bool_mapping->MakeGsqlValueFromStringConst(
+                           "false"));
+  EXPECT_EQ(gsql_value.bool_value(), false);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bool_mapping->MakeGsqlValueFromStringConst(
+                           "null"));
+  EXPECT_TRUE(gsql_value.is_null());
+
+  EXPECT_THAT(pg_bool_mapping->MakeGsqlValueFromStringConst("invalid"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(TypeTest, PgInt8Mapping) {
@@ -118,6 +138,25 @@ TEST_F(TypeTest, PgInt8Mapping) {
       built_const, pg_int8_mapping->MakePgConst(zetasql::Value::NullInt64()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_int8_mapping->MakeGsqlValueFromStringConst(
+                           "3141592653589793"));
+  EXPECT_EQ(gsql_value.int64_value(), 3141592653589793);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_int8_mapping->MakeGsqlValueFromStringConst(
+                           "-0"));
+  EXPECT_EQ(gsql_value.int64_value(), 0);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_int8_mapping->MakeGsqlValueFromStringConst(
+                           "null"));
+  EXPECT_TRUE(gsql_value.is_null());
+
+  EXPECT_THAT(pg_int8_mapping->MakeGsqlValueFromStringConst("invalid"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(TypeTest, PgFloat8Mapping) {
@@ -151,6 +190,25 @@ TEST_F(TypeTest, PgFloat8Mapping) {
                                         zetasql::Value::NullDouble()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_float8_mapping->MakeGsqlValueFromStringConst(
+                           "3.141592653589793"));
+  EXPECT_EQ(gsql_value.double_value(), 3.141592653589793);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_float8_mapping->MakeGsqlValueFromStringConst(
+                           "-0"));
+  EXPECT_EQ(gsql_value.double_value(), 0);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_float8_mapping->MakeGsqlValueFromStringConst(
+                           "null"));
+  EXPECT_TRUE(gsql_value.is_null());
+
+  EXPECT_THAT(pg_float8_mapping->MakeGsqlValueFromStringConst("invalid"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(TypeTest, PgVarcharMapping) {
@@ -186,6 +244,25 @@ TEST_F(TypeTest, PgVarcharMapping) {
                                         zetasql::Value::NullString()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_varchar_mapping->MakeGsqlValueFromStringConst(
+                           "'this is a default value'"));
+  EXPECT_EQ(gsql_value.string_value(), "this is a default value");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_varchar_mapping->MakeGsqlValueFromStringConst(
+                           "''"));
+  EXPECT_EQ(gsql_value.string_value(), "");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_varchar_mapping->MakeGsqlValueFromStringConst(
+                           "null"));
+  EXPECT_TRUE(gsql_value.is_null());
+
+  EXPECT_THAT(pg_varchar_mapping->MakeGsqlValueFromStringConst("invalid"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(TypeTest, PgTextMapping) {
@@ -218,6 +295,23 @@ TEST_F(TypeTest, PgTextMapping) {
                                         zetasql::Value::NullString()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_text_mapping->MakeGsqlValueFromStringConst(
+                           "'this is a default value'"));
+  EXPECT_EQ(gsql_value.string_value(), "this is a default value");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_text_mapping->MakeGsqlValueFromStringConst("''"));
+  EXPECT_EQ(gsql_value.string_value(), "");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_text_mapping->MakeGsqlValueFromStringConst("null"));
+  EXPECT_TRUE(gsql_value.is_null());
+
+  EXPECT_THAT(pg_text_mapping->MakeGsqlValueFromStringConst("invalid"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(TypeTest, PgByteaMapping) {
@@ -251,6 +345,24 @@ TEST_F(TypeTest, PgByteaMapping) {
                                         zetasql::Value::NullBytes()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bytea_mapping->MakeGsqlValueFromStringConst(
+                           "'\x01 this is a default value'"));
+  EXPECT_EQ(gsql_value.bytes_value(), "\x01 this is a default value");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bytea_mapping->MakeGsqlValueFromStringConst(
+                           "'\x01'"));
+  EXPECT_EQ(gsql_value.bytes_value(), "\x01");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bytea_mapping->MakeGsqlValueFromStringConst("null"));
+  EXPECT_TRUE(gsql_value.is_null());
+
+  EXPECT_THAT(pg_bytea_mapping->MakeGsqlValueFromStringConst("invalid"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(TypeTest, PgTimestamptzMapping) {
@@ -297,6 +409,10 @@ TEST_F(TypeTest, PgTimestamptzMapping) {
                                         zetasql::Value::NullTimestamp()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
+
+  EXPECT_THAT(pg_timestamp_mapping->MakeGsqlValueFromStringConst(
+                  "'1970-01-01 00:00:00'"),
+              StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 TEST_F(TypeTest, PgDateMapping) {
@@ -317,6 +433,9 @@ TEST_F(TypeTest, PgDateMapping) {
                                      /*constisnull=*/true));
   EXPECT_THAT(pg_date_mapping->MakeGsqlValue(pg_const),
               IsOkAndHolds(zetasql::Value::NullDate()));
+
+  EXPECT_THAT(pg_date_mapping->MakeGsqlValueFromStringConst("'1970-01-01'"),
+              StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 TEST_F(TypeTest, PgIntervalMapping) {
@@ -358,6 +477,9 @@ TEST_F(TypeTest, PgIntervalMapping) {
                                      /*constbyval=*/false));
   EXPECT_THAT(pg_interval_mapping->MakeGsqlValue(pg_const),
               IsOkAndHolds(zetasql::Value::NullInterval()));
+
+  EXPECT_THAT(pg_interval_mapping->MakeGsqlValueFromStringConst("'3d'"),
+              StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 // Supported Array Types.
@@ -375,6 +497,24 @@ TEST_F(TypeTest, PgBoolArrayMapping) {
   EXPECT_TRUE(
       pg_bool_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
   EXPECT_TRUE(pg_bool_array_mapping->Equals(types::PgBoolArrayMapping()));
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bool_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{true,false}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 2);
+  EXPECT_EQ(gsql_value.elements()[0].bool_value(), true);
+  EXPECT_EQ(gsql_value.elements()[1].bool_value(), false);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bool_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 0);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bool_array_mapping->MakeGsqlValueFromStringConst(
+                           "null"));
+  EXPECT_TRUE(gsql_value.is_null());
 }
 
 TEST_F(TypeTest, PgInt8ArrayMapping) {
@@ -391,6 +531,25 @@ TEST_F(TypeTest, PgInt8ArrayMapping) {
   EXPECT_TRUE(
       pg_int8_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
   EXPECT_TRUE(pg_int8_array_mapping->Equals(types::PgInt8ArrayMapping()));
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_int8_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{1,2,3}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 3);
+  EXPECT_EQ(gsql_value.elements()[0].int64_value(), 1);
+  EXPECT_EQ(gsql_value.elements()[1].int64_value(), 2);
+  EXPECT_EQ(gsql_value.elements()[2].int64_value(), 3);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_int8_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 0);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_int8_array_mapping->MakeGsqlValueFromStringConst(
+                           "null"));
+  EXPECT_TRUE(gsql_value.is_null());
 }
 
 TEST_F(TypeTest, PgFloat8ArrayMapping) {
@@ -407,6 +566,25 @@ TEST_F(TypeTest, PgFloat8ArrayMapping) {
   EXPECT_TRUE(
       pg_float8_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
   EXPECT_TRUE(pg_float8_array_mapping->Equals(types::PgFloat8ArrayMapping()));
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_float8_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{1.23,4.56,7.89}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 3);
+  EXPECT_EQ(gsql_value.elements()[0].double_value(), 1.23);
+  EXPECT_EQ(gsql_value.elements()[1].double_value(), 4.56);
+  EXPECT_EQ(gsql_value.elements()[2].double_value(), 7.89);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_float8_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 0);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_float8_array_mapping->MakeGsqlValueFromStringConst(
+                           "null"));
+  EXPECT_TRUE(gsql_value.is_null());
 }
 
 TEST_F(TypeTest, PgVarcharArrayMapping) {
@@ -423,6 +601,27 @@ TEST_F(TypeTest, PgVarcharArrayMapping) {
   EXPECT_TRUE(
       pg_varchar_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
   EXPECT_TRUE(pg_varchar_array_mapping->Equals(types::PgVarcharArrayMapping()));
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_varchar_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{this,is,a,default,value}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 5);
+  EXPECT_EQ(gsql_value.elements()[0].string_value(), "this");
+  EXPECT_EQ(gsql_value.elements()[1].string_value(), "is");
+  EXPECT_EQ(gsql_value.elements()[2].string_value(), "a");
+  EXPECT_EQ(gsql_value.elements()[3].string_value(), "default");
+  EXPECT_EQ(gsql_value.elements()[4].string_value(), "value");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_varchar_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 0);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_varchar_array_mapping->MakeGsqlValueFromStringConst(
+                           "null"));
+  EXPECT_TRUE(gsql_value.is_null());
 }
 
 TEST_F(TypeTest, PgTextArrayMapping) {
@@ -439,6 +638,26 @@ TEST_F(TypeTest, PgTextArrayMapping) {
   EXPECT_TRUE(
       pg_text_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
   EXPECT_TRUE(pg_text_array_mapping->Equals(types::PgTextArrayMapping()));
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_text_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{this,is,a,default,value}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 5);
+  EXPECT_EQ(gsql_value.elements()[0].string_value(), "this");
+  EXPECT_EQ(gsql_value.elements()[1].string_value(), "is");
+  EXPECT_EQ(gsql_value.elements()[2].string_value(), "a");
+  EXPECT_EQ(gsql_value.elements()[3].string_value(), "default");
+  EXPECT_EQ(gsql_value.elements()[4].string_value(), "value");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_text_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 0);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_text_array_mapping->MakeGsqlValueFromStringConst(
+                           "null"));
 }
 
 TEST_F(TypeTest, PgByteaArrayMapping) {
@@ -455,6 +674,26 @@ TEST_F(TypeTest, PgByteaArrayMapping) {
   EXPECT_TRUE(
       pg_bytea_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
   EXPECT_TRUE(pg_bytea_array_mapping->Equals(types::PgByteaArrayMapping()));
+
+  zetasql::Value gsql_value;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bytea_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{this,is,a,default,value}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 5);
+  EXPECT_EQ(gsql_value.elements()[0].bytes_value(), "this");
+  EXPECT_EQ(gsql_value.elements()[1].bytes_value(), "is");
+  EXPECT_EQ(gsql_value.elements()[2].bytes_value(), "a");
+  EXPECT_EQ(gsql_value.elements()[3].bytes_value(), "default");
+  EXPECT_EQ(gsql_value.elements()[4].bytes_value(), "value");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bytea_array_mapping->MakeGsqlValueFromStringConst(
+                           "'{}'"));
+  EXPECT_EQ(gsql_value.elements().size(), 0);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+                       pg_bytea_array_mapping->MakeGsqlValueFromStringConst(
+                           "null"));
 }
 
 TEST_F(TypeTest, PgTimestamptzArrayMapping) {
@@ -473,6 +712,10 @@ TEST_F(TypeTest, PgTimestamptzArrayMapping) {
       zetasql::LanguageOptions()));
   EXPECT_TRUE(
       pg_timestamptz_array_mapping->Equals(types::PgTimestamptzArrayMapping()));
+
+  EXPECT_THAT(pg_timestamptz_array_mapping->MakeGsqlValueFromStringConst(
+                  "'{1970-01-01 00:00:00,1970-01-01 00:00:01}'"),
+              StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 TEST_F(TypeTest, PgDateArrayMapping) {
@@ -489,6 +732,10 @@ TEST_F(TypeTest, PgDateArrayMapping) {
   EXPECT_TRUE(
       pg_date_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
   EXPECT_TRUE(pg_date_array_mapping->Equals(types::PgDateArrayMapping()));
+
+  EXPECT_THAT(pg_date_array_mapping->MakeGsqlValueFromStringConst(
+                  "'{1970-01-01,1970-01-01}'"),
+              StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 // Helper function to make a PG Array Datum for creating a Const node.

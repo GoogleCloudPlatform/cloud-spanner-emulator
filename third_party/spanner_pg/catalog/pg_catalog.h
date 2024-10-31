@@ -37,6 +37,7 @@
 
 #include "zetasql/public/simple_catalog.h"
 #include "absl/container/flat_hash_map.h"
+#include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/schema/catalog/schema.h"
 
 namespace postgres_translator {
@@ -58,8 +59,26 @@ class PGCatalog : public zetasql::SimpleCatalog {
   absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
       tables_by_name_;
 
+  std::map<std::string,
+           std::vector<google::spanner::emulator::backend::ColumnsMetaEntry>>
+      info_schema_table_name_to_column_metadata_;
+  std::map<std::string,
+           std::vector<google::spanner::emulator::backend::ColumnsMetaEntry>>
+      pg_catalog_table_name_to_column_metadata_;
+  std::map<std::string,
+           std::vector<
+               google::spanner::emulator::backend::SpannerSysColumnsMetaEntry>>
+      spanner_sys_table_name_to_column_metadata_;
+
+  void FillPGAmTable();
+  void FillPGAttrdefTable();
+  void FillPGClassTable();
+  void FillPGIndexTable();
   void FillPGIndexesTable();
+  void FillPGNamespaceTable();
   void FillPGTablesTable();
+  void FillPGSequenceTable();
+  void FillPGSequencesTable();
   void FillPGSettingsTable();
   void FillPGViewsTable();
 };

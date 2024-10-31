@@ -21,12 +21,18 @@
 #include <utility>
 #include <vector>
 
+#include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/catalog.h"
+#include "zetasql/public/function_signature.h"
+#include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
@@ -35,6 +41,7 @@
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
+#include "backend/schema/catalog/schema.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "tests/common/schema_constructor.h"

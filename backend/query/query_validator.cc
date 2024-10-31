@@ -37,6 +37,8 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/sequence.h"
+#include "backend/schema/catalog/table.h"
+#include "backend/transaction/read_write_transaction.h"
 #include "common/constants.h"
 #include "common/errors.h"
 #include "zetasql/base/ret_check.h"
@@ -123,6 +125,12 @@ constexpr absl::string_view kHintDisableQueryNullFilteredIndexCheck =
 
 constexpr absl::string_view kHintDisableInline = "disable_inline";
 
+constexpr absl::string_view kHintAllowSearchIndexesInTransaction =
+    "allow_search_indexes_in_transaction";
+
+constexpr absl::string_view kRequireEnhanceQuery = "require_enhance_query";
+constexpr absl::string_view kEnhanceQueryTimeoutMs = "enhance_query_timeout_ms";
+
 absl::Status CollectHintsForNode(
     const zetasql::ResolvedOption* hint,
     absl::flat_hash_map<absl::string_view, zetasql::Value>* node_hint_map) {
@@ -137,6 +145,21 @@ absl::Status CollectHintsForNode(
 }
 
 }  // namespace
+
+bool IsSearchQueryAllowed(const QueryEngineOptions* options,
+                          const QueryContext& context) {
+  bool allow_search_indexes_in_transaction =
+      options != nullptr && options->allow_search_indexes_in_transaction;
+  if (!allow_search_indexes_in_transaction) {
+    if (context.writer != nullptr &&
+        dynamic_cast<const ReadWriteTransaction*>(context.writer) != nullptr) {
+      // Not allowed in ReadWriteTransaction.
+      return false;
+    }
+  }
+
+  return true;
+}
 
 absl::Status QueryValidator::ValidateHints(
     const zetasql::ResolvedNode* node) {
@@ -173,6 +196,8 @@ absl::Status QueryValidator::ValidateHints(
         CheckHintValue(hint_name, hint_value, node->node_kind(), hint_map));
   }
 
+  ZETASQL_RETURN_IF_ERROR(ExtractSpannerOptionsForNode(hint_map));
+
   // Extract any Emulator-engine options from the hints for this node.
   return ExtractEmulatorOptionsForNode(emulator_hint_map);
 }
@@ -196,12 +221,21 @@ absl::Status QueryValidator::CheckSpannerHintName(
         kHintJoinBatch, kHintJoinForceOrder}},
       {zetasql::RESOLVED_QUERY_STMT,
        {
-           kHintForceIndex, kHintIndexStrategy, kHintJoinTypeDeprecated,
-           kHintJoinMethod, kHashJoinBuildSide, kHintJoinForceOrder,
-           kHintConstantFolding, kUseAdditionalParallelism,
-           kHintEnableAdaptivePlans, kHintLockScannedRange,
+           kHintForceIndex,
+           kHintIndexStrategy,
+           kHintJoinTypeDeprecated,
+           kHintJoinMethod,
+           kHashJoinBuildSide,
+           kHintJoinForceOrder,
+           kHintConstantFolding,
+           kUseAdditionalParallelism,
+           kHintEnableAdaptivePlans,
+           kHintLockScannedRange,
            kHintParameterSensitive,
-           kHashJoinExecution
+           kHashJoinExecution,
+           kHintAllowSearchIndexesInTransaction,
+           kRequireEnhanceQuery,
+           kEnhanceQueryTimeoutMs,
        }},
       {zetasql::RESOLVED_SUBQUERY_EXPR,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
@@ -261,6 +295,9 @@ absl::Status QueryValidator::CheckHintValue(
           {kHintEnableAdaptivePlans, zetasql::types::BoolType()},
           {kHintDisableInline, zetasql::types::BoolType()},
           {kHintIndexStrategy, zetasql::types::StringType()},
+          {kHintAllowSearchIndexesInTransaction, zetasql::types::BoolType()},
+          {kRequireEnhanceQuery, zetasql::types::BoolType()},
+          {kEnhanceQueryTimeoutMs, zetasql::types::Int64Type()},
       }};
 
   const auto& iter = supported_hint_types->find(name);
@@ -276,14 +313,16 @@ absl::Status QueryValidator::CheckHintValue(
       if (node_kind == zetasql::RESOLVED_QUERY_STMT) {
         return error::InvalidStatementHintValue(name, value.DebugString());
       }
-      const Index* index = context_.schema->FindIndex(index_name);
-      if (index == nullptr) {
+      const std::vector<const Index*> indexes =
+          context_.schema->FindIndexesUnderName(index_name);
+      if (indexes.empty()) {
         // We don't have the table name here. So this will not match prod error
         // message.
         return error::QueryHintIndexNotFound("", index_name);
       }
-
-      indexes_used_.insert(index);
+      for (const auto& index : indexes) {
+        indexes_used_.insert(index);
+      }
     }
   } else if (absl::EqualsIgnoreCase(name, kHintJoinMethod) ||
              absl::EqualsIgnoreCase(name, kHintJoinTypeDeprecated)) {
@@ -358,6 +397,25 @@ absl::Status QueryValidator::CheckHintValue(
   return absl::OkStatus();
 }
 
+absl::Status QueryValidator::ExtractSpannerOptionsForNode(
+    const absl::flat_hash_map<absl::string_view, zetasql::Value>&
+        node_hint_map) const {
+  // Only extract options if they are requested.
+  if (extracted_options_ == nullptr) {
+    return absl::OkStatus();
+  }
+
+  for (const auto& [hint_name, hint_value] : node_hint_map) {
+    if (absl::EqualsIgnoreCase(hint_name,
+                               kHintAllowSearchIndexesInTransaction)) {
+      // We already checked the hint type in CheckHintValue.
+      extracted_options_->allow_search_indexes_in_transaction =
+          hint_value.bool_value();
+    }
+  }
+  return absl::OkStatus();
+}
+
 absl::Status QueryValidator::ExtractEmulatorOptionsForNode(
     const absl::flat_hash_map<absl::string_view, zetasql::Value>&
         node_hint_map) const {
@@ -419,6 +477,30 @@ absl::Status QueryValidator::VisitResolvedQueryStmt(
   return DefaultVisit(node);
 }
 
+absl::Status QueryValidator::CheckSearchFunctionsAreAllowed(
+    const zetasql::ResolvedFunctionCall& function_call) {
+  static const auto* search_functions =
+      new const absl::flat_hash_set<absl::string_view, zetasql_base::StringViewCaseHash,
+                                    zetasql_base::StringViewCaseEqual>{
+          "search", "search_substring", "score", "snippet"};
+
+  const std::string name = function_call.function()->FullName(false);
+  if (search_functions->find(name) != search_functions->end()) {
+    if (in_partition_query_) {
+      // Not allowed in batch query.
+      return error::InvalidUseOfSearchRelatedFunctionWithReason(
+          "SQL Search functions are not supported for partitioned queries");
+    }
+    if (!IsSearchQueryAllowed(extracted_options_, context_)) {
+      return error::InvalidUseOfSearchRelatedFunctionWithReason(
+          "SQL Search functions are not supported for transactional "
+          "queries by default");
+    };
+  }
+
+  return absl::OkStatus();
+}
+
 absl::Status QueryValidator::VisitResolvedLiteral(
     const zetasql::ResolvedLiteral* node) {
   if (node->type()->IsArray() &&
@@ -457,6 +539,8 @@ absl::Status QueryValidator::VisitResolvedFunctionCall(
         CheckAllowedCasts(node->argument_list(0)->type(), node->type()));
   }
 
+  ZETASQL_RETURN_IF_ERROR(CheckSearchFunctionsAreAllowed(*node));
+
   if (IsSequenceFunction(node)) {
     ZETASQL_RETURN_IF_ERROR(ValidateSequenceFunction(node));
   }
@@ -490,7 +574,9 @@ absl::Status QueryValidator::ValidateSequenceFunction(
     }
     const std::string sequence_name =
         node->generic_argument_list(0)->sequence()->sequence()->FullName();
-    const Sequence* current_sequence = schema()->FindSequence(sequence_name);
+    const Sequence* current_sequence =
+        schema()->FindSequence(sequence_name
+        );
     if (current_sequence == nullptr) {
       return error::SequenceNotFound(sequence_name);
     }
@@ -505,7 +591,8 @@ absl::Status QueryValidator::ValidateSequenceFunction(
         node->argument_list(0)->GetAs<zetasql::ResolvedLiteral>()->value();
     if (value.type()->IsString()) {
       const Sequence* current_sequence =
-          schema()->FindSequence(value.string_value());
+          schema()->FindSequence(value.string_value()
+          );
       if (current_sequence == nullptr) {
         return error::SequenceNotFound(value.string_value());
       }

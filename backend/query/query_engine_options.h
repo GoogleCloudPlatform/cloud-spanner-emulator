@@ -30,6 +30,10 @@ struct QueryEngineOptions {
   // If true, will disable checks to determine if a NULL_FILTERED index can be
   // used to answer a SQL query.
   bool disable_query_null_filtered_index_check = false;
+
+  // If true, will allow search functions and search index hint in transactional
+  // queries.
+  bool allow_search_indexes_in_transaction = false;
 };
 
 }  // namespace backend

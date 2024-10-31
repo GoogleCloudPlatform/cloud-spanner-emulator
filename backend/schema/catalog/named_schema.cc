@@ -16,12 +16,15 @@
 
 #include "backend/schema/catalog/named_schema.h"
 
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.pb.h"
+#include <string>
+#include <vector>
+
 #include "absl/status/status.h"
+#include "backend/common/case.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
@@ -43,26 +46,99 @@ absl::Status NamedSchema::ValidateUpdate(
                           context);
 }
 
-absl::Status NamedSchema::DeepClone(SchemaGraphEditor* editor,
-                                    const SchemaNode* orig) {
-  for (auto& table : tables_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(table));
-    table = schema_node->As<const Table>();
+template <typename T>
+absl::Status NamedSchema::CloneOrDeleteSchemaObjects(
+    SchemaGraphEditor* editor, std::vector<const T*>& schema_objects,
+    CaseInsensitiveStringMap<const T*>& schema_objects_map) {
+  return editor->CloneOrDeleteSchemaObjectsNameMappings(schema_objects,
+                                                        schema_objects_map);
+}
+
+absl::Status NamedSchema::CloneOrDeleteSchemaObjects(
+    SchemaGraphEditor* editor, std::vector<const Table*>& schema_objects,
+    CaseInsensitiveStringMap<const Table*>& schema_objects_map) {
+  ZETASQL_RETURN_IF_ERROR(editor->CloneOrDeleteSchemaObjectsNameMappings(
+      schema_objects, schema_objects_map));
+
+  // Tables must also handle synonyms.
+  for (auto it = synonyms_.begin(); it != synonyms_.end();) {
+    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
+    if (schema_node->is_deleted()) {
+      synonyms_map_.erase((*it)->synonym());
+      it = synonyms_.erase(it);
+    } else {
+      const Table* cloned_object = schema_node->As<const Table>();
+      *it = cloned_object;
+      synonyms_map_[cloned_object->synonym()] = cloned_object;
+      ++it;
+    }
   }
-  for (auto& index : indexes_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(index));
-    index = schema_node->As<const Index>();
-  }
-  for (auto& view : views_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(view));
-    view = schema_node->As<const View>();
-  }
-  for (auto& sequence : sequences_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(sequence));
-    sequence = schema_node->As<const Sequence>();
-  }
+
   return absl::OkStatus();
 }
+
+absl::Status NamedSchema::DeepClone(SchemaGraphEditor* editor,
+                                    const SchemaNode* orig) {
+  ZETASQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, tables_, tables_map_));
+  ZETASQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, views_, views_map_));
+  ZETASQL_RETURN_IF_ERROR(
+      CloneOrDeleteSchemaObjects(editor, sequences_, sequences_map_));
+  ZETASQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, indexes_, indexes_map_));
+  ZETASQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, udfs_, udfs_map_));
+
+  return absl::OkStatus();
+}
+
+const Table* NamedSchema::FindTable(const std::string& table_name) const {
+  auto itr = tables_map_.find(table_name);
+  if (itr == tables_map_.end()) {
+    return FindTableUsingSynonym(table_name);
+  }
+  return itr->second;
+}
+
+const Table* NamedSchema::FindTableUsingSynonym(
+    const std::string& table_synonym) const {
+  auto itr = synonyms_map_.find(table_synonym);
+  if (itr == synonyms_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+};
+
+const View* NamedSchema::FindView(const std::string& view_name) const {
+  auto itr = views_map_.find(view_name);
+  if (itr == views_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
+const Sequence* NamedSchema::FindSequence(
+    const std::string& sequence_name) const {
+  auto itr = sequences_map_.find(sequence_name);
+  if (itr == sequences_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
+const Index* NamedSchema::FindIndex(const std::string& index_name) const {
+  auto itr = indexes_map_.find(index_name);
+  if (itr == indexes_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
+const Udf* NamedSchema::FindUdf(const std::string& udf_name) const {
+  auto itr = udfs_map_.find(udf_name);
+  if (itr == udfs_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

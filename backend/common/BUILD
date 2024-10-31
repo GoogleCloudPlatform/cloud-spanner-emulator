@@ -173,3 +173,17 @@ cc_test(
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
+
+cc_library(
+    name = "utils",
+    srcs = [
+        "utils.cc",
+    ],
+    hdrs = [
+        "utils.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/strings",
+        "@com_googlesource_code_re2//:re2",
+    ],
+)

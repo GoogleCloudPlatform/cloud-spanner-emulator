@@ -18,7 +18,6 @@
 
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "google/protobuf/descriptor.pb.h"
@@ -28,6 +27,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "common/feature_flags.h"
@@ -43,16 +43,15 @@ namespace ddl {
 
 namespace {
 
+using absl::StatusCode;
 using ::testing::HasSubstr;
 using ::zetasql_base::testing::IsOk;
 using ::zetasql_base::testing::IsOkAndHolds;
 using ::zetasql_base::testing::StatusIs;
 
 absl::StatusOr<DDLStatement> ParseDDLStatement(
-    absl::string_view ddl
-    ,
-    std::shared_ptr<const ProtoBundle> proto_bundle = nullptr
-) {
+    absl::string_view ddl,
+    std::shared_ptr<const ProtoBundle> proto_bundle = nullptr) {
   DDLStatement statement;
   absl::Status s = ParseDDLStatement(ddl, &statement);
   if (s.ok()) {
@@ -82,7 +81,7 @@ TEST(ParseCreateDatabase, CanParseCreateDatabaseWithHyphen) {
 
   // Fails without backticks.
   EXPECT_THAT(ParseDDLStatement("CREATE DATABASE mytestdb-1"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   // Passes with backticks.
   EXPECT_THAT(ParseDDLStatement("CREATE DATABASE `mytestdb-1`"),
@@ -93,7 +92,7 @@ TEST(ParseCreateDatabase, CanParseCreateDatabaseWithHyphen) {
 
 TEST(ParseCreateDatabase, CannotParseEmptyDatabaseName) {
   EXPECT_THAT(ParseDDLStatement("CREATE DATABASE"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterDatabase, ValidSetWitnessLocationToNonEmptyString) {
@@ -137,7 +136,7 @@ TEST(ParseAlterDatabase, Invalid_NoOptionSet) {
     ALTER DATABASE db SET OPTIONS ()
   )";
   EXPECT_THAT(ParseDDLStatement(ddl),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Encountered ')' while parsing: identifier")));
 }
 
@@ -146,7 +145,7 @@ TEST(ParseAlterDatabase, Invalid_EmptyString) {
     ALTER DATABASE db SET OPTIONS ( default_leader = '' )
   )";
   EXPECT_THAT(ParseDDLStatement(ddl),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Invalid string literal: ''")));
 }
 
@@ -170,7 +169,7 @@ TEST(ParseCreateTable, CannotParseCreateTableWithoutName) {
                     CREATE TABLE (
                     ) PRIMARY KEY ()
                     )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseCreateTable, CannotParseCreateTableWithoutPrimaryKey) {
@@ -181,7 +180,7 @@ TEST(ParseCreateTable, CannotParseCreateTableWithoutPrimaryKey) {
                       Name STRING(MAX)
                     )
                     )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Expecting 'PRIMARY' but found 'EOF'")));
 }
 
@@ -747,6 +746,120 @@ TEST(ParseCreateTable, CanParseAlterTableAddForeignKeyWithDeleteNoAction) {
                   )pb")));
 }
 
+TEST(ParseCreateTable, CanParseAlterTableAddForeignKeyEnforcementNoAction) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_fk_enforcement_option = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE T ADD FOREIGN KEY (B, A)
+                    REFERENCES U (X, Y) ON DELETE NO ACTION NOT ENFORCED
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "T"
+                      add_foreign_key {
+                        foreign_key {
+                          constrained_column_name: "B"
+                          constrained_column_name: "A"
+                          referenced_table_name: "U"
+                          referenced_column_name: "X"
+                          referenced_column_name: "Y"
+                          enforced: false
+                          on_delete: NO_ACTION
+                        }
+                      }
+                    }
+                  )pb")));
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE T ADD FOREIGN KEY (B, A)
+                    REFERENCES U (X, Y) ENFORCED
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "T"
+                      add_foreign_key {
+                        foreign_key {
+                          constrained_column_name: "B"
+                          constrained_column_name: "A"
+                          referenced_table_name: "U"
+                          referenced_column_name: "X"
+                          referenced_column_name: "Y"
+                          enforced: true
+                        }
+                      }
+                    }
+                  )pb")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE T ADD FOREIGN KEY (B, A)
+    REFERENCES U (X, Y) ON DELETE CASCADE NOT ENFORCED
+  )sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       R"(Error parsing Spanner DDL statement:
+    ALTER TABLE T ADD FOREIGN KEY (B, A)
+    REFERENCES U (X, Y) ON DELETE CASCADE NOT ENFORCED
+   : ON DELETE actions are not supported for NOT ENFORCED foreign keys.)"));
+}
+
+TEST(ParseAlterTable, FlagGuardedCreateTableWithForeignKeyEnforcement) {
+  absl::string_view ddl = R"sql(
+    CREATE TABLE T (
+      A INT64,
+      B STRING(MAX),
+      CONSTRAINT FK_UXY FOREIGN KEY (B, A)
+      REFERENCES U (X, Y) ON DELETE CASCADE ENFORCED,
+    ) PRIMARY KEY (A)
+  )sql";
+  EXPECT_THAT(ParseDDLStatement(
+                  ddl), StatusIs(absl::StatusCode::kInvalidArgument,
+                       R"(Error parsing Spanner DDL statement:
+    CREATE TABLE T (
+      A INT64,
+      B STRING(MAX),
+      CONSTRAINT FK_UXY FOREIGN KEY (B, A)
+      REFERENCES U (X, Y) ON DELETE CASCADE ENFORCED,
+    ) PRIMARY KEY (A)
+   : Foreign key enforcement is not supported.)"));
+
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_fk_enforcement_option = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(ParseDDLStatement(
+                  ddl),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "T"
+                      column {
+                        column_name: "A"
+                        type: INT64
+                      }
+                      column {
+                        column_name: "B"
+                        type: STRING
+                      }
+                      primary_key {
+                        key_name: "A"
+                      }
+                      foreign_key {
+                        constraint_name: "FK_UXY"
+                        constrained_column_name: "B"
+                        constrained_column_name: "A"
+                        referenced_table_name: "U"
+                        referenced_column_name: "X"
+                        referenced_column_name: "Y"
+                        enforced: true
+                        on_delete: CASCADE
+                      }
+                    }
+                  )pb")));
+}
+
 TEST(ParseCreateTable, CanParseAlterTableWithDropConstraint) {
   EXPECT_THAT(ParseDDLStatement(
                   R"sql(
@@ -840,6 +953,26 @@ TEST(ParseCreateTable, CanParseCreateTableWithFloat32) {
                   )pb")));
 }
 
+TEST(ParseCreateTable, CanParseCreateTableWithTokenList) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE Albums (
+      Id INT64 NOT NULL,
+      Name STRING(MAX),
+      Name_Token TOKENLIST,
+    ) PRIMARY KEY (Id)
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Albums"
+                      column { column_name: "Id" type: INT64 not_null: true }
+                      column { column_name: "Name" type: STRING }
+                      column { column_name: "Name_Token" type: TOKENLIST }
+                      primary_key { key_name: "Id" }
+                    }
+                  )pb")));
+}
+
 TEST(ParseCreateTable, CanParseCreateTableWithVectorLength) {
   EXPECT_THAT(ParseDDLStatement(R"sql(
     CREATE TABLE T(
@@ -870,7 +1003,7 @@ TEST(ParseCreateTable, CannotParseCreateTableWithInvalidColumnParameterName) {
       Arr ARRAY<FLOAT64>(invalid_param=>10),
     ) PRIMARY KEY(K)
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseCreateTable, CannotParseCreateTableWithNegativeVectorLengthValue) {
@@ -880,7 +1013,7 @@ TEST(ParseCreateTable, CannotParseCreateTableWithNegativeVectorLengthValue) {
       Arr ARRAY<FLOAT64>(vector_length=>-1),
     ) PRIMARY KEY(K)
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseCreateTable, CannotParseCreateTableWithVectorLengthInNonArray) {
@@ -890,7 +1023,7 @@ TEST(ParseCreateTable, CannotParseCreateTableWithVectorLengthInNonArray) {
       Arr FLOAT64(vector_length=>10),
     ) PRIMARY KEY(K)
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseCreateTable, CannotParseCreateTableWithMultipleVectorLength) {
@@ -900,7 +1033,7 @@ TEST(ParseCreateTable, CannotParseCreateTableWithMultipleVectorLength) {
       Arr ARRAY<FLOAT64>(vector_length=>10, vector_length=>20),
     ) PRIMARY KEY(K)
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseCreateTable, CannotParseCreateTableWithVectorLengthInStructArray) {
@@ -910,7 +1043,7 @@ TEST(ParseCreateTable, CannotParseCreateTableWithVectorLengthInStructArray) {
       Arr STRUCT<arr ARRAY<INT64>(vector_length=>10)>,
     ) PRIMARY KEY(K)
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
@@ -984,7 +1117,7 @@ TEST(ParseCreateTable, CanParseCreateTableWithRowDeletionPolicy) {
       CreatedAt TIMESTAMP,
     ) PRIMARY KEY (Key), ROW DELETION POLICY (YOUNGER_THAN(CreatedAt, INTERVAL 7 DAY))
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        R"(Error parsing Spanner DDL statement:
     CREATE TABLE T(
       Key INT64,
@@ -1192,17 +1325,17 @@ TEST(ParseDropTable, CanParseDropTableBasic) {
 
 TEST(ParseDropTable, CannotParseDropTableMissingTableName) {
   EXPECT_THAT(ParseDDLStatement("DROP TABLE"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseDropTable, CannotParseDropTableInappropriateQuotes) {
   EXPECT_THAT(ParseDDLStatement("DROP `TABLE` Users"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseDropColumn, CannotParseDropColumnWithoutTable) {
   EXPECT_THAT(ParseDDLStatement("DROP COLUMN `TABLE`"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 // DROP INDEX
@@ -1215,12 +1348,12 @@ TEST(ParseDropIndex, CanParseDropIndexBasic) {
 
 TEST(ParseDropIndex, CannotParseDropIndexMissingIndexName) {
   EXPECT_THAT(ParseDDLStatement("DROP INDEX"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseDropIndex, CannotParseDropIndexInappropriateQuotes) {
   EXPECT_THAT(ParseDDLStatement("DROP `INDEX` LocalAlbumsByName"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 // ALTER TABLE ADD COLUMN
@@ -1334,38 +1467,54 @@ TEST(ParseAlterTable, CanParseAddJsonColumn) {
                   )pb")));
 }
 
+TEST(ParseAlterTable, CanParseAddTokenListColumn) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE Albums ADD COLUMN Name_TOKEN TOKENLIST
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "Albums"
+                      add_column {
+                        column { column_name: "Name_TOKEN" type: TOKENLIST }
+                      }
+                    }
+                  )pb")));
+}
+
 TEST(ParseAlterTable, CanParseAddColumnNoColumnName) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ADD COLUMN STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAddColumnMissingKeywordTable) {
   EXPECT_THAT(ParseDDLStatement("ALTER Users ADD Notes STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER Users ADD COLUMN Notes STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAddColumnMissingTableName) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE ADD Notes STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE ADD COLUMN Notes STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ADD Notes"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ADD COLUMN Notes"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ADD STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(
       ParseDDLStatement("ALTER TABLE Users ADD `COLUMN` Notes STRING(MAX)"),
-      StatusIs(absl::StatusCode::kInvalidArgument));
+      StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CanParseAddSynonym) {
@@ -1398,16 +1547,16 @@ TEST(ParseAlterTable, CanParseDropSynonym) {
 
 TEST(ParseAlterTable, CannotParseMalformedAddDropSynonym) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE foo ADD SYNONYM"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE foo ADD SYNONYM (bar)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE foo SYNONYM bar"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE foo DROP SYNONYM (bar)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CanParseRename) {
@@ -1454,15 +1603,15 @@ TEST(ParseAlterTable, CanParseRenameWithSynonym) {
 
 TEST(ParseAlterTable, CannotParseMalformedRename) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users RENAME NewUsers"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement(
                   "ALTER TABLE Users RENAME TO NewUsers ADD SYNONYM Users"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(
       ParseDDLStatement("ALTER TABLE Users RENAME TO NewUsers, SYNONYM "),
-      StatusIs(absl::StatusCode::kInvalidArgument));
+      StatusIs(StatusCode::kInvalidArgument));
 }
 
 // ALTER TABLE DROP COLUMN
@@ -1490,29 +1639,29 @@ TEST(ParseAlterTable, CanParseDropColumn) {
 
   // But this one fails, since it doesn't mention column name.
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP COLUMN"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseDropColumnMissingKeywordTable) {
   EXPECT_THAT(ParseDDLStatement("ALTER Users DROP Notes"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER Users DROP COLUMN Notes"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseDropColumnMissingTableName) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE DROP Notes"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE DROP COLUMN Notes"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users DROP `COLUMN` Notes"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 // ALTER TABLE ALTER COLUMN
@@ -1582,46 +1731,46 @@ TEST(ParseAlterTable, CanParseAlterColumnNamedColumn) {
 TEST(ParseAlterTable, CannotParseAlterColumnMissingColumnName) {
   // Below statement is ambiguous and fails, unlike column named 'column'.
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ALTER COLUMN STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAlterColumnMissingKeywordTable) {
   EXPECT_THAT(ParseDDLStatement("ALTER Users ALTER Notes STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER Users ALTER COLUMN Notes STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAlterColumnMissingTableName) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE ALTER Notes STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE ALTER COLUMN Notes STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAlterColumnMissingColumnProperties) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ALTER Notes"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ALTER COLUMN Notes"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterTable, CannotParseAlterColumnMiscErrors) {
   // Missing column name.
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ALTER STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   // Multiple column names.
   EXPECT_THAT(
       ParseDDLStatement("ALTER TABLE Users ALTER `COLUMN` Notes STRING(MAX)"),
-      StatusIs(absl::StatusCode::kInvalidArgument));
+      StatusIs(StatusCode::kInvalidArgument));
 
   // Missing table keyword.
   EXPECT_THAT(ParseDDLStatement("ALTER COLUMN Users.Notes STRING(MAX)"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(ParseAlterIndex, CanParseAddStoredColumn) {
@@ -1654,7 +1803,7 @@ TEST(ParseAlterIndex, CanNotParseUnknownAlterType) {
   EXPECT_THAT(ParseDDLStatement(R"sql(
                     ALTER INDEX index UNKNOWN STORED COLUMN extra_column
                   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 // ALTER TABLE SET ONDELETE
@@ -1714,7 +1863,7 @@ TEST(ParseAlterTable, CanParseAlterTableWithRowDeletionPolicy) {
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE T DROP ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY))
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Syntax error on line 2, column 44: Expecting "
                                  "'EOF' but found '('")));
 }
@@ -1748,10 +1897,10 @@ TEST(ParseRenameTable, CanParseRenameTableChain) {
 
 TEST(ParseRenameTable, CannotParseMalformedRenameTable) {
   EXPECT_THAT(ParseDDLStatement("RENAME TABLE Foo Bar"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   EXPECT_THAT(ParseDDLStatement("RENAME TABLE Bar TO Foo, Foo TO;"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 // MISCELLANEOUS
@@ -1762,7 +1911,7 @@ TEST(Miscellaneous, CannotParseNonAsciiCharacters) {
                   R"sql(
                     CREATE TABLE \x1b Users () PRIMARY KEY()
                   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CanParseExtraWhitespaceCharacters) {
@@ -1784,7 +1933,7 @@ TEST(Miscellaneous, CannotParseSmartQuotes) {
                       “Name” STRING(MAX)
                     ) PRIMARY KEY()
                   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CanParseMixedCaseStatements) {
@@ -1879,7 +2028,7 @@ TEST(Miscellaneous, CannotParseStringFieldsWithoutLength) {
                       Name STRING NOT NULL,
                     ) PRIMARY KEY (Name)
                   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CannotParseNonStringFieldsWithLength) {
@@ -1891,7 +2040,7 @@ TEST(Miscellaneous, CannotParseNonStringFieldsWithLength) {
                       Age INT64(4),
                     ) PRIMARY KEY (Name)
                   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(Miscellaneous, CanParseQuotedIdentifiers) {
@@ -1973,7 +2122,7 @@ TEST(AllowCommitTimestamp, CannotParseSingleInvalidOption) {
                       )
                     ) PRIMARY KEY ()
                   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 
   // Cannot also set an invalid option with null value.
   EXPECT_THAT(ParseDDLStatement(
@@ -1985,7 +2134,7 @@ TEST(AllowCommitTimestamp, CannotParseSingleInvalidOption) {
                       )
                     ) PRIMARY KEY ()
                   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(AllowCommitTimestamp, CanParseMultipleOptions) {
@@ -2030,7 +2179,7 @@ TEST(AllowCommitTimestamp, CannotParseMultipleOptionsWithTrailingComma) {
                       )
                     ) PRIMARY KEY ()
                   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST(AllowCommitTimestamp, SetThroughOptions) {
@@ -2058,7 +2207,7 @@ TEST(AllowCommitTimestamp, CannotParseInvalidOptionValue) {
                       )
                     ) PRIMARY KEY ()
                   )sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Encountered 'bogus' while parsing: option_key_val")));
 }
 
@@ -2073,7 +2222,7 @@ TEST(ParseToken, CannotParseUnterminatedTripleQuote) {
   for (const char *statement : statements) {
     EXPECT_THAT(
         ParseDDLStatement(statement),
-        StatusIs(absl::StatusCode::kInvalidArgument,
+        StatusIs(StatusCode::kInvalidArgument,
                  HasSubstr("Encountered an unclosed triple quoted string")));
   }
 }
@@ -2081,7 +2230,7 @@ TEST(ParseToken, CannotParseUnterminatedTripleQuote) {
 TEST(ParseToken, CannotParseIllegalStringEscape) {
   EXPECT_THAT(
       ParseDDLStatement("\"\xc2\""),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Encountered Structurally invalid UTF8 string")));
 }
 
@@ -2089,7 +2238,7 @@ TEST(ParseToken, CannotParseIllegalBytesEscape) {
   EXPECT_THAT(
       ParseDDLStatement("b'''k\\u0030'''"),
       StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           HasSubstr(
               "Encountered Illegal escape sequence: Unicode escape sequence")));
 }
@@ -2267,7 +2416,7 @@ TEST_F(ColumnDefaultValues, CannotParseDefaultAndGeneratedColumn) {
         G INT64 DEFAULT (1) AS (1) STORED,
        ) PRIMARY KEY (K)
     )sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
 }
 
 TEST_F(ColumnDefaultValues, CannotParseGeneratedAndDefaultColumn) {
@@ -2282,7 +2431,7 @@ TEST_F(ColumnDefaultValues, CannotParseGeneratedAndDefaultColumn) {
         G INT64 AS (1) STORED DEFAULT (1),
        ) PRIMARY KEY (K)
     )sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
 }
 
 TEST_F(ColumnDefaultValues, AlterTableAddDefaultColumn) {
@@ -2386,13 +2535,13 @@ TEST_F(ColumnDefaultValues, AlterTableDropDefaultToColumn) {
 TEST_F(ColumnDefaultValues, InvalidDropDefault) {
   EXPECT_THAT(
       ParseDDLStatement("ALTER TABLE T ALTER COLUMN D DROP DEFAULT (1)"),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
 }
 
 TEST_F(ColumnDefaultValues, InvalidSetDefault) {
   EXPECT_THAT(
       ParseDDLStatement("ALTER TABLE T ALTER COLUMN D SET DEFAULT"),
-      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
 }
 
 class CheckConstraint : public ::testing::Test {
@@ -2621,27 +2770,27 @@ TEST_F(CheckConstraint, ParseSyntaxErrorsInCheckConstraint) {
                         "  Value INT64,"
                         "  CONSTRAINT ALL CHECK(Value > 0),"
                         ") PRIMARY KEY(Id)"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Encountered 'ALL' while parsing: column_type")));
 
   EXPECT_THAT(
       ParseDDLStatement("ALTER TABLE T ADD CHECK(B > '\\c')"),
       StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           HasSubstr("Expecting ')' but found Illegal escape sequence: \\c")));
 
   EXPECT_THAT(
       ParseDDLStatement("ALTER TABLE T ADD CONSTRAINT GROUPS CHECK(B > `A`))"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Encountered 'GROUPS' while parsing")));
 
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE T ADD CHECK(()"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Expecting ')' but found 'EOF'")));
 
   EXPECT_THAT(ParseDDLStatement(
                   "ALTER TABLE T ALTER CONSTRAINT col_a_gt_zero CHECK(A < 0);"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -2777,32 +2926,32 @@ TEST(ParseProtoBundleStatements, FailsParsingInvalidIdentifiers) {
   EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
                                 "  create.foo"
                                 ")"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
                                 "  'create'.foo"
                                 ")"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
                                 "  ''create'''.foo"
                                 ")"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
                                 "  foo-.bar"
                                 ")"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
                                 "  .foo.bar"
                                 ")"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(ParseDDLStatement("CREATE PROTO BUNDLE ("
                                 "  foo,.bar"
                                 ")"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3020,7 +3169,7 @@ TEST_F(ProtoAndEnumColumns, FailsParsingInvalidCreateTableSyntax) {
       State PROTO<customer.app.UserState>(MAX)
     ) PRIMARY KEY (Id)
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(ParseDDLStatement(R"sql(
     CREATE TABLE Users(
@@ -3029,7 +3178,7 @@ TEST_F(ProtoAndEnumColumns, FailsParsingInvalidCreateTableSyntax) {
       State PROTO<customer.app.UserState>(MAX)
     ) PRIMARY KEY (Id)
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3086,7 +3235,7 @@ TEST_F(ProtoAndEnumColumns,
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ADD COLUMN customer.app.UserState
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3175,14 +3324,14 @@ TEST_F(ProtoAndEnumColumns, FailsToParseAlterColumnWithAmbiguousColumn) {
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ALTER COLUMN customer.app.UserState
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 
   // A column called COLUMN with the type COLUMN.
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ALTER COLUMN COLUMN
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3239,7 +3388,7 @@ TEST_F(ProtoAndEnumColumns, FailsToParseAlterColumnWithSetType) {
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ALTER COLUMN SET
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3247,7 +3396,7 @@ TEST_F(ProtoAndEnumColumns, FailsToParseAlterColumnWithSetNotNull) {
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ALTER COLUMN State SET NOT NULL
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3255,7 +3404,7 @@ TEST_F(ProtoAndEnumColumns, FailsToParseAlterColumnWithDropNotNull) {
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ALTER COLUMN State DROP NOT NULL
   )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3339,7 +3488,6 @@ TEST_F(ProtoAndEnumColumns, CanParseAlterTableWithKeywordsAsTypes) {
         }
       )pb")));
 }
-
 
 TEST(CreateChangeStream, CanParseCreateChangeStreamForAll) {
   EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
@@ -3485,7 +3633,7 @@ TEST(CreateChangeStream, ChangeStreamErrorForTableNamedALLWithColumn) {
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForTableNamedALLWithColumn
   FOR ALL(SomeColumn))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3493,7 +3641,7 @@ TEST(CreateChangeStream, ChangeStreamErrorForTableNamedALLWithPK) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForTableNamedALLWithPK FOR ALL())sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3501,7 +3649,7 @@ TEST(CreateChangeStream, ChangeStreamErrorForUsersAndALL) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForUsersAndALL FOR Users, ALL)sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3509,7 +3657,7 @@ TEST(CreateChangeStream, ChangeStreamErrorForUsersALLAlbums) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForUsersALLAlbums FOR Users(), ALL, Albums())sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3517,7 +3665,7 @@ TEST(CreateChangeStream, ChangeStreamErrorForUsersColumnALL) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForUsersColumnALL FOR Users(ALL))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3534,7 +3682,7 @@ TEST(CreateChangeStream, ChangeStreamErrorForClauseNothingFollowing) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing FOR)sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3691,7 +3839,7 @@ TEST(CreateChangeStream, ChangeStreamErrorEmptyOptions) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS ())sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3699,7 +3847,7 @@ TEST(CreateChangeStream, ChangeStreamErrorDuplicateOptions) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (retention_period = '7d', retention_period = '7d'))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3707,7 +3855,7 @@ TEST(CreateChangeStream, ChangeStreamErrorInvalidOptionsSyntax) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing SET OPTIONS (retention_period = '7d'))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3715,7 +3863,7 @@ TEST(CreateChangeStream, ChangeStreamErrorUnsupportedOptionName) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (allow_commit_timestamp = true))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3723,66 +3871,66 @@ TEST(CreateChangeStream, ChangeStreamErrorInvalidOptionType) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (retention_period = 1))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (retention_period = true))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (retention_period = ['list']))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (retention_period = [('key','val')]))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (value_capture_type = -1))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (value_capture_type = false))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (value_capture_type = ['list']))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (value_capture_type = [('key','val')]))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (exclude_insert = "false"))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (exclude_update = ['true']))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (exclude_delete = 1))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(CREATE CHANGE STREAM ChangeStreamErrorForClauseNothingFollowing OPTIONS (exclude_ttl_deletes = "null"))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3895,50 +4043,50 @@ TEST(AlterChangeStream, CanParseAlterChangeStreamSuspend) {
 
 TEST(DropChangeStream, MissingAlterAction) {
   EXPECT_THAT(ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs)sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
 TEST(DropChangeStream, MissingChangeStreamName) {
   EXPECT_THAT(ParseDDLStatement(R"sql(ALTER CHANGE STREAM SET FOR ALL)sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(ALTER CHANGE STREAM SET OPTIONS (retention_period = '7d'))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
 TEST(DropChangeStream, MissingKeyWordSet) {
   EXPECT_THAT(ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs FOR ALL)sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(ALTER CHANGE STREAM cs OPTIONS (retention_period = '7d'))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
 TEST(DropChangeStream, InvalidForClause) {
   EXPECT_THAT(ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs SET FOR)sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs SET FOR ALL())sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs SET FOR ALL, Users)sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
 TEST(DropChangeStream, EmptyOptions) {
   EXPECT_THAT(
       ParseDDLStatement(R"sql(ALTER CHANGE STREAM cs SET OPTIONS ())sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3946,7 +4094,7 @@ TEST(DropChangeStream, DuplicateOptions) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(ALTER CHANGE STREAM cs SET OPTIONS (retention_period = '7d', retention_period = '5d'))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3954,7 +4102,7 @@ TEST(DropChangeStream, UnsupportedOptionName) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(ALTER CHANGE STREAM cs SET OPTIONS (allow_commit_timestamp = true))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3962,22 +4110,22 @@ TEST(DropChangeStream, InvalidOptionType) {
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(ALTER CHANGE STREAM cs SET OPTIONS (retention_period = 1))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(ALTER CHANGE STREAM cs SET OPTIONS (retention_period = true))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(ALTER CHANGE STREAM cs SET OPTIONS (value_capture_type = -1))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(ALTER CHANGE STREAM cs SET OPTIONS (value_capture_type = false))sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -3990,13 +4138,156 @@ TEST(DropChangeStream, CanParseDropChangeStream) {
 
 TEST(DropChangeStream, ErrorParseDropChangeStreams) {
   EXPECT_THAT(ParseDDLStatement(R"sql(DROP CHANGE STREAM)sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(ParseDDLStatement(R"sql(DROP `CHANGE STREAM`)sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
   EXPECT_THAT(ParseDDLStatement(R"sql(DROP `CHANGE` `STREAM`)sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(CreateSearchIndex, CanParseDDLStatement) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+          CREATE SEARCH INDEX SearchIndex ON Base(Token1)
+          )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_search_index {
+          index_name: "SearchIndex"
+          index_base_name: "Base"
+          token_column_definition { token_column { key_name: "Token1" } }
+        })pb")));
+}
+
+TEST(CreateSearchIndex, CanParseDDLStatementWithOneOption) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+          CREATE SEARCH INDEX SearchIndex ON Base(Token1)
+          OPTIONS (sort_order_sharding = true)
+          )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_search_index {
+          index_name: "SearchIndex"
+          index_base_name: "Base"
+          token_column_definition { token_column { key_name: "Token1" } }
+          set_options { option_name: "sort_order_sharding" bool_value: true }
+        })pb")));
+}
+
+TEST(CreateSearchIndex, CanParseDDLStatementWithTwoOptions) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+          CREATE SEARCH INDEX SearchIndex ON Base(Token1)
+          OPTIONS (sort_order_sharding = true, disable_automatic_uid_column = false)
+          )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_search_index {
+          index_name: "SearchIndex"
+          index_base_name: "Base"
+          token_column_definition { token_column { key_name: "Token1" } }
+          set_options { option_name: "sort_order_sharding" bool_value: true }
+          set_options {
+            option_name: "disable_automatic_uid_column"
+            bool_value: false
+          }
+        })pb")));
+}
+
+TEST(CreateSearchIndex, CannotParseDDLStatementWithDuplicateOptions) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+          CREATE SEARCH INDEX SearchIndex ON Base(Token1)
+          OPTIONS (sort_order_sharding = true, disable_automatic_uid_column = false,
+                    sort_order_sharding = false)
+          )sql"),
+              StatusIs(StatusCode::kInvalidArgument));
+}
+
+TEST(CreateSearchIndex, CannotParseDDLStatementWithUnsupportedOptions) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+          CREATE SEARCH INDEX SearchIndex ON Base(Token1)
+          OPTIONS (some_invalid_name = true)
+          )sql"),
+              StatusIs(StatusCode::kInvalidArgument));
+}
+
+TEST(CreateSearchIndex, CanParseDDLStatementWithWhereIsNotNull) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+          CREATE SEARCH INDEX SearchIndex ON Base(Token1)
+          ORDER BY Sort1, Sort2
+          WHERE Sort1 IS NOT NULL
+            AND Sort2 IS NOT NULL
+          OPTIONS (sort_order_sharding = false)
+          )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_search_index {
+          index_name: "SearchIndex"
+          index_base_name: "Base"
+          token_column_definition { token_column { key_name: "Token1" } }
+          order_by { key_name: "Sort1" }
+          order_by { key_name: "Sort2" }
+          null_filtered_column: "Sort1"
+          null_filtered_column: "Sort2"
+          set_options { option_name: "sort_order_sharding" bool_value: false }
+        }
+      )pb")));
+}
+
+TEST(CreateSearchIndex, CanParseComplicatedDDLStatement) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+            CREATE SEARCH INDEX SearchIndex ON
+            Base(Token1, Token2) STORING(Stored1, Stored2)
+            PARTITION BY Partition1, Partition2
+            ORDER BY Sort DESC, uid,
+            INTERLEAVE IN Dir)sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_search_index {
+          index_name: "SearchIndex"
+          index_base_name: "Base"
+          token_column_definition { token_column { key_name: "Token1" } }
+          token_column_definition { token_column { key_name: "Token2" } }
+          partition_by { key_name: "Partition1" }
+          partition_by { key_name: "Partition2" }
+          order_by { key_name: "Sort" order: DESC }
+          order_by { key_name: "uid" }
+          interleave_in_table: "Dir"
+          stored_column_definition { name: "Stored1" }
+          stored_column_definition { name: "Stored2" }
+        }
+      )pb")));
+}
+
+TEST(ParseDropSearchIndex, CanParseDropSearchIndexBasic) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+            DROP SEARCH INDEX SearchIndex
+              )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  "drop_index { index_name: 'SearchIndex' }")));
+}
+
+TEST(ParseDropSearchIndex, CannotParseDropSearchIndexMissingIndexName) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+            DROP SEARCH INDEX
+              )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Error parsing Spanner DDL statement")));
+}
+
+TEST(ParseDropSearchIndex, CannotParseDropSearchIndexInappropriateQuotes) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+            DROP `SEARCH INDEX` SearchIndex
+              )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Error parsing Spanner DDL statement")));
 }
 
@@ -4104,7 +4395,7 @@ TEST(CreateSequence, Invalid_NoSequenceKind) {
           start_with_counter = 1
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("CREATE SEQUENCE statements require option "
                                  "`sequence_kind` to be set")));
 }
@@ -4113,7 +4404,7 @@ TEST(CreateSequence, Invalid_EmptyOptionList) {
   EXPECT_THAT(ParseDDLStatement(R"sql(
       CREATE SEQUENCE seq OPTIONS ()
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Encountered ')' while parsing: identifier")));
 }
 
@@ -4125,7 +4416,7 @@ TEST(CreateSequence, Invalid_NullSequenceKind) {
       )
       )sql"),
       StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           HasSubstr(
               "The only supported sequence kind is `bit_reversed_positive`")));
 }
@@ -4136,7 +4427,7 @@ TEST(CreateSequence, Invalid_UnknownSequenceKind) {
         sequence_kind = "some_kind"
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Unsupported sequence kind: some_kind")));
 }
 
@@ -4147,7 +4438,7 @@ TEST(CreateSequence, Invalid_UnknownOption) {
         start_with = 1
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Option: start_with is unknown")));
 }
 
@@ -4159,7 +4450,7 @@ TEST(CreateSequence, Invalid_WrongOptionValue) {
         start_with_counter = "hello"
       )
       )sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Unexpected value for option: start_with_counter. "
                          "Supported option values are integers and NULL.")));
 }
@@ -4171,7 +4462,7 @@ TEST(CreateSequence, Invalid_DuplicateOption) {
         sequence_kind = "bit_reversed_positive"
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Duplicate option: sequence_kind")));
 }
 
@@ -4181,7 +4472,7 @@ TEST(CreateSequence, Invalid_SetOptionClause) {
         sequence_kind = "bit_reversed_positive"
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Expecting 'EOF' but found 'SET'")));
 }
 
@@ -4281,7 +4572,7 @@ TEST(AlterSequence, Invalid_EmptySetOptionClause) {
       ALTER SEQUENCE seq SET OPTIONS (
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Encountered ')' while parsing: identifier")));
 }
 
@@ -4291,7 +4582,7 @@ TEST(AlterSequence, Invalid_OptionClauseWithoutSetKeyword) {
         skip_range_min = 1
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Expecting 'SET' but found 'OPTIONS'")
                        ));
 }
@@ -4304,7 +4595,7 @@ TEST(AlterSequence, Invalid_SetSequenceKindToNull) {
       )
       )sql"),
       StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           HasSubstr(
               "The only supported sequence kind is `bit_reversed_positive`")));
 }
@@ -4315,7 +4606,7 @@ TEST(AlterSequence, Invalid_SetSequenceKindToOtherKind) {
         sequence_kind = "other_kind"
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Unsupported sequence kind: other_kind")));
 }
 
@@ -4325,7 +4616,7 @@ TEST(AlterSequence, Invalid_UnknownOption) {
         start_with = 1
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Option: start_with is unknown")));
 }
 
@@ -4336,7 +4627,7 @@ TEST(AlterSequence, Invalid_WrongOptionValue) {
         start_with_counter = "hello"
       )
       )sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Unexpected value for option: start_with_counter. "
                          "Supported option values are integers and NULL.")));
 }
@@ -4348,7 +4639,7 @@ TEST(AlterSequence, Invalid_DuplicateOption) {
         start_with_counter = 1
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Duplicate option: start_with_counter")));
 }
 
@@ -4358,7 +4649,7 @@ TEST(DropSequence, Invalid_WithOptionClause) {
         start_with_counter = 1
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Expecting 'EOF' but found 'OPTIONS'")));
 }
 
@@ -4368,7 +4659,7 @@ TEST(DropSequence, Invalid_WithSetOptionClause) {
         start_with_counter = 1
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Expecting 'EOF' but found 'SET'")));
 }
 
@@ -4412,6 +4703,19 @@ TEST(ParseViews, CreateViewWithSqlSecurity) {
                   function_name: "MyView"
                   function_kind: VIEW
                   sql_body: "SELECT 1"
+                  sql_security: INVOKER
+                  language: SQL
+                })pb")));
+}
+
+TEST(ParseViews, CreateViewWithEmptySqlBody) {
+  EXPECT_THAT(ParseDDLStatement("CREATE VIEW MyView "
+                                "SQL SECURITY INVOKER AS ()"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "MyView"
+                  function_kind: VIEW
+                  sql_body: "()"
                   sql_security: INVOKER
                   language: SQL
                 })pb")));
@@ -4719,19 +5023,19 @@ TEST(ParseCreateModel, ParseCreateModel) {
       ParseDDLStatement(R"sql(
       CREATE MODEL
       )sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Encountered 'EOF' while parsing: identifier")));
 
   EXPECT_THAT(ParseDDLStatement(R"sql(
       CREATE MODEL MyModel OPTIONS ()
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Encountered ')' while parsing: identifier")));
 
   EXPECT_THAT(ParseDDLStatement(R"sql(
       CREATE MODEL MyModel OPTIONS (unknown_option = true)
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Option: unknown_option is unknown")));
 
   EXPECT_THAT(ParseDDLStatement(R"sql(
@@ -4740,7 +5044,7 @@ TEST(ParseCreateModel, ParseCreateModel) {
         endpoint = 'test'
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Duplicate option: endpoint")));
 
   // Model has a STRUCT column with missing types
@@ -4748,7 +5052,7 @@ TEST(ParseCreateModel, ParseCreateModel) {
       ParseDDLStatement(R"sql(
       CREATE MODEL m INPUT (f1 INT64) OUTPUT (l1 STRUCT<foo, bar>)
       )sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Encountered ',' while parsing: column_type")));
 }
 
@@ -4798,19 +5102,19 @@ TEST(ParseAlterModel, ParseAlterModel) {
       ParseDDLStatement(R"sql(
       ALTER MODEL
       )sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Encountered 'EOF' while parsing: identifier")));
 
   EXPECT_THAT(ParseDDLStatement(R"sql(
       ALTER MODEL MyModel SET OPTIONS ()
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Encountered ')' while parsing: identifier")));
 
   EXPECT_THAT(ParseDDLStatement(R"sql(
       ALTER MODEL MyModel SET OPTIONS (unknown_option = true)
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Option: unknown_option is unknown")));
 
   EXPECT_THAT(ParseDDLStatement(R"sql(
@@ -4819,7 +5123,7 @@ TEST(ParseAlterModel, ParseAlterModel) {
         endpoint='//aiplatform.googleapis.com/projects/p/locations/l/endpoints/e'
       )
       )sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Duplicate option: endpoint")));
 }
 
@@ -4840,7 +5144,7 @@ TEST(ParseDropModel, ParseDropModel) {
       ParseDDLStatement(R"sql(
       DROP MODEL
       )sql"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Encountered 'EOF' while parsing: identifier")));
 }
 
@@ -4947,7 +5251,7 @@ TEST(ParseFGAC, GrantPrivilege) {
   EXPECT_THAT(
       ParseDDLStatement("GRANT DESTROY ON TABLE MyTable TO ROLE MyRole"),
       StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           HasSubstr("Encountered 'DESTROY' while parsing: grant_statement")));
 
   // Multiple Invalid Privileges.
@@ -4955,14 +5259,14 @@ TEST(ParseFGAC, GrantPrivilege) {
       ParseDDLStatement(
           "GRANT DESTROY CRASH BURN ON TABLE MyTable TO ROLE MyRole"),
       StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           HasSubstr("Encountered 'DESTROY' while parsing: grant_statement")));
 
   // Valid and Invalid Privileges.
   EXPECT_THAT(
       ParseDDLStatement(
           "GRANT INSERT, UPDATE, DESTROY ON TABLE MyTable TO ROLE MyRole"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Encountered 'DESTROY' while parsing: privilege")));
 }
 
@@ -5045,7 +5349,7 @@ TEST(ParseFGAC, RevokePrivilege) {
   EXPECT_THAT(
       ParseDDLStatement("REVOKE DESTROY ON TABLE MyTable FROM ROLE MyRole"),
       StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           HasSubstr("Encountered 'DESTROY' while parsing: revoke_statement")));
 
   // Multiple Invalid Privileges.
@@ -5053,14 +5357,14 @@ TEST(ParseFGAC, RevokePrivilege) {
       ParseDDLStatement(
           "REVOKE DESTROY CRASH BURN FROM TABLE MyTable TO ROLE MyRole"),
       StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           HasSubstr("Encountered 'DESTROY' while parsing: revoke_statement")));
 
   // Valid and Invalid Privileges.
   EXPECT_THAT(
       ParseDDLStatement(
           "REVOKE INSERT, UPDATE, DESTROY FROM TABLE MyTable TO ROLE MyRole"),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Encountered 'DESTROY' while parsing: privilege")));
 }
 
@@ -5104,6 +5408,706 @@ TEST(ParseFGAC, RevokeMembership) {
                   grantee { type: ROLE name: "MyRole3" }
                   grantee { type: ROLE name: "MyRole4" }
                 })pb")));
+}
+
+TEST(UserDefinedFunction, CreateFunctionBasicFlagDisabled) {
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL "
+                        "SECURITY INVOKER AS (x+1)"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("User defined functions are not supported.")));
+}
+
+TEST(UserDefinedFunction, CreateFunctionBasic) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto statement,
+      ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL "
+                        "SECURITY INVOKER AS (x+1)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_1"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "x" param_typename: "INT64" }
+                  return_typename: "INT64"
+                  sql_body: "x+1"
+                  language: SQL
+                }
+              )pb"));
+}
+
+TEST(UserDefinedFunction, ParameterizedTypes) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto statement,
+      ParseDDLStatement("CREATE FUNCTION T.func(a STRING(10)) "
+                        "RETURNS STRING(MAX) SQL SECURITY INVOKER AS (NULL)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "T.func"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "a" param_typename: "STRING(10)" }
+                  return_typename: "STRING(MAX)"
+                  sql_body: "NULL"
+                  language: SQL
+                }
+              )pb"));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      statement,
+      ParseDDLStatement("CREATE FUNCTION T.func(a STRING) "
+                        "RETURNS STRING(10) SQL SECURITY INVOKER AS (NULL)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "T.func"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "a" param_typename: "STRING" }
+                  return_typename: "STRING(10)"
+                  sql_body: "NULL"
+                  language: SQL
+                }
+              )pb"));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      statement,
+      ParseDDLStatement("CREATE FUNCTION T.func(a ARRAY<STRING>) RETURNS "
+                        "STRING SQL SECURITY INVOKER AS (NULL)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "T.func"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "a" param_typename: "ARRAY<STRING>" }
+                  return_typename: "STRING"
+                  sql_body: "NULL"
+                  language: SQL
+                }
+              )pb"));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      statement, ParseDDLStatement(
+                     "CREATE FUNCTION T.func(a STRING) "
+                     "RETURNS ARRAY<STRING> SQL SECURITY INVOKER  AS (NULL)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "T.func"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "a" param_typename: "STRING" }
+                  return_typename: "ARRAY<STRING>"
+                  sql_body: "NULL"
+                  language: SQL
+                }
+              )pb"));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      statement,
+      ParseDDLStatement("CREATE FUNCTION T.func(a ARRAY<STRING(10)>) RETURNS "
+                        "STRING SQL SECURITY INVOKER AS (NULL)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "T.func"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "a" param_typename: "ARRAY<STRING(10)>" }
+                  return_typename: "STRING"
+                  sql_body: "NULL"
+                  language: SQL
+                }
+              )pb"));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      statement,
+      ParseDDLStatement("CREATE FUNCTION T.func(a STRING) RETURNS "
+                        "ARRAY<STRING(10)> SQL SECURITY INVOKER AS (a)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "T.func"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "a" param_typename: "STRING" }
+                  return_typename: "ARRAY<STRING(10)>"
+                  sql_body: "a"
+                  language: SQL
+                }
+              )pb"));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithAnyType) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION T.func(a ANY TYPE, b INT64) RETURNS "
+                        "INT64 AS (a + b)"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Encountered 'ANY' while parsing")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION T.func(a ARRAY<ANY>) RETURNS INT64 AS "
+                        "(NULL)"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Encountered 'ANY' while parsing")));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithInvalidDeterminism) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION foo() RETURNS STRING IMMUTABLE AS "
+                        "(GENERATE_UUID())"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Expecting 'AS' but found 'IMMUTABLE'")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION foo() RETURNS STRING DETERMINISTIC AS "
+                        "(GENERATE_UUID())"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Expecting 'AS' but found 'DETERMINISTIC'")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION foo() RETURNS STRING STABLE AS "
+                        "(GENERATE_UUID())"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Expecting 'AS' but found 'STABLE'")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "CREATE FUNCTION foo(a INT64) RETURNS STRING NOT DETERMINISTIC AS "
+          "(GENERATE_UUID())"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Expecting 'AS' but found 'NOT'")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION foo() RETURNS STRING VOLATILE AS "
+                        "(GENERATE_UUID())"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Expecting 'AS' but found 'VOLATILE'")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "CREATE FUNCTION foo(a INT64) RETURNS STRING INVALID_DETERMINISM AS "
+          "(GENERATE_UUID())"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Expecting 'AS' but found 'INVALID_DETERMINISM'")));
+}
+
+TEST(UserDefinedFunction, CreateFunctionLowercase) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto statement,
+      ParseDDLStatement("create function udf_1(x INT64) returns INT64 "
+                        "sql security invoker as (x+1)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_1"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "x" param_typename: "INT64" }
+                  return_typename: "INT64"
+                  sql_body: "x+1"
+                  language: SQL
+                }
+              )pb"));
+}
+
+TEST(UserDefinedFunction, CreateFunctionComplexExpression) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto statement,
+      ParseDDLStatement(
+          "CREATE FUNCTION udf_1(x INT64, y INT64, z INT64) RETURNS INT64 SQL "
+          "SECURITY INVOKER AS (x + y + (z / x))"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_1"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "x" param_typename: "INT64" }
+                  param { name: "y" param_typename: "INT64" }
+                  param { name: "z" param_typename: "INT64" }
+                  return_typename: "INT64"
+                  sql_body: "x + y + (z / x)"
+                  language: SQL
+                }
+              )pb"));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithNoParams) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto statement,
+      ParseDDLStatement("CREATE FUNCTION udf_1() RETURNS INT64 SQL SECURITY "
+                        "INVOKER AS (1)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_1"
+                  function_kind: FUNCTION
+                  return_typename: "INT64"
+                  sql_security: INVOKER
+                  sql_body: "1"
+                  language: SQL
+                }
+              )pb"));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithNoSqlSecurity) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto statement,
+      ParseDDLStatement(
+          "CREATE FUNCTION udf_1(x INT64) RETURNS INT64 AS (x+1)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_1"
+                  function_kind: FUNCTION
+                  param { name: "x" param_typename: "INT64" }
+                  return_typename: "INT64"
+                  sql_body: "x+1"
+                  language: SQL
+                }
+              )pb"));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithNoReturns) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto statement,
+      ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) AS (x+1)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_1"
+                  function_kind: FUNCTION
+                  param { name: "x" param_typename: "INT64" }
+                  sql_body: "x+1"
+                  language: SQL
+                }
+              )pb"));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithNoExpressionFails) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) "
+                        "RETURNS INT64 SQL SECURITY INVOKER"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithInvalidSecurityFails) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) "
+                        "RETURNS INT64 SQL SECURITY DEFINER"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithRemoteFails) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  // Remote functions are not supported in the emulator.
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) "
+                        "RETURNS INT64 REMOTE SECURITY DEFINER"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithNoFunctionNameFails) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION RETURNS INT64 SQL SECURITY INVOKER"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST(UserDefinedFunction, CreateOrReplaceFunction) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto statement,
+      ParseDDLStatement(
+          "CREATE OR REPLACE FUNCTION udf_1(x INT64) RETURNS INT64 SQL "
+          "SECURITY INVOKER AS (x+1)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_1"
+                  function_kind: FUNCTION
+                  is_or_replace: true
+                  sql_security: INVOKER
+                  param { name: "x" param_typename: "INT64" }
+                  return_typename: "INT64"
+                  sql_body: "x+1"
+                  language: SQL
+                }
+              )pb"));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithScalarSubquery) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto statement,
+      ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL "
+                        "SECURITY INVOKER AS ((SELECT 1) + x)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_1"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "x" param_typename: "INT64" }
+                  return_typename: "INT64"
+                  sql_body: "(SELECT 1) + x"
+                  language: SQL
+                }
+              )pb"));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithDefaultsPositional) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto statement,
+      ParseDDLStatement(
+          "CREATE FUNCTION udf_1(x INT64 DEFAULT 1) RETURNS INT64 SQL "
+          "SECURITY INVOKER AS (x+1)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_1"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "x" param_typename: "INT64" default_value: "1" }
+                  return_typename: "INT64"
+                  sql_body: "x+1"
+                  language: SQL
+                }
+              )pb"));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      statement,
+      ParseDDLStatement("CREATE FUNCTION udf_1(x INT64 DEFAULT 1, y INT64 "
+                        "DEFAULT 2) RETURNS INT64 SQL "
+                        "SECURITY INVOKER AS (x+1)"));
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_1"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param { name: "x" param_typename: "INT64" default_value: "1" }
+                  param { name: "y" param_typename: "INT64" default_value: "2" }
+                  return_typename: "INT64"
+                  sql_body: "x+1"
+                  language: SQL
+                }
+              )pb"));
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION udf_1(x INT64 DEFAULT 1, y INT64, z "
+                        "INT64 DEFAULT 3) RETURNS INT64 SQL "
+                        "SECURITY INVOKER AS (x+1)"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Function parameters must have default values if any "
+                         "previous parameter has a default value.")));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithManyFunctionLiterals) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto statement, ParseDDLStatement(
+                                           R"(
+CREATE FUNCTION udf_many_literals(
+  param_int64 INT64 DEFAULT 1,
+  param_numeric NUMERIC DEFAULT NUMERIC '123.456',
+  param_string STRING DEFAULT 'default_string',
+  param_bool BOOL DEFAULT TRUE,
+  param_timestamp TIMESTAMP DEFAULT TIMESTAMP '2021-01-01 00:00:00+00',
+  param_struct STRUCT<field1 INT64> DEFAULT (1),
+  param_json JSON DEFAULT JSON '{"key": "value"}',
+  param_null INT64 DEFAULT NULL
+) RETURNS INT64 SQL SECURITY INVOKER AS (param_int64 + 1)
+)"));
+
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_many_literals"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param {
+                    name: "param_int64"
+                    param_typename: "INT64"
+                    default_value: "1"
+                  }
+                  param {
+                    name: "param_numeric"
+                    param_typename: "NUMERIC"
+                    default_value: "NUMERIC \'123.456\'"
+                  }
+                  param {
+                    name: "param_string"
+                    param_typename: "STRING"
+                    default_value: "\'default_string\'"
+                  }
+                  param {
+                    name: "param_bool"
+                    param_typename: "BOOL"
+                    default_value: "TRUE"
+                  }
+                  param {
+                    name: "param_timestamp"
+                    param_typename: "TIMESTAMP"
+                    default_value: "TIMESTAMP \'2021-01-01 00:00:00+00\'"
+                  }
+                  param {
+                    name: "param_struct"
+                    param_typename: "STRUCT<field1 INT64>"
+                    default_value: "(1)"
+                  }
+                  param {
+                    name: "param_json"
+                    param_typename: "JSON"
+                    default_value: "JSON \'{\"key\": \"value\"}\'"
+                  }
+                  param {
+                    name: "param_null"
+                    param_typename: "INT64"
+                    default_value: "NULL"
+                  }
+                  return_typename: "INT64"
+                  sql_body: "param_int64 + 1"
+                  language: SQL
+                }
+              )pb"));
+}
+
+TEST(UserDefinedFunction, CreateFunctionWithArrayLiterals) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto statement, ParseDDLStatement(
+                                           R"(
+CREATE FUNCTION udf_array_literals(
+  param_int_array ARRAY<INT64> DEFAULT [1, 2, 3],
+  param_string_array ARRAY<STRING> DEFAULT ['x', 'y', 'xy'],
+  param_empty_int_array ARRAY<INT64> DEFAULT ARRAY<INT64>[],
+  param_empty_string_array ARRAY<STRING> DEFAULT ARRAY<STRING>[],
+  param_untyped_array ARRAY<STRING> DEFAULT ARRAY['a', 'b', 'c'],
+  param_nested_array ARRAY<ARRAY<INT64>> DEFAULT [[1, 2], [3, 4]]
+) RETURNS INT64 SQL SECURITY INVOKER AS (ARRAY_LENGTH(param_int_array))
+)"));
+
+  EXPECT_THAT(statement, test::EqualsProto(R"pb(
+                create_function {
+                  function_name: "udf_array_literals"
+                  function_kind: FUNCTION
+                  sql_security: INVOKER
+                  param {
+                    name: "param_int_array"
+                    param_typename: "ARRAY<INT64>"
+                    default_value: "[1, 2, 3]"
+                  }
+                  param {
+                    name: "param_string_array"
+                    param_typename: "ARRAY<STRING>"
+                    default_value: "['x', 'y', 'xy']"
+                  }
+                  param {
+                    name: "param_empty_int_array"
+                    param_typename: "ARRAY<INT64>"
+                    default_value: "ARRAY<INT64>[]"
+                  }
+                  param {
+                    name: "param_empty_string_array"
+                    param_typename: "ARRAY<STRING>"
+                    default_value: "ARRAY<STRING>[]"
+                  }
+                  param {
+                    name: "param_untyped_array"
+                    param_typename: "ARRAY<STRING>"
+                    default_value: "ARRAY['a', 'b', 'c']"
+                  }
+                  param {
+                    name: "param_nested_array"
+                    param_typename: "ARRAY<ARRAY<INT64>>"
+                    default_value: "[[1, 2], [3, 4]]"
+                  }
+                  return_typename: "INT64"
+                  sql_body: "ARRAY_LENGTH(param_int_array)"
+                  language: SQL
+                }
+              )pb"));
+}
+
+TEST(UserDefinedFunction, CreateFunctionInvalidSyntax) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "CREATE FUNCTION T.func(a ARRAY<ANY>) RETURNS INT64 AS (NULL)"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Encountered 'ANY' while parsing")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION foo (,) RETURNS INT64 AS (NULL)"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Expecting ')' but found ','")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION foo (a,b) RETURNS INT64 AS (NULL)"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Encountered ',' while parsing")));
+
+  EXPECT_THAT(ParseDDLStatement(
+                  "CREATE FUNCTION foo (int64_t,int64) RETURNS INT64 AS (NULL)"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Encountered ',' while parsing")));
+
+  EXPECT_THAT(ParseDDLStatement("CREATE FUNCTION foo () RETURNS INT64 AS NULL"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Expecting '(' but found 'NULL'")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION foo () RETURNS INT64 AS (NULL;"),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr("Expecting ')' but found an unknown character (';').")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION foo () RETURNS INT64 AS NULL);"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Expecting '(' but found 'NULL'")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "CREATE FUNCTION foo () RETURNS INT64 SQL SECURITY FOOBAR AS (NULL)"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Expecting 'INVOKER' but found 'FOOBAR'")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION udf_1()) RETURNS INT64 SQL SECURITY "
+                        "INVOKER AS (x+1)"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Expecting 'AS' but found ')'")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL "
+                        "SECURITY INVOKER AS ()"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Encountered ')' while parsing: expression")));
+}
+
+TEST(UserDefinedFunction, CreateTVFFailures) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  EXPECT_THAT(
+      ParseDDLStatement("CREATE TABLE FUNCTION foo(X INT64) AS ((SELECT X));"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "CREATE OR REPLACE TABLE FUNCTION foo(X INT64) AS ((SELECT X));"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST(UserDefinedFunction, DropFunctionBasic) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(ParseDDLStatement("DROP FUNCTION udf_1"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_function { function_name: "udf_1" function_kind: FUNCTION }
+              )pb")));
+}
+
+TEST(UserDefinedFunction, DropFunctionIfExists) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(ParseDDLStatement("DROP FUNCTION IF EXISTS udf_1"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_function {
+                  function_name: "udf_1"
+                  function_kind: FUNCTION
+                  existence_modifier: IF_EXISTS
+                }
+              )pb")));
+}
+
+TEST(UserDefinedFunction, DropFunctionInvalidSyntax) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(
+      ParseDDLStatement("DROP FUNCTION udf_1()"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("DROP FUNCTION foo()"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("DROP FUNCTION foo(a)"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("DROP FUNCTION foo(INT64)"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("DROP FUNCTION foo(a INT64)"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("DROP FUNCTION foo IF EXISTS"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement("DROP TABLE FUNCTION foo"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST(UserDefinedFunction, DropFunctionNotSupportedWhenFlagOff) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  EXPECT_THAT(ParseDDLStatement("DROP FUNCTION foo"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("User defined functions are not supported")));
 }
 
 }  // namespace

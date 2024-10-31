@@ -663,7 +663,6 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 %type <list>    change_stream_tracked_tables_list
 %type <node>    change_stream_tracked_tables
 
-
 /*
  * Non-keyword token types.  These are hard-wired into the "flex" lexer.
  * They must be listed first so that their numeric codes do not depend on

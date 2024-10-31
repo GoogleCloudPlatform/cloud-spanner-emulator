@@ -971,6 +971,251 @@ TEST_P(SchemaUpdaterTest, DropIndexIsCaseSensitive) {
       DROP INDEX idx1)sql"}),
               StatusIs(error::IndexNotFound("idx1")));
 }
+// For the following tests, a custom PG DDL statement is required as the schema
+// has a generated column. Translating expressions from GSQL to PG is not
+// supported in tests.
+
+TEST_P(SchemaUpdaterTest, CannotCreateIndexOnTokenListColumn) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
+      ) PRIMARY KEY (col1)
+    )sql",
+          R"sql(
+      CREATE INDEX Idx ON T(col3)
+    )sql"}),
+      StatusIs(error::CannotCreateIndexOnColumn("Idx", "col3", "TOKENLIST")));
+}
+
+TEST_P(SchemaUpdaterTest, BasicCreateSearchIndex) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
+      ) PRIMARY KEY (col1)
+    )sql",
+                                        R"sql(
+      CREATE SEARCH INDEX Idx ON T(col3)
+    )sql"}));
+
+  auto t = schema->FindTable("T");
+  auto col3 = t->FindColumn("col3");
+  EXPECT_TRUE(col3->GetType()->IsTokenListType());
+
+  auto idx = schema->FindIndex("Idx");
+  EXPECT_NE(idx, nullptr);
+  EXPECT_EQ(idx->key_columns().size(), 1);
+
+  auto idx_data = idx->index_data_table();
+  EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col3));
+}
+
+TEST_P(SchemaUpdaterTest, ComplexCreateSearchIndex) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
+        col4 TOKENLIST AS(TOKENIZE_SUBSTRING(col2)) STORED HIDDEN,
+        col5 INT64,
+        col6 FLOAT64,
+        col7 INT64 NOT NULL
+      ) PRIMARY KEY (col1)
+    )sql",
+                                        R"sql(
+      CREATE SEARCH INDEX Idx
+      ON T(col3, col4)
+      STORING (col2, col5)
+      PARTITION BY col1, col6
+      ORDER BY col7
+    )sql"}));
+
+  auto t = schema->FindTable("T");
+  auto col3 = t->FindColumn("col3");
+  EXPECT_TRUE(col3->GetType()->IsTokenListType());
+  auto col4 = t->FindColumn("col4");
+  EXPECT_TRUE(col4->GetType()->IsTokenListType());
+
+  auto idx = schema->FindIndex("Idx");
+  EXPECT_NE(idx, nullptr);
+  EXPECT_EQ(idx->key_columns().size(), 2);
+
+  auto idx_data = idx->index_data_table();
+  EXPECT_EQ(idx_data->primary_key().size(), 3);
+  EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col3));
+  EXPECT_THAT(idx_data->primary_key()[1]->column(), SourceColumnIs(col4));
+  auto col1 = t->FindColumn("col1");
+  EXPECT_THAT(idx_data->primary_key()[2]->column(), SourceColumnIs(col1));
+
+  EXPECT_EQ(idx->stored_columns().size(), 2);
+  auto col2 = t->FindColumn("col2");
+  EXPECT_THAT(idx->stored_columns()[0], SourceColumnIs(col2));
+  auto col5 = t->FindColumn("col5");
+  EXPECT_THAT(idx->stored_columns()[1], SourceColumnIs(col5));
+
+  EXPECT_EQ(idx->partition_by().size(), 2);
+  EXPECT_THAT(idx->partition_by()[0], SourceColumnIs(col1));
+  auto col6 = t->FindColumn("col6");
+  EXPECT_THAT(idx->partition_by()[1], SourceColumnIs(col6));
+  EXPECT_NE(idx_data->FindColumn("col6"), nullptr);
+
+  EXPECT_EQ(idx->order_by().size(), 1);
+  auto col7 = t->FindColumn("col7");
+  EXPECT_THAT(idx->order_by()[0], SourceColumnIs(col7));
+  EXPECT_NE(idx_data->FindColumn("col7"), nullptr);
+}
+
+TEST_P(SchemaUpdaterTest, UnableToCreateSearchIndexOnJsonColumn) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
+        col4 JSON,
+      ) PRIMARY KEY (col1)
+    )sql",
+                  R"sql(
+      CREATE SEARCH INDEX SearchIndex ON T(col3, col4)
+    )sql"}),
+              StatusIs(error::CannotCreateIndexOnColumn("SearchIndex", "col4",
+                                                        "JSON")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateSearchIndexShouldNotStoreKeyColumn) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
+      ) PRIMARY KEY (col1)
+    )sql",
+          R"sql(
+      CREATE SEARCH INDEX SearchIndex ON T(col3) STORING(col3)
+    )sql"}),
+      StatusIs(error::IndexRefsKeyAsStoredColumn("SearchIndex", "col3")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateSearchIndexPartitionByColumnMustExist) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
+      ) PRIMARY KEY (col1)
+    )sql",
+          R"sql(
+      CREATE SEARCH INDEX SearchIndex ON T(col3) PARTITION BY col4
+    )sql"}),
+      StatusIs(error::IndexRefsNonExistentColumn("SearchIndex", "col4")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByColumnMustExist) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
+      ) PRIMARY KEY (col1)
+    )sql",
+          R"sql(
+      CREATE SEARCH INDEX SearchIndex ON T(col3) ORDER BY col4
+    )sql"}),
+      StatusIs(error::IndexRefsNonExistentColumn("SearchIndex", "col4")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateSearchIndexPartitionByNotTokenListType) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
+        col4 INT64
+      ) PRIMARY KEY (col1)
+    )sql",
+                  R"sql(
+      CREATE SEARCH INDEX SearchIndex ON T(col3) PARTITION BY col3
+    )sql"}),
+              StatusIs(error::SearchIndexNotPartitionByokenListType(
+                  "SearchIndex", "col3")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByMustNotNull) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
+        col4 INT64
+      ) PRIMARY KEY (col1)
+    )sql",
+                  R"sql(
+      CREATE SEARCH INDEX SearchIndex ON T(col3) ORDER BY col4
+    )sql"}),
+              StatusIs(error::SearchIndexSortMustBeNotNullError(
+                  "col4", "SearchIndex")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateSearchIndexNullFilteredOrderBy) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_EXPECT_OK(CreateSchema({
+      R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
+        col4 INT64
+      ) PRIMARY KEY (col1)
+    )sql",
+      R"sql(
+      CREATE SEARCH INDEX SearchIndex ON T(col3)
+      ORDER BY col4
+      WHERE col4 IS NOT NULL
+    )sql"}));
+}
+
+TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByMustBeIntegerType) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
+        col4 JSON NOT NULL
+      ) PRIMARY KEY (col1)
+    )sql",
+                  R"sql(
+      CREATE SEARCH INDEX SearchIndex ON T(col3) ORDER BY col4
+    )sql"}),
+              StatusIs(error::SearchIndexOrderByMustBeIntegerType(
+                  "SearchIndex", "col4", "JSON")));
+}
+
 }  // namespace
 
 }  // namespace test

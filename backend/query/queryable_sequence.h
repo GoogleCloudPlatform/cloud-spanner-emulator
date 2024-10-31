@@ -17,13 +17,11 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERYABLE_SEQUENCE_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERYABLE_SEQUENCE_H_
 
-#include <memory>
-#include <optional>
+#include <string>
 
 #include "zetasql/public/catalog.h"
-#include "absl/status/statusor.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -36,10 +34,13 @@ class QueryableSequence : public zetasql::Sequence {
  public:
   QueryableSequence(const backend::Sequence* backend_sequence);
 
-  std::string Name() const override { return wrapped_sequence_->Name(); }
+  std::string Name() const override {
+    return std::string(
+        SDLObjectName::GetInSchemaName(wrapped_sequence_->Name()));
+  }
 
-  // FullName is used in debugging so it's OK to not include full path here.
-  std::string FullName() const override { return Name(); }
+  // FullName includes schema if present.
+  std::string FullName() const override { return wrapped_sequence_->Name(); }
 
   const backend::Sequence* wrapped_sequence() const {
     return wrapped_sequence_;

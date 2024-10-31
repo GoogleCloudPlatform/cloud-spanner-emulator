@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_GLOBAL_SCHEMA_NAMES_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_GLOBAL_SCHEMA_NAMES_H_
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "backend/common/case.h"
@@ -72,10 +73,20 @@ class GlobalSchemaNames {
   static absl::Status ValidateSchemaName(absl::string_view type,
                                          absl::string_view name);
 
+  // Validates a named schema name.
+  static absl::Status ValidateNamedSchemaName(
+      absl::string_view named_schema_name);
+
   // Validates a schema constraint name.
   static absl::Status ValidateConstraintName(absl::string_view table_name,
                                              absl::string_view constraint_type,
                                              absl::string_view constraint_name);
+
+  // Set of invalid named schema names.
+  static const CaseInsensitiveStringSet& ReservedSchemaNames();
+
+  // Returns true if the given SDL type is allowed in a named schema.
+  static bool IsSDLTypeAllowedInNamedSchema(absl::string_view type);
 
  private:
   // Generates and adds a unique name. A sequence number is incremented and

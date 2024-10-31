@@ -446,6 +446,7 @@ absl::Status SpangresSystemCatalog::AddTypes(
   ZETASQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgTimestamptzMapping(), language_options));
   ZETASQL_RETURN_IF_ERROR(AddType(builtin_types::PgDateMapping(), language_options));
+  ZETASQL_RETURN_IF_ERROR(AddType(spangres_types::PgOidMapping(), language_options));
 
   // Array Types.
   ZETASQL_RETURN_IF_ERROR(
@@ -464,6 +465,8 @@ absl::Status SpangresSystemCatalog::AddTypes(
       AddType(builtin_types::PgTimestamptzArrayMapping(), language_options));
   ZETASQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgDateArrayMapping(), language_options));
+  ZETASQL_RETURN_IF_ERROR(
+      AddType(spangres_types::PgOidArrayMapping(), language_options));
 
     ZETASQL_RETURN_IF_ERROR(
         AddType(spangres_types::PgNumericMapping(), language_options));
@@ -474,11 +477,6 @@ absl::Status SpangresSystemCatalog::AddTypes(
         AddType(spangres_types::PgJsonbMapping(), language_options));
     ZETASQL_RETURN_IF_ERROR(
         AddType(spangres_types::PgJsonbArrayMapping(), language_options));
-
-    ZETASQL_RETURN_IF_ERROR(
-        AddType(spangres_types::PgOidMapping(), language_options));
-    ZETASQL_RETURN_IF_ERROR(
-        AddType(spangres_types::PgOidArrayMapping(), language_options));
 
   ZETASQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgFloat4Mapping(), language_options));
@@ -535,12 +533,12 @@ absl::Status SpangresSystemCatalog::AddFunctions(
 
     spangres::AddPgJsonbFunctions(functions);
 
+  spangres::AddPgOidFunctions(functions);
   spangres::AddPgArrayFunctions(functions);
   spangres::AddPgComparisonFunctions(functions);
   spangres::AddPgDatetimeFunctions(functions);
   spangres::AddPgFormattingFunctions(functions);
   spangres::AddPgStringFunctions(functions);
-
   spangres::AddFloatFunctions(functions);
 
   // Map some Postgres functions to custom Spanner functions to match Postgres'
@@ -573,7 +571,7 @@ absl::Status SpangresSystemCatalog::AddFunctions(
   AddBooleanTestFunctions(expr_functions);
   AddSQLValueFunctions(expr_functions);
   AddArrayAtFunctions(expr_functions);
-    AddArraySliceFunctions(expr_functions);
+  AddArraySliceFunctions(expr_functions);
   AddMakeArrayFunctions(expr_functions);
 
   AddPgLeastGreatestFunctions(expr_functions);

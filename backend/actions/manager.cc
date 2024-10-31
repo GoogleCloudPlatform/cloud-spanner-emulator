@@ -135,6 +135,9 @@ void ActionRegistry::BuildActionRegistry() {
     // Actions for Index.
     for (const Index* index : table->indexes()) {
       // Index effects.
+      if (index->is_search_index()) {
+        continue;
+      }
       table_effectors_[table].emplace_back(
           std::make_unique<IndexEffector>(index));
 

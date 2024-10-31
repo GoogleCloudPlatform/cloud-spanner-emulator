@@ -48,11 +48,9 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
@@ -62,6 +60,7 @@
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
 
@@ -499,7 +498,7 @@ TEST_F(SpangresSystemCatalogTest, ArrayCatFunctions) {
   zetasql::LanguageOptions language_options = GetLanguageOptions();
   EngineSystemCatalog* catalog = GetSpangresTestSystemCatalog();
   // For each array type, check that we have a supported array_cat function.
-  const std::vector<const zetasql::Type*> array_types{
+  std::vector<const zetasql::Type*> array_types{
       zetasql::types::Int64ArrayType(),
       zetasql::types::BoolArrayType(),
       zetasql::types::DoubleArrayType(),
@@ -600,10 +599,13 @@ TEST_F(SpangresSystemCatalogTest, MinAggregateRemapTest) {
 
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
+  static const zetasql::Type* gsql_pg_oid =
+      spangres::datatypes::GetPgOidType();
 
   bool has_signature_for_float = false;
   bool has_signature_for_double = false;
   bool has_signature_for_numeric = false;
+  bool has_signature_for_oid = false;
   for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
        min_function->GetPostgresSignatures()) {
     ASSERT_EQ(signature->arguments().size(), 1);
@@ -621,6 +623,11 @@ TEST_F(SpangresSystemCatalogTest, MinAggregateRemapTest) {
       has_signature_for_numeric = true;
       EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
                 "pg.numeric_min");
+    } else if (
+        argument_type->Equals(gsql_pg_oid)) {
+      has_signature_for_oid = true;
+      EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
+                "pg.min");
     } else {
       EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
                 "min");
@@ -920,6 +927,7 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
                                {zetasql::InputArgumentType(gsql_int64),
                                 zetasql::InputArgumentType(gsql_int64)});
 }
+
 }  // namespace
 
 }  // namespace spangres

@@ -60,6 +60,7 @@
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
+#include "third_party/spanner_pg/shims/parser_shim.h"
 #include "third_party/spanner_pg/util/interval_helpers.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
@@ -2802,6 +2803,10 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
     google::spanner::emulator::backend::ddl::CreateIndex& create_index_out,
     const TranslationOptions& options) {
   ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_index_statement, options));
+  if (create_index_statement.nulls_not_distinct) {
+    return UnsupportedTranslationError(
+        "<NULLS NOT DISTINCT> is not supported in <CREATE INDEX> statement.");
+  }
 
   create_index_out.set_unique(create_index_statement.unique);
 

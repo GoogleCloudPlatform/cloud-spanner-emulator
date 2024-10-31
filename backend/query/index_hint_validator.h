@@ -33,11 +33,14 @@ namespace backend {
 class IndexHintValidator : public zetasql::ResolvedASTVisitor {
  public:
   IndexHintValidator(const Schema* schema,
-                     bool disable_null_filtered_index_check = false
-                     )
+                     bool disable_null_filtered_index_check = false,
+                     bool allow_search_indexes_in_transaction = false,
+                     bool in_partition_query = false)
       : schema_(schema),
-        disable_null_filtered_index_check_(disable_null_filtered_index_check)
-  {}
+        disable_null_filtered_index_check_(disable_null_filtered_index_check),
+        allow_search_indexes_in_transaction_(
+            allow_search_indexes_in_transaction),
+        in_partition_query_(in_partition_query) {}
 
  private:
   absl::Status VisitResolvedQueryStmt(
@@ -70,6 +73,12 @@ class IndexHintValidator : public zetasql::ResolvedASTVisitor {
   // Whether to disable checks around using null-filtered indexes in SQL
   // queries.
   const bool disable_null_filtered_index_check_;
+
+  // Whether to allow using search index in transactions.
+  const bool allow_search_indexes_in_transaction_;
+
+  // Whether to validate indexes in partition query.
+  const bool in_partition_query_;
 };
 
 }  // namespace backend

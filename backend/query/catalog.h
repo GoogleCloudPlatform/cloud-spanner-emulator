@@ -36,6 +36,7 @@
 #include "backend/query/analyzer_options.h"
 #include "backend/query/function_catalog.h"
 #include "backend/query/queryable_model.h"
+#include "backend/query/queryable_named_schema.h"
 #include "backend/query/queryable_sequence.h"
 #include "backend/query/queryable_table.h"
 #include "backend/query/queryable_view.h"
@@ -64,7 +65,7 @@ class Catalog : public zetasql::EnumerableCatalog {
       RowReader* reader = nullptr, QueryEvaluator* query_evaluator = nullptr,
       std::optional<std::string> change_stream_internal_lookup = std::nullopt);
 
-  std::string FullName() const final {
+  std::string FullName() const override {
     // The name of the root catalog is "".
     return "";
   }
@@ -80,14 +81,14 @@ class Catalog : public zetasql::EnumerableCatalog {
 
   // Implementation of the zetasql::Catalog interface.
   absl::Status GetCatalog(const std::string& name, zetasql::Catalog** catalog,
-                          const FindOptions& options) final;
+                          const FindOptions& options) override;
   absl::Status GetTable(const std::string& name, const zetasql::Table** table,
-                        const FindOptions& options) final;
+                        const FindOptions& options) override;
   absl::Status GetModel(const std::string& name, const zetasql::Model** model,
-                        const FindOptions& options = FindOptions()) final;
+                        const FindOptions& options = FindOptions()) override;
   absl::Status GetFunction(const std::string& name,
                            const zetasql::Function** function,
-                           const FindOptions& options) final;
+                           const FindOptions& options) override;
   absl::Status GetProcedure(const std::string& full_name,
                             const zetasql::Procedure** procedure,
                             const FindOptions& options) final;
@@ -97,7 +98,7 @@ class Catalog : public zetasql::EnumerableCatalog {
       const FindOptions& options = FindOptions()) final;
   absl::Status GetSequence(const std::string& name,
                            const zetasql::Sequence** sequence,
-                           const FindOptions& options) final;
+                           const FindOptions& options) override;
 
   // Implementation of the zetasql::EnumerableCatalog interface.
   absl::Status GetCatalogs(
@@ -137,6 +138,17 @@ class Catalog : public zetasql::EnumerableCatalog {
   // Returns the PG catalog (similar to information_schema).
   zetasql::Catalog* GetPGCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
 
+  QueryableNamedSchema* GetNamedSchema(const std::string& name);
+
+  // Returns all named schemas
+  absl::Status GetNamedSchemas(
+      absl::flat_hash_set<const zetasql::Catalog*>* output) const;
+
+  // Adds a schema object to the named schema.
+  template <typename T>
+  absl::Status AddObjectToNamedSchema(const std::string& named_schema_name,
+                                      T object);
+
   // The backend schema (which is the default schema in this catalog).
   const Schema* schema_ = nullptr;
 
@@ -155,6 +167,10 @@ class Catalog : public zetasql::EnumerableCatalog {
 
   // Sequences available in the default schema.
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableSequence>> sequences_;
+
+  // Named schemas available in the default schema.
+  CaseInsensitiveStringMap<std::unique_ptr<QueryableNamedSchema>>
+      named_schemas_;
 
   // Functions available in the default schema.
   const FunctionCatalog* function_catalog_ = nullptr;
@@ -191,6 +207,9 @@ class Catalog : public zetasql::EnumerableCatalog {
 
   // System Procedures available.
   CaseInsensitiveStringMap<std::unique_ptr<zetasql::Procedure>> procedures_;
+
+  // User defined functions available.
+  CaseInsensitiveStringMap<std::unique_ptr<zetasql::Function>> udfs_;
 };
 
 }  // namespace backend

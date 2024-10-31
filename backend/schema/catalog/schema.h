@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/common/case.h"
 #include "backend/schema/catalog/change_stream.h"
@@ -33,6 +34,7 @@
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
 #include "backend/schema/graph/schema_graph.h"
 
@@ -51,16 +53,12 @@ namespace database_api = ::google::spanner::admin::database::v1;
 class Schema {
  public:
   Schema()
-      : graph_(SchemaGraph::CreateEmpty())
-        ,
-        proto_bundle_(ProtoBundle::CreateEmpty())
-        ,
+      : graph_(SchemaGraph::CreateEmpty()),
+        proto_bundle_(ProtoBundle::CreateEmpty()),
         dialect_(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {}
 
-  explicit Schema(const SchemaGraph* graph
-                  ,
-                  std::shared_ptr<const ProtoBundle> proto_bundle
-                  ,
+  explicit Schema(const SchemaGraph* graph,
+                  std::shared_ptr<const ProtoBundle> proto_bundle,
                   const database_api::DatabaseDialect& dialect);
 
   virtual ~Schema() = default;
@@ -77,6 +75,13 @@ class Schema {
 
   // Same as FindView but case-sensitive.
   const View* FindViewCaseSensitive(const std::string& view_name) const;
+
+  // Finds a UDF by its name. Returns a const pointer of the UDF, or
+  // nullptr if the UDF is not found. Name comparison is case-insensitive.
+  const Udf* FindUdf(const std::string& udf_name) const;
+
+  // Same as FindUdf but case-sensitive.
+  const Udf* FindUdfCaseSensitive(const std::string& udf_name) const;
 
   // Finds a table by its name or synonym. Returns a const pointer of the table,
   // or nullptr if the table is not found. Name comparison is case-insensitive.
@@ -101,16 +106,21 @@ class Schema {
   // Same as FindIndex but case-sensitive.
   const Index* FindIndexCaseSensitive(const std::string& index_name) const;
 
-  // Finds a change stream by its name. Returns a const pointer of the change
-  // stream, or nullptr if the change stream is not found. Name comparison is
-  // case-insensitive.
+  // Finds all indexes with the given name.
+  std::vector<const Index*> FindIndexesUnderName(
+      const std::string& index_name) const;
+
+  // Finds a change stream by its name. Returns a const pointer of the
+  // change stream, or nullptr if the change stream is not found. Name
+  // comparison is case-insensitive.
   const ChangeStream* FindChangeStream(
       const std::string& change_stream_name) const;
 
   // Finds a sequence by its name. Returns a const pointer of the sequence, or
   // a nullptr if the sequence is not found. Name comparison is
   // case-insensitive.
-  const Sequence* FindSequence(const std::string& sequence_name) const;
+  const Sequence* FindSequence(const std::string& sequence_name
+  ) const;
 
   // Finds a model by its name. Returns a const pointer of the model,
   // or nullptr if the change stream is not found. Name comparison is
@@ -130,6 +140,9 @@ class Schema {
   absl::Span<const std::string> synonyms() const { return synonyms_; }
 
   absl::Span<const View* const> views() const { return views_; }
+
+  // List all the user-visible UDFs in this schema.
+  absl::Span<const Udf* const> udfs() const { return udfs_; }
 
   // List all the user-visible change streams in this schema.
   absl::Span<const ChangeStream* const> change_streams() const {
@@ -196,6 +209,13 @@ class Schema {
 
   // A vector that maintains the original order of views in the DDL.
   std::vector<const View*> views_;
+
+  // A map that owns all the UDFs. Key is the name of the UDF. Hash and
+  // comparison on the keys are case-insensitive.
+  CaseInsensitiveStringMap<const Udf*> udfs_map_;
+
+  // A vector that maintains the original order of UDFs in the DDL.
+  std::vector<const Udf*> udfs_;
 
   // A map that owns all the tables. Key is the name of the tables. Hash and
   // comparison on the keys are case-insensitive.
@@ -273,6 +293,31 @@ class OwningSchema : public Schema {
 
  private:
   std::unique_ptr<const SchemaGraph> graph_;
+};
+
+class SDLObjectName {
+ public:
+  // Split a name into the "schema" part and the "in-schema local name" part.
+  // "A.B" -> <"A", "B">. Nested schemas are retained in the "schema" part.
+  // For example, "A.B.C" -> <"A.B", "C">.
+  static std::pair<absl::string_view, absl::string_view> SplitSchemaName(
+      absl::string_view name);
+
+  static absl::string_view GetSchemaName(absl::string_view name) {
+    return SplitSchemaName(name).first;
+  }
+
+  static absl::string_view GetInSchemaName(absl::string_view name) {
+    return SplitSchemaName(name).second;
+  }
+
+  static bool IsFullyQualifiedName(absl::string_view name) {
+    return !GetSchemaName(name).empty();
+  }
+
+  static bool InSameSchema(absl::string_view name1, absl::string_view name2) {
+    return GetSchemaName(name1) == GetSchemaName(name2);
+  }
 };
 
 }  // namespace backend

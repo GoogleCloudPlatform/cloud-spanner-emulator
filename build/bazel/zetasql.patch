@@ -1,15 +1,150 @@
 diff --git a/zetasql/analyzer/BUILD b/zetasql/analyzer/BUILD
-index b88b3aa..df9d6ea 100644
+index 590f1be1..3ca15df4 100644
 --- a/zetasql/analyzer/BUILD
 +++ b/zetasql/analyzer/BUILD
-@@ -21,1 +21,1 @@
+@@ -18,7 +18,7 @@ load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+ load(":builddefs.bzl", "gen_analyzer_test")
+ 
+ package(
 -    default_visibility = ["//zetasql/base:zetasql_implementation"],
 +    default_visibility = ["//visibility:public"],
+ )
+ 
+ filegroup(
+diff --git a/zetasql/analyzer/expr_resolver_helper.cc b/zetasql/analyzer/expr_resolver_helper.cc
+index 93c3654d..8fb2256e 100644
+--- a/zetasql/analyzer/expr_resolver_helper.cc
++++ b/zetasql/analyzer/expr_resolver_helper.cc
+@@ -357,7 +357,8 @@ ExprResolutionInfo::ExprResolutionInfo(
+     : ExprResolutionInfo(
+           query_resolution_info_in, name_scope_in, aggregate_name_scope_in,
+           analytic_name_scope_in,
+-          {.allows_aggregation = allows_aggregation_in,
++          ExprResolutionInfoOptions{
++           .allows_aggregation = allows_aggregation_in,
+            .allows_analytic = allows_analytic_in,
+            .use_post_grouping_columns = use_post_grouping_columns_in,
+            .clause_name = clause_name_in,
+diff --git a/zetasql/analyzer/name_scope.cc b/zetasql/analyzer/name_scope.cc
+index b9a3176f..c1cf274a 100644
+--- a/zetasql/analyzer/name_scope.cc
++++ b/zetasql/analyzer/name_scope.cc
+@@ -1549,7 +1549,7 @@ NameList::AddRangeVariableInWrappingNameList(
+   // variables, including for value tables, so we use `flatten_to_table`
+   // which drops range variables.
+   ZETASQL_RETURN_IF_ERROR(range_variable_name_list->MergeFrom(
+-      *original_name_list, ast_location, {.flatten_to_table = true}));
++      *original_name_list, ast_location, MergeOptions{.flatten_to_table = true}));
+ 
+   auto wrapper_name_list = std::make_shared<NameList>();
+   ZETASQL_RETURN_IF_ERROR(
+diff --git a/zetasql/analyzer/resolver_expr.cc b/zetasql/analyzer/resolver_expr.cc
+index 6116b4f7..fa594774 100644
+--- a/zetasql/analyzer/resolver_expr.cc
++++ b/zetasql/analyzer/resolver_expr.cc
+@@ -4957,7 +4957,7 @@ absl::Status Resolver::ResolveAggregateFunctionGroupingModifiers(
+   ExprResolutionInfo multi_level_agg_expr_resolution_info(
+       expr_resolution_info->query_resolution_info,
+       expr_resolution_info->aggregate_name_scope,
+-      {
++      ExprResolutionInfoOptions{
+           .allows_aggregation = false,
+           .allows_analytic = false,
+           .clause_name = "GROUP BY inside aggregate",
+diff --git a/zetasql/analyzer/resolver_expr.cc b/zetasql/analyzer/resolver_expr.cc
+index 6116b4f7..70e8c9fd 100644
+--- a/zetasql/analyzer/resolver_expr.cc
++++ b/zetasql/analyzer/resolver_expr.cc
+@@ -5586,7 +5586,8 @@ absl::Status Resolver::ResolveAnalyticFunctionCall(
+   {
+     ExprResolutionInfo analytic_arg_resolution_info(
+         expr_resolution_info,
+-        {.name_scope = expr_resolution_info->analytic_name_scope,
++        ExprResolutionInfoOptions{
++         .name_scope = expr_resolution_info->analytic_name_scope,
+          .allows_analytic = expr_resolution_info->allows_analytic,
+          .clause_name = expr_resolution_info->clause_name});
+     ZETASQL_RETURN_IF_ERROR(ResolveExpressionArguments(
+diff --git a/zetasql/analyzer/resolver_query.cc b/zetasql/analyzer/resolver_query.cc
+index d9362bbf..d72cca3b 100644
+--- a/zetasql/analyzer/resolver_query.cc
++++ b/zetasql/analyzer/resolver_query.cc
+@@ -624,8 +624,9 @@ static absl::Status UpdateNameListForTableAlias(
+       // If the value table has an existing range variable, then it has to be
+       // renamed to the new name.
+       ZETASQL_RETURN_IF_ERROR(
+-          new_name_list->MergeFrom(*input_name_list, ast_location,
+-                                   {.rename_value_table_to_name = &alias}));
++          new_name_list->MergeFrom(
++            *input_name_list, ast_location,
++            NameList::MergeOptions{.rename_value_table_to_name = &alias}));
+     } else {
+       // If the value table was anonymous and didn't have an existing range
+       // variable, this function will create one, using `alias` as the name.
+@@ -641,8 +642,9 @@ static absl::Status UpdateNameListForTableAlias(
+   // to drop existing range variables and convert value tables to columns,
+   // and then make the new range variables pointing at the remaining columns.
+   auto new_name_list = std::make_shared<NameList>();
+-  ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(*input_name_list, ast_location,
+-                                           {.flatten_to_table = true}));
++  ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(
++      *input_name_list, ast_location,
++      NameList::MergeOptions{.flatten_to_table = true}));
+ 
+   ZETASQL_ASSIGN_OR_RETURN(*output_name_list,
+                    NameList::AddRangeVariableInWrappingNameList(
+diff --git a/zetasql/analyzer/resolver_stmt.cc b/zetasql/analyzer/resolver_stmt.cc
+index 86e3cf09..64379885 100644
+--- a/zetasql/analyzer/resolver_stmt.cc
++++ b/zetasql/analyzer/resolver_stmt.cc
+@@ -2325,7 +2325,8 @@ absl::Status Resolver::ResolveCreateTablePartitionByList(
+                                                             : "CLUSTER BY";
+ 
+   ExprResolutionInfo resolution_info(query_info, &name_scope,
+-                                     {.allows_aggregation = false,
++                                     ExprResolutionInfoOptions{
++                                      .allows_aggregation = false,
+                                       .allows_analytic = false,
+                                       .clause_name = clause_name});
+ 
+@@ -4345,7 +4346,8 @@ absl::Status Resolver::ResolveCreateFunctionStatement(
+         // inside the function body.
+         QueryResolutionInfo query_info(this);
+         ExprResolutionInfo expr_info(&query_info, empty_name_scope_.get(),
+-                                     {.allows_aggregation = true,
++                                     ExprResolutionInfoOptions{
++                                      .allows_aggregation = true,
+                                       .allows_analytic = false,
+                                       .clause_name = "SQL function body"});
+ 
+@@ -7131,7 +7133,8 @@ absl::Status Resolver::ResolveExecuteImmediateStatement(
+       absl::flat_hash_set<IdString, IdStringCaseHash, IdStringCaseEqualFunc>;
+   QueryResolutionInfo query_info(this);
+   ExprResolutionInfo expr_info(&query_info, empty_name_scope_.get(),
+-                               {.allows_aggregation = false,
++                               ExprResolutionInfoOptions{
++                                .allows_aggregation = false,
+                                 .allows_analytic = false,
+                                 .clause_name = "SQL EXECUTE IMMEDIATE"});
+   std::unique_ptr<const ResolvedExpr> sql;
+diff --git a/zetasql/analyzer/rewriters/anonymization_helper.cc b/zetasql/analyzer/rewriters/anonymization_helper.cc
+index 5f0e4534..ea68c177 100644
+--- a/zetasql/analyzer/rewriters/anonymization_helper.cc
++++ b/zetasql/analyzer/rewriters/anonymization_helper.cc
+@@ -724,7 +724,7 @@ absl::StatusOr<std::unique_ptr<ResolvedExpr>> ResolveFunctionCall(
+   QueryResolutionInfo query_resolution_info(resolver);
+   ExprResolutionInfo expr_resolution_info(&query_resolution_info,
+                                           &empty_name_scope,
+-                                          {
++                                          ExprResolutionInfoOptions{
+                                               .allows_aggregation = true,
+                                               .allows_analytic = false,
+                                           });
 diff --git a/zetasql/base/BUILD b/zetasql/base/BUILD
-index 8528859..2d04ac1 100644
+index aa1f00da..7d4c3b3a 100644
 --- a/zetasql/base/BUILD
 +++ b/zetasql/base/BUILD
-@@ -16,7 +16,7 @@
+@@ -15,7 +15,7 @@
  
  licenses(["notice"])
  
@@ -19,7 +154,7 @@ index 8528859..2d04ac1 100644
  package_group(
      name = "zetasql_implementation",
 diff --git a/zetasql/base/testing/BUILD b/zetasql/base/testing/BUILD
-index b88b3aa..df9d6ea 100644
+index 10596497..239c670f 100644
 --- a/zetasql/base/testing/BUILD
 +++ b/zetasql/base/testing/BUILD
 @@ -16,7 +16,7 @@
@@ -32,60 +167,69 @@ index b88b3aa..df9d6ea 100644
  # A drop in replacement for gtest_main that parsers absl flags
  cc_library(
 diff --git a/zetasql/common/BUILD b/zetasql/common/BUILD
-index b88b3aa..df9d6ea 100644
+index cdafb15e..761e13cd 100644
 --- a/zetasql/common/BUILD
 +++ b/zetasql/common/BUILD
-@@ -15,7 +15,7 @@
-
+@@ -14,7 +14,7 @@
+ # limitations under the License.
+ 
  package(
 -    default_visibility = ["//zetasql/base:zetasql_implementation"],
 +    default_visibility = ["//visibility:public"],
      features = ["parse_headers"],
  )
-
- cc_library(
+ 
 diff --git a/zetasql/common/internal_value.h b/zetasql/common/internal_value.h
-index 9d91e28..38e654c 100644
+index 770333d2..617ef628 100644
 --- a/zetasql/common/internal_value.h
 +++ b/zetasql/common/internal_value.h
-@@ -105,7 +105,7 @@ class InternalValue {
+@@ -116,7 +116,7 @@ class InternalValue {
    static std::string FormatInternal(const Value& x,
                                      bool include_array_ordereness
    ) {
 -    return x.FormatInternal({
--        .force_type_at_top_level = true,
 +    return x.FormatInternal(Type::FormatValueContentOptions{
-+        .force_type_at_top_level = true,
+         .force_type_at_top_level = true,
          .include_array_ordereness = include_array_ordereness,
          .indent = 0,
-     });
-   }
 diff --git a/zetasql/parser/BUILD b/zetasql/parser/BUILD
-index b88b3aa..df9d6ea 100644
+index 433cf157..4fa4417c 100644
 --- a/zetasql/parser/BUILD
 +++ b/zetasql/parser/BUILD
-@@ -23,1 +23,1 @@
+@@ -26,7 +26,7 @@ load("//bazel:textmapper.bzl", "tm_syntax")
+ load(":builddefs.bzl", "gen_parser_test")
+ 
+ package(
 -    default_visibility = ["//zetasql/base:zetasql_implementation"],
 +    default_visibility = ["//visibility:public"],
+ )
+ 
+ genrule(
 diff --git a/zetasql/public/types/BUILD b/zetasql/public/types/BUILD
-index 235a1ce..3e5b70a 100644
+index 2b42fdcb..19ff2a4e 100644
 --- a/zetasql/public/types/BUILD
 +++ b/zetasql/public/types/BUILD
-@@ -17,1 +17,1 @@
+@@ -14,7 +14,7 @@
+ # limitations under the License.
+ #
+ 
 -package(default_visibility = ["//zetasql/base:zetasql_implementation"])
 +package(default_visibility = ["//visibility:public"])
+ 
+ cc_library(
+     name = "types",
 diff --git a/zetasql/public/types/type.h b/zetasql/public/types/type.h
-index ad8c28d..6277712 100644
+index 40ceaa24..c405d6a1 100644
 --- a/zetasql/public/types/type.h
 +++ b/zetasql/public/types/type.h
-@@ -621,45 +621,6 @@ class Type {
+@@ -622,45 +622,6 @@ class Type {
      std::optional<int64_t> file_descriptor_sets_max_size_bytes = std::nullopt;
    };
-
+ 
 - protected:
 -  // Types can only be created and destroyed by TypeFactory.
 -  Type(const TypeFactory* factory, TypeKind kind);
--  virtual ~Type();
+-  virtual ~Type() = default;
 -
 -  bool EqualsImpl(const Type* other_type, bool equivalent) const {
 -    if (this == other_type) {
@@ -124,14 +268,14 @@ index ad8c28d..6277712 100644
    // Formatting options that can be provided to FormatValueContent.
    struct FormatValueContentOptions {
      enum class Mode {
-@@ -711,6 +672,45 @@ class Type {
+@@ -712,6 +673,45 @@ class Type {
      static const int kIndentStep = 2;
    };
-
+ 
 + protected:
 +  // Types can only be created and destroyed by TypeFactory.
 +  Type(const TypeFactory* factory, TypeKind kind);
-+  virtual ~Type();
++  virtual ~Type() = default;
 +
 +  bool EqualsImpl(const Type* other_type, bool equivalent) const {
 +    if (this == other_type) {
@@ -167,14 +311,14 @@ index ad8c28d..6277712 100644
 +  // (such as element types of arrays or field types of structs).
 +  virtual int64_t GetEstimatedOwnedMemoryBytesSize() const = 0;
 +
-   std::string FormatValueContentContainerElement(
-       const internal::ValueContentContainerElement element, const Type* type,
-       const FormatValueContentOptions& options) const {
+   // List of DebugStringImpl outputs. Used to serve as a stack in
+   // DebugStringImpl to protect from stack overflows.
+   // Note: SWIG will fail to process this file if we remove a white space
 diff --git a/zetasql/public/value.cc b/zetasql/public/value.cc
-index 50deb34..2070935 100644
+index 7aeffb01..c9f9f9dc 100644
 --- a/zetasql/public/value.cc
 +++ b/zetasql/public/value.cc
-@@ -909,7 +909,7 @@ std::string Value::DebugString(bool verbose) const {
+@@ -1067,7 +1067,7 @@ std::string Value::DebugString(bool verbose) const {
  
  // Format will wrap arrays and structs.
  std::string Value::Format(bool print_top_level_type) const {
@@ -183,7 +327,7 @@ index 50deb34..2070935 100644
        {.force_type_at_top_level = print_top_level_type, .indent = 0});
  }
  
-@@ -1169,7 +1169,7 @@ std::string Value::FormatInternal(
+@@ -1335,7 +1335,7 @@ std::string Value::FormatInternal(
      std::vector<std::string> element_strings(elements().size());
      for (int i = 0; i < elements().size(); ++i) {
        element_strings[i] =
@@ -192,7 +336,7 @@ index 50deb34..2070935 100644
      }
      // Sanitize any '$' characters before creating substitution template. "$$"
      // is replaced by "$" in the output from absl::Substitute.
-@@ -1211,7 +1211,7 @@ std::string Value::FormatInternal(
+@@ -1377,7 +1377,7 @@ std::string Value::FormatInternal(
      const StructType* struct_type = type()->AsStruct();
      std::vector<std::string> field_strings(struct_type->num_fields());
      for (int i = 0; i < struct_type->num_fields(); i++) {
@@ -201,7 +345,7 @@ index 50deb34..2070935 100644
      }
      // Sanitize any '$' characters before creating substitution template. "$$"
      // is replaced by "$" in the output from absl::Substitute.
-@@ -1257,9 +1257,9 @@ std::string Value::FormatInternal(
+@@ -1423,9 +1423,9 @@ std::string Value::FormatInternal(
      }
      std::vector<std::string> boundaries_strings;
      boundaries_strings.push_back(
@@ -213,87 +357,41 @@ index 50deb34..2070935 100644
      // Sanitize any '$' characters before creating substitution template. "$$"
      // is replaced by "$" in the output from absl::Substitute.
      std::string templ =
-diff --git a/zetasql/analyzer/name_scope.cc b/zetasql/analyzer/name_scope.cc
-index 9507aea..de75f25 100644
---- a/zetasql/analyzer/name_scope.cc
-+++ b/zetasql/analyzer/name_scope.cc
-@@ -1458,7 +1458,8 @@ NameList::AddRangeVariableInWrappingNameList(
-   // variables, including for value tables, so we use `flatten_to_table`
-   // which drops range variables.
-   ZETASQL_RETURN_IF_ERROR(range_variable_name_list->MergeFrom(
--      *original_name_list, ast_location, {.flatten_to_table = true}));
-+      *original_name_list, ast_location,
-+      MergeOptions{.flatten_to_table = true}));
-
-   auto wrapper_name_list = std::make_shared<NameList>();
-   ZETASQL_RETURN_IF_ERROR(
-diff --git a/zetasql/analyzer/resolver_query.cc b/zetasql/analyzer/resolver_query.cc
-index f124ed8..ac859d0 100644
---- a/zetasql/analyzer/resolver_query.cc
-+++ b/zetasql/analyzer/resolver_query.cc
-@@ -652,9 +652,9 @@ static absl::Status UpdateNameListForTableAlias(
-     if (input_name_list->HasRangeVariables()) {
-       // If the value table has an existing range variable, then it has to be
-       // renamed to the new name.
--      ZETASQL_RETURN_IF_ERROR(
--          new_name_list->MergeFrom(*input_name_list, ast_location,
--                                   {.rename_value_table_to_name = &alias}));
-+      ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(
-+          *input_name_list, ast_location,
-+          NameList::MergeOptions{.rename_value_table_to_name = &alias}));
-     } else {
-       // If the value table was anonymous and didn't have an existing range
-       // variable, this function will create one, using `alias` as the name.
-@@ -670,8 +670,9 @@ static absl::Status UpdateNameListForTableAlias(
-   // to drop existing range variables and convert value tables to columns,
-   // and then make the new range variables pointing at the remaining columns.
-   auto new_name_list = std::make_shared<NameList>();
--  ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(*input_name_list, ast_location,
--                                           {.flatten_to_table = true}));
-+  ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(
-+      *input_name_list, ast_location,
-+      NameList::MergeOptions{.flatten_to_table = true}));
-
-   ZETASQL_ASSIGN_OR_RETURN(*output_name_list,
-                    NameList::AddRangeVariableInWrappingNameList(
 diff --git a/zetasql/reference_impl/algebrizer.cc b/zetasql/reference_impl/algebrizer.cc
-index a3dd2da..2c249d9 100644
+index 2e1258ab..48a3d7f4 100644
 --- a/zetasql/reference_impl/algebrizer.cc
 +++ b/zetasql/reference_impl/algebrizer.cc
-@@ -6677,7 +6677,8 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
+@@ -6738,7 +6738,7 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
        ZETASQL_RET_CHECK(tvf_scan->signature()->argument(i).is_scalar());
        ZETASQL_ASSIGN_OR_RETURN(auto expr_argument,
                         AlgebrizeExpression(argument->expr()));
 -      arguments.push_back({.value = std::move(expr_argument)});
-+      arguments.push_back(TVFOp::TVFOpArgument
-+                          {.value = std::move(expr_argument)});
++      arguments.push_back(TVFOp::TVFOpArgument{.value = std::move(expr_argument)});
        continue;
      }
-
-@@ -6706,14 +6707,16 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
+ 
+@@ -6767,14 +6767,14 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
          columns.push_back({relation_signature_column.name,
                             argument_column.type(), input_variable});
        }
 -      arguments.push_back({.relation = TVFOp::TvfInputRelation{
-+      arguments.push_back(TVFOp::TVFOpArgument
-+                          {.relation = TVFOp::TvfInputRelation{
++      arguments.push_back(TVFOp::TVFOpArgument{.relation = TVFOp::TvfInputRelation{
                                 std::move(relation), std::move(columns)}});
        continue;
      }
-
+ 
      if (argument->model() != nullptr) {
        ZETASQL_RET_CHECK(tvf_scan->signature()->argument(i).is_model());
 -      arguments.push_back({.model = argument->model()->model()});
-+      arguments.push_back(TVFOp::TVFOpArgument
-+                          {.model = argument->model()->model()});
++      arguments.push_back(TVFOp::TVFOpArgument{.model = argument->model()->model()});
        continue;
      }
-
+ 
 diff --git a/zetasql/reference_impl/relational_op.cc b/zetasql/reference_impl/relational_op.cc
-index 58e5abc..ec1bfd7 100644
+index 1619590a..a18a733f 100644
 --- a/zetasql/reference_impl/relational_op.cc
 +++ b/zetasql/reference_impl/relational_op.cc
-@@ -834,11 +834,11 @@ absl::StatusOr<std::unique_ptr<TupleIterator>> TVFOp::CreateIterator(
+@@ -835,11 +835,11 @@ absl::StatusOr<std::unique_ptr<TupleIterator>> TVFOp::CreateIterator(
        }
        ZETASQL_RET_CHECK_EQ(columns.size(), tuple_indexes.size());
        input_arguments.push_back(

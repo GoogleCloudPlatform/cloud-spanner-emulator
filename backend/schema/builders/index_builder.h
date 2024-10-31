@@ -87,6 +87,22 @@ class Index::Builder {
     return *this;
   }
 
+  Builder& set_index_type(bool is_search_index) {
+    instance_->index_type_ = is_search_index ? Index::IndexType::kSearchIndex
+                                             : Index::IndexType::kIndex;
+    return *this;
+  }
+
+  Builder& add_partition_by_column(const Column* column) {
+    instance_->partition_by_.push_back(column);
+    return *this;
+  }
+
+  Builder& add_order_by_column(const Column* column) {
+    instance_->order_by_.push_back(column);
+    return *this;
+  }
+
   Builder& add_null_filtered_column(const Column* column) {
     instance_->null_filtered_columns_.push_back(column);
     return *this;

@@ -17,16 +17,22 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_SQL_EXPRESSION_VALIDATORS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_SQL_EXPRESSION_VALIDATORS_H_
 
+#include <memory>
 #include <string>
+#include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/language_options.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/simple_catalog.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "backend/query/query_validator.h"
+#include "zetasql/public/types/type.h"
+#include "zetasql/public/types/type_factory.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
+#include "absl/strings/string_view.h"
 #include "backend/schema/catalog/schema.h"
-#include "common/errors.h"
-#include "zetasql/base/ret_check.h"
+#include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
+#include "backend/schema/catalog/view.h"
+#include "backend/schema/graph/schema_node.h"
 
 namespace google {
 namespace spanner {
@@ -42,7 +48,8 @@ absl::Status AnalyzeColumnExpression(
     absl::string_view expression_use,
     absl::flat_hash_set<std::string>* dependent_column_names,
     absl::flat_hash_set<const SchemaNode*>* dependent_sequences,
-    bool allow_volatile_expression);
+    bool allow_volatile_expression,
+    absl::flat_hash_set<const SchemaNode*>* udf_dependencies);
 
 // Analyzes the view definition in `view_definition`. Returns the
 // table, column and other view dependencies in `dependencies` and
@@ -52,6 +59,17 @@ absl::Status AnalyzeViewDefinition(
     const Schema* schema, zetasql::TypeFactory* type_factory,
     std::vector<View::Column>* output_columns,
     absl::flat_hash_set<const SchemaNode*>* dependencies);
+
+// Analyzes the UDF definition in `udf_definition`. Returns the
+// table, column and other view dependencies in `dependencies` and
+// the analyzed UDF's signature in `function_signature`.
+absl::Status AnalyzeUdfDefinition(
+    absl::string_view udf_name, absl::string_view param_list,
+    absl::string_view udf_definition, const Schema* schema,
+    zetasql::TypeFactory* type_factory,
+    absl::flat_hash_set<const SchemaNode*>* dependencies,
+    std::unique_ptr<zetasql::FunctionSignature>* function_signature,
+    Udf::Determinism* determinism_level);
 
 }  // namespace backend
 }  // namespace emulator

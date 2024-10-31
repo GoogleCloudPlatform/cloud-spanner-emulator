@@ -3335,6 +3335,21 @@ TEST_F(EvalToJsonbTest, NumericInput) {
   EXPECT_THAT(evaluator_, NumericToJsonb("  NaN", "\"NaN\""));
 }
 
+MATCHER_P2(OidToJsonb, input, expected_string, "") {
+  EXPECT_THAT(
+      arg(absl::MakeConstSpan({CreatePgOidValue(input).value()})),
+      zetasql_base::testing::IsOkAndHolds(
+          CreatePgJsonbValueWithMemoryContext(expected_string).value()));
+  return true;
+}
+
+TEST_F(EvalToJsonbTest, OidInput) {
+  EXPECT_THAT(evaluator_, OidToJsonb(123456, "123456"));
+  EXPECT_THAT(evaluator_, OidToJsonb(std::numeric_limits<uint32_t>::max(),
+                                     "4294967295"));
+  EXPECT_THAT(evaluator_, OidToJsonb(0, "0"));
+}
+
 MATCHER_P2(ArrayToJsonb, array_input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan({array_input})),
@@ -3367,6 +3382,14 @@ TEST_F(EvalToJsonbTest, ArrayInput) {
                            absl::StrCat("[", kMaxPgJsonbNumericDigitStr, "]")));
   EXPECT_THAT(evaluator_,
               ArrayToJsonb(zetasql::values::DoubleArray({}), "[]"));
+
+  EXPECT_THAT(evaluator_,
+              ArrayToJsonb(zetasql::Value::MakeArray(
+                               spangres::datatypes::GetPgOidArrayType(),
+                            {CreatePgOidValue(0).value(),
+                             CreatePgOidValue(
+                                 std::numeric_limits<uint32_t>::max()).value()
+                            }).value(), "[0, 4294967295]"));
 }
 
 class EvalJsonbSubscriptText : public EmulatorFunctionsTest {
@@ -4492,6 +4515,44 @@ TEST(EvalMaxSignatureTest, CustomMaxSignatures) {
   EXPECT_TRUE(signatures[0].arguments().front().type() ==
               spangres::datatypes::GetPgOidType());
 }
+
+INSTANTIATE_TEST_SUITE_P(EvalMaxTest, EvalMinMaxTest,
+                         ::testing::ValuesIn<EvalAggregatorTestCase>({
+                             {"OneOidNullArg",
+                              kPGMaxFunctionName,
+                              {&kNullPGOidValue},
+                              kNullPGOidValue,
+                              absl::StatusCode::kOk},
+                             {"EmptyOidArgs",
+                              kPGMaxFunctionName,
+                              {},
+                              kNullPGOidValue,
+                              absl::StatusCode::kOk},
+                             {"OneOidArg",
+                              kPGMaxFunctionName,
+                              {&kPGOidValue},
+                              kPGOidValue,
+                              absl::StatusCode::kOk},
+                             {"OneOidArgOneNullArg",
+                              kPGMaxFunctionName,
+                              {&kPGOidValue, &kNullPGOidValue},
+                              kPGOidValue,
+                             absl::StatusCode::kOk},
+                         }));
+
+INSTANTIATE_TEST_SUITE_P(EvalMaxFailureTests, EvalMinMaxTest,
+                         ::testing::ValuesIn<EvalAggregatorTestCase>({
+                             {"OneInvalidArg",
+                              kPGMinFunctionName,
+                              {&kDoubleValue},
+                              kNullPGOidValue,  // ignored
+                              absl::StatusCode::kInvalidArgument},
+                             {"OneValidArgOneInvalidArg",
+                              kPGMinFunctionName,
+                              {&kPGOidValue, &kDoubleValue},
+                              kNullPGOidValue,  // ignored
+                              absl::StatusCode::kInvalidArgument},
+                         }));
 
 using EvalNumericMinMaxTest = ::testing::TestWithParam<EvalAggregatorTestCase>;
 

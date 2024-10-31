@@ -496,6 +496,7 @@ ALTER TABLE T ALTER COLUMN a ARRAY<BYTES(MAX)>;
 --
 ERROR:.* Cannot change the data type of column `a`, which is used by check constraint `a_length_gt_zero`.
 ==
+# TODO, Prod and emulator returns different error messages for this test.
 # Drop a column that is directly used by a check constraint.
 # --regex
 CREATE TABLE T (
@@ -505,7 +506,7 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 ALTER TABLE T DROP COLUMN a;
 --
-ERROR:.* Cannot drop column `a` from table `T` because it is referenced by check constraint `a_gt_zero`.
+ERROR:.* Cannot drop column `a`.*
 ==
 # Drop a column that is indirectly used by a check constraint via stored generated columm.
 # --regex

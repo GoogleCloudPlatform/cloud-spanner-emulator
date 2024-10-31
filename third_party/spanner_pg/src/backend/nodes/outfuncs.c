@@ -38,6 +38,7 @@
 #include "utils/rel.h"
 
 #include "third_party/spanner_pg/shims/parser_shim.h"
+#include "third_party/spanner_pg/src/include/nodes/nodes.h"
 #include "third_party/spanner_pg/util/nodetag_to_string.h"
 
 static void outChar(StringInfo str, char c);

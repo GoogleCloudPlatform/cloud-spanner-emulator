@@ -692,6 +692,61 @@ TEST_P(SequenceReadWriteTest, InsertAfterIfNotExistsSchemaUpdate) {
   ZETASQL_ASSERT_OK(MultiInsert("test_table", {"value"}, {{4}, {5}, {6}}));
 }
 
+TEST_P(SequenceReadWriteTest, SequenceFunctionInWhereClause) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    ZETASQL_ASSERT_OK(UpdateSchema({"CREATE SEQUENCE seq bit_reversed_positive",
+                            R"(
+    CREATE TABLE test_table (
+      id BIGINT DEFAULT (nextval('seq')),
+      value BIGINT,
+      PRIMARY KEY(id)
+    ))"}));
+    ZETASQL_ASSERT_OK(CommitDml(
+        {SqlStatement("INSERT INTO test_table(value) VALUES (1), (2), (3)")}));
+    // Check that counter has incremented at least 3 times.
+    EXPECT_THAT(Query("select spanner.GET_INTERNAL_SEQUENCE_STATE('seq') >= 3"),
+                IsOkAndHoldsRows({{true}}));
+    // GET_NEXT_SEQUENCE_VALUE is only allowed in a read-write transaction.
+    EXPECT_THAT(Query("SELECT nextval('seq')"),
+                StatusIs(absl::StatusCode::kInvalidArgument,
+                         testing::ContainsRegex(
+                             "(only allowed in read-write transactions|can "
+                             "only be used in a read-write)")));
+    EXPECT_THAT(Query(R"(
+        SELECT 1 FROM test_table
+        WHERE (nextval('seq')) IN (1,2,3))")
+                    .status()
+                    .message(),
+                testing::ContainsRegex("(not supported in a WHERE clause|can "
+                                       "only be used in a read-write)"));
+  } else {
+    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    CREATE SEQUENCE seq OPTIONS (sequence_kind = 'bit_reversed_positive'))",
+                            R"(
+    CREATE TABLE test_table (
+      id INT64 DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE seq)),
+      value INT64
+    ) PRIMARY KEY(id))"}));
+    ZETASQL_ASSERT_OK(CommitDml(
+        {SqlStatement("INSERT INTO test_table(value) VALUES (1), (2), (3)")}));
+    // Check that counter has incremented at least 3 times.
+    EXPECT_THAT(Query("select GET_INTERNAL_SEQUENCE_STATE(SEQUENCE seq) >= 3"),
+                IsOkAndHoldsRows({{true}}));
+    // GET_NEXT_SEQUENCE_VALUE is only allowed in a read-write transaction.
+    EXPECT_THAT(Query("SELECT GET_NEXT_SEQUENCE_VALUE(SEQUENCE seq)"),
+                StatusIs(absl::StatusCode::kInvalidArgument,
+                         testing::ContainsRegex(
+                             "(only allowed in read-write transactions|can "
+                             "only be used in a read-write)")));
+    EXPECT_THAT(Query(R"(
+        SELECT 1 FROM test_table
+        WHERE (GET_NEXT_SEQUENCE_VALUE(SEQUENCE seq)) IN (1,2,3))")
+                    .status()
+                    .message(),
+                testing::ContainsRegex("(not supported in a WHERE clause|can "
+                                       "only be used in a read-write)"));
+  }
+}
 }  // namespace
 
 }  // namespace test

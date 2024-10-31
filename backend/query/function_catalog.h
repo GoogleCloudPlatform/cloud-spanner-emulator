@@ -65,6 +65,7 @@ class FunctionCatalog {
   void AddZetaSQLBuiltInFunctions(zetasql::TypeFactory* type_factory);
   void AddSpannerFunctions();
   void AddMlFunctions();
+  void AddSearchFunctions(zetasql::TypeFactory* type_factory);
 
   void AddSpannerPGFunctions(zetasql::TypeFactory* type_factory);
   void AddFunctionAliases();

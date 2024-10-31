@@ -20,6 +20,7 @@
 #include <string>
 
 #include "google/protobuf/text_format.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
 #include "google/protobuf/io/tokenizer.h"
 
@@ -90,8 +91,9 @@ bool ProtoCompare(const internal::ProtoComparison& comp,
 
 std::string DescribeTypes(const google::protobuf::Message& expected,
                           const google::protobuf::Message& actual) {
-  return "whose type should be " + expected.GetDescriptor()->full_name() +
-         " but actually is " + actual.GetDescriptor()->full_name();
+  return absl::StrCat("whose type should be ",
+                      expected.GetDescriptor()->full_name(),
+                      " but actually is ", actual.GetDescriptor()->full_name());
 }
 
 std::string DescribeDiff(const internal::ProtoComparison& comp,

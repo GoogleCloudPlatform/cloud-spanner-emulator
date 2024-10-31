@@ -177,6 +177,8 @@ absl::Status DdlUnavailableError();
 // Schema validation errors.
 absl::Status InvalidSchemaName(absl::string_view object_kind,
                                absl::string_view identifier);
+absl::Status SchemaObjectTypeUnsupportedInNamedSchema(
+    absl::string_view object_kind, absl::string_view identifier);
 absl::Status InvalidConstraintName(absl::string_view constraint_type,
                                    absl::string_view constraint_name,
                                    absl::string_view reserved_prefix);
@@ -532,6 +534,8 @@ absl::Status ColumnNotFoundInIndex(absl::string_view index_name,
                                    absl::string_view column_name);
 absl::Status ColumnInIndexAlreadyExists(absl::string_view index_name,
                                         absl::string_view column_name);
+absl::Status IndexInDifferentSchema(absl::string_view index_name,
+                                    absl::string_view indexed_table_name);
 
 // Foreign key errors.
 absl::Status ForeignKeyColumnsRequired(absl::string_view table,
@@ -596,11 +600,14 @@ absl::Status CheckConstraintNotUsingAnyNonGeneratedColumn(
     absl::string_view expression);
 absl::Status CannotUseCommitTimestampColumnOnCheckConstraint(
     absl::string_view column_name);
-absl::Status InvalidDropColumnReferencedByCheckConstraint(
-    absl::string_view table_name, absl::string_view check_constraint_name,
-    absl::string_view referencing_column_name);
+absl::Status InvalidDropDependentCheckConstraint(
+    absl::string_view type_kind, absl::string_view dependency_name,
+    absl::string_view dependent_check_constraint_name);
 absl::Status CannotAlterColumnDataTypeWithDependentCheckConstraint(
     absl::string_view column_name, absl::string_view check_constraint_name);
+absl::Status DependentCheckConstraintBecomesInvalid(
+    absl::string_view modify_action, absl::string_view dependency_name,
+    absl::string_view dependent_check_constraint, absl::string_view error);
 
 // Generated column errors
 absl::Status GeneratedColumnsNotEnabled();
@@ -632,6 +639,13 @@ absl::Status CannotWriteToGeneratedColumn(absl::string_view table_name,
                                           absl::string_view column_name);
 absl::Status NonDeterministicFunctionInColumnExpression(
     absl::string_view function_name, absl::string_view expression_use);
+absl::Status InvalidDropDependentColumn(absl::string_view type_kind,
+                                        absl::string_view dependency_name,
+                                        absl::string_view dependent_column);
+absl::Status DependentColumnBecomesInvalid(absl::string_view modify_action,
+                                           absl::string_view dependency_name,
+                                           absl::string_view dependent_column,
+                                           absl::string_view error);
 
 // Column default values errors.
 absl::Status ColumnDefaultValuesNotEnabled();
@@ -767,6 +781,69 @@ absl::Status ExtensionNotSupported(int tag_number,
 absl::Status MessageExtensionsNotSupported(absl::string_view message_name);
 absl::Status MessageTypeNotSupported(absl::string_view message_name);
 
+absl::Status NonHiddenTokenlistColumn(absl::string_view table_name,
+                                      absl::string_view column_name);
+// create search index errors
+absl::Status SearchIndexNotPartitionByokenListType(
+    absl::string_view index_name, absl::string_view column_name);
+absl::Status SearchIndexSortMustBeNotNullError(absl::string_view column_name,
+                                               absl::string_view index_name);
+absl::Status SearchIndexOrderByMustBeIntegerType(absl::string_view index_name,
+                                                 absl::string_view column_name,
+                                                 absl::string_view column_type);
+absl::Status ProjectTokenlistNotAllowed();
+absl::Status TokenlistTypeMergeConflict();
+
+absl::Status SearchIndexNotUsable(absl::string_view index_name,
+                                  absl::string_view reason);
+
+absl::Status FpAlgorithmOnlySupportedOnFloats();
+absl::Status NumericIndexingUnsupportedComparisonType(
+    absl::string_view function_name, absl::string_view comparison_type);
+absl::Status NumericIndexingUnsupportedAlgorithm(
+    absl::string_view function_name, absl::string_view algorithm);
+absl::Status NumericIndexingVariableMustBeFinite(
+    absl::string_view var_name, absl::string_view value_string);
+absl::Status NumericIndexingMinMustBeLessThanMax(
+    absl::string_view function_name, absl::string_view min_string,
+    absl::string_view max_string);
+absl::Status NumericIndexingGranularityMustBeFiniteAndPositive(
+    absl::string_view value_string);
+absl::Status NumericIndexingGranularityMustBeLessThanDiffBetweenMinAndMax(
+    absl::string_view granularity_string, absl::string_view min_string,
+    absl::string_view max_string);
+absl::Status NumericIndexingGranularityTooSmallForRange(
+    absl::string_view min_allowed_granularity_string,
+    absl::string_view granularity_string);
+absl::Status NumericIndexingTreeBaseNotInRange(absl::string_view tree_base);
+absl::Status NumericIndexingPrecisionNotInRange(
+    absl::string_view precision_num);
+
+absl::Status InvalidRelativeSearchType(absl::string_view relative_search_type);
+absl::Status SearchSubstringSupportRelativeSearchTypeArgConflict();
+absl::Status RelativeSearchNotSupported(absl::string_view relative_search_type);
+
+// Search function errors
+absl::Status InvalidUseOfSearchRelatedFunctionWithReason(
+    absl::string_view reason);
+absl::Status TokenListNotMatchSearch(absl::string_view function_name,
+                                     absl::string_view tokenizer_name);
+
+absl::Status ColumnNotSearchable(absl::string_view column_type);
+absl::Status InvalidQueryType(absl::string_view query_type);
+
+absl::Status FailToParseSearchQuery(absl::string_view query,
+                                    absl::string_view errors);
+
+absl::Status InvalidNgramSize(absl::string_view error);
+
+absl::Status IncorrectSnippetColumnType(absl::string_view column_type);
+absl::Status InvalidSnippetQueryType(absl::string_view query_type);
+absl::Status InvalidContentType(absl::string_view function_name,
+                                absl::string_view content_type,
+                                absl::string_view valid_types);
+absl::Status InvalidUseOfSnippetArgs(absl::string_view arg_name);
+
 // Vector length errors
 absl::Status VectorLengthExceedsLimit(absl::string_view column_name,
                                       int element_num, int limit);
@@ -798,7 +875,7 @@ absl::Status ViewReplaceError(absl::string_view view_name,
                               absl::string_view error);
 absl::Status ViewReplaceRecursive(absl::string_view view_name);
 absl::Status DependentViewBecomesInvalid(absl::string_view modify_action,
-                                         absl::string_view view_name,
+                                         absl::string_view dependency_name,
                                          absl::string_view dependent_view_name,
                                          absl::string_view error);
 absl::Status DependentViewColumnRename(absl::string_view modify_action,
@@ -816,6 +893,28 @@ absl::Status InvalidDropDependentViews(absl::string_view type_kind,
                                        absl::string_view dependent_views);
 absl::Status WithViewsAreNotSupported();
 
+// Function errors.
+absl::Status FunctionRequiresInvokerSecurity(absl::string_view function_name);
+absl::Status FunctionReplaceError(absl::string_view function_name,
+                                  absl::string_view error);
+absl::Status FunctionBodyAnalysisError(absl::string_view function_name,
+                                       absl::string_view error);
+absl::Status ReplacingBuiltInFunction(absl::string_view operation_string,
+                                      absl::string_view type_kind,
+                                      absl::string_view built_in_name);
+absl::Status FunctionTypeMismatch(absl::string_view function_name,
+                                  absl::string_view expected_type,
+                                  absl::string_view actual_type);
+absl::Status DependentFunctionBecomesInvalid(
+    absl::string_view modify_action, absl::string_view dependency_name,
+    absl::string_view depedent_function_name, absl::string_view error);
+// TODO Create a singular function that takes a list of dependent
+// schema nodes to use for all schema nodes.
+absl::Status InvalidDropDependentFunction(absl::string_view type_kind,
+                                          absl::string_view dependency_name,
+                                          absl::string_view dependent_function);
+absl::Status FunctionNotFound(absl::string_view function_name);
+
 // Sequence-related errors
 absl::Status SequenceNotSupportedInPostgreSQL();
 
@@ -830,8 +929,6 @@ absl::Status SequenceSkipRangeMinLargerThanMax();
 absl::Status UnsupportedSequenceKind(absl::string_view kind);
 absl::Status SequenceNeedsAccessToSchema();
 absl::Status SequenceExhausted(absl::string_view name);
-absl::Status InvalidDropSequenceWithColumnDependents(
-    absl::string_view sequence_name, absl::string_view dependent_name);
 
 // AlterDatabase related errors
 absl::Status UnsupportedAlterDatabaseOption(absl::string_view option_name);

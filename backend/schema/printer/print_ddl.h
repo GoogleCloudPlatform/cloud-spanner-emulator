@@ -17,13 +17,17 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_PRINT_DDL_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_PRINT_DDL_H_
 
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
+#include <vector>
 
-#include "absl/memory/memory.h"
+#include "zetasql/public/types/type.h"
+#include "absl/status/statusor.h"
 #include "absl/types/optional.h"
-#include "absl/types/span.h"
 #include "backend/schema/catalog/change_stream.h"
+#include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
@@ -32,6 +36,8 @@
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
+#include "google/protobuf/repeated_ptr_field.h"
 
 namespace google {
 namespace spanner {
@@ -67,6 +73,9 @@ std::string PrintSequence(const Sequence* sequence);
 
 // Prints the DDL statements for a named schema.
 std::string PrintNamedSchema(const NamedSchema* named_schema);
+
+// Prints the DDL statements for a udf.
+std::string PrintUdf(const Udf* udf);
 
 // Converts an OnDeleteAction to its string representation.
 std::string OnDeleteActionToString(Table::OnDeleteAction action);

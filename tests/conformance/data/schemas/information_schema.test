@@ -57,6 +57,20 @@ CREATE CHANGE STREAM test_stream FOR base(bool_value,int_value),no_action_child 
 CREATE CHANGE STREAM test_stream2 FOR base,no_action_child(),cascade_child(value1,value2,created_at) OPTIONS ( retention_period = '2d' , value_capture_type = 'OLD_AND_NEW_VALUES' );
 CREATE CHANGE STREAM test_stream3 FOR ALL;
 CREATE CHANGE STREAM test_stream4;
+CREATE SCHEMA named_schema;
+CREATE TABLE named_schema.ns_table_1 (
+  key1 INT64,
+  key2 STRING(256),
+  bool_value BOOL,
+) PRIMARY KEY (key1);
+CREATE TABLE named_schema.ns_table_2 (
+  key1 INT64,
+  key2 INT64
+) PRIMARY KEY (key1);
+ALTER TABLE named_schema.ns_table_2 ADD CONSTRAINT fk_ns_table_2 FOREIGN KEY (key1) REFERENCES named_schema.ns_table_1(key1);
+CREATE UNIQUE INDEX named_schema.ns_index ON named_schema.ns_table_1 (key1 ASC);
+CREATE VIEW named_schema.ns_view SQL SECURITY INVOKER AS SELECT t.key1 FROM named_schema.ns_table_1 as t;
+CREATE SEQUENCE test_sequence OPTIONS (sequence_kind = 'bit_reversed_positive', start_with_counter = 1234);
 CREATE MODEL test_model1
 INPUT( feature INT64 )
 OUTPUT( label STRING(MAX) )
@@ -153,3 +167,20 @@ CREATE CHANGE STREAM test_stream FOR base(bool_value,int_value),no_action_child 
 CREATE CHANGE STREAM test_stream2 FOR base,no_action_child(),cascade_child(value1,value2,created_at) WITH ( retention_period = '2d' , value_capture_type = 'OLD_AND_NEW_VALUES' );
 CREATE CHANGE STREAM test_stream3 FOR ALL;
 CREATE CHANGE STREAM test_stream4;
+CREATE SCHEMA named_schema;
+CREATE TABLE named_schema.ns_table_1 (
+  key1 bigint,
+  key2 varchar(256),
+  bool_value bool,
+  PRIMARY KEY (key1)
+);
+CREATE TABLE named_schema.ns_table_2 (
+  key1 bigint,
+  key2 bigint,
+  PRIMARY KEY (key1)
+);
+ALTER TABLE named_schema.ns_table_2 ADD CONSTRAINT fk_ns_table_2 FOREIGN KEY (key1) REFERENCES named_schema.ns_table_1(key1);
+CREATE UNIQUE INDEX ns_index ON named_schema.ns_table_1 (key1 ASC);
+CREATE VIEW named_schema.ns_view SQL SECURITY INVOKER AS SELECT t.key1 FROM named_schema.ns_table_1 as t;
+CREATE SEQUENCE test_sequence BIT_REVERSED_POSITIVE START COUNTER WITH 1234;
+

@@ -31,6 +31,7 @@
 
 #include "third_party/spanner_pg/bootstrap_catalog/proc_changelist.h"
 
+#include <cstdint>
 #include <vector>
 
 #include "zetasql/base/logging.h"
@@ -40,6 +41,8 @@
 
 namespace postgres_translator {
 namespace {
+
+#define TOKENLISTOID 50001
 
 // The proc name and signature uniquely identify a proc.
 // Used as a member of procs_to_remove and the key of procs_to_update.
@@ -94,7 +97,7 @@ absl::flat_hash_set<PgProcId> procs_to_remove = {
 
 // Metadata to unique identify procs to update in the bootstrap catalog, along
 // with the new signature for each proc.
-absl::flat_hash_map<PgProcId, PgProcSignature> procs_to_update = {
+absl::flat_hash_map<PgProcId, PgProcSignature> proc_signatures_to_update = {
     {{"substr", {{TEXTOID, INT4OID}, TEXTOID}}, {{TEXTOID, INT8OID}, TEXTOID}},
     {{"substr", {{TEXTOID, INT4OID, INT4OID}, TEXTOID}},
      {{TEXTOID, INT8OID, INT8OID}, TEXTOID}},
@@ -146,6 +149,17 @@ absl::flat_hash_map<PgProcId, PgProcSignature> procs_to_update = {
      {{DATEOID, INT8OID}, DATEOID}},
     {{"date_pli", {{DATEOID, INT4OID}, DATEOID}},
      {{DATEOID, INT8OID}, DATEOID}},
+    {{"make_interval",
+      {{INT4OID, INT4OID, INT4OID, INT4OID, INT4OID, INT4OID, FLOAT8OID},
+       INTERVALOID}},
+     {{INT8OID, INT8OID, INT8OID, INT8OID, INT8OID, INT8OID, FLOAT8OID},
+      INTERVALOID}},
+};
+
+// Metadata to unique identify procs to update in the bootstrap catalog, along
+// with the new signature for each proc.
+absl::flat_hash_map<PgProcId, std::vector<std::string>>
+proc_default_args_to_update = {
 };
 
 }  // namespace
@@ -155,23 +169,57 @@ bool ProcIsRemoved(const FormData_pg_proc& proc) {
 }
 
 bool ProcIsModified(const FormData_pg_proc& proc) {
-  return procs_to_update.find(MakePgProcId(proc)) != procs_to_update.end();
+  return (proc_signatures_to_update.find(MakePgProcId(proc)) !=
+          proc_signatures_to_update.end()) ||
+      (proc_default_args_to_update.find(MakePgProcId(proc)) !=
+       proc_default_args_to_update.end());
 }
 
 const PgProcSignature* GetUpdatedProcSignature(const FormData_pg_proc& proc) {
-  if (!ProcIsModified(proc)) {
+  if (proc_signatures_to_update.find(MakePgProcId(proc)) ==
+      proc_signatures_to_update.end()) {
     return nullptr;
   }
-  return &procs_to_update.find(MakePgProcId(proc))->second;
+  return &proc_signatures_to_update.find(MakePgProcId(proc))->second;
 }
 
 const PgProcSignature* GetUpdatedProcSignature(const PgProcData& proc) {
-  return &procs_to_update.find(
-             {.name = proc.proname(),
-              .signature = {.arg_types = std::vector<Oid>(
-                               proc.proargtypes().begin(),
-                               proc.proargtypes().end()),
-                           .return_type = proc.prorettype()}})->second;
+  const PgProcId proc_id = {
+    .name = proc.proname(),
+    .signature = {
+    .arg_types = std::vector<Oid>(
+        proc.proargtypes().begin(),
+        proc.proargtypes().end()),
+                  .return_type = proc.prorettype()}};
+  if (proc_signatures_to_update.find(proc_id) !=
+      proc_signatures_to_update.end()) {
+    return &proc_signatures_to_update.find(proc_id)->second;
+  }
+  return nullptr;
+}
+
+uint16_t GetProcDefaultArgumentCount(const FormData_pg_proc& proc) {
+  if (proc_default_args_to_update.find(MakePgProcId(proc)) ==
+      proc_default_args_to_update.end()) {
+    return 0;
+  }
+  return proc_default_args_to_update.find(MakePgProcId(proc))->second.size();
+}
+
+const std::vector<std::string>*
+GetProcDefaultArguments(const PgProcData& proc) {
+  const PgProcId proc_id = {
+    .name = proc.proname(),
+    .signature = {
+    .arg_types = std::vector<Oid>(
+        proc.proargtypes().begin(),
+        proc.proargtypes().end()),
+                  .return_type = proc.prorettype()}};
+  if (proc_default_args_to_update.find(proc_id) !=
+      proc_default_args_to_update.end()) {
+    return &proc_default_args_to_update.find(proc_id)->second;
+  }
+  return nullptr;
 }
 
 }  // namespace postgres_translator

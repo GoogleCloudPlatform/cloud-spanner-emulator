@@ -80,6 +80,10 @@ absl::Status InitTimezoneOffset(int32_t gmt_offset) {
 void CleanupTimezone() {
   session_timezone = nullptr;
   log_timezone = nullptr;
+  if (gmtptr != nullptr) {
+    pfree(gmtptr);
+    gmtptr = nullptr;
+  }
   ClearTimezoneHashtablePointer();
 }
 

@@ -48,6 +48,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "backend/query/search/search_function_catalog.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "common/bit_reverse.h"
@@ -163,6 +164,7 @@ FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory,
   AddFunctionAliases();
   AddMlFunctions();
   AddSpannerPGFunctions(type_factory);
+  AddSearchFunctions(type_factory);
 }
 
 void FunctionCatalog::AddZetaSQLBuiltInFunctions(
@@ -225,6 +227,15 @@ void FunctionCatalog::AddMlFunctions() {
         std::make_unique<MlPredictTableValuedFunction>(/*safe=*/true);
     table_valued_functions_.insert(
         {safe_ml_predict->FullName(), std::move(safe_ml_predict)});
+  }
+}
+
+void FunctionCatalog::AddSearchFunctions(zetasql::TypeFactory* type_factory) {
+  auto search_functions =
+      query::search::GetSearchFunctions(type_factory, catalog_name_);
+
+  for (auto& [name, function] : search_functions) {
+    functions_.emplace(name, std::move(function));
   }
 }
 

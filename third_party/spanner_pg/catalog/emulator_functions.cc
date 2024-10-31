@@ -100,6 +100,7 @@ using spangres::datatypes::CreatePgJsonbValueFromNormalized;
 using spangres::datatypes::CreatePgNumericValue;
 using spangres::datatypes::CreatePgNumericValueWithMemoryContext;
 using spangres::datatypes::CreatePgNumericValueWithPrecisionAndScale;
+using spangres::datatypes::GetPgOidValue;
 using spangres::datatypes::GetPgJsonbNormalizedValue;
 using spangres::datatypes::GetPgNumericNormalizedValue;
 using spangres::datatypes::common::jsonb::IsValidJsonbString;
@@ -1665,6 +1666,8 @@ absl::StatusOr<std::string> GetStringRepresentation(
           return std::string(GetPgJsonbNormalizedValue(value).value());
         case spangres::datatypes::TypeAnnotationCode::PG_NUMERIC:
           return std::string(GetPgNumericNormalizedValue(value).value());
+        case spangres::datatypes::TypeAnnotationCode::PG_OID:
+          return absl::StrCat(GetPgOidValue(value).value());
         default:
           ZETASQL_RET_CHECK_FAIL() << "Encountered unexpected type "
                            << value.type_kind();
@@ -1757,6 +1760,12 @@ absl::StatusOr<zetasql::Value> EvalToJsonbFromPgNumeric(
   return CreatePgJsonbValue(GetStringRepresentation(arg).value());
 }
 
+// Returns a normalized PG.JSONB value from the PG.OID input.
+absl::StatusOr<zetasql::Value> EvalToJsonbFromPgOid(
+    const zetasql::Value arg) {
+  return CreatePgJsonbValue(GetStringRepresentation(arg).value());
+}
+
 // Returns a normalized PG.JSONB value from the extended type input.
 absl::StatusOr<zetasql::Value> EvalToJsonbFromExtended(
     const zetasql::Value arg) {
@@ -1768,6 +1777,8 @@ absl::StatusOr<zetasql::Value> EvalToJsonbFromExtended(
       return EvalToJsonbFromPgJsonb(arg);
     case spangres::datatypes::TypeAnnotationCode::PG_NUMERIC:
       return EvalToJsonbFromPgNumeric(arg);
+    case spangres::datatypes::TypeAnnotationCode::PG_OID:
+      return EvalToJsonbFromPgOid(arg);
     default:
       ZETASQL_RET_CHECK_FAIL() << "Encountered unexpected type " << arg.type_kind();
   }
@@ -1818,6 +1829,10 @@ std::unique_ptr<zetasql::Function> ToJsonbFunction(
       spangres::datatypes::GetPgNumericArrayType();
   static const zetasql::Type* gsql_pg_jsonb_array =
       spangres::datatypes::GetPgJsonbArrayType();
+  static const zetasql::Type* gsql_pg_oid =
+      spangres::datatypes::GetPgOidType();
+  static const zetasql::Type* gsql_pg_oid_array =
+      spangres::datatypes::GetPgOidArrayType();
 
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(PGFunctionEvaluator(EvalToJsonb));
@@ -1864,6 +1879,10 @@ std::unique_ptr<zetasql::Function> ToJsonbFunction(
               gsql_pg_jsonb, {gsql_timestamp}, /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{
               gsql_pg_jsonb, {gsql_timestamp_array}, /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{
+              gsql_pg_jsonb, {gsql_pg_oid}, /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{
+              gsql_pg_jsonb, {gsql_pg_oid_array}, /*context_ptr=*/nullptr},
       },
       function_options);
 }

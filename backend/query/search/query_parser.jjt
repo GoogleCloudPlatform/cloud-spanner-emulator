@@ -1,0 +1,167 @@
+//
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+// Private tokens. Used to define other tokens.
+TOKEN:
+{
+    <#DIGIT:    ["0"-"9"]>
+  | <#LETTER:   ["a"-"z","A"-"Z"]>
+}
+
+// Punctuations
+TOKEN:
+{
+    <HYPHEN:      "-">
+  | <QUOTE:       "\"">
+  | <OR:          ("|" | "OR")>
+  | <CONNECTOR:   ("=" | "." | "/" | "\\\\" | "'" | ":")>
+  | <OPEN_PARE:   ("(")>
+  | <CLOSE_PARE:  (")")>
+  | <SEPARATOR:   ("~" | "`" | "!" | "@" | "#" | "$" | "%" | "^" | "&" | "_" |
+                   "+" | "{" | "}" | "[" | "]" | ";" | "<" | ">" | "," | "?" |
+                   "*" | " " | "\r" | "\n" | "\t" | "\b" | "\f")>
+}
+
+// Separators
+TOKEN:
+{
+    <PADDING:      (<SEPARATOR> | <CONNECTOR> | <OR>) >
+  | <OR_OP:        (<SEPARATOR>)+ <OR> (<SEPARATOR>)+ >
+}
+
+// Number and word terms used by search
+TOKEN:
+{
+     <NUMBER:   (<DIGIT>)+ >
+  |  <TERM:     (<LETTER>|<DIGIT>)+ >
+}
+
+void search_query() #void:
+{}
+{
+  (
+    (<PADDING>)* and_expression() (<PADDING>)*
+  )
+  <EOF>
+}
+
+// Operation priority from low to high: AND < AROUND < OR < NOT
+void and_expression() #void:
+{}
+{
+  (
+    around_expression() ((<SEPARATOR>)+ around_expression())*
+  )
+  #And(>1)
+}
+
+void around_expression() #void:
+{}
+{
+  (
+    or_expression() (LOOKAHEAD(2) around_op() (<SEPARATOR>)+ or_expression())*
+  )
+  #Around(>1)
+}
+
+void around_op() #void:
+{}
+{
+  (
+    (<SEPARATOR>)+ "AROUND(" number() ")"
+  )
+}
+
+void number() :
+{}
+{
+  (
+    <NUMBER>
+  )
+}
+
+void or_expression() #void:
+{}
+{
+  (
+    sub_expression() (LOOKAHEAD(2) <OR_OP> sub_expression())*
+  )
+  #Or(>1)
+}
+
+void sub_expression() #void:
+{}
+{
+  (
+      not_expression()
+    | quoted_phrase()
+    | connected_pharse()
+  )
+}
+
+void not_expression() #void:
+{}
+{
+  (
+    <HYPHEN>sub_expression()
+  )
+  #Not(>0)
+}
+
+// Phrases connected by connecting symbols, such as I'm, cloud-spanner.
+void connected_pharse() #void:
+{}
+{
+  (
+    or_term() ((<CONNECTOR> | <HYPHEN>)+ or_term())*
+  )
+  #Phrase(>1)
+}
+
+// Phrases enclosed by quotation marks.
+void quoted_phrase() #void:
+{}
+{
+  (
+    <QUOTE> or_term() ((<SEPARATOR> | <CONNECTOR> | <HYPHEN>)+ or_term())* <QUOTE>
+  )
+  #Phrase(>1)
+}
+
+void or_term() #void:
+{}
+{
+  (
+    term() (<OR> term())*
+  )
+  #Or(>1)
+}
+
+void term() :
+{}
+{
+  (
+      <TERM>
+    | <NUMBER>
+  )
+}
+
+SKIP:
+{
+    <UNEXPECTED_CHARACTER: ~[]>
+  | <ILLEGAL_STRING_ESCAPE: "\\" ~[]> : DEFAULT
+  | <ILLEGAL_BYTES_ESCAPE: "\\" ~[]> : DEFAULT
+}

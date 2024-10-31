@@ -16,6 +16,7 @@
 
 #include "zetasql/public/catalog.h"
 
+#include <cassert>
 #include <memory>
 #include <string>
 
@@ -35,11 +36,14 @@
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
+#include "backend/query/queryable_named_schema.h"
+#include "backend/query/queryable_table.h"
 #include "backend/schema/catalog/schema.h"
 #include "tests/common/schema_constructor.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/test_catalog/test_catalog.h"
 
 namespace google {
 namespace spanner {
@@ -56,10 +60,17 @@ using ::zetasql_base::testing::StatusIs;
 // An integration test that uses Catalog to call zetasql::AnalyzeStatement.
 class AnalyzeStatementTest : public testing::Test {
  protected:
-  absl::Status AnalyzeStatement(absl::string_view sql) {
+  absl::Status AnalyzeStatement(
+      absl::string_view sql,
+      DatabaseDialect dialect = DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    if (dialect == DatabaseDialect::POSTGRESQL) {
+      // Initialize the Spangres system catalog for pg_catalog.
+      postgres_translator::spangres::test::GetSpangresTestSystemCatalog(
+          MakeGoogleSqlLanguageOptions());
+    }
     zetasql::TypeFactory type_factory{};
     std::unique_ptr<const Schema> schema =
-        test::CreateSchemaWithOneTable(&type_factory);
+        test::CreateSchemaWithOneTable(&type_factory, dialect);
     FunctionCatalog function_catalog{&type_factory};
     function_catalog.SetLatestSchema(schema.get());
     auto analyzer_options = MakeGoogleSqlAnalyzerOptions();
@@ -121,8 +132,15 @@ TEST_F(AnalyzeStatementTest, SelectFromPGInformationSchema) {
       "SELECT column_name FROM pg_information_schema.columns"));
 }
 
-TEST_F(AnalyzeStatementTest, SelectFromPGCatalog) {
-  ZETASQL_EXPECT_OK(AnalyzeStatement("SELECT tablename FROM pg_catalog.pg_tables"));
+TEST_F(AnalyzeStatementTest, SelectFromPGCatalog_ZetaSQL) {
+  // pg_catalog is not available in ZetaSQL.
+  EXPECT_THAT(AnalyzeStatement("SELECT tablename FROM pg_catalog.pg_tables"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(AnalyzeStatementTest, SelectFromPGCatalog_PostgreSQL) {
+  ZETASQL_EXPECT_OK(AnalyzeStatement("SELECT tablename FROM pg_catalog.pg_tables",
+                             DatabaseDialect::POSTGRESQL));
 }
 
 class CatalogTest : public testing::Test {
@@ -194,6 +212,23 @@ TEST_F(CatalogTest, FindFunctionFindsCountFunction) {
   const zetasql::Function* function;
   ZETASQL_ASSERT_OK(catalog().FindFunction({"COUNT"}, &function, {}));
   EXPECT_EQ(function->Name(), "count");
+}
+
+TEST_F(CatalogTest, FindFunctionFindsSoundexFunction) {
+  const zetasql::Function* function;
+  ZETASQL_ASSERT_OK(catalog().FindFunction({"SOUNDEX"}, &function, {}));
+  EXPECT_EQ(function->Name(), "soundex");
+}
+
+TEST_F(CatalogTest,
+       FindFunctionDoesNotFindNonSoundexAdditionalStringFunctions) {
+  const zetasql::Function* function;
+  EXPECT_THAT(catalog().FindFunction({"INSTR"}, &function, {}),
+              StatusIs(absl::StatusCode::kNotFound));
+  EXPECT_THAT(catalog().FindFunction({"TRANSLATE"}, &function, {}),
+              StatusIs(absl::StatusCode::kNotFound));
+  EXPECT_THAT(catalog().FindFunction({"INITCAP"}, &function, {}),
+              StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(CatalogTest, GetTablesGetsTheOnlyTable) {
@@ -402,6 +437,139 @@ TEST_F(CatalogTest, FindSequence) {
               StatusIs(absl::StatusCode::kNotFound));
   EXPECT_EQ(myseq3, nullptr);
 }
+
+TEST_F(CatalogTest, FindTableWithSynonym) {
+  MakeCatalog({
+      R"(CREATE TABLE mytable (
+          int64_col INT64 NOT NULL,
+          string_col STRING(MAX)
+        ) PRIMARY KEY (int64_col)
+      )",
+      R"(ALTER TABLE mytable ADD SYNONYM syn)"});
+
+  const zetasql::Table* mytable;
+  ZETASQL_ASSERT_OK(catalog().FindTable({"mytable"}, &mytable, {}));
+  ASSERT_NE(mytable, nullptr);
+  EXPECT_EQ(mytable->Name(), "mytable");
+  EXPECT_EQ(mytable->FullName(), "mytable");
+
+  const zetasql::Table* syn;
+  ZETASQL_ASSERT_OK(catalog().FindTable({"syn"}, &syn, {}));
+  ASSERT_NE(syn, nullptr);
+  EXPECT_EQ(syn->Name(), "syn");
+  EXPECT_EQ(syn->FullName(), "syn");
+
+  const QueryableTable* queryable_mytable =
+      dynamic_cast<const QueryableTable*>(mytable);
+  EXPECT_NE(queryable_mytable, nullptr);
+
+  const QueryableTable* queryable_syn =
+      dynamic_cast<const QueryableTable*>(syn);
+  EXPECT_NE(queryable_syn, nullptr);
+
+  EXPECT_EQ(queryable_mytable->wrapped_table(), queryable_syn->wrapped_table());
+}
+
+TEST_F(CatalogTest, CatalogGettersWithNamedSchema) {
+  test::ScopedEmulatorFeatureFlagsSetter flag_setter({
+      .enable_user_defined_functions = true,
+  });
+
+  MakeCatalog(
+      {R"(CREATE SCHEMA mynamedschema1)", R"(CREATE SCHEMA mynamedschema2)",
+       R"(CREATE TABLE mynamedschema1.mytable (int64_col INT64 NOT NULL,
+        string_col STRING(MAX)) PRIMARY KEY (int64_col))",
+       R"(CREATE TABLE mynamedschema2.mytable (int64_col INT64 NOT NULL,
+        string_col STRING(MAX)) PRIMARY KEY (int64_col))",
+       R"(CREATE VIEW mynamedschema1.myview SQL SECURITY INVOKER AS SELECT
+        t.string_col AS view_col FROM mynamedschema1.mytable as t)",
+       R"(CREATE FUNCTION mynamedschema1.udf_1() RETURNS INT64 SQL SECURITY INVOKER AS
+        ((SELECT MAX(t.int64_col) FROM mynamedschema1.mytable as t)))"});
+
+  // GetCatalog is a protected member of EnumerableCatalog, so it will be tested
+  // through Catalog objects.
+  const zetasql::Table* mytable1;
+  ZETASQL_ASSERT_OK(catalog().FindTable({"mynamedschema1", "mytable"}, &mytable1, {}));
+  ASSERT_NE(mytable1, nullptr);
+  EXPECT_EQ(mytable1->Name(), "mytable");
+  EXPECT_EQ(mytable1->FullName(), "mynamedschema1.mytable");
+
+  const zetasql::Table* mytable2;
+  ZETASQL_ASSERT_OK(catalog().FindTable({"mynamedschema2", "mytable"}, &mytable2, {}));
+  ASSERT_NE(mytable2, nullptr);
+  EXPECT_EQ(mytable2->Name(), "mytable");
+  EXPECT_EQ(mytable2->FullName(), "mynamedschema2.mytable");
+
+  const zetasql::Table* mytable3;
+  EXPECT_THAT(catalog().FindTable({"mynamedschema3", "mytable"}, &mytable3, {}),
+              StatusIs(absl::StatusCode::kNotFound));
+  EXPECT_EQ(mytable3, nullptr);
+
+  const zetasql::Table* myview;
+  ZETASQL_ASSERT_OK(catalog().FindTable({"mynamedschema1", "myview"}, &myview, {}));
+  ASSERT_NE(myview, nullptr);
+  EXPECT_EQ(myview->Name(), "myview");
+  EXPECT_EQ(myview->FullName(), "mynamedschema1.myview");
+
+  const zetasql::Function* udf_1;
+  ZETASQL_ASSERT_OK(catalog().FindFunction({"mynamedschema1", "udf_1"}, &udf_1, {}));
+  ASSERT_NE(udf_1, nullptr);
+  EXPECT_EQ(udf_1->Name(), "udf_1");
+  EXPECT_EQ(udf_1->FullName(false), "mynamedschema1.udf_1");
+
+  absl::flat_hash_set<const zetasql::Catalog*> catalogs;
+  ZETASQL_ASSERT_OK(catalog().GetCatalogs(&catalogs));
+  EXPECT_THAT(catalogs, Contains(Property(&zetasql::Catalog::FullName,
+                                          "mynamedschema1")));
+  EXPECT_THAT(catalogs, Contains(Property(&zetasql::Catalog::FullName,
+                                          "mynamedschema2")));
+
+  for (const zetasql::Catalog* catalog : catalogs) {
+    if (!catalog->Is<QueryableNamedSchema>()) continue;
+    QueryableNamedSchema* non_const_named_schema =
+        const_cast<QueryableNamedSchema*>(
+            catalog->GetAs<QueryableNamedSchema>());
+
+    const zetasql::Table* mytable;
+    ZETASQL_ASSERT_OK(non_const_named_schema->GetTable("mytable", &mytable, {}));
+    ASSERT_NE(mytable, nullptr);
+    EXPECT_EQ(mytable->FullName(), catalog->FullName() + ".mytable");
+  }
+};
+
+TEST_F(CatalogTest, CatalogGettersWithUDFs) {
+  test::ScopedEmulatorFeatureFlagsSetter flag_setter({
+      .enable_user_defined_functions = true,
+  });
+  MakeCatalog({
+      R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY
+            INVOKER AS (x + 1))",
+      R"(CREATE TABLE t1 (col1 INT64, col2 INT64 AS (udf_1(col1)))
+         PRIMARY KEY (col1))",
+      R"(CREATE FUNCTION STRCMP_CUSTOM(x STRING, y STRING) RETURNS
+        INT64 SQL SECURITY INVOKER AS (CASE
+                  WHEN x = y THEN 0
+                  WHEN x > y THEN 1
+                  ELSE -1
+              END))",
+  });
+
+  const zetasql::Function* udf_1;
+  ZETASQL_ASSERT_OK(catalog().FindFunction({"udf_1"}, &udf_1, {}));
+  ASSERT_NE(udf_1, nullptr);
+  EXPECT_EQ(udf_1->Name(), "udf_1");
+
+  const zetasql::Function* strcmp_custom;
+  ZETASQL_ASSERT_OK(catalog().FindFunction({"STRCMP_CUSTOM"}, &strcmp_custom, {}));
+  ASSERT_NE(strcmp_custom, nullptr);
+  EXPECT_EQ(strcmp_custom->Name(), "STRCMP_CUSTOM");
+
+  const zetasql::Table* t1;
+  ZETASQL_ASSERT_OK(catalog().FindTable({"t1"}, &t1, {}));
+  ASSERT_NE(t1, nullptr);
+  EXPECT_EQ(t1->Name(), "t1");
+  EXPECT_EQ(t1->FullName(), "t1");
+};
 
 TEST_F(CatalogTest, GetPGNumericAndPGJsonbType) {
   MakeCatalog(

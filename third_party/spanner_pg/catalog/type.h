@@ -88,6 +88,19 @@ class PostgresTypeMapping : public zetasql::ExtendedType {
   virtual absl::StatusOr<zetasql::Value> MakeGsqlValue(
       const Const* pg_const) const;
 
+  // Constructs a zetasql::Value of this type given a valid PostgreSQL
+  // string constant. The string types such as varchar, text, and bytea expect
+  // the string to be enclosed in single quotes. This is to differentiate
+  // between a null value and a value of "null".
+  // The following types are currently unsupported:
+  // - timestamptz
+  // - date
+  // - interval
+  // - numeric
+  // - oid
+  virtual absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+    const absl::string_view& string_const) const;
+
   // Constructs an appropriately-typed PostgreSQL constant given an input
   // zetasql::Value. Used when transforming zetasql::ResolvedLiterals to
   // PostgreSQL constants. The transformer will look up the appropriate
@@ -139,6 +152,9 @@ class PostgresExtendedArrayMapping : public PostgresTypeMapping {
 
   absl::StatusOr<zetasql::Value> MakeGsqlValue(
       const Const* pg_const) const override;
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override;
 
   absl::StatusOr<Const*> MakePgConst(
       const zetasql::Value& val) const override;

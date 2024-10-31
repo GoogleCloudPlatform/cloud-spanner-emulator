@@ -141,6 +141,10 @@ INSTANTIATE_TEST_SUITE_P(PgProcDataTestData, PgProcDataTest,
                                prorettype: 1700
                                proargtypes: 1700
                                proargtypes: 1700
+                               proleakproof: false
+                               proisstrict: true
+                               proparallel: "s"
+                               pronargdefaults: 0
                              )pb",
                              R"pb(
                                oid: 3058
@@ -154,6 +158,12 @@ INSTANTIATE_TEST_SUITE_P(PgProcDataTestData, PgProcDataTest,
                                pronargs: 1
                                prorettype: 25
                                proargtypes: 2276
+                               proleakproof: false
+                               proisstrict: false
+                               proparallel: "s"
+                               pronargdefaults: 0
+                               proallargtypes: 2276
+                               proargmodes: "v"
                              )pb",
                              R"pb(
                                oid: 3219
@@ -167,6 +177,16 @@ INSTANTIATE_TEST_SUITE_P(PgProcDataTestData, PgProcDataTest,
                                pronargs: 1
                                prorettype: 3802
                                proargtypes: 3802
+                               proleakproof: false
+                               proisstrict: true
+                               proparallel: "s"
+                               pronargdefaults: 0
+                               proallargtypes: 3802
+                               proallargtypes: 3802
+                               proargmodes: "i"
+                               proargmodes: "o"
+                               proargnames: "from_json"
+                               proargnames: "value"
                              )pb"));
 
 TEST_P(PgTypeDataTest, GetPgTypeDataFromBootstrapNameSuccess) {

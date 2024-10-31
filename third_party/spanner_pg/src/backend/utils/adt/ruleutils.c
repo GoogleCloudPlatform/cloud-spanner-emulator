@@ -5874,9 +5874,14 @@ get_select_query_def(Query *query, deparse_context *context,
 					break;
 			}
 
+			/* SPANGRES BEGIN */
+			// The PostgreSQL dialect doesn't support this option in locking clauses.
+			/*
 			appendStringInfo(buf, " OF %s",
 							 quote_identifier(get_rtable_name(rc->rti,
 															  context)));
+			*/
+			/* SPANGRES END */
 			if (rc->waitPolicy == LockWaitError)
 				appendStringInfoString(buf, " NOWAIT");
 			else if (rc->waitPolicy == LockWaitSkip)

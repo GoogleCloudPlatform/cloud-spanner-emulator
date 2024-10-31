@@ -59,6 +59,7 @@
 #include "absl/types/optional.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
+#include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/transformer/expr_transformer_helper.h"
@@ -287,7 +288,8 @@ class ForwardTransformer {
   // be allocated and assigned to the returned `ResolvedColumn`.
   absl::StatusOr<zetasql::ResolvedColumn> BuildNewGsqlResolvedColumn(
       absl::string_view table_name, absl::string_view column_name,
-      const zetasql::Type* column_type);
+      const zetasql::Type* column_type,
+      const zetasql::AnnotationMap* annotation_map);
 
   // Given a Postgres Node, builds a corresponding ZetaSQL ResolvedScan
   // object. Modeled after the ZetaSQL ResolveTableExpression function.
@@ -461,7 +463,7 @@ class ForwardTransformer {
   // May overwrite resolved_expr.
   // Modeled off of ZetaSQL's HandleGroupByExpression.
   absl::StatusOr<zetasql::ResolvedColumn> BuildGsqlGroupByColumn(
-      const TargetEntry* entry, const zetasql::Type* resolved_expr_type,
+      const TargetEntry* entry, const zetasql::ResolvedExpr* resolved_expr,
       const VarIndexScope* from_clause_scope,
       TransformerInfo* transformer_info);
 
@@ -644,6 +646,19 @@ class ForwardTransformer {
   BuildGsqlResolvedLiteral(Oid const_type, Datum const_value,
                            bool const_is_null, CoercionForm cast_format);
 
+  // Builds a zetasql::Value from a string and then transforms it into a
+  // ZetaSQL literal. The string should be in the format:
+  // 1) 'value'::type for literals that require quotes.
+  //    (e.g. '{}'::jsonb or 'literal'::text)
+  // 2) value::type for numeric types that don't require quotes.
+  //    (e.g. 123::bigint or 123.456::real)
+  // 3) null::type for null literals.
+  //    (e.g. null::text or null::bigint)
+  // The type name should be the formatted output type name.
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLiteral>>
+  BuildGsqlResolvedLiteralForDefaultArgument(Oid arg_type,
+                                             const std::string& default_value);
+
   // Transforms an ArrayExpr (array literal) to the appropriate ZetaSQL
   // ResolvedExpr depending on array contents:
   //   Const-only arrays transform to ResolvedLiterals like other Const types.
@@ -821,8 +836,19 @@ class ForwardTransformer {
   BuildGsqlResolvedBooleanTestExpr(const BooleanTest& boolean_test,
                                    ExprTransformerInfo* expr_transformer_info);
 
+  // Construct a list of arguments for a function call. This does not support
+  // named or default arguments. It should only be used for expression function
+  // calls and aggregate functions as these cannot support named or default
+  // arguments.
   absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
   BuildGsqlFunctionArgumentList(List* args,
+                                ExprTransformerInfo* expr_transformer_info);
+
+  // Construct a list of arguments for a function call. This supports named and
+  // default arguments. It should be used for all functions except expression
+  // functions and aggregate functions.
+  absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
+  BuildGsqlFunctionArgumentList(const PgProcData& proc_data, List* args,
                                 ExprTransformerInfo* expr_transformer_info);
 
   std::vector<zetasql::InputArgumentType> GetInputArgumentTypes(
@@ -1069,7 +1095,6 @@ class ForwardTransformer {
   // n-ary supertypes) and whether one type can be coerced to another type.
   std::unique_ptr<zetasql::Coercer> coercer_;
 };
-
 }  // namespace postgres_translator
 
 #endif  // TRANSFORMER_FORWARD_TRANSFORMER_H_

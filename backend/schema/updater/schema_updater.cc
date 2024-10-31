@@ -20,9 +20,9 @@
 #include <cstdint>
 #include <functional>
 #include <iterator>
-#include <limits>
 #include <memory>
 #include <optional>
+#include <stack>
 #include <string>
 #include <utility>
 #include <vector>
@@ -32,6 +32,8 @@
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/function.h"
 #include "zetasql/public/function.pb.h"
+#include "zetasql/public/function_signature.h"
+#include "zetasql/public/options.pb.h"
 #include "zetasql/public/simple_catalog.h"
 #include "zetasql/public/type.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
@@ -58,6 +60,7 @@
 #include "absl/types/span.h"
 #include "backend/common/case.h"
 #include "backend/common/ids.h"
+#include "backend/common/utils.h"
 #include "backend/database/pg_oid_assigner/pg_oid_assigner.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
@@ -75,6 +78,7 @@
 #include "backend/schema/builders/named_schema_builder.h"
 #include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
+#include "backend/schema/builders/udf_builder.h"
 #include "backend/schema/builders/view_builder.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
@@ -88,6 +92,7 @@
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_graph.h"
@@ -98,7 +103,6 @@
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "backend/schema/updater/sql_expression_validators.h"
-#include "backend/schema/validators/view_validator.h"
 #include "backend/schema/verifiers/check_constraint_verifiers.h"
 #include "backend/schema/verifiers/foreign_key_verifiers.h"
 #include "backend/storage/storage.h"
@@ -115,7 +119,6 @@
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "google/protobuf/repeated_ptr_field.h"
-#include "re2/re2.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -138,6 +141,8 @@ struct ColumnsUsedByIndex {
   std::vector<const KeyColumn*> index_key_columns;
   std::vector<const Column*> stored_columns;
   std::vector<const Column*> null_filtered_columns;
+  std::vector<const Column*> partition_by_columns;
+  std::vector<const Column*> order_by_columns;
 };
 
 // Get all the names of objects in a vector of objects. Useful for creating
@@ -236,19 +241,22 @@ class SchemaUpdaterImpl {
       absl::string_view expression, const std::string& column_name,
       const zetasql::Type* column_type, const Table* table,
       const ddl::CreateTable* ddl_create_table,
-      absl::flat_hash_set<std::string>* dependent_column_names);
+      absl::flat_hash_set<std::string>* dependent_column_names,
+      absl::flat_hash_set<const SchemaNode*>* udf_dependencies);
 
   absl::Status AnalyzeColumnDefaultValue(
       absl::string_view expression, const std::string& column_name,
       const zetasql::Type* column_type, const Table* table,
       const ddl::CreateTable* ddl_create_table,
-      absl::flat_hash_set<const SchemaNode*>* dependent_sequences);
+      absl::flat_hash_set<const SchemaNode*>* dependent_sequences,
+      absl::flat_hash_set<const SchemaNode*>* udf_dependencies);
 
   absl::Status AnalyzeCheckConstraint(
       absl::string_view expression, const Table* table,
       const ddl::CreateTable* ddl_create_table,
       absl::flat_hash_set<std::string>* dependent_column_names,
-      CheckConstraint::Builder* builder);
+      CheckConstraint::Builder* builder,
+      absl::flat_hash_set<const SchemaNode*>* udf_dependencies);
 
   template <typename ColumnModifier>
   absl::Status SetColumnOptions(
@@ -334,7 +342,6 @@ class SchemaUpdaterImpl {
       Modifier* modifier);
   absl::Status ValidateChangeStreamOptions(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options);
-  int64_t ParseSchemaTimeSpec(absl::string_view spec);
   static std::string MakeChangeStreamTvfName(
       std::string change_stream_name,
       const database_api::DatabaseDialect& dialect);
@@ -402,6 +409,8 @@ class SchemaUpdaterImpl {
       const std::string* interleave_in_table,
       const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
           stored_columns,
+      const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>* partition_by,
+      const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>* order_by,
       const ::google::protobuf::RepeatedPtrField<std::string>* null_filtered_columns,
       const Index* index, const Table* indexed_table,
       ColumnsUsedByIndex* columns_used_by_index);
@@ -421,6 +430,9 @@ class SchemaUpdaterImpl {
 
   absl::StatusOr<const Index*> CreateIndex(
       const ddl::CreateIndex& ddl_index, const Table* indexed_table = nullptr);
+  absl::StatusOr<const Index*> CreateSearchIndex(
+      const ddl::CreateSearchIndex& ddl_index,
+      const Table* indexed_table = nullptr);
 
   absl::StatusOr<const ChangeStream*> CreateChangeStream(
       const ddl::CreateChangeStream& ddl_change_stream,
@@ -432,9 +444,36 @@ class SchemaUpdaterImpl {
       const std::vector<ddl::KeyPartClause>& table_pk,
       const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
           stored_columns,
+      bool is_search_index,
+      const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>* partition_by,
+      const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>* order_by,
       const ::google::protobuf::RepeatedPtrField<std::string>* null_filtered_columns,
       const Table* indexed_table);
 
+  absl::flat_hash_set<const SchemaNode*>
+  GatherTransitiveDependenciesForSchemaNode(
+      const absl::flat_hash_set<const SchemaNode*>& initial_set);
+  bool IsBuiltInFunction(const std::string& function_name);
+  bool CanFunctionReplaceTakenName(const ddl::CreateFunction& ddl_function);
+  std::string GetFunctionKindAsString(const ddl::CreateFunction& ddl_function);
+  absl::Status AnalyzeFunctionDefinition(
+      const ddl::CreateFunction& ddl_function, bool replace,
+      absl::flat_hash_set<const SchemaNode*>* dependencies,
+      std::unique_ptr<zetasql::FunctionSignature>* function_signature,
+      Udf::Determinism* determinism_level);
+  absl::Status AnalyzeFunctionDefinition(
+      const ddl::CreateFunction& ddl_function, bool replace,
+      std::vector<View::Column>* output_columns,
+      absl::flat_hash_set<const SchemaNode*>* dependencies);
+  absl::StatusOr<Udf::Builder> CreateFunctionBuilder(
+      const ddl::CreateFunction& ddl_function,
+      std::unique_ptr<zetasql::FunctionSignature> function_signature,
+      Udf::Determinism determinism_level,
+      absl::flat_hash_set<const SchemaNode*> dependencies);
+  absl::StatusOr<View::Builder> CreateFunctionBuilder(
+      const ddl::CreateFunction& ddl_function,
+      std::vector<View::Column> output_columns,
+      absl::flat_hash_set<const SchemaNode*> dependencies);
   absl::Status CreateFunction(const ddl::CreateFunction& ddl_function);
 
   template <typename SequenceModifier>
@@ -545,6 +584,10 @@ class SchemaUpdaterImpl {
     return absl::OkStatus();
   }
 
+  absl::Status AlterInNamedSchema(
+      const std::string& object_name,
+      const SchemaGraphEditor::EditCallback<NamedSchema>& alter_cb);
+
   // Type factory for the database. Not owned.
   zetasql::TypeFactory* const type_factory_;
 
@@ -608,6 +651,21 @@ absl::Status SchemaUpdaterImpl::AddNode(
 absl::Status SchemaUpdaterImpl::DropNode(const SchemaNode* node) {
   ZETASQL_RET_CHECK_NE(node, nullptr);
   ZETASQL_RETURN_IF_ERROR(editor_->DeleteNode(node));
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AlterInNamedSchema(
+    const std::string& object_name,
+    const SchemaGraphEditor::EditCallback<NamedSchema>& alter_cb) {
+  const absl::string_view schema_name =
+      SDLObjectName::GetSchemaName(object_name);
+  const NamedSchema* named_schema =
+      latest_schema_->FindNamedSchema(std::string(schema_name));
+  if (named_schema == nullptr) {
+    return error::NamedSchemaNotFound(schema_name);
+  }
+  ZETASQL_RETURN_IF_ERROR(AlterNode<NamedSchema>(named_schema, alter_cb));
+
   return absl::OkStatus();
 }
 
@@ -710,6 +768,11 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       ZETASQL_RETURN_IF_ERROR(CreateNamedSchema(ddl_statement->create_schema()));
       break;
     }
+    case ddl::DDLStatement::kCreateSearchIndex: {
+      ZETASQL_RETURN_IF_ERROR(
+          CreateSearchIndex(ddl_statement->create_search_index()).status());
+      break;
+    }
     case ddl::DDLStatement::kAlterDatabase: {
       ZETASQL_RETURN_IF_ERROR(AlterDatabase(ddl_statement->alter_database()));
       break;
@@ -726,7 +789,8 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       const ddl::AlterSequence& alter_sequence =
           ddl_statement->alter_sequence();
       const Sequence* current_sequence =
-          latest_schema_->FindSequence(alter_sequence.sequence_name());
+          latest_schema_->FindSequence(alter_sequence.sequence_name()
+          );
       if (current_sequence == nullptr) {
         if (alter_sequence.existence_modifier() == ddl::IF_EXISTS) {
           // The sequence doesn't exist, but we have the IF EXISTS clause
@@ -771,7 +835,8 @@ SchemaUpdaterImpl::ApplyDDLStatement(
     case ddl::DDLStatement::kDropSequence: {
       const ddl::DropSequence& drop_sequence = ddl_statement->drop_sequence();
       const Sequence* current_sequence =
-          latest_schema_->FindSequence(drop_sequence.sequence_name());
+          latest_schema_->FindSequence(drop_sequence.sequence_name()
+          );
       if (current_sequence == nullptr) {
         if (drop_sequence.existence_modifier() == ddl::IF_EXISTS) {
           // The sequence doesn't exist, but we have the IF EXISTS clause
@@ -888,7 +953,6 @@ SchemaUpdaterImpl::ApplyDDLStatements(
 
   return pending_work;
 }
-
 template <typename ColumnModifier>
 absl::Status SchemaUpdaterImpl::SetColumnOptions(
     const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
@@ -901,18 +965,20 @@ absl::Status SchemaUpdaterImpl::SetColumnOptions(
     commit_timestamp_option_name = ddl::kPGCommitTimestampOptionName;
   }
   for (const ddl::SetOption& option : set_options) {
-    ZETASQL_RET_CHECK_EQ(option.option_name(), commit_timestamp_option_name)
-        << "Invalid column option: " << option.option_name();
-    if (option.has_bool_value()) {
-      allows_commit_timestamp = option.bool_value();
-    } else if (option.has_null_value()) {
-      allows_commit_timestamp = std::nullopt;
+    if (option.option_name() == commit_timestamp_option_name) {
+      if (option.has_bool_value()) {
+        allows_commit_timestamp = option.bool_value();
+      } else if (option.has_null_value()) {
+        allows_commit_timestamp = std::nullopt;
+      } else {
+        ZETASQL_RET_CHECK(false) << "Option " << commit_timestamp_option_name
+                         << " can only take bool_value or null_value.";
+      }
+      modifier->set_allow_commit_timestamp(allows_commit_timestamp);
     } else {
-      ZETASQL_RET_CHECK(false) << "Option " << commit_timestamp_option_name
-                       << " can only take bool_value or null_value.";
+      ZETASQL_RET_CHECK(false) << "Invalid column option: " << option.option_name();
     }
   }
-  modifier->set_allow_commit_timestamp(allows_commit_timestamp);
   return absl::OkStatus();
 }
 
@@ -994,36 +1060,6 @@ absl::Status SchemaUpdaterImpl::ValidateChangeStreamOptions(
   return absl::OkStatus();
 }
 
-// Parses the retention period provided in the DDL statement and the returned
-// time is in seconds. Return -1 if the retention period is invalid.
-int64_t SchemaUpdaterImpl::ParseSchemaTimeSpec(absl::string_view spec) {
-  const int64_t invalid_parse_result = -1;
-  int64_t num = invalid_parse_result;
-  char modifier = '\0';
-  static LazyRE2 time_spec_re = {"(\\d+)([smhd])"};
-  constexpr int64_t kint64max = std::numeric_limits<int64_t>::max();
-  if (!RE2::FullMatch(spec, *time_spec_re, &num, &modifier)) {
-    return num;
-  }
-
-  if (modifier == 's') {
-    // RE2 already did overflow checking for us.  NOTE: We explicitly
-    // require the 's' modifier so that it will be straightforward to
-    // extend the language to support "ms" and "us".
-  } else if (modifier == 'm') {
-    if (num > kint64max / 60) return -1;
-    num *= 60;
-  } else if (modifier == 'h') {
-    if (num > kint64max / (60 * 60)) return -1;
-    num *= (60 * 60);
-  } else if (modifier == 'd') {
-    if (num > kint64max / (24 * 60 * 60)) return -1;
-    num *= (24 * 60 * 60);
-  }
-
-  return num;
-}
-
 // Construct the change stream tvf name for googlesql
 std::string SchemaUpdaterImpl::MakeChangeStreamTvfName(
     std::string change_stream_name,
@@ -1066,9 +1102,10 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
                                        /*ddl_create_table=*/nullptr, *editor));
     }
     ZETASQL_RET_CHECK(new_column_def.has_column_default() && !expression.empty());
+    absl::flat_hash_set<const SchemaNode*> udf_dependencies;
     absl::Status s = AnalyzeColumnDefaultValue(
         expression, column->Name(), column->GetType(), table,
-        /*ddl_create_table=*/nullptr, &dependent_sequences);
+        /*ddl_create_table=*/nullptr, &dependent_sequences, &udf_dependencies);
     if (!s.ok()) {
       return error::ColumnDefaultValueParseError(table->Name(), column->Name(),
                                                  s.message());
@@ -1076,6 +1113,29 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
     editor->set_postgresql_oid(pg_oid_assigner_->GetNextPostgresqlOid());
     editor->set_expression(expression);
     editor->set_has_default_value(true);
+    editor->set_udf_dependencies(udf_dependencies);
+    const Column* existing_column =
+        table->FindColumn(alter_column.column().column_name());
+    if (existing_column == nullptr) {
+      return error::ColumnNotFound(table->Name(),
+                                   alter_column.column().column_name());
+    }
+    absl::flat_hash_set<const SchemaNode*> deps;
+    for (const auto& dep : existing_column->udf_dependencies()) {
+      deps.insert(dep);
+    }
+
+    // Check for a recursive columns by analyzing the transitive set of
+    // dependencies, i.e., if the view is a dependency of itself.
+    auto transitive_deps = GatherTransitiveDependenciesForSchemaNode(deps);
+    if (std::find_if(transitive_deps.begin(), transitive_deps.end(),
+                     [existing_column](const SchemaNode* dep) {
+                       return (dep->As<const Column>() != nullptr &&
+                               dep->As<const Column>()->Name() ==
+                                   existing_column->Name());
+                     }) != transitive_deps.end()) {
+      return error::ViewReplaceRecursive(existing_column->Name());
+    }
   } else {
     if (!column->has_default_value()
     ) {
@@ -1120,7 +1180,8 @@ absl::Status SchemaUpdaterImpl::AnalyzeGeneratedColumn(
     absl::string_view expression, const std::string& column_name,
     const zetasql::Type* column_type, const Table* table,
     const ddl::CreateTable* ddl_create_table,
-    absl::flat_hash_set<std::string>* dependent_column_names) {
+    absl::flat_hash_set<std::string>* dependent_column_names,
+    absl::flat_hash_set<const SchemaNode*>* udf_dependencies) {
   std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
   ZETASQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
                                                   &name_and_types));
@@ -1135,14 +1196,15 @@ absl::Status SchemaUpdaterImpl::AnalyzeGeneratedColumn(
       expression, column_type, table, latest_schema_, type_factory_,
       name_and_types, "stored generated columns", dependent_column_names,
       /*dependent_sequences=*/nullptr,
-      /*allow_volatile_expression=*/false);
+      /*allow_volatile_expression=*/false, udf_dependencies);
 }
 
 absl::Status SchemaUpdaterImpl::AnalyzeColumnDefaultValue(
     absl::string_view expression, const std::string& column_name,
     const zetasql::Type* column_type, const Table* table,
     const ddl::CreateTable* ddl_create_table,
-    absl::flat_hash_set<const SchemaNode*>* dependent_sequences) {
+    absl::flat_hash_set<const SchemaNode*>* dependent_sequences,
+    absl::flat_hash_set<const SchemaNode*>* udf_dependencies) {
   std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
   ZETASQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
                                                   &name_and_types));
@@ -1156,7 +1218,8 @@ absl::Status SchemaUpdaterImpl::AnalyzeColumnDefaultValue(
   ZETASQL_RETURN_IF_ERROR(AnalyzeColumnExpression(
       expression, column_type, table, latest_schema_, type_factory_,
       name_and_types, "column default", &dependent_column_names,
-      dependent_sequences, /*allow_volatile_expression=*/true));
+      dependent_sequences, /*allow_volatile_expression=*/true,
+      udf_dependencies));
   if (!dependent_column_names.empty()) {
     return error::DefaultExpressionWithColumnDependency(column_name);
   }
@@ -1167,21 +1230,26 @@ absl::Status SchemaUpdaterImpl::AnalyzeCheckConstraint(
     absl::string_view expression, const Table* table,
     const ddl::CreateTable* ddl_create_table,
     absl::flat_hash_set<std::string>* dependent_column_names,
-    CheckConstraint::Builder* builder) {
+    CheckConstraint::Builder* builder,
+    absl::flat_hash_set<const SchemaNode*>* udf_dependencies) {
   std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
   ZETASQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
                                                   &name_and_types));
 
-  ZETASQL_RETURN_IF_ERROR(
-      AnalyzeColumnExpression(expression, zetasql::types::BoolType(), table,
-                              latest_schema_, type_factory_, name_and_types,
-                              "check constraints", dependent_column_names,
-                              /*dependent_sequences=*/nullptr,
-                              /*allow_volatile_expression=*/false));
+  ZETASQL_RETURN_IF_ERROR(AnalyzeColumnExpression(
+      expression, zetasql::types::BoolType(), table, latest_schema_,
+      type_factory_, name_and_types, "check constraints",
+      dependent_column_names,
+      /*dependent_sequences=*/nullptr,
+      /*allow_volatile_expression=*/false, udf_dependencies));
 
   for (const std::string& column_name : *dependent_column_names) {
     builder->add_dependent_column(table->FindColumn(column_name));
   }
+  for (const SchemaNode* udf : *udf_dependencies) {
+    builder->add_dependent_udf(udf);
+  }
+
   return absl::OkStatus();
 }
 
@@ -1223,6 +1291,11 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
                                    latest_schema_->proto_bundle().get()));
   modifier->set_type(column_type);
 
+  if (column_type->IsTokenList() && !ddl_column.hidden()) {
+    return error::NonHiddenTokenlistColumn(table->Name(),
+                                           ddl_column.column_name());
+  }
+
   // For the case of removing a vector length param in ALTER TABLE ALTER COLUMN.
   if (ddl_create_table == nullptr) {
     const Column* column = table->FindColumn(ddl_column.column_name());
@@ -1232,6 +1305,8 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
           ddl_column.column_name());
     }
   }
+
+  absl::flat_hash_set<const SchemaNode*> udf_dependencies;
   absl::flat_hash_set<const SchemaNode*> dependent_sequences;
   if (ddl_column.has_column_default()) {
     std::string expression = ddl_column.column_default().expression();
@@ -1245,7 +1320,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
 
     absl::Status s = AnalyzeColumnDefaultValue(
         expression, ddl_column.column_name(), column_type, table,
-        ddl_create_table, &dependent_sequences);
+        ddl_create_table, &dependent_sequences, &udf_dependencies);
 
     if (!s.ok()) {
       return error::ColumnDefaultValueParseError(
@@ -1264,7 +1339,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     absl::flat_hash_set<std::string> dependent_column_names;
     absl::Status s = AnalyzeGeneratedColumn(
         expression, ddl_column.column_name(), column_type, table,
-        ddl_create_table, &dependent_column_names);
+        ddl_create_table, &dependent_column_names, &udf_dependencies);
     if (!s.ok()) {
       return error::GeneratedColumnDefinitionParseError(
           table->Name(), ddl_column.column_name(), s.message());
@@ -1324,6 +1399,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     modifier->set_declared_max_length(ddl_column.array_subtype().length());
   }
   modifier->set_sequences_used(dependent_sequences);
+  modifier->set_udf_dependencies(udf_dependencies);
 
   if (ddl_column.has_vector_length()) {
     // For the case of adding `vector_length` param in CREATE TABLE and ALTER
@@ -2202,7 +2278,8 @@ SchemaUpdaterImpl::TranslatePostgreSqlExpression(
 absl::StatusOr<ExpressionTranslateResult>
 SchemaUpdaterImpl::TranslatePostgreSqlQueryInView(absl::string_view query) {
   zetasql::AnalyzerOptions analyzer_options =
-      MakeGoogleSqlAnalyzerOptionsForViews(admin::database::v1::POSTGRESQL);
+      MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
+          admin::database::v1::POSTGRESQL);
   analyzer_options.CreateDefaultArenasIfNotSet();
   FunctionCatalog function_catalog(type_factory_);
   function_catalog.SetLatestSchema(latest_schema_);
@@ -2261,9 +2338,10 @@ absl::Status SchemaUpdaterImpl::CreateCheckConstraint(
         ddl_check_constraint.expression_origin().original_expression())));
   }
   absl::flat_hash_set<std::string> dependent_column_names;
-  absl::Status s = AnalyzeCheckConstraint(ddl_check_constraint.expression(),
-                                          table, ddl_create_table,
-                                          &dependent_column_names, &builder);
+  absl::flat_hash_set<const SchemaNode*> udf_dependencies;
+  absl::Status s = AnalyzeCheckConstraint(
+      ddl_check_constraint.expression(), table, ddl_create_table,
+      &dependent_column_names, &builder, &udf_dependencies);
 
   if (!s.ok()) {
     const std::string display_name =
@@ -2439,6 +2517,26 @@ absl::Status SchemaUpdaterImpl::CreateTable(
       }
     }
   }
+
+  if (SDLObjectName::IsFullyQualifiedName(ddl_table.table_name())) {
+    const absl::string_view schema_name =
+        SDLObjectName::GetSchemaName(ddl_table.table_name());
+    const NamedSchema* named_schema =
+        latest_schema_->FindNamedSchema(std::string(schema_name));
+    if (named_schema == nullptr) {
+      return error::NamedSchemaNotFound(schema_name);
+    }
+
+    ZETASQL_RETURN_IF_ERROR(AlterNode<NamedSchema>(
+        named_schema, [&](NamedSchema::Editor* editor) -> absl::Status {
+          editor->add_table(builder.get());
+          if (ddl_table.has_synonym()) {
+            editor->add_synonym(builder.get());
+          }
+          return absl::OkStatus();
+        }));
+  }
+
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return absl::OkStatus();
 }
@@ -2712,6 +2810,8 @@ SchemaUpdaterImpl::CreateIndexDataTable(
     const std::string* interleave_in_table,
     const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
         stored_columns,
+    const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>* partition_by,
+    const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>* order_by,
     const ::google::protobuf::RepeatedPtrField<std::string>* null_filtered_columns,
     const Index* index, const Table* indexed_table,
     ColumnsUsedByIndex* columns_used_by_index) {
@@ -2820,6 +2920,20 @@ SchemaUpdaterImpl::CreateIndexDataTable(
     }
   }
 
+  if (partition_by != nullptr) {
+    // Add partition by columns to index data table
+    ZETASQL_RETURN_IF_ERROR(AddSearchIndexColumns(
+        *partition_by, indexed_table, index->is_null_filtered(),
+        columns_used_by_index->partition_by_columns, builder));
+  }
+
+  if (order_by != nullptr) {
+    // Add order by columns to index data table.
+    ZETASQL_RETURN_IF_ERROR(AddSearchIndexColumns(
+        *order_by, indexed_table, index->is_null_filtered(),
+        columns_used_by_index->order_by_columns, builder));
+  }
+
   return builder.build();
 }
 
@@ -2844,8 +2958,31 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
       ddl_index.index_name(), ddl_index.index_base_name(), is_unique,
       is_null_filtered, interleave_in_table, index_pk,
       ddl_index.stored_column_definition(),
+      /*is_search_index=*/false,
+      /*partition_by=*/nullptr,
+      /*order_by=*/nullptr,
       /*null_filtered_columns=*/&ddl_index.null_filtered_column(),
       indexed_table);
+}
+
+absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateSearchIndex(
+    const ddl::CreateSearchIndex& ddl_index, const Table* indexed_table) {
+  const std::string* interleave_in_table =
+      ddl_index.has_interleave_in_table() ? &ddl_index.interleave_in_table()
+                                          : nullptr;
+  std::vector<ddl::KeyPartClause> table_pk;
+  table_pk.reserve(ddl_index.token_column_definition().size());
+  for (const ddl::TokenColumnDefinition& token_column_def :
+       ddl_index.token_column_definition()) {
+    table_pk.push_back(token_column_def.token_column());
+  }
+  bool is_null_filtered = ddl_index.null_filtered();
+  return CreateIndexHelper(
+      ddl_index.index_name(), ddl_index.index_base_name(),
+      /*is_unique=*/false, is_null_filtered, interleave_in_table, table_pk,
+      ddl_index.stored_column_definition(),
+      /*is_search_index=*/true, &ddl_index.partition_by(),
+      &ddl_index.order_by(), &ddl_index.null_filtered_column(), indexed_table);
 }
 
 absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
@@ -3039,6 +3176,9 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
     const std::vector<ddl::KeyPartClause>& table_pk,
     const ::google::protobuf::RepeatedPtrField<ddl::StoredColumnDefinition>&
         stored_columns,
+    bool is_search_index,
+    const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>* partition_by,
+    const ::google::protobuf::RepeatedPtrField<ddl::KeyPartClause>* order_by,
     const ::google::protobuf::RepeatedPtrField<std::string>* null_filtered_columns,
     const Table* indexed_table) {
   if (indexed_table == nullptr) {
@@ -3068,7 +3208,7 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<const Table> data_table,
       CreateIndexDataTable(index_name, table_pk, interleave_in_table,
-                           stored_columns,
+                           stored_columns, partition_by, order_by,
                            null_filtered_columns, builder.get(), indexed_table,
                            &columns_used_by_index));
 
@@ -3084,6 +3224,17 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
   for (const Column* col : columns_used_by_index.null_filtered_columns) {
     builder.add_null_filtered_column(col);
   }
+  if (is_search_index) {
+    builder.set_index_type(is_search_index);
+
+    for (const Column* col : columns_used_by_index.partition_by_columns) {
+      builder.add_partition_by_column(col);
+    }
+
+    for (const Column* col : columns_used_by_index.order_by_columns) {
+      builder.add_order_by_column(col);
+    }
+  }
 
   ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
       indexed_table, [&builder](Table::Editor* table_editor) -> absl::Status {
@@ -3091,14 +3242,23 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
         builder.set_indexed_table(table_editor->get());
         return absl::OkStatus();
       }));
-
   // Register a backfill action for the index.
   const Index* index = builder.get();
 
+  if (!is_search_index) {
     statement_context_->AddAction(
         [index](const SchemaValidationContext* context) {
           return BackfillIndex(index, context);
         });
+  }
+
+  if (SDLObjectName::IsFullyQualifiedName(index_name)) {
+    ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+        index_name, [&builder](NamedSchema::Editor* editor) -> absl::Status {
+          editor->add_index(builder.get());
+          return absl::OkStatus();
+        }));
+  }
 
   // The data table must be added after the index for correct order of
   // validation.
@@ -3107,42 +3267,177 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
   return index;
 }
 
-absl::Status SchemaUpdaterImpl::CreateFunction(
+absl::flat_hash_set<const SchemaNode*>
+SchemaUpdaterImpl::GatherTransitiveDependenciesForSchemaNode(
+    const absl::flat_hash_set<const SchemaNode*>& initial_set) {
+  absl::flat_hash_set<const SchemaNode*> transitive;
+  std::stack<const SchemaNode*> explore;
+  for (const auto& dep : initial_set) {
+    transitive.insert(dep);
+    explore.push(dep);
+  }
+
+  while (!explore.empty()) {
+    auto dep = explore.top();
+    explore.pop();
+    // Only explore dependencies that are views, columns, or udfs. (Leave out
+    // sequences).
+    if (auto view = dynamic_cast<const View*>(dep); view != nullptr) {
+      for (const auto& dependency : view->dependencies()) {
+        if (transitive.insert(dependency).second) explore.push(dependency);
+      }
+    }
+    if (auto udf = dynamic_cast<const Udf*>(dep); udf != nullptr) {
+      for (const auto& dependency : udf->dependencies()) {
+        if (transitive.insert(dependency).second) explore.push(dependency);
+      }
+    }
+    if (auto column = dynamic_cast<const Column*>(dep); column != nullptr) {
+      for (const auto& dependency : column->udf_dependencies()) {
+        if (transitive.insert(dependency).second) explore.push(dependency);
+      }
+    }
+  }
+  return transitive;
+}
+
+bool SchemaUpdaterImpl::IsBuiltInFunction(const std::string& function_name) {
+  // Do not include the schema to avoid populating the schema's Udfs.
+  FunctionCatalog function_catalog(type_factory_);
+  const zetasql::Function* function = nullptr;
+  function_catalog.GetFunction({function_name}, &function);
+  return function != nullptr;
+}
+
+bool SchemaUpdaterImpl::CanFunctionReplaceTakenName(
     const ddl::CreateFunction& ddl_function) {
-  if (latest_schema_->views().size() >= limits::kMaxViewsPerDatabase) {
-    return error::TooManyViewsPerDatabase(ddl_function.function_name(),
-                                          limits::kMaxViewsPerDatabase);
-  }
-
-  if (!ddl_function.has_sql_security() ||
-      ddl_function.sql_security() != ddl::Function::INVOKER) {
-    return error::ViewRequiresInvokerSecurity(ddl_function.function_name());
-  }
-
-  // Name lookup is case insensitive.
   const View* existing_view =
       latest_schema_->FindView(ddl_function.function_name());
-  const bool replace = existing_view && ddl_function.has_is_or_replace() &&
-                       ddl_function.is_or_replace();
-  if (!replace) {
-    ZETASQL_RETURN_IF_ERROR(
-        global_names_.AddName("View", ddl_function.function_name()));
-  }
+  const Udf* existing_udf =
+      latest_schema_->FindUdf(ddl_function.function_name());
 
-  // Analyze the view definition.
-  absl::Status error;
-  absl::flat_hash_set<const SchemaNode*> dependencies;
-  std::vector<View::Column> output_columns;
+  if (existing_view != nullptr &&
+      ddl_function.function_kind() == ddl::Function::VIEW &&
+      ddl_function.is_or_replace()) {
+    return true;
+  }
+  if (existing_udf != nullptr &&
+      ddl_function.function_kind() == ddl::Function::FUNCTION &&
+      ddl_function.is_or_replace()) {
+    return true;
+  }
+  return false;
+}
+
+std::string SchemaUpdaterImpl::GetFunctionKindAsString(
+    const ddl::CreateFunction& ddl_function) {
+  if (ddl_function.function_kind() == ddl::Function::FUNCTION) {
+    return "Function";
+  }
+  if (ddl_function.function_kind() == ddl::Function::VIEW) {
+    return "View";
+  }
+  return "Unknown";
+}
+
+absl::Status SchemaUpdaterImpl::AnalyzeFunctionDefinition(
+    const ddl::CreateFunction& ddl_function, bool replace,
+    absl::flat_hash_set<const SchemaNode*>* dependencies,
+    std::unique_ptr<zetasql::FunctionSignature>* function_signature,
+    Udf::Determinism* determinism_level) {
+  std::string param_list = "";
+  for (int i = 0; i < ddl_function.param_size(); i++) {
+    param_list += ddl_function.param(i).name() + " " +
+                  ddl_function.param(i).param_typename();
+    if (ddl_function.param(i).has_default_value()) {
+      param_list += " DEFAULT " + ddl_function.param(i).default_value();
+    }
+    if (i < ddl_function.param_size() - 1) {
+      param_list += ", ";
+    }
+  }
+  auto status = AnalyzeUdfDefinition(ddl_function.function_name(), param_list,
+                                     ddl_function.sql_body(), latest_schema_,
+                                     type_factory_, dependencies,
+                                     function_signature, determinism_level);
+
+  if (!status.ok()) {
+    return replace ? error::FunctionReplaceError(ddl_function.function_name(),
+                                                 status.message())
+                   : error::FunctionBodyAnalysisError(
+                         ddl_function.function_name(), status.message());
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AnalyzeFunctionDefinition(
+    const ddl::CreateFunction& ddl_function, bool replace,
+    std::vector<View::Column>* output_columns,
+    absl::flat_hash_set<const SchemaNode*>* dependencies) {
   auto status = AnalyzeViewDefinition(
       ddl_function.function_name(), ddl_function.sql_body(), latest_schema_,
-      type_factory_, &output_columns, &dependencies);
+      type_factory_, output_columns, dependencies);
   if (!status.ok()) {
     return replace ? error::ViewReplaceError(ddl_function.function_name(),
                                              status.message())
                    : error::ViewBodyAnalysisError(ddl_function.function_name(),
                                                   status.message());
   }
+  return absl::OkStatus();
+}
 
+absl::StatusOr<Udf::Builder> SchemaUpdaterImpl::CreateFunctionBuilder(
+    const ddl::CreateFunction& ddl_function,
+    std::unique_ptr<zetasql::FunctionSignature> function_signature,
+    Udf::Determinism determinism_level,
+    absl::flat_hash_set<const SchemaNode*> dependencies) {
+  Udf::Builder builder;
+  std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_postgresql_oid(oid);
+  if (oid.has_value()) {
+    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to function "
+            << ddl_function.function_name();
+  }
+  builder.set_name(ddl_function.function_name())
+      .set_sql_body(ddl_function.sql_body())
+      .set_sql_security([&]() {
+        switch (ddl_function.sql_security()) {
+          case ddl::Function::UNSPECIFIED_SQL_SECURITY:
+            return Udf::SqlSecurity::SQL_SECURITY_UNSPECIFIED;
+          case ddl::Function::INVOKER:
+            return Udf::SqlSecurity::INVOKER;
+        }
+      }());
+  if (ddl_function.has_sql_body_origin() &&
+      !ddl_function.sql_body_origin().original_expression().empty()) {
+    builder.set_body_origin(absl::StripAsciiWhitespace(
+        ddl_function.sql_body_origin().original_expression()));
+  }
+
+  if (ddl_function.has_return_typename() &&
+      ddl_function.return_typename() !=
+          function_signature->result_type().type()->TypeName(
+              zetasql::PRODUCT_EXTERNAL)) {
+    return error::FunctionTypeMismatch(
+        ddl_function.function_name(), ddl_function.return_typename(),
+        function_signature->result_type().type()->TypeName(
+            zetasql::PRODUCT_EXTERNAL));
+  }
+  builder.set_signature(std::move(function_signature));
+
+  builder.set_determinism_level(determinism_level);
+
+  for (auto dependency : dependencies) {
+    builder.add_dependency(dependency);
+  }
+
+  return builder;
+}
+
+absl::StatusOr<View::Builder> SchemaUpdaterImpl::CreateFunctionBuilder(
+    const ddl::CreateFunction& ddl_function,
+    std::vector<View::Column> output_columns,
+    absl::flat_hash_set<const SchemaNode*> dependencies) {
   View::Builder builder;
   std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_postgresql_oid(oid);
@@ -3174,30 +3469,139 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
   for (const auto& dependency : dependencies) {
     builder.add_dependency(dependency);
   }
+  return builder;
+}
 
-  if (replace) {
-    // Check for a recursive view by analyzing the transitive set of
-    // dependencies, i.e., if the view is a dependency of itself.
-    auto transitive_deps = GatherTransitiveDependenciesForView(dependencies);
-    if (std::find_if(transitive_deps.begin(), transitive_deps.end(),
-                     [existing_view](const SchemaNode* dep) {
-                       auto view_dep = dep->As<const View>();
-                       return view_dep != nullptr &&
-                              view_dep->Name() == existing_view->Name();
-                     }) != transitive_deps.end()) {
-      return error::ViewReplaceRecursive(existing_view->Name());
+absl::Status SchemaUpdaterImpl::CreateFunction(
+    const ddl::CreateFunction& ddl_function) {
+  if (ddl_function.function_kind() == ddl::Function::VIEW &&
+      latest_schema_->views().size() >= limits::kMaxViewsPerDatabase) {
+    return error::TooManyViewsPerDatabase(ddl_function.function_name(),
+                                          limits::kMaxViewsPerDatabase);
+  }
+
+  if (!ddl_function.has_sql_security() ||
+      ddl_function.sql_security() != ddl::Function::INVOKER) {
+    return ddl_function.function_kind() == ddl::Function::FUNCTION
+               ? error::FunctionRequiresInvokerSecurity(
+                     ddl_function.function_name())
+               : error::ViewRequiresInvokerSecurity(
+                     ddl_function.function_name());
+  }
+
+  bool replace = false;
+  if (global_names_.HasName(ddl_function.function_name())) {
+    replace = CanFunctionReplaceTakenName(ddl_function);
+    if (!replace) {
+      return error::SchemaObjectAlreadyExists(
+          GetFunctionKindAsString(ddl_function), ddl_function.function_name());
     }
-    return AlterNode<View>(existing_view,
-                           [&](View::Editor* editor) -> absl::Status {
-                             // Just replace the view definition completely.
-                             // The temp instance inside builder will be
-                             // cleaned up when the builder goes out of scope.
-                             editor->copy_from(builder.get());
-                             return absl::OkStatus();
-                           });
-  } else {
+  }
+
+  if (!replace) {
+    ZETASQL_RETURN_IF_ERROR(global_names_.AddName(GetFunctionKindAsString(ddl_function),
+                                          ddl_function.function_name()));
+  }
+
+  if (IsBuiltInFunction(ddl_function.function_name())) {
+    return error::ReplacingBuiltInFunction(
+        ddl_function.is_or_replace() ? "create or replace" : "create",
+        GetFunctionKindAsString(ddl_function), ddl_function.function_name());
+  }
+
+  absl::Status error;
+  absl::flat_hash_set<const SchemaNode*> dependencies;
+  if (ddl_function.function_kind() == ddl::Function::FUNCTION) {
+    std::unique_ptr<zetasql::FunctionSignature> function_signature;
+    Udf::Determinism determinism_level = Udf::Determinism::DETERMINISTIC;
+    ZETASQL_RETURN_IF_ERROR(
+        AnalyzeFunctionDefinition(ddl_function, replace, &dependencies,
+                                  &function_signature, &determinism_level));
+    ZETASQL_ASSIGN_OR_RETURN(
+        Udf::Builder builder,
+        CreateFunctionBuilder(ddl_function, std::move(function_signature),
+                              determinism_level, dependencies));
+    if (replace) {
+      const Udf* existing_udf =
+          latest_schema_->FindUdf(ddl_function.function_name());
+      // Check for a recursive view by analyzing the transitive set of
+      // dependencies, i.e., if the view is a dependency of itself.
+      auto transitive_deps =
+          GatherTransitiveDependenciesForSchemaNode(dependencies);
+      if (std::find_if(transitive_deps.begin(), transitive_deps.end(),
+                       [existing_udf](const SchemaNode* dep) {
+                         return (dep->As<const Udf>() != nullptr &&
+                                 dep->As<const Udf>()->Name() ==
+                                     existing_udf->Name());
+                       }) != transitive_deps.end()) {
+        return error::ViewReplaceRecursive(existing_udf->Name());
+      }
+      return AlterNode<Udf>(existing_udf,
+                            [&](Udf::Editor* editor) -> absl::Status {
+                              // Just replace the udf definition completely.
+                              // The temp instance inside builder will be
+                              // cleaned up when the builder goes out of scope.
+                              editor->copy_from(builder.get());
+                              return absl::OkStatus();
+                            });
+    }
+
+    if (SDLObjectName::IsFullyQualifiedName(ddl_function.function_name())) {
+      ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+          ddl_function.function_name(),
+          [&builder](NamedSchema::Editor* editor) -> absl::Status {
+            editor->add_udf(builder.get());
+            return absl::OkStatus();
+          }));
+    }
+
+    return AddNode(builder.build());
+  } else if (ddl_function.function_kind() == ddl::Function::VIEW) {
+    std::vector<View::Column> output_columns;
+    ZETASQL_RETURN_IF_ERROR(AnalyzeFunctionDefinition(ddl_function, replace,
+                                              &output_columns, &dependencies));
+    ZETASQL_ASSIGN_OR_RETURN(
+        View::Builder builder,
+        CreateFunctionBuilder(ddl_function, std::move(output_columns),
+                              dependencies));
+
+    if (replace) {
+      const View* existing_view =
+          latest_schema_->FindView(ddl_function.function_name());
+      // Check for a recursive view by analyzing the transitive set of
+      // dependencies, i.e., if the view is a dependency of itself.
+      auto transitive_deps =
+          GatherTransitiveDependenciesForSchemaNode(dependencies);
+      if (std::find_if(transitive_deps.begin(), transitive_deps.end(),
+                       [existing_view](const SchemaNode* dep) {
+                         return (dep->As<const View>() != nullptr &&
+                                 dep->As<const View>()->Name() ==
+                                     existing_view->Name());
+                       }) != transitive_deps.end()) {
+        return error::ViewReplaceRecursive(existing_view->Name());
+      }
+      return AlterNode<View>(existing_view,
+                             [&](View::Editor* editor) -> absl::Status {
+                               // Just replace the view definition completely.
+                               // The temp instance inside builder will be
+                               // cleaned up when the builder goes out of scope.
+                               editor->copy_from(builder.get());
+                               return absl::OkStatus();
+                             });
+    }
+    // No need to account for the named schema in the replace case.
+    if (SDLObjectName::IsFullyQualifiedName(ddl_function.function_name())) {
+      ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+          ddl_function.function_name(),
+          [&builder](NamedSchema::Editor* editor) -> absl::Status {
+            editor->add_view(builder.get());
+            return absl::OkStatus();
+          }));
+    }
+
     return AddNode(builder.build());
   }
+  return absl::OkStatus();  // ERROR FOR UNSUPPORTED VIEW TYPE
 }
 
 template <typename SequenceModifier>
@@ -3339,6 +3743,15 @@ absl::StatusOr<const Sequence*> SchemaUpdaterImpl::CreateSequence(
         return SetSequenceOptions(set_options, editor);
       }));
 
+  if (SDLObjectName::IsFullyQualifiedName(create_sequence.sequence_name())) {
+    ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+        create_sequence.sequence_name(),
+        [&sequence](NamedSchema::Editor* editor) -> absl::Status {
+          editor->add_sequence(sequence);
+          return absl::OkStatus();
+        }));
+  }
+
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return sequence;
 }
@@ -3400,14 +3813,35 @@ absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
 absl::Status SchemaUpdaterImpl::AddSynonym(
     const ddl::AlterTable::AddSynonym& add_synonym, const Table* table) {
   ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", add_synonym.synonym()));
-  return AlterNode(table, [&](Table::Editor* editor) {
+  const Table* updated_table = nullptr;
+  ZETASQL_RETURN_IF_ERROR(AlterNode(table, [&](Table::Editor* editor) {
     editor->set_synonym(add_synonym.synonym());
+    updated_table = editor->get();
     return absl::OkStatus();
-  });
+  }));
+  if (SDLObjectName::IsFullyQualifiedName(add_synonym.synonym())) {
+    ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+        add_synonym.synonym(),
+        [&updated_table](NamedSchema::Editor* editor) -> absl::Status {
+          editor->add_synonym(updated_table);
+          return absl::OkStatus();
+        }));
+  }
+
+  return absl::OkStatus();
 }
 
 absl::Status SchemaUpdaterImpl::DropSynonym(
     const ddl::AlterTable::DropSynonym& drop_synonym, const Table* table) {
+  if (SDLObjectName::IsFullyQualifiedName(drop_synonym.synonym())) {
+    ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+        drop_synonym.synonym(),
+        [&table](NamedSchema::Editor* editor) -> absl::Status {
+          editor->drop_synonym(table);
+          return absl::OkStatus();
+        }));
+  }
+
   global_names_.RemoveName(drop_synonym.synonym());
   return AlterNode(table, [&](Table::Editor* editor) {
     editor->drop_synonym(drop_synonym.synonym());
@@ -3824,7 +4258,6 @@ absl::Status SchemaUpdaterImpl::AlterInterleaveAction(
   });
 }
 
-
 absl::StatusOr<const zetasql::Type*>
 SchemaUpdaterImpl::GetProtoTypeFromBundle(const zetasql::Type* type,
                                           const ProtoBundle* proto_bundle) {
@@ -4067,16 +4500,27 @@ absl::Status SchemaUpdaterImpl::ApplyImplSetColumnOptions(
 
 absl::Status SchemaUpdaterImpl::DropFunction(
     const ddl::DropFunction& drop_function) {
-  const View* view =
-      latest_schema_->FindViewCaseSensitive(drop_function.function_name());
-  if (view == nullptr) {
-    if (drop_function.has_existence_modifier() &&
-        drop_function.existence_modifier() == ddl::IF_EXISTS) {
-      return absl::OkStatus();
+  const SchemaNode* node = nullptr;
+  if (drop_function.function_kind() == ddl::Function::VIEW) {
+    node = latest_schema_->FindViewCaseSensitive(drop_function.function_name());
+    if (node == nullptr) {
+      if (drop_function.has_existence_modifier() &&
+          drop_function.existence_modifier() == ddl::IF_EXISTS) {
+        return absl::OkStatus();
+      }
+      return error::ViewNotFound(drop_function.function_name());
     }
-    return error::ViewNotFound(drop_function.function_name());
+  } else if (drop_function.function_kind() == ddl::Function::FUNCTION) {
+    node = latest_schema_->FindUdfCaseSensitive(drop_function.function_name());
+    if (node == nullptr) {
+      if (drop_function.has_existence_modifier() &&
+          drop_function.existence_modifier() == ddl::IF_EXISTS) {
+        return absl::OkStatus();
+      }
+      return error::FunctionNotFound(drop_function.function_name());
+    }
   }
-  return DropNode(view);
+  return DropNode(node);
 }
 
 absl::StatusOr<Model::ModelColumn> SchemaUpdaterImpl::CreateModelColumn(

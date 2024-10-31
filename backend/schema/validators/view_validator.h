@@ -39,7 +39,8 @@ class ViewValidator {
 
 // Gathers the transitive set of dependencies, i.e., this recursively expands
 // dependencies; initial_set is the starting set of dependencies.
-absl::flat_hash_set<const SchemaNode*> GatherTransitiveDependenciesForView(
+absl::flat_hash_set<const SchemaNode*>
+GatherTransitiveDependenciesForSchemaNode(
     const absl::flat_hash_set<const SchemaNode*>& initial_set);
 
 }  // namespace backend

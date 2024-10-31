@@ -44,6 +44,7 @@
 #include "absl/strings/substitute.h"
 #include "third_party/spanner_pg/ddl/ddl_translator.h"
 #include "third_party/spanner_pg/ddl/translation_utils.h"
+#include "third_party/spanner_pg/shims/parser_shim.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "zetasql/base/ret_check.h"

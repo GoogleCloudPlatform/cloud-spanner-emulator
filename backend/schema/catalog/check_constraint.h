@@ -17,6 +17,15 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_CHECK_CONSTRAINT_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_CHECK_CONSTRAINT_H_
 
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "absl/memory/memory.h"
+#include "absl/status/status.h"
+#include "absl/types/span.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/graph/schema_node.h"
 
@@ -46,6 +55,11 @@ class CheckConstraint : public SchemaNode {
   // Returns the list of directly dependent columns.
   absl::Span<const Column* const> dependent_columns() const {
     return dependent_columns_;
+  }
+
+  // Returns the list of UDFs used by this check constraint.
+  absl::Span<const SchemaNode* const> udf_dependencies() const {
+    return udf_dependencies_;
   }
 
   // Returns the table containing the column.
@@ -107,6 +121,9 @@ class CheckConstraint : public SchemaNode {
   // This is the list of columns that are directly referenced in its expression.
   // Generated columns are not expanded.
   std::vector<const Column*> dependent_columns_;
+
+  // This is the list of UDFs used by this check constraint.
+  std::vector<const SchemaNode*> udf_dependencies_;
 
   // The table containing the column.
   const Table* table_ = nullptr;
