@@ -28,6 +28,7 @@
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "backend/access/read.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/view.h"
 
 namespace google {
@@ -51,10 +52,12 @@ class QueryableView : public zetasql::Table {
   QueryableView(const backend::View* view,
                 QueryEvaluator* query_evaluator = nullptr);
 
-  std::string Name() const override { return wrapped_view_->Name(); }
+  std::string Name() const override {
+    return std::string(SDLObjectName::GetInSchemaName(wrapped_view_->Name()));
+  }
 
-  // FullName is used in debugging so it's OK to not include full path here.
-  std::string FullName() const override { return Name(); }
+  // FullName includes schema if present.
+  std::string FullName() const override { return wrapped_view_->Name(); }
 
   int NumColumns() const override { return columns_.size(); }
 

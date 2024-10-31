@@ -44,6 +44,7 @@
 #include "absl/hash/hash.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/types/span.h"
@@ -54,6 +55,7 @@
 #include "third_party/spanner_pg/util/datetime_conversion.h"
 #include "third_party/spanner_pg/util/oid_to_string.h"
 #include "third_party/spanner_pg/util/postgres.h"
+#include "re2/re2.h"
 #include "zetasql/base/status_macros.h"
 
 namespace postgres_translator {
@@ -115,6 +117,13 @@ absl::StatusOr<zetasql::Value> PostgresTypeMapping::MakeGsqlValue(
   return absl::UnimplementedError(
       absl::StrCat("Unimplemented PostgreSQL data type: ",
                    OidToTypeString(pg_const->consttype)));
+}
+
+absl::StatusOr<zetasql::Value>
+PostgresTypeMapping::MakeGsqlValueFromStringConst(
+    const absl::string_view& string_const) const {
+  return absl::UnimplementedError(
+      absl::StrCat("Unknown data type"));
 }
 
 absl::StatusOr<Const*> PostgresTypeMapping::MakePgConst(
@@ -212,6 +221,17 @@ class PostgresBoolMapping : public PostgresTypeMapping {
     return zetasql::Value::Bool(bool_value);
   }
 
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    if (string_const == "null") {
+      return zetasql::Value::NullBool();
+    }
+    ZETASQL_ASSIGN_OR_RETURN(Datum bool_const, CheckedOidFunctionCall1(
+        F_BOOLIN, CStringGetDatum(string_const.data())));
+    bool bool_value = DatumGetBool(bool_const);
+    return zetasql::Value::Bool(bool_value);
+  }
+
   absl::StatusOr<Const*> MakePgConst(
       const zetasql::Value& val) const override {
     bool bool_val = (!val.is_null() ? val.bool_value() : false);
@@ -237,6 +257,17 @@ class PostgresInt8Mapping : public PostgresTypeMapping {
       return zetasql::Value::NullInt64();
     }
     int64_t int64_value = DatumGetInt64(pg_const->constvalue);
+    return zetasql::Value::Int64(int64_value);
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    if (string_const == "null") {
+      return zetasql::Value::NullInt64();
+    }
+    ZETASQL_ASSIGN_OR_RETURN(Datum int_const, CheckedOidFunctionCall1(
+        F_INT8IN, CStringGetDatum(string_const.data())));
+    int64_t int64_value = DatumGetInt64(int_const);
     return zetasql::Value::Int64(int64_value);
   }
 
@@ -266,6 +297,18 @@ class PostgresFloat8Mapping : public PostgresTypeMapping {
     return zetasql::Value::Double(double_value);
   }
 
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    if (string_const == "null") {
+      return zetasql::Value::NullDouble();
+    }
+    ZETASQL_ASSIGN_OR_RETURN(Datum double_const, CheckedOidFunctionCall1(
+        F_FLOAT8IN, CStringGetDatum(string_const.data())));
+    double double_value = DatumGetFloat8(double_const);
+    return zetasql::Value::Double(double_value);
+  }
+
+
   absl::StatusOr<Const*> MakePgConst(
       const zetasql::Value& val) const override {
     double double_val = (!val.is_null() ? val.double_value() : 0.0);
@@ -289,6 +332,17 @@ class PostgresFloat4Mapping : public PostgresTypeMapping {
       return zetasql::Value::NullFloat();
     }
     float4 float4_value = DatumGetFloat4(pg_const->constvalue);
+    return zetasql::Value::Float(float4_value);
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    if (string_const == "null") {
+      return zetasql::Value::NullFloat();
+    }
+    ZETASQL_ASSIGN_OR_RETURN(Datum float4_const, CheckedOidFunctionCall1(
+        F_FLOAT4IN, CStringGetDatum(string_const.data())));
+    float4 float4_value = DatumGetFloat4(float4_const);
     return zetasql::Value::Float(float4_value);
   }
 
@@ -318,6 +372,29 @@ class PostgresVarcharMapping : public PostgresTypeMapping {
     return zetasql::Value::String(string_value);
   }
 
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    if (string_const == "null") {
+      return zetasql::Value::NullString();
+    }
+    if (RE2::FullMatch(string_const, R"(^'.*'$)")) {
+      // Strip the leading and trailing single quotes.
+      std::string stripped_string = (std::string) string_const.substr(
+          1, string_const.size() - 2);
+      ZETASQL_ASSIGN_OR_RETURN(Datum varchar_const,
+                       CheckedOidFunctionCall3(
+                           F_VARCHARIN,
+                           CStringGetDatum(stripped_string.data()),
+                           /*typelem=*/InvalidOid,  // Unused.
+                           /*atttypmod=*/-1));
+      ZETASQL_ASSIGN_OR_RETURN(absl::string_view varchar_value,
+                       CheckedPgTextDatumGetCString(varchar_const));
+      return zetasql::Value::String(varchar_value);
+    }
+    return absl::InvalidArgumentError(
+        absl::StrCat("Invalid constant string: ", string_const));
+  }
+
   absl::StatusOr<Const*> MakePgConst(
       const zetasql::Value& val) const override {
     std::string string_val = (!val.is_null() ? val.string_value() : "");
@@ -344,6 +421,25 @@ class PostgresTextMapping : public PostgresTypeMapping {
     return zetasql::Value::String(string_value);
   }
 
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    if (string_const == "null") {
+      return zetasql::Value::NullString();
+    }
+    if (RE2::FullMatch(string_const, R"(^'.*'$)")) {
+      // Strip the leading and trailing single quotes.
+      std::string stripped_string = (std::string) string_const.substr(
+          1, string_const.size() - 2);
+      ZETASQL_ASSIGN_OR_RETURN(Datum text_const, CheckedOidFunctionCall1(
+          F_TEXTIN, CStringGetDatum(stripped_string.data())));
+      ZETASQL_ASSIGN_OR_RETURN(absl::string_view text_value,
+                       CheckedPgTextDatumGetCString(text_const));
+      return zetasql::Value::String(text_value);
+    }
+    return absl::InvalidArgumentError(
+        absl::StrCat("Invalid constant string: ", string_const));
+  }
+
   absl::StatusOr<Const*> MakePgConst(
       const zetasql::Value& val) const override {
     std::string string_val = (!val.is_null() ? val.string_value() : "");
@@ -368,6 +464,25 @@ class PostgresBytesaMapping : public PostgresTypeMapping {
     }
     ZETASQL_ASSIGN_OR_RETURN(absl::string_view bytes_value, const_to_string(pg_const));
     return zetasql::Value::Bytes(bytes_value);
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    if (string_const == "null") {
+      return zetasql::Value::NullBytes();
+    }
+    if (RE2::FullMatch(string_const, R"(^'.*'$)")) {
+      // Strip the leading and trailing single quotes.
+      std::string stripped_string = (std::string) string_const.substr(
+          1, string_const.size() - 2);
+      ZETASQL_ASSIGN_OR_RETURN(Datum bytea_const, CheckedOidFunctionCall1(
+          F_BYTEAIN, CStringGetDatum(stripped_string.data())));
+      ZETASQL_ASSIGN_OR_RETURN(absl::string_view bytea_value,
+                       CheckedPgTextDatumGetCString(bytea_const));
+      return zetasql::Value::Bytes(bytea_value);
+    }
+    return absl::InvalidArgumentError(
+        absl::StrCat("Invalid constant string: ", string_const));
   }
 
   absl::StatusOr<Const*> MakePgConst(
@@ -399,6 +514,12 @@ class PostgresTimestamptzMapping : public PostgresTypeMapping {
       return absl::InvalidArgumentError("Timestamp is out of supported range");
     }
     return zetasql::Value::Timestamp(time_val);
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    return absl::UnimplementedError(
+        "Timestamptz default values are not supported");
   }
 
   absl::StatusOr<Const*> MakePgConst(
@@ -435,6 +556,12 @@ class PostgresDateMapping : public PostgresTypeMapping {
     return zetasql::Value::Date(date_val);
   }
 
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    return absl::UnimplementedError(
+        "Date default values are not supported");
+  }
+
   absl::StatusOr<Const*> MakePgConst(
       const zetasql::Value& val) const override {
     int32_t date_val =
@@ -464,6 +591,12 @@ class PostgresIntervalMapping : public PostgresTypeMapping {
                      zetasql::IntervalValue::FromMonthsDaysMicros(
                          interval->month, interval->day, interval->time));
     return zetasql::Value::Interval(interval_value);
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    return absl::UnimplementedError(
+        "Interval default values are not supported");
   }
 
   absl::StatusOr<Const*> MakePgConst(
@@ -535,6 +668,40 @@ absl::StatusOr<zetasql::Value> PostgresExtendedArrayMapping::MakeGsqlValue(
 
   return zetasql::Value::MakeArray(mapped_type()->AsArray(),
                                      array_element_values);
+}
+
+absl::StatusOr<zetasql::Value>
+PostgresExtendedArrayMapping::MakeGsqlValueFromStringConst(
+    const absl::string_view& string_const) const {
+  if (string_const == "null") {
+    return zetasql::Value::Null(mapped_type());
+  }
+  // Array constants are formatted as '{element, element}'
+  if (RE2::FullMatch(string_const, R"(^'\{.*\}'$)")) {
+    std::vector<zetasql::Value> array_element_values;
+    // Strip the leading and trailing single quotes and braces.
+    absl::string_view array_string = string_const.substr(
+        2, string_const.size() - 4);
+    if (!array_string.empty()) {
+      for (absl::string_view element_string :
+          absl::StrSplit(array_string, ',')) {
+        std::string element_string_value = std::string(element_string);
+        if (element_type_->mapped_type()->IsString() ||
+            element_type_->mapped_type()->IsBytes()) {
+          // Add quotes to the string elements.
+          element_string_value = absl::StrCat("'", element_string, "'");
+        }
+        ZETASQL_ASSIGN_OR_RETURN(zetasql::Value gsql_value,
+                        element_type_->MakeGsqlValueFromStringConst(
+                            element_string_value));
+        array_element_values.push_back(std::move(gsql_value));
+      }
+    }
+    return zetasql::Value::MakeArray(mapped_type()->AsArray(),
+                                       array_element_values);
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("Invalid array constant: ", string_const));
 }
 
 absl::StatusOr<Const*> PostgresExtendedArrayMapping::MakePgConst(

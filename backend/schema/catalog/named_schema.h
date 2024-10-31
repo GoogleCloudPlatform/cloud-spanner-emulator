@@ -27,12 +27,13 @@
 #include "absl/status/status.h"
 #include "absl/strings/substitute.h"
 #include "absl/types/span.h"
+#include "backend/common/case.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
-#include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
@@ -54,10 +55,13 @@ class NamedSchema : public SchemaNode {
   absl::Span<const View* const> views() const { return views_; }
   absl::Span<const Index* const> indexes() const { return indexes_; }
   absl::Span<const Sequence* const> sequences() const { return sequences_; }
+  absl::Span<const Udf* const> udfs() const { return udfs_; }
 
   // Finds a Table by name. Returns nullptr if the named schema doesn't contain
   // a Table called "table_name."
   const Table* FindTable(const std::string& table_name) const;
+
+  const Table* FindTableUsingSynonym(const std::string& table_synonym) const;
 
   // Finds a View by name. Returns nullptr if the named schema doesn't contain a
   // View called "view_name."
@@ -70,6 +74,10 @@ class NamedSchema : public SchemaNode {
   // Finds a Sequence by name. Returns nullptr if the named schema doesn't
   // contain a Sequence called "sequence_name."
   const Sequence* FindSequence(const std::string& sequence_name) const;
+
+  // Finds a Udf by name. Returns nullptr if the named schema doesn't contain a
+  // Udf called "udf_name."
+  const Udf* FindUdf(const std::string& udf_name) const;
 
   // SchemaNode interface implementation.
   // ------------------------------------
@@ -108,6 +116,15 @@ class NamedSchema : public SchemaNode {
     return absl::WrapUnique(new NamedSchema(*this));
   }
 
+  template <typename T>
+  absl::Status CloneOrDeleteSchemaObjects(
+      SchemaGraphEditor* editor, std::vector<const T*>& schema_objects,
+      CaseInsensitiveStringMap<const T*>& schema_objects_map);
+
+  absl::Status CloneOrDeleteSchemaObjects(
+      SchemaGraphEditor* editor, std::vector<const Table*>& schema_objects,
+      CaseInsensitiveStringMap<const Table*>& schema_objects_map);
+
   absl::Status DeepClone(SchemaGraphEditor* editor,
                          const SchemaNode* orig) override;
 
@@ -122,9 +139,22 @@ class NamedSchema : public SchemaNode {
   NamedSchemaID id_;
 
   std::vector<const Table*> tables_;
+  CaseInsensitiveStringMap<const Table*> tables_map_;
+
+  std::vector<const Table*> synonyms_;
+  CaseInsensitiveStringMap<const Table*> synonyms_map_;
+
   std::vector<const View*> views_;
+  CaseInsensitiveStringMap<const View*> views_map_;
+
   std::vector<const Index*> indexes_;
+  CaseInsensitiveStringMap<const Index*> indexes_map_;
+
   std::vector<const Sequence*> sequences_;
+  CaseInsensitiveStringMap<const Sequence*> sequences_map_;
+
+  std::vector<const Udf*> udfs_;
+  CaseInsensitiveStringMap<const Udf*> udfs_map_;
 };
 
 }  // namespace backend

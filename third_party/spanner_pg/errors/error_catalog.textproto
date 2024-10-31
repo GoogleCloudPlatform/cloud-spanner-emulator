@@ -30,6 +30,11 @@ group {
     name: "InvalidUnicodeSurrogatePair"
     pg_message_id: "invalid Unicode surrogate pair"
   }
+
+  message {
+    name: "InvalidLimitSyntax"
+    pg_message_id: "LIMIT #,# syntax is not supported"
+  }
 }
 
 group {
@@ -345,6 +350,21 @@ group {
   message {
     name: "LockingClauseWithTableNamesNotSupported"
     pg_message_id: "tables names in locking clause is not supported"
+  }
+
+  message {
+    name: "LockingClauseWithDistinctNotSupported"
+    pg_message_id: "%s is not allowed with DISTINCT clause"
+  }
+
+  message {
+    name: "LockingClauseWithAggregateFunctionsNotSupported"
+    pg_message_id: "%s is not allowed with aggregate functions"
+  }
+
+  message {
+    name: "CannotConvertInfinityToInteger"
+    pg_message_id: "cannot convert infinity to %s"
   }
 }
 
@@ -821,7 +841,7 @@ group {
 
   message {
     name: "InvalidInputString"
-    pg_message_id: "invalid input string for \"%s\""
+    pg_message_id: "invalid input string for \"Y,YYY\""
   }
 
   message {

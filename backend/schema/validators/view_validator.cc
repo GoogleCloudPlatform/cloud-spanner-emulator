@@ -16,69 +16,35 @@
 
 #include "backend/schema/validators/view_validator.h"
 
-#include <ctime>
-#include <memory>
-#include <stack>
 #include <string>
 #include <vector>
 
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/types/type_factory.h"
-#include "absl/container/flat_hash_map.h"
-#include "absl/memory/memory.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/str_format.h"
-#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
-#include "absl/strings/substitute.h"
-#include "backend/common/case.h"
-#include "backend/common/graph_dependency_helper.h"
-#include "backend/datamodel/types.h"
-#include "backend/query/analyzer_options.h"
-#include "backend/query/catalog.h"
-#include "backend/query/queryable_view.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
+#include "backend/schema/catalog/schema.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/sql_expression_validators.h"
 #include "common/errors.h"
-#include "common/limits.h"
 #include "zetasql/base/ret_check.h"
-#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
-
-absl::flat_hash_set<const SchemaNode*> GatherTransitiveDependenciesForView(
-    const absl::flat_hash_set<const SchemaNode*>& initial_set) {
-  absl::flat_hash_set<const SchemaNode*> transitive;
-  std::stack<const SchemaNode*> explore;
-
-  for (const auto& dep : initial_set) {
-    transitive.insert(dep);
-    explore.push(dep);
-  }
-
-  while (!explore.empty()) {
-    auto dep = explore.top();
-    explore.pop();
-    // Only explore dependencies that are views.
-    if (auto view = dynamic_cast<const View*>(dep); view != nullptr) {
-      for (const auto& dependency : view->dependencies()) {
-        if (transitive.insert(dependency).second) explore.push(dependency);
-      }
-    }
-  }
-  return transitive;
-}
 
 namespace {
 
@@ -205,6 +171,9 @@ absl::Status ViewValidator::ValidateUpdate(const View* view,
       if (auto dep_column = dependency->As<const Column>();
           dep_column != nullptr) {
         dependency_name = dep_column->FullName();
+      }
+      if (auto dep_udf = dependency->As<const Udf>(); dep_udf != nullptr) {
+        dependency_name = dep_udf->Name();
       }
       // No need to check modifications on index dependencies as indexes
       // cannot currently be altered.

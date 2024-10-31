@@ -31,27 +31,41 @@
 
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 
-#include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "zetasql/analyzer/function_signature_matcher.h"
 #include "zetasql/public/cast.h"
+#include "zetasql/public/coercer.h"
 #include "zetasql/public/function.pb.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/input_argument_type.h"
 #include "zetasql/public/language_options.h"
 #include "zetasql/public/options.pb.h"
+#include "zetasql/public/procedure.h"
+#include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/types/type.h"
-#include "absl/random/distributions.h"
-#include "absl/random/random.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/types/span.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
+#include "third_party/spanner_pg/catalog/function.h"
+#include "third_party/spanner_pg/catalog/function_identifier.h"
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/util/nodetag_to_string.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 #include "zetasql/public/builtin_function.h"
 #include "zetasql/public/builtin_function_options.h"
@@ -1014,9 +1028,13 @@ absl::Status EngineSystemCatalog::AddCastOverrideFunction(
           {cast_pair,
            FunctionAndSignature(builtin_function, *result_signature)});
 
-      ZETASQL_RET_CHECK(!engine_cast_functions_.contains(builtin_function_name))
-          << "Attempting to insert duplicate cast function.";
-      engine_cast_functions_.insert(builtin_function_name);
+      // Same function name can have multiple signatures.
+      // For example, PG_CAST_TO_STRING has signature for INTERVAL and
+      // PG.NUMERIC.
+      if (!engine_cast_functions_.contains(builtin_function_name)) {
+        engine_cast_functions_.insert(builtin_function_name);
+      }
+
       return absl::OkStatus();
     }
   }

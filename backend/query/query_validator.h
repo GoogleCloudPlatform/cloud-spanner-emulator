@@ -42,6 +42,9 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+bool IsSearchQueryAllowed(const QueryEngineOptions* options,
+                          const QueryContext& context);
+
 // Implements ResolvedASTVisitor to validate various nodes in an AST and
 // collect information of interest (such as index names).
 class QueryValidator : public zetasql::ResolvedASTVisitor {
@@ -59,6 +62,10 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
   // be called after the entire tree has been visited.
   const absl::flat_hash_set<const Index*>& indexes_used() const {
     return indexes_used_;
+  }
+
+  void set_in_partition_query(bool in_partition_query) {
+    in_partition_query_ = in_partition_query;
   }
 
   const absl::flat_hash_set<const SchemaNode*>& dependent_sequences() {
@@ -129,6 +136,15 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
       const zetasql::ResolvedNodeKind node_kind,
       const absl::flat_hash_map<absl::string_view, zetasql::Value>& hint_map);
 
+  // Check a node's hint map and extracts query engine options from any Spanner
+  // hints
+  absl::Status ExtractSpannerOptionsForNode(
+      const absl::flat_hash_map<absl::string_view, zetasql::Value>&
+          node_hint_map) const;
+
+  absl::Status CheckSearchFunctionsAreAllowed(
+      const zetasql::ResolvedFunctionCall& function_call);
+
   // Extracts query engine options from any Emulator-specific hints
   // 'node_hint_map' for a node.
   absl::Status ExtractEmulatorOptionsForNode(
@@ -151,6 +167,7 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
 
   const zetasql::LanguageOptions language_options_;
 
+  bool in_partition_query_ = false;
   const SqlFeaturesView sql_features_;
 
   // List of indexes used by the query being validated.

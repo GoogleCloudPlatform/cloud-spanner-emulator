@@ -53,6 +53,7 @@ cc_library(
         ":schema_graph",
         ":schema_node",
         ":schema_objects_pool",
+        "//backend/common:case",
         "//backend/schema/updater:schema_validation_context",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",

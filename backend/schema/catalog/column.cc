@@ -21,19 +21,14 @@
 
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.pb.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "absl/strings/substitute.h"
-#include "backend/datamodel/types.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "common/errors.h"
-#include "common/limits.h"
 #include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
@@ -110,6 +105,10 @@ absl::Status Column::DeepClone(SchemaGraphEditor* editor,
     column = schema_node->As<const Column>();
   }
   for (const SchemaNode*& dependency : sequences_used_) {
+    ZETASQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dependency));
+    dependency = cloned_dep;
+  }
+  for (const SchemaNode*& dependency : udf_dependencies_) {
     ZETASQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dependency));
     dependency = cloned_dep;
   }

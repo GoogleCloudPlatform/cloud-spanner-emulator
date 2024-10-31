@@ -1140,14 +1140,11 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndDropColumn) {
                   schema->FindSequence("myseq")}));
 
   // Try to drop the sequence, receive error because a column is using it.
-  EXPECT_THAT(
-      UpdateSchema(schema.get(), {R"(
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq
     )"}),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kFailedPrecondition,
-          testing::HasSubstr("Cannot drop SEQUENCE `myseq` on which there "
-                             "are dependent columns")));
+              StatusIs(error::InvalidDropDependentColumn(
+                  "SEQUENCE", "myseq", "test_table.int64_col")));
 
   // Drop the column, dependencies are dropped accordingly.
   ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
@@ -1223,14 +1220,11 @@ TEST_P(SequenceSchemaUpdaterTest,
 
   // Try to drop the sequence, receive error because column int64_col is using
   // it.
-  EXPECT_THAT(
-      UpdateSchema(schema.get(), {R"(
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq
     )"}),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kFailedPrecondition,
-          testing::HasSubstr("Cannot drop SEQUENCE `myseq` on which there "
-                             "are dependent columns")));
+              StatusIs(error::InvalidDropDependentColumn(
+                  "SEQUENCE", "myseq", "test_table.int64_col")));
 
   // Drop the column default value, dependencies are dropped accordingly.
   ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
@@ -1288,14 +1282,11 @@ TEST_P(SequenceSchemaUpdaterTest,
                   schema->FindSequence("myseq")}));
 
   // Try to drop the sequence, receive error because a column is using it.
-  EXPECT_THAT(
-      UpdateSchema(schema.get(), {R"(
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq
     )"}),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kFailedPrecondition,
-          testing::HasSubstr("Cannot drop SEQUENCE `myseq` on which there "
-                             "are dependent columns")));
+              StatusIs(error::InvalidDropDependentColumn(
+                  "SEQUENCE", "myseq", "test_table.int64_col")));
 
   // Drop the column default value, dependencies are dropped accordingly.
   ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
@@ -1360,14 +1351,11 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoColumnDefaultValues) {
                   schema->FindSequence("myseq")}));
 
   // Try to drop the sequence, receive error because a column is using it.
-  EXPECT_THAT(
-      UpdateSchema(schema.get(), {R"(
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq
     )"}),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kFailedPrecondition,
-          testing::HasSubstr("Cannot drop SEQUENCE `myseq` on which there "
-                             "are dependent columns")));
+              StatusIs(error::InvalidDropDependentColumn(
+                  "SEQUENCE", "myseq", "test_table.int64_col")));
 
   // Drop one column default value, only one dependency is dropped.
   ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
@@ -1455,23 +1443,17 @@ TEST_P(SequenceSchemaUpdaterTest,
           schema->FindSequence("myseq"), schema->FindSequence("myseq2")}));
 
   // Try to drop the sequences, receive error because a column is using it.
-  EXPECT_THAT(
-      UpdateSchema(schema.get(), {R"(
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq
     )"}),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kFailedPrecondition,
-          testing::HasSubstr("Cannot drop SEQUENCE `myseq` on which there "
-                             "are dependent columns")));
+              StatusIs(error::InvalidDropDependentColumn(
+                  "SEQUENCE", "myseq", "test_table.int64_col")));
 
-  EXPECT_THAT(
-      UpdateSchema(schema.get(), {R"(
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq2
     )"}),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kFailedPrecondition,
-          testing::HasSubstr("Cannot drop SEQUENCE `myseq2` on which there "
-                             "are dependent columns")));
+              StatusIs(error::InvalidDropDependentColumn(
+                  "SEQUENCE", "myseq2", "test_table.int64_col")));
 
   // Drop the column default value, corresponding dependencies are now dropped.
   ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(

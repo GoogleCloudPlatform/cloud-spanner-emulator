@@ -55,6 +55,7 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
     case zetasql::TypeKind::TYPE_DATE:
     case zetasql::TypeKind::TYPE_NUMERIC:
     case zetasql::TypeKind::TYPE_JSON:
+    case zetasql::TypeKind::TYPE_TOKENLIST:
       return true;
     case zetasql::TypeKind::TYPE_PROTO:
     case zetasql::TypeKind::TYPE_ENUM: {
@@ -90,6 +91,9 @@ bool IsSupportedKeyColumnType(const zetasql::Type* type) {
         type_code == TypeAnnotationCode::PG_JSONB) {
       return false;
     }
+  }
+  if (type->IsTokenList()) {
+    return false;
   }
   return IsSupportedColumnType(type);
 }

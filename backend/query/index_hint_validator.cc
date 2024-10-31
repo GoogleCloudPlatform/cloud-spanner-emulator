@@ -21,14 +21,22 @@
 #include <string>
 #include <vector>
 
+#include "zetasql/public/value.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
+#include "zetasql/resolved_ast/resolved_node.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "backend/query/queryable_table.h"
+#include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/index.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
 #include "re2/re2.h"
+#include "zetasql/base/ret_check.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -112,7 +120,9 @@ absl::Status IndexHintValidator::ValidateIndexesForTables() {
     auto table = table_scan->table();
     auto query_table = table->GetAs<QueryableTable>();
     auto schema_table = query_table->wrapped_table();
-    const auto* index = schema_table->FindIndex(index_name);
+    const auto* index = schema_table->FindIndex(
+        schema_table->FindIndexQualifiedName(index_name));
+
     // See comments above regarding special-casing of managed indexes.
     if (index == nullptr) {
       if (MatchesManagedIndexName(schema_table->Name(), index_name)) {
@@ -123,13 +133,29 @@ absl::Status IndexHintValidator::ValidateIndexesForTables() {
       return error::QueryHintManagedIndexNotSupported(index_name);
     }
 
+    if (index->is_search_index()) {
+      if (!allow_search_indexes_in_transaction_) {
+        return error::SearchIndexNotUsable(
+            index_name,
+            "is a SEARCH index type which is not supported for transactional "
+            "queries by default");
+      }
+
+      if (in_partition_query_) {
+        // Not allowed in batch query.
+        return error::SearchIndexNotUsable(
+            index_name,
+            "is a SEARCH index type which is not supported for partitioned "
+            "queries");
+      }
+    }
     if (index->is_null_filtered() && !disable_null_filtered_index_check_) {
       for (const auto* key_column : index->key_columns()) {
         const auto* source_column = key_column->column()->source_column();
         // If any of the index's columns are nullable, then it is not indexing
-        // the full table and therefore, without analyzing the predicates in the
-        // query to determine if they filter nulls, we cannot allow the index
-        // to be used.
+        // the full table and therefore, without analyzing the predicates in
+        // the query to determine if they filter nulls, we cannot allow the
+        // index to be used.
         if (source_column->is_nullable()) {
           return error::NullFilteredIndexUnusable(index_name);
         }

@@ -17,23 +17,34 @@
 #include "backend/schema/validators/column_validator.h"
 
 #include <string>
+#include <vector>
 
 #include "zetasql/public/options.pb.h"
+#include "zetasql/public/simple_catalog.h"
 #include "zetasql/public/type.pb.h"
+#include "zetasql/public/types/type.h"
+#include "zetasql/public/types/type_factory.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/substitute.h"
+#include "absl/strings/string_view.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/backfills/column_value_backfill.h"
 #include "backend/schema/catalog/change_stream.h"
-#include "backend/schema/catalog/check_constraint.h"
+#include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
+#include "backend/schema/updater/sql_expression_validators.h"
 #include "backend/schema/verifiers/column_value_verifiers.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
 #include "common/limits.h"
+#include "google/protobuf/descriptor.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -130,6 +141,38 @@ absl::Status CheckAllowedColumnTypeChange(
           return BackfillColumnValue(old_column, new_column, context);
         });
   }
+  return absl::OkStatus();
+}
+
+absl::Status ValidateColumnSignatureChange(
+    absl::string_view modify_action, absl::string_view dependency_name,
+    const Column* dependent_column, const Table* dependent_table,
+    const Schema* temp_new_schema, zetasql::TypeFactory* type_factory) {
+  // Re-analyze the dependent view based on the new definition of the
+  // dependency in the temporary new schema.
+  if (!dependent_column->expression().has_value()) {
+    return absl::OkStatus();
+  }
+  absl::flat_hash_set<const SchemaNode*> unused_new_deps;
+  absl::flat_hash_set<const SchemaNode*> unused_udf_dependencies;
+  absl::flat_hash_set<std::string> dependent_column_names;
+  std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
+  for (const Column* column : dependent_table->columns()) {
+    name_and_types.emplace_back(column->Name(), column->GetType());
+  }
+
+  auto status = AnalyzeColumnExpression(
+      dependent_column->expression().value(), dependent_column->GetType(),
+      dependent_table, temp_new_schema, type_factory, name_and_types,
+      "check constraints", &dependent_column_names,
+      /*dependent_sequences=*/nullptr,
+      /*allow_volatile_expression=*/false, &unused_udf_dependencies);
+  if (!status.ok()) {
+    return error::DependentColumnBecomesInvalid(modify_action, dependency_name,
+                                                dependent_column->Name(),
+                                                status.message());
+  }
+
   return absl::OkStatus();
 }
 
@@ -240,8 +283,7 @@ absl::Status ColumnValidator::Validate(const Column* column,
     } else {
       ZETASQL_RET_CHECK(!column->postgresql_oid().has_value());
     }
-    if (
-        !EmulatorFeatureFlags::instance().flags().enable_generated_pk &&
+    if (!EmulatorFeatureFlags::instance().flags().enable_generated_pk &&
         column->table()->FindKeyColumn(column->Name())) {
       return error::CannotUseGeneratedColumnInPrimaryKey(
           column->table()->Name(), column->Name());
@@ -371,8 +413,22 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
     // Cannot drop a sequence if a column depends on it.
     if (dependency->is_deleted()) {
       const auto& dep_info = dependency->GetSchemaNameInfo();
-      return error::InvalidDropSequenceWithColumnDependents(dep_info->name,
-                                                            column->FullName());
+      std::string dependency_type =
+          (dep_info->global ? absl::AsciiStrToUpper(dep_info->kind)
+                            : absl::AsciiStrToLower(dep_info->kind));
+      return error::InvalidDropDependentColumn(dependency_type, dep_info->name,
+                                               column->FullName());
+    }
+  }
+
+  for (const SchemaNode* dependency : column->udf_dependencies()) {
+    if (dependency->is_deleted()) {
+      const auto& dep_info = dependency->GetSchemaNameInfo();
+      std::string dependency_type =
+          (dep_info->global ? absl::AsciiStrToUpper(dep_info->kind)
+                            : absl::AsciiStrToLower(dep_info->kind));
+      return error::InvalidDropDependentColumn(dependency_type, dep_info->name,
+                                               column->FullName());
     }
   }
 
@@ -391,6 +447,28 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
     ZETASQL_RET_CHECK(!column->postgresql_oid().has_value());
   }
 
+  for (const SchemaNode* dep : column->udf_dependencies()) {
+    // TODO When dropping support is added, a check should be added
+    // to ensure that this column references a UDF that is also being dropped.
+    if (context->IsModifiedNode(dep)) {
+      const auto& dep_info = dep->GetSchemaNameInfo();
+      std::string dependency_type =
+          (dep_info->global ? absl::AsciiStrToUpper(dep_info->kind)
+                            : absl::AsciiStrToLower(dep_info->kind));
+      std::string modify_action = absl::StrCat("alter ", dependency_type);
+
+      std::string dependency_name;
+      if (auto dep_udf = dep->As<const Udf>(); dep_udf != nullptr) {
+        dependency_name = dep_udf->Name();
+      }
+      // No need to check modifications on index dependencies as indexes
+      // cannot currently be altered.
+      ZETASQL_RETURN_IF_ERROR(ValidateColumnSignatureChange(
+          modify_action, dependency_name, column, column->table(),
+          context->tmp_new_schema(), context->type_factory()));
+    }
+  }
+
   return absl::OkStatus();
 }
 
@@ -404,6 +482,11 @@ absl::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
                 zetasql::PRODUCT_EXTERNAL, /*use_external_float32=*/true);
   if (!IsSupportedKeyColumnType(key_column->column_->GetType())) {
     auto owner_index = key_column->column()->table()->owner_index();
+
+    if (owner_index != nullptr && owner_index->is_search_index() &&
+        key_column->column_->GetType()->IsTokenListType()) {
+      return absl::OkStatus();
+    }
 
     if (owner_index != nullptr) {
       return error::CannotCreateIndexOnColumn(

@@ -759,6 +759,14 @@ absl::Status InvalidSchemaName(absl::string_view object_kind,
       absl::Substitute("$0 name not valid: $1.", object_kind, identifier));
 }
 
+absl::Status SchemaObjectTypeUnsupportedInNamedSchema(
+    absl::string_view object_kind, absl::string_view identifier) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("$0 not yet supported in named schema: $1.", object_kind,
+                       identifier));
+}
+
 absl::Status InvalidConstraintName(absl::string_view constraint_type,
                                    absl::string_view constraint_name,
                                    absl::string_view reserved_prefix) {
@@ -2237,6 +2245,15 @@ absl::Status ColumnInIndexAlreadyExists(absl::string_view index_name,
                        index_name));
 }
 
+absl::Status IndexInDifferentSchema(absl::string_view index_name,
+                                    absl::string_view indexed_table_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Index $0 does not match the schema of the indexed "
+                       "table $1.",
+                       index_name, indexed_table_name));
+}
+
 // Foreign key errors.
 absl::Status ForeignKeyColumnsRequired(absl::string_view table,
                                        absl::string_view foreign_key) {
@@ -2453,15 +2470,15 @@ absl::Status CannotUseCommitTimestampColumnOnCheckConstraint(
                        column_name));
 }
 
-absl::Status InvalidDropColumnReferencedByCheckConstraint(
-    absl::string_view table_name, absl::string_view check_constraint_name,
-    absl::string_view referencing_column_name) {
+absl::Status InvalidDropDependentCheckConstraint(
+    absl::string_view type_kind, absl::string_view dependency_name,
+    absl::string_view dependent_check_constraint_name) {
   return absl::Status(
-      absl::StatusCode::kInvalidArgument,
-      absl::Substitute("Cannot drop column `$0` from table `$1` because it is "
-                       "referenced by check constraint `$2`.",
-                       referencing_column_name, table_name,
-                       check_constraint_name));
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot drop $0 `$1` on which there is a dependent check constraint: "
+          "$2.",
+          type_kind, dependency_name, dependent_check_constraint_name));
 }
 
 absl::Status CannotAlterColumnDataTypeWithDependentCheckConstraint(
@@ -2471,6 +2488,18 @@ absl::Status CannotAlterColumnDataTypeWithDependentCheckConstraint(
       absl::Substitute("Cannot change the data type of column `$0`, which is "
                        "used by check constraint `$1`.",
                        column_name, check_constraint_name));
+}
+
+absl::Status DependentCheckConstraintBecomesInvalid(
+    absl::string_view modify_action, absl::string_view dependency_name,
+    absl::string_view dependent_check_constraint, absl::string_view error) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot $0 `$1`. The new definition causes "
+          "the definition of check constraint `$2` to become invalid with the "
+          "following diagnostic message: $3",
+          modify_action, dependency_name, dependent_check_constraint, error));
 }
 
 // Generated column errors.
@@ -2603,6 +2632,29 @@ absl::Status NonDeterministicFunctionInColumnExpression(
           "the same value for the same dependent column values. "
           "Non-deterministic functions inside the expressions are not allowed.",
           function_name, expression_use));
+}
+
+absl::Status InvalidDropDependentColumn(absl::string_view type_kind,
+                                        absl::string_view dependency_name,
+                                        absl::string_view dependent_column) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot drop $0 `$1` on which there is a dependent column: $2.",
+          type_kind, dependency_name, dependent_column));
+}
+
+absl::Status DependentColumnBecomesInvalid(absl::string_view modify_action,
+                                           absl::string_view dependency_name,
+                                           absl::string_view dependent_column,
+                                           absl::string_view error) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot $0 `$1`. The new definition causes "
+          "the definition of column `$2` to become invalid with the "
+          "following diagnostic message: $3",
+          modify_action, dependency_name, dependent_column, error));
 }
 
 // Column default values errors.
@@ -3227,6 +3279,244 @@ absl::Status ForeignKeyRowDeletionPolicyAddNotAllowed(
                        table_name, foreign_keys));
 }
 
+absl::Status NonHiddenTokenlistColumn(absl::string_view table_name,
+                                      absl::string_view column_name) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("TOKENLIST column $0.$1 must be HIDDEN.",
+                                       table_name, column_name));
+}
+
+// create search index errors
+absl::Status SearchIndexNotPartitionByokenListType(
+    absl::string_view index_name, absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Search index $0 cannot be partitioned by TOKENLIST type column $1",
+          index_name, column_name));
+}
+
+absl::Status SearchIndexSortMustBeNotNullError(absl::string_view column_name,
+                                               absl::string_view index_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Column $0 in search index $1 must be NOT NULL.",
+                       column_name, index_name));
+}
+
+absl::Status SearchIndexOrderByMustBeIntegerType(
+    absl::string_view index_name, absl::string_view column_name,
+    absl::string_view column_type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Search index $0 ordered by column $1 with invalid type $2",
+          index_name, column_name, column_type));
+}
+
+// Search function errors
+absl::Status InvalidUseOfSearchRelatedFunctionWithReason(
+    absl::string_view reason) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Invalid use of search related function: $0", reason));
+}
+
+absl::Status TokenListNotMatchSearch(absl::string_view function_name,
+                                     absl::string_view tokenizer_name) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("$0 function's first argument must be a "
+                                       "TOKENLIST column generated by $1",
+                                       function_name, tokenizer_name));
+}
+
+absl::Status SearchIndexNotUsable(absl::string_view index_name,
+                                  absl::string_view reason) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The index $0 cannot be used because it $1", index_name,
+                       reason));
+}
+
+absl::Status FailToParseSearchQuery(absl::string_view query,
+                                    absl::string_view errors) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Error(s) parsing search query `$0`, has error(s):\n-$1",
+                       query, errors));
+}
+
+absl::Status ColumnNotSearchable(absl::string_view column_type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Invalid search query. Trying to execute search related "
+                       "function on unsupported column type: $0.",
+                       column_type));
+}
+
+absl::Status InvalidQueryType(absl::string_view query_type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Invalid search query type: $0.", query_type));
+}
+
+absl::Status InvalidNgramSize(absl::string_view error) {
+  return absl::Status(absl::StatusCode::kInvalidArgument, error);
+}
+
+absl::Status ProjectTokenlistNotAllowed() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "TOKENLIST is an internal-only type and cannot be "
+                      "returned to the user by SQL query.");
+}
+
+absl::Status TokenlistTypeMergeConflict() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "All elements to TOKENLIST_CONCAT must be produced by "
+                      "the same kind of tokenization function.");
+}
+
+absl::Status FpAlgorithmOnlySupportedOnFloats() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "TOKENIZE_NUMBER: algorithm 'floatingpoint' can only be used to "
+      "tokenize floating point values");
+}
+
+absl::Status NumericIndexingUnsupportedComparisonType(
+    absl::string_view function_name, absl::string_view comparison_type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "$0: Unsupported comparison type: '$1', supported comparison types: "
+          "'all', 'range', 'equality' (equality is only allowed for integrals)",
+          function_name, comparison_type));
+}
+
+absl::Status NumericIndexingUnsupportedAlgorithm(
+    absl::string_view function_name, absl::string_view algorithm) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "$0: Algorithm is not supported: '$1'; supported algorithms are: "
+          "'auto', 'logtree', 'prefixtree', 'floatingpoint' "
+          "(floatingpoint is supported only for floating point types)",
+          function_name, algorithm));
+}
+
+absl::Status NumericIndexingVariableMustBeFinite(
+    absl::string_view var_name, absl::string_view value_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("TOKENIZE_NUMBER: $0 must be finite, got: $1", var_name,
+                       value_string));
+}
+
+absl::Status NumericIndexingMinMustBeLessThanMax(
+    absl::string_view function_name, absl::string_view min_string,
+    absl::string_view max_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("$0: min must be less than max, got: $1 and $2",
+                       function_name, min_string, max_string));
+}
+
+absl::Status NumericIndexingGranularityMustBeFiniteAndPositive(
+    absl::string_view value_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "TOKENIZE_NUMBER: granularity must be finite and positive, got: $0",
+          value_string));
+}
+
+absl::Status NumericIndexingGranularityMustBeLessThanDiffBetweenMinAndMax(
+    absl::string_view granularity_string, absl::string_view min_string,
+    absl::string_view max_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("TOKENIZE_NUMBER: granularity ($0) must be less than or "
+                       "equal to the difference between min and max ($1, $2)",
+                       granularity_string, min_string, max_string));
+}
+
+absl::Status NumericIndexingGranularityTooSmallForRange(
+    absl::string_view min_allowed_granularity_string,
+    absl::string_view granularity_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("TOKENIZE_NUMBER: granularity cannot be less than (max "
+                       "- min) / (2^64 - 3)), which is: $0; got: $1",
+                       min_allowed_granularity_string, granularity_string));
+}
+
+absl::Status NumericIndexingTreeBaseNotInRange(absl::string_view tree_base) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "TOKENIZE_NUMBER: tree_base must be in the range [2, 10], got: $0",
+          tree_base));
+}
+
+absl::Status NumericIndexingPrecisionNotInRange(
+    absl::string_view precision_num) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("TOKENIZE_NUMBER: precision must "
+                                       "be in the range [1, 15], got: $0",
+                                       precision_num));
+}
+
+absl::Status InvalidRelativeSearchType(absl::string_view relative_search_type) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Invalid relative_search_type: '$0'.",
+                                       relative_search_type));
+}
+
+absl::Status SearchSubstringSupportRelativeSearchTypeArgConflict() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "TOKENIZE_SUBSTRING: only one of 'support_relative_search' and "
+      "'relative_search_types' can be specified.");
+}
+
+absl::Status RelativeSearchNotSupported(
+    absl::string_view relative_search_type) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("The referenced substring TOKENLIST is "
+                                       "not tokenized with '$0' support.",
+                                       relative_search_type));
+}
+
+absl::Status IncorrectSnippetColumnType(absl::string_view column_type) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Unable to execute snippet function on "
+                                       "unsupported column type: $0.",
+                                       column_type));
+}
+
+absl::Status InvalidSnippetQueryType(absl::string_view query_type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Invalid snippet query type: $0.", query_type));
+}
+
+absl::Status InvalidContentType(absl::string_view function_name,
+                                absl::string_view content_type,
+                                absl::string_view valid_types) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Invalid use of $0: content_type. \'$1\' is not a "
+                       "supported content type. Supported options:[$2]",
+                       function_name, content_type, valid_types));
+}
+
+absl::Status InvalidUseOfSnippetArgs(absl::string_view arg_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("SNIPPET has out of range value for $0 argument.",
+                       arg_name));
+}
+
 absl::Status ProtoTypeNotFound(absl::string_view type) {
   return absl::NotFoundError(absl::Substitute("Type not found: `$0`", type));
 }
@@ -3339,7 +3629,7 @@ absl::Status ViewReplaceRecursive(absl::string_view view_name) {
 }
 
 absl::Status DependentViewBecomesInvalid(absl::string_view modify_action,
-                                         absl::string_view view_name,
+                                         absl::string_view dependency_name,
                                          absl::string_view dependent_view_name,
                                          absl::string_view error) {
   return absl::Status(
@@ -3347,7 +3637,8 @@ absl::Status DependentViewBecomesInvalid(absl::string_view modify_action,
       absl::Substitute("Cannot $0 `$1`. The new definition causes "
                        "the definition of VIEW `$2` to become invalid with the "
                        "following diagnostic message: $3",
-                       modify_action, view_name, dependent_view_name, error));
+                       modify_action, dependency_name, dependent_view_name,
+                       error));
 }
 
 absl::Status DependentViewColumnRename(absl::string_view modify_action,
@@ -3400,6 +3691,79 @@ absl::Status ViewNotFound(absl::string_view view_name) {
 absl::Status WithViewsAreNotSupported() {
   return absl::Status(absl::StatusCode::kInvalidArgument,
                       "WITH clauses are unsupported in view definitions.");
+}
+
+// Function errors
+absl::Status FunctionRequiresInvokerSecurity(absl::string_view function_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Function `$0` is missing the SQL SECURITY clause.",
+                       function_name));
+}
+
+absl::Status FunctionReplaceError(absl::string_view function_name,
+                                  absl::string_view error) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot replace FUNCTION `$0` because new definition is "
+                       "invalid with the following diagnostic message:\n\n$1",
+                       function_name, error));
+}
+
+absl::Status FunctionBodyAnalysisError(absl::string_view function_name,
+                                       absl::string_view error) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Error parsing the definition of function `$0`: $1",
+                       function_name, error));
+}
+
+absl::Status ReplacingBuiltInFunction(absl::string_view operation_string,
+                                      absl::string_view type_kind,
+                                      absl::string_view built_in_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot $0 a $1 with the same name as builtin function "
+                       "`$2`. This may be supported in a future release.",
+                       operation_string, type_kind, built_in_name));
+}
+
+absl::Status FunctionTypeMismatch(absl::string_view function_name,
+                                  absl::string_view expected_type,
+                                  absl::string_view actual_type) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Function `$0` has type mismatch. User provided type: "
+                       "`$1`. Actual type: `$2`.",
+                       function_name, expected_type, actual_type));
+}
+
+absl::Status DependentFunctionBecomesInvalid(
+    absl::string_view modify_action, absl::string_view dependency_name,
+    absl::string_view depedent_function_name, absl::string_view error) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot $0 `$1`. The new definition causes "
+          "the definition of function `$2` to become invalid with the "
+          "following diagnostic message: $3",
+          modify_action, dependency_name, depedent_function_name, error));
+}
+
+absl::Status InvalidDropDependentFunction(
+    absl::string_view type_kind, absl::string_view dependency_name,
+    absl::string_view dependent_function) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot drop $0 `$1` on which there is a dependent function: $2.",
+          type_kind, dependency_name, dependent_function));
+}
+
+absl::Status FunctionNotFound(absl::string_view function_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::Substitute("Function not found: $0", function_name));
 }
 
 absl::Status SequenceNotSupportedInPostgreSQL() {
@@ -3521,15 +3885,6 @@ absl::Status SequenceNeedsAccessToSchema() {
 absl::Status SequenceExhausted(absl::string_view name) {
   return absl::Status(absl::StatusCode::kFailedPrecondition,
                       absl::Substitute("Sequence $0 is exhausted", name));
-}
-
-absl::Status InvalidDropSequenceWithColumnDependents(
-    absl::string_view sequence_name, absl::string_view dependent_name) {
-  return absl::Status(
-      absl::StatusCode::kFailedPrecondition,
-      absl::Substitute(
-          "Cannot drop SEQUENCE `$0` on which there are dependent columns: $1.",
-          sequence_name, dependent_name));
 }
 
 absl::Status DdlInvalidArgumentError(absl::string_view message) {

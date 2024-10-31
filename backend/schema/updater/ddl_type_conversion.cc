@@ -115,6 +115,9 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
           type_factory->MakeStructType(struct_fields, &struct_type));
       return struct_type;
     }
+    case ddl::TypeDefinition::TOKENLIST: {
+      return type_factory->get_tokenlist();
+    }
     default:
       if (ddl_type_def.type() == ddl::TypeDefinition::NONE &&
           ddl_type_def.has_proto_type_name()) {
@@ -145,10 +148,7 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
 
 absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     const ddl::ColumnDefinition& ddl_column_def,
-    zetasql::TypeFactory* type_factory
-    ,
-    const ProtoBundle* proto_bundle
-) {
+    zetasql::TypeFactory* type_factory, const ProtoBundle* proto_bundle) {
   ZETASQL_RET_CHECK(ddl_column_def.has_type())
       << "No type field specification in "
       << "ddl::ColumnDefinition input: " << ddl_column_def.ShortDebugString();
@@ -195,10 +195,7 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       ZETASQL_ASSIGN_OR_RETURN(
           auto array_element_type,
           DDLColumnTypeToGoogleSqlType(ddl_column_def.array_subtype(),
-                                       type_factory
-                                       ,
-                                       proto_bundle
-                                       ));
+                                       type_factory, proto_bundle));
       ZETASQL_RET_CHECK_NE(array_element_type, nullptr);
       const zetasql::Type* array_type;
       ZETASQL_RETURN_IF_ERROR(
@@ -207,10 +204,10 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     }
     case ddl::ColumnDefinition::STRUCT: {
       return DDLColumnTypeToGoogleSqlType(ddl_column_def.type_definition(),
-                                          type_factory
-                                          ,
-                                          proto_bundle
-      );
+                                          type_factory, proto_bundle);
+    }
+    case ddl::ColumnDefinition::TOKENLIST: {
+      return type_factory->get_tokenlist();
     }
     default:
       if (ddl_column_def.type() == ddl::ColumnDefinition::NONE &&
@@ -272,6 +269,7 @@ ddl::TypeDefinition GoogleSqlTypeToDDLType(const zetasql::Type* type) {
   if (type->IsDate()) type_def.set_type(ddl::TypeDefinition::DATE);
   if (type->IsNumericType()) type_def.set_type(ddl::TypeDefinition::NUMERIC);
   if (type->IsJson()) type_def.set_type(ddl::TypeDefinition::JSON);
+  if (type->IsTokenList()) type_def.set_type(ddl::TypeDefinition::TOKENLIST);
   if (type->IsProto()) {
     type_def.set_type(ddl::TypeDefinition::NONE);
     type_def.set_proto_type_name(type->AsProto()->descriptor()->full_name());
@@ -322,6 +320,8 @@ ddl::ColumnDefinition GoogleSqlTypeToDDLColumnType(
   if (type->IsNumericType())
     ddl_column_def.set_type(ddl::ColumnDefinition::NUMERIC);
   if (type->IsJson()) ddl_column_def.set_type(ddl::ColumnDefinition::JSON);
+  if (type->IsTokenList())
+    ddl_column_def.set_type(ddl::ColumnDefinition::TOKENLIST);
   if (type->IsProto()) {
     ddl_column_def.set_type(ddl::ColumnDefinition::NONE);
     ddl_column_def.set_proto_type_name(

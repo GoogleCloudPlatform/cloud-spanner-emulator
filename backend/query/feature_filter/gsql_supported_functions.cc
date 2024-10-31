@@ -206,6 +206,7 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "sign",
         "sin",
         "sinh",
+        "soundex",
         "split",
         "sqrt",
         "starts_with",

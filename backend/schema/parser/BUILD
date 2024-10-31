@@ -36,6 +36,7 @@ cc_library(
     ],
     deps = [
         ":javacc_ddl_parser",
+        "//backend/common:utils",
         "//backend/schema/ddl:operations_cc_proto",
         "//common:constants",
         "//common:errors",

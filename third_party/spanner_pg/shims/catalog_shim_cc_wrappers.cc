@@ -517,7 +517,14 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromTVF(
   proc->provolatile = PROVOLATILE_VOLATILE;
   proc->proparallel = PROPARALLEL_SAFE;
   proc->pronargs = signature->arguments().size();
-  proc->pronargdefaults = 0;  // TODO: support default args
+
+  int pronargdefaults = 0;
+  for (const auto& arg : signature->arguments()) {
+    if (arg.HasDefault()) {
+      ++pronargdefaults;
+    }
+  }
+  proc->pronargdefaults = pronargdefaults;
   proc->proargtypes.ndim = 1;
   proc->proargtypes.dataoffset = 0;
   proc->proargtypes.elemtype = OIDOID;
@@ -1179,6 +1186,7 @@ extern "C" int GetFunctionArgInfo(Oid proc_oid, Oid **p_argtypes,
     for (int i = 0; i < argument_names.size(); ++i) {
       (*p_argnames)[i] = pstrdup(argument_names[i].c_str());
     }
+    *p_argmodes = NULL;  // Ignore argmodes for UDFs.
     return argument_types.size();
   };
   // Function not found.

@@ -22,6 +22,8 @@
 #include <utility>
 #include <vector>
 
+#include "zetasql/public/types/struct_type.h"
+#include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

@@ -43,6 +43,8 @@ namespace test {
 
 namespace {
 
+using database_api::DatabaseDialect::POSTGRESQL;
+
 class InformationSchemaTest
     : public DatabaseTest,
       public testing::WithParamInterface<database_api::DatabaseDialect> {
@@ -194,7 +196,7 @@ class InformationSchemaTest
     // the PG dialect. The constants defined for the InformationSchema are for
     // the ZetaSQL dialect which are all uppercase. So we lowercase them here
     // for PG.
-    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    if (GetParam() == POSTGRESQL) {
       return absl::AsciiStrToLower(name);
     }
     return std::string(name);
@@ -243,7 +245,7 @@ class InformationSchemaTest
 INSTANTIATE_TEST_SUITE_P(
     PerDialectInformationSchemaTests, InformationSchemaTest,
     testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
-                    database_api::DatabaseDialect::POSTGRESQL),
+                    POSTGRESQL),
     [](const testing::TestParamInfo<InformationSchemaTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
     });
@@ -258,21 +260,21 @@ TEST_P(InformationSchemaTest, Schemata) {
       order by
         s.catalog_name,
         s.schema_name
-      limit 2
+      limit 3
     )");
   LogResults(results);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Remove the catalog_name column from the expected results since we don't
     // currently set that to its correct value for PG.
-    auto expected =
-        std::vector<ValueRow>({{"", "information_schema"}, {"", "pg_catalog"}});
+    auto expected = std::vector<ValueRow>(
+        {{"", "information_schema"}, {"", "named_schema"}, {"", "pg_catalog"}});
     std::vector<ValueRow> pg_expected = StripFirstColumnFromRows(expected);
     ZETASQL_EXPECT_OK(results);
     EXPECT_THAT(StripFirstColumnFromRows(*results), pg_expected);
   } else {
-    auto expected =
-        std::vector<ValueRow>({{"", ""}, {"", "INFORMATION_SCHEMA"}});
+    auto expected = std::vector<ValueRow>(
+        {{"", ""}, {"", "INFORMATION_SCHEMA"}, {"", "SPANNER_SYS"}});
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   }
 }
@@ -288,7 +290,7 @@ TEST_P(InformationSchemaTest, MetaTables) {
   std::string table_schema = GetNameForDialect("INFORMATION_SCHEMA");
   std::string filter;
   std::string collation;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // The PG dialect doesn't support UNNEST or ANY on parameters so we have to
     // provide a static array of unsupported tables. The array is substituted in
     // below when running the query.
@@ -342,7 +344,7 @@ TEST_P(InformationSchemaTest, MetaTables) {
   expected.push_back({"", table_schema, "VIEW", GetNameForDialect("INDEX_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
   expected.push_back({"", table_schema, "VIEW", GetNameForDialect("INDEXES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
   expected.push_back({"", table_schema, "VIEW", GetNameForDialect("KEY_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() != POSTGRESQL) {
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_COLUMN_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
@@ -350,7 +352,7 @@ TEST_P(InformationSchemaTest, MetaTables) {
   }
   expected.push_back({"", table_schema, "VIEW", GetNameForDialect("REFERENTIAL_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
   expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SCHEMATA"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() != POSTGRESQL) {
       expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SEQUENCE_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
   }
   expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SEQUENCES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
@@ -360,7 +362,7 @@ TEST_P(InformationSchemaTest, MetaTables) {
 
   // clang-format on
   absl::StatusOr<std::vector<ValueRow>> results;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Remove the table_catalog column from the expected results since we don't
     // currently set that to its correct value for PG.
     std::vector<ValueRow> pg_expected = StripFirstColumnFromRows(expected);
@@ -380,7 +382,7 @@ TEST_P(InformationSchemaTest, MetaTables) {
 TEST_P(InformationSchemaTest, GSQLMetaColumns) {
   // Since the query and output for the PG dialect is significantly different,
   // we test this logic in a separate function just for the PG dialect.
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
 
@@ -659,7 +661,7 @@ TEST_P(InformationSchemaTest, PGMetaColumns) {
 TEST_P(InformationSchemaTest, MetaIndexes) {
   std::string table_schema = GetNameForDialect("INFORMATION_SCHEMA");
   std::string filter;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // The PG dialect doesn't support UNNEST or ANY on parameters so we have to
     // provide a static array of unsupported tables. The array is substituted in
     // below when running the query.
@@ -691,7 +693,7 @@ TEST_P(InformationSchemaTest, MetaIndexes) {
                                        table_schema, filter);
 
   absl::StatusOr<std::vector<ValueRow>> results;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // PG dialect doesn't store information schema indexes in this table.
     auto expected = std::vector<ValueRow>({});
     // Substituting in the static array of unsupported tables.
@@ -737,7 +739,7 @@ TEST_P(InformationSchemaTest, MetaIndexes) {
 TEST_P(InformationSchemaTest, MetaIndexColumns) {
   std::string table_schema = GetNameForDialect("INFORMATION_SCHEMA");
   std::string filter;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // The PG dialect doesn't support UNNEST or ANY on parameters so we have to
     // provide a static array of unsupported tables. The array is substituted in
     // below when running the query.
@@ -770,7 +772,7 @@ TEST_P(InformationSchemaTest, MetaIndexColumns) {
                                        table_schema, filter);
 
   absl::StatusOr<std::vector<ValueRow>> results;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // PG dialect doesn't store information schema columns in this table.
     auto expected = std::vector<ValueRow>({});
     // Substituting in the static array of unsupported tables.
@@ -894,7 +896,7 @@ TEST_P(InformationSchemaTest, MetaIndexColumns) {
 
 TEST_P(InformationSchemaTest, MetaTableConstraints) {
   std::string filter;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     filter = "t.constraint_schema = 'information_schema'";
   } else {
     filter = R"(
@@ -924,7 +926,7 @@ TEST_P(InformationSchemaTest, MetaTableConstraints) {
         t.constraint_name
   )",
                                        filter);
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     auto results = Query(query);
     LogResults(results);
     // Production doesn't add check constraints for the information schema
@@ -1121,7 +1123,7 @@ TEST_P(InformationSchemaTest, MetaTableConstraints) {
 
 TEST_P(InformationSchemaTest, MetaCheckConstraints) {
   std::string filter;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     filter = "t.constraint_schema = 'information_schema'";
   } else {
     filter =
@@ -1174,7 +1176,7 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
   )",
                                        filter);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     auto results = Query(query);
     LogResults(results);
     // Production doesn't add check constraints for the information schema
@@ -1290,7 +1292,7 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
 
 TEST_P(InformationSchemaTest, MetaConstraintTableUsage) {
   std::string filter;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     filter = R"(
         t.table_schema = 'information_schema'
     )";
@@ -1321,7 +1323,7 @@ TEST_P(InformationSchemaTest, MetaConstraintTableUsage) {
     )",
                                        filter);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     auto results = Query(query);
     LogResults(results);
     // Production doesn't add constraint table usage for the information schema
@@ -1541,7 +1543,7 @@ TEST_P(InformationSchemaTest, MetaReferentialConstraints) {
 
 TEST_P(InformationSchemaTest, MetaKeyColumnUsage) {
   std::string filter;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     filter = R"(
         t.constraint_schema = 'information_schema'
     )";
@@ -1575,7 +1577,7 @@ TEST_P(InformationSchemaTest, MetaKeyColumnUsage) {
     )",
                                        filter);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // PG dialect doesn't store information schema key column usage in
     // this table.
     auto expected = std::vector<ValueRow>({});
@@ -1699,7 +1701,7 @@ TEST_P(InformationSchemaTest, MetaKeyColumnUsage) {
 
 TEST_P(InformationSchemaTest, MetaConstraintColumnUsage) {
   std::string filter;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     filter = R"(
         t.table_schema = 'information_schema'
     )";
@@ -1732,7 +1734,7 @@ TEST_P(InformationSchemaTest, MetaConstraintColumnUsage) {
     )",
                                        filter);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // PG dialect doesn't store information schema constraint column usage in
     // this table.
     auto expected = std::vector<ValueRow>({});
@@ -2032,11 +2034,11 @@ TEST_P(InformationSchemaTest, DefaultTables) {
           t.table_name
       )",
       filter,
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public" :
+      (GetParam() == POSTGRESQL ? "public" :
        "")));
   LogResults(results);
   std::string expected_interval =
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+      (GetParam() == POSTGRESQL)
       ?  "INTERVAL '7 DAYS' ON created_at"
       : "OLDER_THAN(created_at, INTERVAL 7 DAY)";
   // clang-format off
@@ -2051,10 +2053,40 @@ TEST_P(InformationSchemaTest, DefaultTables) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
+TEST_P(InformationSchemaTest, NamedSchemaTables) {
+  absl::StatusOr<std::vector<ValueRow>> results = Query(R"(
+        select
+          t.table_type,
+          t.table_name,
+          t.parent_table_name,
+          t.spanner_state,
+          t.on_delete_action,
+          t.row_deletion_policy_expression
+        from
+          information_schema.tables AS t
+        where
+          t.table_schema = 'named_schema'
+        order by
+          t.table_catalog,
+          t.table_schema,
+          t.table_name
+      )");
+
+  LogResults(results);
+  // clang-format off
+  auto expected = std::vector<ValueRow>({
+    {"BASE TABLE", "ns_table_1", Ns(), "COMMITTED", Ns(), Ns()}, // NOLINT
+    {"BASE TABLE", "ns_table_2", Ns(), "COMMITTED", Ns(), Ns()}, // NOLINT
+    {"VIEW", "ns_view", Ns(), Ns(), Ns(), Ns()}, // NOLINT
+  });
+  // clang-format on
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+}
+
 TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
   // Since the query and output for the PG dialect is significantly different,
   // we test this logic in a separate function just for the GSQL dialect.
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
 
@@ -2190,6 +2222,59 @@ TEST_P(InformationSchemaTest, PGDefaultColumns) {
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
+TEST_P(InformationSchemaTest, NamedSchemaColumns) {
+  absl::StatusOr<std::vector<ValueRow>> results = Query(
+      R"(
+        select
+          t.table_schema,
+          t.table_name,
+          t.column_name,
+          t.ordinal_position,
+          t.column_default,
+          t.data_type,
+          t.is_nullable,
+          t.spanner_type,
+          t.is_generated,
+          t.generation_expression,
+          t.is_stored,
+          t.spanner_state
+        from
+          information_schema.columns AS t
+        where
+          t.table_schema = 'named_schema'
+        order by
+          t.table_name,
+          t.ordinal_position
+      )");
+  LogResults(results);
+
+  if (GetParam() == POSTGRESQL) {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"named_schema", "ns_table_1", "key1", 1, Ns(), "bigint", "NO", "bigint", "NEVER", Ns(), Ns(), "COMMITTED"}, // NOLINT
+      {"named_schema", "ns_table_1", "key2", 2, Ns(), "character varying", "YES", "character varying(256)", "NEVER", Ns(), Ns(), "COMMITTED"}, // NOLINT
+      {"named_schema", "ns_table_1", "bool_value", 3, Ns(), "boolean", "YES", "boolean", "NEVER", Ns(), Ns(), "COMMITTED"}, // NOLINT
+      {"named_schema", "ns_table_2", "key1", 1, Ns(), "bigint", "NO", "bigint", "NEVER", Ns(), Ns(), "COMMITTED"}, // NOLINT
+      {"named_schema", "ns_table_2", "key2", 2, Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED"}, // NOLINT
+      {"named_schema", "ns_view", "key1", 1, Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED"} // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  } else {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"named_schema", "ns_table_1", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"}, // NOLINT
+      {"named_schema", "ns_table_1", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER",  Ns(), Ns(), "COMMITTED"},  // NOLINT
+      {"named_schema", "ns_table_1", "bool_value", 3,  Ns(), Ns(), "YES", "BOOL", "NEVER",  Ns(), Ns(), "COMMITTED"}, // NOLINT
+      {"named_schema", "ns_table_2", "key1", 1,  Ns(), Ns(), "YES", "INT64", "NEVER",  Ns(), Ns(), "COMMITTED"}, // NOLINT
+      {"named_schema", "ns_table_2", "key2", 2,  Ns(), Ns(), "YES", "INT64", "NEVER",  Ns(), Ns(), "COMMITTED"}, // NOLINT
+      {"named_schema", "ns_view", "key1", 1,  Ns(), Ns(), "YES", "INT64", "NEVER",  Ns(), Ns(), "COMMITTED"} // NOLINT
+  });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
+}
+
 TEST_P(InformationSchemaTest, DefaultIndexes) {
   // GSQL uses an empty string for the default schema and PG doesn't.
   std::string filter = "";
@@ -2219,11 +2304,9 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
         t.table_name,
         t.index_name
     )",
-      filter,
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public"
-                                                               : "")));
+      filter, (GetParam() == POSTGRESQL ? "public" : "")));
   LogResults(results);
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // clang-format off
     auto expected = ExpectedRows(StripFirstColumnFromRows(*results), {
       {"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", "NO", "YES", "READ_WRITE", "YES"},  // NOLINT
@@ -2250,6 +2333,45 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
       {"", "", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
       {"", "", "no_action_child", "no_action_child_by_value", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
       {"", "", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
+}
+
+TEST_P(InformationSchemaTest, NamedSchemaIndexes) {
+  auto results = Query(R"(
+    SELECT
+      t.table_schema,
+      t.table_name,
+      t.index_name,
+      t.index_type
+    FROM
+      information_schema.indexes AS t
+    WHERE
+      t.table_schema = 'named_schema'
+    ORDER BY
+      t.table_name,
+      t.index_name
+  )");
+
+  LogResults(results);
+  if (GetParam() == POSTGRESQL) {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"named_schema", "ns_table_1", "PRIMARY_KEY", "PRIMARY_KEY"},  // NOLINT
+      {"named_schema", "ns_table_1", "ns_index", "INDEX"}, // NOLINT
+      {"named_schema", "ns_table_2","PRIMARY_KEY", "PRIMARY_KEY"} // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, expected);
+  } else {
+    // clang-format off
+    auto expected =  ExpectedRows(results, {
+      {"named_schema", "ns_table_1", "PRIMARY_KEY", "PRIMARY_KEY"},  // NOLINT
+      {"named_schema", "ns_table_1", "ns_index", "INDEX"}, // NOLINT
+      {"named_schema", "ns_table_2", "IDX_ns_table_2_key1_N_\\w{16}", "INDEX"}, // NOLINT
+      {"named_schema", "ns_table_2","PRIMARY_KEY", "PRIMARY_KEY"} // NOLINT
     });
     // clang-format on
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -2293,11 +2415,9 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
         t.index_name,
         t.ordinal_position
     )",
-      filter,
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public"
-                                                               : "")));
+      filter, (GetParam() == POSTGRESQL ? "public" : "")));
   LogResults(results);
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // clang-format off
     auto expected = ExpectedRows(StripFirstColumnFromRows(*results), {
       {"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "bool_value", 1, "ASC NULLS FIRST", "NO", "boolean"},  // NOLINT
@@ -2349,6 +2469,46 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
   }
 }
 
+TEST_P(InformationSchemaTest, NamedSchemaIndexColumns) {
+  auto results = Query(R"(
+      select
+        t.table_schema,
+        t.table_name,
+        t.index_name,
+        t.index_type
+      from
+        information_schema.index_columns AS t
+      where
+        t.table_schema = 'named_schema'
+      order by
+        t.table_name,
+        t.index_name,
+        t.ordinal_position
+    )");
+  LogResults(results);
+
+  if (GetParam() == POSTGRESQL) {
+    // clang-format off
+  auto expected = ExpectedRows(results, {
+      {"named_schema", "ns_table_1", "PRIMARY_KEY", "PRIMARY_KEY"},  // NOLINT
+      {"named_schema", "ns_table_1", "ns_index", "INDEX"}, // NOLINT
+      {"named_schema", "ns_table_2", "PRIMARY_KEY", "PRIMARY_KEY"} // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  } else {
+    // clang-format off
+  auto expected = ExpectedRows(results, {
+      {"named_schema", "ns_table_1", "PRIMARY_KEY", "PRIMARY_KEY"},  // NOLINT
+      {"named_schema", "ns_table_1", "ns_index", "INDEX"}, // NOLINT
+      {"named_schema", "ns_table_2", "IDX_ns_table_2_key1_N_\\w{16}", "INDEX"} ,// NOLINT
+      {"named_schema", "ns_table_2", "PRIMARY_KEY", "PRIMARY_KEY"} // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
+}
+
 TEST_P(InformationSchemaTest, DefaultDatabaseOptions) {
   auto results = Query(R"(
       select
@@ -2363,9 +2523,8 @@ TEST_P(InformationSchemaTest, DefaultDatabaseOptions) {
         t.option_name
     )");
   LogResults(results);
-  std::string type = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
-                         ? "character varying"
-                         : "STRING";
+  std::string type =
+      (GetParam() == POSTGRESQL) ? "character varying" : "STRING";
   // clang-format off
   auto expected = std::vector<ValueRow>({
     {"database_dialect", type, database_api::DatabaseDialect_Name(GetParam())},  // NOLINT
@@ -2396,7 +2555,7 @@ TEST_P(InformationSchemaTest, DefaultColumnOptions) {
         t.option_name
     )");
   LogResults(results);
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // A PG database doesn't store values in this table.
     auto expected = std::vector<ValueRow>({});
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -2414,7 +2573,7 @@ TEST_P(InformationSchemaTest, DefaultTableConstraints) {
   std::string default_schema = "";
   std::string constraint_catalog_col = "";
   std::string table_catalog_col = "";
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     default_schema = "public";
     // We don't include the catalog columns as the name is different between
     // production and the emulator due to the emulator information schema
@@ -2446,7 +2605,7 @@ TEST_P(InformationSchemaTest, DefaultTableConstraints) {
                                         constraint_catalog_col,
                                         table_catalog_col, default_schema));
   LogResults(results);
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {"public", "CK_IS_NOT_NULL_base_bool_array", "public", "base", "CHECK", "NO", "NO", "YES"},  // NOLINT
@@ -2492,11 +2651,52 @@ TEST_P(InformationSchemaTest, DefaultTableConstraints) {
   }
 }
 
+TEST_P(InformationSchemaTest, NamedSchemaTableConstraints) {
+  auto results = Query(R"(
+      select
+        t.table_schema,
+        t.table_name,
+        t.constraint_type,
+        t.is_deferrable,
+        t.initially_deferred,
+        t.enforced
+      from
+        information_schema.table_constraints as t
+      where
+        t.table_schema = 'named_schema'
+      order by
+        t.constraint_name
+  )");
+  LogResults(results);
+  if (GetParam() == POSTGRESQL) {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"named_schema", "ns_table_1", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"named_schema", "ns_table_2", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"named_schema", "ns_table_1", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+      {"named_schema", "ns_table_2", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+      {"named_schema", "ns_table_2", "FOREIGN KEY", "NO", "NO", "YES"},  // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  } else {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"named_schema", "ns_table_1", "PRIMARY KEY", "NO", "NO", "YES"}, // NOLINT
+      {"named_schema", "ns_table_2", "PRIMARY KEY", "NO", "NO", "YES"}, // NOLINT
+      {"named_schema", "ns_table_2", "FOREIGN KEY", "NO", "NO", "YES"} // NOLINT
+    });
+
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
+}
+
 TEST_P(InformationSchemaTest, DefaultConstraintTableUsage) {
   std::string schema = "";
   std::string table_catalog_col = "";
   std::string constraint_catalog_col = "";
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     schema = "public";
     // We don't include the catalog columns as the name is different between
     // production and the emulator due to the emulator information schema
@@ -2526,7 +2726,7 @@ TEST_P(InformationSchemaTest, DefaultConstraintTableUsage) {
                                         constraint_catalog_col, schema));
   LogResults(results);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {schema, "base", schema, "PK_base"},  // NOLINT
@@ -2558,21 +2758,72 @@ TEST_P(InformationSchemaTest, DefaultConstraintTableUsage) {
   }
 }
 
+TEST_P(InformationSchemaTest, NamedSchemaConstraintTableUsage) {
+  std::string table_catalog_col = "";
+  std::string constraint_catalog_col = "";
+  if (GetParam() != POSTGRESQL) {
+    table_catalog_col = "t.table_catalog,";
+    constraint_catalog_col = "t.constraint_catalog,";
+  }
+
+  auto results =
+      Query(absl::Substitute(R"(
+      select
+        $0
+        t.table_schema,
+        t.table_name,
+        $1
+        t.constraint_schema,
+        t.constraint_name
+      from
+        information_schema.constraint_table_usage as t
+      where
+        t.table_schema = 'named_schema'
+      order by
+        t.table_name,
+        t.constraint_name
+  )",
+                             table_catalog_col, constraint_catalog_col));
+
+  LogResults(results);
+  if (GetParam() == POSTGRESQL) {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"named_schema", "ns_table_1", "named_schema", "PK_ns_table_1"},  // NOLINT
+      {"named_schema", "ns_table_1", "named_schema", "fk_ns_table_2"},  // NOLINT
+      {"named_schema", "ns_table_2", "named_schema", "PK_ns_table_2"},  // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  } else {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"", "named_schema", "ns_table_1", "", "named_schema", "PK_ns_table_1"}, // NOLINT
+      {"", "named_schema", "ns_table_1", "", "named_schema", "fk_ns_table_2"}, // NOLINT
+      {"", "named_schema", "ns_table_2", "", "named_schema", "PK_ns_table_2"} // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
+}
+
 TEST_P(InformationSchemaTest, DefaultReferentialConstraints) {
   std::string schema = "";
   std::string constraint_catalog_col = "";
   std::string unique_constraint_catalog_col = "";
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     schema = "public";
     // Since we don't set the catalog name to the value expected by PG due to
     // the database name not being available to the information schema catalog
-    // that populates the data, we exclude these two columns from the PG query.
+    // that populates the data, we exclude these two columns from the PG
+    // query.
   } else {
     constraint_catalog_col = "t.constraint_catalog,";
     unique_constraint_catalog_col = "t.unique_constraint_catalog,";
   }
 
-  auto results = Query(absl::Substitute(R"(
+  auto results = Query(absl::Substitute(
+      R"(
       select
         $0
         t.constraint_schema,
@@ -2591,11 +2842,10 @@ TEST_P(InformationSchemaTest, DefaultReferentialConstraints) {
       order by
         t.constraint_name
   )",
-                                        constraint_catalog_col,
-                                        unique_constraint_catalog_col, schema));
+      constraint_catalog_col, unique_constraint_catalog_col, schema));
   LogResults(results);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // clang-format off
     auto expected = ExpectedRows(results, {
         {schema, "fk_base_cascade_child", schema, "IDX_cascade_child_child_key_value1_U_\\w{16}", "NONE", "NO ACTION", "NO ACTION", "COMMITTED"},  // NOLINT
@@ -2612,16 +2862,63 @@ TEST_P(InformationSchemaTest, DefaultReferentialConstraints) {
   }
 }
 
+TEST_P(InformationSchemaTest, NamedSchemaReferentialConstraints) {
+  std::string constraint_catalog_col = "t.constraint_catalog,";
+  std::string unique_constraint_catalog_col = "t.unique_constraint_catalog,";
+  if (GetParam() == POSTGRESQL) {
+    constraint_catalog_col = "";
+    unique_constraint_catalog_col = "";
+  }
+  auto results = Query(absl::Substitute(
+      R"(
+      select
+        $0
+        t.constraint_schema,
+        t.constraint_name,
+        $1
+        t.unique_constraint_schema,
+        t.unique_constraint_name,
+        t.match_option,
+        t.update_rule,
+        t.delete_rule,
+        t.spanner_state
+      from
+        information_schema.referential_constraints as t
+      where
+        t.constraint_schema = 'named_schema'
+      order by
+        t.constraint_name
+  )",
+      constraint_catalog_col, unique_constraint_catalog_col));
+
+  LogResults(results);
+  if (GetParam() == POSTGRESQL) {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"named_schema", "fk_ns_table_2", "named_schema", "PK_ns_table_1", "NONE", "NO ACTION", "NO ACTION", "COMMITTED"},  // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  } else {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"","named_schema", "fk_ns_table_2", "", "named_schema", "PK_ns_table_1", "SIMPLE", "NO ACTION", "NO ACTION", "COMMITTED"},  // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
+}
+
 TEST_P(InformationSchemaTest, DefaultKeyColumnUsage) {
   std::string schema = "";
   std::string constraint_catalog_col = "";
   std::string table_catalog_col = "";
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     schema = "public";
-    // We currently don't store the correct value for the catalog name in PG as
-    // the emulator information schema doesn't have access to the database name
-    // when populating the information schema tables. So we don't query these
-    // columns in PG.
+    // We currently don't store the correct value for the catalog name in PG
+    // as the emulator information schema doesn't have access to the database
+    // name when populating the information schema tables. So we don't query
+    // these columns in PG.
   } else {
     constraint_catalog_col = "t.constraint_catalog,";
     table_catalog_col = "t.table_catalog,";
@@ -2651,7 +2948,7 @@ TEST_P(InformationSchemaTest, DefaultKeyColumnUsage) {
                                         table_catalog_col, schema));
   LogResults(results);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {schema, "IDX_cascade_child_child_key_value1_U_\\w{16}", schema, "cascade_child", "child_key", 1, Ni()},  // NOLINT
@@ -2692,16 +2989,68 @@ TEST_P(InformationSchemaTest, DefaultKeyColumnUsage) {
   }
 }
 
+TEST_P(InformationSchemaTest, NamedSchemaKeyColumnUsage) {
+  std::string constraint_catalog_col = "";
+  std::string table_catalog_col = "";
+  if (GetParam() != POSTGRESQL) {
+    constraint_catalog_col = "t.constraint_catalog,";
+    table_catalog_col = "t.table_catalog,";
+  }
+  auto results =
+      Query(absl::Substitute(R"(
+      select
+        $0
+        t.constraint_schema,
+        t.constraint_name,
+        $1
+        t.table_schema,
+        t.table_name,
+        t.column_name,
+        t.ordinal_position,
+        t.position_in_unique_constraint
+      from
+        information_schema.key_column_usage as t
+      where
+        t.constraint_schema = 'named_schema'
+      order by
+        t.constraint_name,
+        t.table_name,
+        t.ordinal_position
+  )",
+                             constraint_catalog_col, table_catalog_col));
+
+  LogResults(results);
+  if (GetParam() == POSTGRESQL) {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"named_schema", "PK_ns_table_1", "named_schema", "ns_table_1", "key1", 1, Ni()},  // NOLINT
+      {"named_schema", "PK_ns_table_2", "named_schema", "ns_table_2", "key1", 1, Ni()}, // NOLINT
+      {"named_schema", "fk_ns_table_2", "named_schema", "ns_table_2", "key1", 1, 1},  // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  } else {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"", "named_schema", "PK_ns_table_1", "", "named_schema", "ns_table_1", "key1", 1, Ni()},  // NOLINT
+      {"", "named_schema", "PK_ns_table_2", "","named_schema", "ns_table_2", "key1", 1, Ni()}, // NOLINT
+      {"", "named_schema", "fk_ns_table_2", "", "named_schema", "ns_table_2", "key1", 1, 1},  // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
+}
+
 TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
   std::string schema = "";
   std::string table_catalog_col = "";
   std::string constraint_catalog_col = "";
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     schema = "public";
-    // We currently don't store the correct value for the catalog name in PG as
-    // the emulator information schema doesn't have access to the database name
-    // when populating the information schema tables. So we don't query these
-    // columns in PG.
+    // We currently don't store the correct value for the catalog name in PG
+    // as the emulator information schema doesn't have access to the database
+    // name when populating the information schema tables. So we don't query
+    // these columns in PG.
   } else {
     table_catalog_col = "t.table_catalog,";
     constraint_catalog_col = "t.constraint_catalog,";
@@ -2728,7 +3077,7 @@ TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
                                         constraint_catalog_col, schema));
   LogResults(results);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {schema, "base", "bool_array", schema, "CK_IS_NOT_NULL_base_bool_array"},  // NOLINT
@@ -2788,6 +3137,57 @@ TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
   }
 }
 
+TEST_P(InformationSchemaTest, NamedSchemaConstraintColumnUsage) {
+  std::string table_catalog_col = "";
+  std::string constraint_catalog_col = "";
+  if (GetParam() != POSTGRESQL) {
+    table_catalog_col = "t.table_catalog,";
+    constraint_catalog_col = "t.constraint_catalog,";
+  }
+  auto results =
+      Query(absl::Substitute(R"(
+      select
+        $0
+        t.table_schema,
+        t.table_name,
+        t.column_name,
+        $1
+        t.constraint_schema,
+        t.constraint_name
+      from
+        information_schema.constraint_column_usage as t
+      where
+        t.table_schema = 'named_schema'
+      order by
+        t.table_name,
+        t.column_name,
+        t.constraint_name
+  )",
+                             table_catalog_col, constraint_catalog_col));
+
+  if (GetParam() == POSTGRESQL) {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"named_schema", "ns_table_1", "key1", "named_schema", "CK_IS_NOT_NULL_ns_table_1_key1"}, // NOLINT
+      {"named_schema", "ns_table_1", "key1", "named_schema", "PK_ns_table_1"},  // NOLINT
+      {"named_schema", "ns_table_1", "key1", "named_schema", "fk_ns_table_2"},  // NOLINT
+      {"named_schema", "ns_table_2", "key1", "named_schema", "CK_IS_NOT_NULL_ns_table_2_key1"},  // NOLINT
+      {"named_schema", "ns_table_2", "key1", "named_schema", "PK_ns_table_2"} // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  } else {
+    // clang-format off
+    auto expected = ExpectedRows(results, {
+      {"", "named_schema", "ns_table_1", "key1", "", "named_schema", "PK_ns_table_1"},  // NOLINT
+      {"", "named_schema", "ns_table_1", "key1","", "named_schema", "fk_ns_table_2"},  // NOLINT
+      {"", "named_schema", "ns_table_2", "key1", "", "named_schema", "PK_ns_table_2"} // NOLINT
+    });
+    // clang-format on
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
+}
+
 TEST_P(InformationSchemaTest, SpannerSysTables) {
   auto results = Query(R"(
       -- Using LOWER because ZetaSQL uses upper case, while PG uses lowercase.
@@ -2811,7 +3211,7 @@ class ColumnColumnUsageInformationSchemaTest : public InformationSchemaTest {
   }
 
   absl::Status SetUpDatabase() override {
-    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    if (GetParam() == POSTGRESQL) {
       return SetSchema({R"(
         CREATE TABLE generated_columns (
           user_id bigint,
@@ -2841,7 +3241,7 @@ class ColumnColumnUsageInformationSchemaTest : public InformationSchemaTest {
 
 TEST_P(InformationSchemaTest, DefaultViews) {
   std::string filter;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     filter = "t.table_schema = 'public'";
   } else {
     filter = "t.table_catalog = '' and t.table_schema = ''";
@@ -2862,13 +3262,13 @@ TEST_P(InformationSchemaTest, DefaultViews) {
                                         filter));
   LogResults(results);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     auto expected = std::vector<ValueRow>({
         {"public", "base_view", "SELECT key1 FROM base"},
     });
     ZETASQL_EXPECT_OK(results);
-    // Remove the table_catalog column from the expected results since we don't
-    // currently set that to its correct value for PG.
+    // Remove the table_catalog column from the expected results since we
+    // don't currently set that to its correct value for PG.
     EXPECT_THAT(StripFirstColumnFromRows(*results), expected);
   } else {
     auto expected = std::vector<ValueRow>({
@@ -2894,11 +3294,10 @@ TEST_P(InformationSchemaTest, DefaultCheckConstraints) {
       order by
         t.constraint_name
   )",
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public"
-                                                               : "")));
+      (GetParam() == POSTGRESQL ? "public" : "")));
   LogResults(results);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // clang-format off
     auto expected = ExpectedRows(StripFirstColumnFromRows(*results), {
       {"public", "CK_IS_NOT_NULL_base_bool_array", "bool_array IS NOT NULL", "COMMITTED"},  // NOLINT
@@ -2917,8 +3316,8 @@ TEST_P(InformationSchemaTest, DefaultCheckConstraints) {
       {"public", "check_constraint_name", "(int_value > '0'::bigint)", "COMMITTED"},  // NOLINT
     });
     // clang-format on
-    // Remove the table_catalog column from the expected results since we don't
-    // currently set that to its correct value for PG.
+    // Remove the table_catalog column from the expected results since we
+    // don't currently set that to its correct value for PG.
     EXPECT_THAT(StripFirstColumnFromRows(*results), expected);
   } else {
     // clang-format off
@@ -2938,7 +3337,7 @@ INSTANTIATE_TEST_SUITE_P(
     PerDialectColumnColumnUsageInformationSchemaTests,
     ColumnColumnUsageInformationSchemaTest,
     testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
-                    database_api::DatabaseDialect::POSTGRESQL),
+                    POSTGRESQL),
     [](const testing::TestParamInfo<
         ColumnColumnUsageInformationSchemaTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
@@ -2964,9 +3363,7 @@ TEST_P(ColumnColumnUsageInformationSchemaTest, DefaultColumnColumnUsage) {
       order by
         t.table_name, t.dependent_column, t.column_name
   )",
-      filter,
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public"
-                                                               : "")));
+      filter, (GetParam() == POSTGRESQL ? "public" : "")));
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
@@ -2992,7 +3389,7 @@ class ForeignKeyInformationSchemaTest : public InformationSchemaTest {
   }
 
   absl::Status SetUpDatabase() override {
-    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    if (GetParam() == POSTGRESQL) {
       return SetSchema({R"(
         CREATE TABLE table1 (
           name1  character varying(64)  NOT NULL,
@@ -3038,7 +3435,7 @@ class ForeignKeyInformationSchemaTest : public InformationSchemaTest {
 INSTANTIATE_TEST_SUITE_P(
     PerDialectForeignKeyInformationSchemaTests, ForeignKeyInformationSchemaTest,
     testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
-                    database_api::DatabaseDialect::POSTGRESQL),
+                    POSTGRESQL),
     [](const testing::TestParamInfo<ForeignKeyInformationSchemaTest::ParamType>&
            info) { return database_api::DatabaseDialect_Name(info.param); });
 
@@ -3056,8 +3453,7 @@ TEST_P(ForeignKeyInformationSchemaTest, DefaultTableConstraints) {
       order by
         t.constraint_name
   )",
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public"
-                                                               : "")));
+      (GetParam() == POSTGRESQL ? "public" : "")));
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
@@ -3088,10 +3484,10 @@ TEST_P(ForeignKeyInformationSchemaTest, DefaultConstraintTableUsage) {
         t.table_name,
         t.constraint_name
   )",
-      GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public" : ""));
+      GetParam() == POSTGRESQL ? "public" : ""));
   LogResults(results);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {"table1", "FK_table2_table1_\\w{16}_1"},
@@ -3135,7 +3531,7 @@ TEST_P(ForeignKeyInformationSchemaTest, DefaultKeyColumnUsage) {
         t.table_name,
         t.ordinal_position
   )",
-      GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public" : ""));
+      GetParam() == POSTGRESQL ? "public" : ""));
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
@@ -3160,8 +3556,7 @@ TEST_P(ForeignKeyInformationSchemaTest, DefaultReferentialConstraints) {
       order by
         t.constraint_name
   )",
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public"
-                                                               : "")));
+      (GetParam() == POSTGRESQL ? "public" : "")));
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
@@ -3187,7 +3582,7 @@ TEST_P(ForeignKeyInformationSchemaTest, DefaultConstraintColumnUsage) {
         t.column_name,
         t.constraint_name
   )",
-      GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public" : ""));
+      GetParam() == POSTGRESQL ? "public" : ""));
   LogResults(results);
   // clang-format off
   auto expected = ExpectedRows(results, {
@@ -3216,10 +3611,10 @@ TEST_P(InformationSchemaTest, DefaultChangeStreams) {
       order by
         t.change_stream_name
     )",
-      GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public" : ""));
+      GetParam() == POSTGRESQL ? "public" : ""));
   LogResults(results);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     auto expected = std::vector<ValueRow>({
         {"public", "test_stream", "NO"},
         {"public", "test_stream2", "NO"},
@@ -3259,10 +3654,10 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamTables) {
       order by
         t.change_stream_name, t.table_name
     )",
-      GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public" : ""));
+      GetParam() == POSTGRESQL ? "public" : ""));
   LogResults(results);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     auto expected = std::vector<ValueRow>({
         {"test_stream", "public", "base", "NO"},
         {"test_stream", "public", "no_action_child", "YES"},
@@ -3299,12 +3694,11 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamsOptions) {
       order by
         t.change_stream_name, t.option_name
     )",
-      GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public" : ""));
+      GetParam() == POSTGRESQL ? "public" : ""));
   LogResults(results);
-  std::string type = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
-                         ? "character varying"
-                         : "STRING";
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  std::string type =
+      (GetParam() == POSTGRESQL) ? "character varying" : "STRING";
+  if (GetParam() == POSTGRESQL) {
     auto expected = std::vector<ValueRow>({
         {"public", "test_stream", "retention_period", type, "36h"},
         {"public", "test_stream2", "retention_period", type, "2d"},
@@ -3343,10 +3737,10 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamColumns) {
       order by
         t.change_stream_name, t.column_name
     )",
-      GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "public" : ""));
+      GetParam() == POSTGRESQL ? "public" : ""));
   LogResults(results);
 
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     auto expected = std::vector<ValueRow>({
         {"test_stream", "public", "base", "bool_value"},
         {"test_stream", "public", "base", "int_value"},
@@ -3372,7 +3766,7 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamColumns) {
 }
 
 TEST_P(InformationSchemaTest, DefaultModels) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     return;
   }
 
@@ -3392,7 +3786,7 @@ TEST_P(InformationSchemaTest, DefaultModels) {
 }
 
 TEST_P(InformationSchemaTest, DefaultModelOptions) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     return;
   }
 
@@ -3417,7 +3811,7 @@ TEST_P(InformationSchemaTest, DefaultModelOptions) {
 }
 
 TEST_P(InformationSchemaTest, DefaultModelColumns) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     return;
   }
 
@@ -3443,7 +3837,7 @@ TEST_P(InformationSchemaTest, DefaultModelColumns) {
 }
 
 TEST_P(InformationSchemaTest, DefaultModelColumnOptions) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     return;
   }
 
@@ -3485,7 +3879,7 @@ class SequenceInformationSchemaTest : public InformationSchemaTest {
   }
 
   absl::Status SetUpDatabase() override {
-    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    if (GetParam() == POSTGRESQL) {
       return SetSchema({R"(
             CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
           )",
@@ -3519,12 +3913,12 @@ class SequenceInformationSchemaTest : public InformationSchemaTest {
 INSTANTIATE_TEST_SUITE_P(
     PerDialectSequenceInformationSchemaTests, SequenceInformationSchemaTest,
     testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
-                    database_api::DatabaseDialect::POSTGRESQL),
+                    POSTGRESQL),
     [](const testing::TestParamInfo<SequenceInformationSchemaTest::ParamType>&
            info) { return database_api::DatabaseDialect_Name(info.param); });
 
 TEST_P(SequenceInformationSchemaTest, PGSequencesTable) {
-  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() != POSTGRESQL) {
     return;
   }
   auto results = Query("select * from information_schema.sequences");
@@ -3558,7 +3952,7 @@ TEST_P(SequenceInformationSchemaTest, GSQLSequencesTable) {
 }
 
 TEST_P(SequenceInformationSchemaTest, SequenceOptionsTable) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // PostgreSQL dialect doesn't have this table.
     return;
   }

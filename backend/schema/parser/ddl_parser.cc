@@ -39,6 +39,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
+#include "backend/common/utils.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/DDLParserTokenManager.h"
 #include "backend/schema/parser/DDLParserTree.h"
@@ -100,6 +101,21 @@ bool IsPrint(absl::string_view str) {
     if (!absl::ascii_isprint(*strp++)) {
       return false;
     }
+  }
+  return true;
+}
+
+bool UnescapeStringLiteral(absl::string_view val, std::string* result,
+                           std::string* error) {
+  if (val.size() <= 2) {
+    *error = absl::StrCat("Invalid string literal: ", val);
+    return false;
+  }
+  ABSL_CHECK_EQ(val[0], val[val.size() - 1]);
+  ZETASQL_VLOG(val[0] == '\'' || val[0] == '"');
+  if (!absl::CUnescape(absl::ClippedSubstr(val, 1, val.size() - 2), result)) {
+    *error = absl::StrCat("Cannot parse string literal: ", val);
+    return false;
   }
   return true;
 }
@@ -639,6 +655,8 @@ void VisitColumnTypeNode(const SimpleNode* column_type,
     } else if (type_name == "FLOAT32") {
       // FLOAT32 => FLOAT.
       type = ColumnDefinition::FLOAT;
+    } else if (type_name == "TOKENLIST") {
+      type = ColumnDefinition::TOKENLIST;
     } else if (!ColumnDefinition::Type_Parse(type_name, &type)) {
       ABSL_LOG(FATAL) << "Unrecognized type: " << type_name;
     }
@@ -863,9 +881,42 @@ ForeignKey::Action GetForeignKeyAction(const SimpleNode* node) {
   }
 }
 
+void VisitForeignKeyEnforcementNode(const SimpleNode* node,
+                                    ForeignKey* foreign_key,
+                                    std::vector<std::string>* errors) {
+  CheckNode(node, JJTENFORCEMENT);
+  if (!EmulatorFeatureFlags::instance().flags().enable_fk_enforcement_option) {
+    errors->push_back("Foreign key enforcement is not supported.");
+    return;
+  }
+  SimpleNode* child = GetChildNode(node, 0);
+  switch (child->getId()) {
+    case JJTENFORCED:
+      foreign_key->set_enforced(true);
+      return;
+    case JJTNOT_ENFORCED:
+      foreign_key->set_enforced(false);
+      // Relies on the fact that JJTON_DELETE, if exists, is parsed before this.
+      if (foreign_key->on_delete() != ForeignKey::ACTION_UNSPECIFIED &&
+          foreign_key->on_delete() != ForeignKey::NO_ACTION) {
+        errors->push_back(
+            "ON DELETE actions are not supported for NOT ENFORCED foreign "
+            "keys.");
+      }
+      return;
+    default:
+      // Should never happen since the parser rule only defines the two nodes
+      // above.
+      ABSL_LOG(FATAL) << "Unexpected foreign key enforcement: "
+                 << child->toString();  // Crash OK
+      return;
+  }
+}
+
 void VisitForeignKeyNode(const SimpleNode* node, ForeignKey* foreign_key,
                          std::vector<std::string>* errors) {
   CheckNode(node, JJTFOREIGN_KEY);
+  // Default enforcement is true, when not specified.
   foreign_key->set_enforced(true);
   for (int i = 0; i < node->jjtGetNumChildren(); i++) {
     SimpleNode* child = GetChildNode(node, i);
@@ -890,6 +941,9 @@ void VisitForeignKeyNode(const SimpleNode* node, ForeignKey* foreign_key,
         break;
       case JJTON_DELETE:
         foreign_key->set_on_delete(GetForeignKeyAction(child));
+        break;
+      case JJTENFORCEMENT:
+        VisitForeignKeyEnforcementNode(child, foreign_key, errors);
         break;
       default:
         // We can only get here if there is a bug in the grammar or parser.
@@ -972,6 +1026,72 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
   }
 }
 
+void VisitCreateFunctionNode(const SimpleNode* node,
+                             CreateFunction* create_function,
+                             bool is_or_replace, absl::string_view ddl_text,
+                             std::vector<std::string>* errors) {
+  if (!EmulatorFeatureFlags::instance().flags().enable_user_defined_functions) {
+    errors->push_back("User defined functions are not supported.");
+    return;
+  }
+  CheckNode(node, JJTCREATE_FUNCTION_STATEMENT);
+
+  const SimpleNode* name_node = GetFirstChildNode(node, JJTNAME);
+  ABSL_DCHECK(name_node);
+
+  bool prev_param_has_default = false;
+  const SimpleNode* param_list_node =
+      GetFirstChildNode(node, JJTFUNCTION_PARAMETER_LIST);
+  if (param_list_node) {
+    for (int i = 0; i < param_list_node->jjtGetNumChildren(); i++) {
+      SimpleNode* function_param_node = GetChildNode(param_list_node, i);
+      Function::Parameter* param = create_function->add_param();
+      param->set_name(ExtractTextForNode(
+          GetFirstChildNode(function_param_node, JJTNAME), ddl_text));
+      param->set_param_typename(ExtractTextForNode(
+          GetFirstChildNode(function_param_node, JJTFUNCTION_DATA_TYPE),
+          ddl_text));
+      SimpleNode* default_value_node =
+          GetFirstChildNode(function_param_node, JJTPARAM_DEFAULT_EXPRESSION);
+      if (default_value_node) {
+        prev_param_has_default = true;
+        param->set_default_value(
+            absl::StrCat(ExtractTextForNode(default_value_node, ddl_text)));
+      } else if (prev_param_has_default) {
+        errors->push_back(
+            "Function parameters must have default values if any previous "
+            "parameter has a default value.");
+        return;
+      }
+    }
+  }
+
+  create_function->set_function_name(GetQualifiedIdentifier(name_node));
+  create_function->set_function_kind(Function::FUNCTION);
+  create_function->set_language(Function::SQL);
+
+  if (is_or_replace) {
+    create_function->set_is_or_replace(true);
+  }
+
+  const SimpleNode* return_type_node = GetFirstChildNode(node, JJTRETURN_TYPE);
+  if (return_type_node) {
+    create_function->set_return_typename(ExtractTextForNode(
+        GetFirstChildNode(return_type_node, JJTFUNCTION_DATA_TYPE), ddl_text));
+  }
+
+  const SimpleNode* security_node = GetFirstChildNode(node, JJTSQL_SECURITY);
+  if (security_node) {
+    create_function->set_sql_security(Function::INVOKER);
+  }
+
+  const SimpleNode* definition_node =
+      GetFirstChildNode(node, JJTFUNCTION_DEFINITION);
+  ABSL_DCHECK(definition_node);
+  create_function->set_sql_body(
+      std::string(ExtractTextForNode(definition_node, ddl_text)));
+}
+
 void VisitCreateViewNode(const SimpleNode* node, CreateFunction* function,
                          bool is_or_replace, absl::string_view ddl_text,
                          std::vector<std::string>* errors) {
@@ -1035,6 +1155,110 @@ void VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index,
         break;
       default:
         ABSL_LOG(FATAL) << "Unexpected index info: " << child->toString();
+    }
+  }
+}
+
+void VisitTokenKeyListNode(
+    const SimpleNode* node,
+    google::protobuf::RepeatedPtrField<TokenColumnDefinition>* token_columns,
+    std::vector<std::string>* errors) {
+  CheckNode(node, JJTTOKEN_KEY_LIST);
+  ABSL_CHECK_GT(node->jjtGetNumChildren(), 0);
+
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* token_key = GetChildNode(node, i, JJTKEY_PART);
+    KeyPartClause* key_part = token_columns->Add()->mutable_token_column();
+    key_part->set_key_name(GetChildNode(token_key, 0, JJTPATH)->image());
+    SetSortOrder(token_key, key_part, errors);
+  }
+}
+
+void VisitSearchIndexOptionKeyValNode(const SimpleNode* node,
+                                      absl::string_view option_name,
+                                      OptionList* options,
+                                      std::vector<std::string>* errors) {
+  if (option_name != kSearchIndexOptionSortOrderShardingName &&
+      option_name != kSearchIndexOptionsDisableAutomaticUidName) {
+    errors->push_back(absl::StrCat("Option: ", option_name, " is unknown."));
+    return;
+  }
+  SetOption* option = options->Add();
+  option->set_option_name(option_name);
+  const SimpleNode* child = GetChildNode(node, 1);
+  switch (child->getId()) {
+    case JJTBOOL_TRUE_VAL:
+      option->set_bool_value(true);
+      break;
+    case JJTBOOL_FALSE_VAL:
+      option->set_bool_value(false);
+      break;
+    default: {
+      errors->push_back(
+          absl::StrCat("Unexpected value for option: ", option_name,
+                       ". "
+                       "Supported option values are true and false."));
+      break;
+    }
+  }
+}
+
+void VisitSearchIndexOptionsClause(const SimpleNode* node, OptionList* options,
+                                   std::vector<std::string>* errors) {
+  CheckNode(node, JJTOPTIONS_CLAUSE);
+  absl::flat_hash_set<std::string> options_names;
+  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
+    const auto* child = GetChildNode(node, i, JJTOPTION_KEY_VAL);
+    std::string option_name = CheckOptionKeyValNodeAndGetName(child);
+    if (options_names.contains(option_name)) {
+      errors->push_back(absl::StrCat("Duplicate option: ", option_name));
+      return;
+    }
+    options_names.insert(option_name);
+    VisitSearchIndexOptionKeyValNode(child, option_name, options, errors);
+  }
+}
+
+void VisitCreateSearchIndexNode(const SimpleNode* node,
+                                CreateSearchIndex* index,
+                                std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_SEARCH_INDEX_STATEMENT);
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTNAME:
+        index->set_index_name(GetQualifiedIdentifier(child));
+        break;
+      case JJTTABLE:
+        index->set_index_base_name(GetQualifiedIdentifier(child));
+        break;
+      case JJTTOKEN_KEY_LIST:
+        VisitTokenKeyListNode(child, index->mutable_token_column_definition(),
+                              errors);
+        break;
+      case JJTPARTITION_KEY:
+        VisitKeyNode(child, index->mutable_partition_by(), errors);
+        break;
+      case JJTORDER_BY_KEY:
+        VisitKeyNode(child, index->mutable_order_by(), errors);
+        break;
+      case JJTSTORED_COLUMN_LIST:
+        VisitStoredColumnListNode(
+            child, index->mutable_stored_column_definition(), errors);
+        break;
+      case JJTCREATE_INDEX_WHERE_CLAUSE:
+        VisitCreateIndexWhereClause(child,
+                                    index->mutable_null_filtered_column());
+        break;
+      case JJTINDEX_INTERLEAVE_CLAUSE:
+        VisitIndexInterleaveNode(child, index->mutable_interleave_in_table());
+        break;
+      case JJTOPTIONS_CLAUSE:
+        VisitSearchIndexOptionsClause(child, index->mutable_set_options(),
+                                      errors);
+        break;
+      default:
+        ABSL_LOG(FATAL) << "Unexpected search index info: " << child->toString();
     }
   }
 }
@@ -1129,21 +1353,6 @@ void VisitChangeStreamForClause(const SimpleNode* node,
       ABSL_LOG(FATAL) << "Unexpected change stream for clause: "
                  << child->toString();
   }
-}
-
-bool UnescapeStringLiteral(absl::string_view val, std::string* result,
-                           std::string* error) {
-  if (val.size() <= 2) {
-    *error = absl::StrCat("Invalid string literal: ", val);
-    return false;
-  }
-  ABSL_CHECK_EQ(val[0], val[val.size() - 1]);
-  ZETASQL_VLOG(val[0] == '\'' || val[0] == '"');
-  if (!absl::CUnescape(absl::ClippedSubstr(val, 1, val.size() - 2), result)) {
-    *error = absl::StrCat("Cannot parse string literal: ", val);
-    return false;
-  }
-  return true;
 }
 
 // Build a string representing a basic logical error for the given node.
@@ -2101,6 +2310,10 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       VisitRenameTableNode(stmt, statement->mutable_rename_table(), errors);
       break;
     }
+    case JJTCREATE_SEARCH_INDEX_STATEMENT:
+      VisitCreateSearchIndexNode(stmt, statement->mutable_create_search_index(),
+                                 errors);
+      break;
     case JJTCREATE_CHANGE_STREAM_STATEMENT:
       VisitCreateChangeStreamNode(
           stmt, statement->mutable_create_change_stream(), errors);
@@ -2111,8 +2324,10 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       break;
     case JJTDROP_STATEMENT: {
       const SimpleNode* drop_stmt = GetChildNode(stmt, 0);
-      std::string name =
-          GetQualifiedIdentifier(GetFirstChildNode(stmt, JJTNAME));
+      const SimpleNode* name_node = GetFirstChildNode(stmt, JJTNAME);
+      std::string name;
+        name = GetQualifiedIdentifier(name_node);
+
       switch (drop_stmt->getId()) {
         case JJTTABLE:
           if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
@@ -2121,6 +2336,12 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
           statement->mutable_drop_table()->set_table_name(name);
           break;
         case JJTINDEX:
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_index()->set_existence_modifier(IF_EXISTS);
+          }
+          statement->mutable_drop_index()->set_index_name(name);
+          break;
+        case JJTSEARCH_INDEX:
           if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
             statement->mutable_drop_index()->set_existence_modifier(IF_EXISTS);
           }
@@ -2138,6 +2359,21 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
                 IF_EXISTS);
           }
           statement->mutable_drop_function()->set_function_kind(Function::VIEW);
+          statement->mutable_drop_function()->set_function_name(name);
+          break;
+        case JJTFUNCTION:
+          if (!EmulatorFeatureFlags::instance()
+                   .flags()
+                   .enable_user_defined_functions) {
+            errors->push_back("User defined functions are not supported.");
+            return;
+          }
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_function()->set_existence_modifier(
+                IF_EXISTS);
+          }
+          statement->mutable_drop_function()->set_function_kind(
+              Function::FUNCTION);
           statement->mutable_drop_function()->set_function_name(name);
           break;
         case JJTMODEL: {
@@ -2213,6 +2449,11 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
         case JJTCREATE_SCHEMA_STATEMENT:
           VisitCreateSchemaNode(actual_stmt, statement->mutable_create_schema(),
                                 errors);
+          break;
+        case JJTCREATE_FUNCTION_STATEMENT:
+          VisitCreateFunctionNode(actual_stmt,
+                                  statement->mutable_create_function(),
+                                  has_or_replace, ddl_text, errors);
           break;
         default:
           ABSL_LOG(FATAL) << "Unexpected statement: " << stmt->toString();

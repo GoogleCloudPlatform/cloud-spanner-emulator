@@ -107,11 +107,12 @@ void create_statement() #void :
     | create_proto_bundle_statement()
     | create_table_statement()
     | create_index_statement()
-
+    | create_search_index_statement()
     | create_or_replace_statement()
     | create_change_stream_statement()
     | create_sequence_statement()
     | create_role_statement()
+
   )
 }
 
@@ -156,7 +157,72 @@ void create_or_replace_statement() :
       create_view_statement()
     | create_model_statement()
     | create_schema_statement()
+    | create_function_statement()
+
   )
+}
+
+void function_data_type() :
+{}
+{
+      <ARRAY> "<" function_data_type() ">"
+    | <BOOL>
+    | <BYTES> ["(" column_length() ")"]
+    | <ENUM>
+    | <JSON>
+    | <INT64>
+    | <NUMERIC>
+    | <FLOAT32>
+    | <FLOAT64>
+    | <PROTO>
+    | <STRING> ["(" column_length() ")"]
+    | <STRUCT> ( "<" struct_fields() ">" | "<>" )
+    | <TIMESTAMP>
+}
+
+void literal_value() :
+{}
+{
+      <INTEGER_LITERAL>
+    | <NUMERIC> any_string_literal()
+    | any_string_literal()
+    | <TRUEE>
+    | <FALSEE>
+    | <TIMESTAMP> any_string_literal()
+    | "[" [ literal_value() ( "," literal_value() )* ] "]"
+    | <ARRAY> [ "<" function_data_type() ">" ] "[" [ literal_value() ( "," literal_value() )* ] "]"
+    | "(" expression() ")"
+    | <STRUCT> "<" struct_fields() ">" "(" [ expression() ( "," expression() )* ] ")"
+    | <JSON> any_string_literal()
+}
+
+void literal_value_or_null() :
+{}
+{
+  literal_value() | <NULLL>
+}
+
+void function_parameter_list() :
+{}
+{
+  function_param() ( "," function_param() )*
+}
+
+void function_param() :
+{}
+{
+  identifier() #name function_data_type() [ <DEFAULTT> literal_value_or_null() #param_default_expression ]
+}
+
+void create_function_statement() :
+{}
+{
+  <FUNCTION>
+  qualified_identifier() #name
+  "(" [ function_parameter_list() ] ")"
+  [ <RETURNS> function_data_type() #return_type ]
+  [ <SQL> <SECURITY> sql_security() ]
+  <AS> "(" expression() #function_definition ")"
 }
 
 void alter_index_statement() :
@@ -258,7 +324,7 @@ void column_type() :
   | <JSON>
   | <ARRAY> "<" column_type() ">"
       [ "(" <VECTOR_LENGTH> "="">" <INTEGER_LITERAL> #vector_length ")"]
-
+  | <TOKENLIST>
   | <STRUCT> ( "<" struct_fields() ">" | "<>" )
   | dotted_path()
 }
@@ -309,6 +375,14 @@ void foreign_key() :
   <REFERENCES> qualified_identifier() #referenced_table
     "(" identifier_list() #referenced_columns ")"
   [ <ON> <DELETE> referential_action() #on_delete ]
+  [ enforcement() ]
+}
+
+void enforcement() :
+{}
+{
+  <ENFORCED> #enforced
+    | <NOT> <ENFORCED> #not_enforced
 }
 
 void referential_action() :
@@ -384,6 +458,45 @@ void create_index_statement() :
   [ LOOKAHEAD(2) "," index_interleave_clause() ]
 }
 
+void create_search_index_statement() :
+{}
+{
+  <SEARCH> <INDEX> qualified_identifier() #name
+  <ON> qualified_identifier() #table
+  token_key_list()
+  [ <STORING> stored_column_list() ]
+  [ <PARTITION> <BY> partition_key() ]
+  [ <ORDER> <BY> order_by_key() ]
+  [ <WHERE> create_index_where_clause() ]
+  [ LOOKAHEAD(2) "," index_interleave_clause() ]
+  [ options_clause() ]
+}
+
+void token_key_list() :
+{}
+{
+  "("
+    [ key_part()
+      ("," key_part() )*
+    ]
+  ")"
+}
+
+void partition_key() :
+{}
+{
+  key_part()
+    ( LOOKAHEAD(3, {(getToken(3) == nullptr || getToken(3)->kind != IN)})
+    "," key_part() )*
+}
+
+void order_by_key() :
+{}
+{
+  key_part()
+  ( LOOKAHEAD(3, {(getToken(3) == nullptr || getToken(3)->kind != IN)})
+    "," key_part() )*
+}
 
 void create_index_where_clause() :
 {}
@@ -461,6 +574,7 @@ void target_type():
   | <CHANGE> <STREAM> #change_stream
   | <VIEW> #view
   | <SEQUENCE> #sequence
+
 }
 
 void privilege_target():
@@ -591,6 +705,7 @@ void statement_tokens() :
   | ")" )+
 }
 
+
 void if_not_exists() :
 {}
 {
@@ -633,15 +748,18 @@ void drop_statement() :
   (
     ( <TABLE> #table [ if_exists() ]
       | <INDEX> #index [ if_exists() ]
-
+      | <SEARCH> <INDEX> #search_index [ if_exists() ]
       | <VIEW> #view [ if_exists() ]
+      | <FUNCTION> #function [ if_exists() ]
       | <CHANGE> <STREAM> #change_stream
       | <ROLE> #role
       | <SEQUENCE> #sequence [ if_exists() ]
       | <MODEL> #model [ if_exists() ]
       | <SCHEMA> #schema [ if_exists() ]
+
     ) qualified_identifier() #name
     | <PROTO> #proto_bundle <BUNDLE> #name
+
   )
 }
 
@@ -658,6 +776,7 @@ void alter_statement() #void :
     | alter_sequence_statement()
     | alter_model_statement()
     | alter_schema_statement()
+
   )
 }
 

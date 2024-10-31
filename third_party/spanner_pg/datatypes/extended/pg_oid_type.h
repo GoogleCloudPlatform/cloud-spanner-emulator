@@ -51,6 +51,9 @@ const zetasql::ArrayType* GetPgOidArrayType();
 // Creates a zetasql::Value from an uint32_t.
 absl::StatusOr<zetasql::Value> CreatePgOidValue(uint32_t oid);
 
+// Creates a PG.OID zetasql::Value that is null.
+zetasql::Value NullPgOid();
+
 // Retrieves int64_t representation from the ZetaSQL `value`.
 // Returns error if `value` doesn't contain non-NULL value of PG.OID.
 absl::StatusOr<int64_t> GetPgOidValue(const zetasql::Value& value);

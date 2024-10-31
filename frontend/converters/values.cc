@@ -36,6 +36,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "absl/time/time.h"
+#include "backend/query/search/tokenizer.h"
 #include "common/constants.h"
 #include "common/errors.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
@@ -53,6 +54,7 @@ namespace frontend {
 
 namespace {
 
+using backend::query::search::TokenListFromBytes;
 using google::spanner::v1::TypeAnnotationCode;
 using postgres_translator::spangres::datatypes::CreatePgJsonbValue;
 using postgres_translator::spangres::datatypes::CreatePgNumericValue;
@@ -307,6 +309,18 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
       return zetasql::values::Json(std::move(status_or_json.value()));
     }
 
+    case zetasql::TypeKind::TYPE_TOKENLIST: {
+      if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
+        return error::ValueProtoTypeMismatch(value_pb.DebugString(),
+                                             type->DebugString());
+      }
+      std::string bytes;
+      if (!absl::Base64Unescape(value_pb.string_value(), &bytes)) {
+        return error::CouldNotParseStringAsBytes(value_pb.string_value());
+      }
+      return TokenListFromBytes(bytes);
+    }
+
     case zetasql::TypeKind::TYPE_ARRAY: {
       if (value_pb.kind_case() != google::protobuf::Value::kListValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
@@ -512,6 +526,12 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
       std::string strvalue;
       absl::CopyCordToString(value.ToCord(), &strvalue);
       absl::Base64Escape(strvalue, value_pb.mutable_string_value());
+      break;
+    }
+
+    case zetasql::TYPE_TOKENLIST: {
+      absl::Base64Escape(value.tokenlist_value().GetBytes(),
+                         value_pb.mutable_string_value());
       break;
     }
 

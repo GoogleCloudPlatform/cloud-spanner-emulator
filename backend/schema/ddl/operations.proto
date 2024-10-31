@@ -46,6 +46,7 @@ message DDLStatement {
     CreateIndex create_index = 13;
     AlterIndex alter_index = 15;
     DropIndex drop_index = 16;
+    CreateSearchIndex create_search_index = 76;
 
     // Change Stream statements.
     CreateChangeStream create_change_stream = 56;
@@ -168,7 +169,7 @@ message ColumnDefinition {
     NUMERIC = 19;
     JSON = 20;
     PG_NUMERIC = 21;
-
+    TOKENLIST = 22;
     PG_JSONB = 24;
     STRUCT = 26;
   }
@@ -275,6 +276,7 @@ message Function {
   enum Kind {
     INVALID_KIND = 0;
     VIEW = 1;
+    FUNCTION = 2;
   }
 
   enum Language {
@@ -286,6 +288,25 @@ message Function {
     UNSPECIFIED_SQL_SECURITY = 0;
     INVOKER = 2;
   }
+
+  message Parameter {
+    optional string name = 1;
+    optional string param_typename = 2;
+    optional string default_value = 3;
+  }
+
+  enum Determinism {
+    UNSPECIFIED_DETERMINISM = 0;
+    // Always returns the same result when passed the same arguments.
+    DETERMINISTIC = 1;
+    // Within one run of a query statement, the function will consistently
+    // return the same result for the same argument values. However, the result
+    // could change across two runs.
+    NOT_DETERMINISTIC_STABLE = 2;
+    // The function does not always return the same result when passed the same
+    // arguments, even within the same run of a query statement.
+    NOT_DETERMINISTIC_VOLATILE = 3;
+  }
 }
 
 message CreateFunction {
@@ -293,9 +314,12 @@ message CreateFunction {
   optional Function.Kind function_kind = 3;
   optional bool is_or_replace = 4;
   optional Function.SqlSecurity sql_security = 5;
+  repeated Function.Parameter param = 6;
+  optional string return_typename = 7;
   optional string sql_body = 9;
   optional SQLExpressionOrigin sql_body_origin = 12;
   optional Function.Language language = 10;
+  optional Function.Determinism determinism = 11;
 }
 
 message DropFunction {
@@ -422,6 +446,7 @@ message CreateTable {
   repeated ForeignKey foreign_key = 10;
   repeated CheckConstraint check_constraint = 11;
   optional InterleaveClause interleave_clause = 7;
+
   optional RowDeletionPolicy row_deletion_policy = 9;
   // How to handle creation if the table already exists.
   optional ExistenceModifier existence_modifier = 13;
@@ -574,6 +599,7 @@ message AlterTable {
     AddColumn add_column = 3;
     string drop_column = 4;
     AlterColumn alter_column = 5;
+
     SetInterleaveClause set_interleave_clause = 18;
     SetOnDelete set_on_delete = 10;
     RowDeletionPolicy add_row_deletion_policy = 11;
@@ -785,6 +811,31 @@ message DropIndex {
   optional ExistenceModifier existence_modifier = 2;
 }
 
+message TokenColumnDefinition {
+  // Required.
+  optional KeyPartClause token_column = 1;
+  repeated SetOption set_options = 2;
+}
+
+message CreateSearchIndex {
+  // Required.
+  optional string index_name = 1;
+  // Required.
+  optional string index_base_name = 2;
+  // Each column here corresponds to one token index per secondary index.
+  // They should exist in the base table already.
+  repeated TokenColumnDefinition token_column_definition = 3;
+
+  repeated KeyPartClause partition_by = 4;
+  // Normally there will be at most a single order_by column listed here, but
+  // if the user provides their own UID column, there could be up to two.
+  repeated KeyPartClause order_by = 5;
+  repeated string null_filtered_column = 6;
+  optional string interleave_in_table = 7;
+  repeated StoredColumnDefinition stored_column_definition = 8;
+  repeated SetOption set_options = 9;
+  optional bool null_filtered = 10;
+}
 
 message DDLTimeLengthProto {
   enum Unit {

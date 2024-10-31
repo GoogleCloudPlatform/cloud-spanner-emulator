@@ -16,7 +16,7 @@
 
 #include "backend/schema/catalog/schema.h"
 
-#include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -27,24 +27,30 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/time/clock.h"
-#include "absl/time/time.h"
 #include "backend/schema/builders/change_stream_builder.h"
 #include "backend/schema/builders/column_builder.h"
 #include "backend/schema/builders/database_options_builder.h"
 #include "backend/schema/builders/index_builder.h"
+#include "backend/schema/builders/named_schema_builder.h"
 #include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
+#include "backend/schema/builders/udf_builder.h"
 #include "backend/schema/builders/view_builder.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/database_options.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
+#include "backend/schema/catalog/view.h"
 #include "backend/schema/printer/print_ddl.h"
+#include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "tests/common/schema_constructor.h"
@@ -56,9 +62,11 @@ namespace emulator {
 namespace backend {
 namespace {
 
+using absl::StatusCode;
 using test::ScopedEmulatorFeatureFlagsSetter;
 using ::testing::ElementsAre;
 using ::zetasql_base::testing::IsOkAndHolds;
+using ::zetasql_base::testing::StatusIs;
 
 class SchemaTest : public testing::Test {
  public:
@@ -67,6 +75,7 @@ class SchemaTest : public testing::Test {
         base_schema_(test::CreateSchemaWithOneTable(type_factory_.get())),
         flag_setter_({
             .enable_fk_delete_cascade_action = true,
+            .enable_user_defined_functions = true,
         }) {}
 
   void SetUp() override {
@@ -372,9 +381,8 @@ TEST_F(SchemaTest, KeyColumnBuilder) {
   kb2.set_column(c2.get());
   auto k2 = kb2.build();
   EXPECT_THAT(k2->Validate(&context_),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::HasSubstr("is part of the primary key")));
+              StatusIs(StatusCode::kInvalidArgument,
+                       testing::HasSubstr("is part of the primary key")));
 }
 
 TEST_F(SchemaTest, TableBuilder) {
@@ -626,6 +634,169 @@ TEST_F(SchemaTest, ViewBuilder) {
   EXPECT_THAT(view->dependencies(), testing::ElementsAreArray({test_table}));
   EXPECT_THAT(view->columns(), testing::ElementsAreArray({testing::FieldsAre(
                                    "c1", type_factory_->get_int64())}));
+}
+
+TEST_F(SchemaTest, NamedSchemaBuilder) {
+  NamedSchema::Builder nsb;
+  nsb.set_name("ns1");
+  nsb.set_id("ns1");
+
+  Table::Builder table_builder;
+  auto c1 = column_builder("c1", table_builder.get()).build();
+  auto c2 = column_builder("c2", table_builder.get()).build();
+  auto k1 = KeyColumn::Builder().set_column(c1.get()).build();
+  auto k2 = KeyColumn::Builder().set_column(c2.get()).build();
+  auto t1 = table_builder.add_column(c1.get())
+                .add_column(c2.get())
+                .add_key_column(k1.get())
+                .add_key_column(k2.get())
+                .build();
+  nsb.add_table(t1.get());
+
+  View::Builder view_builder;
+  view_builder.set_name("V1");
+  view_builder.set_sql_security(View::SqlSecurity::INVOKER);
+  view_builder.set_sql_body("SELECT t.int64_col AS c1 FROM test_table t");
+  view_builder.add_column(View::Column{"c1", type_factory_->get_int64()});
+  auto test_table = base_schema_->FindTable("test_table");
+  ASSERT_TRUE(test_table != nullptr);
+  view_builder.add_dependency(test_table);
+  auto view = view_builder.build();
+  nsb.add_view(view.get());
+
+  Sequence::Builder sequence_builder;
+  sequence_builder.set_name("S1");
+  sequence_builder.set_id("S1");
+  auto sequence = sequence_builder.build();
+  nsb.add_sequence(sequence.get());
+
+  Index::Builder index_builder;
+  index_builder.set_name("I1");
+  auto index = index_builder.build();
+  nsb.add_index(index.get());
+
+  auto named_schema = nsb.build();
+  ZETASQL_EXPECT_OK(named_schema->Validate(&context_));
+  EXPECT_EQ(named_schema->Name(), "ns1");
+  EXPECT_EQ(named_schema->id(), "ns1");
+  EXPECT_THAT(named_schema->tables(), testing::ElementsAreArray({t1.get()}));
+  EXPECT_THAT(named_schema->views(), testing::ElementsAreArray({view.get()}));
+  EXPECT_THAT(named_schema->sequences(),
+              testing::ElementsAreArray({sequence.get()}));
+  EXPECT_THAT(named_schema->indexes(),
+              testing::ElementsAreArray({index.get()}));
+}
+
+// TODO Once dependency tracking is added, test here.
+TEST_F(SchemaTest, UdfBuilder) {
+  // Valid UDF with simple addition
+  Udf::Builder udf_builder_simple_add;
+  udf_builder_simple_add.set_name("udf_simple_add");
+  udf_builder_simple_add.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_simple_add.set_sql_body(
+      "CREATE FUNCTION udf_simple_add(a INT64, b INT64) RETURNS INT64 AS (a + "
+      "b)");
+  auto udf_simple_add = udf_builder_simple_add.build();
+  ZETASQL_EXPECT_OK(udf_simple_add->Validate(&context_));
+  EXPECT_EQ(udf_simple_add->Name(), "udf_simple_add");
+  EXPECT_EQ(udf_simple_add->body(),
+            "CREATE FUNCTION udf_simple_add(a INT64, b INT64) RETURNS INT64 AS "
+            "(a + b)");
+  EXPECT_EQ(udf_simple_add->security(), Udf::SqlSecurity::INVOKER);
+
+  // UDF with missing parameters (should fail validation due to missing name and
+  // body)
+  Udf::Builder udf_builder_missing_params;
+  auto udf_missing_params = udf_builder_missing_params.build();
+  EXPECT_THAT(
+      udf_missing_params->Validate(&context_),
+      StatusIs(StatusCode::kInternal, testing::HasSubstr("RET_CHECK failure")));
+
+  // UDF with invalid name (starts with underscore)
+  Udf::Builder udf_builder_invalid_name;
+  udf_builder_invalid_name.set_name("_udf_invalid");
+  udf_builder_invalid_name.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_invalid_name.set_sql_body(
+      "CREATE FUNCTION _udf_invalid(a INT64, b INT64) RETURNS INT64 AS (a + "
+      "b)");
+  auto udf_invalid_name = udf_builder_invalid_name.build();
+  EXPECT_THAT(udf_invalid_name->Validate(&context_),
+              StatusIs(StatusCode::kInvalidArgument,
+                       testing::HasSubstr("Udf name not valid: _udf_invalid")));
+
+  // UDF with no name
+  Udf::Builder udf_builder_no_name;
+  udf_builder_no_name.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_no_name.set_sql_body(
+      "CREATE FUNCTION udf_no_name(a INT64, b INT64) RETURNS INT64 AS (a + b)");
+  auto udf_no_name = udf_builder_no_name.build();
+  // Handled in the parsers so a ZETASQL_RET_CHECK failure is expected.
+  EXPECT_THAT(
+      udf_no_name->Validate(&context_),
+      StatusIs(StatusCode::kInternal, testing::HasSubstr("RET_CHECK failure")));
+
+  // UDF with no body
+  Udf::Builder udf_builder_no_body;
+  udf_builder_no_body.set_name("udf_no_body");
+  udf_builder_no_body.set_sql_security(Udf::SqlSecurity::INVOKER);
+  auto udf_no_body = udf_builder_no_body.build();
+  // Handled in the parsers so a ZETASQL_RET_CHECK failure is expected.
+  EXPECT_THAT(
+      udf_no_body->Validate(&context_),
+      StatusIs(StatusCode::kInternal, testing::HasSubstr("RET_CHECK failure")));
+
+  // UDF with reserved keyword as name, needs to be quoted
+  Udf::Builder udf_builder_reserved_keyword;
+  udf_builder_reserved_keyword.set_name("function");
+  udf_builder_reserved_keyword.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_reserved_keyword.set_sql_body(
+      "CREATE FUNCTION `function`(a INT64) RETURNS INT64 AS (a * 2)");
+  auto udf_reserved_keyword = udf_builder_reserved_keyword.build();
+  ZETASQL_EXPECT_OK(udf_reserved_keyword->Validate(&context_));
+  EXPECT_EQ(udf_reserved_keyword->Name(), "function");
+
+  // UDF with name starting with a number, needs to be quoted
+  Udf::Builder udf_builder_number_start;
+  udf_builder_number_start.set_name("1udf");
+  udf_builder_number_start.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_number_start.set_sql_body(
+      "CREATE FUNCTION `1udf`(a INT64) RETURNS INT64 AS (a + 1)");
+  auto udf_number_start = udf_builder_number_start.build();
+  ZETASQL_EXPECT_OK(udf_number_start->Validate(&context_));
+  EXPECT_EQ(udf_number_start->Name(), "1udf");
+
+  // UDF with uppercase name
+  Udf::Builder udf_builder_uppercase;
+  udf_builder_uppercase.set_name("UDF_UPPERCASE");
+  udf_builder_uppercase.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_uppercase.set_sql_body(
+      "CREATE FUNCTION UDF_UPPERCASE(a INT64) RETURNS INT64 AS (a - 1)");
+  auto udf_uppercase = udf_builder_uppercase.build();
+  ZETASQL_EXPECT_OK(udf_uppercase->Validate(&context_));
+  EXPECT_EQ(udf_uppercase->Name(), "UDF_UPPERCASE");
+
+  // UDF calling another UDF
+  // First, define the helper UDF
+  Udf::Builder udf_builder_helper;
+  udf_builder_helper.set_name("helper_udf");
+  udf_builder_helper.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_helper.set_sql_body(
+      "CREATE FUNCTION helper_udf(a INT64) RETURNS INT64 AS (a * a)");
+  auto udf_helper = udf_builder_helper.build();
+  ZETASQL_EXPECT_OK(udf_helper->Validate(&context_));
+  EXPECT_EQ(udf_helper->Name(), "helper_udf");
+
+  // Now, define a UDF that calls the helper UDF
+  Udf::Builder udf_builder_caller;
+  udf_builder_caller.set_name("caller_udf");
+  udf_builder_caller.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_caller.set_sql_body(
+      "CREATE FUNCTION caller_udf(a INT64) RETURNS INT64 AS (helper_udf(a) + "
+      "1)");
+  udf_builder_caller.add_dependency(udf_helper.get());
+  auto udf_caller = udf_builder_caller.build();
+  ZETASQL_EXPECT_OK(udf_caller->Validate(&context_));
+  EXPECT_EQ(udf_caller->Name(), "caller_udf");
 }
 
 // TODO: GetDatabaseDDL needs more robust testing with
@@ -1620,6 +1791,41 @@ ALTER TABLE vanishing_data ALTER TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date
   PRIMARY KEY(id)
 ) TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date)")));
 }
+
+TEST_F(SchemaTest, PrintDDLStatementsTestUDFsWithDependencies) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE FUNCTION udf_base(x INT64 DEFAULT 1) RETURNS INT64 SQL SECURITY INVOKER AS (x + 1))",
+           R"(CREATE FUNCTION udf_increment(x INT64) RETURNS INT64 SQL SECURITY INVOKER AS (udf_base(x) * 2))",
+           R"(CREATE TABLE T1 (id INT64 NOT NULL, val INT64, val_generated INT64 AS (udf_increment(val)) STORED) PRIMARY KEY(id))",
+           R"(CREATE FUNCTION udf_complex(x INT64 DEFAULT NULL) RETURNS INT64 SQL SECURITY INVOKER AS (udf_increment(x) + 3))",
+           R"(CREATE TABLE T2 (id INT64 NOT NULL, val INT64 DEFAULT (udf_complex(5))) PRIMARY KEY(id))",
+           R"(CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T1.id, udf_base(T1.val) AS val_plus_one FROM T1)",
+           R"(CREATE VIEW V2 SQL SECURITY INVOKER AS SELECT V1.id, V1.val_plus_one, udf_complex(V1.val_plus_one) AS complex_val FROM V1)"},
+          type_factory_.get()));
+
+  EXPECT_THAT(
+      PrintDDLStatements(schema.get()),
+      IsOkAndHolds(ElementsAre(
+          "CREATE FUNCTION udf_base(x INT64 DEFAULT 1) RETURNS INT64 SQL "
+          "SECURITY INVOKER AS (x + 1)",
+          "CREATE FUNCTION udf_increment(x INT64) RETURNS INT64 SQL SECURITY "
+          "INVOKER AS (udf_base(x) * 2)",
+          "CREATE TABLE T1 (\n  id INT64 NOT NULL,\n  val INT64,\n  "
+          "val_generated INT64 AS (udf_increment(val)) STORED,\n) PRIMARY "
+          "KEY(id)",
+          "CREATE FUNCTION udf_complex(x INT64 DEFAULT NULL) RETURNS INT64 SQL "
+          "SECURITY INVOKER AS (udf_increment(x) + 3)",
+          "CREATE TABLE T2 (\n  id INT64 NOT NULL,\n  val INT64 DEFAULT "
+          "(udf_complex(5)),\n) PRIMARY KEY(id)",
+          "CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T1.id, "
+          "udf_base(T1.val) AS val_plus_one FROM T1",
+          "CREATE VIEW V2 SQL SECURITY INVOKER AS SELECT V1.id, "
+          "V1.val_plus_one, udf_complex(V1.val_plus_one) AS complex_val FROM "
+          "V1")));
+}
+
 }  // namespace
 }  // namespace backend
 }  // namespace emulator

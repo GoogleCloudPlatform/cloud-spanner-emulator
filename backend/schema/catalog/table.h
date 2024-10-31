@@ -24,11 +24,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/type.h"
-#include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "absl/strings/match.h"
 #include "absl/strings/substitute.h"
 #include "absl/types/span.h"
 #include "backend/common/case.h"
@@ -40,7 +37,6 @@
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -179,6 +175,10 @@ class Table : public SchemaNode {
   // Finds an index on the table by its name. Name comparison is
   // case-insensitive.
   const Index* FindIndex(const std::string& index_name) const;
+
+  // Finds an indexes fully qualified name given a name (qualified or not).
+  std::string FindIndexQualifiedName(
+      const std::string& qualified_or_unqualified_name) const;
 
   // Finds a change stream on the table by its name. Name comparison is
   // case-insensitive.

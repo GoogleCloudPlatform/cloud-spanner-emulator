@@ -22,10 +22,13 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "zetasql/public/type.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
 #include "absl/memory/memory.h"
+#include "absl/strings/match.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
@@ -137,6 +140,16 @@ class Column::Builder {
     instance_->sequences_used_.reserve(sequences_used.size());
     for (const SchemaNode* node : sequences_used) {
       instance_->sequences_used_.push_back(node);
+    }
+    return *this;
+  }
+
+  Builder& set_udf_dependencies(
+      const absl::flat_hash_set<const SchemaNode*>& udf_dependencies) {
+    instance_->udf_dependencies_.clear();
+    instance_->udf_dependencies_.reserve(udf_dependencies.size());
+    for (const SchemaNode* node : udf_dependencies) {
+      instance_->udf_dependencies_.push_back(node);
     }
     return *this;
   }
@@ -263,6 +276,16 @@ class Column::Editor {
     instance_->sequences_used_.reserve(sequences_used.size());
     for (const SchemaNode* node : sequences_used) {
       instance_->sequences_used_.push_back(node);
+    }
+    return *this;
+  }
+
+  Editor& set_udf_dependencies(
+      const absl::flat_hash_set<const SchemaNode*>& udf_dependencies) {
+    instance_->udf_dependencies_.clear();
+    instance_->udf_dependencies_.reserve(udf_dependencies.size());
+    for (const SchemaNode* udf : udf_dependencies) {
+      instance_->udf_dependencies_.push_back(udf);
     }
     return *this;
   }

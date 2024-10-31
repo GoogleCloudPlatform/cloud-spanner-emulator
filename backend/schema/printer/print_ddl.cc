@@ -23,6 +23,8 @@
 #include <string>
 #include <vector>
 
+#include "zetasql/public/function_signature.h"
+#include "zetasql/public/options.pb.h"
 #include "zetasql/public/strings.h"
 #include "zetasql/public/types/struct_type.h"
 #include "zetasql/public/types/type.h"
@@ -32,8 +34,11 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
+#include "absl/strings/strip.h"
 #include "absl/strings/substitute.h"
 #include "absl/types/span.h"
+#include "backend/common/utils.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
@@ -44,9 +49,11 @@
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_node.h"
+#include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/parser/ddl_reserved_words.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
@@ -390,21 +397,76 @@ std::string PrintTable(const Table* table) {
   return table_string;
 }
 
-void TopologicalOrderViews(const View* view,
-                           absl::flat_hash_set<const SchemaNode*>* visited,
-                           std::vector<const View*>* views) {
-  if (visited->find(view) != visited->end()) {
+// Moves the nodes with no dependencies to the front of the list.
+void TopologicalOrderSchemaNodes(
+    const SchemaNode* node, absl::flat_hash_set<const SchemaNode*>* visited,
+    std::vector<std::string>* statements) {
+  if (visited->find(node) != visited->end()) {
     return;
   }
-  visited->insert(view);
-  for (auto dependency : view->dependencies()) {
-    auto view_dep = dependency->As<const View>();
-    if (view_dep == nullptr) {
-      continue;
+  visited->insert(node);
+
+  if (const View* view = node->As<const View>(); view != nullptr) {
+    for (auto dependency : view->dependencies()) {
+      TopologicalOrderSchemaNodes(dependency, visited, statements);
     }
-    TopologicalOrderViews(view_dep, visited, views);
+    statements->push_back(PrintView(view));
   }
-  views->push_back(view);
+
+  if (const Table* table = node->As<const Table>(); table != nullptr) {
+    for (const Column* column : table->columns()) {
+      for (const Column* column_dep : column->dependent_columns()) {
+        TopologicalOrderSchemaNodes(column_dep->table(), visited, statements);
+      }
+      for (const SchemaNode* sequence_dep : column->sequences_used()) {
+        TopologicalOrderSchemaNodes(sequence_dep, visited, statements);
+      }
+      for (const SchemaNode* udf_dep : column->udf_dependencies()) {
+        TopologicalOrderSchemaNodes(udf_dep, visited, statements);
+      }
+      // Omitting indexes since their dependencies to UDFs are through columns.
+    }
+    for (const CheckConstraint* check_constraint : table->check_constraints()) {
+      for (const SchemaNode* udf_dep : check_constraint->udf_dependencies()) {
+        TopologicalOrderSchemaNodes(udf_dep, visited, statements);
+      }
+    }
+
+    statements->push_back(PrintTable(table));
+    std::vector<const Index*> indexes{table->indexes().begin(),
+                                      table->indexes().end()};
+    std::sort(indexes.begin(), indexes.end(),
+              [](const Index* i1, const Index* i2) {
+                return i1->Name() < i2->Name();
+              });
+    for (const Index* index : indexes) {
+      if (!index->is_managed()) {
+        statements->push_back(PrintIndex(index));
+      }
+    }
+  }
+
+  if (const Udf* udf = node->As<const Udf>(); udf != nullptr) {
+    for (const SchemaNode* udf_dep : udf->dependencies()) {
+      TopologicalOrderSchemaNodes(udf_dep, visited, statements);
+    }
+
+    statements->push_back(PrintUdf(udf));
+  }
+
+  if (const Sequence* sequence = node->As<const Sequence>();
+      sequence != nullptr) {
+      statements->push_back(PrintSequence(sequence));
+  }
+
+  if (const ChangeStream* change_stream = node->As<ChangeStream>();
+      change_stream != nullptr) {
+    statements->push_back(PrintChangeStream(change_stream));
+  }
+
+  if (const Model* model = node->As<const Model>(); model != nullptr) {
+    statements->push_back(PrintModel(model));
+  }
 }
 
 std::string PrintCheckConstraint(const CheckConstraint* check_constraint) {
@@ -460,6 +522,48 @@ std::string PrintSequence(const Sequence* sequence) {
   return sequence_string;
 }
 
+std::string PrintUdf(const Udf* udf) {
+  if (udf->body_origin().has_value()) {
+    return udf->body_origin().value();
+  }
+
+  std::string udf_string =
+      absl::Substitute("CREATE FUNCTION $0", PrintName(udf->Name()));
+
+  const zetasql::FunctionSignature* signature = udf->signature();
+  if (signature) {
+    const std::vector<zetasql::FunctionArgumentType>& arguments =
+        signature->arguments();
+    std::vector<std::string> arg_strings;
+
+    for (int i = 0; i < arguments.size(); ++i) {
+      const zetasql::FunctionArgumentType& arg = arguments[i];
+      std::string arg_string =
+          absl::StrCat(arg.argument_name(), " ",
+                       arg.type()->TypeName(zetasql::PRODUCT_EXTERNAL));
+      if (arg.HasDefault()) {
+        absl::StrAppend(&arg_string, " DEFAULT ",
+                        arg.GetDefault().value().GetSQLLiteral(
+                            zetasql::PRODUCT_EXTERNAL));
+      }
+
+      arg_strings.push_back(arg_string);
+    }
+
+    absl::StrAppend(&udf_string, "(", absl::StrJoin(arg_strings, ", "), ")");
+    absl::StrAppend(
+        &udf_string, " RETURNS ",
+        signature->result_type().type()->TypeName(zetasql::PRODUCT_EXTERNAL));
+  }
+
+  if (udf->security() == Udf::SqlSecurity::INVOKER) {
+    absl::StrAppend(&udf_string, " SQL SECURITY INVOKER");
+  }
+
+  absl::StrAppend(&udf_string, " AS (", udf->body(), ")");
+  return udf_string;
+}
+
 std::string PrintNamedSchema(const NamedSchema* named_schema) {
   return absl::Substitute("CREATE SCHEMA $0", PrintName(named_schema->Name()));
 }
@@ -496,45 +600,27 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
     statements.push_back(PrintProtoBundle(proto_bundle));
   }
 
-  // Print sequences
-  for (auto sequence : schema->sequences()) {
-      statements.push_back(PrintSequence(sequence));
-  }
-
-  // Print tables
-  for (auto table : schema->tables()) {
-    statements.push_back(PrintTable(table));
-    // Print indexes (sorted by name).
-    std::vector<const Index*> indexes{table->indexes().begin(),
-                                      table->indexes().end()};
-    std::sort(indexes.begin(), indexes.end(),
-              [](const Index* i1, const Index* i2) {
-                return i1->Name() < i2->Name();
-              });
-    for (auto index : indexes) {
-      if (!index->is_managed()) {
-        statements.push_back(PrintIndex(index));
-      }
-    }
-  }
-  for (auto change_stream : schema->change_streams()) {
-    statements.push_back(PrintChangeStream(change_stream));
-  }
-
-  // Print models
-  for (auto model : schema->models()) {
-    statements.push_back(PrintModel(model));
-  }
-
-  // Print views that depend on the tables/indexes.
+  // Print schema nodes while ensuring that dependencies are printed first.
   absl::flat_hash_set<const SchemaNode*> visited;
-  std::vector<const View*> views;
-  for (auto view : schema->views()) {
-    TopologicalOrderViews(view, &visited, &views);
+  for (const Sequence* sequence : schema->sequences()) {
+    TopologicalOrderSchemaNodes(sequence, &visited, &statements);
   }
-  for (auto view : views) {
-    statements.push_back(PrintView(view));
+  for (const Table* table : schema->tables()) {
+    TopologicalOrderSchemaNodes(table, &visited, &statements);
   }
+  for (const ChangeStream* change_stream : schema->change_streams()) {
+    TopologicalOrderSchemaNodes(change_stream, &visited, &statements);
+  }
+  for (const Model* model : schema->models()) {
+    TopologicalOrderSchemaNodes(model, &visited, &statements);
+  }
+  for (const View* view : schema->views()) {
+    TopologicalOrderSchemaNodes(view, &visited, &statements);
+  }
+  for (const Udf* udf : schema->udfs()) {
+    TopologicalOrderSchemaNodes(udf, &visited, &statements);
+  }
+
   return statements;
 }
 

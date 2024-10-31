@@ -57,7 +57,7 @@ absl::Status NamedSchemaValidator::Validate(const NamedSchema* named_schema,
     ZETASQL_RET_CHECK(!named_schema->postgresql_oid().has_value());
   }
   ZETASQL_RETURN_IF_ERROR(
-      GlobalSchemaNames::ValidateSchemaName("Schema", named_schema->name_));
+      GlobalSchemaNames::ValidateNamedSchemaName(named_schema->name_));
   return absl::OkStatus();
 }
 

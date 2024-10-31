@@ -16,7 +16,6 @@
 
 #include "common/feature_flags.h"
 
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
@@ -40,6 +39,8 @@ TEST(EmulatorFeatureFlags, Basic) {
       features.flags().enable_bit_reversed_positive_sequences_postgresql);
   EXPECT_TRUE(features.flags().enable_upsert_queries);
   EXPECT_TRUE(features.flags().enable_upsert_queries_with_returning);
+  EXPECT_FALSE(features.flags().enable_user_defined_functions);
+  EXPECT_FALSE(features.flags().enable_fk_enforcement_option);
 
   {
     EmulatorFeatureFlags::Flags flags;
@@ -51,6 +52,7 @@ TEST(EmulatorFeatureFlags, Basic) {
     flags.enable_bit_reversed_positive_sequences_postgresql = false;
     flags.enable_upsert_queries = false;
     flags.enable_upsert_queries_with_returning = false;
+    flags.enable_fk_enforcement_option = true;
 
     test::ScopedEmulatorFeatureFlagsSetter setter(flags);
     EXPECT_FALSE(features.flags().enable_check_constraint);
@@ -62,6 +64,7 @@ TEST(EmulatorFeatureFlags, Basic) {
         features.flags().enable_bit_reversed_positive_sequences_postgresql);
     EXPECT_FALSE(features.flags().enable_upsert_queries);
     EXPECT_FALSE(features.flags().enable_upsert_queries_with_returning);
+    EXPECT_TRUE(features.flags().enable_fk_enforcement_option);
   }
   EXPECT_TRUE(features.flags().enable_check_constraint);
   EXPECT_TRUE(features.flags().enable_column_default_values);
@@ -72,6 +75,7 @@ TEST(EmulatorFeatureFlags, Basic) {
       features.flags().enable_bit_reversed_positive_sequences_postgresql);
   EXPECT_TRUE(features.flags().enable_upsert_queries);
   EXPECT_TRUE(features.flags().enable_upsert_queries_with_returning);
+  EXPECT_FALSE(features.flags().enable_fk_enforcement_option);
 }
 
 TEST(EmulatorFeatureFlags, ProtosFlag) {

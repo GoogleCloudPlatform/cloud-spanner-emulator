@@ -18,8 +18,13 @@
 
 #include <string>
 
+#include "absl/status/status.h"
+#include "absl/strings/substitute.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_graph_editor.h"
+#include "backend/schema/graph/schema_node.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -52,6 +57,11 @@ absl::Status CheckConstraint::DeepClone(SchemaGraphEditor* editor,
   for (const Column*& column : dependent_columns_) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));
     column = schema_node->As<const Column>();
+  }
+
+  for (const SchemaNode*& dependency : udf_dependencies_) {
+    ZETASQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dependency));
+    dependency = cloned_dep;
   }
 
   return absl::OkStatus();

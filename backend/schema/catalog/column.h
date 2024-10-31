@@ -21,6 +21,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "zetasql/public/type.h"
 #include "absl/log/check.h"
@@ -28,10 +29,12 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
+#include "absl/types/span.h"
 #include "backend/common/case.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/sequence.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/graph/schema_node.h"
 #include "common/limits.h"
 #include "absl/status/status.h"
@@ -136,6 +139,10 @@ class Column : public SchemaNode {
 
   const std::vector<const SchemaNode*>& sequences_used() const {
     return sequences_used_;
+  }
+
+  absl::Span<const SchemaNode* const> udf_dependencies() const {
+    return udf_dependencies_;
   }
 
   // Returns the source column.
@@ -259,6 +266,9 @@ class Column : public SchemaNode {
 
   // List of sequences used by this column in its expression.
   std::vector<const SchemaNode*> sequences_used_;
+
+  // List of UDFs used by this column in its expression.
+  std::vector<const SchemaNode*> udf_dependencies_;
 
   // If a generated column is stored. Valid only if is_generated() is true.
   bool is_stored_ = false;

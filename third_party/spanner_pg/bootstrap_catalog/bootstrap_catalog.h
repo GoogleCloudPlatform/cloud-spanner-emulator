@@ -41,6 +41,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog_info.h"
+#include "third_party/spanner_pg/bootstrap_catalog/proc_changelist.h"
 #include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
@@ -262,8 +263,8 @@ class PgBootstrapCatalog {
   // Create a copy of original_proc with the updated arg types and return type.
   // Store the updated copy in updated_proc_by_oid_.
   void UpdateProc(const FormData_pg_proc_WithArgTypes& original_proc,
-                  const std::vector<Oid>& updated_arg_types,
-                  Oid updated_return_type);
+                  const PgProcSignature* updated_signature,
+                  uint16_t updated_default_arg_count);
 
   // Create a copy of original_operator with the updated arg types and return
   // type. Store the updated copy in updated_operator_by_oid_.

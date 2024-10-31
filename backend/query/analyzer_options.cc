@@ -23,6 +23,7 @@
 #include "zetasql/public/builtin_function_options.h"
 #include "zetasql/public/language_options.h"
 #include "zetasql/public/options.pb.h"
+#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/time/time.h"
 #include "common/constants.h"
 #include "common/feature_flags.h"
@@ -60,6 +61,7 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
   options.set_product_mode(zetasql::PRODUCT_EXTERNAL);
   options.SetEnabledLanguageFeatures({
       zetasql::FEATURE_EXTENDED_TYPES,
+      zetasql::FEATURE_FUNCTION_ARGUMENTS_WITH_DEFAULTS,
       zetasql::FEATURE_NAMED_ARGUMENTS,
       zetasql::FEATURE_NUMERIC_TYPE,
       zetasql::FEATURE_TABLESAMPLE,
@@ -78,6 +80,8 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_V_1_3_DML_RETURNING,
       zetasql::FEATURE_V_1_4_WITH_EXPRESSION,
       zetasql::FEATURE_TABLE_VALUED_FUNCTIONS,
+      zetasql::FEATURE_TOKENIZED_SEARCH,
+      zetasql::FEATURE_V_1_3_ADDITIONAL_STRING_FUNCTIONS,
       zetasql::FEATURE_V_1_4_SEQUENCE_ARG,
       zetasql::FEATURE_V_1_4_ENABLE_FLOAT_DISTANCE_FUNCTIONS,
       zetasql::FEATURE_V_1_4_DOT_PRODUCT,
@@ -113,7 +117,7 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance() {
   return options;
 }
 
-zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViews(
+zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
     DatabaseDialect dialect) {
   auto language_opts = MakeGoogleSqlLanguageOptions();
   if (dialect == DatabaseDialect::POSTGRESQL) {
@@ -124,6 +128,7 @@ zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViews(
   // Only CREATE VIEW and CREATE FUNCTION are supported in DDL.
   language_opts.SetSupportedStatementKinds({
       zetasql::RESOLVED_CREATE_VIEW_STMT,
+      zetasql::RESOLVED_CREATE_FUNCTION_STMT,
   });
   // VIEW defintions must be specified in strict name resolution mode.
   language_opts.set_name_resolution_mode(zetasql::NAME_RESOLUTION_STRICT);
@@ -146,6 +151,13 @@ zetasql::BuiltinFunctionOptions MakeGoogleSqlBuiltinFunctionOptions() {
       zetasql::FN_COSINE_DISTANCE_SPARSE_STRING,
       zetasql::FN_EUCLIDEAN_DISTANCE_SPARSE_INT64,
       zetasql::FN_EUCLIDEAN_DISTANCE_SPARSE_STRING,
+      // Exclude additional string functions not yet supported in Spanner since
+      // we have enabled FEATURE_V_1_3_ADDITIONAL_STRING_FUNCTIONS for SOUNDEX.
+      zetasql::FN_INSTR_STRING,
+      zetasql::FN_INSTR_BYTES,
+      zetasql::FN_TRANSLATE_STRING,
+      zetasql::FN_TRANSLATE_BYTES,
+      zetasql::FN_INITCAP_STRING,
   };
 
   for (const auto& exclude_function_id : exclude_function_ids) {

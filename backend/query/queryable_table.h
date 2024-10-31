@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "zetasql/public/catalog.h"
@@ -28,8 +29,8 @@
 #include "backend/access/read.h"
 #include "backend/query/queryable_column.h"
 #include "backend/schema/catalog/change_stream.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -47,12 +48,14 @@ class QueryableTable : public zetasql::Table {
       const backend::Table* table, RowReader* reader,
       std::optional<const zetasql::AnalyzerOptions> options = std::nullopt,
       zetasql::Catalog* catalog = nullptr,
-      zetasql::TypeFactory* type_factory = nullptr);
+      zetasql::TypeFactory* type_factory = nullptr, bool is_synonym = false);
 
-  std::string Name() const override { return wrapped_table_->Name(); }
+  std::string Name() const override {
+    return std::string(SDLObjectName::GetInSchemaName(SynonymOrName()));
+  }
 
-  // FullName is used in debugging so it's OK to not include full path here.
-  std::string FullName() const override { return Name(); }
+  // FullName includes schema if present.
+  std::string FullName() const override { return SynonymOrName(); }
 
   int NumColumns() const override { return columns_.size(); }
 
@@ -82,6 +85,15 @@ class QueryableTable : public zetasql::Table {
       const Column* column, zetasql::TypeFactory* type_factory,
       zetasql::Catalog* catalog,
       std::optional<const zetasql::AnalyzerOptions> opt_options) const;
+
+  // Whether the table should be treated as a synonym.
+  bool is_synonym_;
+
+  // Returns the name of the table or the synonym if the table is a synonym.
+  std::string SynonymOrName() const {
+    return is_synonym_ ? wrapped_table_->synonym() : wrapped_table_->Name();
+  }
+
   // The underlying Table object which backes the QueryableTable.
   const backend::Table* wrapped_table_;
 

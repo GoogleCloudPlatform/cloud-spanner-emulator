@@ -637,11 +637,9 @@ cc_test(
     deps = [
         ":error_shim",
         ":parser_shim",
-        "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
         "//third_party/spanner_pg/util:postgres",
         "//third_party/spanner_pg/util:valid_memory_context_fixture",
-        "@com_google_absl//absl/cleanup",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],

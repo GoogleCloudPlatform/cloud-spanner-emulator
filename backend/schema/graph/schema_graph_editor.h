@@ -19,12 +19,14 @@
 
 #include <algorithm>
 #include <memory>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "backend/common/case.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/graph/schema_objects_pool.h"
@@ -155,6 +157,25 @@ class SchemaGraphEditor {
   template <typename T>
   absl::Status CloneVector(std::vector<const T*>* nodes) {
     return CloneContainer<T>(nodes);
+  }
+
+  template <typename T>
+  absl::Status CloneOrDeleteSchemaObjectsNameMappings(
+      std::vector<const T*>& schema_objects,
+      CaseInsensitiveStringMap<const T*>& schema_objects_map) {
+    for (auto it = schema_objects.begin(); it != schema_objects.end();) {
+      ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, Clone(*it));
+      if (schema_node->is_deleted()) {
+        schema_objects_map.erase((*it)->Name());
+        schema_objects.erase(it);
+      } else {
+        const T* cloned_object = schema_node->template As<const T>();
+        *it = cloned_object;
+        schema_objects_map[cloned_object->Name()] = cloned_object;
+        ++it;
+      }
+    }
+    return absl::OkStatus();
   }
 
   // Returns true if the graph has any modifications.

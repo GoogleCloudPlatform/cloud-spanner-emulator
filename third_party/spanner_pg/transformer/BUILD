@@ -110,6 +110,7 @@ cc_library(
         "//third_party/spanner_pg/catalog:udf_support",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
+        "//third_party/spanner_pg/interface:bootstrap_catalog_data_cc_proto",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/src/backend",
@@ -220,7 +221,10 @@ cc_test(
     deps = [
         ":forward_transformer",
         ":transformer_test",
+        "//third_party/spanner_pg/bootstrap_catalog",
         "//third_party/spanner_pg/catalog:catalog_adapter",
+        "//third_party/spanner_pg/interface:bootstrap_catalog_data_cc_proto",
+        "//third_party/spanner_pg/interface:interfaces_with_stub_implementations",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "//third_party/spanner_pg/test_catalog",

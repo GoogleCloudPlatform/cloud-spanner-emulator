@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-#include "google/spanner/admin/database/v1/common.pb.h"
+#include "google/spanner/v1/spanner.pb.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
@@ -73,10 +73,27 @@ using testing::UnorderedElementsAre;
 using zetasql_base::testing::IsOkAndHolds;
 using zetasql_base::testing::StatusIs;
 
+using ::emulator::tests::common::Simple;
+using ::emulator::tests::common::TestEnum;
+
+using zetasql::values::Array;
+using zetasql::values::Date;
+using zetasql::values::Enum;
 using zetasql::values::Int64;
+using zetasql::values::NullInt64;
+using zetasql::values::Numeric;
+using zetasql::values::Proto;
 using zetasql::values::String;
+using zetasql::values::Timestamp;
+using zetasql::values::TimestampFromUnixMicros;
+
 using postgres_translator::spangres::datatypes::GetPgJsonbType;
 using postgres_translator::spangres::datatypes::GetPgNumericType;
+
+using database_api::DatabaseDialect::GOOGLE_STANDARD_SQL;
+using database_api::DatabaseDialect::POSTGRESQL;
+
+using absl::StatusCode;
 
 inline constexpr char kQueryContainsSubqueryError[] =
     "Query contains subquery.";
@@ -235,8 +252,7 @@ class QueryEngineTestBase : public testing::Test {
   const Schema* proto_schema() { return proto_schema_.get(); }
   std::string read_descriptors() {
     google::protobuf::FileDescriptorSet proto_files;
-    ::emulator::tests::common::Simple::descriptor()->file()->CopyTo(
-        proto_files.add_file());
+    Simple::descriptor()->file()->CopyTo(proto_files.add_file());
     return proto_files.SerializeAsString();
   }
 
@@ -270,18 +286,12 @@ class QueryEngineTestBase : public testing::Test {
         type_factory()->MakeArrayType(proto_type, &array_proto_type));
     const zetasql::Type* array_enum_type;
     ZETASQL_RETURN_IF_ERROR(type_factory()->MakeArrayType(enum_type, &array_enum_type));
-    ::emulator::tests::common::Simple simple_proto1;
-    ::emulator::tests::common::Simple simple_proto2;
-    ::emulator::tests::common::Simple simple_proto3;
+    Simple simple_proto1;
+    Simple simple_proto2;
+    Simple simple_proto3;
     simple_proto1.set_field("One");
     simple_proto2.set_field("Two");
     simple_proto3.set_field("Four");
-    ::emulator::tests::common::TestEnum enum1 =
-        ::emulator::tests::common::TEST_ENUM_ONE;
-    ::emulator::tests::common::TestEnum enum2 =
-        ::emulator::tests::common::TEST_ENUM_TWO;
-    ::emulator::tests::common::TestEnum enum3 =
-        ::emulator::tests::common::TEST_ENUM_FOUR;
 
     test::TestRowReader reader{
         {{"test_table",
@@ -289,33 +299,24 @@ class QueryEngineTestBase : public testing::Test {
             "array_enum_col"},
            {zetasql::types::Int64Type(), proto_type, enum_type,
             array_proto_type, array_enum_type},
-           {{zetasql::values::Int64(1),
-             zetasql::values::Proto(proto_type, simple_proto1),
-             zetasql::values::Enum(enum_type, enum1),
-             zetasql::values::Array(
-                 array_proto_type->AsArray(),
-                 {zetasql::values::Proto(proto_type, simple_proto1)}),
-             zetasql::values::Array(
-                 array_enum_type->AsArray(),
-                 {zetasql::values::Enum(enum_type, enum1)})},
-            {zetasql::values::Int64(2),
-             zetasql::values::Proto(proto_type, simple_proto2),
-             zetasql::values::Enum(enum_type, enum2),
-             zetasql::values::Array(
-                 array_proto_type->AsArray(),
-                 {zetasql::values::Proto(proto_type, simple_proto2)}),
-             zetasql::values::Array(
-                 array_enum_type->AsArray(),
-                 {zetasql::values::Enum(enum_type, enum2)})},
-            {zetasql::values::Int64(4),
-             zetasql::values::Proto(proto_type, simple_proto3),
-             zetasql::values::Enum(enum_type, enum3),
-             zetasql::values::Array(
-                 array_proto_type->AsArray(),
-                 {zetasql::values::Proto(proto_type, simple_proto3)}),
-             zetasql::values::Array(
-                 array_enum_type->AsArray(),
-                 {zetasql::values::Enum(enum_type, enum3)})}}}}}};
+           {{Int64(1), Proto(proto_type, simple_proto1),
+             Enum(enum_type, TestEnum::TEST_ENUM_ONE),
+             Array(array_proto_type->AsArray(),
+                   {Proto(proto_type, simple_proto1)}),
+             Array(array_enum_type->AsArray(),
+                   {Enum(enum_type, TestEnum::TEST_ENUM_ONE)})},
+            {Int64(2), Proto(proto_type, simple_proto2),
+             Enum(enum_type, TestEnum::TEST_ENUM_TWO),
+             Array(array_proto_type->AsArray(),
+                   {Proto(proto_type, simple_proto2)}),
+             Array(array_enum_type->AsArray(),
+                   {Enum(enum_type, TestEnum::TEST_ENUM_TWO)})},
+            {Int64(4), Proto(proto_type, simple_proto3),
+             Enum(enum_type, TestEnum::TEST_ENUM_FOUR),
+             Array(array_proto_type->AsArray(),
+                   {Proto(proto_type, simple_proto3)}),
+             Array(array_enum_type->AsArray(),
+                   {Enum(enum_type, TestEnum::TEST_ENUM_FOUR)})}}}}}};
     return reader;
   }
 
@@ -337,21 +338,19 @@ class QueryEngineTestBase : public testing::Test {
         {{"int64_col", "string_col", "date_col", "timestamp_col"},
          {zetasql::types::Int64Type(), zetasql::types::StringType(),
           zetasql::types::DateType(), zetasql::types::TimestampType()},
-         {{zetasql::values::Int64(1), zetasql::values::String("one"),
-           zetasql::values::Date(1),
-           zetasql::values::Timestamp(absl::FromUnixSeconds(1))},
-          {zetasql::values::Int64(2), zetasql::values::String("two"),
-           zetasql::values::Date(2),
-           zetasql::values::Timestamp(absl::FromUnixSeconds(2))},
-          {zetasql::values::Int64(4), zetasql::values::String("four"),
-           zetasql::values::Date(4),
-           zetasql::values::Timestamp(absl::FromUnixSeconds(4))}}}}}};
+         {{Int64(1), String("one"), Date(1),
+           Timestamp(absl::FromUnixSeconds(1))},
+          {Int64(2), String("two"), Date(2),
+           Timestamp(absl::FromUnixSeconds(2))},
+          {Int64(4), String("four"), Date(4),
+           Timestamp(absl::FromUnixSeconds(4))}}}}}};
   QueryEngine query_engine_{&type_factory_};
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_setter_ =
       test::ScopedEmulatorFeatureFlagsSetter(
           {.enable_dml_returning = true,
            .enable_bit_reversed_positive_sequences = true,
-           .enable_bit_reversed_positive_sequences_postgresql = true});
+           .enable_bit_reversed_positive_sequences_postgresql = true,
+           .enable_user_defined_functions = true});
   test::TestRowReader change_stream_partition_table_reader_{
       {{"_change_stream_partition_change_stream_test_table",
         {{"partition_token"}, {zetasql::types::StringType()}}}}};
@@ -371,9 +370,7 @@ class QueryEngineTestBase : public testing::Test {
         {{"int64_col", "timestamp_col", "date_col"},
          {zetasql::types::Int64Type(), zetasql::types::TimestampType(),
           zetasql::types::DateType()},
-         {{zetasql::values::Int64(1),
-           zetasql::values::Timestamp(absl::FromUnixSeconds(1)),
-           zetasql::values::Date(1)}}}}}};
+         {{Int64(1), Timestamp(absl::FromUnixSeconds(1)), Date(1)}}}}}};
 };
 
 struct TestQuery {
@@ -391,26 +388,20 @@ class QueryEngineTest
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  protected:
   void SetUp() override {
-    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-      schema_ = test::CreateSchemaWithOneTable(
-          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
-      multi_table_schema_ = test::CreateSchemaWithMultiTables(
-          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
+    if (GetParam() == POSTGRESQL) {
+      schema_ = test::CreateSchemaWithOneTable(&type_factory_, POSTGRESQL);
+      multi_table_schema_ =
+          test::CreateSchemaWithMultiTables(&type_factory_, POSTGRESQL);
       change_stream_schema_ = test::CreateSchemaWithOneTableAndOneChangeStream(
-          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
-      ZETASQL_ASSERT_OK_AND_ASSIGN(
-          gpk_schema_,
-          test::CreateGpkSchemaWithOneTable(
-              &type_factory_, database_api::DatabaseDialect::POSTGRESQL));
-      ZETASQL_ASSERT_OK_AND_ASSIGN(
-          sequence_schema_,
-          test::CreateSchemaWithOneSequence(
-              &type_factory_, database_api::DatabaseDialect::POSTGRESQL));
+          &type_factory_, POSTGRESQL);
+      ZETASQL_ASSERT_OK_AND_ASSIGN(gpk_schema_, test::CreateGpkSchemaWithOneTable(
+                                            &type_factory_, POSTGRESQL));
+      ZETASQL_ASSERT_OK_AND_ASSIGN(sequence_schema_, test::CreateSchemaWithOneSequence(
+                                                 &type_factory_, POSTGRESQL));
       query_engine().SetLatestSchemaForFunctionCatalog(sequence_schema_.get());
-      timestamp_date_schema_ = test::CreateSchemaWithTimestampDateTable(
-          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
-    } else if (GetParam() ==
-               database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+      timestamp_date_schema_ =
+          test::CreateSchemaWithTimestampDateTable(&type_factory_, POSTGRESQL);
+    } else if (GetParam() == GOOGLE_STANDARD_SQL) {
       schema_ = test::CreateSchemaWithOneTable(&type_factory_);
       multi_table_schema_ = test::CreateSchemaWithMultiTables(&type_factory_);
       change_stream_schema_ =
@@ -483,8 +474,7 @@ class QueryEngineTest
 
 INSTANTIATE_TEST_SUITE_P(
     QueryEnginePerDialectTests, QueryEngineTest,
-    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
-                    database_api::DatabaseDialect::POSTGRESQL),
+    testing::Values(GOOGLE_STANDARD_SQL, POSTGRESQL),
     [](const testing::TestParamInfo<QueryEngineTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
     });
@@ -497,7 +487,7 @@ TEST_P(QueryEngineTest, DetectsDMLQueries) {
 }
 
 TEST_P(QueryEngineTest, CallCancelQuery) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // TODO: b/314327062 - Enable for PGSQL once support is added.
     GTEST_SKIP();
   }
@@ -510,7 +500,7 @@ TEST_P(QueryEngineTest, CallCancelQuery) {
 }
 
 TEST_P(QueryEngineTest, CallWrongProcedure) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // This test will be enabled for Psql once the support for
     // query cancellation is in Psql is completed.
     GTEST_SKIP();
@@ -518,7 +508,7 @@ TEST_P(QueryEngineTest, CallWrongProcedure) {
   absl::StatusOr<QueryResult> status_or = query_engine().ExecuteSql(
       Query{"CALL wrong_procedure('123')"}, QueryContext{schema(), reader()},
       v1::ExecuteSqlRequest::NORMAL);
-  ASSERT_THAT(status_or.status(), StatusIs(absl::StatusCode::kInvalidArgument));
+  ASSERT_THAT(status_or.status(), StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlSelectsOneFromTable) {
@@ -559,7 +549,7 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsGenerateUUIDFromTable) {
         query_engine().ExecuteSql(Query{absl::StrFormat(sql, function_call)},
                                   QueryContext{schema(), reader()});
 
-    bool using_pg = GetParam() == database_api::DatabaseDialect::POSTGRESQL;
+    bool using_pg = GetParam() == POSTGRESQL;
     bool expect_success =
         (!using_pg && function_call == "GENERATE_UUID()") ||
         (using_pg && function_call == "SPANNER.GENERATE_UUID()");
@@ -590,7 +580,7 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectBitReverse) {
         query_engine().ExecuteSql(Query{absl::StrFormat(sql, function_call)},
                                   QueryContext{schema(), reader()});
 
-    bool using_pg = GetParam() == database_api::DatabaseDialect::POSTGRESQL;
+    bool using_pg = GetParam() == POSTGRESQL;
     bool expect_success =
         (!using_pg && function_call == "BIT_REVERSE(1, true)") ||
         (using_pg && function_call == "SPANNER.BIT_REVERSE(1, true)");
@@ -611,7 +601,7 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectBitReverse) {
 }
 
 TEST_P(QueryEngineTest, SelectBitReverseWithDifferentArguments) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
 
@@ -641,7 +631,7 @@ TEST_P(QueryEngineTest, SelectBitReverseWithDifferentArguments) {
 }
 
 TEST_P(QueryEngineTest, PG_SelectBitReverseWithDifferentArguments) {
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
     GTEST_SKIP();
   }
 
@@ -671,7 +661,7 @@ TEST_P(QueryEngineTest, PG_SelectBitReverseWithDifferentArguments) {
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlSelectGetInternalSequenceState) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
   // When using the postgres dialect, GET_INTERNAL_SEQUENCE_STATE() is exposed
@@ -685,7 +675,7 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectGetInternalSequenceState) {
         query_engine().ExecuteSql(Query{absl::StrFormat(sql, function_call)},
                                   QueryContext{sequence_schema(), reader()});
 
-    bool using_pg = GetParam() == database_api::DatabaseDialect::POSTGRESQL;
+    bool using_pg = GetParam() == POSTGRESQL;
     bool expect_success =
         (!using_pg &&
          function_call == "GET_INTERNAL_SEQUENCE_STATE(SEQUENCE myseq)") ||
@@ -699,16 +689,15 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectGetInternalSequenceState) {
       EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(Int64Type()));
 
       EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
-                  IsOkAndHolds(ElementsAre(
-                      ElementsAre(zetasql::values::NullInt64()),
-                      ElementsAre(zetasql::values::NullInt64()),
-                      ElementsAre(zetasql::values::NullInt64()))));
+                  IsOkAndHolds(ElementsAre(ElementsAre(NullInt64()),
+                                           ElementsAre(NullInt64()),
+                                           ElementsAre(NullInt64()))));
     }
   }
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlSelectGetInternalSequenceStateInvalidArg) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
 
@@ -719,7 +708,7 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectGetInternalSequenceStateInvalidArg) {
       query_engine().ExecuteSql(Query{absl::StrFormat(sql, "SEQUENCE")},
                                 QueryContext{sequence_schema(), reader()}),
       zetasql_base::testing::StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           testing::HasSubstr("Unrecognized name: SEQUENCE")));
 
   // Invalid input: empty argument
@@ -727,7 +716,7 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectGetInternalSequenceStateInvalidArg) {
       query_engine().ExecuteSql(Query{absl::StrFormat(sql, "")},
                                 QueryContext{sequence_schema(), reader()}),
       zetasql_base::testing::StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           testing::HasSubstr("No matching signature for function")));
 
   // Invalid input: invalid type
@@ -735,7 +724,7 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectGetInternalSequenceStateInvalidArg) {
       query_engine().ExecuteSql(Query{absl::StrFormat(sql, "1234")},
                                 QueryContext{sequence_schema(), reader()}),
       zetasql_base::testing::StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           testing::HasSubstr("No matching signature for function")));
 
   // Invalid input: extra argument
@@ -744,7 +733,7 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectGetInternalSequenceStateInvalidArg) {
           Query{absl::StrFormat(sql, "SEQUENCE myseq, SEQUENCE myseq2")},
           QueryContext{sequence_schema(), reader()}),
       zetasql_base::testing::StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           testing::HasSubstr("No matching signature for function")));
 }
 
@@ -777,7 +766,7 @@ TEST_P(QueryEngineTest, PlanSqlSelectsOneColumnFromTable) {
 
 TEST_P(QueryEngineTest, PlanSqlRecognizesAllParameterTypes) {
   Query query;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     query = Query{
         "SELECT "
         "cast($1 as varchar) as string_param, "
@@ -812,20 +801,17 @@ TEST_P(QueryEngineTest, PlanSqlRecognizesAllParameterTypes) {
                                                  "p6", "p7", "p8", "p9"));
   EXPECT_THAT(
       GetParamTypes(result),
-      ElementsAre(StringType(), Int64Type(), BoolType(), BytesType(),
-                  Float64Type(),
-                  GetParam() == database_api::DatabaseDialect::POSTGRESQL
-                      ? testing::Eq(GetPgJsonbType())
-                      : JsonType(),
-                  GetParam() == database_api::DatabaseDialect::POSTGRESQL
-                      ? testing::Eq(GetPgNumericType())
-                      : NumericType(),
-                  TimestampType(), DateType()));
+      ElementsAre(
+          StringType(), Int64Type(), BoolType(), BytesType(), Float64Type(),
+          GetParam() == POSTGRESQL ? testing::Eq(GetPgJsonbType()) : JsonType(),
+          GetParam() == POSTGRESQL ? testing::Eq(GetPgNumericType())
+                                   : NumericType(),
+          TimestampType(), DateType()));
 }
 
 TEST_P(QueryEngineTest, PlanSqlRecognizesFloat32Types) {
   Query query;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     query = Query{"SELECT cast($1 as float4) as float32_param;"};
   } else {
     query = Query{"SELECT cast(@p1 as float32) as float32_param;"};
@@ -842,16 +828,16 @@ TEST_P(QueryEngineTest, PlanSqlRecognizesFloat32Types) {
 
 TEST_P(QueryEngineTest, PlanSqlAcceptsIncompleteParameters) {
   Query query;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     query = {
         "SELECT string_col FROM test_table "
         "WHERE string_col=$1 and int64_col=$2",
-        {{"p2", zetasql::values::Int64(1)}}};
+        {{"p2", Int64(1)}}};
   } else {
     query = {
         "SELECT string_col FROM test_table "
         "WHERE string_col=@p1 and int64_col=@p2",
-        {{"p2", zetasql::values::Int64(1)}}};
+        {{"p2", Int64(1)}}};
   }
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,
@@ -868,14 +854,14 @@ TEST_P(QueryEngineTest, PlanSqlAcceptsIncompleteParameters) {
 
 TEST_P(QueryEngineTest, ExecuteSqlRefusesIncompleteParameters) {
   Query query;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     query = {"SELECT string_col FROM test_table WHERE string_col=$1"};
   } else {
     query = {"SELECT string_col FROM test_table WHERE string_col=@p1"};
   }
   EXPECT_THAT(query_engine().ExecuteSql(query, QueryContext{schema(), reader()},
                                         v1::ExecuteSqlRequest::NORMAL),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Incomplete query parameters")));
 }
 
@@ -884,7 +870,7 @@ TEST_P(QueryEngineTest, ExecuteSqlAcceptsNonNullUntypedParameter) {
   google::protobuf::Value p1, p2;
   p1.set_string_value("0001-01-01T00:00:00.00Z");
   p2.set_string_value("0001-01-01");
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     query = {/*sql=*/
              "SELECT int64_col FROM timestamp_date_table WHERE "
              "timestamp_col=$1 AND date_col=$2",
@@ -908,7 +894,7 @@ TEST_P(QueryEngineTest, ExecuteSqlAcceptsNonNullUntypedParameter) {
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTableWithForceIndexHint) {
-  std::string hint = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+  std::string hint = (GetParam() == POSTGRESQL)
                          ? "/*@ force_index=test_index */"
                          : "@{force_index=test_index}";
   ZETASQL_ASSERT_OK_AND_ASSIGN(
@@ -927,7 +913,7 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTableWithForceIndexHint) {
 
 TEST_P(QueryEngineTest,
        ExecuteSqlSelectsOneColumnFromTableWithBaseTableStatementHint) {
-  std::string hint = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+  std::string hint = (GetParam() == POSTGRESQL)
                          ? "/*@ force_index=_base_table */"
                          : "@{force_index=_base_table}";
   ZETASQL_ASSERT_OK_AND_ASSIGN(
@@ -963,7 +949,7 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsAllColumnsFromTable) {
 
 TEST_P(QueryEngineTest, ExecuteSqlSelectsParameterValuesFromTable) {
   Query query;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     query = {"SELECT $1 AS int64_p, $2 AS string_p FROM test_table",
              {{"p1", Int64(24)}, {"p2", String("bar")}}};
   } else {
@@ -997,12 +983,47 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsCountFromTable) {
               IsOkAndHolds(ElementsAre(ElementsAre(Int64(3)))));
 }
 
+TEST_P(QueryEngineTest, ExecuteSqlSelectSoundex) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  struct SoundexFunctionTestCase {
+    std::string input;
+    std::string expected;
+  };
+  // SOUNDEX is a ZetaSQL built-in functions and we have compliance
+  // tests to cover their correctness already. This test is a quick sanity check
+  // to confirm that these functions are callable from emulator interface.
+  std::vector<SoundexFunctionTestCase> test_cases = {
+      {"Ashcraft", "A261"},
+      {"Raven", "R150"},
+      {"Ribbon", "R150"},
+      {"apple", "a140"},
+      {"Hello world!", "H464"},
+      {"H3##!@llo w00orld!", "H464"},
+      {"#1", ""},
+  };
+
+  constexpr absl::string_view sql = "SELECT SOUNDEX('%s');";
+  for (const auto& test_case : test_cases) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult result,
+        query_engine().ExecuteSql(Query{absl::StrFormat(sql, test_case.input)},
+                                  QueryContext{schema(), reader()}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_THAT(
+        GetAllColumnValues(std::move(result.rows)),
+        IsOkAndHolds(ElementsAre(ElementsAre(String(test_case.expected)))));
+  }
+}
+
 TEST_P(QueryEngineTest, ExecuteSqlQueryStringTooLong) {
   std::string long_str = std::string(limits::kMaxQueryStringSize + 1, 'a');
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{absl::Substitute("SELECT '$0'", long_str)},
                   QueryContext{schema(), reader()}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("exceeds maximum allowed length")));
 }
 
@@ -1019,7 +1040,7 @@ TEST_P(QueryEngineTest, PartitionableSimpleScanFilter) {
 }
 
 TEST_P(QueryEngineTest, PartitionableSimpleScanSubqueryColumn) {
-  absl::StatusCode error_code = absl::StatusCode::kInvalidArgument;
+  StatusCode error_code = StatusCode::kInvalidArgument;
   std::string error_msg = kQueryContainsSubqueryError;
   Query query{
       "SELECT string_col, ARRAY(SELECT child_key from child_table) FROM "
@@ -1047,7 +1068,7 @@ TEST_P(QueryEngineTest, PartitionableExecuteSqlSimpleScanFilterSubquery) {
       "(SELECT child_key FROM child_table)"};
   EXPECT_THAT(query_engine().IsPartitionable(
                   query, QueryContext{multi_table_schema(), reader()}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr(kQueryContainsSubqueryError)));
 }
 
@@ -1057,7 +1078,7 @@ TEST_P(QueryEngineTest, PartitionableSimpleScanFilterSubqueryInExpr) {
       "(SELECT child_key FROM child_table)"};
   EXPECT_THAT(query_engine().IsPartitionable(
                   query, QueryContext{multi_table_schema(), reader()}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr(kQueryContainsSubqueryError)));
 }
 
@@ -1065,7 +1086,7 @@ TEST_P(QueryEngineTest, NonPartitionableSelectsFromTwoTable) {
   Query query{"SELECT t1.string_col FROM test_table AS t1, test_table2 AS t2"};
   EXPECT_THAT(query_engine().IsPartitionable(
                   query, QueryContext{multi_table_schema(), reader()}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr(kQueryNotASimpleTableScanError)));
 }
 
@@ -1082,13 +1103,13 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlFlagDisabled) {
   test::ScopedEmulatorFeatureFlagsSetter setter(
       {.enable_upsert_queries = false});
   MockRowWriter writer;
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
     EXPECT_THAT(
         query_engine().ExecuteSql(
             Query{"INSERT OR IGNORE INTO test_table (int64_col) VALUES(1)"},
             QueryContext{schema(), reader(), &writer}),
         StatusIs(
-            absl::StatusCode::kUnimplemented,
+            StatusCode::kUnimplemented,
             HasSubstr(
                 "Insert or ignore statement is not supported in Emulator")));
   } else {
@@ -1098,7 +1119,7 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlFlagDisabled) {
                   "ON CONFLICT(int64_col) DO NOTHING"},
             QueryContext{schema(), reader(), &writer}),
         StatusIs(
-            absl::StatusCode::kUnimplemented,
+            StatusCode::kUnimplemented,
             HasSubstr(
                 "Insert or ignore statement is not supported in Emulator")));
   }
@@ -1108,14 +1129,14 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlWithReturningFlagDisabled) {
   test::ScopedEmulatorFeatureFlagsSetter setter(
       {.enable_upsert_queries_with_returning = false});
   MockRowWriter writer;
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
     EXPECT_THAT(
         query_engine().ExecuteSql(
             Query{"INSERT OR IGNORE INTO test_table (int64_col) VALUES(1) "
                   "THEN RETURN *"},
             QueryContext{schema(), reader(), &writer}),
         StatusIs(
-            absl::StatusCode::kUnimplemented,
+            StatusCode::kUnimplemented,
             HasSubstr("Returning clause in Insert or ignore statement is not "
                       "supported in Emulator")));
   } else {
@@ -1125,7 +1146,7 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlWithReturningFlagDisabled) {
                   "ON CONFLICT(int64_col) DO NOTHING RETURNING *"},
             QueryContext{schema(), reader(), &writer}),
         StatusIs(
-            absl::StatusCode::kUnimplemented,
+            StatusCode::kUnimplemented,
             HasSubstr("Returning clause in Insert or ignore statement is not "
                       "supported in Emulator")));
   }
@@ -1135,13 +1156,13 @@ TEST_P(QueryEngineTest, InsertOrUpdateDmlFlagDisabled) {
   test::ScopedEmulatorFeatureFlagsSetter setter(
       {.enable_upsert_queries = false});
   MockRowWriter writer;
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
     EXPECT_THAT(
         query_engine().ExecuteSql(
             Query{"INSERT OR UPDATE INTO test_table (int64_col) VALUES(1)"},
             QueryContext{schema(), reader(), &writer}),
         StatusIs(
-            absl::StatusCode::kUnimplemented,
+            StatusCode::kUnimplemented,
             HasSubstr(
                 "Insert or update statement is not supported in Emulator")));
   } else {
@@ -1152,7 +1173,7 @@ TEST_P(QueryEngineTest, InsertOrUpdateDmlFlagDisabled) {
                   "SET int64_col = excluded.int64_col"},
             QueryContext{schema(), reader(), &writer}),
         StatusIs(
-            absl::StatusCode::kUnimplemented,
+            StatusCode::kUnimplemented,
             HasSubstr(
                 "Insert or update statement is not supported in Emulator")));
   }
@@ -1162,14 +1183,14 @@ TEST_P(QueryEngineTest, InsertOrUpdateDmlWithReturningFlagDisabled) {
   test::ScopedEmulatorFeatureFlagsSetter setter(
       {.enable_upsert_queries_with_returning = false});
   MockRowWriter writer;
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
     EXPECT_THAT(
         query_engine().ExecuteSql(
             Query{"INSERT OR UPDATE INTO test_table (int64_col) VALUES(1) "
                   "THEN RETURN *"},
             QueryContext{schema(), reader(), &writer}),
         StatusIs(
-            absl::StatusCode::kUnimplemented,
+            StatusCode::kUnimplemented,
             HasSubstr("Returning clause in Insert or update statement is not "
                       "supported in Emulator")));
   } else {
@@ -1180,7 +1201,7 @@ TEST_P(QueryEngineTest, InsertOrUpdateDmlWithReturningFlagDisabled) {
                   "SET int64_col = excluded.int64_col RETURNING *"},
             QueryContext{schema(), reader(), &writer}),
         StatusIs(
-            absl::StatusCode::kUnimplemented,
+            StatusCode::kUnimplemented,
             HasSubstr("Returning clause in Insert or update statement is not "
                       "supported in Emulator")));
   }
@@ -1215,8 +1236,7 @@ TEST_P(QueryEngineTest, ExecuteInsertsTwoRows) {
 
 TEST_P(QueryEngineTest, ExecuteInsertsTwoRowsIntoSequenceTable) {
   std::string returning =
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
-                                                                : "THEN RETURN";
+      (GetParam() == POSTGRESQL) ? "RETURNING" : "THEN RETURN";
   MockRowWriter writer;
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,
@@ -1286,11 +1306,11 @@ TEST_P(QueryEngineTest, CannotInsertDuplicateValuesForPrimaryKey) {
                   Query{"INSERT INTO test_table (int64_col, string_col) "
                         "VALUES(2, 'another two')"},
                   QueryContext{schema(), reader(), &writer}),
-              StatusIs(absl::StatusCode::kAlreadyExists));
+              StatusIs(StatusCode::kAlreadyExists));
 }
 
 TEST_P(QueryEngineTest, CanInsertZeroRowsWithSelectStatement) {
-  std::string select = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+  std::string select = (GetParam() == POSTGRESQL)
                            ? "SELECT 2::bigint, 'another_two'::varchar\n"
                              "FROM (SELECT 1::bigint) t\n"
                              "WHERE NOT EXISTS (\n"
@@ -1321,17 +1341,17 @@ TEST_P(QueryEngineTest, ConnotUpdatePrimaryKey) {
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{"UPDATE test_table SET int64_col=2 WHERE int64_col=2"},
                   QueryContext{schema(), reader(), &writer}),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, TestGetValidChangeStreamMetadataFromChangeStreamQuery) {
   Query query;
   absl::Time start_time = absl::Now();
   absl::Time end_time = start_time + absl::Minutes(1);
-  std::string tvf_name = GetParam() == database_api::DatabaseDialect::POSTGRESQL
+  std::string tvf_name = GetParam() == POSTGRESQL
                              ? "read_json_change_stream_test_table"
                              : "READ_change_stream_test_table";
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     query = {absl::Substitute(
         "SELECT * FROM "
         "spanner.read_json_change_stream_test_table ('$0'::timestamptz, "
@@ -1366,8 +1386,7 @@ TEST_P(QueryEngineTest, TestGetValidChangeStreamMetadataFromChangeStreamQuery) {
             "_change_stream_partition_change_stream_test_table");
   EXPECT_EQ(metadata.data_table,
             "_change_stream_data_change_stream_test_table");
-  EXPECT_EQ(metadata.is_pg,
-            GetParam() == database_api::DatabaseDialect::POSTGRESQL);
+  EXPECT_EQ(metadata.is_pg, GetParam() == POSTGRESQL);
   ASSERT_TRUE(metadata.is_change_stream_query);
 }
 
@@ -1376,7 +1395,7 @@ TEST_P(QueryEngineTest,
   Query query;
   absl::Time start_time = absl::Now();
   absl::Time end_time = start_time + absl::Minutes(1);
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     query = {absl::Substitute(
         "SELECT * FROM "
         "spanner.read_json_change_stream_test_table ('$0'::timestamptz, "
@@ -1391,7 +1410,7 @@ TEST_P(QueryEngineTest,
   }
   EXPECT_THAT(
       query_engine().TryGetChangeStreamMetadata(query, change_stream_schema()),
-      StatusIs(absl::StatusCode::kInvalidArgument));
+      StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, TestGetEmptyChangeStreamMetadataFromNormalQuery) {
@@ -1406,7 +1425,7 @@ TEST_P(QueryEngineTest,
   Query query;
   absl::Time start_time = absl::Now();
   absl::Time end_time = start_time + absl::Minutes(1);
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     query = {absl::Substitute(
         "SELECT * FROM "
         "spanner.read_json_change_stream_test_table ('$0'::timestamptz, "
@@ -1421,7 +1440,7 @@ TEST_P(QueryEngineTest,
   }
   EXPECT_THAT(query_engine().ExecuteSql(
                   query, QueryContext{change_stream_schema(), reader()}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Change stream queries are not "
                                  "supported for the ExecuteSql API.")));
 }
@@ -1441,12 +1460,12 @@ TEST_P(QueryEngineTest, TestCannotQueryChangeStreamPartitionTableExternally) {
   Query query{
       "SELECT partition_token FROM "
       "_change_stream_partition_change_stream_test_table"};
-  EXPECT_THAT(query_engine().ExecuteSql(
-                  query, QueryContext{change_stream_schema(),
-                                      change_stream_partition_table_reader()}),
-              StatusIs(GetParam() == database_api::DatabaseDialect::POSTGRESQL
-                           ? absl::StatusCode::kNotFound
-                           : absl::StatusCode::kInvalidArgument));
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          query, QueryContext{change_stream_schema(),
+                              change_stream_partition_table_reader()}),
+      StatusIs(GetParam() == POSTGRESQL ? StatusCode::kNotFound
+                                        : StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, TestCanQueryChangeStreamDataTableInternally) {
@@ -1463,16 +1482,16 @@ TEST_P(QueryEngineTest, TestCannotQueryChangeStreamDataTableExternally) {
   Query query{
       "SELECT partition_token FROM "
       "_change_stream_data_change_stream_test_table"};
-  EXPECT_THAT(query_engine().ExecuteSql(
-                  query, QueryContext{change_stream_schema(),
-                                      change_stream_data_table_reader()}),
-              StatusIs(GetParam() == database_api::DatabaseDialect::POSTGRESQL
-                           ? absl::StatusCode::kNotFound
-                           : absl::StatusCode::kInvalidArgument));
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          query, QueryContext{change_stream_schema(),
+                              change_stream_data_table_reader()}),
+      StatusIs(GetParam() == POSTGRESQL ? StatusCode::kNotFound
+                                        : StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, TestMlQuery) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         QueryResult result,
         query_engine().ExecuteSql(Query{R"sql(
@@ -1540,7 +1559,7 @@ TEST_P(ParameterizedSelectProto, ExecuteSqlSelectsProtoAndEnumColumnFromTable) {
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlSelectsInvalidProtoField) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Protos are unsupported in the PG dialect.
     return;
   }
@@ -1549,12 +1568,12 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectsInvalidProtoField) {
       query_engine().ExecuteSql(
           Query{R"sql(SELECT proto_col.invalid_field FROM test_table)sql"},
           QueryContext{proto_schema(), &reader}),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("does not have a field called invalid_field")));
 }
 
 TEST_P(QueryEngineTest, ExecuteInsertsTwoProtoAndEnumRows) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Protos are unsupported in the PG dialect.
     return;
   }
@@ -1569,14 +1588,10 @@ TEST_P(QueryEngineTest, ExecuteInsertsTwoProtoAndEnumRows) {
   ZETASQL_ASSERT_OK(type_factory()->MakeArrayType(proto_type, &array_proto_type));
   const zetasql::Type* array_enum_type;
   ZETASQL_ASSERT_OK(type_factory()->MakeArrayType(enum_type, &array_enum_type));
-  ::emulator::tests::common::Simple simple_proto2;
-  ::emulator::tests::common::Simple simple_proto3;
+  Simple simple_proto2;
+  Simple simple_proto3;
   simple_proto2.set_field("Two");
   simple_proto3.set_field("Four");
-  ::emulator::tests::common::TestEnum enum2 =
-      ::emulator::tests::common::TEST_ENUM_TWO;
-  ::emulator::tests::common::TestEnum enum3 =
-      ::emulator::tests::common::TEST_ENUM_FOUR;
 
   MockRowWriter writer;
   EXPECT_CALL(
@@ -1590,31 +1605,23 @@ TEST_P(QueryEngineTest, ExecuteInsertsTwoProtoAndEnumRows) {
                     std::vector<std::string>{"int64_col", "proto_col",
                                              "enum_col", "array_proto_col",
                                              "array_enum_col"}),
-              Field(&MutationOp::rows,
-                    UnorderedElementsAre(
-                        ValueList{
-                            Int64(7),
-                            zetasql::values::Proto(proto_type, simple_proto2),
-                            zetasql::values::Enum(enum_type, enum2),
-                            zetasql::values::Array(
-                                array_proto_type->AsArray(),
-                                {zetasql::values::Proto(proto_type,
-                                                          simple_proto2)}),
-                            zetasql::values::Array(
-                                array_enum_type->AsArray(),
-                                {zetasql::values::Enum(enum_type, enum2)})},
-                        ValueList{
-                            Int64(8),
-                            zetasql::values::Proto(proto_type, simple_proto3),
-                            zetasql::values::Enum(enum_type, enum3),
-                            zetasql::values::Array(
-                                array_proto_type->AsArray(),
-                                {zetasql::values::Proto(proto_type,
-                                                          simple_proto3)}),
-                            zetasql::values::Array(
-                                array_enum_type->AsArray(),
-                                {zetasql::values::Enum(enum_type,
-                                                         enum3)})})))))))
+              Field(
+                  &MutationOp::rows,
+                  UnorderedElementsAre(
+                      ValueList{
+                          Int64(7), Proto(proto_type, simple_proto2),
+                          Enum(enum_type, TestEnum::TEST_ENUM_TWO),
+                          Array(array_proto_type->AsArray(),
+                                {Proto(proto_type, simple_proto2)}),
+                          Array(array_enum_type->AsArray(),
+                                {Enum(enum_type, TestEnum::TEST_ENUM_TWO)})},
+                      ValueList{Int64(8), Proto(proto_type, simple_proto3),
+                                Enum(enum_type, TestEnum::TEST_ENUM_FOUR),
+                                Array(array_proto_type->AsArray(),
+                                      {Proto(proto_type, simple_proto3)}),
+                                Array(array_enum_type->AsArray(),
+                                      {Enum(enum_type,
+                                            TestEnum::TEST_ENUM_FOUR)})})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(
@@ -1633,7 +1640,7 @@ TEST_P(QueryEngineTest, ExecuteInsertsTwoProtoAndEnumRows) {
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlInsertsInvalidProtoEnumField) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Protos are unsupported in the PG dialect.
     return;
   }
@@ -1645,19 +1652,19 @@ TEST_P(QueryEngineTest, ExecuteSqlInsertsInvalidProtoEnumField) {
           Query{R"sql(INSERT into test_table(int64_col,proto_col,enum_col)
                       VALUES(5,'invalid_field:"Four"','TEST_ENUM_FOUR'))sql"},
           QueryContext{proto_schema(), &reader, &writer}),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Error parsing proto:")));
   EXPECT_THAT(
       query_engine().ExecuteSql(
           Query{R"sql(INSERT into test_table(int64_col,proto_col,enum_col)
                       VALUES(8,'field:"Eight"','TEST_ENUM_EIGHT'))sql"},
           QueryContext{proto_schema(), &reader, &writer}),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Could not cast literal")));
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlDeleteProtoAndEnumColumnFromTable) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Protos are unsupported in the PG dialect.
     return;
   }
@@ -1700,7 +1707,7 @@ TEST_P(QueryEngineTest, ExecuteSqlDeleteProtoAndEnumColumnFromTable) {
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlDeleteArrayProtoAndArrayEnumColumnFromTable) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Protos are unsupported in the PG dialect.
     return;
   }
@@ -1744,7 +1751,7 @@ TEST_P(QueryEngineTest, ExecuteSqlDeleteArrayProtoAndArrayEnumColumnFromTable) {
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlDeleteInvalidProtoAndEnumColumnFromTable) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Protos are unsupported in the PG dialect.
     return;
   }
@@ -1755,19 +1762,19 @@ TEST_P(QueryEngineTest, ExecuteSqlDeleteInvalidProtoAndEnumColumnFromTable) {
       query_engine().ExecuteSql(Query{R"sql(DELETE FROM test_table
                                 WHERE proto_col.invalid_field = "Four")sql"},
                                 QueryContext{proto_schema(), &reader, &writer}),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("does not have a field called invalid_field")));
 
   EXPECT_THAT(
       query_engine().ExecuteSql(Query{R"sql(DELETE FROM test_table
                 WHERE enum_col = 'TEST_ENUM_EIGHT')sql"},
                                 QueryContext{proto_schema(), &reader, &writer}),
-      StatusIs(absl::StatusCode::kInvalidArgument,
+      StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Could not cast literal")));
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlUpdateProtoWithEnumColumnInTable) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Protos are unsupported in the PG dialect.
     return;
   }
@@ -1784,12 +1791,10 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdateProtoWithEnumColumnInTable) {
   ZETASQL_ASSERT_OK(type_factory()->MakeArrayType(enum_type, &array_enum_type));
   MockRowWriter writer;
 
-  ::emulator::tests::common::Simple simple_proto2;
+  Simple simple_proto2;
   simple_proto2.set_field("Two");
-  ::emulator::tests::common::TestEnum enum2 =
-      ::emulator::tests::common::TEST_ENUM_TWO;
 
-  ::emulator::tests::common::Simple simple_proto_updated;
+  Simple simple_proto_updated;
   simple_proto_updated.set_field("Updated");
   EXPECT_CALL(
       writer,
@@ -1805,16 +1810,12 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdateProtoWithEnumColumnInTable) {
               Field(
                   &MutationOp::rows,
                   UnorderedElementsAre(ValueList{
-                      Int64(2),
-                      zetasql::values::Proto(proto_type,
-                                               simple_proto_updated),
-                      zetasql::values::Enum(enum_type, enum2),
-                      zetasql::values::Array(array_proto_type->AsArray(),
-                                               {zetasql::values::Proto(
-                                                   proto_type, simple_proto2)}),
-                      zetasql::values::Array(
-                          array_enum_type->AsArray(),
-                          {zetasql::values::Enum(enum_type, enum2)})})))))))
+                      Int64(2), Proto(proto_type, simple_proto_updated),
+                      Enum(enum_type, TestEnum::TEST_ENUM_TWO),
+                      Array(array_proto_type->AsArray(),
+                            {Proto(proto_type, simple_proto2)}),
+                      Array(array_enum_type->AsArray(),
+                            {Enum(enum_type, TestEnum::TEST_ENUM_TWO)})})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(
@@ -1824,12 +1825,8 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdateProtoWithEnumColumnInTable) {
                                 QueryContext{proto_schema(), &reader, &writer}),
       IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
 
-  ::emulator::tests::common::Simple simple_proto3;
+  Simple simple_proto3;
   simple_proto3.set_field("Four");
-  ::emulator::tests::common::TestEnum enum3 =
-      ::emulator::tests::common::TEST_ENUM_FOUR;
-  ::emulator::tests::common::TestEnum updated_enum =
-      ::emulator::tests::common::TEST_ENUM_ONE;
   EXPECT_CALL(
       writer,
       Write(Property(
@@ -1844,15 +1841,12 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdateProtoWithEnumColumnInTable) {
               Field(
                   &MutationOp::rows,
                   UnorderedElementsAre(ValueList{
-                      Int64(4),
-                      zetasql::values::Proto(proto_type, simple_proto3),
-                      zetasql::values::Enum(enum_type, updated_enum),
-                      zetasql::values::Array(array_proto_type->AsArray(),
-                                               {zetasql::values::Proto(
-                                                   proto_type, simple_proto3)}),
-                      zetasql::values::Array(
-                          array_enum_type->AsArray(),
-                          {zetasql::values::Enum(enum_type, enum3)})})))))))
+                      Int64(4), Proto(proto_type, simple_proto3),
+                      Enum(enum_type, TestEnum::TEST_ENUM_ONE),
+                      Array(array_proto_type->AsArray(),
+                            {Proto(proto_type, simple_proto3)}),
+                      Array(array_enum_type->AsArray(),
+                            {Enum(enum_type, TestEnum::TEST_ENUM_FOUR)})})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(query_engine().ExecuteSql(
@@ -1865,7 +1859,7 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdateProtoWithEnumColumnInTable) {
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlUpdateInvalidProtoWithEnumColumnInTable) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Protos are unsupported in the PG dialect.
     return;
   }
@@ -1876,7 +1870,7 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdateInvalidProtoWithEnumColumnInTable) {
                         R"sql(SET proto_col = 'invalid_field: "Updated"'
                 WHERE enum_col = 'TEST_ENUM_TWO')sql"},
                   QueryContext{proto_schema(), &reader, &writer}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Could not cast literal")));
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{
@@ -1884,12 +1878,12 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdateInvalidProtoWithEnumColumnInTable) {
               SET enum_col='TEST_ENUM_EIGHT'
               WHERE proto_col.field = 'Four')sql"},
                   QueryContext{proto_schema(), &reader, &writer}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Could not cast literal")));
 }
 
 TEST_P(QueryEngineTest, ExecuteSqlUpdateArrayProtoWithArrayEnumColumnInTable) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Protos are unsupported in the PG dialect.
     return;
   }
@@ -1904,53 +1898,12 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdateArrayProtoWithArrayEnumColumnInTable) {
   ZETASQL_ASSERT_OK(type_factory()->MakeArrayType(proto_type, &array_proto_type));
   const zetasql::Type* array_enum_type;
   ZETASQL_ASSERT_OK(type_factory()->MakeArrayType(enum_type, &array_enum_type));
-  ::emulator::tests::common::Simple simple_proto2;
+  Simple simple_proto2;
   simple_proto2.set_field("Two");
-  ::emulator::tests::common::TestEnum enum2 =
-      ::emulator::tests::common::TEST_ENUM_TWO;
 
-  ::emulator::tests::common::Simple simple_proto_updated;
+  Simple simple_proto_updated;
   simple_proto_updated.set_field("Updated");
   MockRowWriter writer;
-  EXPECT_CALL(
-      writer,
-      Write(Property(
-          &Mutation::ops,
-          UnorderedElementsAre(AllOf(
-              Field(&MutationOp::type, MutationOpType::kUpdate),
-              Field(&MutationOp::table, "test_table"),
-              Field(&MutationOp::columns,
-                    std::vector<std::string>{"int64_col", "proto_col",
-                                             "enum_col", "array_proto_col",
-                                             "array_enum_col"}),
-              Field(&MutationOp::rows,
-                    UnorderedElementsAre(ValueList{
-                        Int64(2),
-                        zetasql::values::Proto(proto_type, simple_proto2),
-                        zetasql::values::Enum(enum_type, enum2),
-                        zetasql::values::Array(
-                            array_proto_type->AsArray(),
-                            {zetasql::values::Proto(proto_type,
-                                                      simple_proto_updated)}),
-                        zetasql::values::Array(
-                            array_enum_type->AsArray(),
-                            {zetasql::values::Enum(enum_type, enum2)})})))))))
-      .Times(1)
-      .WillOnce(Return(absl::OkStatus()));
-
-  EXPECT_THAT(query_engine().ExecuteSql(
-                  Query{
-                      R"sql(UPDATE test_table
-              SET array_proto_col = ARRAY<emulator.tests.common.Simple>['field: "Updated"']
-              WHERE array_enum_col[OFFSET(0)] = 'TEST_ENUM_TWO')sql"},
-                  QueryContext{proto_schema(), &reader, &writer}),
-              IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
-  ::emulator::tests::common::Simple simple_proto3;
-  simple_proto3.set_field("Four");
-  ::emulator::tests::common::TestEnum enum3 =
-      ::emulator::tests::common::TEST_ENUM_FOUR;
-  ::emulator::tests::common::TestEnum updated_enum =
-      ::emulator::tests::common::TEST_ENUM_ONE;
   EXPECT_CALL(
       writer,
       Write(Property(
@@ -1965,16 +1918,44 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdateArrayProtoWithArrayEnumColumnInTable) {
               Field(
                   &MutationOp::rows,
                   UnorderedElementsAre(ValueList{
-                      Int64(4),
-                      zetasql::values::Proto(proto_type, simple_proto3),
-                      zetasql::values::Enum(enum_type, enum3),
-                      zetasql::values::Array(array_proto_type->AsArray(),
-                                               {zetasql::values::Proto(
-                                                   proto_type, simple_proto3)}),
-                      zetasql::values::Array(
-                          array_enum_type->AsArray(),
-                          {zetasql::values::Enum(enum_type,
-                                                   updated_enum)})})))))))
+                      Int64(2), Proto(proto_type, simple_proto2),
+                      Enum(enum_type, TestEnum::TEST_ENUM_TWO),
+                      Array(array_proto_type->AsArray(),
+                            {Proto(proto_type, simple_proto_updated)}),
+                      Array(array_enum_type->AsArray(),
+                            {Enum(enum_type, TestEnum::TEST_ENUM_TWO)})})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{
+                      R"sql(UPDATE test_table
+              SET array_proto_col = ARRAY<emulator.tests.common.Simple>['field: "Updated"']
+              WHERE array_enum_col[OFFSET(0)] = 'TEST_ENUM_TWO')sql"},
+                  QueryContext{proto_schema(), &reader, &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+  Simple simple_proto3;
+  simple_proto3.set_field("Four");
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "proto_col",
+                                             "enum_col", "array_proto_col",
+                                             "array_enum_col"}),
+              Field(
+                  &MutationOp::rows,
+                  UnorderedElementsAre(ValueList{
+                      Int64(4), Proto(proto_type, simple_proto3),
+                      Enum(enum_type, TestEnum::TEST_ENUM_FOUR),
+                      Array(array_proto_type->AsArray(),
+                            {Proto(proto_type, simple_proto3)}),
+                      Array(array_enum_type->AsArray(),
+                            {Enum(enum_type, TestEnum::TEST_ENUM_ONE)})})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
 
@@ -1988,14 +1969,14 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdateArrayProtoWithArrayEnumColumnInTable) {
 }
 
 TEST_P(QueryEngineTest, ParameterProtoField) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Protos are unsupported in the PG dialect.
     return;
   }
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto reader, PopulateProtoReader());
   Query query{
       R"sql(Select int64_col from test_table WHERE proto_col.field=@param)sql",
-      {{"param", zetasql::values::String("One")}}};
+      {{"param", String("One")}}};
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,
       query_engine().ExecuteSql(query, QueryContext{proto_schema(), &reader}));
@@ -2004,7 +1985,7 @@ TEST_P(QueryEngineTest, ParameterProtoField) {
 }
 
 TEST_P(QueryEngineTest, ParameterEnums) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     // Protos are unsupported in the PG dialect.
     return;
   }
@@ -2012,10 +1993,8 @@ TEST_P(QueryEngineTest, ParameterEnums) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       auto enum_type,
       MakeEnumType(proto_schema(), "emulator.tests.common.TestEnum"));
-  Query query{
-      R"sql(Select int64_col from test_table WHERE enum_col=@param)sql",
-      {{"param", zetasql::values::Enum(
-                     enum_type, ::emulator::tests::common::TEST_ENUM_TWO)}}};
+  Query query{R"sql(Select int64_col from test_table WHERE enum_col=@param)sql",
+              {{"param", Enum(enum_type, TestEnum::TEST_ENUM_TWO)}}};
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,
       query_engine().ExecuteSql(query, QueryContext{proto_schema(), &reader}));
@@ -2028,8 +2007,7 @@ struct ParameterSensitiveHintInfo {
   std::string hint_value;
   // A flag to indicate whether the value is supported or not.
   bool is_valid;
-  database_api::DatabaseDialect dialect =
-      database_api::DatabaseDialect::GOOGLE_STANDARD_SQL;
+  database_api::DatabaseDialect dialect = GOOGLE_STANDARD_SQL;
   static std::vector<ParameterSensitiveHintInfo> TestCases() {
     std::vector<ParameterSensitiveHintInfo> test_cases = {
         {.hint_value = "auto", .is_valid = true},
@@ -2043,7 +2021,7 @@ struct ParameterSensitiveHintInfo {
     test_cases.reserve(num_tests * 2);
     for (int i = 0; i < num_tests; ++i) {
       ParameterSensitiveHintInfo pg_test_case = test_cases[i];
-      pg_test_case.dialect = database_api::DatabaseDialect::POSTGRESQL;
+      pg_test_case.dialect = POSTGRESQL;
       test_cases.emplace_back(pg_test_case);
     }
 
@@ -2056,13 +2034,11 @@ class ParameterSensitiveHintTests
       public ::testing::WithParamInterface<ParameterSensitiveHintInfo> {
   void SetUp() override {
     const ParameterSensitiveHintInfo& test_params = GetParam();
-    if (test_params.dialect == database_api::DatabaseDialect::POSTGRESQL) {
-      schema_ = test::CreateSchemaWithOneTable(
-          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
-      multi_table_schema_ = test::CreateSchemaWithMultiTables(
-          &type_factory_, database_api::DatabaseDialect::POSTGRESQL);
-    } else if (test_params.dialect ==
-               database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    if (test_params.dialect == POSTGRESQL) {
+      schema_ = test::CreateSchemaWithOneTable(&type_factory_, POSTGRESQL);
+      multi_table_schema_ =
+          test::CreateSchemaWithMultiTables(&type_factory_, POSTGRESQL);
+    } else if (test_params.dialect == GOOGLE_STANDARD_SQL) {
       schema_ = test::CreateSchemaWithOneTable(&type_factory_);
       multi_table_schema_ = test::CreateSchemaWithMultiTables(&type_factory_);
     }
@@ -2073,7 +2049,7 @@ TEST_P(ParameterSensitiveHintTests, TestParameterSensitiveHint) {
   const ParameterSensitiveHintInfo& test_params = GetParam();
   std::string hint =
       absl::Substitute("@{parameter_sensitive=$0} ", test_params.hint_value);
-  if (test_params.dialect == database_api::DatabaseDialect::POSTGRESQL) {
+  if (test_params.dialect == POSTGRESQL) {
     hint = absl::Substitute("/*@ parameter_sensitive=$0 */ ",
                             test_params.hint_value);
   }
@@ -2096,7 +2072,7 @@ TEST_P(ParameterSensitiveHintTests, TestParameterSensitiveHint) {
         query_engine().ExecuteSql(Query{query},
                                   QueryContext{schema(), reader()}),
         StatusIs(
-            absl::StatusCode::kInvalidArgument,
+            StatusCode::kInvalidArgument,
             HasSubstr("Invalid hint value for: parameter_sensitive hint")));
   }
 }
@@ -2107,8 +2083,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(QueryEngineTest, ExecuteSqlInsertReturning) {
   std::string returning =
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
-                                                                : "THEN RETURN";
+      (GetParam() == POSTGRESQL) ? "RETURNING" : "THEN RETURN";
   MockRowWriter writer;
   EXPECT_CALL(
       writer,
@@ -2148,8 +2123,7 @@ TEST_P(QueryEngineTest, ExecuteSqlInsertReturning) {
 
 TEST_P(QueryEngineTest, ExecuteSqlDeleteReturning) {
   std::string returning =
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
-                                                                : "THEN RETURN";
+      (GetParam() == POSTGRESQL) ? "RETURNING" : "THEN RETURN";
   MockRowWriter writer;
   EXPECT_CALL(writer,
               Write(Property(
@@ -2185,8 +2159,7 @@ TEST_P(QueryEngineTest, ExecuteSqlDeleteReturning) {
 
 TEST_P(QueryEngineTest, ExecuteSqlUpdatesReturning) {
   std::string returning =
-      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
-                                                                : "THEN RETURN";
+      (GetParam() == POSTGRESQL) ? "RETURNING" : "THEN RETURN";
   MockRowWriter writer;
   EXPECT_CALL(
       writer,
@@ -2225,7 +2198,7 @@ TEST_P(QueryEngineTest, ExecuteSqlUpdatesReturning) {
 }
 
 TEST_P(QueryEngineTest, JsonConverterFunctionsForGsql) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     return;
   }
 
@@ -2342,7 +2315,7 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlInsertsNewRows) {
   std::string sql;
   // The insert statement inserts 2 new rows and ignores the existing row with
   // primary key (int64_col:1)
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     sql =
         "INSERT INTO test_table (int64_col, string_col) "
         "VALUES(10, 'ten'), (1, 'one'), (10, 'ten'), (3, 'three') "
@@ -2382,7 +2355,7 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlInsertsWithReturning) {
   std::string sql;
   // The insert statement inserts 2 new rows and ignores the existing row with
   // primary key (int64_col:1)
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     sql =
         "INSERT INTO test_table (int64_col, string_col) "
         "VALUES(10, 'ten'), (1, 'one'), (10, 'ten'), (3, 'three') "
@@ -2432,7 +2405,7 @@ TEST_P(QueryEngineTest, InsertOrUpdateDmlInsertsNewRows) {
   std::string sql;
   // The insert statement inserts 2 new rows and updates the existing row with
   // primary key (int64_col:1).
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     sql =
         "INSERT INTO test_table (int64_col, string_col) "
         "VALUES(10, 'ten'), (1, 'one updated'), (3, 'three updated') "
@@ -2474,7 +2447,7 @@ TEST_P(QueryEngineTest, InsertOrUpdateDmlInsertsWithReturning) {
   std::string sql;
   // The insert statement inserts 2 new rows and updates the existing row with
   // primary key (int64_col:1).
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     sql =
         "INSERT INTO test_table (int64_col, string_col) "
         "VALUES(10, 'ten'), (1, 'one updated'), (3, 'three updated') "
@@ -2527,7 +2500,7 @@ TEST_P(QueryEngineTest, InsertOrUpdateDuplicateInputRowsReturnError) {
   std::string sql;
   // Spanner does not allow duplicate insert rows with same key.
   // The insert statement inserts 2 rows with same key (int64_col:10).
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     sql =
         "INSERT INTO test_table (int64_col, string_col) "
         "VALUES(10, 'ten'), (1, 'one updated'), (10, 'ten') "
@@ -2542,13 +2515,13 @@ TEST_P(QueryEngineTest, InsertOrUpdateDuplicateInputRowsReturnError) {
 
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{sql}, QueryContext{schema(), reader(), &writer}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Cannot affect a row second time for key: "
                                  "{Int64(10)}")));
 }
 
 TEST_P(QueryEngineTest, InsertDMLWithReturningAction) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
 
@@ -2567,7 +2540,7 @@ TEST_P(QueryEngineTest, InsertDMLWithReturningAction) {
 }
 
 TEST_P(QueryEngineTest, UpdateDMLWithReturningAction) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
 
@@ -2586,7 +2559,7 @@ TEST_P(QueryEngineTest, UpdateDMLWithReturningAction) {
 }
 
 TEST_P(QueryEngineTest, DeleteDMLWithReturningAction) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
 
@@ -2603,7 +2576,7 @@ TEST_P(QueryEngineTest, DeleteDMLWithReturningAction) {
 }
 
 TEST_P(QueryEngineTest, UpsertDMLWithReturningAction) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
 
@@ -2645,7 +2618,7 @@ TEST_P(QueryEngineTest, UpsertDMLWithReturningAction) {
 }
 
 TEST_P(QueryEngineTest, UpsertPGqueryWithGeneratedKeyUnsupported) {
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
     GTEST_SKIP();
   }
 
@@ -2655,7 +2628,7 @@ TEST_P(QueryEngineTest, UpsertPGqueryWithGeneratedKeyUnsupported) {
           Query{"INSERT INTO test_table(k1_pk, k2, k4) VALUES(1, 1, 1) "
                 "ON CONFLICT(k1_pk, k3gen_storedpk) DO NOTHING"},
           QueryContext{gpk_schema(), gpk_table_reader(), &writer}),
-      StatusIs(absl::StatusCode::kUnimplemented,
+      StatusIs(StatusCode::kUnimplemented,
                HasSubstr("ON CONFLICT clause on table with generated key is "
                          "not supported in Emulator")));
 
@@ -2665,14 +2638,14 @@ TEST_P(QueryEngineTest, UpsertPGqueryWithGeneratedKeyUnsupported) {
                 "ON CONFLICT(k1_pk,k3gen_storedpk) DO UPDATE SET "
                 "k1_pk = excluded.k1_pk, k2 = excluded.k2, k4 = excluded.k4"},
           QueryContext{gpk_schema(), gpk_table_reader(), &writer}),
-      StatusIs(absl::StatusCode::kUnimplemented,
+      StatusIs(StatusCode::kUnimplemented,
                HasSubstr("ON CONFLICT clause on table with generated key is "
                          "not supported in Emulator")));
 }
 
 TEST_P(QueryEngineTest, BitReverseUnsupportedWhenFlagIsOff) {
   std::string spanner_prefix = "";
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
     spanner_prefix = "spanner.";
   }
   test::ScopedEmulatorFeatureFlagsSetter setter(
@@ -2681,14 +2654,14 @@ TEST_P(QueryEngineTest, BitReverseUnsupportedWhenFlagIsOff) {
   Query query{absl::StrCat("SELECT ", spanner_prefix, "BIT_REVERSE(1, true)")};
   EXPECT_THAT(
       query_engine().ExecuteSql(query, QueryContext{schema(), reader()}),
-      StatusIs(absl::StatusCode::kUnimplemented));
+      StatusIs(StatusCode::kUnimplemented));
 }
 
 TEST_P(QueryEngineTest, GetInternalSequenceStateUnsupportedWhenFlagIsOff) {
   std::string spanner_prefix = "";
   std::string sequence_name = "SEQUENCE myseq";
-  absl::StatusCode code = absl::StatusCode::kUnimplemented;
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+  StatusCode code = StatusCode::kUnimplemented;
+  if (GetParam() == POSTGRESQL) {
     spanner_prefix = "spanner.";
     sequence_name = "'myseq'";
   }
@@ -2710,7 +2683,749 @@ TEST_P(QueryEngineTest, GetNextSequenceValueUnsupportedWhenFlagIsOff) {
   Query query{"INSERT INTO test_table (string_col) VALUES ('abc')"};
   EXPECT_THAT(query_engine().ExecuteSql(
                   query, QueryContext{sequence_schema(), reader(), &writer}),
-              StatusIs(absl::StatusCode::kUnimplemented));
+              StatusIs(StatusCode::kUnimplemented));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlSelectsFromNamedSchemaTable) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA test_schema)",
+             R"(CREATE TABLE test_schema.test_table (int64_col bigint primary key,
+             string_col varchar))"},
+            type_factory(),
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/POSTGRESQL));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA test_schema)",
+             R"(CREATE TABLE test_schema.test_table (int64_col INT64, string_col
+             STRING(MAX)) PRIMARY KEY (int64_col))"},
+            type_factory(),
+            /*proto_descriptor_bytes=*/""));
+  }
+  test::TestRowReader reader{
+      {{"test_schema.test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(4), String("four")}}}}}};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"SELECT int64_col FROM test_schema.test_table"},
+          QueryContext{schema.get(), &reader}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("int64_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(Int64Type()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(1)),
+                                                ElementsAre(Int64(2)),
+                                                ElementsAre(Int64(4)))));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlSelectsFromNamedSchemaTableWithSynonym) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA test_schema)",
+             R"(CREATE TABLE test_schema.test_table (int64_col bigint primary key,
+             string_col varchar))",
+             R"(ALTER TABLE test_schema.test_table ADD SYNONYM syn)"},
+            type_factory(),
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/POSTGRESQL));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA test_schema)",
+             R"(CREATE TABLE test_schema.test_table (int64_col INT64, string_col
+             STRING(MAX)) PRIMARY KEY (int64_col))",
+             R"(ALTER TABLE test_schema.test_table ADD SYNONYM syn)"},
+            type_factory(),
+            /*proto_descriptor_bytes=*/""));
+  }
+  test::TestRowReader reader{
+      {{"syn",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(4), String("four")}}}}}};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"SELECT int64_col FROM syn"},
+                                QueryContext{schema.get(), &reader}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("int64_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(Int64Type()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(1)),
+                                                ElementsAre(Int64(2)),
+                                                ElementsAre(Int64(4)))));
+}
+
+TEST_P(QueryEngineTest, PlanSqlSelectsFromNamedSchemaTable) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA test_schema)",
+             R"(CREATE TABLE test_schema.test_table (int64_col bigint primary key,
+             string_col varchar))"},
+            type_factory(),
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/POSTGRESQL));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema, test::CreateSchemaFromDDL(
+                    {R"(CREATE SCHEMA test_schema)",
+                     R"(CREATE TABLE test_schema.test_table (int64_col INT64,
+             string_col STRING(MAX)) PRIMARY KEY (int64_col))"},
+                    type_factory(),
+                    /*proto_descriptor_bytes=*/""));
+  }
+  test::TestRowReader reader{
+      {{"test_schema.test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(4), String("four")}}}}}};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"SELECT int64_col FROM test_schema.test_table"},
+          QueryContext{schema.get(), &reader}, v1::ExecuteSqlRequest::PLAN));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("int64_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(Int64Type()));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlInsertsToNamedSchemaTable) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA test_schema)",
+             R"(CREATE TABLE test_schema.test_table (int64_col bigint primary key,
+              string_col varchar))"},
+            type_factory(),
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/POSTGRESQL));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema, test::CreateSchemaFromDDL(
+                    {R"(CREATE SCHEMA test_schema)",
+                     R"(CREATE TABLE test_schema.test_table (int64_col INT64,
+              string_col STRING(MAX)) PRIMARY KEY (int64_col))"},
+                    type_factory(),
+                    /*proto_descriptor_bytes=*/""));
+  }
+  test::TestRowReader reader{
+      {{"test_schema.test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {}}}}};
+
+  MockRowWriter writer;
+  QueryResult result;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        result,
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_schema.test_table (int64_col, string_col) "
+                  "VALUES (1, 'one'), (2, 'two'), (4, 'four')"},
+            QueryContext{schema.get(), &reader, &writer}));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        result,
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_schema.test_table (int64_col, string_col) "
+                  "VALUES (1, 'one'), (2, 'two'), (4, 'four')"},
+            QueryContext{schema.get(), &reader, &writer}));
+  }
+
+  ASSERT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 3);
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlInsertsToNamedSchemaTableWithReturns) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, test::CreateSchemaFromDDL(
+                                     {R"(CREATE SCHEMA test_schema)",
+                                      R"(CREATE TABLE test_schema.test_table (
+              int64_col bigint primary key, string_col varchar))"},
+                                     type_factory(),
+                                     /*proto_descriptor_bytes=*/"",
+                                     /*dialect=*/POSTGRESQL));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, test::CreateSchemaFromDDL(
+                                     {R"(CREATE SCHEMA test_schema)",
+                                      R"(CREATE TABLE test_schema.test_table (
+             int64_col INT64, string_col STRING(MAX)) PRIMARY KEY (int64_col))"},
+                                     type_factory(),
+                                     /*proto_descriptor_bytes=*/""));
+  }
+  test::TestRowReader reader{
+      {{"test_schema.test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {}}}}};
+
+  MockRowWriter writer;
+  QueryResult result;
+
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        result,
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_schema.test_table (int64_col, string_col) "
+                  "VALUES (5, 'five') RETURNING *"},
+            QueryContext{schema.get(), &reader, &writer}));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        result,
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_schema.test_table (int64_col, string_col) "
+                  "VALUES (5, 'five') THEN RETURN *"},
+            QueryContext{schema.get(), &reader, &writer}));
+  }
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("int64_col", "string_col"));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(
+                  UnorderedElementsAre(ElementsAre(Int64(5), String("five")))));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlSelectsFromNamedSchemaView) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA test_schema)",
+             R"(CREATE TABLE test_schema.test_table (int64_col bigint primary key,
+              string_col varchar))",
+             R"(CREATE VIEW test_schema.test_view SQL SECURITY INVOKER AS SELECT
+              test_table.int64_col FROM test_schema.test_table)"},
+            type_factory(),
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/POSTGRESQL));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA test_schema)",
+             R"(CREATE TABLE test_schema.test_table (int64_col INT64, string_col
+              STRING(MAX)) PRIMARY KEY (int64_col))",
+             R"(CREATE VIEW test_schema.test_view SQL SECURITY INVOKER AS SELECT
+              test_table.int64_col FROM test_schema.test_table)"},
+            type_factory(),
+            /*proto_descriptor_bytes=*/""));
+  }
+  test::TestRowReader reader{
+      {{"test_schema.test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(4), String("four")}}}}}};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"SELECT * FROM test_schema.test_view"},
+                                QueryContext{schema.get(), &reader}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(1)),
+                                                ElementsAre(Int64(2)),
+                                                ElementsAre(Int64(4)))));
+}
+
+TEST_P(QueryEngineTest, ExecuteSqlInsertWithNamedSchemaSequence) {
+  test::ScopedEmulatorFeatureFlagsSetter setter({
+      .enable_bit_reversed_positive_sequences = true,
+      .enable_bit_reversed_positive_sequences_postgresql = true,
+  });
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA test_schema)",
+             R"(CREATE SEQUENCE test_schema.test_sequence BIT_REVERSED_POSITIVE)",
+             R"(CREATE TABLE test_schema.test_table (int64_col bigint DEFAULT
+                nextval('test_schema.test_sequence'), string_col varchar,
+                PRIMARY KEY (int64_col)))"},
+            type_factory(),
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/POSTGRESQL));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema, test::CreateSchemaFromDDL(
+                    {R"(CREATE SCHEMA test_schema)",
+                     R"(CREATE SEQUENCE test_schema.test_sequence OPTIONS
+              (sequence_kind = "bit_reversed_positive"))",
+                     R"(CREATE TABLE test_schema.test_table (
+                int64_col INT64 NOT NULL DEFAULT
+                (GET_NEXT_SEQUENCE_VALUE (SEQUENCE test_schema.test_sequence)),
+                string_col STRING(MAX),
+             ) PRIMARY KEY (int64_col))"},
+                    type_factory(),
+                    /*proto_descriptor_bytes=*/""));
+  }
+  query_engine().SetLatestSchemaForFunctionCatalog(schema.get());
+  test::TestRowReader reader{
+      {{"test_schema.test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {}}}}};
+
+  MockRowWriter writer;
+  QueryResult result;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result, query_engine().ExecuteSql(
+                  Query{"INSERT INTO test_schema.test_table (string_col) "
+                        "VALUES ('one'), ('two'), ('four')"},
+                  QueryContext{schema.get(), &reader, &writer}));
+
+  EXPECT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 3);
+}
+
+TEST_P(QueryEngineTest,
+       ExecuteSqlSelectsFromNamedSchemaTableWithForceIndexHint) {
+  std::unique_ptr<const Schema> schema;
+  std::string hint;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema, test::CreateSchemaFromDDL(
+                    {R"(CREATE SCHEMA test_schema)",
+                     R"(CREATE TABLE test_schema.test_table (
+               int64_col bigint primary key, string_col varchar
+              ))",
+                     R"(CREATE UNIQUE INDEX test_index ON test_schema.test_table
+             (string_col DESC))"},
+                    type_factory(),
+                    /*proto_descriptor_bytes=*/"",
+                    /*dialect=*/POSTGRESQL));
+    hint = "/*@ force_index=\"test_index\" */";
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         test::CreateSchemaFromDDL(
+                             {R"(CREATE SCHEMA test_schema)",
+                              R"(CREATE TABLE test_schema.test_table (
+                int64_col INT64,
+                string_col STRING(MAX),
+             ) PRIMARY KEY (int64_col))",
+                              R"(CREATE UNIQUE INDEX test_schema.test_index ON
+             test_schema.test_table (string_col DESC))"},
+                             type_factory(),
+                             /*proto_descriptor_bytes=*/""));
+    hint = "@{force_index=\"test_schema.test_index\"}";
+  }
+  test::TestRowReader reader{
+      {{"test_schema.test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(4), String("four")}}}}}};
+
+  QueryResult result;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(result,
+                       query_engine().ExecuteSql(
+                           Query{absl::Substitute(
+                               "SELECT * FROM test_schema.test_table$0", hint)},
+                           QueryContext{schema.get(), &reader}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("int64_col", "string_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(zetasql::types::Int64Type(),
+                          zetasql::types::StringType()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre(ElementsAre(Int64(2), String("two")),
+                                       ElementsAre(Int64(1), String("one")),
+                                       ElementsAre(Int64(4), String("four")))));
+}
+
+TEST_P(QueryEngineTest, ExecuteColumnExpressionUDF) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE TABLE test_table (int64_col INT64, string_col STRING(MAX))
+            PRIMARY KEY (int64_col))",
+           R"(CREATE FUNCTION test_udf(x INT64) RETURNS INT64 SQL SECURITY
+            INVOKER AS (x+1))",
+           R"(CREATE VIEW test_view SQL SECURITY INVOKER AS SELECT
+            test_udf(test_table.int64_col) AS int64_col FROM test_table)"},
+          type_factory(),
+          /*proto_descriptor_bytes=*/""));
+
+  test::TestRowReader reader{
+      {{"test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(4), String("four")}}}}}};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"SELECT * FROM test_view"},
+                                QueryContext{schema.get(), &reader}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(2)),
+                                                ElementsAre(Int64(3)),
+                                                ElementsAre(Int64(5)))));
+}
+
+TEST_P(QueryEngineTest, ExecuteUDFWithDefault) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaFromDDL(
+          {
+              R"(CREATE FUNCTION test_udf(x INT64 DEFAULT 1) RETURNS INT64 SQL SECURITY
+            INVOKER AS (x+1))"},
+          type_factory(),
+          /*proto_descriptor_bytes=*/""));
+
+  test::TestRowReader reader{
+      {{"test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(4), String("four")}}}}}};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"SELECT test_udf()"},
+                                QueryContext{schema.get(), &reader}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(2)))));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result, query_engine().ExecuteSql(Query{"SELECT test_udf(3)"},
+                                        QueryContext{schema.get(), &reader}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(4)))));
+}
+
+TEST_P(QueryEngineTest, ExecuteScalarSubqueryUDF) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE TABLE test_table (int64_col INT64, string_col STRING(MAX))
+            PRIMARY KEY (int64_col))",
+           R"(CREATE FUNCTION test_udf(x INT64) RETURNS INT64 SQL SECURITY
+            INVOKER AS (x + (SELECT MAX(test_table.int64_col) FROM test_table)))",
+           R"(CREATE VIEW test_view SQL SECURITY INVOKER AS SELECT
+              test_udf(test_table.int64_col) AS int64_col FROM test_table)"},
+          type_factory(),
+          /*proto_descriptor_bytes=*/""));
+
+  test::TestRowReader reader{
+      {{"test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(4), String("four")}}}}}};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"SELECT * FROM test_view"},
+                                QueryContext{schema.get(), &reader}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(5)),
+                                                ElementsAre(Int64(6)),
+                                                ElementsAre(Int64(8)))));
+}
+
+TEST_P(QueryEngineTest, UsingArrayUnnestingWithUDF) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY
+              INVOKER AS (x+1))",
+           R"(CREATE TABLE T (
+                K INT64,
+                V ARRAY<INT64>,
+              ) PRIMARY KEY (K))"},
+          type_factory(),
+          /*proto_descriptor_bytes=*/""));
+
+  test::TestRowReader reader{
+      {{"T",
+        {{"K", "V"},
+         {zetasql::types::Int64Type(), zetasql::types::Int64ArrayType()},
+         {{Int64(1), Array(zetasql::types::Int64ArrayType(),
+                           {Int64(1), Int64(2), Int64(3)})}}}}}};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{
+              R"(SELECT T.K, element, udf_1(element) AS element_plus_1
+             FROM T, UNNEST(V) AS element
+             ORDER BY T.K, element)"},
+          QueryContext{schema.get(), &reader}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(
+                  ElementsAre(Int64(1), Int64(1), Int64(2)),
+                  ElementsAre(Int64(1), Int64(2), Int64(3)),
+                  ElementsAre(Int64(1), Int64(3), Int64(4)))));
+}
+
+TEST_P(QueryEngineTest, ExecuteChainedUDFs) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY
+              INVOKER AS (x + 1))",
+           R"(CREATE FUNCTION udf_2(x INT64) RETURNS INT64 SQL SECURITY
+              INVOKER AS (udf_1(x) * 2))",
+           R"(CREATE TABLE test_table (
+                int64_col INT64,
+                string_col STRING(MAX),
+              ) PRIMARY KEY (int64_col))"},
+          type_factory(),
+          /*proto_descriptor_bytes=*/""));
+
+  test::TestRowReader reader{
+      {{"test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(3), String("three")}}}}}};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{
+              R"(SELECT int64_col, udf_2(int64_col) AS calculated_value
+             FROM test_table
+             ORDER BY int64_col)"},
+          QueryContext{schema.get(), &reader}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(
+      GetAllColumnValues(std::move(result.rows)),
+      IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(1), Int64(4)),
+                                        ElementsAre(Int64(2), Int64(6)),
+                                        ElementsAre(Int64(3), Int64(8)))));
+}
+
+TEST_P(QueryEngineTest, UDFOnViewCallingAnotherUDF) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE TABLE test_table (int64_col INT64, string_col STRING(MAX))
+            PRIMARY KEY (int64_col))",
+           R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY
+            INVOKER AS (x + 1))",
+           R"(CREATE FUNCTION udf_2(x INT64) RETURNS INT64 SQL SECURITY
+            INVOKER AS (udf_1(x) * 2))",
+           R"(CREATE VIEW test_view SQL SECURITY INVOKER AS SELECT
+            udf_2(test_table.int64_col) AS int64_col FROM test_table)"},
+          type_factory(),
+          /*proto_descriptor_bytes=*/""));
+
+  test::TestRowReader reader{
+      {{"test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(3), String("three")}}}}}};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"SELECT * FROM test_view"},
+                                QueryContext{schema.get(), &reader}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(4)),
+                                                ElementsAre(Int64(6)),
+                                                ElementsAre(Int64(8)))));
+}
+
+TEST_P(QueryEngineTest, UDFCallingSequenceInsert) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  test::ScopedEmulatorFeatureFlagsSetter setter({
+      .enable_bit_reversed_positive_sequences = true,
+      .enable_user_defined_functions = true,
+  });
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE SEQUENCE seq OPTIONS(sequence_kind="bit_reversed_positive"))",
+           R"(CREATE FUNCTION udf_1() RETURNS INT64 SQL SECURITY
+              INVOKER AS (CAST(get_internal_sequence_state(SEQUENCE seq) AS INT64)))",
+           R"(CREATE TABLE test_table (int64_col INT64 NOT NULL DEFAULT
+              (GET_NEXT_SEQUENCE_VALUE (SEQUENCE seq)), string_col STRING(MAX))
+              PRIMARY KEY (int64_col))"},
+          type_factory(),
+          /*proto_descriptor_bytes=*/""));
+  query_engine().SetLatestSchemaForFunctionCatalog(schema.get());
+
+  test::TestRowReader reader{
+      {{"test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {}}}}};
+
+  MockRowWriter writer;
+  QueryResult result;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result,
+      query_engine().ExecuteSql(Query{"INSERT INTO test_table (string_col) "
+                                      "VALUES ('one'), ('two'), ('three')"},
+                                QueryContext{schema.get(), &reader, &writer}));
+
+  EXPECT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 3);
+}
+
+TEST_P(QueryEngineTest, UDFUsingIndexInScalarSubquery) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaFromDDL(
+          {
+              R"(CREATE TABLE test_table (int64_col INT64, string_col STRING(MAX))
+                PRIMARY KEY (string_col))",
+              R"(CREATE UNIQUE INDEX test_index ON test_table (int64_col DESC))",
+              R"(CREATE FUNCTION udf_with_index() RETURNS INT64 SQL SECURITY INVOKER
+                AS ((SELECT MAX(test_table.int64_col) FROM
+                test_table@{FORCE_INDEX=test_index})))"},
+          type_factory(),
+          /*proto_descriptor_bytes=*/""));
+
+  test::TestRowReader reader{
+      {{"test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(3), String("three")}}}}}};
+  QueryResult result;
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(result,
+                       query_engine().ExecuteSql(
+                           Query{R"(SELECT udf_with_index() AS result_value)"},
+                           QueryContext{schema.get(), &reader}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("result_value"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(zetasql::types::Int64Type()));
+
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre(ElementsAre(Int64(3)))));
+}
+
+TEST_P(QueryEngineTest, IndexUsingUDF) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
+              AS (CASE WHEN x > 10 THEN NULL ELSE x + 1 END))",
+           R"(CREATE TABLE test_table (int64_col INT64 NOT NULL, udf_col INT64
+              AS (udf_1(int64_col)), string_col STRING(MAX)) PRIMARY KEY (int64_col))",
+           R"(CREATE INDEX test_index ON test_table(udf_col) WHERE int64_col
+              IS NOT NULL)"},
+          type_factory(),
+          /*proto_descriptor_bytes=*/""));
+
+  test::TestRowReader reader{
+      {{"test_table",
+        {{"int64_col", "udf_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::Int64Type(),
+          zetasql::types::StringType()},
+         {{Int64(1), Int64(2), String("one")},
+          {Int64(5), Int64(6), String("five")},
+          {Int64(11), NullInt64(), String("eleven")}}}}}};
+
+  QueryResult result;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(result,
+                       query_engine().ExecuteSql(
+                           Query{R"(SELECT int64_col, udf_col FROM test_table
+                                    WHERE udf_col IS NOT NULL ORDER BY udf_col ASC)"},
+                           QueryContext{schema.get(), &reader}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows),
+              ElementsAre("int64_col", "udf_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(zetasql::types::Int64Type(),
+                          zetasql::types::Int64Type()));
+
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre(ElementsAre(Int64(1), Int64(2)),
+                                       ElementsAre(Int64(5), Int64(6)))));
 }
 
 class DefaultValuesTest : public QueryEngineTest {
@@ -2731,7 +3446,7 @@ class DefaultValuesTest : public QueryEngineTest {
       {{"players",
         {{"player_id", "account_balance"},
          {zetasql::types::Int64Type(), zetasql::types::NumericType()},
-         {{Int64(1), zetasql::values::Numeric(1.0)}}}}}};
+         {{Int64(1), Numeric(1.0)}}}}}};
   std::unique_ptr<ActionManager> action_manager_;
 };
 
@@ -2747,8 +3462,7 @@ TEST_F(DefaultValuesTest, ExecuteInsertsDefaultValues) {
               Field(&MutationOp::columns,
                     std::vector<std::string>{"player_id", "account_balance"}),
               Field(&MutationOp::rows,
-                    UnorderedElementsAre(ValueList{
-                        Int64(2), zetasql::values::Numeric(0)})))))))
+                    UnorderedElementsAre(ValueList{Int64(2), Numeric(0)})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(
@@ -2775,12 +3489,11 @@ TEST_F(DefaultValuesTest, InsertOrUpdateDefaultValues) {
               Field(&MutationOp::table, "players"),
               Field(&MutationOp::columns,
                     std::vector<std::string>{"player_id", "account_balance"}),
-              Field(&MutationOp::rows,
-                    UnorderedElementsAre(
-                        ValueList{Int64(10), zetasql::values::Numeric(10.0)},
-                        ValueList{Int64(1), zetasql::values::Numeric(100.0)},
-                        ValueList{Int64(3),
-                                  zetasql::values::Numeric(3.0)})))))))
+              Field(
+                  &MutationOp::rows,
+                  UnorderedElementsAre(ValueList{Int64(10), Numeric(10.0)},
+                                       ValueList{Int64(1), Numeric(100.0)},
+                                       ValueList{Int64(3), Numeric(3.0)})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(query_engine().ExecuteSql(
@@ -2805,16 +3518,58 @@ TEST_F(DefaultValuesTest, InsertOrIgnoreDefaultValues) {
               Field(&MutationOp::table, "players"),
               Field(&MutationOp::columns,
                     std::vector<std::string>{"player_id", "account_balance"}),
-              Field(&MutationOp::rows,
-                    UnorderedElementsAre(
-                        ValueList{Int64(10), zetasql::values::Numeric(0.0)},
-                        ValueList{Int64(3),
-                                  zetasql::values::Numeric(0.0)})))))))
+              Field(
+                  &MutationOp::rows,
+                  UnorderedElementsAre(ValueList{Int64(10), Numeric(0.0)},
+                                       ValueList{Int64(3), Numeric(0.0)})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{sql}, QueryContext{schema(), reader(), &writer}),
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_F(DefaultValuesTest, ExecuteInsertsDefaultValuesWithUDF) {
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(
+              AllOf(Field(&MutationOp::type, MutationOpType::kInsert),
+                    Field(&MutationOp::table, "test_table"),
+                    Field(&MutationOp::columns,
+                          std::vector<std::string>{"int64_col", "string_col"}),
+                    Field(&MutationOp::rows,
+                          UnorderedElementsAre(
+                              ValueList{Int64(42), String("one")},
+                              ValueList{Int64(42), String("two")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE FUNCTION udf_default_value() RETURNS INT64 SQL SECURITY
+              INVOKER AS (42))",
+           R"(CREATE TABLE test_table (
+                int64_col INT64 DEFAULT(udf_default_value()),
+                string_col STRING(MAX),
+              ) PRIMARY KEY (string_col))"},
+          type_factory(),
+          /*proto_descriptor_bytes=*/""));
+
+  test::TestRowReader reader{
+      {{"test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {}}}}};
+
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (string_col) VALUES ('one'), ('two')"},
+          QueryContext{schema.get(), &reader, &writer}),
+      IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
 }
 
 class DefaultKeyTest
@@ -2824,12 +3579,12 @@ class DefaultKeyTest
   const Schema* schema() { return dkschema_.get(); }
   RowReader* reader() { return &reader_; }
   void SetUp() override {
-    if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-      dkschema_ = test::CreateSimpleDefaultKeySchema(
-          type_factory(), database_api::DatabaseDialect::POSTGRESQL);
+    if (GetParam() == POSTGRESQL) {
+      dkschema_ =
+          test::CreateSimpleDefaultKeySchema(type_factory(), POSTGRESQL);
     } else {
-      dkschema_ = test::CreateSimpleDefaultKeySchema(
-          type_factory(), database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+      dkschema_ = test::CreateSimpleDefaultKeySchema(type_factory(),
+                                                     GOOGLE_STANDARD_SQL);
     }
     action_manager_ = std::make_unique<ActionManager>();
     action_manager_->AddActionsForSchema(schema(),
@@ -2851,8 +3606,7 @@ class DefaultKeyTest
 
 INSTANTIATE_TEST_SUITE_P(
     DefaultKeyPerDialectTests, DefaultKeyTest,
-    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
-                    database_api::DatabaseDialect::POSTGRESQL),
+    testing::Values(GOOGLE_STANDARD_SQL, POSTGRESQL),
     [](const testing::TestParamInfo<DefaultKeyTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
     });
@@ -2862,7 +3616,7 @@ TEST_P(DefaultKeyTest, InsertOrUpdateDefaultKey) {
   // default primary key (prefix: 100, player_id:1) is updated to from previous
   // value of 1 to the new value of `balance`.
   std::string sql;
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
     sql =
         "INSERT OR UPDATE INTO players_default_key (player_id, balance) "
         "VALUES(1, 1000), (2, 2000)";
@@ -2898,7 +3652,7 @@ TEST_P(DefaultKeyTest, InsertOrIgnoreDmlDefaultKey) {
   // The insert statement inserts 2 new rows and the existing row with primary
   // key (prefix: 100, player_id:1) is ignored.
   std::string sql;
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
     sql =
         "INSERT OR IGNORE INTO players_default_key (player_id, balance) "
         "VALUES (3, 30), (1, 10), (2, 20)";
@@ -2934,7 +3688,7 @@ TEST_P(DefaultKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
   // The insert statement inserts 2 rows with same key
   // (prefix: 100, player_id:1).
   std::string sql;
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
     sql =
         "INSERT OR UPDATE INTO players_default_key (player_id, balance) "
         "VALUES(1, 20), (1, 200)";
@@ -2949,7 +3703,7 @@ TEST_P(DefaultKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
 
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{sql}, QueryContext{schema(), reader(), &writer}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Cannot affect a row second time for key: "
                                  "{Int64(100), Int64(1)}")));
 }
@@ -3013,7 +3767,7 @@ TEST_F(GeneratedPrimaryKeyTest, FailsExecuteInsertsTwoRowsIfGpkDisabled) {
       query_engine().ExecuteSql(Query{"INSERT INTO test_table (k1_pk,k2,k4) "
                                       "VALUES(3,3,5), (3,4,5)"},
                                 QueryContext{schema(), reader(), &writer}),
-      StatusIs(absl::StatusCode::kAlreadyExists,
+      StatusIs(StatusCode::kAlreadyExists,
                HasSubstr("Failed to insert row with primary key "
                          "({pk#k1_pk:3, pk#k3gen_storedpk:NULL})")));
 }
@@ -3069,7 +3823,7 @@ TEST_F(GeneratedPrimaryKeyTest, CannotInsertDuplicateValuesForPrimaryKey) {
       query_engine().ExecuteSql(Query{"INSERT INTO test_table (k1_pk,k2,k4) "
                                       "VALUES(2,2,8)"},
                                 QueryContext{schema(), reader(), &writer}),
-      StatusIs(absl::StatusCode::kAlreadyExists,
+      StatusIs(StatusCode::kAlreadyExists,
                HasSubstr("Failed to insert row with primary key "
                          "({pk#k1_pk:2, pk#k3gen_storedpk:2})")));
 }
@@ -3082,7 +3836,7 @@ TEST_F(GeneratedPrimaryKeyTest, CannotUpdatePrimaryKey) {
               "UPDATE test_table SET k3gen_storedpk=5 WHERE k3gen_storedpk=2"},
           QueryContext{schema(), reader(), &writer}),
       StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           HasSubstr(
               "Cannot UPDATE value on non-writable column: k3gen_storedpk")));
 }
@@ -3333,7 +4087,7 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
 
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{sql}, QueryContext{schema(), reader(), &writer}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
+              StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Cannot affect a row second time for key: "
                                  "{Int64(2), Int64(5)}")));
 }
@@ -3345,12 +4099,12 @@ class TimestampKeyTest
   const Schema* schema() { return tsschema_.get(); }
   RowReader* reader() { return &reader_; }
   void SetUp() override {
-    if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-      tsschema_ = test::CreateSimpleTimestampKeySchema(
-          type_factory(), database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+    if (GetParam() == GOOGLE_STANDARD_SQL) {
+      tsschema_ = test::CreateSimpleTimestampKeySchema(type_factory(),
+                                                       GOOGLE_STANDARD_SQL);
     } else {
-      tsschema_ = test::CreateSimpleTimestampKeySchema(
-          type_factory(), database_api::DatabaseDialect::POSTGRESQL);
+      tsschema_ =
+          test::CreateSimpleTimestampKeySchema(type_factory(), POSTGRESQL);
     }
     action_manager_ = std::make_unique<ActionManager>();
     action_manager_->AddActionsForSchema(schema(),
@@ -3365,16 +4119,14 @@ class TimestampKeyTest
         {{"k", "ts", "val"},
          {zetasql::types::Int64Type(), zetasql::types::TimestampType(),
           zetasql::types::Int64Type()},
-         {{Int64(1), zetasql::values::TimestampFromUnixMicros(1), Int64(1)},
-          {Int64(2), zetasql::values::TimestampFromUnixMicros(2),
-           Int64(2)}}}}}};
+         {{Int64(1), TimestampFromUnixMicros(1), Int64(1)},
+          {Int64(2), TimestampFromUnixMicros(2), Int64(2)}}}}}};
   std::unique_ptr<ActionManager> action_manager_;
 };
 
 INSTANTIATE_TEST_SUITE_P(
     TimestampKeyPerDialectTests, TimestampKeyTest,
-    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
-                    database_api::DatabaseDialect::POSTGRESQL),
+    testing::Values(GOOGLE_STANDARD_SQL, POSTGRESQL),
     [](const testing::TestParamInfo<TimestampKeyTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
     });
@@ -3383,7 +4135,7 @@ TEST_P(TimestampKeyTest, InsertOrIgnoreTimestampKey) {
   // The insert statement inserts the 2 new row with one key column k:1 and
   // pending_commit_timestamp in the `ts` in key column.
   std::string sql;
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
     sql =
         "INSERT OR IGNORE INTO timestamp_key_table (k, ts, val) "
         "VALUES (1, PENDING_COMMIT_TIMESTAMP(), 1), "
@@ -3426,7 +4178,7 @@ TEST_P(TimestampKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
   // The insert statement inserts 2 rows with same key
   // (k:1, ts:commit_timestamp).
   std::string sql;
-  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
     sql =
         "INSERT OR UPDATE INTO timestamp_key_table (k, ts, val) "
         "VALUES (1, PENDING_COMMIT_TIMESTAMP(), 1), "
@@ -3447,7 +4199,7 @@ TEST_P(TimestampKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
       query_engine().ExecuteSql(Query{sql},
                                 QueryContext{schema(), reader(), &writer}),
       StatusIs(
-          absl::StatusCode::kInvalidArgument,
+          StatusCode::kInvalidArgument,
           HasSubstr("Cannot affect a row second time for key: "
                     "{Int64(1), String(\"spanner.commit_timestamp()\")}")));
 }

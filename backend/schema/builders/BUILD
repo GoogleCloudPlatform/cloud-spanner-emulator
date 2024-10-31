@@ -33,6 +33,7 @@ cc_library(
         "named_schema_builder.h",
         "sequence_builder.h",
         "table_builder.h",
+        "udf_builder.h",
         "view_builder.h",
     ],
     deps = [
@@ -46,8 +47,8 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )

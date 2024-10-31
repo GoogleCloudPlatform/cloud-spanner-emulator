@@ -184,7 +184,7 @@ absl::Status MutationFromProto(
         ZETASQL_RETURN_IF_ERROR(
             DeleteFromProto(schema, mutation_pb.delete_(), mutation));
         break;
-      case spanner_api::Mutation::OPERATION_NOT_SET:
+      default:
         return error::MissingRequiredFieldError("Mutation.operation");
     }
   }

@@ -102,6 +102,10 @@ static bool typesequiv(struct state const *, int, int);
 /* SPANGRES BEGIN */
 // Make this thread-local so each thread has its own "class member" copy.
 static __thread struct pg_tm tm;
+
+/* GMT timezone state data is kept here */
+// Make this thread-local so each thread has its own copy.
+static __thread struct state *gmtptr = NULL;
 /* SPANGRES END */
 
 /* Initialize *S to a value based on UTOFF, ISDST, and DESIGIDX.  */
@@ -1360,12 +1364,7 @@ gmtsub(pg_time_t const *timep, int32 offset,
 {
 	struct pg_tm *result;
 
-	/* GMT timezone state data is kept here */
-	/* SPANGRES BEGIN */
-	// Make this thread-local so each thread has its own copy.
-	static __thread struct state *gmtptr = NULL;
-	/* SPANGRES END */
-
+	// SPANGRES: Make gmtptr global so that it can be cleaned up.
 	if (gmtptr == NULL)
 	{
 		/* Allocate on first use */

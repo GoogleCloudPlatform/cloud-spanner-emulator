@@ -218,6 +218,8 @@ absl::StatusOr<zetasql::Value> CreatePgOidValue(uint32_t oid) {
       GetPgOidType(), zetasql::ValueContent::Create((int64_t)oid));
 }
 
+zetasql::Value NullPgOid() { return zetasql::Value::Null(GetPgOidType()); }
+
 absl::StatusOr<int64_t> GetPgOidValue(const zetasql::Value& value) {
   ZETASQL_RET_CHECK(!value.is_null());
   ZETASQL_RET_CHECK(value.type() == GetPgOidType());

@@ -248,6 +248,15 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, JsonB) {
               test::EqualsProto(ddl_type));
 }
 
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, TokenList) {
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::TOKENLIST);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
+                       DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
+  EXPECT_TRUE(converted_type->Equals(type_factory_.get_tokenlist()));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(ddl_type));
+}
+
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, TestUnrecognizedColumnType) {
   auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::NONE);
   EXPECT_THAT(DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_),

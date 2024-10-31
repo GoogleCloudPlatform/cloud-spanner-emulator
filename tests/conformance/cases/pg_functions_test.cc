@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -31,6 +32,7 @@
 #include "absl/time/time.h"
 #include "google/cloud/spanner/json.h"
 #include "google/cloud/spanner/numeric.h"
+#include "google/cloud/spanner/oid.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 #include "third_party/spanner_pg/datatypes/common/numeric_core.h"
@@ -45,6 +47,7 @@ namespace {
 using cloud::spanner::JsonB;
 using cloud::spanner::MakePgNumeric;
 using cloud::spanner::PgNumeric;
+using cloud::spanner::PgOid;
 using postgres_translator::spangres::datatypes::common::MaxNumericString;
 using postgres_translator::spangres::datatypes::common::MinNumericString;
 using testing::HasSubstr;
@@ -300,6 +303,50 @@ TEST_F(PGFunctionsTest, MaxNumericFromTable) {
   EXPECT_THAT(
       Query("SELECT max(numeric_value) + max(numeric_value) FROM values"),
       IsOkAndHoldsRows({{*MakePgNumeric("246.0")}}));
+}
+
+// Test for pg.min with PG.OID.
+TEST_F(PGFunctionsTest, MinOid) {
+  EXPECT_THAT(Query("SELECT min(1::oid)"), IsOkAndHoldsRows({{1}}));
+}
+
+TEST_F(PGFunctionsTest, MinOidFromEmptyTable) {
+  EXPECT_THAT(Query("SELECT min(int_value::oid) FROM values"),
+              IsOkAndHoldsRows({{Null<PgOid>()}}));
+}
+
+TEST_F(PGFunctionsTest, MinOidFromTableWithOnlyNull) {
+  PopulateDatabase();
+  EXPECT_THAT(Query("SELECT min(int_value::oid) FROM values WHERE id=4"),
+              IsOkAndHoldsRows({{Null<PgOid>()}}));
+}
+
+TEST_F(PGFunctionsTest, MinOidFromTable) {
+  PopulateDatabase();
+  EXPECT_THAT(Query("SELECT min(int_value::oid) FROM values"),
+              IsOkAndHoldsRows({{PgOid(0)}}));
+}
+
+// Test for pg.max with PG.OID.
+TEST_F(PGFunctionsTest, MaxOid) {
+  EXPECT_THAT(Query("SELECT max(1::oid)"), IsOkAndHoldsRows({{1}}));
+}
+
+TEST_F(PGFunctionsTest, MaxOidFromEmptyTable) {
+  EXPECT_THAT(Query("SELECT max(int_value::oid) FROM values"),
+              IsOkAndHoldsRows({{Null<PgOid>()}}));
+}
+
+TEST_F(PGFunctionsTest, MaxOidFromTableWithOnlyNull) {
+  PopulateDatabase();
+  EXPECT_THAT(Query("SELECT max(int_value::oid) FROM values WHERE id=4"),
+              IsOkAndHoldsRows({{Null<PgOid>()}}));
+}
+
+TEST_F(PGFunctionsTest, MaxOidFromTable) {
+  PopulateDatabase();
+  EXPECT_THAT(Query("SELECT max(int_value::oid) FROM values"),
+              IsOkAndHoldsRows({{PgOid(5)}}));
 }
 
 // Tests for pg.sum with Int64.
@@ -1698,6 +1745,8 @@ TEST_F(PGFunctionsTest, ToJsonB) {
   EXPECT_THAT(Query(R"(select to_jsonb(null::bigint))"),
               IsOkAndHoldsRows({Null<JsonB>()}));
   EXPECT_THAT(Query(R"(select to_jsonb(4))"), IsOkAndHoldsRows({JsonB("4")}));
+  EXPECT_THAT(Query(R"(select to_jsonb(4::oid))"),
+              IsOkAndHoldsRows({JsonB("4")}));
   EXPECT_THAT(Query(R"(select to_jsonb(fAlSe))"),
               IsOkAndHoldsRows({JsonB("false")}));
   EXPECT_THAT(Query(R"(select to_jsonb(10419.85))"),
@@ -1764,6 +1813,48 @@ TEST_F(PGFunctionsTest, ExtendedTypeCastTest) {
               IsOkAndHoldsRows({{1}}));
   EXPECT_THAT(Query(R"(SELECT CAST(1::oid AS text))"),
               IsOkAndHoldsRows({{"1"}}));
+}
+
+TEST_F(PGFunctionsTest, ExtendedTypeArrayCatTest) {
+  PopulateDatabase();
+  EXPECT_THAT(
+      Query(R"(SELECT array_cat('{123,234}'::oid[], '{123,234}'::oid[]))"),
+      IsOkAndHoldsRows(
+          {{Array<PgOid>({PgOid(123), PgOid(234), PgOid(123), PgOid(234)})}}));
+}
+
+// TODO: Array order is not guaranteed. Update test to handle this.
+TEST_F(PGFunctionsTest, DISABLED_ExtendedTypeArrayAggTest) {
+  PopulateDatabase();
+  EXPECT_THAT(
+      Query(R"(SELECT array_agg(numeric_value) FROM values)"),
+      IsOkAndHoldsRows(
+          {{Array<PgNumeric>({*MakePgNumeric("123"), std::nullopt,
+                              *MakePgNumeric("12"), *MakePgNumeric("3")})}}));
+  EXPECT_THAT(Query(R"(SELECT array_agg(to_jsonb(int_value)) FROM values)"),
+              IsOkAndHoldsRows({{Array<JsonB>(
+                  {JsonB("1"), JsonB("0"), JsonB("5"), std::nullopt})}}));
+  EXPECT_THAT(
+      Query(R"(SELECT array_agg(int_value::oid) FROM values)"),
+      IsOkAndHoldsRows(
+          {{Array<PgOid>({PgOid(1), PgOid(0), PgOid(5), std::nullopt})}}));
+}
+
+TEST_F(PGFunctionsTest, ExtendedTypeCountTest) {
+  PopulateDatabase();
+  EXPECT_THAT(Query(R"(SELECT count(int_value::oid) FROM values)"),
+              IsOkAndHoldsRows({{3}}));
+}
+
+TEST_F(PGFunctionsTest, FarmFingerprintTest) {
+  EXPECT_THAT(Query(R"(SELECT spanner.farm_fingerprint('abc'))"),
+              IsOkAndHoldsRows({{2640714258260161385}}));
+  EXPECT_THAT(Query(R"(SELECT spanner.farm_fingerprint(null::text))"),
+              IsOkAndHoldsRows({{Null<int64_t>()}}));
+  EXPECT_THAT(Query(R"(SELECT spanner.farm_fingerprint('abc'::bytea))"),
+              IsOkAndHoldsRows({{2640714258260161385}}));
+  EXPECT_THAT(Query(R"(SELECT spanner.farm_fingerprint(null::bytea))"),
+              IsOkAndHoldsRows({{Null<int64_t>()}}));
 }
 
 }  // namespace

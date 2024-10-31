@@ -17,16 +17,16 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_INDEX_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_INDEX_H_
 
+#include <algorithm>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include "zetasql/public/type.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "absl/strings/substitute.h"
-#include "backend/common/ids.h"
+#include "absl/types/span.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_node.h"
@@ -115,6 +115,17 @@ class Index : public SchemaNode {
     return managing_nodes_;
   }
 
+  // Returns the type of the index.
+  bool is_search_index() const {
+    return index_type_ == IndexType::kSearchIndex;
+  }
+
+  // Returns the list of partition by column defined in the search index.
+  absl::Span<const Column* const> partition_by() const { return partition_by_; }
+
+  // Returns the list of order by column defined in the search index.
+  absl::Span<const Column* const> order_by() const { return order_by_; }
+
   // Returns a detailed string which lists information about this index.
   std::string FullDebugString() const;
 
@@ -196,6 +207,18 @@ class Index : public SchemaNode {
   // Columns specified in the WHERE IS NOT NULL clause. References are
   // to the corresponding columns in 'index_data_table_'.
   std::vector<const Column*> null_filtered_columns_;
+
+  // The type of the index.
+  enum class IndexType { kIndex, kSearchIndex };
+  IndexType index_type_ = IndexType::kIndex;
+
+  // Currently applies only to search index. A list of key parts that the index
+  // is partitioned by. If this is empty, then the index is not partitioned.
+  std::vector<const Column*> partition_by_;
+
+  // Currently applies only to search index. A list of key parts that the index
+  // is ordered by. If this is empty, then the index is unordered.
+  std::vector<const Column*> order_by_;
 };
 
 }  // namespace backend

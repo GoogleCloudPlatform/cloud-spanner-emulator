@@ -234,6 +234,21 @@ Notable limitations:
   hints. However, index names generated in the emulator cannot be used in the
   emulator or in production.
 
+- The emulator does not implement handlings of all the parameters of full text
+  search functions in Cloud Spanner.
+  - For full text search functions that has `language_tag` or
+    `enhance_query` parameter, the functions will accept calls with the
+    parameters but take no action on it.
+  - `TOKENIZE_FULLTEXT` and `TOKENIZE_SUBSTRING` functions only support default
+    value `text/plain` for `content_type` parameter.
+  - `TOKENIZE_FULLTEXT` accepts `token_category` parameter but takes no action
+    on it.
+  - `TOKENIZE_SUBSTRING` accepts `remove_diacritics` and
+    `short_tokens_only_for_anchors` parameters but takes no action on them.
+  - `SCORE` function accepts `options` parameter but takes no action on it.
+  - `TOKENIZE_NGRAMS` accepts `remove_diacritics` parameter but takes no action
+    on it.
+
 ## Frequently Asked Questions (FAQ)
 
 
