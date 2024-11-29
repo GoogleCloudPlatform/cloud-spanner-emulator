@@ -42,14 +42,20 @@ class TestCase(unittest.TestCase):
   """Base class for tests that need to test the emulator against gcloud."""
 
   def RunGCloud(self, *args):
+    """Runs gcloud with the given args and returns the output."""
     # Run gcloud with a temporary config dir so it does not mess up the default
     # config when run locally.
     env = {}
     if os.environ.get('TEST_UNDECLARED_OUTPUTS_DIR'):
       env['CLOUDSDK_CONFIG'] = os.path.join(
           os.environ.get('TEST_UNDECLARED_OUTPUTS_DIR'), '.config', 'gcloud')
-    return subprocess.check_output(
-        (GCLOUD_BINARY,) + args, env=env, universal_newlines=True).strip()
+    try:
+      return subprocess.check_output(
+          (GCLOUD_BINARY,) + args, env=env, universal_newlines=True
+      ).strip()
+    except subprocess.CalledProcessError as e:
+      print(f'Invoking gcloud with args: {args} failed with error: {e.output}')
+      raise e
 
   def GCloudVersion(self):
     # Get the current installed version e.g., Google Cloud SDK 287.0.0.

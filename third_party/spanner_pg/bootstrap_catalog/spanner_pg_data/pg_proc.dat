@@ -197,7 +197,7 @@
 
 # SOUNDEX
 { oid => 50037, proname => 'soundex', pronamespace => 'spanner',
-  prorettype => 'bool', proargtypes => 'text',
+  prorettype => 'text', proargtypes => 'text',
   prosrc => 'spangres_fts_func' },
 
 #############################

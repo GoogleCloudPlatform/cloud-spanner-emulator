@@ -189,6 +189,7 @@ void StripPgExpr(Expr* expr) {
     }
     case T_FuncExpr: {
       FuncExpr* func_expr = PostgresCastNode(FuncExpr, expr);
+      func_expr->funccollid = InvalidOid;
       func_expr->inputcollid = InvalidOid;
       func_expr->location = -1;
       for (Expr* arg : StructList<Expr*>(func_expr->args)) {

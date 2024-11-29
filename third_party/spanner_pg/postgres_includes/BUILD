@@ -79,7 +79,6 @@ cc_library(
     features = ["-use_header_modules"],  # Incompatible with -fexceptions.
     visibility = [
         "//:__subpackages__",
-        "//spanner/datatypes/common/jsonb:__subpackages__",
         "//spanner/tests/spangres_end_to_end_test:__subpackages__",
     ],
     deps = [

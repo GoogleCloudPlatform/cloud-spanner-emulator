@@ -56,11 +56,13 @@ namespace spangres {
 absl::Status ValidateSequenceOption(
     const List* options,
     bool is_create,
+    bool is_identity_column,
     const TranslationOptions& translation_options);
 
 absl::Status ValidateSequenceOption(
     const DefElem& elem,
-    bool is_create
+    bool is_create,
+    bool is_identity_column
 );
 
 namespace {
@@ -307,6 +309,36 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
               ValidateParseTreeNode(*column_def, /*alter_column=*/true));
           break;
         }
+        case AT_SetIdentity: {
+          ZETASQL_RET_CHECK_NE(node.name, nullptr);
+          ZETASQL_RET_CHECK_NE(node.def, nullptr);
+          // We currently support altering only one option at a time.
+          ZETASQL_ASSIGN_OR_RETURN(const List* alter_options,
+                           (DowncastNode<List, T_List>(node.def)));
+          if (list_length(alter_options) != 1) {
+            return absl::InvalidArgumentError(
+                "Only single option is allowed for <ALTER COLUMN> on identity "
+                "column.");
+          }
+          // The supported options are: NO MINVALUE | NO MAXVALUE | NO SKIP
+          // RANGE | SKIP RANGE skip_range_min skip_range_max | NO CYCLE. We
+          // reuse the validation for sequence option.
+          ZETASQL_ASSIGN_OR_RETURN(
+              const DefElem* elem,
+              (GetListItemAsNode<DefElem, T_DefElem>(alter_options, 0)));
+          ZETASQL_RET_CHECK_NE(elem, nullptr);
+          ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(*elem, /*is_create=*/false,
+                                                 /*is_identity_column=*/true));
+          break;
+        }
+        case AT_RestartCounter: {
+          ZETASQL_RET_CHECK_NE(node.name, nullptr);
+          ZETASQL_RET_CHECK_NE(node.def, nullptr);
+          // Pg integer-looking string will get lexed as T_Float if the value is
+          // too large to fit in an 'int'.
+          ZETASQL_RET_CHECK(node.def->type == T_Integer || node.def->type == T_Float);
+          break;
+        }
         case AT_ColumnDefault: {
           ZETASQL_RET_CHECK_NE(node.name, nullptr);
           break;
@@ -530,6 +562,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
       case CONSTR_ATTR_NOT_DEFERRABLE:
       case CONSTR_GENERATED:
       case CONSTR_DEFAULT:
+      case CONSTR_IDENTITY:
         break;
       case CONSTR_VECTOR_LENGTH:
         if (node.vector_length < 0) {
@@ -600,11 +633,18 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
   // `exclusions` is used for EXCLUDE constraints which are not supported.
   ZETASQL_RET_CHECK_EQ(node.exclusions, nullptr);
 
+  if (node.contype == CONSTR_IDENTITY) {
+    List* opts = node.options;
+    ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(opts, /*is_create=*/true,
+                                           /*is_identity_column=*/true,
+                                           options));
+  } else {
     // `options` are defined in WITH clause, which is not supported.
     if (!IsListEmpty(node.options)) {
       return UnsupportedTranslationError(
           "<WITH> clause is not supported in constraint definitions.");
     }
+  }
 
   // `indexname` is used in ALTER TABLE ADD [UNIQUE | PRIMARY KEY] USING INDEX.
   // This type of ALTER statement is not supported.
@@ -869,17 +909,18 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
   if (node.removeType != OBJECT_TABLE && node.removeType != OBJECT_INDEX &&
       node.removeType != OBJECT_SCHEMA && node.removeType != OBJECT_VIEW &&
       node.removeType != OBJECT_CHANGE_STREAM &&
-      node.removeType != OBJECT_SEQUENCE) {
+      node.removeType != OBJECT_SEQUENCE
+  ) {
     auto object_type = internal::ObjectTypeToString(node.removeType);
+    const std::string error_message =
+        "Only <DROP TABLE>, <DROP INDEX>, <DROP SCHEMA>, <DROP VIEW>, "
+        "<DROP SEQUENCE>, "
+        "and <DROP CHANGE STREAM> statements are supported.";
     if (!object_type.ok()) {
-          return UnsupportedTranslationError(
-        "Only <DROP TABLE>, <DROP INDEX>, <DROP SCHEMA>, <DROP VIEW>, "
-        "<DROP SEQUENCE>, and <DROP CHANGE STREAM> statements are supported.");
+      return UnsupportedTranslationError(error_message);
     }
-    return UnsupportedTranslationError(
-        "<DROP " + *object_type + "> is not supported. "
-        "Only <DROP TABLE>, <DROP INDEX>, <DROP SCHEMA>, <DROP VIEW>, "
-        "<DROP SEQUENCE>, and <DROP CHANGE STREAM> statements are supported.");
+    return UnsupportedTranslationError("<DROP " + *object_type +
+                                       "> is not supported. " + error_message);
   }
 
   if (node.removeType == OBJECT_CHANGE_STREAM) {
@@ -1028,11 +1069,14 @@ absl::Status ValidateParseTreeNode(const TypeName& node) {
 }
 
 // Validate the option for both <CREATE SEQUENCE> and <ALTER SEQUENCE>.
-absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create
-                                   ) {
+// Also validate the option for <CREATE TABLE> and <ALTER TABLE> when
+// is_identity_column is true.
+absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create,
+                                    bool is_identity_column) {
   absl::string_view name = elem.defname;
   absl::string_view parent_statement_type =
-            (is_create ? "CREATE SEQUENCE" : "ALTER SEQUENCE");
+      is_identity_column ? (is_create ? "CREATE TABLE" : "ALTER COLUMN ... SET")
+                         : (is_create ? "CREATE SEQUENCE" : "ALTER SEQUENCE");
   ZETASQL_RET_CHECK(!name.empty());
   if (name == "minvalue") {
     if (elem.arg != nullptr) {
@@ -1047,22 +1091,44 @@ absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create
           parent_statement_type));
     }
   } else if (name == "skip_range") {
+    // `skip_range` name is used by `SKIP RANGE min max` and `NO SKIP RANGE`.
+    // Below we check that if `NO SKIP RANGE` is found, i.e. elem.arg==nullptr,
+    // return error if it is not `ALTER COLUMN ... SET NO SKIP RANGE`.
+    if (elem.arg == nullptr) {
+      if (is_create || !is_identity_column) {
+        return UnsupportedTranslationError(absl::Substitute(
+          "Optional clause <NO SKIP RANGE> is not supported in <$0> statement.",
+          parent_statement_type));
+      }
+    } else {
       ZETASQL_RET_CHECK_NE(elem.arg, nullptr);
       ZETASQL_ASSIGN_OR_RETURN(const List* range_values,
                       (DowncastNode<List, T_List>(elem.arg)));
       ZETASQL_RET_CHECK_EQ(list_length(range_values), 2);
+    }
   } else if (name == "start_counter" && is_create) {
     ZETASQL_RET_CHECK_NE(elem.arg, nullptr);
     // Pg integer-looking string will get lexed as T_Float if the value is
     // too large to fit in an 'int'.
     ZETASQL_RET_CHECK(elem.arg->type == T_Integer || elem.arg->type == T_Float);
   } else if (name == "restart_counter" && !is_create) {
+    if (is_identity_column) {
+      // Spangres supports RESTART COUNTER WITH as follows:
+      // - Correct: ALTER COLUMN ... RESTART COUNTER WITH ...
+      // - Incorrect: ALTER COLUMN ... SET RESTART COUNTER WITH ...
+      return UnsupportedTranslationError(absl::Substitute(
+          "Optional clause <RESTART COUNTER WITH> is not supported "
+          "in <$0> statement. Use <ALTER COLUMN ... RESTART COUNTER WITH> "
+          "instead.",
+          parent_statement_type));
+    }
     ZETASQL_RET_CHECK_NE(elem.arg, nullptr);
     // Pg integer-looking string will get lexed as T_Float if the value is
     // too large to fit in an 'int'.
     ZETASQL_RET_CHECK(elem.arg->type == T_Integer || elem.arg->type == T_Float);
-  } else if (name == "owned_by"
-            ) {
+  } else if (name == "owned_by" && !is_identity_column) {
+    // Spangres does not support OWNED BY for identity column, so only
+    // validating "owned_by" for sequence.
     ZETASQL_ASSIGN_OR_RETURN(const List* names, (DowncastNode<List, T_List>(elem.arg)));
     ZETASQL_RET_CHECK_GE(list_length(names), 1);
     if (list_length(names) == 1) {
@@ -1090,8 +1156,11 @@ absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create
   return absl::OkStatus();
 }
 
+// Validate the options for:
+// * sequence in <CREATE SEQUENCE> and <ALTER SEQUENCE>, and
+// * identity column in <CREATE TABLE> and <ALTER TABLE>.
 absl::Status ValidateSequenceOption(
-    const List* options, bool is_create,
+    const List* options, bool is_create, bool is_identity_column,
     const TranslationOptions& translation_options) {
   bool seen_bit_reversed_positive = false;
   for (int i = 0; i < list_length(options); ++i) {
@@ -1102,18 +1171,25 @@ absl::Status ValidateSequenceOption(
     if (name == "bit_reversed_positive" && is_create) {
       seen_bit_reversed_positive = true;
     } else {
-      ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(
-          *elem,
-          is_create
-          ));
+      ZETASQL_RETURN_IF_ERROR(
+          ValidateSequenceOption(*elem, is_create, is_identity_column));
     }
   }
 
+  if (!translation_options.enable_default_sequence_kind) {
+    // Sequence kind is mandatory when default sequence kind is disabled.
     if (!seen_bit_reversed_positive && is_create) {
+      if (is_identity_column) {
+        return UnsupportedTranslationError(
+            "Only BIT_REVERSED_POSITIVE identity columns are supported. Use "
+            "`GENERATED BY DEFAULT AS IDENTITY (BIT_REVERSED_POSITIVE ...)` to "
+            "define identity column.");
+      }
       return UnsupportedTranslationError(
           "Only BIT_REVERSED_POSITIVE sequences are supported. Use `CREATE "
           "SEQUENCE <name> BIT_REVERSED_POSITIVE ...` to create sequence.");
     }
+  }
 
   return absl::OkStatus();
 }
@@ -1140,9 +1216,9 @@ absl::Status ValidateParseTreeNode(const CreateSeqStmt& node,
   // `options` defines the property of the sequence. Spangres only supports a
   // few portions of native PostgreSQL's options.
   List* opts = node.options;
-  ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(
-      opts, /*is_create=*/true,
-      options));
+  ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(opts, /*is_create=*/true,
+                                         /*is_identity_column=*/false,
+                                         options));
 
   // `ownerId` should be the default value after parsing.
   ZETASQL_RET_CHECK_EQ(node.ownerId, InvalidOid);
@@ -1169,9 +1245,9 @@ absl::Status ValidateParseTreeNode(const AlterSeqStmt& node,
   // specified options we don't (currently) allow.
   List* opts = node.options;
   if (opts != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(
-        opts, /*is_create=*/false,
-        options));
+    ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(opts, /*is_create=*/false,
+                                           /*is_identity_column=*/false,
+                                           options));
   }
 
   // `for_identity` true when it created for SERIAL

@@ -93,6 +93,7 @@ pg_collation,collisdeterministic,YES,boolean
 pg_collation,collencoding,YES,bigint
 pg_collation,collcollate,YES,character varying
 pg_collation,collctype,YES,character varying
+pg_collation,colliculocale,YES,character varying
 pg_collation,collversion,YES,character varying
 pg_config,name,YES,character varying
 pg_config,setting,YES,character varying

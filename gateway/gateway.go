@@ -39,15 +39,16 @@ import (
 
 // Options encapsulates options for the emulator gateway.
 type Options struct {
-	GatewayAddress                     string
-	FrontendBinary                     string
-	FrontendAddress                    string
-	CopyEmulatorStdout                 bool
-	CopyEmulatorStderr                 bool
-	LogRequests                        bool
-	EnableFaultInjection               bool
-	DisableQueryNullFilteredIndexCheck bool
-	OverrideMaxDatabasesPerInstance    int
+	GatewayAddress                                 string
+	FrontendBinary                                 string
+	FrontendAddress                                string
+	CopyEmulatorStdout                             bool
+	CopyEmulatorStderr                             bool
+	LogRequests                                    bool
+	EnableFaultInjection                           bool
+	DisableQueryNullFilteredIndexCheck             bool
+	OverrideMaxDatabasesPerInstance                int
+	OverrideChangeStreamPartitionTokenAliveSeconds int
 }
 
 // Gateway implements the emulator gateway server.
@@ -78,6 +79,9 @@ func (gw *Gateway) Run() {
 	emulatorArgs = append(emulatorArgs,
 		fmt.Sprintf("--override_max_databases_per_instance=%d",
 			gw.opts.OverrideMaxDatabasesPerInstance))
+	emulatorArgs = append(emulatorArgs,
+		fmt.Sprintf("--override_change_stream_partition_token_alive_seconds=%d",
+			gw.opts.OverrideChangeStreamPartitionTokenAliveSeconds))
 
 	cmd := exec.Command(gw.opts.FrontendBinary, emulatorArgs...)
 

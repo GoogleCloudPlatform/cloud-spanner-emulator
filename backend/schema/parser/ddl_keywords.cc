@@ -38,6 +38,9 @@ std::string ToToken(absl::string_view word) {
     token = "TRUEE";
   } else if (token == "TOKEN") {
     token = "TOKENT";
+  } else if (token == "SKIP") {
+    // SKIP is a reserved keyword in the rule generator.
+    token = "SKIPP";
   }
   return token;
 }

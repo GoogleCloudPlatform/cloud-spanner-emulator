@@ -29,8 +29,6 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "third_party/spanner_pg/catalog/spangres_system_catalog.h"
-
 #include <memory>
 #include <string>
 #include <utility>

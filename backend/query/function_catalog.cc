@@ -150,6 +150,19 @@ std::unique_ptr<zetasql::Function> MlPredictRowFunction(
               nullptr}},
       zetasql::FunctionOptions().set_evaluator({EvalMlPredictRow}));
 }
+
+std::optional<std::tuple<std::string, std::string, std::string>>
+ParseFullyQualifiedColumnPath(const std::string& qualified_column_path) {
+  std::vector<std::string> parts = absl::StrSplit(qualified_column_path, '.');
+  if (parts.size() == 2) {
+    return std::make_tuple(/*schema_name=*/"", /*table_name=*/parts[0],
+                           /*column_name=*/parts[1]);
+  } else if (parts.size() == 3) {
+    return std::make_tuple(/*schema_name=*/parts[0], /*table_name=*/parts[1],
+                           /*column_name=*/parts[2]);
+  }
+  return std::nullopt;
+}
 }  // namespace
 
 FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory,
@@ -203,6 +216,11 @@ void FunctionCatalog::AddSpannerFunctions() {
       GetInternalSequenceStateFunction(catalog_name_);
   functions_[get_internal_sequence_state_func->Name()] =
       std::move(get_internal_sequence_state_func);
+
+  auto get_table_column_identity_state_func =
+      GetTableColumnIdentityStateFunction(catalog_name_);
+  functions_[get_table_column_identity_state_func->Name()] =
+      std::move(get_table_column_identity_state_func);
 
   auto get_next_sequence_value_func =
       GetNextSequenceValueFunction(catalog_name_);
@@ -355,6 +373,60 @@ FunctionCatalog::GetInternalSequenceStateFunction(
               zetasql::types::Int64Type(),
               {zetasql::FunctionArgumentType::AnySequence()},
               nullptr},
+          zetasql::FunctionSignature{zetasql::types::Int64Type(),
+                                       {zetasql::types::StringType()},
+                                       nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function>
+FunctionCatalog::GetTableColumnIdentityStateFunction(
+    const std::string& catalog_name) {
+  // Defines the function evaluator as a lambda, so it has access to the schema.
+  auto evaluator = [&](absl::Span<const zetasql::Value> args)
+      -> absl::StatusOr<zetasql::Value> {
+    ZETASQL_RET_CHECK(args.size() == 1 && args[0].type()->IsString());
+
+    if (!EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
+      return error::UnsupportedFunction(
+          kGetTableColumnIdentityStateFunctionName);
+    }
+
+    if (latest_schema_ == nullptr) {
+      return error::SequenceNeedsAccessToSchema();
+    }
+
+    std::string column_path = args[0].string_value();
+    auto parsed_column_path = ParseFullyQualifiedColumnPath(column_path);
+    if (!parsed_column_path.has_value()) {
+      return error::InvalidColumnIdentifierFormat(column_path);
+    }
+    auto [schema_name, table_name, column_name] = *parsed_column_path;
+    std::string full_table_name =
+        schema_name.empty() ? table_name
+                            : absl::StrCat(schema_name, ".", table_name);
+    const Table* table = latest_schema_->FindTable(full_table_name);
+    if (table == nullptr) {
+      return error::TableNotFoundInIdentityFunction(full_table_name);
+    }
+    const Column* column = table->FindColumn(column_name);
+    if (column == nullptr || !column->is_identity_column()) {
+      return error::ColumnNotFoundInIdentityFunction(full_table_name,
+                                                     column_name);
+    }
+    ZETASQL_RET_CHECK(column->sequences_used().size() == 1);
+    const Sequence* sequence =
+        static_cast<const Sequence*>(column->sequences_used().at(0));
+    return sequence->GetInternalSequenceState();
+  };
+
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(zetasql::FunctionEvaluator(evaluator));
+
+  return std::make_unique<zetasql::Function>(
+      kGetTableColumnIdentityStateFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{zetasql::types::Int64Type(),
                                        {zetasql::types::StringType()},
                                        nullptr}},

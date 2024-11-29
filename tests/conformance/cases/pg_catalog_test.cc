@@ -15,6 +15,7 @@
 //
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "gmock/gmock.h"
@@ -169,6 +170,200 @@ TEST_F(PGCatalogTest, PGAttrdef) {
               IsOkAndHoldsRows({{4, 1}}));
 }
 
+TEST_F(PGCatalogTest, PGAttribute) {
+  if (in_prod_env()) {
+    GTEST_SKIP();
+  }
+  constexpr absl::string_view query_template = R"sql(
+      SELECT
+        c.relname,
+        attname,
+        t.typname,
+        attnum,
+        attndims,
+        attcacheoff,
+        attcompression,
+        attnotnull,
+        atthasdef,
+        atthasmissing,
+        attidentity,
+        attgenerated,
+        attisdropped,
+        attislocal,
+        attinhcount
+      FROM
+        pg_catalog.pg_attribute AS a
+      JOIN
+        pg_catalog.pg_class AS c
+        ON a.attrelid = c.oid
+      JOIN
+        pg_catalog.pg_type AS t
+        ON a.atttypid = t.oid
+      WHERE
+        c.relnamespace != 11 AND c.relnamespace != 75003 AND
+        c.relnamespace != 75004 AND c.relkind = '%s'
+      ORDER BY
+        attrelid, attnum)sql";
+
+  // Table attributes.
+  auto expected = std::vector<ValueRow>({
+      {"base", "key1", "int8", 1, 0, -1, "\0", true, false, false, "\0", "\0",
+       false, true, 0},
+      {"base", "key2", "text", 2, 0, -1, "\0", true, false, false, "\0", "\0",
+       false, true, 0},
+      {"base", "bool_value", "bool", 3, 0, -1, "\0", false, false, false, "\0",
+       "\0", false, true, 0},
+      {"base", "int_value", "int8", 4, 0, -1, "\0", true, false, false, "\0",
+       "\0", false, true, 0},
+      {"base", "float_value", "float4", 5, 0, -1, "\0", false, false, false,
+       "\0", "\0", false, true, 0},
+      {"base", "double_value", "float8", 6, 0, -1, "\0", false, false, false,
+       "\0", "\0", false, true, 0},
+      {"base", "str_value", "text", 7, 0, -1, "\0", false, false, false, "\0",
+       "\0", false, true, 0},
+      {"base", "byte_value", "bytea", 8, 0, -1, "\0", false, false, false, "\0",
+       "\0", false, true, 0},
+      {"base", "timestamp_value", "timestamptz", 9, 0, -1, "\0", false, false,
+       false, "\0", "\0", false, true, 0},
+      {"base", "date_value", "date", 10, 0, -1, "\0", false, false, false, "\0",
+       "\0", false, true, 0},
+      {"base", "bool_array", "_bool", 11, 1, -1, "\0", true, false, false, "\0",
+       "\0", false, true, 0},
+      {"base", "int_array", "_int8", 12, 1, -1, "\0", false, false, false, "\0",
+       "\0", false, true, 0},
+      {"base", "float_array", "_float4", 13, 1, -1, "\0", false, false, false,
+       "\0", "\0", false, true, 0},
+      {"base", "double_array", "_float8", 14, 1, -1, "\0", false, false, false,
+       "\0", "\0", false, true, 0},
+      {"base", "str_array", "_text", 15, 1, -1, "\0", false, false, false, "\0",
+       "\0", false, true, 0},
+      {"base", "byte_array", "_bytea", 16, 1, -1, "\0", false, false, false,
+       "\0", "\0", false, true, 0},
+      {"base", "timestamp_array", "_timestamptz", 17, 1, -1, "\0", false, false,
+       false, "\0", "\0", false, true, 0},
+      {"base", "date_array", "_date", 18, 1, -1, "\0", false, false, false,
+       "\0", "\0", false, true, 0},
+      {"base", "gen_value", "int8", 19, 0, -1, "\0", false, false, false, "\0",
+       "s", false, true, 0},
+      {"base", "gen_function_value", "int8", 20, 0, -1, "\0", false, false,
+       false, "\0", "s", false, true, 0},
+      {"base", "default_col_value", "int8", 21, 0, -1, "\0", false, true, false,
+       "\0", "\0", false, true, 0},
+      {"base", "default_timestamp_col_value", "timestamptz", 22, 0, -1, "\0",
+       false, true, false, "\0", "\0", false, true, 0},
+
+      {"cascade_child", "key1", "int8", 1, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+      {"cascade_child", "key2", "text", 2, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+      {"cascade_child", "child_key", "bool", 3, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+      {"cascade_child", "value1", "text", 4, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+      {"cascade_child", "value2", "bool", 5, 0, -1, "\0", false, false, false,
+       "\0", "\0", false, true, 0},
+      {"cascade_child", "created_at", "timestamptz", 6, 0, -1, "\0", false,
+       false, false, "\0", "\0", false, true, 0},
+
+      {"no_action_child", "key1", "int8", 1, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+      {"no_action_child", "key2", "text", 2, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+      {"no_action_child", "child_key", "bool", 3, 0, -1, "\0", true, false,
+       false, "\0", "\0", false, true, 0},
+      {"no_action_child", "value", "text", 4, 0, -1, "\0", false, false, false,
+       "\0", "\0", false, true, 0},
+
+      {"row_deletion_policy", "key", "int8", 1, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+      {"row_deletion_policy", "created_at", "timestamptz", 2, 0, -1, "\0",
+       false, false, false, "\0", "\0", false, true, 0},
+
+      {"ns_table_1", "key1", "int8", 1, 0, -1, "\0", true, false, false, "\0",
+       "\0", false, true, 0},
+      {"ns_table_1", "key2", "text", 2, 0, -1, "\0", false, false, false, "\0",
+       "\0", false, true, 0},
+      {"ns_table_1", "bool_value", "bool", 3, 0, -1, "\0", false, false, false,
+       "\0", "\0", false, true, 0},
+
+      {"ns_table_2", "key1", "int8", 1, 0, -1, "\0", true, false, false, "\0",
+       "\0", false, true, 0},
+      {"ns_table_2", "key2", "int8", 2, 0, -1, "\0", false, false, false, "\0",
+       "\0", false, true, 0},
+  });
+  EXPECT_THAT(Query(absl::StrFormat(query_template, "r")),
+              IsOkAndHoldsRows(expected));
+
+  // Index attributes.
+  expected = std::vector<ValueRow>({
+      {"PK_base", "key1", "int8", 1, 0, -1, "\0", true, false, false, "\0",
+       "\0", false, true, 0},
+      {"PK_base", "key2", "text", 2, 0, -1, "\0", true, false, false, "\0",
+       "\0", false, true, 0},
+
+      {"PK_cascade_child", "key1", "int8", 1, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+      {"PK_cascade_child", "key2", "text", 2, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+      {"PK_cascade_child", "child_key", "bool", 3, 0, -1, "\0", true, false,
+       false, "\0", "\0", false, true, 0},
+
+      {"PK_no_action_child", "key1", "int8", 1, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+      {"PK_no_action_child", "key2", "text", 2, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+      {"PK_no_action_child", "child_key", "bool", 3, 0, -1, "\0", true, false,
+       false, "\0", "\0", false, true, 0},
+
+      {"cascade_child_by_value", "key1", "int8", 1, 0, -1, "\0", true, false,
+       false, "\0", "\0", false, true, 0},
+      {"cascade_child_by_value", "key2", "text", 2, 0, -1, "\0", true, false,
+       false, "\0", "\0", false, true, 0},
+      {"cascade_child_by_value", "value2", "bool", 3, 0, -1, "\0", true, false,
+       false, "\0", "\0", false, true, 0},
+      {"cascade_child_by_value", "value1", "text", 4, 0, -1, "\0", true, false,
+       false, "\0", "\0", false, true, 0},
+
+      {"no_action_child_by_value", "value", "text", 1, 0, -1, "\0", false,
+       false, false, "\0", "\0", false, true, 0},
+
+      {"IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", "bool", 1,
+       0, -1, "\0", true, false, false, "\0", "\0", false, true, 0},
+      {"IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", "text", 2, 0,
+       -1, "\0", true, false, false, "\0", "\0", false, true, 0},
+
+      {"IDX_base_bool_value_key2_N_\\w{16}", "bool_value", "bool", 1, 0, -1,
+       "\0", true, false, false, "\0", "\0", false, true, 0},
+      {"IDX_base_bool_value_key2_N_\\w{16}", "key2", "text", 2, 0, -1, "\0",
+       true, false, false, "\0", "\0", false, true, 0},
+
+      {"PK_row_deletion_policy", "key", "int8", 1, 0, -1, "\0", true, false,
+       false, "\0", "\0", false, true, 0},
+
+      {"PK_ns_table_1", "key1", "int8", 1, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+
+      {"PK_ns_table_2", "key1", "int8", 1, 0, -1, "\0", true, false, false,
+       "\0", "\0", false, true, 0},
+
+      {"ns_index", "key1", "int8", 1, 0, -1, "\0", true, false, false, "\0",
+       "\0", false, true, 0},
+  });
+  auto results = Query(absl::StrFormat(query_template, "i"));
+  EXPECT_THAT(*results, ExpectedRows(*results, expected));
+
+  // View attributes.
+  expected = std::vector<ValueRow>({
+      {"base_view", "key1", "int8", 1, 0, -1, "\0", false, false, false, "\0",
+       "\0", false, true, 0},
+
+      {"ns_view", "key1", "int8", 1, 0, -1, "\0", false, false, false, "\0",
+       "\0", false, true, 0},
+  });
+  EXPECT_THAT(Query(absl::StrFormat(query_template, "v")),
+              IsOkAndHoldsRows(expected));
+}
+
 TEST_F(PGCatalogTest, PGClass) {
   constexpr absl::string_view query_template = R"sql(
       SELECT
@@ -310,6 +505,129 @@ TEST_F(PGCatalogTest, PGClass) {
                                  Ni64(), Ni64(), Ns(),   Ns()}}));
 };
 
+TEST_F(PGCatalogTest, PGCollation) {
+  auto expected = std::vector<ValueRow>({
+      {PgOid(100), "default", "pg_catalog", NOid(), "d", true, -1, Ns(), Ns(),
+       Ns(), Ns()},
+      {PgOid(950), "C", "pg_catalog", NOid(), "c", true, -1, Ns(), Ns(), Ns(),
+       Ns()},
+  });
+
+  EXPECT_THAT(Query(R"sql(
+      SELECT
+        c.oid,
+        collname,
+        n.nspname,
+        collowner,
+        collprovider,
+        collisdeterministic,
+        collencoding,
+        collcollate,
+        collctype,
+        colliculocale,
+        collversion
+      FROM
+        pg_catalog.pg_collation AS c
+      JOIN
+        pg_catalog.pg_namespace AS n
+      ON
+        c.collnamespace = n.oid
+      ORDER BY
+        c.oid)sql"),
+              IsOkAndHoldsRows(expected));
+}
+
+TEST_F(PGCatalogTest, PGConstraint) {
+  auto results = Query(R"sql(
+      SELECT
+        conname,
+        n.nspname,
+        contype,
+        convalidated,
+        cl.relname,
+        confupdtype,
+        confdeltype,
+        conkey
+      FROM
+        pg_catalog.pg_constraint as c
+      JOIN pg_catalog.pg_namespace as n ON c.connamespace = n.oid
+      JOIN pg_catalog.pg_class as cl ON c.conrelid = cl.oid
+      WHERE contype != 'f'
+      ORDER BY
+        contype, c.oid)sql");
+  EXPECT_THAT(
+      *results,
+      ExpectedRows(*results,
+                   {
+                       {"check_constraint_name", "public", "c", true, "base",
+                        " ", " ", std::vector<int>{4}},
+                       {"CK_base_\\w{16}_1", "public", "c", true, "base", " ",
+                        " ", std::vector<int>{4}},
+                       {"PK_base", "public", "p", true, "base", " ", " ",
+                        std::vector<int>{1, 2}},
+                       {"PK_cascade_child", "public", "p", true,
+                        "cascade_child", " ", " ", std::vector<int>{1, 2, 3}},
+                       {"PK_no_action_child", "public", "p", true,
+                        "no_action_child", " ", " ", std::vector<int>{1, 2, 3}},
+                       {"PK_row_deletion_policy", "public", "p", true,
+                        "row_deletion_policy", " ", " ", std::vector<int>{1}},
+                       {"PK_ns_table_1", "named_schema", "p", true,
+                        "ns_table_1", " ", " ", std::vector<int>{1}},
+                       {"PK_ns_table_2", "named_schema", "p", true,
+                        "ns_table_2", " ", " ", std::vector<int>{1}},
+                   }));
+
+  results = Query(R"sql(
+      SELECT
+        conname,
+        n.nspname,
+        contype,
+        convalidated,
+        cl.relname,
+        fcl.relname,
+        confdeltype,
+        conkey,
+        confkey
+      FROM
+        pg_catalog.pg_constraint as c
+      JOIN pg_catalog.pg_namespace as n ON c.connamespace = n.oid
+      JOIN pg_catalog.pg_class as cl ON c.conrelid = cl.oid
+      JOIN pg_catalog.pg_class as fcl ON c.confrelid = fcl.oid
+      WHERE contype = 'f'
+      ORDER BY
+        contype, c.oid)sql");
+  EXPECT_THAT(*results,
+              ExpectedRows(*results,
+                           {
+                               {"fk_base_cascade_child", "public", "f", true,
+                                "base", "cascade_child", "a",
+                                std::vector<int>{3, 2}, std::vector<int>{3, 4}},
+                               {"fk_ns_table_2", "named_schema", "f", true,
+                                "ns_table_2", "ns_table_1", "a",
+                                std::vector<int>{1}, std::vector<int>{1}},
+                           }));
+
+  // Check empty columns.
+  EXPECT_THAT(
+      Query(R"sql(
+      SELECT DISTINCT
+        condeferrable,
+        condeferred,
+        contypid,
+        conindid,
+        conparentid,
+        confmatchtype,
+        conislocal,
+        coninhcount,
+        connoinherit,
+        conbin
+      FROM
+        pg_catalog.pg_constraint as c)sql"),
+      IsOkAndHoldsRows({
+          {Nb(), Nb(), NOid(), NOid(), NOid(), Ns(), Nb(), Ni64(), Nb(), Ns()},
+      }));
+}
+
 TEST_F(PGCatalogTest, PGIndex) {
   auto expected = std::vector<ValueRow>({
       {"IDX_base_bool_value_key2_N_\\w{16}",
@@ -429,9 +747,7 @@ TEST_F(PGCatalogTest, PGIndex) {
   EXPECT_THAT(*results, ExpectedRows(*results, expected));
 }
 
-TEST_F(PGCatalogTest, DISABLED_PGIndexes) {
-  // TODO: Reenable and add named schema rows once pg_catalog is
-  // fixed.
+TEST_F(PGCatalogTest, PGIndexes) {
   auto results = Query(R"sql(
       SELECT
         schemaname,
@@ -442,6 +758,7 @@ TEST_F(PGCatalogTest, DISABLED_PGIndexes) {
       FROM
         pg_catalog.pg_indexes
       ORDER BY
+        schemaname,
         tablename,
         indexname)sql");
   // NOLINTBEGIN
@@ -449,7 +766,11 @@ TEST_F(PGCatalogTest, DISABLED_PGIndexes) {
       *results,
       ExpectedRows(
           *results,
-          {{"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", Ns(), Ns()},
+          {{"named_schema", "ns_table_1", "PK_ns_table_1", Ns(), Ns()},
+           {"named_schema", "ns_table_1", "ns_index", Ns(), Ns()},
+           {"named_schema", "ns_table_2", "PK_ns_table_2", Ns(), Ns()},
+
+           {"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", Ns(), Ns()},
            {"public", "base", "PK_base", Ns(), Ns()},
            {"public", "cascade_child",
             "IDX_cascade_child_child_key_value1_U_\\w{16}", Ns(), Ns()},
@@ -480,7 +801,7 @@ TEST_F(PGCatalogTest, PGNamespace) {
       WHERE oid < 100000
       ORDER BY
         oid)sql"),
-              IsOkAndHoldsRows(expected));
+              IsOkAndContainsRows(expected));
 
   expected = std::vector<ValueRow>({
       {"named_schema", NOid()},
@@ -511,6 +832,50 @@ TEST_F(PGCatalogTest, PGNamespace) {
   ASSERT_EQ(results.size(), 1);
   ASSERT_EQ(results[0].values().size(), 1);
   EXPECT_EQ(results[0].values()[0].get<int64_t>().value(), expected.size());
+}
+
+TEST_F(PGCatalogTest, PGProc) {
+  auto expected = std::vector<ValueRow>({
+      {"read_json_test_stream", "public", PgOid(0), "f", true, 5, 0,
+       PgOid(3802),
+       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(1043), PgOid(20),
+                          PgOid(1015)},
+       Ns()},
+      {"read_json_test_stream2", "public", PgOid(0), "f", true, 5, 0,
+       PgOid(3802),
+       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(1043), PgOid(20),
+                          PgOid(1015)},
+       Ns()},
+      {"read_json_test_stream3", "public", PgOid(0), "f", true, 5, 0,
+       PgOid(3802),
+       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(1043), PgOid(20),
+                          PgOid(1015)},
+       Ns()},
+      {"read_json_test_stream4", "public", PgOid(0), "f", true, 5, 0,
+       PgOid(3802),
+       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(1043), PgOid(20),
+                          PgOid(1015)},
+       Ns()},
+  });
+  EXPECT_THAT(Query(R"sql(
+      SELECT
+        p.proname,
+        n.nspname,
+        provariadic,
+        prokind,
+        proretset,
+        pronargs,
+        pronargdefaults,
+        prorettype,
+        proargtypes,
+        prosqlbody
+      FROM
+        pg_catalog.pg_proc as p
+      LEFT JOIN pg_catalog.pg_namespace as n on n.oid = p.pronamespace
+      WHERE n.nspname != 'pg_catalog' AND n.nspname != 'spanner'
+      ORDER BY
+        p.oid)sql"),
+              IsOkAndHoldsRows(expected));
 }
 
 TEST_F(PGCatalogTest, PGSequence) {
@@ -582,10 +947,11 @@ TEST_F(PGCatalogTest, PGSettings) {
               IsOkAndHoldsRows(expected));
 }
 
-TEST_F(PGCatalogTest, DISABLED_PGTables) {
-  // TODO: Reenable and add named schema rows once pg_catalog is
-  // fixed.
+TEST_F(PGCatalogTest, PGTables) {
   auto expected = std::vector<ValueRow>({
+      {"named_schema", "ns_table_1", Ns(), Ns(), true, Nb(), Nb(), Nb()},
+      {"named_schema", "ns_table_2", Ns(), Ns(), false, Nb(), Nb(), Nb()},
+
       {"public", "base", Ns(), Ns(), true, Nb(), Nb(), Nb()},
       {"public", "cascade_child", Ns(), Ns(), true, Nb(), Nb(), Nb()},
       {"public", "no_action_child", Ns(), Ns(), true, Nb(), Nb(), Nb()},
@@ -603,9 +969,177 @@ TEST_F(PGCatalogTest, DISABLED_PGTables) {
         rowsecurity
       FROM
         pg_catalog.pg_tables
+      WHERE
+        schemaname != 'pg_catalog' AND schemaname != 'information_schema' AND
+        schemaname != 'spanner_sys'
       ORDER BY
-        tablename)sql"),
+        schemaname, tablename)sql"),
               IsOkAndHoldsRows({expected}));
+}
+
+TEST_F(PGCatalogTest, PGType) {
+  auto expected = std::vector<ValueRow>({
+      // Array Types.
+      {PgOid(1000), "_bool",  PgOid(11), NOid(), -1,   false,
+       "b",         "A",      false,     true,   ",",  PgOid(0),
+       PgOid(16),   PgOid(0), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),   NOid(),    Ns(),   Ns()},
+      {PgOid(1001), "_bytea", PgOid(11), NOid(), -1,   false,
+       "b",         "A",      false,     true,   ",",  PgOid(0),
+       PgOid(17),   PgOid(0), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),   NOid(),    Ns(),   Ns()},
+      {PgOid(1182), "_date",  PgOid(11), NOid(), -1,   false,
+       "b",         "A",      false,     true,   ",",  PgOid(0),
+       PgOid(1082), PgOid(0), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),   NOid(),    Ns(),   Ns()},
+      {PgOid(1021), "_float4", PgOid(11), NOid(), -1,   false,
+       "b",         "A",       false,     true,   ",",  PgOid(0),
+       PgOid(700),  PgOid(0),  Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),    NOid(),    Ns(),   Ns()},
+      {PgOid(1022), "_float8", PgOid(11), NOid(), -1,   false,
+       "b",         "A",       false,     true,   ",",  PgOid(0),
+       PgOid(701),  PgOid(0),  Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),    NOid(),    Ns(),   Ns()},
+      {PgOid(1016), "_int8",  PgOid(11), NOid(), -1,   false,
+       "b",         "A",      false,     true,   ",",  PgOid(0),
+       PgOid(20),   PgOid(0), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),   NOid(),    Ns(),   Ns()},
+      {PgOid(3807), "_jsonb", PgOid(11), NOid(), -1,   false,
+       "b",         "A",      false,     true,   ",",  PgOid(0),
+       PgOid(3802), PgOid(0), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),   NOid(),    Ns(),   Ns()},
+      {PgOid(1231), "_numeric", PgOid(11), NOid(), -1,   false,
+       "b",         "A",        false,     true,   ",",  PgOid(0),
+       PgOid(1700), PgOid(0),   Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),     NOid(),    Ns(),   Ns()},
+      {PgOid(1028), "_oid",   PgOid(11), NOid(), -1,   false,
+       "b",         "A",      false,     true,   ",",  PgOid(0),
+       PgOid(26),   PgOid(0), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),   NOid(),    Ns(),   Ns()},
+      {PgOid(1009), "_text",  PgOid(11), NOid(), -1,   false,
+       "b",         "A",      false,     true,   ",",  PgOid(0),
+       PgOid(25),   PgOid(0), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),   NOid(),    Ns(),   Ns()},
+      {PgOid(1185), "_timestamptz", PgOid(11), NOid(),
+       -1,          false,          "b",       "A",
+       false,       true,           ",",       PgOid(0),
+       PgOid(1184), PgOid(0),       Ns(),      Ns(),
+       Nb(),        NOid(),         Ni64(),    Ni64(),
+       NOid(),      Ns(),           Ns()},
+      {PgOid(1015), "_varchar", PgOid(11), NOid(), -1,   false,
+       "b",         "A",        false,     true,   ",",  PgOid(0),
+       PgOid(1043), PgOid(0),   Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),     NOid(),    Ns(),   Ns()},
+
+      // Pseudotypes.
+      {PgOid(2276), "any",  PgOid(11), NOid(),   4,        true,     "p",  "P",
+       false,       true,   ",",       PgOid(0), PgOid(0), PgOid(0), Ns(), Ns(),
+       Nb(),        NOid(), Ni64(),    Ni64(),   NOid(),   Ns(),     Ns()},
+      {PgOid(2277), "anyarray", PgOid(11), NOid(), -1,   false,
+       "p",         "P",        false,     true,   ",",  PgOid(0),
+       PgOid(0),    PgOid(0),   Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),     NOid(),    Ns(),   Ns()},
+      {PgOid(5078), "anycompatiblearray",
+       PgOid(11),   NOid(),
+       -1,          false,
+       "p",         "P",
+       false,       true,
+       ",",         PgOid(0),
+       PgOid(0),    PgOid(0),
+       Ns(),        Ns(),
+       Nb(),        NOid(),
+       Ni64(),      Ni64(),
+       NOid(),      Ns(),
+       Ns()},
+      {PgOid(2283), "anyelement", PgOid(11), NOid(), 4,    true,
+       "p",         "P",          false,     true,   ",",  PgOid(0),
+       PgOid(0),    PgOid(0),     Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),       NOid(),    Ns(),   Ns()},
+      {PgOid(2776), "anynonarray", PgOid(11), NOid(), 4,    true,
+       "p",         "P",           false,     true,   ",",  PgOid(0),
+       PgOid(0),    PgOid(0),      Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),        NOid(),    Ns(),   Ns()},
+
+      // Base Types.
+      {PgOid(16), "bool",      PgOid(11), NOid(), 1,    true,
+       "b",       "B",         true,      true,   ",",  PgOid(0),
+       PgOid(0),  PgOid(1000), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),    Ni64(),      NOid(),    Ns(),   Ns()},
+      {PgOid(17), "bytea",     PgOid(11), NOid(), -1,   false,
+       "b",       "U",         false,     true,   ",",  PgOid(0),
+       PgOid(0),  PgOid(1001), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),    Ni64(),      NOid(),    Ns(),   Ns()},
+      {PgOid(1082), "date",      PgOid(11), NOid(), 4,    true,
+       "b",         "D",         false,     true,   ",",  PgOid(0),
+       PgOid(0),    PgOid(1182), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),      NOid(),    Ns(),   Ns()},
+      {PgOid(700), "float4",    PgOid(11), NOid(), 4,    true,
+       "b",        "N",         false,     true,   ",",  PgOid(0),
+       PgOid(0),   PgOid(1021), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),     Ni64(),      NOid(),    Ns(),   Ns()},
+      {PgOid(701), "float8",    PgOid(11), NOid(), 8,    true,
+       "b",        "N",         true,      true,   ",",  PgOid(0),
+       PgOid(0),   PgOid(1022), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),     Ni64(),      NOid(),    Ns(),   Ns()},
+      {PgOid(20), "int8",      PgOid(11), NOid(), 8,    true,
+       "b",       "N",         false,     true,   ",",  PgOid(0),
+       PgOid(0),  PgOid(1016), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),    Ni64(),      NOid(),    Ns(),   Ns()},
+      {PgOid(3802), "jsonb",     PgOid(11), NOid(), -1,   false,
+       "b",         "U",         false,     true,   ",",  PgOid(0),
+       PgOid(0),    PgOid(3807), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),      NOid(),    Ns(),   Ns()},
+      {PgOid(1700), "numeric",   PgOid(11), NOid(), -1,   false,
+       "b",         "N",         false,     true,   ",",  PgOid(0),
+       PgOid(0),    PgOid(1231), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),      NOid(),    Ns(),   Ns()},
+      {PgOid(26), "oid",       PgOid(11), NOid(), 4,    true,
+       "b",       "N",         true,      true,   ",",  PgOid(0),
+       PgOid(0),  PgOid(1028), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),    Ni64(),      NOid(),    Ns(),   Ns()},
+      {PgOid(25), "text",      PgOid(11), NOid(), -1,   false,
+       "b",       "S",         true,      true,   ",",  PgOid(0),
+       PgOid(0),  PgOid(1009), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),    Ni64(),      NOid(),    Ns(),   Ns()},
+      {PgOid(1184), "timestamptz", PgOid(11), NOid(), 8,    true,
+       "b",         "D",           true,      true,   ",",  PgOid(0),
+       PgOid(0),    PgOid(1185),   Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),        NOid(),    Ns(),   Ns()},
+      {PgOid(1043), "varchar",   PgOid(11), NOid(), -1,   false,
+       "b",         "S",         false,     true,   ",",  PgOid(0),
+       PgOid(0),    PgOid(1015), Ns(),      Ns(),   Nb(), NOid(),
+       Ni64(),      Ni64(),      NOid(),    Ns(),   Ns()},
+  });
+  EXPECT_THAT(Query(R"sql(
+      SELECT
+        oid,
+        typname,
+        typnamespace,
+        typowner,
+        typlen,
+        typbyval,
+        typtype,
+        typcategory,
+        typispreferred,
+        typisdefined,
+        typdelim,
+        typrelid,
+        typelem,
+        typarray,
+        typalign,
+        typstorage,
+        typnotnull,
+        typbasetype,
+        typtypmod,
+        typndims,
+        typcollation,
+        typdefaultbin,
+        typdefault
+      FROM
+        pg_catalog.pg_type
+      ORDER BY
+        typname)sql"),
+              IsOkAndContainsRows({expected}));
 }
 
 TEST_F(PGCatalogTest, PGViews) {

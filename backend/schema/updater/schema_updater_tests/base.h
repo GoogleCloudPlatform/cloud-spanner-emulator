@@ -162,7 +162,7 @@ class SchemaUpdaterTest
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
   SchemaUpdaterTest()
-      : feature_flags_({
+      : feature_flags_({.enable_identity_columns = true,
                         .enable_user_defined_functions = true}) {}
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
       absl::Span<const std::string> statements,

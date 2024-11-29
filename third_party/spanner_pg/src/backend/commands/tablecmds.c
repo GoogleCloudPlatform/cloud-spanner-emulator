@@ -6233,6 +6233,10 @@ alter_table_type_to_string(AlterTableType cmdtype)
 			return "ALTER COLUMN ... ADD IDENTITY";
 		case AT_SetIdentity:
 			return "ALTER COLUMN ... SET";
+		/* SPANGRES BEGIN */
+		case AT_RestartCounter:
+			return "ALTER COLUMN ... RESTART COUNTER WITH";
+		/* SPANGRES END */
 		case AT_DropIdentity:
 			return "ALTER COLUMN ... DROP IDENTITY";
 		case AT_ReAddStatistics:

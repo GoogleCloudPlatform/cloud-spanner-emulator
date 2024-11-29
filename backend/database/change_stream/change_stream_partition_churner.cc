@@ -42,6 +42,7 @@
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_write_transaction.h"
 #include "common/change_stream.h"
+#include "common/clock.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -63,6 +64,11 @@ ABSL_FLAG(
 ABSL_FLAG(bool, enable_change_stream_churning, true,
           "Whether to enable change stream churning.");
 
+ABSL_FLAG(
+    int, override_change_stream_partition_token_alive_seconds, -1,
+    "If set to X seconds, and it's greater than 0, then override the default "
+    "partition token alive time from 20-40 seconds to X-2X seconds.");
+
 namespace google {
 namespace spanner {
 namespace emulator {
@@ -70,6 +76,22 @@ namespace backend {
 
 using zetasql::values::String;
 using zetasql::values::StringArray;
+
+ChangeStreamPartitionChurner::ChangeStreamPartitionChurner(
+    CreateReadWriteTransactionFn create_read_write_transaction_fn, Clock* clock)
+    : create_read_write_transaction_fn_(create_read_write_transaction_fn),
+      clock_(clock) {
+  int oerridden_partition_token_alive_seconds =
+      absl::GetFlag(FLAGS_override_change_stream_partition_token_alive_seconds);
+  if (oerridden_partition_token_alive_seconds > 0) {
+    absl::SetFlag(&FLAGS_change_stream_churning_interval,
+                  absl::Seconds(oerridden_partition_token_alive_seconds));
+    absl::SetFlag(&FLAGS_change_stream_churn_thread_sleep_interval,
+                  absl::Seconds(oerridden_partition_token_alive_seconds));
+    absl::SetFlag(&FLAGS_change_stream_churn_thread_retry_sleep_interval,
+                  absl::Seconds(oerridden_partition_token_alive_seconds));
+  }
+}
 
 void ChangeStreamPartitionChurner::CreateChurningThread(
     absl::string_view change_stream_name) {

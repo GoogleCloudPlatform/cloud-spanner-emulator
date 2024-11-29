@@ -131,6 +131,51 @@ TEST(ParseAlterDatabase, ValidSetDefaultLeaderToNonEmptyString) {
                                   })pb"));
 }
 
+TEST(ParseAlterDatabase, ValidSetVersionRetentionPeriodToNonEmptyString) {
+  absl::string_view ddl = R"(
+    ALTER DATABASE db SET OPTIONS (version_retention_period = '7d' )
+  )";
+  DDLStatement statement;
+  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(statement, test::EqualsProto(
+                             R"pb(alter_database {
+                                    set_options {
+                                      options {
+                                        option_name: "version_retention_period"
+                                        string_value: "7d"
+                                      }
+                                    }
+                                    db_name: "db"
+                                  })pb"));
+}
+
+TEST(ParseAlterDatabase, ValidSetVersionRetentionPeriodToNull) {
+  absl::string_view ddl = R"(
+ALTER DATABASE db SET OPTIONS (version_retention_period = NULL)
+  )";
+  DDLStatement statement;
+  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(statement, test::EqualsProto(
+                             R"pb(alter_database {
+                                    set_options {
+                                      options {
+                                        option_name: "version_retention_period"
+                                        null_value: true
+                                      }
+                                    }
+                                    db_name: "db"
+                                  })pb"));
+}
+
+TEST(ParseAlterDatabase, InvalidSetVersionRetentionPeriod) {
+  absl::string_view ddl = R"(
+ALTER DATABASE db SET OPTIONS (version_retention_period = 1)
+  )";
+  EXPECT_THAT(ParseDDLStatement(ddl),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Unexpected value for option")));
+}
+
 TEST(ParseAlterDatabase, Invalid_NoOptionSet) {
   absl::string_view ddl = R"(
     ALTER DATABASE db SET OPTIONS ()
@@ -138,6 +183,60 @@ TEST(ParseAlterDatabase, Invalid_NoOptionSet) {
   EXPECT_THAT(ParseDDLStatement(ddl),
               StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("Encountered ')' while parsing: identifier")));
+}
+
+TEST(ParseAlterDatabase, SetDefaultSequenceKind) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_identity_columns = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  absl::string_view ddl = R"(
+ALTER DATABASE db SET OPTIONS (default_sequence_kind = 'bit_reversed_positive')
+  )";
+  DDLStatement statement;
+  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(statement, test::EqualsProto(
+                             R"pb(alter_database {
+                                    set_options {
+                                      options {
+                                        option_name: "default_sequence_kind"
+                                        string_value: "bit_reversed_positive"
+                                      }
+                                    }
+                                    db_name: "db"
+                                  })pb"));
+}
+
+TEST(ParseAlterDatabase, SetDefaultSequenceKindNull) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_identity_columns = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  absl::string_view ddl = R"(
+ALTER DATABASE db SET OPTIONS (default_sequence_kind = NULL)
+  )";
+  DDLStatement statement;
+  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(statement, test::EqualsProto(
+                             R"pb(alter_database {
+                                    set_options {
+                                      options {
+                                        option_name: "default_sequence_kind"
+                                        null_value: true
+                                      }
+                                    }
+                                    db_name: "db"
+                                  })pb"));
+}
+
+TEST(ParseAlterDatabase, InvalidDefaultSequenceKind) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_identity_columns = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  absl::string_view ddl = R"(
+ALTER DATABASE db SET OPTIONS (default_sequence_kind = 1)
+  )";
+  EXPECT_THAT(ParseDDLStatement(ddl),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Unexpected value for option")));
 }
 
 TEST(ParseAlterDatabase, Invalid_EmptyString) {
@@ -4495,6 +4594,29 @@ TEST(AlterSequence, SetSequenceKind) {
               )pb")));
 }
 
+TEST(AlterSequence, AlterSequenceClauseDisabled) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_identity_columns = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq SKIP RANGE 1, 1000
+      )sql"),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr(
+              "SKIP RANGE is not supported in ALTER SEQUENCE statements")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+      ALTER SEQUENCE seq NO SKIP RANGE
+      )sql"),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr(
+              "NO SKIP RANGE is not supported in ALTER SEQUENCE statements")));
+}
+
 TEST(AlterSequence, WithIfExists) {
   EXPECT_THAT(ParseDDLStatement(R"sql(
       ALTER SEQUENCE IF EXISTS seq SET OPTIONS (
@@ -4583,8 +4705,8 @@ TEST(AlterSequence, Invalid_OptionClauseWithoutSetKeyword) {
       )
       )sql"),
               StatusIs(StatusCode::kInvalidArgument,
-                       HasSubstr("Expecting 'SET' but found 'OPTIONS'")
-                       ));
+                       HasSubstr("Encountered 'OPTIONS' while parsing: "
+                                 "alter_sequence_statement")));
 }
 
 TEST(AlterSequence, Invalid_SetSequenceKindToNull) {
@@ -5408,6 +5530,894 @@ TEST(ParseFGAC, RevokeMembership) {
                   grantee { type: ROLE name: "MyRole3" }
                   grantee { type: ROLE name: "MyRole4" }
                 })pb")));
+}
+class IdentityColumn : public ::testing::Test {
+ public:
+  IdentityColumn() : feature_flags_({.enable_identity_columns = true}) {}
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
+};
+
+TEST_F(IdentityColumn, DisabledFlag) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_identity_columns = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE TABLE T (
+        Id INT64 GENERATED BY DEFAULT AS IDENTITY (BIT_REVERSED_POSITIVE),
+        Value STRING(MAX),
+      ) PRIMARY KEY(Id)
+      )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Identity columns are not supported.")));
+}
+
+TEST_F(IdentityColumn, CreateTableKeyColumn) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE TABLE T (
+        Id INT64 GENERATED BY DEFAULT AS IDENTITY (BIT_REVERSED_POSITIVE),
+        Value STRING(MAX),
+      ) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column { type: BIT_REVERSED_POSITIVE }
+                  }
+                  column { column_name: "Value" type: STRING }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableNonKeyColumn) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE TABLE T (
+        Id INT64,
+        Value INT64 GENERATED BY DEFAULT AS IDENTITY (BIT_REVERSED_POSITIVE),
+      ) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column { column_name: "Id" type: INT64 }
+                  column {
+                    column_name: "Value"
+                    type: INT64
+                    identity_column { type: BIT_REVERSED_POSITIVE }
+                  }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableTwoColumns) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE TABLE T (
+        Id INT64 GENERATED BY DEFAULT AS IDENTITY (BIT_REVERSED_POSITIVE),
+        Value INT64 GENERATED BY DEFAULT AS IDENTITY (BIT_REVERSED_POSITIVE),
+      ) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column { type: BIT_REVERSED_POSITIVE }
+                  }
+                  column {
+                    column_name: "Value"
+                    type: INT64
+                    identity_column { type: BIT_REVERSED_POSITIVE }
+                  }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableStartCounter) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE TABLE T (
+        Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+          BIT_REVERSED_POSITIVE START COUNTER WITH 1000),
+        Value STRING(MAX),
+      ) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column {
+                      type: BIT_REVERSED_POSITIVE
+                      start_with_counter: 1000
+                    }
+                  }
+                  column { column_name: "Value" type: STRING }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableSkipRange) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    BIT_REVERSED_POSITIVE SKIP RANGE 2000, 3000),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column {
+                      type: BIT_REVERSED_POSITIVE
+                      skip_range_min: 2000
+                      skip_range_max: 3000
+                    }
+                  }
+                  column { column_name: "Value" type: STRING }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableSkipRangeDifferentOrder) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    SKIP RANGE 1, 1000 BIT_REVERSED_POSITIVE),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column {
+                      type: BIT_REVERSED_POSITIVE
+                      skip_range_min: 1
+                      skip_range_max: 1000
+                    }
+                  }
+                  column { column_name: "Value" type: STRING }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableAllParams) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    BIT_REVERSED_POSITIVE START COUNTER WITH 1000 SKIP RANGE 2000, 3000),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column {
+                      type: BIT_REVERSED_POSITIVE
+                      start_with_counter: 1000
+                      skip_range_min: 2000
+                      skip_range_max: 3000
+                    }
+                  }
+                  column { column_name: "Value" type: STRING }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableAllParamsDifferentOrder) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    BIT_REVERSED_POSITIVE SKIP RANGE 2000, 3000 START COUNTER WITH 1000),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column {
+                      type: BIT_REVERSED_POSITIVE
+                      start_with_counter: 1000
+                      skip_range_min: 2000
+                      skip_range_max: 3000
+                    }
+                  }
+                  column { column_name: "Value" type: STRING }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableNamedSchema) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE NamedSchema.T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (BIT_REVERSED_POSITIVE),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "NamedSchema.T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column { type: BIT_REVERSED_POSITIVE }
+                  }
+                  column { column_name: "Value" type: STRING }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableNoSequenceKind) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY,
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column {}
+                  }
+                  column { column_name: "Value" type: STRING }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableInvalidSyntax) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (UNKNOWN_SEQUENCE_KIND),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY
+    (BIT_REVERSED_POSITIVE) (BIT_REVERSED_POSITIVE),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    BIT_REVERSED_POSITIVE BIT_REVERSED_POSITIVE),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("The sequence kind is set more than once")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    BIT_REVERSED_POSITIVE START SKIP RANGE 2000, 3000),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    START COUNTER WITH 1000 START COUNTER WITH 1000),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("START WITH COUNTER is set more than once")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    SKIP RANGE 1000, 2000 SKIP RANGE 1000, 2000),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("SKIP RANGE is set more than once")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED ALWAYS AS IDENTITY (BIT_REVERSED_POSITIVE),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    BIT_REVERSED_POSITIVE SKIP RANGE 1000),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST_F(IdentityColumn, CreateTableNegativeStartCounter) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    BIT_REVERSED_POSITIVE START COUNTER WITH -1),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column {
+                      type: BIT_REVERSED_POSITIVE
+                      start_with_counter: -1
+                    }
+                  }
+                  column { column_name: "Value" type: STRING }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableNegativeSkipRange) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    BIT_REVERSED_POSITIVE SKIP RANGE -1, -1),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column {
+                      type: BIT_REVERSED_POSITIVE
+                      skip_range_min: -1
+                      skip_range_max: -1
+                    }
+                  }
+                  column { column_name: "Value" type: STRING }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, CreateTableSkipRangeMinLargerThanMax) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+CREATE TABLE T (
+  Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+    BIT_REVERSED_POSITIVE SKIP RANGE 1000, 100),
+  Value STRING(MAX),
+) PRIMARY KEY(Id)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_table {
+                  table_name: "T"
+                  column {
+                    column_name: "Id"
+                    type: INT64
+                    identity_column {
+                      type: BIT_REVERSED_POSITIVE
+                      skip_range_min: 1000
+                      skip_range_max: 100
+                    }
+                  }
+                  column { column_name: "Value" type: STRING }
+                  primary_key { key_name: "Id" }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AlterIdentityRestartCounter) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY RESTART COUNTER WITH 1000
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  alter_column {
+                    column {
+                      column_name: "Id"
+                      type: NONE
+                      identity_column { start_with_counter: 1000 }
+                    }
+                    operation: ALTER_IDENTITY
+                    identity_alter_start_with_counter: true
+                  }
+                }
+              )pb")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER Id ALTER IDENTITY RESTART COUNTER WITH 1000
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  alter_column {
+                    column {
+                      column_name: "Id"
+                      type: NONE
+                      identity_column { start_with_counter: 1000 }
+                    }
+                    operation: ALTER_IDENTITY
+                    identity_alter_start_with_counter: true
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AlterIdentitySkipRange) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY SET SKIP RANGE 2000, 3000
+      )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_table {
+          table_name: "T"
+          alter_column {
+            column {
+              column_name: "Id"
+              type: NONE
+              identity_column { skip_range_min: 2000 skip_range_max: 3000 }
+            }
+            operation: ALTER_IDENTITY
+            identity_alter_skip_range: true
+          }
+        }
+      )pb")));
+}
+
+TEST_F(IdentityColumn, AlterIdentityNoSkipRange) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY SET NO SKIP RANGE
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  alter_column {
+                    column {
+                      column_name: "Id"
+                      type: NONE
+                      identity_column {}
+                    }
+                    operation: ALTER_IDENTITY
+                    identity_alter_skip_range: true
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AlterIdentityInvalidSyntax) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id RESTART COUNTER WITH 1000
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id SET SKIP RANGE 2000, 3000
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id
+  ALTER IDENTITY RESTART COUNTER WITH 1000 RESTART COUNTER WITH 2000
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id
+  ALTER IDENTITY RESTART COUNTER WITH 1000 SET SKIP RANGE 2000, 3000
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id
+  ALTER IDENTITY SET SKIP RANGE 2000, 3000 SET NO SKIP RANGE
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY SET SKIP RANGE 2000 3000
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY SET SKIP RANGE 2000: 3000
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY SET UNKNOWN_SEQUENCE_KIND
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY SET SKIP RANGE 1000
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY SET SKIP RANGE ,1000
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY SET SKIP RANGE 1, NULL
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY SET SKIP RANGE NULL, 100
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST_F(IdentityColumn, AlterIdentityNegativeRestartCounter) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY RESTART COUNTER WITH -1
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  alter_column {
+                    column {
+                      column_name: "Id"
+                      type: NONE
+                      identity_column { start_with_counter: -1 }
+                    }
+                    operation: ALTER_IDENTITY
+                    identity_alter_start_with_counter: true
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AlterIdentityNegativeSkipRange) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY SET SKIP RANGE -1, -1
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  alter_column {
+                    column {
+                      column_name: "Id"
+                      type: NONE
+                      identity_column { skip_range_min: -1 skip_range_max: -1 }
+                    }
+                    operation: ALTER_IDENTITY
+                    identity_alter_skip_range: true
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AlterIdentityMinLargerThanMax) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id ALTER IDENTITY SET SKIP RANGE 1000, 100
+      )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_table {
+          table_name: "T"
+          alter_column {
+            column {
+              column_name: "Id"
+              type: NONE
+              identity_column { skip_range_min: 1000 skip_range_max: 100 }
+            }
+            operation: ALTER_IDENTITY
+            identity_alter_skip_range: true
+          }
+        }
+      )pb")));
+}
+
+TEST_F(IdentityColumn, AlterColumnNoSequenceKind) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id INT64 GENERATED BY DEFAULT AS IDENTITY
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  alter_column {
+                    column {
+                      column_name: "Id"
+                      type: INT64
+                      identity_column {}
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AlterColumn) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+  BIT_REVERSED_POSITIVE)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  alter_column {
+                    column {
+                      column_name: "Id"
+                      type: INT64
+                      identity_column { type: BIT_REVERSED_POSITIVE }
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AlterColumnStartCounter) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+  BIT_REVERSED_POSITIVE START COUNTER WITH 1000)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  alter_column {
+                    column {
+                      column_name: "Id"
+                      type: INT64
+                      identity_column {
+                        type: BIT_REVERSED_POSITIVE
+                        start_with_counter: 1000
+                      }
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AlterColumnSkipRange) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+  BIT_REVERSED_POSITIVE SKIP RANGE 2000, 3000)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  alter_column {
+                    column {
+                      column_name: "Id"
+                      type: INT64
+                      identity_column {
+                        type: BIT_REVERSED_POSITIVE
+                        skip_range_min: 2000
+                        skip_range_max: 3000
+                      }
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AlterColumnAllParams) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ALTER COLUMN Id INT64 GENERATED BY DEFAULT AS IDENTITY (
+  BIT_REVERSED_POSITIVE START COUNTER WITH 1000 SKIP RANGE 2000, 3000)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  alter_column {
+                    column {
+                      column_name: "Id"
+                      type: INT64
+                      identity_column {
+                        type: BIT_REVERSED_POSITIVE
+                        start_with_counter: 1000
+                        skip_range_min: 2000
+                        skip_range_max: 3000
+                      }
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AddColumn) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ADD COLUMN Value INT64 GENERATED BY DEFAULT AS IDENTITY (
+  BIT_REVERSED_POSITIVE)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  add_column {
+                    column {
+                      column_name: "Value"
+                      type: INT64
+                      identity_column { type: BIT_REVERSED_POSITIVE }
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AddColumnStartCounter) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ADD COLUMN Value INT64 GENERATED BY DEFAULT AS IDENTITY (
+  BIT_REVERSED_POSITIVE START COUNTER WITH 1000)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  add_column {
+                    column {
+                      column_name: "Value"
+                      type: INT64
+                      identity_column {
+                        type: BIT_REVERSED_POSITIVE
+                        start_with_counter: 1000
+                      }
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AddColumnSkipRange) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ADD COLUMN Value INT64 GENERATED BY DEFAULT AS IDENTITY (
+  BIT_REVERSED_POSITIVE SKIP RANGE 3000, 4000)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  add_column {
+                    column {
+                      column_name: "Value"
+                      type: INT64
+                      identity_column {
+                        type: BIT_REVERSED_POSITIVE
+                        skip_range_min: 3000
+                        skip_range_max: 4000
+                      }
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AddColumnAllParams) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ADD COLUMN Value INT64 GENERATED BY DEFAULT AS IDENTITY (
+  BIT_REVERSED_POSITIVE START COUNTER WITH 1000 SKIP RANGE 3000, 4000)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  add_column {
+                    column {
+                      column_name: "Value"
+                      type: INT64
+                      identity_column {
+                        type: BIT_REVERSED_POSITIVE
+                        start_with_counter: 1000
+                        skip_range_min: 3000
+                        skip_range_max: 4000
+                      }
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AddColumnNoSequenceKind) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ADD COLUMN Value INT64 GENERATED BY DEFAULT AS IDENTITY
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  add_column {
+                    column {
+                      column_name: "Value"
+                      type: INT64
+                      identity_column {}
+                    }
+                  }
+                }
+              )pb")));
+}
+
+TEST_F(IdentityColumn, AddColumnInvalidSyntax) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+ALTER TABLE T ADD COLUMN Value INT64 GENERATED BY DEFAULT AS IDENTITY ()
+      )sql"),
+      StatusIs(StatusCode::kInvalidArgument, HasSubstr("Syntax error")));
+}
+
+TEST_F(IdentityColumn, AddColumnStringType) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+ALTER TABLE T ADD COLUMN Value STRING(MAX) GENERATED BY DEFAULT AS IDENTITY (BIT_REVERSED_POSITIVE)
+      )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_table {
+                  table_name: "T"
+                  add_column {
+                    column {
+                      column_name: "Value"
+                      type: STRING
+                      identity_column { type: BIT_REVERSED_POSITIVE }
+                    }
+                  }
+                }
+              )pb")));
 }
 
 TEST(UserDefinedFunction, CreateFunctionBasicFlagDisabled) {

@@ -204,7 +204,7 @@ ForwardTransformer::GetInputArgumentTypes(
   return input_argument_types;
 }
 
-static std::unique_ptr<zetasql::ResolvedFunctionCall>
+static absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
 MakeResolvedFunctionCall(
     FunctionAndSignature function_and_signature,
     std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list) {
@@ -1246,8 +1246,10 @@ ForwardTransformer::BuildGsqlResolvedArraySliceFunctionCall(
         catalog_adapter_->GetEngineSystemCatalog()->GetFunctionAndSignature(
             F_ARRAY_UPPER, upper_bound_arg_types,
             catalog_adapter_->analyzer_options().language()));
-    upper_index = MakeResolvedFunctionCall(array_upper_function_and_signature,
-                                           std::move(upper_bound_arg_list));
+    ZETASQL_ASSIGN_OR_RETURN(upper_index,
+                     MakeResolvedFunctionCall(
+                         array_upper_function_and_signature,
+                         std::move(upper_bound_arg_list)));
   } else {
     ZETASQL_ASSIGN_OR_RETURN(
         upper_index,

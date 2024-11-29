@@ -36,6 +36,10 @@ constexpr char kBitReverseFunctionName[] = "bit_reverse";
 constexpr char kGetInternalSequenceStateFunctionName[] =
     "get_internal_sequence_state";
 
+// Name of the get_table_column_identity_state function.
+constexpr char kGetTableColumnIdentityStateFunctionName[] =
+    "get_table_column_identity_state";
+
 constexpr char kGetNextSequenceValueFunctionName[] = "get_next_sequence_value";
 
 // Name of the ml_predict_row function.

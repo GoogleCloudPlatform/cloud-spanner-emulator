@@ -70,14 +70,14 @@ absl::Status Sequence::DeepClone(SchemaGraphEditor* editor,
 
 absl::StatusOr<zetasql::Value> Sequence::GetNextSequenceValue() const {
   absl::MutexLock lock(&SequenceMutex);
-  if (!Sequence::SequenceLastValues.contains(name_)) {
+  if (!Sequence::SequenceLastValues.contains(id_)) {
     if (start_with_.has_value()) {
-      Sequence::SequenceLastValues[name_] = start_with_.value();
+      Sequence::SequenceLastValues[id_] = start_with_.value();
     } else {
-      Sequence::SequenceLastValues[name_] = kSequenceDefaultStartWith;
+      Sequence::SequenceLastValues[id_] = kSequenceDefaultStartWith;
     }
   }
-  if (Sequence::SequenceLastValues[name_] < 0) {
+  if (Sequence::SequenceLastValues[id_] < 0) {
     return error::InvalidSequenceStartWithCounterValue();
   }
 
@@ -94,14 +94,14 @@ absl::StatusOr<zetasql::Value> Sequence::GetNextSequenceValue() const {
                 << "].";
       return error::SequenceExhausted(name_);
     }
-    if (Sequence::SequenceLastValues[name_] == kInt64Max) {
+    if (Sequence::SequenceLastValues[id_] == kInt64Max) {
       ABSL_LOG(INFO) << "No additional value can be obtained. The current sequence "
                 << "counter is already at int64max.";
       return error::SequenceExhausted(name_);
     }
     // In a bit-reversed-positive sequence, we bit-reverse the counter and
     // preserve its sign.
-    value = BitReverse(Sequence::SequenceLastValues[name_]++,
+    value = BitReverse(Sequence::SequenceLastValues[id_]++,
                        /*preserve_sign=*/true);
 
     ++attempt_count;
@@ -116,28 +116,28 @@ zetasql::Value Sequence::GetInternalSequenceState() const {
   // If no sequence value has been retrieved before, then the current state is
   // NULL.
   absl::MutexLock lock(&SequenceMutex);
-  if (!Sequence::SequenceLastValues.contains(name_)) {
+  if (!Sequence::SequenceLastValues.contains(id_)) {
     return zetasql::Value::NullInt64();
   }
-  return zetasql::Value::Int64(Sequence::SequenceLastValues[name_]);
+  return zetasql::Value::Int64(Sequence::SequenceLastValues[id_]);
 }
 
 void Sequence::ResetSequenceLastValue() const {
   absl::MutexLock lock(&SequenceMutex);
-  if (!Sequence::SequenceLastValues.contains(name_)) {
+  if (!Sequence::SequenceLastValues.contains(id_)) {
     return;
   }
   if (start_with_.has_value()) {
-    Sequence::SequenceLastValues[name_] = start_with_.value();
+    Sequence::SequenceLastValues[id_] = start_with_.value();
   } else {
-    Sequence::SequenceLastValues[name_] = kSequenceDefaultStartWith;
+    Sequence::SequenceLastValues[id_] = kSequenceDefaultStartWith;
   }
 }
 
 void Sequence::RemoveSequenceFromLastValuesMap() const {
   absl::MutexLock lock(&SequenceMutex);
   absl::flat_hash_map<std::string, int64_t>::iterator it =
-      Sequence::SequenceLastValues.find(name_);
+      Sequence::SequenceLastValues.find(id_);
   if (it != Sequence::SequenceLastValues.end()) {
     Sequence::SequenceLastValues.erase(it);
   }

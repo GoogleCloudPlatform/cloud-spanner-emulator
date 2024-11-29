@@ -114,6 +114,9 @@ class Column : public SchemaNode {
     return expression_.has_value() && !has_default_value_;
   }
 
+  // Returns whether the column is an identity column.
+  bool is_identity_column() const { return is_identity_column_; }
+
   // Returns if a generated column is stored.
   // Valid only if is_generated() is true.
   bool is_stored() const { return is_stored_; }
@@ -258,6 +261,9 @@ class Column : public SchemaNode {
 
   // Whether the column has a default value.
   bool has_default_value_ = false;
+
+  // Whether the column is an identity column.
+  bool is_identity_column_ = false;
 
   // For a generated column, this is the list of columns that this column
   // references in its expression.

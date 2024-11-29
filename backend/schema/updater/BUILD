@@ -180,6 +180,7 @@ cc_library(
         "@com_google_absl//absl/functional:function_ref",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/meta:type_traits",
+        "@com_google_absl//absl/random",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -195,6 +196,7 @@ cc_library(
         "@com_google_zetasql//zetasql/public:options_cc_proto",
         "@com_google_zetasql//zetasql/public:simple_catalog",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public/functions:uuid",
         "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
     ],
 )

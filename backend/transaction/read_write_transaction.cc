@@ -475,6 +475,7 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
     // PG.NUMERIC calls PG to get comparison result (see function
     // ValueContentLess in datatypes/extended/pg_numeric_type.cc) and therefore
     // requires a PG arena.
+    ZETASQL_VLOG(1) << "Creating memory context and Processing Write mutations";
     ZETASQL_ASSIGN_OR_RETURN(
         std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
         postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
@@ -585,6 +586,7 @@ absl::Status ReadWriteTransaction::Commit() {
     // PG.NUMERIC calls PG to get comparison result (see function
     // ValueContentLess in datatypes/extended/pg_numeric_type.cc) and therefore
     // requires a PG arena.
+    ZETASQL_VLOG(1) << "Creating memory context and Committing transaction";
     ZETASQL_ASSIGN_OR_RETURN(
         std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
         postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));

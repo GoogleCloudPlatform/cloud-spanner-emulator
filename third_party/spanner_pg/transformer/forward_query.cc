@@ -48,6 +48,7 @@
 #include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/types/array_type.h"
 #include "zetasql/public/types/type.h"
+#include "zetasql/public/types/type_factory.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_ast_enums.pb.h"
 #include "zetasql/resolved_ast/resolved_column.h"
@@ -63,8 +64,8 @@
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/engine_user_catalog.h"
+#include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/table_name.h"
-#include "third_party/spanner_pg/catalog/udf_support.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/transformer/expr_transformer_helper.h"
@@ -346,7 +347,7 @@ ForwardTransformer::BuildGsqlResolvedScanForTableExpression(
         return absl::InvalidArgumentError("Unsupported JOIN in FROM clause");
       }
       case RTE_FUNCTION: {
-        // Hand off to a funciton-call helper.
+        // Hand off to a function-call helper.
         return BuildGsqlResolvedScanForFunctionCall(
             rte, rtindex, external_scope, output_scope);
       }
@@ -396,9 +397,23 @@ absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
 ForwardTransformer::BuildGsqlResolvedScanForFunctionCall(
     const RangeTblEntry* rte, const Index rtindex,
     const VarIndexScope* external_scope, VarIndexScope* output_scope) {
+  ZETASQL_RET_CHECK_EQ(rte->rtekind, RTE_FUNCTION);
   // Only a few FROM-clause function calls are supported. Determine what they
   // are and dispatch the appropriate ResolvedScan builder.
   ZETASQL_RET_CHECK_GE(list_length(rte->functions), 1);
+  // Validate inputs: support for single function calls only.
+  if (list_length(rte->functions) > 1) {
+    // TODO: If we support WITH ORDINALITY but not multiple
+    // unnest, suggest that customers join on the ordinality column to achieve
+    // the same result.
+
+    // PG's analyzer transforms UNNEST(a, b) the same as
+    // ROWS FROM (UNNEST(a), UNNEST(b)), so we'll cover both in our error.
+    return absl::InvalidArgumentError(
+        "UNNEST of multiple arrays and ROWS FROM expressions are not "
+        "supported");
+  }
+
   Node* expr_node = linitial_node(RangeTblFunction, rte->functions)->funcexpr;
   // We don't support queries that generate a RangeTblFunction which contains a
   // funcexpr that is not of type FuncExpr e.g.,
@@ -430,18 +445,26 @@ ForwardTransformer::BuildGsqlResolvedScanForFunctionCall(
           std::move(array_scan.value()), rtindex, output_scope);
     }
     return array_scan;
-  } else {
-    // Anything else had better be a TVF. For now that's Change Streams, which
-    // is user defined and assigned a temporary oid in CatalogAdapter, or
-    // builtin TVFs.
-    auto tvf_catalog_entry = catalog_adapter().GetTVFFromOid(func_expr->funcid);
-    if (tvf_catalog_entry.ok()) {
-      return BuildGsqlResolvedTVFScan(*rte, rtindex, external_scope,
-                                      *tvf_catalog_entry, output_scope);
-    }
-    return absl::InvalidArgumentError(
-        "Unsupported function call in FROM clause");
   }
+  // Next check if the function call is a TVF. For now that's builtin TVFs or
+  // Change Streams, which is user defined and assigned a temporary oid in
+  // CatalogAdapter.
+  auto tvf_catalog_entry = catalog_adapter().GetTVFFromOid(func_expr->funcid);
+  if (tvf_catalog_entry.ok()) {
+    return BuildGsqlResolvedTVFScan(*rte, rtindex, external_scope,
+                                    *tvf_catalog_entry, output_scope);
+  }
+  // Any other set returning PostgreSQL function is transformed into a scalar
+  // ZetaSQL function wrapped in an unnest.
+  // BuildGsqlResolvedArrayScanForSetReturningFunction will look up the set
+  // returning PG function and corresponding scalar ZetaSQL function in the
+  // system catalog.
+  // https://www.postgresql.org/docs/current/xfunc-sql.html#XFUNC-SQL-FUNCTIONS-RETURNING-SET
+  if (IsSetReturningFunction(&func_expr->xpr)) {
+    return BuildGsqlResolvedArrayScanForSetReturningFunction(
+        *rte, func_expr, rtindex, external_scope, output_scope);
+  }
+  return absl::InvalidArgumentError("Unsupported function call in FROM clause");
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedProjectScan>>
@@ -740,7 +763,11 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
       ZETASQL_RET_CHECK_NE(func_expr, nullptr);
       ZETASQL_ASSIGN_OR_RETURN(const Oid array_unnest_proc_oid,
                        internal::GetArrayUnnestProcOid());
-      rhs_is_unnest_expr = func_expr->funcid == array_unnest_proc_oid;
+      // Set returning functions are converted to a scalar function wrapped in
+      // an UNNEST call when converted to ZetaSQL.
+      // e.g. jsonb_object_keys(jsonb) -> UNNEST(pg.jsonb_object_keys(jsonb)).
+      rhs_is_unnest_expr = (func_expr->funcid == array_unnest_proc_oid) ||
+                           IsSetReturningFunction(&func_expr->xpr);
     }
   }
   std::unique_ptr<zetasql::ResolvedScan> result;
@@ -753,11 +780,10 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
         is_left_outer = true;
         break;
       case zetasql::ResolvedJoinScan::RIGHT:
-        return absl::UnimplementedError(
-            "UNNEST is not supported with RIGHT JOIN.");
       case zetasql::ResolvedJoinScan::FULL:
         return absl::UnimplementedError(
-            "UNNEST is not supported with FULL JOIN.");
+            "UNNEST and Set Returning Functions are not supported with RIGHT "
+            "or FULL joins.");
     }
     ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedScan> right_scan,
                      BuildGsqlResolvedScanForTableExpression(
@@ -815,7 +841,7 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
       std::move(left_scan), std::move(right_scan), std::move(gsql_join_expr));
     }
   } else {
-    /// Now we're in the normal table-scan case.
+    // Now we're in the normal table-scan case.
     ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedScan> right_scan,
                      BuildGsqlResolvedScanForTableExpression(
                          *(join_expr.rarg), rtable, transformer_info,
@@ -1242,18 +1268,6 @@ ForwardTransformer::BuildGsqlResolvedArrayScan(
     const VarIndexScope* external_scope, VarIndexScope* output_scope) {
   // Caller has already verified that this is an UNNEST function call. We only
   // need to verify it's a supported kind of UNNEST.
-  // Validate inputs: support for single function calls only.
-  if (list_length(rte.functions) > 1) {
-    // TODO: If we support WITH ORDINALITY but not multiple
-    // unnest, suggest that customers join on the ordinality column to achieve
-    // the same result.
-
-    // PG's analyzer transforms UNNEST(a, b) the same as
-    // ROWS FROM (UNNEST(a), UNNEST(b)), so we'll cover both in our error.
-    return absl::InvalidArgumentError(
-        "UNNEST of multiple arrays and ROWS FROM expressions are not "
-        "supported");
-  }
   FuncExpr* func_expr = PostgresCastNode(
       FuncExpr, linitial_node(RangeTblFunction, rte.functions)->funcexpr);
   if (list_length(func_expr->args) > 1) {
@@ -1349,6 +1363,76 @@ ForwardTransformer::BuildGsqlResolvedArrayScan(
       std::move(resolved_array_expr_argument), array_element_column,
       std::move(array_offset_column), std::move(resolved_condition),
       is_outer_scan);
+}
+
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedArrayScan>>
+ForwardTransformer::BuildGsqlResolvedArrayScanForSetReturningFunction(
+    const RangeTblEntry& rte, FuncExpr* func_expr, int rtindex,
+    const VarIndexScope* external_scope, VarIndexScope* output_scope) {
+  // If the function call depends on a Table prior to it in the comma join, we
+  // need to combine the external_scope and output_scope so that the function
+  // can access VarIndex's from the Table in the output_scope.
+  // If there is no Table prior to the function call in the comma join,
+  // output_scope will be empty, which is ok.
+  VarIndexScope expr_scope(external_scope, *output_scope);
+  // Build an ExprTransformerInfo that disallows aggregation.
+  ExprTransformerInfo expr_transformer_info =
+      ExprTransformerInfo::ForScalarFunctions(&expr_scope, "FROM clause");
+
+  // Transform the input arguments.
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list,
+      BuildGsqlFunctionArgumentList(func_expr->args, &expr_transformer_info));
+  std::vector<zetasql::InputArgumentType> input_argument_types =
+      GetInputArgumentTypes(argument_list);
+
+  // Look up the function and signature.
+  ZETASQL_ASSIGN_OR_RETURN(
+      FunctionAndSignature function_and_signature,
+      catalog_adapter_->GetEngineSystemCatalog()->GetFunctionAndSignature(
+          func_expr->funcid, input_argument_types,
+          catalog_adapter_->analyzer_options().language()));
+  const zetasql::Type* result_type =
+      function_and_signature.signature().result_type().type();
+  ZETASQL_RET_CHECK(result_type->IsArray());
+  std::unique_ptr<zetasql::ResolvedFunctionCall> function_call =
+      zetasql::MakeResolvedFunctionCall(
+          result_type, function_and_signature.function(),
+          function_and_signature.signature(), std::move(argument_list),
+          zetasql::ResolvedFunctionCallBase::DEFAULT_ERROR_MODE);
+
+  Node* column_name =
+      internal::PostgresCastToNode(list_nth(rte.eref->colnames, 0));
+  ZETASQL_RET_CHECK(IsA(column_name, String));
+  std::string column_name_str(strVal(column_name));
+  ZETASQL_ASSIGN_OR_RETURN(
+      const zetasql::ResolvedColumn array_element_column,
+      BuildNewGsqlResolvedColumn(rte.eref->aliasname, column_name_str,
+                                 result_type->AsArray()->element_type(),
+                                 function_call->type_annotation_map()));
+
+  // Register the input columns to the output scope.
+  output_scope->MapVarIndexToColumn({.varno = rtindex, .varattno = 1},
+                                    array_element_column,
+                                    /*allow_override=*/true);
+
+  zetasql::ResolvedColumnList output_column_list;
+  output_column_list.emplace_back(array_element_column);
+  std::vector<std::unique_ptr<const zetasql::ResolvedExpr>> srf_expr_list;
+  srf_expr_list.push_back(std::move(function_call));
+  std::vector<zetasql::ResolvedColumn> element_column_list;
+  element_column_list.push_back(array_element_column);
+
+  // is_outer_scan only applies when joining an array (ZetaSQLism).
+  const bool is_outer_scan = false;
+  // Note: input_scan and array_offset_column are intentionally left null
+  // since explicit joins are handled elsewhere. join_expr is null since
+  // explicit joins are handled elsewhere.
+  return MakeResolvedArrayScan(
+      output_column_list, /*input_scan=*/nullptr, std::move(srf_expr_list),
+      std::move(element_column_list), /*array_offset_column=*/nullptr,
+      /*join_expr=*/nullptr, is_outer_scan,
+      /*array_zip_mode=*/nullptr);
 }
 
 // Resolve the TVF into a TVFScan following ZetaSQL's ResolveTVF with a few

@@ -118,9 +118,10 @@ class Schema {
 
   // Finds a sequence by its name. Returns a const pointer of the sequence, or
   // a nullptr if the sequence is not found. Name comparison is
-  // case-insensitive.
-  const Sequence* FindSequence(const std::string& sequence_name
-  ) const;
+  // case-insensitive. If exclude_internal is true, internal sequences are
+  // excluded from the search.
+  const Sequence* FindSequence(const std::string& sequence_name,
+                               bool exclude_internal = false) const;
 
   // Finds a model by its name. Returns a const pointer of the model,
   // or nullptr if the change stream is not found. Name comparison is

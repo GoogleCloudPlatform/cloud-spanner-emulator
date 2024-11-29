@@ -205,7 +205,7 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
       const zetasql::LanguageOptions& language_options);
 
   // Get the PostgreSQL proc oid for the reverse transformer.
-  // - `function name specifies the function name to look up.
+  // - `function_name` specifies the function name to look up.
   //   If the PostgreSQL function has a base implementation, function_name
   //   should be the PostgreSQL function name. If the PostgreSQL has a mapped
   //   builtin function, function_name should be the name of the mapped
@@ -251,6 +251,12 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // Output should be populated with the mapped builtin functions.
   absl::Status GetFunctions(
       absl::flat_hash_set<const zetasql::Function*>* output) const override;
+
+  // GetSetReturningFunctions is used to surface the registered system Set
+  // Returning Functions (SRFs) for the random query generator. Output should be
+  // populated with the mapped functions.
+  absl::Status GetSetReturningFunctions(
+      absl::flat_hash_set<const zetasql::Function*>* output) const;
 
   // GetTableValuedFunctions is used to surface the registered system TVFs and
   // their associated OIDs. Output should be populated with the mapped TVFs.
@@ -554,6 +560,8 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
         absl::StrCat("Engine defined ", not_found_type,
                      " are not supported in this EngineSystemCatalog."));
   }
+
+  absl::StatusOr<bool> IsSetReturningFunction(Oid proc_oid) const;
 
   std::string name_;
   // Stores the PostgreSQL types which are supported in this storage engine.

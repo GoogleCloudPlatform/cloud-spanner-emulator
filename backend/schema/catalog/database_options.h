@@ -43,6 +43,9 @@ class DatabaseOptions : public SchemaNode {
     return options_;
   }
 
+  std::optional<std::string> default_sequence_kind() const {
+    return default_sequence_kind_;
+  }
   // SchemaNode interface implementation.
   // ------------------------------------
   std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
@@ -85,6 +88,8 @@ class DatabaseOptions : public SchemaNode {
   // Name of this database.
   std::string database_name_;
   ::google::protobuf::RepeatedPtrField<ddl::SetOption> options_;
+  // Default sequence kind.
+  std::optional<std::string> default_sequence_kind_;
 };
 }  // namespace backend
 }  // namespace emulator

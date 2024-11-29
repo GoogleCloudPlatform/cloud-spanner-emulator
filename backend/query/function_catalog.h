@@ -73,6 +73,9 @@ class FunctionCatalog {
   std::unique_ptr<zetasql::Function> GetInternalSequenceStateFunction(
       const std::string& catalog_name);
 
+  std::unique_ptr<zetasql::Function> GetTableColumnIdentityStateFunction(
+      const std::string& catalog_name);
+
   std::unique_ptr<zetasql::Function> GetNextSequenceValueFunction(
       const std::string& catalog_name);
 

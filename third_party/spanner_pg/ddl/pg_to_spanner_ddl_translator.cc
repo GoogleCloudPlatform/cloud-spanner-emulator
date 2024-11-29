@@ -103,7 +103,7 @@ class PostgreSQLToSpannerDDLTranslatorImpl
 
     template <typename PgStatementT, typename SchemaStatementT>
     absl::Status TranslateAndAddStatement(
-        const PgStatementT& intput_statement,
+        const PgStatementT& input_statement,
         std::function<absl::Status(const PgStatementT& pg_statement,
                                    SchemaStatementT& output)>
             translate_function,
@@ -111,7 +111,7 @@ class PostgreSQLToSpannerDDLTranslatorImpl
             statement_member_selector) {
       google::spanner::emulator::backend::ddl::DDLStatement statement;
       ZETASQL_RETURN_IF_ERROR(translate_function(
-          intput_statement, *statement_member_selector(statement)));
+          input_statement, *statement_member_selector(statement)));
       AddStatementToOutput(std::move(statement));
       return absl::OkStatus();
     }
@@ -182,8 +182,8 @@ class PostgreSQLToSpannerDDLTranslatorImpl
         const InterleaveSpec* pg_interleave) const;
 
     absl::Status UnsupportedTranslationError(
-        absl::string_view error_mesage) const {
-      return ddl_translator_.UnsupportedTranslationError(error_mesage);
+        absl::string_view error_message) const {
+      return ddl_translator_.UnsupportedTranslationError(error_message);
     }
 
     absl::Status WhereClauseTranslationError(
@@ -225,6 +225,12 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::Status TranslateAlterTable(const AlterTableStmt& alter_statement,
                                    const TranslationOptions& options,
                                    google::spanner::emulator::backend::ddl::AlterTable& out) const;
+  absl::Status TranslateAlterTableAlterIdentity(
+      const AlterTableStmt& alter_statement, const AlterTableCmd& first_cmd,
+      const TranslationOptions& options, google::spanner::emulator::backend::ddl::AlterTable& out) const;
+  absl::Status TranslateAlterTableRestartCounter(
+      const AlterTableStmt& alter_statement, const AlterTableCmd& first_cmd,
+      const TranslationOptions& options, google::spanner::emulator::backend::ddl::AlterTable& out) const;
   absl::Status TranslateCreateTable(const CreateStmt& create_statement,
                                     const TranslationOptions& options,
                                     google::spanner::emulator::backend::ddl::CreateTable& out) const;
@@ -295,6 +301,10 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       const Constraint& generated, const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
 
+  absl::Status TranslateIdentityColumn(
+      const Constraint& identity, const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
+
   absl::Status TranslateColumnDefault(
       const Constraint& column_default, const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
@@ -315,7 +325,7 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       absl::string_view option_name, const TranslationOptions& options) const;
 
   absl::Status UnsupportedTranslationError(
-      absl::string_view error_mesage) const;
+      absl::string_view error_message) const;
 
   absl::StatusOr<google::spanner::emulator::backend::ddl::InterleaveClause::Action>
   GetInterleaveParentDeleteActionType(char action) const;
@@ -475,9 +485,8 @@ GetTypeMap() {
       {"int4range", absl::nullopt},
       {"int8range", absl::nullopt},
       {"internal", absl::nullopt},
-      // copybara::insert_begin(interval-emulator-support)
       {"interval", absl::nullopt},
-      // copybara::insert_end
+      {"uuid", absl::nullopt},
       {"json", absl::nullopt},
       {"jsonpath", absl::nullopt},
       {"language_handler", absl::nullopt},
@@ -576,6 +585,13 @@ GetSuggestedTypeMap() {
   return *map;
 }
 
+// Return true if a type is one of SERIAL types.
+bool IsSerialType(absl::string_view type_name) {
+  static auto* set = new absl::flat_hash_set<absl::string_view>{
+      "smallserial", "serial2", "serial", "serial4", "bigserial", "serial8"};
+  return set->contains(type_name);
+}
+
 // Returns the first and only element of the single-item list cast to
 // <NodeType*>. Checks that element's type is equal to NodeTypeTag.
 template <typename NodeType, const NodeTag NodeTypeTag>
@@ -668,6 +684,14 @@ PostgreSQLToSpannerDDLTranslatorImpl::TranslateOption(
   absl::optional<internal::PGAlterOption> option =
       internal::GetOptionByInternalName(option_name);
   if (!option) {
+    return UnsupportedTranslationError(
+        absl::StrCat("Database option <", option_name, "> is not supported."));
+  }
+
+  if (option->PGName() ==
+          internal::PostgreSQLConstants::
+              kSpangresDefaultSequenceKindOptionName &&
+      !options.enable_default_sequence_kind) {
     return UnsupportedTranslationError(
         absl::StrCat("Database option <", option_name, "> is not supported."));
   }
@@ -804,6 +828,24 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
       return absl::OkStatus();
     }
 
+    case CONSTR_IDENTITY: {
+      if (!options.enable_identity_column) {
+        return UnsupportedTranslationError(
+            "Identity column is not supported.");
+      }
+      // If the column is already an identity column, then it must be set by
+      // one of the SERIAL types. We should not allow SERIAL and IDENTITY to be
+      // set on the same column.
+      if (target_column->has_identity_column()) {
+        return UnsupportedTranslationError(absl::StrFormat(
+            "Both serial and identity specified for column \"%s\"",
+            target_column->column_name()));
+      }
+      ZETASQL_RETURN_IF_ERROR(
+          TranslateIdentityColumn(constraint, options, *target_column));
+      return absl::OkStatus();
+    }
+
     case CONSTR_DEFAULT: {
       if (!options.enable_column_default) {
         return UnsupportedTranslationError(
@@ -815,10 +857,6 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
     }
 
     case CONSTR_VECTOR_LENGTH: {
-      if (!options.enable_vector_length) {
-        return UnsupportedTranslationError(
-            "<VECTOR LENGTH> constraint type is not supported.");
-      }
       // VECTOR LENGTH can be defined only as column constraint.
       ZETASQL_RET_CHECK_NE(target_column, nullptr);
       ZETASQL_RET_CHECK(target_column->has_column_name());
@@ -1027,6 +1065,80 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnDefault(
     expression_origin->set_original_expression(
         column_default.constraint_expr_string);
   }
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateIdentityColumn(
+    const Constraint& identity, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
+  ZETASQL_RET_CHECK_EQ(identity.contype, CONSTR_IDENTITY);
+  ZETASQL_RETURN_IF_ERROR(
+      ValidateParseTreeNode(identity, /*add_in_alter=*/false, options));
+
+  // Currently we only support GENERATED BY DEFAULT for identity column.
+  // However, PostgreSQL supports both GENERATED ALWAYS and GENERATED BY DEFAULT
+  // for identity column.
+  if (identity.generated_when != ATTRIBUTE_IDENTITY_BY_DEFAULT) {
+    return UnsupportedTranslationError(
+        "Only <GENERATED BY DEFAULT> is supported for identity column.");
+  }
+
+  google::spanner::emulator::backend::ddl::ColumnDefinition::IdentityColumnDefinition*
+      identity_column_def = out.mutable_identity_column();
+
+  List* opts = identity.options;
+  for (int i = 0; i < list_length(opts); ++i) {
+    DefElem* elem = ::postgres_translator::internal::PostgresCastNode(
+        DefElem, opts->elements[i].ptr_value);
+    absl::string_view name = elem->defname;
+    if (name == "bit_reversed_positive") {
+      if (identity_column_def->has_type()) {
+        return absl::InvalidArgumentError(
+            "The sequence kind is set more than once.");
+      }
+      identity_column_def->set_type(
+          google::spanner::emulator::backend::ddl::ColumnDefinition::IdentityColumnDefinition::
+              BIT_REVERSED_POSITIVE);
+    } else if (name == "start_counter") {
+      if (identity_column_def->has_start_with_counter()) {
+        return absl::InvalidArgumentError(
+            "START COUNTER WITH is set more than once.");
+      }
+      ZETASQL_ASSIGN_OR_RETURN(int64_t value, CheckedPgDefGetInt64(elem));
+      identity_column_def->set_start_with_counter(value);
+    } else if (name == "skip_range" && elem->arg != nullptr) {
+      if (identity_column_def->has_skip_range_min() ||
+          identity_column_def->has_skip_range_max()) {
+        return absl::InvalidArgumentError("SKIP RANGE is set more than once.");
+      }
+      ZETASQL_ASSIGN_OR_RETURN(const List* skip_range,
+                       (DowncastNode<List, T_List>(elem->arg)));
+
+      // Can not use the DowncastNode because the type tag could be either
+      // T_INTEGER or T_FLOAT.
+      Node* skip_range_min = PostgresCastToNode(linitial(skip_range));
+      char min_name[] = "skip_range_min";
+      ZETASQL_ASSIGN_OR_RETURN(
+          DefElem * min_elem,
+          CheckedPgMakeDefElem(min_name, PostgresCastToNode(skip_range_min),
+                               elem->location));
+      ZETASQL_ASSIGN_OR_RETURN(int64_t min_int64, CheckedPgDefGetInt64(min_elem));
+      identity_column_def->set_skip_range_min(min_int64);
+
+      // Can not use the DowncastNode because the type tag could be either
+      // T_INTEGER or T_FLOAT.
+      Node* skip_range_max = PostgresCastToNode(lsecond(skip_range));
+      char max_name[] = "skip_range_max";
+      ZETASQL_ASSIGN_OR_RETURN(
+          DefElem * max_elem,
+          CheckedPgMakeDefElem(max_name, PostgresCastToNode(skip_range_max),
+                               elem->location));
+      ZETASQL_ASSIGN_OR_RETURN(int64_t max_int64, CheckedPgDefGetInt64(max_elem));
+      identity_column_def->set_skip_range_max(max_int64);
+    }
+    // else ignore NO MINVALUE | NO MAXVALUE | NO CYCLE
+  }
+
   return absl::OkStatus();
 }
 
@@ -1239,11 +1351,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessPostgresType(
     return UnsupportedTranslationError(
         absl::StrCat("Type <", type_name, "> does not exist."));
   }
-  if (!type_it->second.has_value()) {
+  if (!type_it->second.has_value()
+  ) {
     // type not supported
     auto suggested_type_it = GetSuggestedTypeMap().find(type_name);
     if (suggested_type_it != GetSuggestedTypeMap().end()) {
-      // Type <bigserial> is unsupported; use bigint or int8_t instead.
       return UnsupportedTranslationError(
           absl::StrFormat(
               "Type <%s> is not supported; use %s instead.", type_name,
@@ -1295,6 +1407,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessPostgresType(
         return UnsupportedTranslationError(
             absl::Substitute(type_modifier_not_supported, type_name));
     }
+  }
+
+  if (IsSerialType(type_name)) {
+    where_to_set_type->mutable_identity_column();
+    where_to_set_type->set_not_null(true);
   }
 
   return absl::OkStatus();
@@ -1573,7 +1690,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
 
       default: {
         return UnsupportedTranslationError(
-            "Unkown clause in <CREATE TABLE> statement.");
+            "Unknown clause in <CREATE TABLE> statement.");
       }
     }
   }
@@ -1642,6 +1759,108 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
         "Primary key must be defined for table \"", table_name, "\"."));
   }
 
+  return absl::OkStatus();
+}
+
+absl::Status
+PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTableAlterIdentity(
+    const AlterTableStmt& alter_statement, const AlterTableCmd& first_cmd,
+    const TranslationOptions& options, google::spanner::emulator::backend::ddl::AlterTable& out) const {
+  ZETASQL_RET_CHECK_EQ(alter_statement.objtype, OBJECT_TABLE);
+  ZETASQL_RET_CHECK_EQ(first_cmd.subtype, AT_SetIdentity);
+  if (!options.enable_identity_column) {
+    return UnsupportedTranslationError(
+        "Identity option altering is not supported in <ALTER TABLE ... "
+        "ALTER COLUMN> statement.");
+  }
+  google::spanner::emulator::backend::ddl::AlterTable::AlterColumn* alter_column =
+      out.mutable_alter_column();
+  alter_column->mutable_column()->set_column_name(first_cmd.name);
+  alter_column->set_operation(
+      google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::ALTER_IDENTITY);
+  // `type` is required in ColumnDefinition, so set it to NONE here. It will be
+  // replaced later using the type from current schema when applying the schema
+  // in analyzer.
+  alter_column->mutable_column()->set_type(
+      google::spanner::emulator::backend::ddl::ColumnDefinition::NONE);
+  ZETASQL_ASSIGN_OR_RETURN(const List* alter_options,
+                   (DowncastNode<List, T_List>(first_cmd.def)));
+  // We currently support altering only one option at a time, so get the
+  // first and only option.
+  ZETASQL_ASSIGN_OR_RETURN(const DefElem* elem,
+                   (GetListItemAsNode<DefElem, T_DefElem>(alter_options, 0)));
+  absl::string_view name = elem->defname;
+  if (name == "skip_range") {
+    alter_column->set_identity_alter_skip_range(true);
+    if (elem->arg != nullptr) {
+      ZETASQL_ASSIGN_OR_RETURN(const List* skip_range,
+                       (DowncastNode<List, T_List>(elem->arg)));
+
+      Node* skip_range_min = PostgresCastToNode(linitial(skip_range));
+      char min_name[] = "skip_range_min";
+      ZETASQL_ASSIGN_OR_RETURN(
+          DefElem * min_elem,
+          CheckedPgMakeDefElem(min_name, skip_range_min, elem->location));
+      ZETASQL_ASSIGN_OR_RETURN(int64_t min_int64, CheckedPgDefGetInt64(min_elem));
+      alter_column->mutable_column()
+          ->mutable_identity_column()
+          ->set_skip_range_min(min_int64);
+
+      Node* skip_range_max = PostgresCastToNode(lsecond(skip_range));
+      char max_name[] = "skip_range_max";
+      ZETASQL_ASSIGN_OR_RETURN(
+          DefElem * max_elem,
+          CheckedPgMakeDefElem(max_name, skip_range_max, elem->location));
+      ZETASQL_ASSIGN_OR_RETURN(int64_t max_int64, CheckedPgDefGetInt64(max_elem));
+      alter_column->mutable_column()
+          ->mutable_identity_column()
+          ->set_skip_range_max(max_int64);
+    } else {
+      alter_column->mutable_column()
+          ->mutable_identity_column()
+          ->clear_skip_range_min();
+      alter_column->mutable_column()
+          ->mutable_identity_column()
+          ->clear_skip_range_max();
+    }
+  }
+  // else ignore NO MINVALUE | NO MAXVALUE | NO CYCLE
+  // TODO: b/352174488 - When this bug is fixed, check whether it is fixed
+  // for <ALTER TABLE ... ALTER COLUMN ... SET ...> as well.
+  return absl::OkStatus();
+}
+
+absl::Status
+PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTableRestartCounter(
+    const AlterTableStmt& alter_statement, const AlterTableCmd& first_cmd,
+    const TranslationOptions& options, google::spanner::emulator::backend::ddl::AlterTable& out) const {
+  ZETASQL_RET_CHECK_EQ(alter_statement.objtype, OBJECT_TABLE);
+  ZETASQL_RET_CHECK_EQ(first_cmd.subtype, AT_RestartCounter);
+  if (!options.enable_identity_column) {
+    return UnsupportedTranslationError(
+        "Identity option altering is not supported in <ALTER TABLE ... "
+        "ALTER COLUMN> statement.");
+  }
+  google::spanner::emulator::backend::ddl::AlterTable::AlterColumn* alter_column =
+      out.mutable_alter_column();
+  alter_column->mutable_column()->set_column_name(first_cmd.name);
+  alter_column->set_operation(
+      google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::ALTER_IDENTITY);
+  // `type` is required in ColumnDefinition, so set it to NONE here. It will be
+  // replaced later using the type from current schema when applying the schema
+  // in analyzer.
+  alter_column->mutable_column()->set_type(
+      google::spanner::emulator::backend::ddl::ColumnDefinition::NONE);
+  alter_column->set_identity_alter_start_with_counter(true);
+  // Can not use the DowncastNode because the type tag could be either
+  // T_INTEGER or T_FLOAT.
+  char restart_counter_name[] = "restart_counter";
+  ZETASQL_ASSIGN_OR_RETURN(DefElem * elem, CheckedPgMakeDefElem(restart_counter_name,
+                                                        first_cmd.def, 0));
+  ZETASQL_ASSIGN_OR_RETURN(int64_t restart_counter_int64, CheckedPgDefGetInt64(elem));
+  alter_column->mutable_column()
+      ->mutable_identity_column()
+      ->set_start_with_counter(restart_counter_int64);
   return absl::OkStatus();
 }
 
@@ -1754,6 +1973,13 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
 
       return absl::OkStatus();
     }
+
+    case AT_SetIdentity:
+      return TranslateAlterTableAlterIdentity(alter_statement, *first_cmd,
+                                              options, out);
+    case AT_RestartCounter:
+      return TranslateAlterTableRestartCounter(alter_statement, *first_cmd,
+                                               options, out);
 
     case AT_AlterColumnType: {
       google::spanner::emulator::backend::ddl::ColumnDefinition* out_column =
@@ -1909,8 +2135,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
 }
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::UnsupportedTranslationError(
-    absl::string_view error_mesage) const {
-  return absl::FailedPreconditionError(error_mesage);
+    absl::string_view error_message) const {
+  return absl::FailedPreconditionError(error_message);
 }
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateDatabase(

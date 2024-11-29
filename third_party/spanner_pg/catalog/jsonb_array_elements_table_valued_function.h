@@ -55,7 +55,8 @@ class JsonbArrayElementsTableValuedFunction
                     /*extra_relation_input_columns_allowed=*/false),
                 {GetPgJsonbType()}, nullptr),
             /*result_schema=*/
-            zetasql::TVFRelation({{"", GetPgJsonbType()}})) {}
+            zetasql::TVFRelation(
+                {{"jsonb_array_elements", GetPgJsonbType()}})) {}
 
   absl::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
   CreateEvaluator(std::vector<TvfEvaluatorArg> input_arguments,

@@ -17,15 +17,25 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_DATABASE_CHANGE_STREAM_CHANGE_STREAM_PARTITION_CHURNER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_DATABASE_CHANGE_STREAM_CHANGE_STREAM_PARTITION_CHURNER_H_
 
+#include <functional>
+#include <memory>
+#include <string>
 #include <thread>  // NOLINT
+#include <vector>
 
 #include "absl/base/thread_annotations.h"
-#include "absl/random/random.h"
-#include "backend/actions/manager.h"
-#include "backend/common/ids.h"
-#include "backend/locking/manager.h"
-#include "backend/schema/catalog/versioned_catalog.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/flags/declare.h"
+#include "absl/log/log.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
+#include "absl/time/time.h"
+#include "backend/schema/catalog/schema.h"
+#include "backend/transaction/options.h"
 #include "backend/transaction/read_write_transaction.h"
+#include "common/clock.h"
 
 // How often to terminate currently active change stream partitions.
 ABSL_DECLARE_FLAG(absl::Duration, change_stream_churning_interval);
@@ -43,6 +53,11 @@ ABSL_DECLARE_FLAG(int, change_stream_churn_thread_retry_jitter);
 
 // Whether the change stream churning should be enabled.
 ABSL_DECLARE_FLAG(bool, enable_change_stream_churning);
+
+// If set to X seconds, and it's greater than 0, then
+// override the default partition token alive seconds from 20-40 seconds to X-2X
+// seconds.
+ABSL_DECLARE_FLAG(int, override_change_stream_partition_token_alive_seconds);
 
 namespace google {
 namespace spanner {
@@ -72,9 +87,7 @@ class ChangeStreamPartitionChurner {
 
   ChangeStreamPartitionChurner(
       CreateReadWriteTransactionFn create_read_write_transaction_fn,
-      Clock* clock)
-      : create_read_write_transaction_fn_(create_read_write_transaction_fn),
-        clock_(clock) {}
+      Clock* clock);
 
   ~ChangeStreamPartitionChurner() { ClearAllChurningThreads(); }
 

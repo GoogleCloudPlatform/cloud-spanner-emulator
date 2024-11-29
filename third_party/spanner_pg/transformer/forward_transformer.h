@@ -192,6 +192,13 @@ class ForwardTransformer {
                              const VarIndexScope* external_scope,
                              VarIndexScope* output_scope);
 
+  // Builds a `ResolvedArrayScan` for Set Returning Functions (SRF).
+  // Currently only `jsonb_object_keys` is supported.
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedArrayScan>>
+  BuildGsqlResolvedArrayScanForSetReturningFunction(
+      const RangeTblEntry& rte, FuncExpr* func_expr, int rtindex,
+      const VarIndexScope* external_scope, VarIndexScope* output_scope);
+
   // Builds a `ResolvedTVFScan` for a TVF in the FROM clause.
   // Currently this is just the Change Streams TVF.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedTVFScan>>
@@ -574,8 +581,7 @@ class ForwardTransformer {
 
   // Determines whether this expr (which may not even be a FuncExpr) is for a
   // set-returning function (SRF). This is used to provide better error messages
-  // for query locations where PostgreSQL permits an SRF but ZetaSQL (and thus
-  // Spangres) does not.
+  // and determine if a function needs to be wrapped in an array scan.
   bool IsSetReturningFunction(const Expr* expr) const;
 
  public:

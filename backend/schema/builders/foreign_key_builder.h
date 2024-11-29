@@ -82,6 +82,11 @@ class ForeignKey::Builder {
     return *this;
   }
 
+  Builder& set_enforced(bool enforced) {
+    instance_->enforced_ = enforced;
+    return *this;
+  }
+
   Builder& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
     if (postgresql_oid.has_value()) {
       instance_->set_postgresql_oid(postgresql_oid.value());

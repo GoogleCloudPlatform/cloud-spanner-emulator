@@ -89,10 +89,15 @@ absl::Status ForeignKeyValidator::Validate(const ForeignKey* foreign_key,
   ZETASQL_RET_CHECK_EQ(foreign_key->referenced_table_->FindReferencingForeignKey(
                    foreign_key->Name()),
                foreign_key);
-  ZETASQL_RET_CHECK_EQ(foreign_key->referencing_data_table(),
-               foreign_key->referencing_index_ == nullptr
-                   ? foreign_key->referencing_table_
-                   : foreign_key->referencing_index_->index_data_table());
+  if (foreign_key->enforced()) {
+    ZETASQL_RET_CHECK_EQ(foreign_key->referencing_data_table(),
+                 foreign_key->referencing_index_ == nullptr
+                     ? foreign_key->referencing_table_
+                     : foreign_key->referencing_index_->index_data_table());
+  } else {
+    ZETASQL_RET_CHECK_EQ(foreign_key->referencing_index_, nullptr);
+  }
+
   ZETASQL_RET_CHECK_EQ(foreign_key->referenced_data_table(),
                foreign_key->referenced_index_ == nullptr
                    ? foreign_key->referenced_table_

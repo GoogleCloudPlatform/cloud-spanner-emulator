@@ -586,28 +586,5 @@ TEST_F(DdlTest, PrintRowDeletionPolicyForEmulator) {
               zetasql_base::testing::IsOkAndHolds("INTERVAL '7 DAYS' ON user_id"));
 }
 
-TEST_F(DdlTest, DisableVectorLength) {
-  const std::string input =
-      "CREATE TABLE Users ("
-      "id bigint PRIMARY KEY,"
-      "vector float[] VECTOR LENGTH 123"
-      ")";
-
-  interfaces::ParserBatchOutput parsed_statements =
-      base_helper_.Parser()->ParseBatch(
-          interfaces::ParserParamsBuilder(input).Build());
-  ABSL_CHECK_OK(parsed_statements.global_status());
-  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
-
-  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
-      base_helper_.Translator()->Translate(parsed_statements,
-                                          {.enable_vector_length = false});
-
-  EXPECT_THAT(statements,
-              StatusIs(
-                  absl::StatusCode::kFailedPrecondition,
-                  "<VECTOR LENGTH> constraint type is not supported."));
-}
-
 }  // namespace
 }  // namespace postgres_translator::spangres

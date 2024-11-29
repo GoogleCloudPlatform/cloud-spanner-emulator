@@ -52,6 +52,7 @@ cc_test(
     deps = [
         ":databases",
         "//backend/database",
+        "//backend/schema/catalog:schema",
         "//backend/schema/printer:print_ddl",
         "//common:constants",
         "//common:limits",
@@ -64,6 +65,7 @@ cc_test(
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
         "@com_google_googletest//:gtest_main",
