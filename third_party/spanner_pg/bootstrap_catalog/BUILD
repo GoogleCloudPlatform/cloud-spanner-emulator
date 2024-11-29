@@ -220,3 +220,18 @@ genrule(
     """,
     tools = ["gen_catalog_info.pl"],
 )
+
+cc_library(
+    name = "bootstrap_catalog_accessor_impl",
+    srcs = ["bootstrap_catalog_accessor.cc"],
+    visibility = ["//third_party/spanner_pg/interface:__subpackages__"],
+    deps = [
+        ":bootstrap_catalog",
+        "//third_party/spanner_pg/interface:bootstrap_catalog_accessor",
+        "//third_party/spanner_pg/interface:bootstrap_catalog_data_cc_proto",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)

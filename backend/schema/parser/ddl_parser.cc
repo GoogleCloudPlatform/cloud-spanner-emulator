@@ -87,6 +87,8 @@ const char kModelEndpointOptionName[] = "endpoint";
 const char kModelEndpointsOptionName[] = "endpoints";
 const char kWitnessLocationOptionName[] = "witness_location";
 const char kDefaultLeaderOptionName[] = "default_leader";
+const char kVersionRetentionPeriodOptionName[] = "version_retention_period";
+const char kDefaultSequenceKindOptionName[] = "default_sequence_kind";
 
 typedef google::protobuf::RepeatedPtrField<SetOption> OptionList;
 typedef google::protobuf::RepeatedPtrField<Grantee> Grantees;
@@ -451,9 +453,16 @@ void VisitTableRowDeletionPolicyNode(const SimpleNode* node,
 }
 
 void SetSortOrder(const SimpleNode* key_part_node, KeyPartClause* key_part,
-                  std::vector<std::string>* errors) {
+                  std::vector<std::string>* errors,
+                  bool set_default_asc = false) {
   if (GetFirstChildNode(key_part_node, JJTDESC) != nullptr) {
     key_part->set_order(KeyPartClause::DESC);
+  }
+
+  if (set_default_asc && !key_part->has_order()) {
+    if (GetFirstChildNode(key_part_node, JJTASC) != nullptr) {
+      key_part->set_order(KeyPartClause::ASC);
+    }
   }
 }
 
@@ -712,6 +721,87 @@ void VisitGenerationClauseNode(const SimpleNode* node, ColumnDefinition* column,
   }
 }
 
+template <typename T>
+void VisitSequenceParamNode(const SimpleNode* node, T* definition,
+                            std::vector<std::string>* errors) {
+  // For SKIP RANGE, there will be two children.
+  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTBIT_REVERSED_POSITIVE: {
+        if (definition->has_type()) {
+          errors->push_back("The sequence kind is set more than once.");
+          return;
+        }
+        definition->set_type(T::BIT_REVERSED_POSITIVE);
+        break;
+      }
+      case JJTSTART_WITH_COUNTER: {
+        ABSL_DCHECK_EQ(child->jjtGetNumChildren(), 1);
+        if (definition->has_start_with_counter()) {
+          errors->push_back("START WITH COUNTER is set more than once.");
+          return;
+        }
+        definition->set_start_with_counter(
+            GetChildNode(child, 0)->image_as_int64());
+        break;
+      }
+      case JJTSKIP_RANGE_MIN: {
+        if (definition->has_skip_range_min()) {
+          errors->push_back("SKIP RANGE is set more than once.");
+          return;
+        }
+        definition->set_skip_range_min(child->image_as_int64());
+        break;
+      }
+      case JJTSKIP_RANGE_MAX: {
+        if (definition->has_skip_range_max()) {
+          errors->push_back("SKIP RANGE is set more than once.");
+          return;
+        }
+        definition->set_skip_range_max(child->image_as_int64());
+        break;
+      }
+      default:
+        errors->push_back(absl::StrCat("Unexpected sequence options info: ",
+                                       child->toString()));
+        return;
+    }
+  }
+}
+
+template <typename T>
+void VisitSequenceParamListNode(const SimpleNode* node, T* definition,
+                                std::vector<std::string>* errors) {
+  CheckNode(node, JJTSEQUENCE_PARAM_LIST);
+
+  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
+    VisitSequenceParamNode(GetChildNode(node, i, JJTSEQUENCE_PARAM), definition,
+                           errors);
+  }
+}
+
+void VisitIdentityColumnClauseNode(const SimpleNode* node,
+                                   ColumnDefinition* column,
+                                   std::vector<std::string>* errors) {
+  CheckNode(node, JJTIDENTITY_COLUMN_CLAUSE);
+  if (!EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
+    errors->push_back("Identity columns are not supported.");
+    return;
+  }
+
+  if (node->jjtGetNumChildren() != 1) {
+    // There is no () clause. Make the side effect of creating the submessage
+    // and return. We let the sdl schema to validate if a sequence kind is not
+    // specified.
+    column->mutable_identity_column();
+    return;
+  }
+
+  SimpleNode* child = GetChildNode(node, 0, JJTSEQUENCE_PARAM_LIST);
+  VisitSequenceParamListNode(child, column->mutable_identity_column(), errors);
+}
+
 void VisitColumnDefaultClauseNode(const SimpleNode* node,
                                   ColumnDefinition* column,
                                   absl::string_view ddl_text) {
@@ -753,6 +843,9 @@ void VisitColumnNode(const SimpleNode* node, ColumnDefinition* column,
       case JJTCOLUMN_DEFAULT_CLAUSE:
         VisitColumnDefaultClauseNode(child, column, ddl_text);
         break;
+      case JJTIDENTITY_COLUMN_CLAUSE:
+        VisitIdentityColumnClauseNode(child, column, errors);
+        break;
       default:
         ABSL_LOG(FATAL) << "Unexpected column info: " << child->toString();
     }
@@ -781,6 +874,9 @@ void VisitColumnNodeAlterAttrs(const SimpleNode* node,
         break;
       case JJTCOLUMN_DEFAULT_CLAUSE:
         VisitColumnDefaultClauseNode(child, column, ddl_text);
+        break;
+      case JJTIDENTITY_COLUMN_CLAUSE:
+        VisitIdentityColumnClauseNode(child, column, errors);
         break;
       default:
         ABSL_LOG(FATAL) << "Unexpected column info: " << child->toString();
@@ -849,6 +945,54 @@ void VisitColumnNodeAlter(const std::string& table_name,
     case JJTDROP_NOT_NULL: {
       errors->push_back(
           "ALTER COLUMN DROP NOT NULL not supported without a column type");
+      break;
+    }
+    case JJTRESTART_COUNTER: {
+      if (!EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
+        errors->push_back("Identity columns are not supported.");
+        return;
+      }
+      // The reason to use two separate fields is because we would like to have
+      // the capability to support updating multiple properties in a single
+      // statement. Also, if we supported RESTART COUNTER without WITH, we can
+      // set this bool to true but not set the start_with_counter field.
+      alter_column->set_operation(AlterTable::AlterColumn::ALTER_IDENTITY);
+      alter_column->set_identity_alter_start_with_counter(true);
+      column->mutable_identity_column()->set_start_with_counter(
+          child->image_as_int64());
+      break;
+    }
+    case JJTSKIP_RANGE_MIN: {
+      if (!EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
+        errors->push_back("Identity columns are not supported.");
+        return;
+      }
+      if (node->jjtGetNumChildren() != 2) {
+        // It should theoretically never happen.
+        errors->push_back(
+            "skip_range_max is missing in ALTER IDENTITY SET SKIP RANGE.");
+        return;
+      }
+      const SimpleNode* next_child = GetChildNode(node, 1);
+      CheckNode(next_child, JJTSKIP_RANGE_MAX);
+
+      alter_column->set_operation(AlterTable::AlterColumn::ALTER_IDENTITY);
+      alter_column->set_identity_alter_skip_range(true);
+      column->mutable_identity_column()->set_skip_range_min(
+          child->image_as_int64());
+      column->mutable_identity_column()->set_skip_range_max(
+          next_child->image_as_int64());
+      break;
+    }
+    case JJTNO_SKIP_RANGE: {
+      if (!EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
+        errors->push_back("Identity columns are not supported.");
+        return;
+      }
+      alter_column->set_operation(AlterTable::AlterColumn::ALTER_IDENTITY);
+      alter_column->set_identity_alter_skip_range(true);
+      column->mutable_identity_column()->clear_skip_range_min();
+      column->mutable_identity_column()->clear_skip_range_max();
       break;
     }
     default:
@@ -1170,7 +1314,7 @@ void VisitTokenKeyListNode(
     SimpleNode* token_key = GetChildNode(node, i, JJTKEY_PART);
     KeyPartClause* key_part = token_columns->Add()->mutable_token_column();
     key_part->set_key_name(GetChildNode(token_key, 0, JJTPATH)->image());
-    SetSortOrder(token_key, key_part, errors);
+    SetSortOrder(token_key, key_part, errors, /*set_default_asc=*/true);
   }
 }
 
@@ -1422,6 +1566,58 @@ void VisitDefaultLeaderDatabaseOptionValNode(const SimpleNode* value_node,
   }
 }
 
+void VisitDefaultSequenceKindDatabaseOptionValNode(
+    const SimpleNode* value_node, SetOption* option,
+    std::vector<std::string>* errors) {
+  ABSL_DCHECK_EQ(option->option_name(), kDefaultSequenceKindOptionName);
+
+  if (value_node->getId() == JJTSTR_VAL &&
+      ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
+          .ok()) {
+    std::string string_value;
+    std::string error = "";
+    if (!UnescapeStringLiteral(value_node->image(), &string_value, &error)) {
+      errors->push_back(error);
+      return;
+    }
+    option->set_string_value(string_value);
+  } else if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+  } else {
+    errors->push_back(absl::StrCat(
+        "Unexpected value for option: ", kDefaultSequenceKindOptionName,
+        ". Supported option values are strings and NULL."));
+    return;
+  }
+}
+
+void VisitVersionRetentionPeriodDatabaseOptionValNode(
+    const SimpleNode* value_node, SetOption* option,
+    std::vector<std::string>* errors) {
+  ABSL_DCHECK_EQ(option->option_name(), kVersionRetentionPeriodOptionName);
+
+  if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+    return;
+  }
+  if (value_node->getId() != JJTSTR_VAL ||
+      !ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
+           .ok()) {
+    errors->push_back(
+        absl::StrCat("Unexpected value for option: version_retention_period."
+                     " Supported values are non-empty strings only."));
+    return;
+  }
+
+  std::string string_value;
+  std::string error = "";
+  if (!UnescapeStringLiteral(value_node->image(), &string_value, &error)) {
+    errors->push_back(error);
+    return;
+  }
+  option->set_string_value(string_value);
+}
+
 void VisitDatabaseOptionKeyValNode(const SimpleNode* node, OptionList* options,
                                    std::vector<std::string>* errors) {
   std::string option_name = CheckOptionKeyValNodeAndGetName(node);
@@ -1454,6 +1650,16 @@ void VisitDatabaseOptionKeyValNode(const SimpleNode* node, OptionList* options,
       errors->push_back("Option: default_leader is null.");
       return;
     }
+  } else if (option_name == kDefaultSequenceKindOptionName &&
+             EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
+    SetOption* option = options->Add();
+    option->set_option_name(kDefaultSequenceKindOptionName);
+    VisitDefaultSequenceKindDatabaseOptionValNode(value_node, option, errors);
+  } else if (option_name == kVersionRetentionPeriodOptionName) {
+    SetOption* option = options->Add();
+    option->set_option_name(kVersionRetentionPeriodOptionName);
+    VisitVersionRetentionPeriodDatabaseOptionValNode(value_node, option,
+                                                     errors);
   } else {
     errors->push_back(absl::StrCat("Option: ", option_name, " is unknown."));
   }
@@ -1693,6 +1899,15 @@ void VisitCreateSequenceNode(const SimpleNode* node, CreateSequence* sequence,
   while (offset < node->jjtGetNumChildren()) {
     const SimpleNode* child = GetChildNode(node, offset++);
     switch (child->getId()) {
+      case JJTSEQUENCE_PARAM_LIST:
+        if (!EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
+          errors->push_back(
+              "Using SQL clauses to configure sequence options is not "
+              "supported in CREATE SEQUENCE statements.");
+          return;
+        }
+        VisitSequenceParamListNode(child, sequence, errors);
+        break;
       case JJTOPTIONS_CLAUSE: {
         OptionList* options = sequence->mutable_set_options();
         bool sequence_kind_visited = false;
@@ -1707,8 +1922,8 @@ void VisitCreateSequenceNode(const SimpleNode* node, CreateSequence* sequence,
           }
         }
 
-        if (!has_valid_sequence_kind
-        ) {
+        if (!has_valid_sequence_kind &&
+            !EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
           errors->push_back(
               "CREATE SEQUENCE statements require option `sequence_kind` to "
               "be set");
@@ -1760,6 +1975,48 @@ void VisitAlterSequenceNode(const SimpleNode* node, AlterSequence* sequence,
         VisitSequenceOptionKeyValNode(GetChildNode(child, i, JJTOPTION_KEY_VAL),
                                       options, errors, &sequence_kind_visited);
       }
+      break;
+    }
+    case JJTRESTART_COUNTER: {
+      if (!EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
+        errors->push_back(
+            "RESTART COUNTER WITH is not supported in ALTER SEQUENCE "
+            "statements.");
+        return;
+      }
+      sequence->mutable_set_start_with_counter()->set_counter_value(
+          child->image_as_int64());
+      break;
+    }
+    case JJTSKIP_RANGE_MIN: {
+      if (!EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
+        errors->push_back(
+            "SKIP RANGE is not supported in ALTER SEQUENCE statements.");
+        return;
+      }
+      if (node->jjtGetNumChildren() != 3) {
+        // It should theoretically never happen.
+        errors->push_back(
+            "skip_range_max is missing for SET SKIP RANGE in ALTER SEQUENCE "
+            "statements.");
+        return;
+      }
+      const SimpleNode* next_child = GetChildNode(node, offset + 1);
+      CheckNode(next_child, JJTSKIP_RANGE_MAX);
+      sequence->mutable_set_skip_range()->set_min_value(
+          child->image_as_int64());
+      sequence->mutable_set_skip_range()->set_max_value(
+          next_child->image_as_int64());
+      break;
+    }
+    case JJTNO_SKIP_RANGE: {
+      if (!EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
+        errors->push_back(
+            "NO SKIP RANGE is not supported in ALTER SEQUENCE statements.");
+        return;
+      }
+      sequence->mutable_set_skip_range()->clear_min_value();
+      sequence->mutable_set_skip_range()->clear_max_value();
       break;
     }
     default:

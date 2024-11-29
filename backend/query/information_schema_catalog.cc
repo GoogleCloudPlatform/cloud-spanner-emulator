@@ -790,7 +790,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
     for (const Column* column : table->columns()) {
       if (dialect_ == DatabaseDialect::POSTGRESQL) {
         specific_kvs[kColumnDefault] =
-            column->has_default_value()
+            column->has_default_value() && !column->is_identity_column()
                 ? String(column->original_expression().value())
                 : NullString();
 
@@ -826,7 +826,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
         }
 
         specific_kvs[kColumnDefault] =
-                column->has_default_value()
+            (column->has_default_value() && !column->is_identity_column())
                 ? String(column->expression().value())
                 : NullString();
 
@@ -2495,6 +2495,10 @@ void InformationSchemaCatalog::FillSequenceOptionsTable() {
       tables_by_name_.at(GetNameForDialect(kSequenceOptions)).get();
   std::vector<std::vector<zetasql::Value>> rows;
   for (const Sequence* sequence : default_schema_->sequences()) {
+    if (sequence->is_internal_use()) {
+      // Skip internal sequences.
+      continue;
+    }
     const auto& [sequence_schema_part, sequence_name_part] =
         GetSchemaAndNameForInformationSchema(sequence->Name());
     rows.push_back(

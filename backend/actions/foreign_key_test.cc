@@ -29,6 +29,7 @@
 #include "backend/actions/ops.h"
 #include "tests/common/actions.h"
 #include "tests/common/schema_constructor.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -42,7 +43,10 @@ using zetasql_base::testing::StatusIs;
 class ForeignKeyTest : public test::ActionsTest {
  public:
   ForeignKeyTest()
-      : schema_(emulator::test::CreateSchemaFromDDL({R"(
+      : flag_setter_({
+            .enable_fk_enforcement_option = true,
+        }),
+        schema_(emulator::test::CreateSchemaFromDDL({R"(
             CREATE TABLE T (
               A INT64,
               B INT64,
@@ -55,11 +59,13 @@ class ForeignKeyTest : public test::ActionsTest {
                Y INT64,
                Z INT64,
                CONSTRAINT C FOREIGN KEY (Y, Z) REFERENCES T (B, C),
+               CONSTRAINT D FOREIGN KEY (Y, Z) REFERENCES T (B, C) NOT ENFORCED,
              ) PRIMARY KEY(X)
            )"},
                                                     &type_factory_)
                     .value()),
         foreign_key_(schema_->FindTable("U")->FindForeignKey("C")),
+        unenforced_foreign_key_(schema_->FindTable("U")->FindForeignKey("D")),
         referencing_data_(
             foreign_key_->referencing_index()->index_data_table()),
         referencing_columns_(referencing_data_->columns()),
@@ -68,21 +74,32 @@ class ForeignKeyTest : public test::ActionsTest {
         referencing_verifier_(
             std::make_unique<ForeignKeyReferencingVerifier>(foreign_key_)),
         referenced_verifier_(
-            std::make_unique<ForeignKeyReferencedVerifier>(foreign_key_)) {}
+            std::make_unique<ForeignKeyReferencedVerifier>(foreign_key_)),
+        unenforced_referencing_verifier_(
+            std::make_unique<ForeignKeyReferencingVerifier>(
+                unenforced_foreign_key_)),
+        unenforced_referenced_verifier_(
+            std::make_unique<ForeignKeyReferencedVerifier>(
+                unenforced_foreign_key_)) {}
 
  protected:
   // Test components.
+  const ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter
+      flag_setter_;
   zetasql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
 
   // Test variables.
   const ForeignKey* foreign_key_;
+  const ForeignKey* unenforced_foreign_key_;
   const Table* referencing_data_;
   absl::Span<const Column* const> referencing_columns_;
   const Table* referenced_data_;
   absl::Span<const Column* const> referenced_columns_;
   std::unique_ptr<Verifier> referencing_verifier_;
   std::unique_ptr<Verifier> referenced_verifier_;
+  std::unique_ptr<Verifier> unenforced_referencing_verifier_;
+  std::unique_ptr<Verifier> unenforced_referenced_verifier_;
 };
 
 TEST_F(ForeignKeyTest, InsertReferencingRowWithReferencedRow) {
@@ -97,6 +114,9 @@ TEST_F(ForeignKeyTest, InsertReferencingRowWithReferencedRow) {
   ZETASQL_EXPECT_OK(referencing_verifier_->Verify(
       ctx(), Insert(referencing_data_, Key({Int64(1), Int64(2), Int64(4)}),
                     referencing_columns_, {Int64(1), Int64(2), Int64(4)})));
+  ZETASQL_EXPECT_OK(unenforced_referencing_verifier_->Verify(
+      ctx(), Insert(referencing_data_, Key({Int64(1), Int64(2), Int64(4)}),
+                    referencing_columns_, {Int64(1), Int64(2), Int64(4)})));
 }
 
 TEST_F(ForeignKeyTest, InsertReferencingRowWithoutReferencedRow) {
@@ -107,6 +127,9 @@ TEST_F(ForeignKeyTest, InsertReferencingRowWithoutReferencedRow) {
           ctx(), Insert(referencing_data_, Key({Int64(1), Int64(2), Int64(3)}),
                         referencing_columns_, {Int64(1), Int64(2), Int64(3)})),
       StatusIs(absl::StatusCode::kFailedPrecondition));
+  ZETASQL_EXPECT_OK(unenforced_referencing_verifier_->Verify(
+      ctx(), Insert(referencing_data_, Key({Int64(1), Int64(2), Int64(3)}),
+                    referencing_columns_, {Int64(1), Int64(2), Int64(3)})));
 }
 
 TEST_F(ForeignKeyTest, DeleteReferencedRowWithReferencingRow) {
@@ -122,6 +145,8 @@ TEST_F(ForeignKeyTest, DeleteReferencedRowWithReferencingRow) {
       referenced_verifier_->Verify(
           ctx(), Delete(referenced_data_, Key({Int64(1), Int64(2), Int64(3)}))),
       StatusIs(absl::StatusCode::kFailedPrecondition));
+  ZETASQL_EXPECT_OK(unenforced_referenced_verifier_->Verify(
+      ctx(), Delete(referenced_data_, Key({Int64(1), Int64(2), Int64(3)}))));
 }
 
 TEST_F(ForeignKeyTest, DeleteReferencedRowWithoutReferencingRow) {
@@ -139,6 +164,8 @@ TEST_F(ForeignKeyTest, DeleteReferencedRowWithoutReferencingRow) {
   // Deletion of the referenced row without a corresponding referencing row
   // should succeed.
   ZETASQL_EXPECT_OK(referenced_verifier_->Verify(
+      ctx(), Delete(referenced_data_, Key({Int64(4), Int64(5), Int64(6)}))));
+  ZETASQL_EXPECT_OK(unenforced_referenced_verifier_->Verify(
       ctx(), Delete(referenced_data_, Key({Int64(4), Int64(5), Int64(6)}))));
 }
 

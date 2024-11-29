@@ -16,6 +16,7 @@
 
 #include "backend/actions/foreign_key.h"
 
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "backend/actions/action.h"
@@ -38,6 +39,9 @@ ForeignKeyReferencingVerifier::ForeignKeyReferencingVerifier(
 
 absl::Status ForeignKeyReferencingVerifier::Verify(const ActionContext* ctx,
                                                    const InsertOp& op) const {
+  if (!foreign_key_->enforced()) {
+    return absl::OkStatus();
+  }
   // Check that the corresponding row exists in the referenced index. Exclude
   // any extra columns from the primary key that are not used by the foreign
   // key.
@@ -62,6 +66,9 @@ ForeignKeyReferencedVerifier::ForeignKeyReferencedVerifier(
 
 absl::Status ForeignKeyReferencedVerifier::Verify(const ActionContext* ctx,
                                                   const DeleteOp& op) const {
+  if (!foreign_key_->enforced()) {
+    return absl::OkStatus();
+  }
   // Check that the corresponding row does not exist in the referencing index.
   // Exclude any extra columns from the primary key that are not used by the
   // foreign key.

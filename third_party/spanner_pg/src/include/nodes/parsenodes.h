@@ -2057,6 +2057,9 @@ typedef enum AlterTableType
 	AT_DetachPartitionFinalize, /* DETACH PARTITION FINALIZE */
 	AT_AddIdentity,				/* ADD IDENTITY */
 	AT_SetIdentity,				/* SET identity column options */
+	// SPANGRES BEGIN
+	AT_RestartCounter,		/* RESTART COUNTER of identity column */
+	// SPANGRES END
 	AT_DropIdentity,			/* DROP IDENTITY */
 	AT_ReAddStatistics,			/* internal to commands/tablecmds.c */
 	AT_DropTtl,                 /* DROP TTL */

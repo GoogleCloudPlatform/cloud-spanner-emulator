@@ -41,6 +41,7 @@ class Sequence : public SchemaNode {
   std::optional<int64_t> start_with_counter() const { return start_with_; }
   std::optional<int64_t> skip_range_min() const { return skip_range_min_; }
   std::optional<int64_t> skip_range_max() const { return skip_range_max_; }
+  bool is_internal_use() const { return is_internal_use_; }
 
   ~Sequence() { RemoveSequenceFromLastValuesMap(); }
 
@@ -57,7 +58,17 @@ class Sequence : public SchemaNode {
     }
     return "INVALID";
   }
+
+  bool created_from_syntax() const { return created_from_syntax_; }
+  bool created_from_options() const { return created_from_options_; }
+  bool use_default_sequence_kind_option() const {
+    return use_default_sequence_kind_option_;
+  }
+
   inline static absl::Mutex SequenceMutex;
+  // A global map of sequence ids to their last values. This is used to
+  // maintain the state of the sequence across multiple databases. Therefore,
+  // the key should be a unique id for the sequence across all databases.
   inline static absl::flat_hash_map<std::string, int64_t> SequenceLastValues
       ABSL_GUARDED_BY(SequenceMutex);
 
@@ -114,9 +125,10 @@ class Sequence : public SchemaNode {
 
   // Name of this sequence.
   std::string name_;
+  // Whether this sequence is used internally, e.g., by identity columns.
+  bool is_internal_use_ = false;
 
-  // A unique ID for identifying this sequence in the schema that owns this
-  // sequence.
+  // A globally unique ID for identifying this sequence across all databases.
   SequenceID id_;
 
   std::shared_ptr<Schema> schema_ = nullptr;
@@ -125,6 +137,9 @@ class Sequence : public SchemaNode {
   std::optional<int64_t> start_with_;
   std::optional<int64_t> skip_range_min_;
   std::optional<int64_t> skip_range_max_;
+  bool created_from_syntax_ = false;
+  bool created_from_options_ = false;
+  bool use_default_sequence_kind_option_ = false;
 };
 
 }  // namespace backend

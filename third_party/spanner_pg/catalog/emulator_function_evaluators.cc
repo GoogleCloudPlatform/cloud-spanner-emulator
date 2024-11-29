@@ -53,9 +53,14 @@ zetasql::FunctionEvaluator PGFunctionEvaluator(
   return [function, on_compute_end](absl::Span<const zetasql::Value> args)
              -> absl::StatusOr<zetasql::Value> {
     // Binds PG memory context arena to thread local
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
-        postgres_translator::interfaces::CreatePGArena(nullptr));
+    ZETASQL_VLOG(1) << "Creating PG arena and Evaluating PG function";
+    absl::StatusOr<std::unique_ptr<postgres_translator::interfaces::PGArena>>
+        status_or = postgres_translator::interfaces::CreatePGArena(nullptr);
+    if (!status_or.ok()) {
+      ABSL_LOG(WARNING) << "Tried to create PG arena but failed: "
+                 << status_or.status();
+    }
+
     // Initializes the thread local timezone with the default timezone
     ZETASQL_RETURN_IF_ERROR(
         postgres_translator::interfaces::InitPGTimezone(kDefaultTimeZone));

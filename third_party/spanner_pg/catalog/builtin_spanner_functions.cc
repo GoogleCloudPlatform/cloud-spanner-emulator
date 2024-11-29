@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "zetasql/public/function.h"
+#include "zetasql/public/function.pb.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
@@ -100,6 +101,22 @@ void AddNewSignaturesForExistingFunctions(
   for (const auto& [function_name, signatures] : func_name_with_signatures) {
     add_signatures_for_name(function_name, signatures);
   }
+}
+
+zetasql::FunctionArgumentTypeOptions GetRequiredNamedArgumentOptions(
+    absl::string_view name) {
+  zetasql::FunctionArgumentTypeOptions options;
+  options.set_cardinality(zetasql::FunctionArgumentType::REQUIRED);
+  options.set_argument_name(name, zetasql::kPositionalOrNamed);
+  return options;
+}
+
+zetasql::FunctionArgumentTypeOptions GetOptionalNamedArgumentOptions(
+    absl::string_view name) {
+  zetasql::FunctionArgumentTypeOptions options;
+  options.set_cardinality(zetasql::FunctionArgumentType::OPTIONAL);
+  options.set_argument_name(name, zetasql::kNamedOnly);
+  return options;
 }
 
 }  // namespace
@@ -1153,14 +1170,20 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
 
     const zetasql::Type* gsql_pg_jsonb =
         types::PgJsonbMapping()->mapped_type();
+    zetasql::FunctionArgumentTypeOptions model_endpoint =
+        GetRequiredNamedArgumentOptions("model_endpoint");
+    zetasql::FunctionArgumentTypeOptions args =
+        GetRequiredNamedArgumentOptions("args");
     functions.push_back({"ml_predict_row",
                           "ml_predict_row",
                           {
                               {{gsql_pg_jsonb,
-                                {gsql_string, gsql_pg_jsonb},
+                                {{gsql_string, model_endpoint},
+                                 {gsql_pg_jsonb, args}},
                                 /*context_ptr=*/nullptr}},
                               {{gsql_pg_jsonb,
-                                {gsql_pg_jsonb, gsql_pg_jsonb},
+                                {{gsql_pg_jsonb, model_endpoint},
+                                 {gsql_pg_jsonb, args}},
                                 /*context_ptr=*/nullptr}},
                           },
                           /*mode=*/zetasql::Function::SCALAR,
@@ -1269,5 +1292,6 @@ void RemapFunctionsForSpanner(
     std::vector<PostgresFunctionArguments>& functions) {
   RemapMinFunction(functions);
 }
+
 }  // namespace spangres
 }  // namespace postgres_translator

@@ -50,8 +50,7 @@ using testing::Optional;
 class SequenceSchemaUpdaterTest : public SchemaUpdaterTest {
  public:
   SequenceSchemaUpdaterTest()
-      : flag_setter_({
-        }) {}
+      : flag_setter_({.enable_identity_columns = true}) {}
   const ScopedEmulatorFeatureFlagsSetter flag_setter_;
 };
 
@@ -2299,6 +2298,212 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ViewUsesNonExistSequence) {
                     testing::HasSubstr("Sequence not found: nonexist")));
   }
 }
+
+TEST_P(SequenceSchemaUpdaterTest, GSQLSequenceClauseNotSupportedWhenFlagIsOff) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ScopedEmulatorFeatureFlagsSetter setter({.enable_identity_columns = false});
+
+  EXPECT_THAT(CreateSchema({R"(
+      CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
+      )"}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr(
+                      "Using SQL clauses to configure sequence options is not "
+                      "supported in CREATE SEQUENCE statements")));
+
+  EXPECT_THAT(CreateSchema({R"(
+      ALTER SEQUENCE myseq RESTART COUNTER WITH 1
+      )"}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("RESTART COUNTER WITH is not supported in "
+                                     "ALTER SEQUENCE statements")));
+}
+
+TEST_P(SequenceSchemaUpdaterTest, GSQLSequenceClause_CreateSequence) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
+        SKIP RANGE 1000, 2000 START COUNTER WITH 100
+    )"}));
+  const Sequence* sequence = schema->FindSequence("myseq");
+  EXPECT_NE(sequence, nullptr);
+
+  EXPECT_TRUE(sequence->start_with_counter().has_value());
+  EXPECT_EQ(sequence->DebugString(),
+            "Sequence myseq. Sequence kind: BIT_REVERSED_POSITIVE\n  "
+            "start_with_counter: 100\n  skipped range: [1000, 2000]");
+  EXPECT_THAT(sequence->start_with_counter(), Optional(100));
+  EXPECT_THAT(sequence->skip_range_min(), Optional(1000));
+  EXPECT_THAT(sequence->skip_range_max(), Optional(2000));
+}
+
+TEST_P(SequenceSchemaUpdaterTest,
+       GSQLSequenceClause_SpecifyNoSequenceKindFailed) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  EXPECT_THAT(CreateSchema({"CREATE SEQUENCE myseq"}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr(
+                      "The sequence does not have a valid sequence kind. "
+                      "Please specify the sequence kind explicitly or set "
+                      "the database option `default_sequence_kind`.")));
+}
+
+TEST_P(SequenceSchemaUpdaterTest,
+       GSQLSequenceClause_SpecifyNoSequenceKindSuccess) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+                                   R"(ALTER DATABASE db SET OPTIONS (
+        default_sequence_kind = 'bit_reversed_positive'))",
+                                   R"(
+      CREATE SEQUENCE myseq
+        SKIP RANGE 1000, 2000 START COUNTER WITH 100
+    )",
+                                   R"(
+      CREATE SEQUENCE myseq2 OPTIONS (
+          start_with_counter = 200,
+          skip_range_min = 3000,
+          skip_range_max = 4000
+        )
+    )",
+                                   R"(
+      CREATE SEQUENCE myseq3
+    )"}));
+  const Sequence* sequence = schema->FindSequence("myseq");
+  EXPECT_NE(sequence, nullptr);
+  EXPECT_EQ(sequence->sequence_kind_name(), "BIT_REVERSED_POSITIVE");
+  EXPECT_TRUE(sequence->start_with_counter().has_value());
+  EXPECT_EQ(sequence->DebugString(),
+            "Sequence myseq. Sequence kind: BIT_REVERSED_POSITIVE\n  "
+            "start_with_counter: 100\n  skipped range: [1000, 2000]");
+  EXPECT_THAT(sequence->start_with_counter(), Optional(100));
+  EXPECT_THAT(sequence->skip_range_min(), Optional(1000));
+  EXPECT_THAT(sequence->skip_range_max(), Optional(2000));
+
+  const Sequence* sequence2 = schema->FindSequence("myseq2");
+  EXPECT_NE(sequence2, nullptr);
+  EXPECT_EQ(sequence2->sequence_kind_name(), "BIT_REVERSED_POSITIVE");
+  EXPECT_TRUE(sequence2->start_with_counter().has_value());
+  EXPECT_EQ(sequence2->DebugString(),
+            "Sequence myseq2. Sequence kind: BIT_REVERSED_POSITIVE\n  "
+            "start_with_counter: 200\n  skipped range: [3000, 4000]");
+  EXPECT_THAT(sequence2->start_with_counter(), Optional(200));
+  EXPECT_THAT(sequence2->skip_range_min(), Optional(3000));
+  EXPECT_THAT(sequence2->skip_range_max(), Optional(4000));
+
+  const Sequence* sequence3 = schema->FindSequence("myseq3");
+  EXPECT_NE(sequence3, nullptr);
+  EXPECT_EQ(sequence3->sequence_kind_name(), "BIT_REVERSED_POSITIVE");
+  EXPECT_EQ(sequence3->DebugString(),
+            "Sequence myseq3. Sequence kind: BIT_REVERSED_POSITIVE");
+  EXPECT_FALSE(sequence3->start_with_counter().has_value());
+  EXPECT_FALSE(sequence3->skip_range_min().has_value());
+  EXPECT_FALSE(sequence3->skip_range_max().has_value());
+}
+
+TEST_P(SequenceSchemaUpdaterTest,
+       GSQLSequenceClause_UseBothClausesAndOptions_CreateFailed) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  EXPECT_THAT(
+      CreateSchema({R"(
+            CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
+              OPTIONS (sequence_kind = "bit_reversed_positive")
+          )"}),
+      StatusIs(error::CannotSetSequenceClauseAndOptionTogether("myseq")));
+
+  EXPECT_THAT(
+      CreateSchema({R"(
+            CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
+              OPTIONS (start_with_counter = 5000)
+          )"}),
+      StatusIs(error::CannotSetSequenceClauseAndOptionTogether("myseq")));
+}
+
+TEST_P(SequenceSchemaUpdaterTest,
+       GSQLSequenceClause_UseBothClausesAndOptions_AlterFailed) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+            CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
+          )",
+                                             R"(
+            CREATE SEQUENCE myseq2
+              OPTIONS (sequence_kind = "bit_reversed_positive")
+          )"}));
+
+  EXPECT_THAT(
+      UpdateSchema(schema.get(), {R"(
+      ALTER SEQUENCE myseq SET OPTIONS (start_with_counter = 5000)
+  )"}),
+      StatusIs(error::CannotSetSequenceClauseAndOptionTogether("myseq")));
+
+  EXPECT_THAT(
+      UpdateSchema(schema.get(), {R"(
+      ALTER SEQUENCE myseq2 RESTART COUNTER WITH 5000
+  )"}),
+      StatusIs(error::CannotSetSequenceClauseAndOptionTogether("myseq2")));
+}
+
+TEST_P(SequenceSchemaUpdaterTest, GSQLSequenceClause_AlterSequence) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
+        SKIP RANGE 1000, 2000 START COUNTER WITH 100
+    )"}));
+  const Sequence* sequence = schema->FindSequence("myseq");
+  EXPECT_NE(sequence, nullptr);
+  EXPECT_EQ(sequence->DebugString(),
+            "Sequence myseq. Sequence kind: BIT_REVERSED_POSITIVE\n  "
+            "start_with_counter: 100\n  skipped range: [1000, 2000]");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+      ALTER SEQUENCE myseq SKIP RANGE 3000, 4000
+    )"}));
+  sequence = schema->FindSequence("myseq");
+  EXPECT_EQ(sequence->DebugString(),
+            "Sequence myseq. Sequence kind: BIT_REVERSED_POSITIVE\n  "
+            "start_with_counter: 100\n  skipped range: [3000, 4000]");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+      ALTER SEQUENCE myseq RESTART COUNTER WITH 200
+    )"}));
+  sequence = schema->FindSequence("myseq");
+  EXPECT_EQ(sequence->DebugString(),
+            "Sequence myseq. Sequence kind: BIT_REVERSED_POSITIVE\n  "
+            "start_with_counter: 200\n  skipped range: [3000, 4000]");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+      ALTER SEQUENCE myseq NO SKIP RANGE
+    )"}));
+  sequence = schema->FindSequence("myseq");
+  EXPECT_EQ(sequence->DebugString(),
+            "Sequence myseq. Sequence kind: BIT_REVERSED_POSITIVE\n  "
+            "start_with_counter: 200");
+}
+
 }  // namespace test
 }  // namespace backend
 }  // namespace emulator

@@ -2412,6 +2412,12 @@ absl::Status ForeignKeyOnDeleteActionUnsupported(
           referential_action));
 }
 
+absl::Status ForeignKeyEnforcementUnsupported() {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("Foreign key enforcement option is not supported."));
+}
+
 absl::Status CheckConstraintNotEnabled() {
   return absl::Status(absl::StatusCode::kUnimplemented,
                       "Check Constraint is not implemented.");
@@ -3314,6 +3320,15 @@ absl::Status SearchIndexOrderByMustBeIntegerType(
           index_name, column_name, column_type));
 }
 
+absl::Status SearchIndexTokenlistKeyOrderUnsupported(
+    absl::string_view column_name, absl::string_view index_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Token key $0 in search index $1 does not support order.",
+          column_name, index_name));
+}
+
 // Search function errors
 absl::Status InvalidUseOfSearchRelatedFunctionWithReason(
     absl::string_view reason) {
@@ -3897,6 +3912,107 @@ absl::Status DdlUnavailableError() {
       absl::StatusCode::kUnavailable,
       "Error processing PostgreSQL DDL statements, retry may succeed.");
 }
+
+absl::Status UnsupportedVersionRetentionPeriodOptionValues() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      "The version_retention_period option only supports string or null.");
+}
+
+absl::Status ColumnIsNotIdentityColumn(absl::string_view table_name,
+                                       absl::string_view column_name) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::StrCat("Column is not an identity column in table ",
+                                   table_name, ": ", column_name));
+}
+
+absl::Status DefaultSequenceKindAlreadySet() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      "The default_sequence_kind option may not be unset once set.");
+}
+
+absl::Status UnsupportedDefaultSequenceKindOptionValues() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      "The default_sequence_kind option only supports string or null.");
+}
+
+absl::Status UnspecifiedIdentityColumnSequenceKind(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::StrCat(
+          "The sequence kind of an identity column ", column_name,
+          " is not specified. Please specify the sequence kind explicitly or "
+          "set the database option `default_sequence_kind`."));
+}
+
+absl::Status InvalidColumnIdentifierFormat(
+    absl::string_view column_path_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::StrCat(
+          "The column identifier's format is invalid: ", column_path_string,
+          ". It should be either \"<schema>.<table>.<column>\" or "
+          "\"<table>.<column>\"."));
+}
+
+absl::Status TableNotFoundInIdentityFunction(absl::string_view table_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::StrCat(
+          "Table not found for the GET_TABLE_COLUMN_IDENTITY_STATE function: ",
+          table_string));
+}
+
+absl::Status ColumnNotFoundInIdentityFunction(absl::string_view table_string,
+                                              absl::string_view column_string) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::StrCat("Identity column not found in table ",
+                                   table_string, ": ", column_string));
+}
+
+absl::Status UnspecifiedSequenceKind() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "The sequence does not have a valid sequence kind. Please "
+      "specify the sequence kind explicitly or set the database option "
+      "`default_sequence_kind`.");
+}
+
+absl::Status CannotSetSequenceClauseAndOptionTogether(
+    absl::string_view sequence_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::StrCat("The sequence properties can only be set in either clauses "
+                   "and options for the sequence ",
+                   sequence_string));
+}
+
+absl::Status CannotAlterToIdentityColumn(absl::string_view table_string,
+                                         absl::string_view column_string) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::StrCat("Cannot alter column `", table_string, ".",
+                                   column_string, "` to an identity column."));
+}
+
+absl::Status CannotAlterColumnToDropIdentity(absl::string_view table_string,
+                                             absl::string_view column_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::StrCat("Cannot alter column `", table_string, ".", column_string,
+                   "` to drop the identity property."));
+}
+
+absl::Status CannotAlterIdentityColumnToGeneratedOrDefaultColumn(
+    absl::string_view table_string, absl::string_view column_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::StrCat("Cannot alter an identity column `", table_string, ".",
+                   column_string, "` to a generated or default column."));
+}
+
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

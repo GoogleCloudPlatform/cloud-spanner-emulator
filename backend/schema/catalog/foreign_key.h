@@ -17,6 +17,8 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_FOREIGN_KEY_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_FOREIGN_KEY_H_
 
+#include <stdbool.h>
+
 #include <string>
 #include <vector>
 
@@ -99,6 +101,10 @@ class ForeignKey : public SchemaNode {
 
   // Returns the on delete action of this foreign key.
   Action on_delete_action() const { return on_delete_action_; }
+
+  // Returns whether this foreign key is enforced.
+  bool enforced() const { return enforced_; }
+
   // SchemaNode interface implementation.
   // ------------------------------------
 
@@ -164,6 +170,9 @@ class ForeignKey : public SchemaNode {
   // Action to take for the referencing table if a row from the referenced
   // table is deleted.
   Action on_delete_action_ = Action::kActionUnspecified;
+
+  // Whether the foreign key is enforced.
+  bool enforced_ = true;
 };
 
 }  // namespace backend

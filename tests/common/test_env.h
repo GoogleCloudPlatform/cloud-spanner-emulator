@@ -218,12 +218,17 @@ class ServerTest : public testing::Test {
     return WaitForOperation(operation.name(), &operation);
   }
 
-  absl::StatusOr<std::string> CreateTestSession() {
+  absl::StatusOr<std::string> CreateTestSession(std::string database_uri = "") {
     // Create a session that belongs to the database created above.
     grpc::ClientContext context;
     spanner_api::CreateSessionRequest request;
     spanner_api::Session response;
-    request.set_database(test_database_uri_);
+    if (database_uri.empty()) {
+      request.set_database(test_database_uri_);
+    } else {
+      request.set_database(database_uri);
+    }
+
     ZETASQL_RETURN_IF_ERROR(test_env()->spanner_client()->CreateSession(
         &context, request, &response));
     return response.name();

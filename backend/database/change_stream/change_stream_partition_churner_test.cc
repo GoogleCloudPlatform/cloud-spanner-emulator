@@ -62,9 +62,8 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
   };
 
   void SetUp() override {
-    absl::SetFlag(&FLAGS_change_stream_churning_interval, absl::Seconds(1));
-    absl::SetFlag(&FLAGS_change_stream_churn_thread_sleep_interval,
-                  absl::Seconds(1));
+    absl::SetFlag(&FLAGS_override_change_stream_partition_token_alive_seconds,
+                  1);
     std::vector<std::string> create_statements = {R"(
     CREATE TABLE T(
       k1 INT64,

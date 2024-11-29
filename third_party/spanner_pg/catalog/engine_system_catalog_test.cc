@@ -45,6 +45,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/catalog/function_identifier.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/interface/stub_builtin_function_catalog.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
@@ -169,6 +170,24 @@ class TestSystemCatalog : public EngineSystemCatalog {
          "logical_and",
          {{{gsql_bool, {gsql_bool}, /*context_ptr=*/nullptr}}},
          zetasql::Function::AGGREGATE});
+    ZETASQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
+    return absl::OkStatus();
+  }
+
+  // A set returning function.
+  absl::Status AddGenerateSeriesFunction(bool set_oid) {
+    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgVarcharMapping()));
+    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(spangres::types::PgJsonbMapping()));
+
+    PostgresFunctionArguments arguments(
+        {"generate_series",
+         "generate_array",
+         {{{gsql_int64_array,
+            {gsql_int64, gsql_int64},
+            /*context_ptr=*/nullptr},
+           /*has_mapped_function=*/true,
+           /*explicit_mapped_function_name=*/"",
+           set_oid ? F_GENERATE_SERIES_NUMERIC_NUMERIC : InvalidOid}}});
     ZETASQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
     return absl::OkStatus();
   }
@@ -425,6 +444,41 @@ TEST_F(EngineSystemCatalogTest, GetFunctions) {
   EXPECT_THAT(abs_result_types,
               UnorderedElementsAre(zetasql::types::Int64Type(),
                                    zetasql::types::DoubleType()));
+}
+
+TEST_F(EngineSystemCatalogTest, GetSetReturningFunctions) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+                       TestSystemCatalog::GetTestCatalog());
+  // Add a function.
+  ZETASQL_ASSERT_OK(catalog->AddGenerateSeriesFunction(/*set_oid=*/true));
+
+  absl::flat_hash_set<const zetasql::Function*> functions;
+  ZETASQL_ASSERT_OK(catalog->GetSetReturningFunctions(&functions));
+
+  // Collect all the function names.
+  absl::flat_hash_set<absl::string_view> function_names;
+  for (const zetasql::Function* function : functions) {
+    function_names.insert(function->Name());
+  }
+
+  // Check the expected set of function names.
+  EXPECT_THAT(function_names, UnorderedElementsAre("generate_array"));
+}
+
+TEST_F(EngineSystemCatalogTest, GetSetReturningFunctionsWithoutSetOid) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+                       TestSystemCatalog::GetTestCatalog());
+  // Add a function.
+  absl::Status actual_status =
+      catalog->AddGenerateSeriesFunction(/*set_oid=*/false);
+  EXPECT_THAT(actual_status, StatusIs(absl::StatusCode::kUnimplemented,
+                                      HasSubstr("No Postgres proc oid found")));
+  EXPECT_THAT(
+      actual_status,
+      StatusIs(
+          absl::StatusCode::kUnimplemented,
+          HasSubstr("(this function is a set returning function, "
+                    "which requires an explicit proc OID in the mapping)")));
 }
 
 TEST_F(EngineSystemCatalogTest, ReverseFunctionSignatureLookup) {

@@ -29,6 +29,8 @@ namespace test {
 
 namespace {
 
+using testing::ElementsAre;
+using zetasql_base::testing::IsOkAndHolds;
 using zetasql_base::testing::StatusIs;
 
 class GeneratedColumnTest : public DatabaseTest {
@@ -495,6 +497,44 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, DmlInsertDistinctOnlyGpkValues) {
   ZETASQL_EXPECT_OK(CommitDml({SqlStatement("INSERT T2(k1,k3) Values (1,1),(2,1)")}));
   EXPECT_THAT(ReadAll("T2", {"k1", "k2_stored", "k3", "k4_stored"}),
               IsOkAndHoldsRows({{1, 2, 1, 3}, {2, 4, 1, 3}}));
+}
+
+class PGGeneratedColumnTest : public DatabaseTest {
+ public:
+  PGGeneratedColumnTest()
+      : feature_flags_({.enable_postgresql_interface = true}) {}
+
+  void SetUp() override {
+    dialect_ = database_api::DatabaseDialect::POSTGRESQL;
+    DatabaseTest::SetUp();
+  }
+
+  absl::Status SetUpDatabase() override { return absl::OkStatus(); }
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
+};
+
+TEST_F(PGGeneratedColumnTest, AddJsonbGeneratedColumn) {
+  ZETASQL_ASSERT_OK(UpdateSchema({
+      R"(
+        CREATE TABLE t (
+          k bigint primary key,
+          jsonb_val jsonb default to_jsonb('{"a": 1, "b": 2}'::text),
+          jsonb_typ text generated always as (jsonb_typeof(jsonb_val)) stored
+        )
+      )",
+  }));
+
+  EXPECT_THAT(GetDatabaseDdl(), IsOkAndHolds(ElementsAre(R"(CREATE TABLE t (
+  k bigint NOT NULL,
+  jsonb_val jsonb DEFAULT to_jsonb('{"a": 1, "b": 2}'::text),
+  jsonb_typ character varying GENERATED ALWAYS AS (jsonb_typeof(jsonb_val)) STORED,
+  PRIMARY KEY(k)
+))")));
+
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO t(k) VALUES (1)")}));
+  EXPECT_THAT(Query("SELECT jsonb_typ FROM t"), IsOkAndHoldsRows({{"string"}}));
 }
 
 }  // namespace

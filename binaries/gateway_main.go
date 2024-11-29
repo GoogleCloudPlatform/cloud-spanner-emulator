@@ -60,6 +60,9 @@ var (
 			"MAX_DATABASES_PER_INSTANCE environment variable is set, it overrides the "+
 			"value set in this flag but it is only respected if it's greater than "+
 			"the default limit of Spanner.")
+	overrideChangeStreamPartitionTokenAliveSeconds = flag.Int("override_change_stream_partition_token_alive_seconds", -1,
+		"If set to X seconds, and X is greater than 0, then override the default partition token alive"+
+			"time from 20-40 seconds(default for Emulator only, not for production Spanner) to X-2X seconds.")
 )
 
 // resolveGRPCBinary figures out the full path to the grpc binary from the --grpc_binary flag.
@@ -108,6 +111,15 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	// If the environment variable is set, it overrides the value specified
+	// in the --change_stream_partition_token_alive_seconds flag.
+	overrideChangeStreamPartitionTokenAliveSeconds := *overrideChangeStreamPartitionTokenAliveSeconds
+	if os.Getenv("CHANGE_STREAM_PARTITION_TOKEN_ALIVE_SECONDS") != "" {
+		overrideChangeStreamPartitionTokenAliveSeconds, err = strconv.Atoi(os.Getenv("CHANGE_STREAM_PARTITION_TOKEN_ALIVE_SECONDS"))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	// Start the gateway http server. This will run the emulator grpc server as a subprocess and
 	// proxy http/json requests into grpc requests.
 	gwopts := gateway.Options{
@@ -120,6 +132,7 @@ func main() {
 		EnableFaultInjection:               *enableFaultInjection,
 		DisableQueryNullFilteredIndexCheck: *disableQueryNullFilteredIndexCheck,
 		OverrideMaxDatabasesPerInstance:    instanceDbs,
+		OverrideChangeStreamPartitionTokenAliveSeconds: overrideChangeStreamPartitionTokenAliveSeconds,
 	}
 	gw := gateway.New(gwopts)
 	gw.Run()

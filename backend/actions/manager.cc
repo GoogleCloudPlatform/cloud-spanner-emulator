@@ -150,12 +150,23 @@ void ActionRegistry::BuildActionRegistry() {
 
     // Actions for foreign keys.
     for (const ForeignKey* foreign_key : table->foreign_keys()) {
+      if (!foreign_key->enforced()) {
+        // Not enforced foreign keys doesn't verify referential integrity on
+        // data.
+        continue;
+      }
       table_verifiers_[foreign_key->referencing_data_table()].emplace_back(
           std::make_unique<ForeignKeyReferencingVerifier>(foreign_key));
     }
     for (const ForeignKey* foreign_key : table->referencing_foreign_keys()) {
+      if (!foreign_key->enforced()) {
+        // Not enforced foreign keys has no actions, and doesn't verify
+        // referential integrity on data.
+        continue;
+      }
       table_verifiers_[foreign_key->referenced_data_table()].emplace_back(
           std::make_unique<ForeignKeyReferencedVerifier>(foreign_key));
+
       if (foreign_key->on_delete_action() == ForeignKey::Action::kCascade) {
         table_effectors_[table].emplace_back(
             std::make_unique<ForeignKeyActionEffector>(foreign_key));

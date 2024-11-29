@@ -391,6 +391,7 @@ cc_test(
         ":ops",
         "//tests/common:actions",
         "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
         "//tests/common:test_schema_constructor",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/memory",

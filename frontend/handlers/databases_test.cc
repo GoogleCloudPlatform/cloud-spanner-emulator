@@ -29,7 +29,9 @@
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "absl/synchronization/mutex.h"
 #include "backend/database/database.h"
+#include "backend/schema/catalog/sequence.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "common/constants.h"
 #include "common/limits.h"
@@ -45,6 +47,7 @@ namespace frontend {
 
 namespace {
 
+using google::spanner::emulator::backend::Sequence;
 using zetasql_base::testing::StatusIs;
 
 namespace database_api = ::google::spanner::admin::database::v1;
@@ -523,6 +526,64 @@ TEST_F(DatabaseApiTest, UpdateAndGetDatabaseDDL) {
 
     ZETASQL_EXPECT_OK(
         DropDatabase(MakeDatabaseUri(test_instance_uri_, test_database_name_)));
+  }
+}
+
+spanner_api::CommitRequest GenerateSequenceTableInsert(
+    const std::string& session) {
+  spanner_api::CommitRequest commit_request = PARSE_TEXT_PROTO(R"pb(
+    single_use_transaction { read_write {} }
+    mutations {
+      insert {
+        table: "test_table"
+        columns: "col"
+        values { values { string_value: "1" } }
+        values { values { string_value: "2" } }
+      }
+    }
+  )pb");
+  *commit_request.mutable_session() = session;
+  return commit_request;
+}
+
+TEST_F(DatabaseApiTest, CreateSameNameSequencesInTwoDatabases) {
+  std::vector<std::string> schema = {
+      R"(CREATE SEQUENCE test_sequence OPTIONS (
+  sequence_kind = 'bit_reversed_positive'))",
+      R"(CREATE TABLE test_table (
+  id INT64 DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE test_sequence)),
+  col INT64,
+) PRIMARY KEY(id))"};
+  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, "test_db_1", schema));
+  std::string database_uri_1 = MakeDatabaseUri(test_instance_uri_, "test_db_1");
+
+  database_api::GetDatabaseDdlResponse response;
+  ZETASQL_EXPECT_OK(GetDatabaseDdl(database_uri_1, &response));
+
+  for (int i = 0; i < schema.size(); ++i) {
+    EXPECT_THAT(response.statements(i), schema[i]);
+  }
+
+  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, "test_db_2", schema));
+  std::string database_uri_2 = MakeDatabaseUri(test_instance_uri_, "test_db_2");
+  ZETASQL_EXPECT_OK(GetDatabaseDdl(database_uri_2, &response));
+
+  for (int i = 0; i < schema.size(); ++i) {
+    EXPECT_THAT(response.statements(i), schema[i]);
+  }
+
+  spanner_api::CommitResponse commit_response;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const std::string session_1,
+                       CreateTestSession(database_uri_1));
+  ZETASQL_ASSERT_OK(Commit(GenerateSequenceTableInsert(session_1), &commit_response));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const std::string session_2,
+                       CreateTestSession(database_uri_2));
+  ZETASQL_ASSERT_OK(Commit(GenerateSequenceTableInsert(session_2), &commit_response));
+
+  {
+    absl::MutexLock lock(&Sequence::SequenceMutex);
+    ASSERT_EQ(Sequence::SequenceLastValues.size(), 2);
   }
 }
 

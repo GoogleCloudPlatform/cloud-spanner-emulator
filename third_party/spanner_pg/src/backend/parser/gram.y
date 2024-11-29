@@ -2605,6 +2605,18 @@ alter_table_cmd:
 					n->def = (Node *) $4;
 					$$ = (Node *) n;
 				}
+			// SPANGRES BEGIN
+			/* ALTER TABLE <name> ALTER [COLUMN] <colname> RESTART COUNTER [WITH] counter_restart */
+			| ALTER opt_column ColId RESTART COUNTER opt_with NumericOnly
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+
+					n->subtype = AT_RestartCounter;
+					n->name = $3;
+					n->def = (Node *) $7;
+					$$ = (Node *) n;
+				}
+			// SPANGRES END
 			/* ALTER TABLE <name> ALTER [COLUMN] <colname> DROP IDENTITY */
 			| ALTER opt_column ColId DROP IDENTITY_P
 				{
@@ -5073,6 +5085,12 @@ SeqOptElem: AS SimpleTypename
 				{
 					$$ = makeDefElem("skip_range", (Node *)list_make2($3, $4), @1);
 				}
+			// SPANGRES BEGIN
+			| NO SKIP RANGE
+				{
+					$$ = makeDefElem("skip_range", NULL, @1);
+				}
+			// SPANGRES END
 			| START opt_with NumericOnly
 				{
 					$$ = makeDefElem("start", (Node *) $3, @1);
@@ -15085,11 +15103,15 @@ a_expr:		c_expr
 					$$ = (Node *) makeSimpleA_Expr(AEXPR_LIKE, "~~",
 												   $1, (Node *) n, @2);
 				}
+			// SPANGRES BEGIN
+			// GoogleSQL rewrites 'NOT LIKE' expressions as a composition of 'NOT' AND 'LIKE'.
+			// We update the the PostgreSQL parser to produce the same expression.
 			| a_expr NOT_LA LIKE a_expr							%prec NOT_LA
 				{
-					$$ = (Node *) makeSimpleA_Expr(AEXPR_LIKE, "!~~",
-												   $1, $4, @2);
+					$$ = makeNotExpr((Node *) makeSimpleA_Expr(AEXPR_LIKE, "~~",
+													$1, $4, @2), @2);
 				}
+			// SPANGRES END
 			| a_expr NOT_LA LIKE a_expr ESCAPE a_expr			%prec NOT_LA
 				{
 					FuncCall   *n = makeFuncCall(SystemFuncName("like_escape"),

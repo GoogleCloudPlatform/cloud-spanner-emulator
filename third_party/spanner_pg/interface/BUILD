@@ -69,6 +69,7 @@ cc_library(
         "spangres_translator_interface.cc",
     ],
     hdrs = [
+        "bootstrap_catalog_accessor.h",
         "engine_builtin_function_catalog.h",
         "spangres_translator_factory.h",
         "spangres_translator_interface.h",
@@ -79,6 +80,8 @@ cc_library(
     licenses = ["unencumbered"],
     visibility = ["//:__subpackages__"],
     deps = [
+        ":bootstrap_catalog_accessor_stub",
+        ":bootstrap_catalog_data_cc_proto",
         ":memory_reservation_manager",
         ":parser_interface",
         ":pg_evaluators_stubs",  # buildcleaner: keep
@@ -118,6 +121,7 @@ cc_library(
         ":memory_reservation_manager",
         ":parser_interface",
         ":sql_builder",
+        "//third_party/spanner_pg/bootstrap_catalog:bootstrap_catalog_accessor_impl",
         "//third_party/spanner_pg/catalog:catalog_adapter_holder",
         "//third_party/spanner_pg/catalog:spangres_system_catalog",
         "//third_party/spanner_pg/catalog:spangres_user_catalog",
@@ -427,7 +431,40 @@ proto_library(
 
 cc_proto_library(
     name = "bootstrap_catalog_data_cc_proto",
+    visibility = [
+        "//third_party/spanner_pg/bootstrap_catalog:__subpackages__",
+        "//third_party/spanner_pg/transformer:__subpackages__",
+    ],
     deps = [":bootstrap_catalog_data"],
+)
+
+cc_library(
+    name = "bootstrap_catalog_accessor",
+    hdrs = [
+        "bootstrap_catalog_accessor.h",
+    ],
+    visibility = [
+        "//third_party/spanner_pg/bootstrap_catalog:__subpackages__",
+        "//third_party/spanner_pg/catalog:__subpackages__",
+    ],
+    deps = [
+        ":bootstrap_catalog_data_cc_proto",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "bootstrap_catalog_accessor_stub",
+    srcs = ["stub_bootstrap_catalog_accessor.cc"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":bootstrap_catalog_accessor",
+        ":bootstrap_catalog_data_cc_proto",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
 )
 
 cc_library(

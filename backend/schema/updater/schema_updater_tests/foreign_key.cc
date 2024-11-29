@@ -26,6 +26,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/algorithm/container.h"
 #include "absl/log/log.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
@@ -51,6 +52,7 @@ class ForeignKeyTest : public SchemaUpdaterTest {
   ForeignKeyTest()
       : flag_setter_({
             .enable_fk_delete_cascade_action = true,
+            .enable_fk_enforcement_option = true,
         }) {}
   const ScopedEmulatorFeatureFlagsSetter flag_setter_;
 };
@@ -74,6 +76,7 @@ struct Expected {
   std::vector<const Column*> referenced_columns;
   const Index* referenced_index;
   const std::string foreign_key_delete_action;
+  const bool enforced;
 };
 
 Expected BuildExpected(const Schema* schema, const std::string& constraint_name,
@@ -84,7 +87,7 @@ Expected BuildExpected(const Schema* schema, const std::string& constraint_name,
                        const std::vector<std::string>& referenced_column_names,
                        const std::string& referenced_index_name,
                        const std::string& foreign_key_delete_action,
-                       int sequence_number = 1) {
+                       bool enforced = true, int sequence_number = 1) {
   // Generates and returns a constraint name if one was not provided. Returns an
   // empty string if a name was provided.
   auto generated_name = [&]() -> std::string {
@@ -136,7 +139,8 @@ Expected BuildExpected(const Schema* schema, const std::string& constraint_name,
           referenced_table,
           columns(referenced_table, referenced_column_names),
           referenced_index,
-          foreign_key_delete_action};
+          foreign_key_delete_action,
+          enforced};
 }
 
 std::string Print(const Index* index) {
@@ -145,7 +149,7 @@ std::string Print(const Index* index) {
 
 std::string Print(const Expected& expected) {
   return absl::Substitute(
-      "FK:$0:$1($2)[$3]:$4($5)[$6][$7]",
+      "FK:$0:$1($2)[$3]:$4($5)[$6][$7][$8]",
       absl::StrCat(expected.constraint_name, expected.generated_name),
       expected.referencing_table->Name(),
       PrintNames(expected.referencing_columns),
@@ -155,7 +159,8 @@ std::string Print(const Expected& expected) {
       expected.foreign_key_delete_action.empty()
           ? ""
           : absl::StrCat(kDeleteAction, " ",
-                         expected.foreign_key_delete_action));
+                         expected.foreign_key_delete_action),
+      expected.enforced ? "" : "NOT ENFORCED");
 }
 
 MATCHER_P2(IsForeignKeyOf, table, expected, Print(expected)) {
@@ -245,6 +250,7 @@ MATCHER_P2(IsForeignKeyOf, table, expected, Print(expected)) {
               expected.foreign_key_delete_action,
           "Wrong foreign key delete action");
   }
+  check(fk->enforced() == expected.enforced, "Wrong enforcement option");
   return match;
 }
 
@@ -504,9 +510,64 @@ TEST_P(ForeignKeyTest, AddForeignKeyAction) {
   const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
   const ForeignKey* c = ASSERT_NOT_NULL(u->FindForeignKey("C"));
   EXPECT_THAT(
-      c, IsForeignKeyOf(
-             u, BuildExpected(schema.get(), "C", "U", {"A"}, "", "T", {"Y"},
-                              "IDX_T_Y_U_3E1CA8A966CF5C7A", "CASCADE")));
+      c, IsForeignKeyOf(u, BuildExpected(schema.get(), "C", "U", {"A"}, "", "T",
+                                         {"Y"}, "IDX_T_Y_U_3E1CA8A966CF5C7A",
+                                         "CASCADE", /*enforced=*/true)));
+}
+
+TEST_P(ForeignKeyTest, AddForeignKeyEnforcementOption) {
+  if (GetParam() != GOOGLE_STANDARD_SQL) {
+    return;
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+      CREATE TABLE T (
+        X INT64,
+        Y INT64,
+      ) PRIMARY KEY (X)
+    )",
+                                        R"(
+      CREATE TABLE U (
+        A INT64 NOT NULL,
+      ) PRIMARY KEY (A)
+    )",
+                                        R"(
+      ALTER TABLE U ADD CONSTRAINT C FOREIGN KEY (A) REFERENCES T (Y)
+        ON DELETE NO ACTION NOT ENFORCED
+    )"}));
+
+  const Table* u = ASSERT_NOT_NULL(schema->FindTable("U"));
+  const ForeignKey* c = ASSERT_NOT_NULL(u->FindForeignKey("C"));
+  EXPECT_THAT(
+      c, IsForeignKeyOf(u, BuildExpected(schema.get(), "C", "U", {"A"}, "", "T",
+                                         {"Y"}, "IDX_T_Y_U_3E1CA8A966CF5C7A",
+                                         "NO ACTION", /*enforced=*/false)));
+}
+
+TEST_P(ForeignKeyTest, CannotAddForeignKeyEnforcementOptionWithoutFlag) {
+  if (GetParam() != GOOGLE_STANDARD_SQL) {
+    return;
+  }
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_fk_enforcement_option = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  EXPECT_THAT(CreateSchema({
+                  R"(
+      CREATE TABLE T (
+        X INT64,
+        Y INT64,
+      ) PRIMARY KEY (X)
+    )",
+                  R"(
+      CREATE TABLE U (
+        A INT64,
+        B INT64,
+        CONSTRAINT C FOREIGN KEY (A, B)
+          REFERENCES T (X, Y) NOT ENFORCED,
+      ) PRIMARY KEY (A)
+    )"}),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
+                                        testing::HasSubstr("not supported")));
 }
 
 std::vector<std::string> SchemaForCaseSensitivityTests() {

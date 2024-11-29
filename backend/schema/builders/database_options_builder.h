@@ -54,6 +54,12 @@ class DatabaseOptions::Builder {
     return *this;
   }
 
+  Builder& set_default_sequence_kind(
+      std::optional<std::string> default_sequence_kind) {
+    instance_->default_sequence_kind_ = default_sequence_kind;
+    return *this;
+  }
+
  private:
   std::unique_ptr<DatabaseOptions> instance_;
 };
@@ -67,6 +73,12 @@ class DatabaseOptions::Editor {
   Editor& set_options(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption> options) {
     instance_->options_ = options;
+    return *this;
+  }
+
+  Editor& set_default_sequence_kind(
+      std::optional<std::string> default_sequence_kind) {
+    instance_->default_sequence_kind_ = default_sequence_kind;
     return *this;
   }
 

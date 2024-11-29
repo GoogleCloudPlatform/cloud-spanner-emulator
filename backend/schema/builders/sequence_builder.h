@@ -75,6 +75,26 @@ class Sequence::Builder {
     return *this;
   }
 
+  Builder& set_internal_use() {
+    instance_->is_internal_use_ = true;
+    return *this;
+  }
+
+  Builder& set_created_from_syntax() {
+    instance_->created_from_syntax_ = true;
+    return *this;
+  }
+
+  Builder& set_created_from_options() {
+    instance_->created_from_options_ = true;
+    return *this;
+  }
+
+  Builder& set_use_default_sequence_kind_option() {
+    instance_->use_default_sequence_kind_option_ = true;
+    return *this;
+  }
+
   Builder& set_postgresql_oid(std::optional<uint32_t> postgresql_oid) {
     if (postgresql_oid.has_value()) {
       instance_->set_postgresql_oid(postgresql_oid.value());
@@ -126,6 +146,21 @@ class Sequence::Editor {
 
   Editor& clear_skip_range_max() {
     instance_->skip_range_max_.reset();
+    return *this;
+  }
+
+  Editor& set_created_from_syntax() {
+    instance_->created_from_syntax_ = true;
+    return *this;
+  }
+
+  Editor& set_created_from_options() {
+    instance_->created_from_options_ = true;
+    return *this;
+  }
+
+  Editor& set_use_default_sequence_kind_option() {
+    instance_->use_default_sequence_kind_option_ = true;
     return *this;
   }
 

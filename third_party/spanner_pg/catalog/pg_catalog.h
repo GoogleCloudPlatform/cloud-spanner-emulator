@@ -39,6 +39,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/schema/catalog/schema.h"
+#include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 
 namespace postgres_translator {
 
@@ -49,10 +50,15 @@ class PGCatalog : public zetasql::SimpleCatalog {
   static constexpr char kName[] = "pg_catalog";
 
   explicit PGCatalog(
+      const EnumerableCatalog* root_catalog,
       const google::spanner::emulator::backend::Schema* default_schema);
 
  private:
+  const EnumerableCatalog* root_catalog_;
   const google::spanner::emulator::backend::Schema* default_schema_;
+
+  const postgres_translator::EngineSystemCatalog* system_catalog_ =
+      postgres_translator::EngineSystemCatalog::GetEngineSystemCatalog();
 
   // Explicitly storing the tables because we are using SimpleCatalog::AddTable
   // which expects that the caller maintains the ownership of the added objects.
@@ -72,14 +78,19 @@ class PGCatalog : public zetasql::SimpleCatalog {
 
   void FillPGAmTable();
   void FillPGAttrdefTable();
+  void FillPGAttributeTable();
   void FillPGClassTable();
+  void FillPGCollationTable();
+  void FillPGConstraintTable();
   void FillPGIndexTable();
   void FillPGIndexesTable();
   void FillPGNamespaceTable();
-  void FillPGTablesTable();
+  void FillPGProcTable();
   void FillPGSequenceTable();
   void FillPGSequencesTable();
   void FillPGSettingsTable();
+  void FillPGTablesTable();
+  void FillPGTypeTable();
   void FillPGViewsTable();
 };
 

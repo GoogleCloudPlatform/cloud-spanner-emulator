@@ -49,6 +49,9 @@ std::vector<ColumnID> DataColumnIds(const Table* data_table, int column_count) {
 
 absl::Status VerifyForeignKeyData(const ForeignKey* foreign_key,
                                   const SchemaValidationContext* context) {
+  if (!foreign_key->enforced()) {
+    return absl::OkStatus();
+  }
   const Storage* storage = context->storage();
   absl::Time timestamp = context->pending_commit_timestamp();
   int column_count = foreign_key->referencing_columns().size();

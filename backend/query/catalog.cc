@@ -479,6 +479,14 @@ absl::Status Catalog::GetFunctions(
   return absl::OkStatus();
 }
 
+absl::Status Catalog::GetTableValuedFunctions(
+    absl::flat_hash_set<const zetasql::TableValuedFunction*>* output) const {
+  for (const auto& [unused_name, function] : tvfs_) {
+    output->insert(function.get());
+  }
+  return absl::OkStatus();
+}
+
 zetasql::Catalog* Catalog::GetInformationSchemaCatalog() const {
   absl::MutexLock lock(&mu_);
   auto spanner_sys_catalog = GetSpannerSysCatalogWithoutLocks();
@@ -532,7 +540,8 @@ zetasql::Catalog* Catalog::GetPGCatalog() const {
   absl::MutexLock lock(&mu_);
   if (schema_->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
     if (!pg_catalog_) {
-      pg_catalog_ = std::make_unique<postgres_translator::PGCatalog>(schema_);
+      pg_catalog_ =
+          std::make_unique<postgres_translator::PGCatalog>(this, schema_);
     }
     return pg_catalog_.get();
   }

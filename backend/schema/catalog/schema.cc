@@ -166,10 +166,13 @@ const ChangeStream* Schema::FindChangeStream(
   return itr->second;
 }
 
-const Sequence* Schema::FindSequence(const std::string& sequence_name
-) const {
+const Sequence* Schema::FindSequence(const std::string& sequence_name,
+                                     bool exclude_internal) const {
   auto itr = sequences_map_.find(sequence_name);
   if (itr == sequences_map_.end()) {
+    return nullptr;
+  }
+  if (exclude_internal && itr->second->is_internal_use()) {
     return nullptr;
   }
   return itr->second;
@@ -299,7 +302,7 @@ void DumpColumn(const Column* column, ddl::ColumnDefinition& column_def) {
 void DumpForeignKey(const ForeignKey* foreign_key,
                     ddl::ForeignKey& foreign_key_def) {
   ABSL_CHECK_NE(foreign_key, nullptr);  // Crash OK
-  foreign_key_def.set_enforced(true);
+  foreign_key_def.set_enforced(foreign_key->enforced());
   if (!foreign_key->constraint_name().empty()) {
     // Do not set constraint name when it is a generated name.
     foreign_key_def.set_constraint_name(foreign_key->Name());

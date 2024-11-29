@@ -1216,6 +1216,31 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByMustBeIntegerType) {
                   "SearchIndex", "col4", "JSON")));
 }
 
+TEST_P(SchemaUpdaterTest, CreateSearchIndexTokenColumnOrderNotAllowed) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
+        col4 INT64 NOT NULL,
+      ) PRIMARY KEY (col1)
+    )sql"}));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
+      CREATE SEARCH INDEX SearchIndex ON T(col3 ASC) ORDER BY col4
+    )sql"}),
+              StatusIs(error::SearchIndexTokenlistKeyOrderUnsupported(
+                  "col3", "SearchIndex")));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
+      CREATE SEARCH INDEX SearchIndex ON T(col3 DESC) ORDER BY col4
+    )sql"}),
+              StatusIs(error::SearchIndexTokenlistKeyOrderUnsupported(
+                  "col3", "SearchIndex")));
+}
+
 }  // namespace
 
 }  // namespace test

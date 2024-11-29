@@ -1516,6 +1516,68 @@ TEST_P(QueryEngineTest, TestMlQuery) {
   }
 }
 
+TEST_P(QueryEngineTest, TestJsonbArrayElements) {
+  if (GetParam() != POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  MockRowWriter writer;
+  // Should not return any rows
+  ZETASQL_ASSERT_OK_AND_ASSIGN(QueryResult result,
+                       query_engine().ExecuteSql(
+                           Query{"SELECT * from jsonb_array_elements(null)"},
+                           QueryContext{schema(), reader(), &writer}));
+  EXPECT_NE(result.rows, nullptr);
+  EXPECT_FALSE(result.rows->Next());
+  ZETASQL_EXPECT_OK(result.rows->Status());
+
+  // Should not return any rows.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result, query_engine().ExecuteSql(
+                  Query{"SELECT * from jsonb_array_elements('[]'::jsonb)"},
+                  QueryContext{schema(), reader(), &writer}));
+  EXPECT_NE(result.rows, nullptr);
+  EXPECT_FALSE(result.rows->Next());
+  ZETASQL_EXPECT_OK(result.rows->Status());
+
+  // Should return one row per element, but the results may not be ordered.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result, query_engine().ExecuteSql(
+                  Query{"SELECT jsonb_array_elements::int from "
+                        "jsonb_array_elements('[1, 2, 3]'::jsonb) ORDER BY 1"},
+                  QueryContext{schema(), reader(), &writer}));
+  EXPECT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), "jsonb_array_elements(INT64) : 1,2,3,");
+
+  // Aggregate the results.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(result,
+                       query_engine().ExecuteSql(
+                           Query{"SELECT array(SELECT * from "
+                                 "jsonb_array_elements('[1, 2, 3]'::jsonb))"},
+                           QueryContext{schema(), reader(), &writer}));
+  EXPECT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), "array(ARRAY<PG.JSONB>) : [1, 2, 3],");
+
+  // Accepts subqueries as input.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result, query_engine().ExecuteSql(
+                  Query{"SELECT array(SELECT * from "
+                        "jsonb_array_elements((select '[1, 2, 3]'::jsonb)))"},
+                  QueryContext{schema(), reader(), &writer}));
+  EXPECT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), "array(ARRAY<PG.JSONB>) : [1, 2, 3],");
+
+  // Accepts functions as input
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result,
+      query_engine().ExecuteSql(
+          Query{"SELECT array(SELECT * from "
+                "jsonb_array_elements(to_jsonb(array[4.5::numeric, 5, 6])))"},
+          QueryContext{schema(), reader(), &writer}));
+  EXPECT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), "array(ARRAY<PG.JSONB>) : [4.5, 5, 6],");
+}
+
 INSTANTIATE_TEST_SUITE_P(
     ParameterizedSelectProto, ParameterizedSelectProto,
     testing::ValuesIn<TestQuery>(

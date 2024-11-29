@@ -83,16 +83,20 @@ std::string ForeignKey::DebugString() const {
                            absl::StrAppend(out, column->Name());
                          });
   };
+  std::string referencing_index_string = referencing_index_ == nullptr
+                                             ? (enforced_ ? "PK" : "")
+                                             : referencing_index_->Name();
+
   return absl::Substitute(
-      "FK:$0:$1($2)[$3]:$4($5)[$6][$7]", Name(), referencing_table_->Name(),
-      column_names(referencing_columns_),
-      referencing_index_ == nullptr ? "PK" : referencing_index_->Name(),
+      "FK:$0:$1($2)[$3]:$4($5)[$6][$7][$8]", Name(), referencing_table_->Name(),
+      column_names(referencing_columns_), referencing_index_string,
       referenced_table_->Name(), column_names(referenced_columns_),
       referenced_index_ == nullptr ? "PK" : referenced_index_->Name(),
       on_delete_action_ == ForeignKey::Action::kActionUnspecified
           ? ""
           : absl::StrCat(kDeleteAction, " ",
-                         ForeignKey::ActionName(on_delete_action_)));
+                         ForeignKey::ActionName(on_delete_action_)),
+      enforced_ ? "" : "NOT ENFORCED");
 }
 
 }  // namespace backend

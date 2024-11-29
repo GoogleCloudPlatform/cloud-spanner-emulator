@@ -509,6 +509,13 @@ absl::Status EngineSystemCatalog::GetTypes(
   return absl::OkStatus();
 }
 
+absl::StatusOr<bool> EngineSystemCatalog::IsSetReturningFunction(
+    Oid proc_oid) const {
+  ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_proc* proc,
+                   PgBootstrapCatalog::Default()->GetProc(proc_oid));
+  return proc->proretset;
+}
+
 absl::Status EngineSystemCatalog::GetFunctions(
     absl::flat_hash_set<const zetasql::Function*>* output) const {
   for (const auto& [function_name, function] : engine_functions_) {
@@ -518,7 +525,10 @@ absl::Status EngineSystemCatalog::GetFunctions(
       // should not be returned to RQG.
       if (signature->mapped_function() == nullptr) {
         continue;
-      } else {
+      }
+      ZETASQL_ASSIGN_OR_RETURN(bool is_set_returning_function,
+                       IsSetReturningFunction(signature->postgres_proc_oid()));
+      if (!is_set_returning_function) {
         output->insert(signature->mapped_function());
       }
     }
@@ -534,6 +544,26 @@ absl::Status EngineSystemCatalog::GetFunctions(
     output->insert(function.function());
   }
 
+  return absl::OkStatus();
+}
+
+absl::Status EngineSystemCatalog::GetSetReturningFunctions(
+    absl::flat_hash_set<const zetasql::Function*>* output) const {
+  for (const auto& [function_name, function] : engine_functions_) {
+    for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
+         function->GetPostgresSignatures()) {
+      // If there isn't a mapped function, the signature is unsupported and
+      // should not be returned to RQG.
+      if (signature->mapped_function() == nullptr) {
+        continue;
+      }
+      ZETASQL_ASSIGN_OR_RETURN(bool is_set_returning_function,
+                       IsSetReturningFunction(signature->postgres_proc_oid()));
+      if (is_set_returning_function) {
+        output->insert(signature->mapped_function());
+      }
+    }
+  }
   return absl::OkStatus();
 }
 
@@ -726,6 +756,7 @@ absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
     const std::vector<zetasql::InputArgumentType>& input_argument_types,
     const zetasql::Type* return_type,
     const zetasql::LanguageOptions& language_options) {
+  bool srf_ret_type_mismatch = false;
   for (const FormData_pg_proc* pg_proc : procs) {
     // Convert the proc from a PostgreSQL signature into a ZetaSQL signature
     absl::StatusOr<const zetasql::FunctionSignature> postgres_signature =
@@ -735,6 +766,7 @@ absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
     // If there is a problem transforming the postgres signature, potentially
     // due to unsupported types, just skip the proc.
     if (!postgres_signature.ok()) {
+      srf_ret_type_mismatch = pg_proc->proretset;
       continue;
     }
 
@@ -756,7 +788,11 @@ absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
     }
   }
   return absl::UnimplementedError(
-      "No Postgres proc oid found for the provided argument types");
+      absl::StrCat("No Postgres proc oid found for the provided argument types",
+                   srf_ret_type_mismatch
+                       ? " (this function is a set returning function, "
+                         "which requires an explicit proc OID in the mapping)"
+                       : ""));
 }
 
 void EngineSystemCatalog::AddFunctionToReverseMappings(

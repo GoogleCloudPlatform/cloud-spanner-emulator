@@ -35,21 +35,29 @@
 #include <string>
 #include <vector>
 
+#include "zetasql/public/catalog.h"
 #include "zetasql/public/simple_catalog.h"
+#include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_cat.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/query/tables_from_metadata.h"
+#include "backend/schema/catalog/change_stream.h"
+#include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/view.h"
+#include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
+#include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
+#include "third_party/spanner_pg/interface/bootstrap_catalog_accessor.h"
 
 namespace postgres_translator {
 
@@ -93,8 +101,12 @@ static constexpr char kPGTables[] = "pg_tables";
 static constexpr char kPGType[] = "pg_type";
 static constexpr char kPGViews[] = "pg_views";
 
+using google::spanner::emulator::backend::ChangeStream;
+using google::spanner::emulator::backend::CheckConstraint;
 using google::spanner::emulator::backend::Column;
+using google::spanner::emulator::backend::ForeignKey;
 using google::spanner::emulator::backend::Index;
+using google::spanner::emulator::backend::KeyColumn;
 using google::spanner::emulator::backend::kSpannerPGTypeToGSQLType;
 using google::spanner::emulator::backend::NamedSchema;
 using google::spanner::emulator::backend::PGCatalogColumnsMetadata;
@@ -106,6 +118,7 @@ using google::spanner::emulator::backend::SpannerSysColumnsMetadata;
 using google::spanner::emulator::backend::Table;
 using google::spanner::emulator::backend::View;
 using ::zetasql::types::Int64ArrayType;
+using ::zetasql::types::StringArrayType;
 using ::zetasql::values::Bool;
 using ::zetasql::values::Int64;
 using ::zetasql::values::Int64Array;
@@ -117,6 +130,7 @@ using ::zetasql::values::NullString;
 using ::zetasql::values::String;
 using ::zetasql::values::StringArray;
 using postgres_translator::spangres::datatypes::CreatePgOidValue;
+using postgres_translator::spangres::datatypes::GetPgOidArrayType;
 using spangres::datatypes::NullPgOid;
 
 struct PgClassSystemTableMetadata {
@@ -167,10 +181,14 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
         kPGViews,
     }};
 
+const auto kSupportedCollations =
+    absl::flat_hash_set<absl::string_view>({"default", "C"});
+
 const auto kHardCodedNamedSchemaOid =
     absl::flat_hash_map<absl::string_view, uint32_t>(
         {{"pg_catalog", 11},
          {"public", 2200},
+         {"spanner", 50000},
          {"information_schema", 75003},
          {"spanner_sys", 75004}});
 
@@ -373,8 +391,11 @@ std::string PrimaryKeyName(const T* table) {
 
 }  // namespace
 
-PGCatalog::PGCatalog(const Schema* default_schema)
-    : zetasql::SimpleCatalog(kName), default_schema_(default_schema) {
+PGCatalog::PGCatalog(const EnumerableCatalog* root_catalog,
+                     const Schema* default_schema)
+    : zetasql::SimpleCatalog(kName),
+      root_catalog_(root_catalog),
+      default_schema_(default_schema) {
   tables_by_name_ = AddTablesFromMetadata(
       PGCatalogColumnsMetadata(), *kSpannerPGTypeToGSQLType, *kSupportedTables);
   for (auto& [name, table] : tables_by_name_) {
@@ -397,14 +418,19 @@ PGCatalog::PGCatalog(const Schema* default_schema)
 
   FillPGAmTable();
   FillPGAttrdefTable();
+  FillPGAttributeTable();
   FillPGClassTable();
+  FillPGCollationTable();
+  FillPGConstraintTable();
   FillPGIndexTable();
   FillPGIndexesTable();
   FillPGNamespaceTable();
+  FillPGProcTable();
   FillPGSequenceTable();
   FillPGSequencesTable();
   FillPGSettingsTable();
   FillPGTablesTable();
+  FillPGTypeTable();
   FillPGViewsTable();
 }
 
@@ -450,7 +476,8 @@ void PGCatalog::FillPGAttrdefTable() {
                 << " does not have a PostgreSQL OID.";
         continue;
       }
-      if (column->has_default_value() || column->is_generated()) {
+      if (!column->is_identity_column() &&
+          (column->has_default_value() || column->is_generated())) {
         if (!column->original_expression().has_value()) { continue; }
         rows.push_back({
             // oid
@@ -466,6 +493,322 @@ void PGCatalog::FillPGAttrdefTable() {
     }
   }
   pg_attrdef->SetContents(rows);
+}
+
+void PGCatalog::FillPGAttributeTable() {
+  auto pg_attribute = tables_by_name_.at(kPGAttribute).get();
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const Table* table : default_schema_->tables()) {
+    if (!table->postgresql_oid().has_value()) {
+      ZETASQL_VLOG(1) << "Table " << table->Name()
+              << " does not have a PostgreSQL OID.";
+      continue;
+    }
+    if (!table->primary_key_index_postgresql_oid().has_value()) {
+      ZETASQL_VLOG(1) << "PK for " << table->Name()
+              << " does not have a PostgreSQL OID.";
+      continue;
+    }
+    // Add columns.
+    int ordinal_position = 1;
+    for (const Column* column : table->columns()) {
+      const PostgresTypeMapping* pg_type =
+          system_catalog_->GetTypeFromReverseMapping(column->GetType());
+      rows.push_back({
+          // attrelid
+          CreatePgOidValue(table->postgresql_oid().value()).value(),
+          //  attname
+          String(column->Name()),
+          // atttypid
+          CreatePgOidValue(pg_type->PostgresTypeOid()).value(),
+          // attstattarget
+          NullInt64(),
+          // attlen
+          NullInt64(),
+          // attnum
+          Int64(ordinal_position),
+          // attndims
+          Int64(column->GetType()->IsArray() ? 1 : 0),
+          // attcacheoff
+          Int64(-1),
+          // atttypmod
+          NullInt64(),
+          // attbyval
+          NullBool(),
+          // attalign
+          NullString(),
+          // attstorage
+          NullString(),
+          // attcompression
+          String(std::string("\0")),
+          // attnotnull
+          Bool(!column->is_nullable()),
+          // atthasdef
+          Bool(column->has_default_value()),
+          // atthasmissing
+          Bool(false),
+          // attidentity
+          String(std::string("\0")),
+          // attgenerated
+          String(column->is_generated() ? "s" : std::string("\0")),
+          // attisdropped
+          Bool(false),
+          // attislocal
+          Bool(true),
+          // attinhcount
+          Int64(0),
+          // attcollation
+          NullPgOid(),
+          // attoptions
+          NullString(),
+          // attfdwoptions
+          NullString(),
+      });
+      ++ordinal_position;
+    }
+    // Add primary key columns.
+    ordinal_position = 1;
+    for (const KeyColumn* key_column : table->primary_key()) {
+      const PostgresTypeMapping* pg_type =
+          system_catalog_->GetTypeFromReverseMapping(
+              key_column->column()->GetType());
+      rows.push_back({
+          // attrelid
+          CreatePgOidValue(table->primary_key_index_postgresql_oid().value())
+              .value(),
+          //  attname
+          String(key_column->column()->Name()),
+          // atttypid
+          CreatePgOidValue(pg_type->PostgresTypeOid()).value(),
+          // attstattarget
+          NullInt64(),
+          // attlen
+          NullInt64(),
+          // attnum
+          Int64(ordinal_position++),
+          // attndims
+          Int64(key_column->column()->GetType()->IsArray() ? 1 : 0),
+          // attcacheoff
+          Int64(-1),
+          // atttypmod
+          NullInt64(),
+          // attbyval
+          NullBool(),
+          // attalign
+          NullString(),
+          // attstorage
+          NullString(),
+          // attcompression
+          String(std::string("\0")),
+          // attnotnull
+          Bool(!key_column->column()->is_nullable()),
+          // atthasdef
+          Bool(key_column->column()->has_default_value()),
+          // atthasmissing
+          Bool(false),
+          // attidentity
+          String(std::string("\0")),
+          // attgenerated
+          String(key_column->column()->is_generated() ? "s"
+                                                      : std::string("\0")),
+          // attisdropped
+          Bool(false),
+          // attislocal
+          Bool(true),
+          // attinhcount
+          Int64(0),
+          // attcollation
+          NullPgOid(),
+          // attoptions
+          NullString(),
+          // attfdwoptions
+          NullString(),
+      });
+    }
+    for (const Index* index : table->indexes()) {
+      if (!index->postgresql_oid().has_value()) {
+        ZETASQL_VLOG(1) << "Index " << index->Name()
+                << " does not have a PostgreSQL OID.";
+        continue;
+      }
+      int index_ordinal_position = 1;
+      for (const KeyColumn* key_column : index->key_columns()) {
+        const PostgresTypeMapping* pg_type =
+            system_catalog_->GetTypeFromReverseMapping(
+                key_column->column()->GetType());
+        rows.push_back({
+            // attrelid
+            CreatePgOidValue(index->postgresql_oid().value()).value(),
+            //  attname
+            String(key_column->column()->Name()),
+            // atttypid
+            CreatePgOidValue(pg_type->PostgresTypeOid()).value(),
+            // attstattarget
+            NullInt64(),
+            // attlen
+            NullInt64(),
+            // attnum
+            Int64(index_ordinal_position++),
+            // attndims
+            Int64(key_column->column()->GetType()->IsArray() ? 1 : 0),
+            // attcacheoff
+            Int64(-1),
+            // atttypmod
+            NullInt64(),
+            // attbyval
+            NullBool(),
+            // attalign
+            NullString(),
+            // attstorage
+            NullString(),
+            // attcompression
+            String(std::string("\0")),
+            // attnotnull
+            Bool(!key_column->column()->is_nullable()),
+            // atthasdef
+            Bool(key_column->column()->has_default_value()),
+            // atthasmissing
+            Bool(false),
+            // attidentity
+            String(std::string("\0")),
+            // attgenerated
+            String(key_column->column()->is_generated() ? "s"
+                                                        : std::string("\0")),
+            // attisdropped
+            Bool(false),
+            // attislocal
+            Bool(true),
+            // attinhcount
+            Int64(0),
+            // attcollation
+            NullPgOid(),
+            // attoptions
+            NullString(),
+            // attfdwoptions
+            NullString(),
+        });
+      }
+      for (const Column* column : index->stored_columns()) {
+        const PostgresTypeMapping* pg_type =
+            system_catalog_->GetTypeFromReverseMapping(column->GetType());
+        rows.push_back({
+            // attrelid
+            CreatePgOidValue(index->postgresql_oid().value()).value(),
+            //  attname
+            String(column->Name()),
+            // atttypid
+            CreatePgOidValue(pg_type->PostgresTypeOid()).value(),
+            // attstattarget
+            NullInt64(),
+            // attlen
+            NullInt64(),
+            // attnum
+            Int64(index_ordinal_position++),
+            // attndims
+            Int64(column->GetType()->IsArray() ? 1 : 0),
+            // attcacheoff
+            Int64(-1),
+            // atttypmod
+            NullInt64(),
+            // attbyval
+            NullBool(),
+            // attalign
+            NullString(),
+            // attstorage
+            NullString(),
+            // attcompression
+            String(std::string("\0")),
+            // attnotnull
+            Bool(!column->is_nullable()),
+            // atthasdef
+            Bool(column->has_default_value()),
+            // atthasmissing
+            Bool(false),
+            // attidentity
+            String(std::string("\0")),
+            // attgenerated
+            String(column->is_generated() ? "s" : std::string("\0")),
+            // attisdropped
+            Bool(false),
+            // attislocal
+            Bool(true),
+            // attinhcount
+            Int64(0),
+            // attcollation
+            NullPgOid(),
+            // attoptions
+            NullString(),
+            // attfdwoptions
+            NullString(),
+        });
+      }
+    }
+  }
+
+  for (const View* view : default_schema_->views()) {
+    if (!view->postgresql_oid().has_value()) {
+      ZETASQL_VLOG(1) << "View " << view->Name() << " does not have a PostgreSQL OID.";
+      continue;
+    }
+    int ordinal_position = 1;
+    for (const View::Column& column : view->columns()) {
+      const PostgresTypeMapping* pg_type =
+          system_catalog_->GetTypeFromReverseMapping(column.type);
+      rows.push_back({
+          // attrelid
+          CreatePgOidValue(view->postgresql_oid().value()).value(),
+          //  attname
+          String(column.name),
+          // atttypid
+          CreatePgOidValue(pg_type->PostgresTypeOid()).value(),
+          // attstattarget
+          NullInt64(),
+          // attlen
+          NullInt64(),
+          // attnum
+          Int64(ordinal_position++),
+          // attndims
+          Int64(column.type->IsArray() ? 1 : 0),
+          // attcacheoff
+          Int64(-1),
+          // atttypmod
+          NullInt64(),
+          // attbyval
+          NullBool(),
+          // attalign
+          NullString(),
+          // attstorage
+          NullString(),
+          // attcompression
+          String(std::string("\0")),
+          // attnotnull
+          Bool(false),
+          // atthasdef
+          Bool(false),
+          // atthasmissing
+          Bool(false),
+          // attidentity
+          String(std::string("\0")),
+          // attgenerated
+          String(std::string("\0")),
+          // attisdropped
+          Bool(false),
+          // attislocal
+          Bool(true),
+          // attinhcount
+          Int64(0),
+          // attcollation
+          NullPgOid(),
+          // attoptions
+          NullString(),
+          // attfdwoptions
+          NullString(),
+      });
+    }
+  }
+
+  pg_attribute->SetContents(rows);
 }
 
 void PGCatalog::FillPGClassTable() {
@@ -1016,6 +1359,293 @@ void PGCatalog::FillPGClassTable() {
   pg_class->SetContents(rows);
 }
 
+void PGCatalog::FillPGCollationTable() {
+  auto pg_collation = tables_by_name_.at(kPGCollation).get();
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (auto collname : kSupportedCollations) {
+    auto collation_metadata = GetPgCollationDataFromBootstrap(
+        PgBootstrapCatalog::Default(), collname);
+    rows.push_back({
+        // oid
+        CreatePgOidValue(collation_metadata->oid()).value(),
+        // collname
+        String(collation_metadata->collname()),
+        // collnamespace
+        CreatePgOidValue(kHardCodedNamedSchemaOid.at("pg_catalog")).value(),
+        // collowner
+        NullPgOid(),
+        // collcollate
+        String(collation_metadata->collprovider()),
+        // collisdeterministic
+        Bool(collation_metadata->collisdeterministic()),
+        // collencoding
+        Int64(collation_metadata->collencoding()),
+        // collcollate
+        NullString(),
+        // collctype
+        NullString(),
+        // colliculocale
+        NullString(),
+        // collversion
+        NullString(),
+    });
+  }
+
+  pg_collation->SetContents(rows);
+}
+
+void PGCatalog::FillPGConstraintTable() {
+  auto pg_constraint = tables_by_name_.at(kPGConstraint).get();
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const Table* table : default_schema_->tables()) {
+    if (!table->postgresql_oid().has_value()) {
+      ZETASQL_VLOG(1) << "Table " << table->Name()
+              << " does not have a PostgreSQL OID.";
+      continue;
+    }
+    const auto& [table_schema, _] = GetSchemaAndNameForPGCatalog(table->Name());
+    int namespace_oid = 0;
+    if (kHardCodedNamedSchemaOid.contains(table_schema)) {
+      namespace_oid = kHardCodedNamedSchemaOid.at(table_schema);
+    } else {
+      const NamedSchema* named_schema =
+          default_schema_->FindNamedSchema(table_schema);
+      if (!named_schema->postgresql_oid().has_value()) {
+        ZETASQL_VLOG(1) << "Named schema " << table_schema
+                << " does not have a PostgreSQL OID.";
+        continue;
+      }
+      namespace_oid = named_schema->postgresql_oid().value();
+    }
+    int ordinal_position = 1;
+    std::map<std::string, int> column_name_to_index;
+    for (const Column* column : table->columns()) {
+      column_name_to_index[column->Name()] = ordinal_position++;
+    }
+    for (const CheckConstraint* check_constraint : table->check_constraints()) {
+      if (!check_constraint->postgresql_oid().has_value()) {
+        ZETASQL_VLOG(1) << "Check constraint " << check_constraint->Name()
+                << " does not have a PostgreSQL OID.";
+        continue;
+      }
+      std::vector<int64_t> key_attnums;
+      for (const Column* column : check_constraint->dependent_columns()) {
+        key_attnums.push_back(column_name_to_index[column->Name()]);
+      }
+      rows.push_back({
+          // oid
+          CreatePgOidValue(check_constraint->postgresql_oid().value()).value(),
+          // conname
+          String(check_constraint->Name()),
+          // connamespace
+          CreatePgOidValue(namespace_oid).value(),
+          // contype
+          String("c"),
+          // condeferrable
+          NullBool(),
+          // condeferred
+          NullBool(),
+          // convalidated
+          Bool(true),
+          // conrelid
+          CreatePgOidValue(table->postgresql_oid().value()).value(),
+          // contypid
+          NullPgOid(),
+          // conindid
+          NullPgOid(),
+          // conparentid
+          NullPgOid(),
+          // confrelid
+          CreatePgOidValue(0).value(),
+          // confupdtype
+          String(" "),
+          // confdeltype
+          String(" "),
+          // confmatchtype
+          NullString(),
+          // conislocal
+          NullBool(),
+          // coninhcount
+          NullInt64(),
+          // connoinherit
+          NullBool(),
+          // conkey
+          Int64Array(key_attnums),
+          // confkey
+          Null(Int64ArrayType()),
+          // conpfeqop
+          Null(GetPgOidArrayType()),
+          // conppeqop
+          Null(GetPgOidArrayType()),
+          // conffeqop
+          Null(GetPgOidArrayType()),
+          // conexclop
+          Null(GetPgOidArrayType()),
+          // conbin
+          NullString(),
+      });
+    }
+    for (const ForeignKey* foreign_key : table->foreign_keys()) {
+      if (!foreign_key->postgresql_oid().has_value()) {
+        ZETASQL_VLOG(1) << "Foreign key " << foreign_key->Name()
+                << " does not have a PostgreSQL OID.";
+        continue;
+      }
+      if (!foreign_key->referencing_table()->postgresql_oid().has_value()) {
+        ZETASQL_VLOG(1) << "Referencing table " <<
+            foreign_key->referencing_table()->Name() << "of foreign key "
+            << foreign_key->Name() << " does not have a PostgreSQL OID.";
+        continue;
+      }
+      std::string on_delete_action;
+      switch (foreign_key->on_delete_action()) {
+        case ForeignKey::Action::kNoAction:
+          on_delete_action = "a";
+          break;
+        case ForeignKey::Action::kCascade:
+          on_delete_action = "c";
+          break;
+        default:
+          on_delete_action = " ";
+      }
+      std::vector<int64_t> key_attnums;
+      for (const Column* column : foreign_key->referencing_columns()) {
+        key_attnums.push_back(column_name_to_index[column->Name()]);
+      }
+      int ordinal_position = 1;
+      std::map<std::string, int> foreign_column_name_to_index;
+      for (const Column* column : foreign_key->referenced_table()->columns()) {
+        foreign_column_name_to_index[column->Name()] = ordinal_position++;
+      }
+      std::vector<int64_t> confkey_attnums;
+      for (const Column* column : foreign_key->referenced_columns()) {
+        confkey_attnums.push_back(foreign_column_name_to_index[column->Name()]);
+      }
+      rows.push_back({
+          // oid
+          CreatePgOidValue(foreign_key->postgresql_oid().value()).value(),
+          // conname
+          String(foreign_key->Name()),
+          // connamespace
+          CreatePgOidValue(namespace_oid).value(),
+          // contype
+          String("f"),
+          // condeferrable
+          NullBool(),
+          // condeferred
+          NullBool(),
+          // convalidated
+          Bool(true),
+          // conrelid
+          CreatePgOidValue(
+              foreign_key->referencing_table()->postgresql_oid().value())
+              .value(),
+          // contypid
+          NullPgOid(),
+          // conindid
+          NullPgOid(),
+          // conparentid
+          NullPgOid(),
+          // confrelid
+          CreatePgOidValue(
+              foreign_key->referenced_table()->postgresql_oid().value())
+              .value(),
+          // confupdtype
+          String(" "),  // For update is not yet supported in the emulator.
+          // confdeltype
+          String(on_delete_action),
+          // confmatchtype
+          NullString(),
+          // conislocal
+          NullBool(),
+          // coninhcount
+          NullInt64(),
+          // connoinherit
+          NullBool(),
+          // conkey
+          Int64Array(key_attnums),
+          // confkey
+          Int64Array(confkey_attnums),
+          // conpfeqop
+          Null(GetPgOidArrayType()),
+          // conppeqop
+          Null(GetPgOidArrayType()),
+          // conffeqop
+          Null(GetPgOidArrayType()),
+          // conexclop
+          Null(GetPgOidArrayType()),
+          // conbin
+          NullString(),
+      });
+    }
+    if (!table->primary_key()[0]->postgresql_oid().has_value()) {
+      ZETASQL_VLOG(1) << "Primary key constraint for table " << table->Name()
+              << " does not have a PostgreSQL OID.";
+      continue;
+    }
+    std::vector<int64_t> key_attnums;
+    for (const KeyColumn* key_column : table->primary_key()) {
+      key_attnums.push_back(column_name_to_index[key_column->column()->Name()]);
+    }
+    // Primary key constraint.
+    rows.push_back({
+        // oid
+        CreatePgOidValue(table->primary_key()[0]->postgresql_oid().value())
+            .value(),
+        // conname
+        String(PrimaryKeyName(table)),
+        // connamespace
+        CreatePgOidValue(namespace_oid).value(),
+        // contype
+        String("p"),
+        // condeferrable
+        NullBool(),
+        // condeferred
+        NullBool(),
+        // convalidated
+        Bool(true),
+        // conrelid
+        CreatePgOidValue(table->postgresql_oid().value()).value(),
+        // contypid
+        NullPgOid(),
+        // conindid
+        NullPgOid(),
+        // conparentid
+        NullPgOid(),
+        // confrelid
+        CreatePgOidValue(0).value(),
+        // confupdtype
+        String(" "),
+        // confdeltype
+        String(" "),
+        // confmatchtype
+        NullString(),
+        // conislocal
+        NullBool(),
+        // coninhcount
+        NullInt64(),
+        // connoinherit
+        NullBool(),
+        // conkey
+        Int64Array(key_attnums),
+        // confkey
+        Null(Int64ArrayType()),
+        // conpfeqop
+        Null(GetPgOidArrayType()),
+        // conppeqop
+        Null(GetPgOidArrayType()),
+        // conffeqop
+        Null(GetPgOidArrayType()),
+        // conexclop
+        Null(GetPgOidArrayType()),
+        // conbin
+        NullString(),
+    });
+  }
+  pg_constraint->SetContents(rows);
+}
+
 void PGCatalog::FillPGIndexTable() {
   auto pg_index = tables_by_name_.at(kPGIndex).get();
 
@@ -1148,14 +1778,7 @@ void PGCatalog::FillPGNamespaceTable() {
         NullPgOid(),
     });
   }
-  // Add system namespaces.
-  std::map<int, std::string> system_namespaces = {
-      {11, "pg_catalog"},
-      {2200, "public"},
-      {75003, "information_schema"},
-      {75004, "spanner_sys"},
-  };
-  for (const auto& [oid, name] : system_namespaces) {
+  for (const auto& [name, oid] : kHardCodedNamedSchemaOid) {
     rows.push_back({
         // oid
         CreatePgOidValue(oid).value(),
@@ -1168,11 +1791,339 @@ void PGCatalog::FillPGNamespaceTable() {
   pg_namespace->SetContents(rows);
 }
 
+void PGCatalog::FillPGProcTable() {
+  auto pg_proc = tables_by_name_.at(kPGProc).get();
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  absl::flat_hash_set<const PostgresExtendedFunction*> functions;
+  auto status = system_catalog_->GetPostgreSQLFunctions(&functions);
+  if (!status.ok()) {
+    ZETASQL_VLOG(1) << "Failed to get table-valued functions: " << status;
+    return;
+  }
+  for (const PostgresExtendedFunction* function : functions) {
+    for (const auto& signature : function->GetPostgresSignatures()) {
+      auto proc_metadata = GetPgProcDataFromBootstrap(
+          PgBootstrapCatalog::Default(), signature->postgres_proc_oid());
+      std::vector<zetasql::Value> proargtypes;
+      for (const auto& argtype : proc_metadata->proargtypes()) {
+        proargtypes.push_back(CreatePgOidValue(argtype).value());
+      }
+      rows.push_back({
+          // oid
+          CreatePgOidValue(proc_metadata->oid()).value(),
+          // proname
+          String(proc_metadata->proname()),
+          // pronamespace
+          CreatePgOidValue(proc_metadata->pronamespace()).value(),
+          // proowner
+          NullPgOid(),
+          // prolang
+          NullPgOid(),
+          // procost
+          NullDouble(),
+          // prorows
+          NullDouble(),
+          // provariadic
+          CreatePgOidValue(proc_metadata->provariadic()).value(),
+          // prokind
+          String(proc_metadata->prokind()),
+          // prosecdef
+          NullBool(),
+          // proleakproof
+          NullBool(),
+          // proisstrict
+          NullBool(),
+          // proretset
+          Bool(proc_metadata->proretset()),
+          // provolatile
+          NullString(),
+          // proparallel
+          NullString(),
+          // pronargs
+          Int64(proc_metadata->pronargs()),
+          // pronargdefaults
+          Int64(proc_metadata->pronargdefaults()),
+          // prorettype
+          CreatePgOidValue(proc_metadata->prorettype()).value(),
+          // proargtypes
+          zetasql::Value::MakeArray(GetPgOidArrayType(), proargtypes).value(),
+          // proallargtypes
+          Null(GetPgOidArrayType()),
+          // proargmodes
+          Null(StringArrayType()),
+          // proargnames
+          Null(StringArrayType()),
+          // proargdefaults
+          NullString(),
+          // protrftypes
+          Null(GetPgOidArrayType()),
+          // prosrc
+          NullString(),
+          // probin
+          NullString(),
+          // prosqlbody
+          String(proc_metadata->prosqlbody()),
+          // proconfig
+          Null(StringArrayType()),
+      });
+    }
+  }
+
+  absl::flat_hash_map<Oid, const zetasql::TableValuedFunction*> tvfs;
+  status = system_catalog_->GetTableValuedFunctions(&tvfs);
+  if (!status.ok()) {
+    ZETASQL_VLOG(1) << "Failed to get table-valued functions: " << status;
+    return;
+  }
+  for (const auto& [tvf_oid, tvf] : tvfs) {
+    auto signature = tvf->GetSignature(0);
+    std::vector<zetasql::Value> proargtypes;
+    int variadic_type_oid = 0;
+    if (!signature->result_type().IsRelation()) {
+      ZETASQL_VLOG(1) << "Table-valued functions must return a relation type.";
+      continue;
+    }
+    auto& rettype_options = signature->result_type().options();
+    if (rettype_options.has_relation_input_schema() &&
+        rettype_options.relation_input_schema().num_columns() != 1) {
+      ZETASQL_VLOG(1) << "Table-valued functions must return a relation type "
+                 << "with exactly one column.";
+      continue;
+    }
+    auto rettype_mapping = system_catalog_->GetTypeFromReverseMapping(
+        rettype_options.relation_input_schema().column(0).type);
+    if (rettype_mapping == nullptr) {
+      ZETASQL_VLOG(1) << "Failed to get type mapping for "
+                 << signature->result_type().DebugString();
+      continue;
+    }
+    int rettype_oid = rettype_mapping->PostgresTypeOid();
+    for (const auto& arg : signature->arguments()) {
+      auto type_mapping =
+          system_catalog_->GetTypeFromReverseMapping(arg.type());
+      if (type_mapping == nullptr) {
+        ZETASQL_VLOG(1) << "Failed to get type mapping for "
+                   << arg.type()->DebugString();
+        continue;
+      }
+      if (arg.repeated()) {
+        variadic_type_oid = type_mapping->PostgresTypeOid();
+      }
+      proargtypes.push_back(
+          CreatePgOidValue(type_mapping->PostgresTypeOid()).value());
+    }
+    rows.push_back({
+        // oid
+        CreatePgOidValue(tvf_oid).value(),
+        // proname
+        String(tvf->Name()),
+        // pronamespace
+        CreatePgOidValue(50000).value(),
+        // proowner
+        NullPgOid(),
+        // prolang
+        NullPgOid(),
+        // procost
+        NullDouble(),
+        // prorows
+        NullDouble(),
+        // provariadic
+        CreatePgOidValue(variadic_type_oid).value(),
+        // prokind
+        String("f"),
+        // prosecdef
+        NullBool(),
+        // proleakproof
+        NullBool(),
+        // proisstrict
+        NullBool(),
+        // proretset
+        Bool(true),
+        // provolatile
+        NullString(),
+        // proparallel
+        NullString(),
+        // pronargs
+        Int64(signature->arguments().size()),
+        // pronargdefaults
+        Int64(0),
+        // prorettype
+        CreatePgOidValue(rettype_oid).value(),
+        // proargtypes
+        zetasql::Value::MakeArray(GetPgOidArrayType(), proargtypes).value(),
+        // proallargtypes
+        Null(GetPgOidArrayType()),
+        // proargmodes
+        Null(StringArrayType()),
+        // proargnames
+        Null(StringArrayType()),
+        // proargdefaults
+        NullString(),
+        // protrftypes
+        Null(GetPgOidArrayType()),
+        // prosrc
+        NullString(),
+        // probin
+        NullString(),
+        // prosqlbody
+        NullString(),
+        // proconfig
+        Null(StringArrayType()),
+    });
+  }
+
+  absl::flat_hash_set<const zetasql::TableValuedFunction*> changestream_tvfs;
+  status = root_catalog_->GetTableValuedFunctions(&changestream_tvfs);
+  if (!status.ok()) {
+    ZETASQL_VLOG(1) << "Failed to get table-valued functions from root catalog: "
+               << status;
+    return;
+  }
+  absl::flat_hash_map<absl::string_view, const zetasql::TableValuedFunction*>
+      changestream_tvfs_map;
+  for (const zetasql::TableValuedFunction* tvf : changestream_tvfs) {
+    changestream_tvfs_map[tvf->Name()] = tvf;
+  }
+  for (const ChangeStream* change_stream : default_schema_->change_streams()) {
+    if (!changestream_tvfs_map.contains(change_stream->tvf_name())) {
+      ZETASQL_VLOG(1) << "Change stream " << change_stream->Name()
+                 << " does not have a table-valued function.";
+      continue;
+    }
+    if (!change_stream->tvf_postgresql_oid().has_value()) {
+        ZETASQL_VLOG(1) << "Change stream TVF " << change_stream->Name()
+                << " does not have a PostgreSQL OID.";
+        continue;
+    }
+    const auto& [change_stream_schema, change_stream_name] =
+        GetSchemaAndNameForPGCatalog(change_stream->Name());
+    int namespace_oid = 0;
+    if (kHardCodedNamedSchemaOid.contains(change_stream_schema)) {
+      namespace_oid = kHardCodedNamedSchemaOid.at(change_stream_schema);
+    } else {
+      const NamedSchema* named_schema =
+          default_schema_->FindNamedSchema(change_stream_schema);
+      if (!named_schema->postgresql_oid().has_value()) {
+        ZETASQL_VLOG(1) << "Named schema " << change_stream_schema
+                << " does not have a PostgreSQL OID.";
+        continue;
+      }
+      namespace_oid = named_schema->postgresql_oid().value();
+    }
+    auto signature =
+        changestream_tvfs_map[change_stream->tvf_name()]->GetSignature(0);
+    std::vector<zetasql::Value> proargtypes;
+    int variadic_type_oid = 0;
+    if (!signature->result_type().IsRelation()) {
+      ZETASQL_VLOG(1) << "Table-valued functions must return a relation type.";
+      continue;
+    }
+    auto& rettype_options = signature->result_type().options();
+    if (rettype_options.has_relation_input_schema() &&
+        rettype_options.relation_input_schema().num_columns() != 1) {
+      ZETASQL_VLOG(1) << "Table-valued functions must return a relation type "
+                 << "with exactly one column.";
+      continue;
+    }
+    auto rettype_mapping = system_catalog_->GetTypeFromReverseMapping(
+        rettype_options.relation_input_schema().column(0).type);
+    if (rettype_mapping == nullptr) {
+      ZETASQL_VLOG(1) << "Failed to get type mapping for "
+                 << signature->result_type().DebugString();
+      continue;
+    }
+    int rettype_oid = rettype_mapping->PostgresTypeOid();
+    for (const auto& arg : signature->arguments()) {
+      auto type_mapping =
+          system_catalog_->GetTypeFromReverseMapping(arg.type());
+      if (type_mapping == nullptr) {
+        ZETASQL_VLOG(1) << "Failed to get type mapping for "
+                   << arg.type()->DebugString();
+        continue;
+      } else if (type_mapping->PostgresTypeOid() == TEXTOID) {
+        type_mapping = types::PgVarcharMapping();
+      } else if (type_mapping->PostgresTypeOid() == TEXTARRAYOID) {
+        type_mapping = types::PgVarcharArrayMapping();
+      }
+      if (arg.repeated()) {
+        variadic_type_oid = type_mapping->PostgresTypeOid();
+      }
+      proargtypes.push_back(
+          CreatePgOidValue(type_mapping->PostgresTypeOid()).value());
+    }
+    rows.push_back({
+        // oid
+        CreatePgOidValue(change_stream->tvf_postgresql_oid().value()).value(),
+        // proname
+        String(change_stream->tvf_name()),
+        // pronamespace
+        CreatePgOidValue(namespace_oid).value(),
+        // proowner
+        NullPgOid(),
+        // prolang
+        NullPgOid(),
+        // procost
+        NullDouble(),
+        // prorows
+        NullDouble(),
+        // provariadic
+        CreatePgOidValue(variadic_type_oid).value(),
+        // prokind
+        String("f"),
+        // prosecdef
+        NullBool(),
+        // proleakproof
+        NullBool(),
+        // proisstrict
+        NullBool(),
+        // proretset
+        Bool(true),
+        // provolatile
+        NullString(),
+        // proparallel
+        NullString(),
+        // pronargs
+        Int64(signature->arguments().size()),
+        // pronargdefaults
+        Int64(0),
+        // prorettype
+        CreatePgOidValue(rettype_oid).value(),
+        // proargtypes
+        zetasql::Value::MakeArray(GetPgOidArrayType(), proargtypes).value(),
+        // proallargtypes
+        Null(GetPgOidArrayType()),
+        // proargmodes
+        Null(StringArrayType()),
+        // proargnames
+        Null(StringArrayType()),
+        // proargdefaults
+        NullString(),
+        // protrftypes
+        Null(GetPgOidArrayType()),
+        // prosrc
+        NullString(),
+        // probin
+        NullString(),
+        // prosqlbody
+        NullString(),
+        // proconfig
+        Null(StringArrayType()),
+    });
+  }
+
+  pg_proc->SetContents(rows);
+}
+
 void PGCatalog::FillPGSequenceTable() {
   auto pg_sequence = tables_by_name_.at(kPGSequence).get();
 
   std::vector<std::vector<zetasql::Value>> rows;
   for (const Sequence* sequence : default_schema_->sequences()) {
+    if (sequence->is_internal_use()) {
+      // Skip internal sequences.
+      continue;
+    }
     if (!sequence->postgresql_oid().has_value()) {
       ZETASQL_VLOG(1) << "Sequence " << sequence->Name()
               << " does not have a PostgreSQL OID.";
@@ -1205,6 +2156,10 @@ void PGCatalog::FillPGSequencesTable() {
 
   std::vector<std::vector<zetasql::Value>> rows;
   for (const Sequence* sequence : default_schema_->sequences()) {
+    if (sequence->is_internal_use()) {
+      // Skip internal sequences.
+      continue;
+    }
     const auto& [sequence_schema_part, sequence_name_part] =
         GetSchemaAndNameForPGCatalog(sequence->Name());
     rows.push_back({
@@ -1306,6 +2261,127 @@ void PGCatalog::FillPGTablesTable() {
   }
 
   pg_tables->SetContents(rows);
+}
+
+void PGCatalog::FillPGTypeTable() {
+  auto pg_type = tables_by_name_.at(kPGType).get();
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  absl::flat_hash_set<const PostgresTypeMapping*> postgres_types;
+  auto status = system_catalog_->GetPostgreSQLTypes(&postgres_types);
+  for (const PostgresTypeMapping* postgres_type : postgres_types) {
+    auto type_metadata = GetPgTypeDataFromBootstrap(
+        PgBootstrapCatalog::Default(), postgres_type->PostgresTypeOid());
+    rows.push_back({
+        // oid
+        CreatePgOidValue(postgres_type->PostgresTypeOid()).value(),
+        // typname
+        String(postgres_type->raw_type_name()),
+        // typnamespace
+        CreatePgOidValue(11).value(),
+        // typowner
+        NullPgOid(),
+        // typlen
+        Int64(type_metadata->typlen()),
+        // typbyval
+        Bool(type_metadata->typbyval()),
+        // typtype
+        String(type_metadata->typtype()),
+        // typcategory
+        String(type_metadata->typcategory()),
+        // typispreferred
+        Bool(type_metadata->typispreferred()),
+        // typisdefined
+        Bool(type_metadata->typisdefined()),
+        // typdelim
+        String(type_metadata->typdelim()),
+        // typrelid
+        CreatePgOidValue(0).value(),
+        // typelem
+        CreatePgOidValue(type_metadata->typelem()).value(),
+        // typarray
+        CreatePgOidValue(type_metadata->typarray()).value(),
+        // typalign
+        NullString(),
+        // typstorage
+        NullString(),
+        // typnotnull
+        NullBool(),
+        // typbasetype
+        NullPgOid(),
+        // typtypmod
+        NullInt64(),
+        // typndims
+        NullInt64(),
+        // typcollation
+        NullPgOid(),
+        // typdefaultbin
+        NullString(),
+        // typdefault
+        NullString(),
+    });
+  }
+
+  for (uint32_t pseudotype_oid : {
+           2276,  // any
+           2277,  // anyarray
+           2283,  // anyelement
+           2776,  // anynonarray
+           5078,  // anycompatiblearray
+       }) {
+    auto type_metadata = GetPgTypeDataFromBootstrap(
+        PgBootstrapCatalog::Default(), pseudotype_oid);
+    rows.push_back({
+        // oid
+        CreatePgOidValue(pseudotype_oid).value(),
+        // typname
+        String(type_metadata->typname()),
+        // typnamespace
+        CreatePgOidValue(11).value(),
+        // typowner
+        NullPgOid(),
+        // typlen
+        Int64(type_metadata->typlen()),
+        // typbyval
+        Bool(type_metadata->typbyval()),
+        // typtype
+        String(type_metadata->typtype()),
+        // typcategory
+        String(type_metadata->typcategory()),
+        // typispreferred
+        Bool(type_metadata->typispreferred()),
+        // typisdefined
+        Bool(type_metadata->typisdefined()),
+        // typdelim
+        String(type_metadata->typdelim()),
+        // typrelid
+        CreatePgOidValue(0).value(),
+        // typelem
+        CreatePgOidValue(type_metadata->typelem()).value(),
+        // typarray
+        CreatePgOidValue(type_metadata->typarray()).value(),
+        // typalign
+        NullString(),
+        // typstorage
+        NullString(),
+        // typnotnull
+        NullBool(),
+        // typbasetype
+        NullPgOid(),
+        // typtypmod
+        NullInt64(),
+        // typndims
+        NullInt64(),
+        // typcollation
+        NullPgOid(),
+        // typdefaultbin
+        NullString(),
+        // typdefault
+        NullString(),
+    });
+  }
+
+  pg_type->SetContents(rows);
 }
 
 void PGCatalog::FillPGViewsTable() {

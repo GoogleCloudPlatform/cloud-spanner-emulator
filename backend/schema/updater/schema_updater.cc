@@ -44,6 +44,7 @@
 #include "absl/functional/function_ref.h"
 #include "absl/log/log.h"
 #include "absl/meta/type_traits.h"
+#include "absl/random/random.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
@@ -119,6 +120,8 @@
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "google/protobuf/repeated_ptr_field.h"
+#include "zetasql/public/functions/uuid.h"
+
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -156,6 +159,26 @@ std::vector<std::string> GetObjectNames(absl::Span<const T* const> objects) {
   }
   return names;
 }
+
+template <typename SetOptions>
+void SetSequenceOptionsForIdentityColumn(
+    ddl::ColumnDefinition::IdentityColumnDefinition identity_column,
+    SetOptions* set_options) {
+  if (identity_column.has_start_with_counter()) {
+    ddl::SetOption* start_with_counter = set_options->Add();
+    start_with_counter->set_option_name("start_with_counter");
+    start_with_counter->set_int64_value(identity_column.start_with_counter());
+  }
+  if (identity_column.has_skip_range_min()) {
+    ddl::SetOption* skip_range_min = set_options->Add();
+    skip_range_min->set_option_name("skip_range_min");
+    skip_range_min->set_int64_value(identity_column.skip_range_min());
+    ddl::SetOption* skip_range_max = set_options->Add();
+    skip_range_max->set_option_name("skip_range_max");
+    skip_range_max->set_int64_value(identity_column.skip_range_max());
+  }
+}
+
 // A class that processes a set of Cloud Spanner DDL statements, and applies
 // them to an existing (or empty) `Schema` to obtain the updated `Schema`.
 //
@@ -273,6 +296,7 @@ class SchemaUpdaterImpl {
                                    const Table* table,
                                    const ddl::CreateTable* ddl_create_table,
                                    const database_api::DatabaseDialect& dialect,
+                                   bool is_alter,
                                    ColumnDefModifier* modifier);
 
   absl::Status AlterColumnDefinition(
@@ -483,10 +507,15 @@ class SchemaUpdaterImpl {
   absl::Status ValidateSequenceOptions(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
       const Sequence* current_sequence);
+  void SetOptionsForSequenceClauses(
+      const ddl::CreateSequence& create_sequence,
+      ::google::protobuf::RepeatedPtrField<ddl::SetOption>* set_options);
+  bool IsDefaultSequenceKindSet();
 
   absl::StatusOr<const Sequence*> CreateSequence(
-      const ddl::CreateSequence& create_sequence
-  );
+      const ddl::CreateSequence& create_sequence,
+      const database_api::DatabaseDialect& dialect,
+      bool is_internal_use = false);
 
   absl::Status CreateNamedSchema(const ddl::CreateSchema& create_schema);
 
@@ -759,9 +788,8 @@ SchemaUpdaterImpl::ApplyDDLStatement(
         // would not cause any schema change.
         return nullptr;
       }
-      ZETASQL_RETURN_IF_ERROR(CreateSequence(ddl_statement->create_sequence()
-                                     )
-                          .status());
+      ZETASQL_RETURN_IF_ERROR(
+          CreateSequence(ddl_statement->create_sequence(), dialect).status());
       break;
     }
     case ddl::DDLStatement::kCreateSchema: {
@@ -789,8 +817,8 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       const ddl::AlterSequence& alter_sequence =
           ddl_statement->alter_sequence();
       const Sequence* current_sequence =
-          latest_schema_->FindSequence(alter_sequence.sequence_name()
-          );
+          latest_schema_->FindSequence(alter_sequence.sequence_name(),
+                                       /*exclude_internal=*/true);
       if (current_sequence == nullptr) {
         if (alter_sequence.existence_modifier() == ddl::IF_EXISTS) {
           // The sequence doesn't exist, but we have the IF EXISTS clause
@@ -835,8 +863,8 @@ SchemaUpdaterImpl::ApplyDDLStatement(
     case ddl::DDLStatement::kDropSequence: {
       const ddl::DropSequence& drop_sequence = ddl_statement->drop_sequence();
       const Sequence* current_sequence =
-          latest_schema_->FindSequence(drop_sequence.sequence_name()
-          );
+          latest_schema_->FindSequence(drop_sequence.sequence_name(),
+                                       /*exclude_internal=*/true);
       if (current_sequence == nullptr) {
         if (drop_sequence.existence_modifier() == ddl::IF_EXISTS) {
           // The sequence doesn't exist, but we have the IF EXISTS clause
@@ -987,6 +1015,18 @@ absl::Status SchemaUpdaterImpl::SetDatabaseOptions(
     const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
     Modifier* modifier) {
   modifier->set_options(set_options);
+  for (const ddl::SetOption& option : set_options) {
+    if (absl::StripPrefix(option.option_name(), "spanner.internal.cloud_") ==
+        ddl::kDefaultSequenceKindOptionName) {
+      if (option.has_string_value()) {
+        std::optional<std::string> default_sequence_kind =
+            option.string_value();
+        modifier->set_default_sequence_kind(default_sequence_kind);
+      } else if (option.has_null_value()) {
+        modifier->set_default_sequence_kind(std::nullopt);
+      }
+    }
+  }
   return absl::OkStatus();
 }
 
@@ -1075,7 +1115,7 @@ absl::Status SchemaUpdaterImpl::AlterColumnDefinition(
     const database_api::DatabaseDialect& dialect, Column::Editor* editor) {
   ZETASQL_RETURN_IF_ERROR(SetColumnDefinition(ddl_column, table,
                                       /*ddl_create_table=*/nullptr, dialect,
-                                      editor));
+                                      /*is_alter=*/true, editor));
   return absl::OkStatus();
 }
 
@@ -1093,6 +1133,13 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
   if (type == ddl::AlterTable::AlterColumn::SET_DEFAULT) {
     if (column->is_generated()) {
       return error::CannotSetDefaultValueOnGeneratedColumn(column->FullName());
+    }
+
+    if (column->is_identity_column() &&
+        (new_column_def.has_column_default() ||
+         new_column_def.has_generated_column())) {
+      return error::CannotAlterIdentityColumnToGeneratedOrDefaultColumn(
+          table->Name(), new_column_def.column_name());
     }
 
     std::string expression = new_column_def.column_default().expression();
@@ -1137,8 +1184,7 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
       return error::ViewReplaceRecursive(existing_column->Name());
     }
   } else {
-    if (!column->has_default_value()
-    ) {
+    if (!column->has_default_value() || column->is_identity_column()) {
       return absl::OkStatus();
     }
     editor->clear_expression();
@@ -1280,10 +1326,11 @@ template <typename ColumnDefModifer>
 absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     const ddl::ColumnDefinition& ddl_column, const Table* table,
     const ddl::CreateTable* ddl_create_table,
-    const database_api::DatabaseDialect& dialect,
+    const database_api::DatabaseDialect& dialect, bool is_alter,
     ColumnDefModifer* modifier) {
   bool is_generated = false;
   bool has_default_value = false;
+  bool is_identity_column = false;
   // Process any changes in column definition.
   ZETASQL_ASSIGN_OR_RETURN(
       const zetasql::Type* column_type,
@@ -1306,6 +1353,19 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     }
   }
 
+  // Do not allow a column to convert to and stop being an identity column.
+  const Column* old_column = table->FindColumn(ddl_column.column_name());
+  if (old_column != nullptr &&
+      old_column->is_identity_column() != ddl_column.has_identity_column()) {
+    if (ddl_column.has_identity_column()) {
+      return error::CannotAlterToIdentityColumn(table->Name(),
+                                                ddl_column.column_name());
+    } else {
+      return error::CannotAlterColumnToDropIdentity(table->Name(),
+                                                    ddl_column.column_name());
+    }
+  }
+
   absl::flat_hash_set<const SchemaNode*> udf_dependencies;
   absl::flat_hash_set<const SchemaNode*> dependent_sequences;
   if (ddl_column.has_column_default()) {
@@ -1325,6 +1385,62 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     if (!s.ok()) {
       return error::ColumnDefaultValueParseError(
           table->Name(), ddl_column.column_name(), s.message());
+    }
+  } else if (ddl_column.has_identity_column()) {
+    is_identity_column = true;
+    // The default value is the expression
+    // `GET_NEXT_SEQUENCE_VALUE(sequence_name)`
+    has_default_value = true;
+    std::vector<std::string> parts = absl::StrSplit(modifier->get()->id(), ':');
+    ZETASQL_RET_CHECK_GE(parts.size(), 2);
+
+    std::string sequence_name = absl::StrFormat(
+        "_identity_seq_%s", absl::StrReplaceAll(parts[0], {{".", "__"}}));
+    const Sequence* existing_sequence =
+        latest_schema_->FindSequence(sequence_name);
+    if (is_alter) {
+      ZETASQL_RET_CHECK(existing_sequence != nullptr)
+          << "sequence does not exist: " << sequence_name;
+      ddl::AlterSequence alter_sequence;
+      alter_sequence.set_sequence_name(sequence_name);
+      SetSequenceOptionsForIdentityColumn(
+          ddl_column.identity_column(),
+          alter_sequence.mutable_set_options()->mutable_options());
+      ZETASQL_RETURN_IF_ERROR(AlterSequence(alter_sequence, existing_sequence));
+      dependent_sequences.insert(existing_sequence);
+    } else {
+      ZETASQL_RET_CHECK(existing_sequence == nullptr)
+          << "sequence already exists: " << sequence_name;
+      // Create the internal sequence.
+      ddl::CreateSequence create_sequence;
+      create_sequence.set_sequence_name(sequence_name);
+      if (ddl_column.identity_column().has_type() &&
+          ddl_column.identity_column().type() ==
+              ddl::ColumnDefinition::IdentityColumnDefinition::
+                  BIT_REVERSED_POSITIVE) {
+        ddl::SetOption* sequence_kind = create_sequence.add_set_options();
+        sequence_kind->set_option_name("sequence_kind");
+        sequence_kind->set_string_value("bit_reversed_positive");
+      } else if (!IsDefaultSequenceKindSet()) {
+        return error::UnspecifiedIdentityColumnSequenceKind(
+            ddl_column.column_name());
+      }
+      SetSequenceOptionsForIdentityColumn(
+          ddl_column.identity_column(), create_sequence.mutable_set_options());
+      ZETASQL_ASSIGN_OR_RETURN(
+          const Sequence* sequence,
+          CreateSequence(create_sequence, dialect, /*is_internal_use=*/true));
+
+      std::string expression;
+      if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+        expression =
+            absl::StrFormat("(GET_NEXT_SEQUENCE_VALUE(\"%s\"))", sequence_name);
+      } else {
+        expression = absl::StrFormat("(GET_NEXT_SEQUENCE_VALUE(SEQUENCE %s))",
+                                     sequence_name);
+      }
+      modifier->set_expression(expression);
+      dependent_sequences.insert(sequence);
     }
   } else if (ddl_column.has_generated_column()) {
     std::string expression = ddl_column.generated_column().expression();
@@ -1387,6 +1503,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     ZETASQL_RET_CHECK(is_generated != has_default_value);
   }
 
+  modifier->set_is_identity_column(is_identity_column);
   modifier->set_has_default_value(has_default_value);
   // Set the default values for nullability and length.
   modifier->set_nullable(!ddl_column.not_null());
@@ -1420,6 +1537,28 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
         SetColumnOptions(ddl_column.set_options(), dialect, modifier));
   }
 
+  if (is_alter) {
+    const Column* existing_column = table->FindColumn(ddl_column.column_name());
+    if (existing_column == nullptr) {
+      return error::ColumnNotFound(table->Name(), ddl_column.column_name());
+    }
+    absl::flat_hash_set<const SchemaNode*> deps;
+    for (const auto& dep : existing_column->udf_dependencies()) {
+      deps.insert(dep);
+    }
+    // Check for a recursive columns by analyzing the transitive set of
+    // dependencies, i.e., if the view is a dependency of itself.
+    auto transitive_deps = GatherTransitiveDependenciesForSchemaNode(deps);
+    if (std::find_if(transitive_deps.begin(), transitive_deps.end(),
+                     [existing_column](const SchemaNode* dep) {
+                       return (dep->As<const Column>() != nullptr &&
+                               dep->As<const Column>()->Name() ==
+                                   existing_column->Name());
+                     }) != transitive_deps.end()) {
+      return error::ViewReplaceRecursive(existing_column->Name());
+    }
+  }
+
   return absl::OkStatus();
 }
 
@@ -1434,7 +1573,7 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
           absl::StrCat(table->Name(), ".", column_name)))
       .set_name(column_name);
   ZETASQL_RETURN_IF_ERROR(SetColumnDefinition(ddl_column, table, ddl_table, dialect,
-                                      &builder));
+                                      /*is_alter=*/false, &builder));
   builder.set_hidden(ddl_column.has_hidden() && ddl_column.hidden());
   const Column* column = builder.get();
   builder.set_table(table);
@@ -1897,6 +2036,11 @@ absl::Status SchemaUpdaterImpl::CreateForeignKeyConstraint(
   // Build and add the emulator foreign key before creating any of its backing
   // indexes. This ensures the foreign key is validated first which in turn
   // ensures better foreign key error messages instead of obscure index errors.
+
+  // Not enforced foreign keys doesn't perform referential integrity
+  // checks, so the index on the referencing table is not created. Only the
+  // unique index on the referenced table is created, because the definition of
+  // foreign keys requires them to refer to unique identities.
   ZETASQL_ASSIGN_OR_RETURN(
       const ForeignKey* foreign_key,
       BuildForeignKeyConstraint(ddl_foreign_key, referencing_table));
@@ -1931,6 +2075,12 @@ absl::Status SchemaUpdaterImpl::CreateForeignKeyConstraint(
           editor->set_referenced_index(referenced_index);
           return absl::OkStatus();
         }));
+  }
+
+  if (!foreign_key->enforced()) {
+    // Skip referencing index creation and fk data validation for unenforced
+    // foreign keys.
+    return absl::OkStatus();
   }
 
   bool referencing_index_required = false;
@@ -2050,6 +2200,15 @@ absl::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
           ForeignKey::ActionName(GetForeignKeyOnDeleteAction(ddl_foreign_key)));
     }
     builder.set_delete_action(GetForeignKeyOnDeleteAction(ddl_foreign_key));
+  }
+
+  if (!ddl_foreign_key.enforced()) {
+    if (!EmulatorFeatureFlags::instance()
+             .flags()
+             .enable_fk_enforcement_option) {
+      return error::ForeignKeyEnforcementUnsupported();
+    }
+    builder.set_enforced(ddl_foreign_key.enforced());
   }
 
   const ForeignKey* foreign_key = builder.get();
@@ -2974,6 +3133,12 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateSearchIndex(
   table_pk.reserve(ddl_index.token_column_definition().size());
   for (const ddl::TokenColumnDefinition& token_column_def :
        ddl_index.token_column_definition()) {
+    const ddl::KeyPartClause& key = token_column_def.token_column();
+    if (key.has_order()) {
+      return error::SearchIndexTokenlistKeyOrderUnsupported(
+          key.key_name(), ddl_index.index_name());
+    }
+
     table_pk.push_back(token_column_def.token_column());
   }
   bool is_null_filtered = ddl_index.null_filtered();
@@ -3716,9 +3881,42 @@ absl::Status SchemaUpdaterImpl::ValidateSequenceOptions(
   return absl::OkStatus();
 }
 
+bool SchemaUpdaterImpl::IsDefaultSequenceKindSet() {
+  const DatabaseOptions* db_options = latest_schema_->options();
+  return db_options != nullptr &&
+         db_options->default_sequence_kind().has_value() &&
+         db_options->default_sequence_kind().value() ==
+             kSequenceKindBitReversedPositive;
+}
+
+void SchemaUpdaterImpl::SetOptionsForSequenceClauses(
+    const ddl::CreateSequence& create_sequence,
+    ::google::protobuf::RepeatedPtrField<ddl::SetOption>* set_options) {
+  ddl::SetOption* option;
+  if (create_sequence.has_type() &&
+      create_sequence.type() == ddl::CreateSequence::BIT_REVERSED_POSITIVE) {
+    option = set_options->Add();
+    option->set_option_name(kSequenceKindOptionName);
+    option->set_string_value(kSequenceKindBitReversedPositive);
+  }
+  if (create_sequence.has_start_with_counter()) {
+    option = set_options->Add();
+    option->set_option_name(kSequenceStartWithCounterOptionName);
+    option->set_int64_value(create_sequence.start_with_counter());
+  }
+  if (create_sequence.has_skip_range_min()) {
+    option = set_options->Add();
+    option->set_option_name(kSequenceSkipRangeMinOptionName);
+    option->set_int64_value(create_sequence.skip_range_min());
+    option = set_options->Add();
+    option->set_option_name(kSequenceSkipRangeMaxOptionName);
+    option->set_int64_value(create_sequence.skip_range_max());
+  }
+}
+
 absl::StatusOr<const Sequence*> SchemaUpdaterImpl::CreateSequence(
-    const ddl::CreateSequence& create_sequence
-) {
+    const ddl::CreateSequence& create_sequence,
+    const database_api::DatabaseDialect& dialect, bool is_internal_use) {
   // Validate the sequence name in global_names_
   ZETASQL_RETURN_IF_ERROR(
       global_names_.AddName("Sequence", create_sequence.sequence_name()));
@@ -3731,14 +3929,58 @@ absl::StatusOr<const Sequence*> SchemaUpdaterImpl::CreateSequence(
             << create_sequence.sequence_name();
   }
   builder.set_name(create_sequence.sequence_name());
+  absl::BitGen bitgen;
+  builder.set_id(absl::StrCat(
+      "seq_",
+      zetasql::functions::GenerateUuid(bitgen)
+      ));
+  ::google::protobuf::RepeatedPtrField<ddl::SetOption> clause_options;
+  if (dialect == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    bool created_from_syntax = create_sequence.has_type() ||
+                               create_sequence.has_start_with_counter() ||
+                               create_sequence.has_skip_range_min();
+
+    if (created_from_syntax && !create_sequence.set_options().empty()) {
+      return error::CannotSetSequenceClauseAndOptionTogether(
+          create_sequence.sequence_name());
+    }
+    if (created_from_syntax) {
+      SetOptionsForSequenceClauses(create_sequence, &clause_options);
+      builder.set_created_from_syntax();
+    }
+  }
+
+  if (!create_sequence.set_options().empty()) {
+    builder.set_created_from_options();
+  }
+
+  if (is_internal_use) {
+    builder.set_internal_use();
+  }
   const Sequence* sequence = builder.get();
 
   // Validate and set sequence options.
-  const auto& set_options = create_sequence.set_options();
+  const auto& set_options =
+      clause_options.empty() ? create_sequence.set_options() : clause_options;
   ZETASQL_RETURN_IF_ERROR(ValidateSequenceOptions(set_options,
                                           /*current_sequence=*/nullptr));
   ZETASQL_RETURN_IF_ERROR(AlterNode<Sequence>(
       sequence, [this, set_options](Sequence::Editor* editor) -> absl::Status {
+        bool has_sequence_kind_option = false;
+        for (const ddl::SetOption& option : set_options) {
+          if (option.option_name() == kSequenceKindOptionName) {
+            has_sequence_kind_option = true;
+            break;
+          }
+        }
+        if (!has_sequence_kind_option) {
+          if (IsDefaultSequenceKindSet()) {
+            editor->set_sequence_kind(Sequence::BIT_REVERSED_POSITIVE);
+            editor->set_use_default_sequence_kind_option();
+          } else {
+            return error::UnspecifiedSequenceKind();
+          }
+        }
         // Set sequence options
         return SetSequenceOptions(set_options, editor);
       }));
@@ -3803,6 +4045,25 @@ absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
       } else if (option.has_null_value()) {
         return error::NullValueAlterDatabaseOption();
       }
+    } else if (option_name == ddl::kDefaultSequenceKindOptionName) {
+      if (option.has_string_value() || option.has_null_value()) {
+        if (latest_schema_->options() != nullptr &&
+            latest_schema_->options()->default_sequence_kind().has_value()) {
+          return error::DefaultSequenceKindAlreadySet();
+        }
+        if (option.has_string_value() &&
+            option.string_value() != kSequenceKindBitReversedPositive) {
+          return error::UnsupportedSequenceKind(option.string_value());
+        }
+      } else {
+        return error::UnsupportedDefaultSequenceKindOptionValues();
+      }
+    } else if (option_name == ddl::kVersionRetentionPeriodOptionName) {
+      if (option.has_string_value() || option.has_null_value()) {
+        continue;
+      }
+
+      return error::UnsupportedVersionRetentionPeriodOptionValues();
     } else {
       return error::UnsupportedAlterDatabaseOption(option_name);
     }
@@ -3953,21 +4214,63 @@ absl::Status SchemaUpdaterImpl::AlterSequence(
     const ddl::AlterSequence& alter_sequence,
     const Sequence* current_sequence) {
   std::string sequence_name = current_sequence->Name();
-  if (alter_sequence.alter_type_case() != ddl::AlterSequence::kSetOptions
-  ) {
+  if (alter_sequence.alter_type_case() != ddl::AlterSequence::kSetOptions &&
+      alter_sequence.alter_type_case() != ddl::AlterSequence::kSetSkipRange &&
+      alter_sequence.alter_type_case() !=
+          ddl::AlterSequence::kSetStartWithCounter) {
     return error::Internal(
         absl::StrCat("Unsupported alter sequence statement: ",
                      alter_sequence.DebugString()));
   }
 
   ::google::protobuf::RepeatedPtrField<ddl::SetOption> repeated_set_options;
+  bool set_from_syntax = false;
+  if (alter_sequence.alter_type_case() == ddl::AlterSequence::kSetOptions) {
+    if (current_sequence->created_from_syntax()) {
+      return error::CannotSetSequenceClauseAndOptionTogether(sequence_name);
+    }
     repeated_set_options = alter_sequence.set_options().options();
+  } else if (alter_sequence.alter_type_case() ==
+             ddl::AlterSequence::kSetSkipRange) {
+    if (current_sequence->created_from_options()) {
+      return error::CannotSetSequenceClauseAndOptionTogether(sequence_name);
+    }
+    ddl::SetOption* skip_range_min = repeated_set_options.Add();
+    ddl::SetOption* skip_range_max = repeated_set_options.Add();
+    skip_range_min->set_option_name(kSequenceSkipRangeMinOptionName);
+    skip_range_max->set_option_name(kSequenceSkipRangeMaxOptionName);
+    if (alter_sequence.set_skip_range().has_min_value()) {
+      skip_range_min->set_int64_value(
+          alter_sequence.set_skip_range().min_value());
+      skip_range_max->set_int64_value(
+          alter_sequence.set_skip_range().max_value());
+    } else {
+      skip_range_min->set_null_value(true);
+      skip_range_max->set_null_value(true);
+    }
+    set_from_syntax = true;
+  } else if (alter_sequence.alter_type_case() ==
+             ddl::AlterSequence::kSetStartWithCounter) {
+    if (current_sequence->created_from_options()) {
+      return error::CannotSetSequenceClauseAndOptionTogether(sequence_name);
+    }
+    ddl::SetOption* start_with_counter = repeated_set_options.Add();
+    start_with_counter->set_option_name(kSequenceStartWithCounterOptionName);
+    start_with_counter->set_int64_value(
+        alter_sequence.set_start_with_counter().counter_value());
+    set_from_syntax = true;
+  }
   ZETASQL_RETURN_IF_ERROR(
       ValidateSequenceOptions(repeated_set_options, current_sequence));
   ZETASQL_RETURN_IF_ERROR(AlterNode<Sequence>(
       current_sequence,
-      [this,
+      [this, set_from_syntax,
        repeated_set_options](Sequence::Editor* editor) -> absl::Status {
+        if (set_from_syntax) {
+          editor->set_created_from_syntax();
+        } else {
+          editor->set_created_from_options();
+        }
         // Set sequence options
         return SetSequenceOptions(repeated_set_options, editor);
       }));
@@ -4085,6 +4388,43 @@ absl::Status SchemaUpdaterImpl::AlterTable(
       }
       const auto& alter_column = alter_table.alter_column();
       if (alter_column.has_operation()) {
+        if (alter_column.operation() ==
+            ddl::AlterTable::AlterColumn::ALTER_IDENTITY) {
+          if (!column->is_identity_column()) {
+            return error::ColumnIsNotIdentityColumn(table->Name(), column_name);
+          }
+          ZETASQL_RET_CHECK(column->sequences_used().size() == 1);
+          const Sequence* sequence =
+              static_cast<const Sequence*>(column->sequences_used().at(0));
+          const auto& column_def = alter_column.column();
+          ddl::AlterSequence alter_sequence;
+          alter_sequence.set_sequence_name(sequence->Name());
+          if (alter_column.identity_alter_start_with_counter()) {
+            ddl::SetOption* start_with_counter =
+                alter_sequence.mutable_set_options()->add_options();
+            start_with_counter->set_option_name("start_with_counter");
+            start_with_counter->set_int64_value(
+                column_def.identity_column().start_with_counter());
+          }
+          if (alter_column.identity_alter_skip_range()) {
+            ddl::SetOption* skip_range_min =
+                alter_sequence.mutable_set_options()->add_options();
+            ddl::SetOption* skip_range_max =
+                alter_sequence.mutable_set_options()->add_options();
+            skip_range_min->set_option_name("skip_range_min");
+            skip_range_max->set_option_name("skip_range_max");
+            if (column_def.identity_column().has_skip_range_min()) {
+              skip_range_min->set_int64_value(
+                  column_def.identity_column().skip_range_min());
+              skip_range_max->set_int64_value(
+                  column_def.identity_column().skip_range_max());
+            } else {
+              skip_range_min->set_null_value(true);
+              skip_range_max->set_null_value(true);
+            }
+          }
+          ZETASQL_RETURN_IF_ERROR(AlterSequence(alter_sequence, sequence));
+        } else {
           ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
               column,
               [this, &alter_column, &column, &table,
@@ -4092,6 +4432,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
                 return AlterColumnSetDropDefault(alter_column, table, column,
                                                  dialect, editor);
               }));
+        }
       } else {
         const auto& column_def = alter_column.column();
         ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
@@ -4121,6 +4462,13 @@ absl::Status SchemaUpdaterImpl::AlterTable(
             change_stream_names);
       }
       ZETASQL_RETURN_IF_ERROR(DropNode(column));
+      if (column->is_identity_column()) {
+        ZETASQL_RET_CHECK(column->sequences_used().size() == 1);
+        const Sequence* sequence =
+            static_cast<const Sequence*>(column->sequences_used().at(0));
+        global_names_.RemoveName(sequence->Name());
+        ZETASQL_RETURN_IF_ERROR(DropNode(sequence));
+      }
       return absl::OkStatus();
     }
     case ddl::AlterTable::kAddRowDeletionPolicy: {
@@ -4426,6 +4774,18 @@ absl::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_table) {
   }
   // TODO : Error if any view depends on this table.
   absl::Status status = DropNode(table);
+  if (status.ok()) {
+    // Drop dependent sequences.
+    for (const Column* column : table->columns()) {
+      if (column->is_identity_column()) {
+        ZETASQL_RET_CHECK(column->sequences_used().size() == 1);
+        const Sequence* sequence =
+            static_cast<const Sequence*>(column->sequences_used().at(0));
+        global_names_.RemoveName(sequence->Name());
+        ZETASQL_RETURN_IF_ERROR(DropNode(sequence));
+      }
+    }
+  }
   return status;
 }
 

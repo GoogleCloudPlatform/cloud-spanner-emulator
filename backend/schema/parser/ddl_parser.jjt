@@ -278,10 +278,30 @@ void column_def() :
   [ <NOT> <NULLL> #not_null ]
   [ generation_clause()
   | column_default_clause()
-
+  | identity_column_clause()
   ]
   [ <HIDDEN> #hidden ]
   [ options_clause() ]
+}
+
+void identity_column_clause() :
+{}
+{
+  <GENERATED> <BY> <DEFAULTT> <AS> <IDENTITY> [ "(" sequence_param_list() ")" ]
+}
+
+void sequence_param_list() :
+{}
+{
+  sequence_param() ( sequence_param() )*
+}
+
+void sequence_param() :
+{}
+{
+  <BIT_REVERSED_POSITIVE> #bit_reversed_positive
+  | <SKIPP> <RANGE> int_value() #skip_range_min "," int_value() #skip_range_max
+  | <START> <COUNTER> <WITH> int_value() #start_with_counter
 }
 
 void column_def_alter_attrs() :
@@ -291,7 +311,7 @@ void column_def_alter_attrs() :
   [ <NOT> <NULLL> #not_null ]
   [ generation_clause()
   | column_default_clause()
-
+  | identity_column_clause()
   ]
 }
 
@@ -305,6 +325,11 @@ void column_def_alter() :
   | LOOKAHEAD(2) <DROP>  ( <DEFAULTT> #drop_column_default
                           | ( <NOT> <NULLL> #drop_not_null )
                         )
+  | <ALTER> <IDENTITY> ( <RESTART> <COUNTER> <WITH> int_value() #restart_counter
+                         | <SET> ( <SKIPP> <RANGE> int_value() #skip_range_min
+                                               "," int_value() #skip_range_max
+                                   | <NO> <SKIPP> <RANGE> #no_skip_range )
+                       )
   | column_def_alter_attrs()
 }
 
@@ -613,7 +638,7 @@ void create_sequence_statement() :
 {}
 {
   <SEQUENCE> [ if_not_exists() ] qualified_identifier() #name
-
+  [ sequence_param_list() ]
   [ options_clause() ]
 }
 
@@ -632,7 +657,7 @@ void key_part() :
 {}
 {
   path()
-  [   <ASC>
+  [   <ASC> #asc
     | <DESC> #desc
   ]
 }
@@ -838,9 +863,12 @@ void alter_sequence_statement() :
 {}
 {
   <SEQUENCE> [ if_exists() ] (qualified_identifier() #name)
-
+  (
     <SET> options_clause()
-
+    | <RESTART> <COUNTER> <WITH> int_value() #restart_counter
+    | <SKIPP> <RANGE> int_value() #skip_range_min "," int_value() #skip_range_max
+    | <NO> <SKIPP> <RANGE> #no_skip_range
+  )
 }
 
 void alter_schema_statement() :

@@ -24,13 +24,12 @@ namespace test {
 namespace {
 
 using zetasql_base::testing::StatusIs;
-
 class ForeignKeyTransactionsTest : public DatabaseTest {
  protected:
   absl::Status SetUpDatabase() override {
     EmulatorFeatureFlags::Flags flags;
+    flags.enable_fk_enforcement_option = true;
     emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-
     return SetSchema({
         R"(
         CREATE TABLE T (
@@ -38,11 +37,15 @@ class ForeignKeyTransactionsTest : public DatabaseTest {
           B INT64,
         ) PRIMARY KEY(A, B)
       )",
+        // The NOT ENFORCED foreign key does not perform referential integrity
+        // checks. The `not_compliant_ifk` gets not-compliant data in related
+        // test cases but would remain silent.
         R"(
         CREATE TABLE U (
           X INT64,
           Y INT64,
           FOREIGN KEY (Y, X) REFERENCES T (A, B),
+          CONSTRAINT not_compliant_ifk FOREIGN KEY (X, Y) REFERENCES T (A, B) NOT ENFORCED,
         ) PRIMARY KEY(X)
       )",
         R"(
@@ -57,12 +60,17 @@ class ForeignKeyTransactionsTest : public DatabaseTest {
         ) PRIMARY KEY(A, B),
           INTERLEAVE IN PARENT Parent ON DELETE CASCADE
       )",
+        // The `compliant_ifk` always have compliant data.
         R"(
         CREATE TABLE Referencing (
           X INT64 NOT NULL,
           FOREIGN KEY (X) REFERENCES Child (B),
+          CONSTRAINT compliant_ifk FOREIGN KEY (X) REFERENCES Child (B) NOT ENFORCED,
         ) PRIMARY KEY(X)
       )",
+        // The `ifk` puts an extra unique constraint on the referenced
+        // `NumericT1` table, since it cannot reuse the primary key / unique
+        // index from other FKs.
         R"(
         CREATE TABLE NumericT1 (
           A NUMERIC,
@@ -74,6 +82,7 @@ class ForeignKeyTransactionsTest : public DatabaseTest {
           X NUMERIC,
           Y NUMERIC,
           FOREIGN KEY (Y, X) REFERENCES NumericT1 (A, B),
+          CONSTRAINT ifk FOREIGN KEY (X) REFERENCES NumericT1 (B) NOT ENFORCED,
         ) PRIMARY KEY(X)
       )",
     });
@@ -324,6 +333,14 @@ TEST_F(ForeignKeyTransactionsTest,
   EXPECT_THAT(Commit({MakeInsert("NumericT2", {"X", "Y"}, v1, v2),
                       MakeInsert("NumericT1", {"A", "B"}, v1, v2)}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(ForeignKeyTransactionsTest, NumericInsertNotUniqueReferencedRow) {
+  Numeric v1 = cloud::spanner::MakeNumeric("-999999999.456789").value();
+  Numeric v2 = cloud::spanner::MakeNumeric("123.456789").value();
+  ZETASQL_ASSERT_OK(Insert("NumericT1", {"A", "B"}, {v1, v2}));
+  EXPECT_THAT(Commit({MakeInsert("NumericT1", {"A", "B"}, v1, v2)}),
+              StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 }  // namespace

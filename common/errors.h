@@ -583,6 +583,7 @@ absl::Status ForeignKeyReferencingKeyFound(absl::string_view foreign_key,
                                            absl::string_view referencing_key);
 absl::Status ForeignKeyOnDeleteActionUnsupported(
     absl::string_view referential_action);
+absl::Status ForeignKeyEnforcementUnsupported();
 
 absl::Status NumericTypeNotEnabled();
 absl::Status JsonTypeNotEnabled();
@@ -797,6 +798,9 @@ absl::Status TokenlistTypeMergeConflict();
 absl::Status SearchIndexNotUsable(absl::string_view index_name,
                                   absl::string_view reason);
 
+absl::Status SearchIndexTokenlistKeyOrderUnsupported(
+    absl::string_view column_name, absl::string_view index_name);
+
 absl::Status FpAlgorithmOnlySupportedOnFloats();
 absl::Status NumericIndexingUnsupportedComparisonType(
     absl::string_view function_name, absl::string_view comparison_type);
@@ -942,6 +946,30 @@ absl::Status DropNamedSchemaHasDependencies(
     const std::vector<std::string>& views,
     const std::vector<std::string>& indexes,
     const std::vector<std::string>& sequences);
+
+absl::Status UnsupportedVersionRetentionPeriodOptionValues();
+// Identity column-related errors
+absl::Status ColumnIsNotIdentityColumn(absl::string_view table_name,
+                                       absl::string_view column_name);
+absl::Status DefaultSequenceKindAlreadySet();
+absl::Status UnsupportedDefaultSequenceKindOptionValues();
+absl::Status UnspecifiedIdentityColumnSequenceKind(
+    absl::string_view column_name);
+absl::Status InvalidColumnIdentifierFormat(
+    absl::string_view column_path_string);
+absl::Status TableNotFoundInIdentityFunction(absl::string_view table_string);
+absl::Status ColumnNotFoundInIdentityFunction(absl::string_view table_string,
+                                              absl::string_view column_string);
+absl::Status UnspecifiedSequenceKind();
+absl::Status CannotSetSequenceClauseAndOptionTogether(
+    absl::string_view sequence_string);
+absl::Status CannotAlterToIdentityColumn(absl::string_view table_string,
+                                         absl::string_view column_string);
+absl::Status CannotAlterColumnToDropIdentity(absl::string_view table_string,
+                                             absl::string_view column_string);
+absl::Status CannotAlterIdentityColumnToGeneratedOrDefaultColumn(
+    absl::string_view table_string, absl::string_view column_string);
+
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

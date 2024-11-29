@@ -144,10 +144,6 @@ cc_library(
     name = "postgres",
     srcs = ["postgres.cc"],
     hdrs = ["postgres.h"],
-    visibility = [
-        "//:__subpackages__",
-        "//spanner/datatypes/common/jsonb:__subpackages__",
-    ],
     deps = [
         "//third_party/spanner_pg/bootstrap_catalog",
         "//third_party/spanner_pg/postgres_includes",

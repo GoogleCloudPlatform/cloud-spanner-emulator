@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "zetasql/public/type.h"
+#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/functional/function_ref.h"
 #include "absl/memory/memory.h"
@@ -198,16 +199,22 @@ absl::Status ValidateRowDeletionPolicy(
     }
   }));
 
-  if (auto foreign_keys = table->referencing_foreign_keys();
-      !foreign_keys.empty()) {
-    return error::ForeignKeyRowDeletionPolicyAddNotAllowed(
-        table_name,
-        absl::StrJoin(foreign_keys, ",", [](std::string* out, auto fk) {
-          absl::StrAppend(out, fk->Name());
-        }));
+  auto is_enforced = [](const ForeignKey* fk) { return fk->enforced(); };
+  const int enforced_count =
+      absl::c_count_if(table->referencing_foreign_keys(), is_enforced);
+
+  if (enforced_count == 0) {
+    return absl::OkStatus();
   }
 
-  return absl::OkStatus();
+  std::vector<const ForeignKey*> enforced_fks(enforced_count);
+  absl::c_copy_if(table->referencing_foreign_keys(), enforced_fks.begin(),
+                  is_enforced);
+  return error::ForeignKeyRowDeletionPolicyAddNotAllowed(
+      table_name,
+      absl::StrJoin(enforced_fks, ",", [](std::string* out, auto fk) {
+        absl::StrAppend(out, fk->Name());
+      }));
 }
 
 absl::Status ValidateUpdateRowDeletionPolicy(const Table* table,

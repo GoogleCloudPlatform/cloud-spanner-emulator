@@ -137,6 +137,11 @@ struct PostgreSQLConstants {
       "exclude_ttl_deletes";
   static constexpr absl::string_view kChangeStreamAllowTxnExclusionOptionName =
       "allow_txn_exclusion";
+  static constexpr absl::string_view kSpangresDefaultSequenceKindOptionName =
+      "spanner.default_sequence_kind";
+  static constexpr absl::string_view
+      kInternalDatabaseDefaultSequenceKindOptionName =
+          "spanner.internal.cloud_default_sequence_kind";
   static constexpr absl::string_view kInternalDatabaseDefaultLeaderOptionName =
     "spanner.internal.cloud_default_leader";
   static constexpr absl::string_view

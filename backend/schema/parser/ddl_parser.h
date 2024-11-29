@@ -58,6 +58,8 @@ extern const char kModelEndpointsOptionName[];
 
 extern const char kWitnessLocationOptionName[];
 extern const char kDefaultLeaderOptionName[];
+extern const char kVersionRetentionPeriodOptionName[];
+extern const char kDefaultSequenceKindOptionName[];
 absl::Status ParseDDLStatement(absl::string_view ddl, DDLStatement* statement);
 
 }  // namespace ddl

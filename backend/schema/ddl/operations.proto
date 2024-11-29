@@ -226,6 +226,19 @@ message ColumnDefinition {
   optional ColumnDefaultDefinition column_default = 12;
 
   optional TypeDefinition type_definition = 13;
+  // The fields should match the definition of CreateSequence (the field numbers
+  // can be different).
+  message IdentityColumnDefinition {
+    enum Type {
+      BIT_REVERSED_POSITIVE = 1;
+    }
+    optional Type type = 1;
+    optional int64 start_with_counter = 2;
+    optional int64 skip_range_min = 3;
+    optional int64 skip_range_max = 4;
+  }
+
+  optional IdentityColumnDefinition identity_column = 17;
 }
 
 // Used for CREATE TABLE and CREATE INDEX
@@ -512,6 +525,11 @@ message CreateSequence {
   repeated SetOption set_options = 9;
 
   optional ExistenceModifier existence_modifier = 10;
+  // A value at which the internal sequence counter starts.
+  optional int64 start_with_counter = 11;
+  // An inclusive range whose values the sequence will skip over.
+  optional int64 skip_range_min = 12;
+  optional int64 skip_range_max = 13;
 }
 
 message CreateSchema {
@@ -567,10 +585,14 @@ message AlterTable {
       DROP_DEFAULT = 2;
       SET_NOT_NULL = 3;
       DROP_NOT_NULL = 4;
-
+      ALTER_IDENTITY = 5;
     }
     // Defines the specific alter operation on the column.
     optional AlterColumnOp operation = 2;
+    // True, if start_with_counter is altered.
+    optional bool identity_alter_start_with_counter = 3;
+    // True, if skip_range_min and skip_range_max is altered.
+    optional bool identity_alter_skip_range = 4;
   }
   message SetInterleaveClause {
     optional InterleaveClause interleave_clause = 1;
@@ -641,9 +663,18 @@ message AlterSequence {
   message SetOptions {
     repeated SetOption options = 1;
   }
+  message SetStartWithCounter {
+    optional int64 counter_value = 1 [default = 1];
+  }
+  message SetSkipRange {
+    optional int64 min_value = 1;
+    optional int64 max_value = 2;
+  }
 
   oneof alter_type {
     SetOptions set_options = 3;
+    SetStartWithCounter set_start_with_counter = 9;
+    SetSkipRange set_skip_range = 10;
   }
 
   optional ExistenceModifier existence_modifier = 8;

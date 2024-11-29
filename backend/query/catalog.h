@@ -109,6 +109,9 @@ class Catalog : public zetasql::EnumerableCatalog {
       absl::flat_hash_set<const zetasql::Type*>* output) const final;
   absl::Status GetFunctions(
       absl::flat_hash_set<const zetasql::Function*>* output) const final;
+  absl::Status GetTableValuedFunctions(
+      absl::flat_hash_set<const zetasql::TableValuedFunction*>* output)
+      const final;
 
   absl::Status GetType(const std::string& name, const zetasql::Type** type,
                        const FindOptions& options) final;
