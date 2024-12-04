@@ -695,7 +695,7 @@ absl::Status ReadOnlyTransactionDoesNotSupportReadWriteOnlyFunctions(
 absl::Status CannotInsertDuplicateKeyInsertOrUpdateDml(absl::string_view key);
 // Unsupported query shape errors.
 absl::Status UnsupportedReturnStructAsColumn();
-absl::Status UnsupportedArrayConstructorSyntaxForEmptyStructArray();
+absl::Status UnsupportedArrayConstructorSyntaxForNullValuedStructArray();
 absl::Status UnsupportedFeatureSafe(absl::string_view feature_type,
                                     absl::string_view info_message);
 absl::Status UnsupportedFunction(absl::string_view function_name);

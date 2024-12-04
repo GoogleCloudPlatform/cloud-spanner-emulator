@@ -2884,11 +2884,11 @@ absl::Status UnsupportedReturnStructAsColumn() {
       "value. Rewrite the query to flatten the struct fields in the result.");
 }
 
-absl::Status UnsupportedArrayConstructorSyntaxForEmptyStructArray() {
+absl::Status UnsupportedArrayConstructorSyntaxForNullValuedStructArray() {
   return absl::Status(
       absl::StatusCode::kUnimplemented,
       "Unsupported query shape: Spanner does not support array constructor "
-      "syntax for an empty array where array elements are Structs.");
+      "syntax for a null-valued array of struct.");
 }
 
 absl::Status UnsupportedFeatureSafe(absl::string_view feature_type,

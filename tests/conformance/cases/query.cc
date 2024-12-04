@@ -555,16 +555,13 @@ TEST_P(QueryTest, CanReturnArrayOfStructTypedColumns) {
       IsOkAndHoldsRow({Value(std::vector<SimpleStruct>{SimpleStruct{1}})}));
 }
 
-TEST_P(QueryTest, CannotQueryArrayOfEmptyStruct) {
+TEST_P(QueryTest, CanQueryArrayOfEmptyStruct) {
   // Spanner PG dialect doesn't support STRUCT.
   if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    using SimpleStruct = std::tuple<int64_t>;
     EXPECT_THAT(
-        Query("SELECT ARRAY<STRUCT<int64_val INT64>>[]"),
-        StatusIs(
-            absl::StatusCode::kUnimplemented,
-            "Unsupported query shape: Spanner does not support array "
-            "constructor "
-            "syntax for an empty array where array elements are Structs."));
+        Query("SELECT ARRAY<STRUCT<INT64>>[]"),
+        IsOkAndHoldsRow({Value(std::vector<SimpleStruct>{SimpleStruct{}})}));
   }
 
   std::string query = "SELECT ARRAY<INT64>[]";
@@ -572,6 +569,21 @@ TEST_P(QueryTest, CannotQueryArrayOfEmptyStruct) {
     query = "SELECT '{}'::bigint[]";
   }
   EXPECT_THAT(Query(query), IsOkAndHoldsRow({Value(std::vector<int64_t>{})}));
+}
+
+TEST_P(QueryTest, CannotQueryNullValuedArrayOfStruct) {
+  // Spanner PG dialect doesn't support STRUCT and array subquery expressions.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  EXPECT_THAT(
+        Query("SELECT IF(false, ARRAY<STRUCT<INT64>>[], null)"),
+        StatusIs(
+            absl::StatusCode::kUnimplemented,
+            "Unsupported query shape: Spanner does not support array "
+            "constructor "
+            "syntax for a null-valued array of struct."));
 }
 
 TEST_P(QueryTest, QueryColumnCannotBeStruct) {
